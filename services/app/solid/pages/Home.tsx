@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createMemo, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, onMount, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
 import type { HomeCore, HomeInsights } from '@/web/home-resource';
@@ -14,9 +14,10 @@ import { usePageData } from '../web/use-page-data';
 import { useSession } from '../web/session';
 
 export function HomePage(): JSX.Element {
-  const { session, reload } = useSession();
+  const { session, sessionError, reload } = useSession();
   const core = usePageData<HomeCore>('/api/page/home?part=core');
   const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: () => Boolean(core.data()?.signedIn) });
+  createEffect(() => { if (sessionError()) { core.invalidate(); insights.invalidate(); } });
   const load = () => { void core.refresh(true); void insights.refresh(true); };
   const wrongAccount = createMemo(() => {
     const current = session(); const home = core.data(); const detail = insights.data();

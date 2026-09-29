@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, within } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, within } from '@solidjs/testing-library';
 import { afterEach, expect, it } from 'vitest';
 import Dashboard from '@/solid/components/Dashboard';
 
@@ -28,4 +28,13 @@ it('preserves the account metrics and engagement chart in the Home rail', () => 
   expect(dashboard).toHaveTextContent('Engagement over time');
   expect(screen.getByRole('group', { name: 'Interactive engagement chart: 7 views and 3 likes in the last 30 days' })).toBeInTheDocument();
   expect(screen.getByLabelText('Engagement Vega chart')).toBeInTheDocument();
+});
+
+it('opens a wider dashboard and closes it with Escape', () => {
+  render(() => <Dashboard rows={[]} viewsOverTime={[1]} />);
+  fireEvent.click(screen.getByLabelText('Expand dashboard'));
+  expect(screen.getByRole('dialog', { name: 'Expanded dashboard' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Expanded dashboard metrics')).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Expanded dashboard' })).toBeNull();
 });

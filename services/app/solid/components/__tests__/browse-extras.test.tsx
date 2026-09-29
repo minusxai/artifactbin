@@ -23,6 +23,17 @@ it('keeps shared work absent when empty, and filters by role and search', () => 
   expect(screen.queryByLabelText('Open shared artifact two')).toBeNull();
 });
 
+it('names each recipient role and uses short artifact links even for untitled work', () => {
+  render(() => <SharedWithYou items={[shared('one'), shared('two', 'editor'), { ...shared('three', 'commenter'), title: null, owner_username: null }]} />);
+  expect(screen.getByLabelText('Your role on one')).toHaveTextContent('can view');
+  expect(screen.getByLabelText('Your role on two')).toHaveTextContent('can edit');
+  expect(screen.getByLabelText('Your role on three')).toHaveTextContent('can comment');
+  expect(screen.getByLabelText('Shared with you')).toHaveTextContent('@alice');
+  expect(screen.getByLabelText('Open shared artifact one')).toHaveAttribute('href', '/a/one');
+  expect(screen.getByLabelText('Open shared artifact three')).toHaveAttribute('href', '/a/three');
+  expect(screen.getByLabelText('Open shared artifact three')).toHaveTextContent('three');
+});
+
 const offers = [
   { tokenId: 'tok_a', titles: ['Alpha draft'], artifacts: 1 },
   { tokenId: 'tok_b', titles: ['Beta draft'], artifacts: 1 },

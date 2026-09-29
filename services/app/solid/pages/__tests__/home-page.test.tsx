@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { SessionProvider } from '@/solid/web/session';
 import { HomePage } from '@/solid/pages/Home';
+import { REFRESH_EVENT } from '@/solid/shared/page-data';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com', username: 'one', image: null }, onboarded: true };
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
@@ -76,4 +77,76 @@ it('keeps the working shelf before the account dashboard and links to assets, tr
   expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
   fireEvent.click(screen.getByLabelText('Create'));
   expect(screen.getByRole('menuitem', { name: 'Dataset' })).toHaveAttribute('href', '/datasets/new');
+});
+
+it('waits for identity without showing a public marketing page', () => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+  open();
+  expect(screen.getByLabelText('Loading workspace')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'About Artifactbin' })).toBeNull();
+});
+
+it.each(['none', 'anon'])('redirects %s sessions with held drafts to login', async kind => {
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? { kind, user: null } : { signedIn: false, drafts: [{ id: 'AbC123', title: 'Private draft' }] }))));
+  render(() => <MemoryRouter><Route path="/" component={() => <SessionProvider><HomePage /></SessionProvider>} /><Route path="/login" component={() => <h1>Log in</h1>} /></MemoryRouter>);
+  await screen.findByRole('heading', { name: 'Log in' });
+  expect(screen.queryByText('Private draft')).toBeNull();
+});
+
+const doc = (id: string) => ({ id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1, visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0, sparkline: null });
+const richInsights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2, sparklines: {} };
+function homeFetch(home: unknown, insights: unknown = richInsights) {
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? home : url.includes('claimable') ? { claimable: [] } : insights))));
+}
+
+it('leads a populated workspace with its shelf and shows all account metrics in the rail', async () => {
+  homeFetch({ signedIn: true, accountId: 'one', artifacts: [doc('a'), { ...doc('data'), title: 'Dataset', format: 'dataset' }], shared: [] });
+  open(); const shelf = await screen.findByLabelText('Shelf'); const dashboard = await screen.findByLabelText('Dashboard');
+  expect(screen.getByLabelText('Dashboard rail')).toContainElement(dashboard);
+  const metrics = screen.getByLabelText('Dashboard metrics');
+  expect(metrics).toHaveTextContent('1k'); expect(metrics).toHaveTextContent('204'); expect(metrics).toHaveTextContent('1.2k');
+  expect(metrics).toHaveTextContent('likes'); expect(metrics).toHaveTextContent('followers'); expect(metrics).toHaveTextContent('forks');
+  expect(screen.getByRole('group', { name: 'Interactive engagement chart: 7 views and 3 likes in the last 30 days' })).toBeInTheDocument();
+  expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Assets' })).toBeNull();
+  expect(screen.queryByLabelText('Get started')).toBeNull();
+});
+
+it('shows only root rows while retaining whole-account dashboard totals', async () => {
+  homeFetch({ signedIn: true, accountId: 'one', artifacts: [doc('root'), { ...doc('folder'), title: 'Research', format: 'folder' }, { ...doc('filed'), parent_id: 'folder', ancestor_ids: ['folder'] }], shared: [] }, { ...richInsights, stats: { ...richInsights.stats, artifacts: 2 } });
+  open(); await screen.findByLabelText('Open Doc root');
+  expect(screen.getByLabelText('Open folder Research')).toBeInTheDocument(); expect(screen.queryByLabelText('Open Doc filed')).toBeNull();
+  expect(await screen.findByLabelText('Dashboard metrics')).toHaveTextContent('2');
+});
+
+it('offers one trash link only to an account', async () => {
+  homeFetch({ signedIn: true, accountId: 'one', artifacts: [doc('a')], shared: [] }); open();
+  await screen.findByLabelText('Open Doc a'); expect(screen.getAllByLabelText('Trash')).toHaveLength(1);
+});
+
+it('names first creation and shows the setup panel on an empty account', async () => {
+  homeFetch({ signedIn: true, accountId: 'one', artifacts: [], shared: [] }, { ...richInsights, stats: { ...richInsights.stats, assets: 0 } }); open();
+  const heading = await screen.findByRole('heading', { name: /create your first artifact/i });
+  expect(heading).toHaveTextContent('hi one, let’s create your first artifact!');
+  const panel = screen.getByLabelText('Get started');
+  expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
+  expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByLabelText('What you can use it for')).toBeNull();
+});
+
+it('keeps shared work primary when the account owns no artifacts', async () => {
+  homeFetch({ signedIn: true, accountId: 'one', artifacts: [], shared: [{ ...doc('shared'), role: 'viewer', owner_username: 'alice' }] }, { ...richInsights, stats: { ...richInsights.stats, artifacts: 0 } });
+  open(); const shared = await screen.findByLabelText('Open shared artifact shared'); const dashboard = await screen.findByLabelText('Dashboard');
+  expect(shared.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByLabelText('Create your first artifact')).toBeNull();
+});
+
+it('keeps the claim result while an empty library fills on refresh', async () => {
+  let current = { signedIn: true, accountId: 'one', artifacts: [] as ReturnType<typeof doc>[], shared: [] };
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? current : url.includes('claimable') ? { claimable: [{ tokenId: 'tok_1', titles: ['Quarterly Review'], artifacts: 1 }] } : url.includes('/claim') ? { ok: true } : { ...richInsights, stats: { ...richInsights.stats, assets: 0 } }))));
+  open(); await screen.findByLabelText('Unclaimed drafts'); fireEvent.click(screen.getByLabelText('Add to my account'));
+  expect(await screen.findByLabelText('Claim result')).toHaveTextContent(/Added/);
+  current = { ...current, artifacts: [doc('a')] };
+  window.dispatchEvent(new Event(REFRESH_EVENT)); await screen.findByLabelText('Open Doc a');
+  expect(screen.getByLabelText('Claim result')).toHaveTextContent(/Added/);
 });
