@@ -168,7 +168,7 @@ export function DocumentPage(): JSX.Element {
       <Show when={panel() === 'controls'}><section aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls"><h2>artifact controls</h2><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}>light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}>dark</button></div>
         <DocumentActions id={id!} title={page?.surface?.title ?? 'Untitled'} version={currentVersion()} archived={archivedNow()}
           owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()}
-          like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={setRailOpen}
+          like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { setPanel(null); setRailOpen(open); }}
           openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null}
           onEdit={goToEdit}
           onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />

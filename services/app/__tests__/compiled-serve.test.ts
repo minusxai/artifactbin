@@ -176,7 +176,7 @@ describe('the reader mode on /raw', () => {
 });
 
 describe('the HTML-first reader page', () => {
-  it('selects the Solid handover for readers and the React handover for owners', async () => {
+  it('selects the Solid handover for every admitted role on a live markup document', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Reader handover', markup: '<article><h1>Reader</h1></article>' });
     const page = { spa: { entry: '/spa-idle.ts', preload: [] }, readerSpa: { entry: '/solid-spa-idle.ts', preload: [] } };
@@ -184,8 +184,8 @@ describe('the HTML-first reader page', () => {
     const writer = await artifactPageAnswer(request(`/a/${id}`, { actor: { credential: 'session', userId: who.user.id, email: who.user.email!, emailVerified: true } }), id, { page });
     expect(guest.compiled?.html).toContain('/solid-spa-idle.ts');
     expect(guest.compiled?.html).not.toContain('/spa-idle.ts"');
-    expect(writer.compiled?.html).toContain('/spa-idle.ts');
-    expect(writer.compiled?.html).not.toContain('/solid-spa-idle.ts');
+    expect(writer.compiled?.html).toContain('/solid-spa-idle.ts');
+    expect(writer.compiled?.html).not.toContain('/spa-idle.ts"');
   });
   it('serves a plan outline in the initial compiled HTML and omits it from a capture', async () => {
     const who = await owner();
