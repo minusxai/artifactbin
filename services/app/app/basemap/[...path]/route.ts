@@ -5,8 +5,8 @@
  * blob: — is served from here too. Only lib/basemap's allowlist is forwarded.
  *
  * maplibre-gl is a build dependency, absent from the production image, so the
- * worker is served from the copy the story-runtime build places beside the SSR
- * bundle (scripts/build-server-reader.mjs), located as lib/story/ssr.server does.
+ * worker is served from the copy scripts/build-server-reader.mjs places in
+ * lib/build-assets.
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';

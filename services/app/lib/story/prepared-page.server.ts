@@ -9,17 +9,13 @@
  *   - the isolated stylesheet (exactly what lib/story/inline-css produces) and
  *     the node tree with the style values that policy rewrote (style-overrides);
  *   - glyphs, fonts, the resolved colour mode, the lazy-code manifest, the
- *     declared dataflow;
- *   - the ANONYMOUS reader's server render of the story, with a digest of the
- *     per-reader inputs it was rendered with.
+ *     declared dataflow and the pinned compiled page.
  *
  * Nothing per viewer is stored. A request overlays what only it decides — who
  * reads, their `$` values, what they may hold, the other artifacts the document
  * embeds — through the same writer the whole preparation uses
- * (prepare-runtime.server `readerIslandData`), and reuses the stored render only
- * when that overlay is byte-identical to the one it was rendered with. The
- * first reader of a version may be its owner; the stored render is still the
- * anonymous one.
+ * (prepare-runtime.server `readerIslandData`). The compiled serve path renders
+ * request data through the compiled page's pinned SSR module.
  *
  * A slot's key is only the document version. A deploy, compiler change, CSS
  * change or dependency change does not rebuild a published version. The
@@ -125,11 +121,6 @@ const sha = (text: string): string => createHash('sha256').update(text).digest('
 const buildAsset = (name: string): Buffer => readFileSync(path.join(process.cwd(), 'lib/build-assets', name));
 const compilerFingerprint = (): string => buildAsset('prepared-sources.sha256').toString('utf8').trim();
 
-/**
- * JSON with its object keys in one order. The overlay carries the STORED flow,
- * and a JSONB column hands objects back in its own key order: a digest of plain
- * JSON would call a byte-identical overlay different, and never reuse a render.
- */
 const slotOf = (at: ArchivedRender | null): string => (at ? `v:${at.version}` : 'head');
 /** The standalone reader is retired, so every prepared page needs a compile. */
 function compilerBuild(): { build: CompilerBuild | null; error: string | null } | null {
@@ -325,9 +316,9 @@ export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null,
 }
 
 /**
- * THE READER'S RUNTIME for one request: the stored version under this
- * request's overlay. `storyHtml` renders only when the overlay differs from
- * the one the stored render was made with.
+ * THE READER'S RUNTIME for one request. `storyHtml` supplies static compiled
+ * markup to remaining editor/API consumers; reader data is rendered by the
+ * compiled serve path.
  */
 export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: ReaderContext): Promise<{ runtime: ServedStoryRuntime & { css: string }; storyHtml: () => string }> {
   // Only the head's answers are the query route's: an archived render, and a
@@ -337,17 +328,11 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
     readerInputFor(row, page, reader),
     servable ? servedResultsFor(row, servable, { admit: reader.results!.admit, viewer: reader.viewer, search: reader.search }) : Promise.resolve(null),
   ]);
-  /*
-   * The results ride in the overlay, beside the request's other facts (its
-   * stored diagram drawings), so its digest differs from the stored anonymous
-   * render's and the story is rendered fresh WITH them. The stored render
-   * never holds data: its key does not follow the datasets.
-   */
+  // Results belong to this request's runtime; compiledPageFor renders them into the page.
   const input: ReaderOverlay = results && overlay.dataflow ? { ...overlay, dataflow: { ...overlay.dataflow, results } } : overlay;
   const runtime = servedOf(page, input);
   return {
     runtime,
-    // An overlay carrying results can never be the stored one's: render it, and hash nothing the size of its rows.
     storyHtml: () => renderStory(page, input),
   };
 }

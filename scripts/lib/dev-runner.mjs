@@ -82,7 +82,7 @@ export async function runDev({ appOnly, args = [] }) {
     /*
      * LIVE. `tsx watch` restarts the server when any file it imports changes —
      * the document renderer, the chrome CSS the server inlines, a route. The
-     * server SSR and offline assets are rebuilt by the watcher below.
+     * server reader assets and offline assets are rebuilt by the watcher below.
      */
     // node_modules is excluded by name: Vite bundles its config into
     // node_modules/.vite-temp on every boot, and a watcher that sees that file
@@ -100,7 +100,7 @@ export async function runDev({ appOnly, args = [] }) {
 }
 
 /**
- * The sources used by server SSR and the offline editor. Rebuild their assets
+ * The sources used by the server reader and the offline editor. Rebuild their assets
  * when one changes, then let tsx restart the server from the changed bundle.
  */
 const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/story-ui', 'lib/story', 'lib/offline', 'lib/viz', 'lib/data/story', 'components/kit', 'components/offline'];

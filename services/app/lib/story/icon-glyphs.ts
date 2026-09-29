@@ -52,8 +52,7 @@ const resolved = new Map<string, IconGlyph>();
 function resolveGlyph(name: string): IconGlyph {
   const key = iconGlyphKey(name);
   const hit = resolved.get(key);
-  // A glyph never changes, and a document renders on every request (no caching
-  // above this), so resolving one twice is pure waste. Grows to at most the number
+  // A glyph never changes, so resolving one twice is pure waste. Grows to at most the number
   // of DISTINCT icons this process has served, never freed — the icon set is the
   // only ceiling, and it is a fixed ~1600 entries of small strings.
   if (hit) return hit;
