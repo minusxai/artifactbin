@@ -74,7 +74,6 @@ export interface IslandMorphSeam {
   /** Every module this document has run, by its `ISLANDS` (a cached re-import runs no `boot`). */
   readonly modules: WeakMap<readonly IslandEntry[], IslandModule>;
   readonly trees: WeakMap<Component, IslandModule>;
-  /** Load the incoming module's immutable DOM factories before changing the old tree. */
   /** Set by the engine while it imports a newer version's module: that module's `boot` hands it in here. */
   take?: (module: IslandModule) => void;
   /** Replace only the sandboxed author realm after a version changes its source. */

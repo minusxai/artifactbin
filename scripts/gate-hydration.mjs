@@ -123,7 +123,7 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
     await page.close();
   }
 
-  // EDIT FROM THE COMPILED PAGE: the interpreter takes over the same source, the edit publishes, and a reload is compiled again.
+  // EDIT FROM THE COMPILED PAGE: the same story accepts the editor, the edit publishes, and a reload is compiled again.
   {
     const doc = await publishAs(ownerPage, { title: 'Compiled edit', visibility: 'unlisted', markup: '<article><h1>Compiled edit</h1><p id="para">Before the edit.</p>'
       + '<Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent><TabsContent value="b">b</TabsContent></Tabs></article>' });
@@ -135,9 +135,9 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
     const head = await ownerPage.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), doc.id);
     await page.click('#root [data-mx-reader-rail] [data-mx-reader-action="edit"]');
     await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
-    check(await waitFor(page, '!window.__compiledTakeover.story.isConnected && !!document.querySelector("#root [data-mx-inline-story] #para")', 20000),
-      'edit: the islands left and the interpreter drew the same source in their place');
-    check(await page.evaluate(() => window.__compiledTakeover.story.__mxIslands?.mode?.()) === 'edit', 'edit: the islands were put in edit mode before they went');
+    check(await waitFor(page, 'window.__compiledTakeover.story.isConnected && document.querySelector("#root [data-mx-inline-story]") === window.__compiledTakeover.story && !!document.querySelector("#root #para")?.isContentEditable', 20000),
+      'edit: the adopted compiled story stayed mounted and became editable');
+    check(await page.evaluate(() => window.__compiledTakeover.story.__mxIslands?.mode?.()) === 'edit', 'edit: the islands entered edit mode');
     await waitFor(page, '!!document.querySelector("#root #para")?.isContentEditable', 20000);
     await page.evaluate(() => {
       const el = document.querySelector('#root #para');
@@ -157,7 +157,11 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
     check(after.version > head.version && (after.markup ?? '').includes('Edited from the compiled page.'), `edit: the edit published (v${head.version} → v${after.version})`);
     check(errors.length === 0, `edit: no page error (${errors.length}: ${errors[0] ?? ''})`);
     await page.close();
-    const again = await compiledServed(path);
+    let again = await compiledServed(path);
+    for (const end = Date.now() + 20000; end > Date.now() && again !== 'compiled';) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      again = await compiledServed(path);
+    }
     check(again === 'compiled', `edit: reloading serves the compiled page again (${again})`);
     const { page: reloaded } = await open(anonymous, path);
     check(await reloaded.evaluate(() => document.querySelector('body > [data-mx-inline-story]')?.textContent?.includes('Edited from the compiled page.') ?? false),

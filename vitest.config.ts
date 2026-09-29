@@ -116,7 +116,8 @@ export default defineConfig({
       },
       {
         extends: true,
-        plugins: [react()],
+        // The React page hosts Solid editor islands through a single DOM mount.
+        plugins: [react({ exclude: /\/solid\/.*\.tsx$/ }), solid({ include: ['services/app/solid/**/*.{tsx,jsx}'], hot: false })],
         test: {
           name: 'ui',
           environment: 'jsdom',

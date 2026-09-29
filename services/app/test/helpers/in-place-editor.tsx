@@ -22,12 +22,12 @@ export const queue = vi.fn();
 export const flushNow = vi.fn(async () => {});
 // A write from elsewhere, and whether the editor took it: both drivable, so a
 // test can put the editor where an agent's edit has just landed under it.
-export const live = { remote: null as unknown, adopted: false };
+export const live = { remote: null as unknown, adopted: false, pending: false };
 export const adoptRemote = vi.fn(() => live.adopted);
 vi.mock('@/lib/story/use-live-edits', () => ({
   FLUSH_DEBOUNCE_MS: 500,
   useLiveEdits: () => ({
-    state: { version: 4, editId: 'e1', status: '', pending: false },
+    state: { version: 4, editId: 'e1', status: '', pending: live.pending },
     queue, flushNow, adoptRemote, isOwnEdit: () => false,
   }),
 }));
@@ -50,7 +50,7 @@ vi.mock('@/lib/dynamic', () => ({
 // does with the text; that the real editor mounts at all is
 // scripts/gate-editor-v2.mjs's question (an earlier editor's CDN loader went
 // unnoticed for months because only a mock ever ran here).
-vi.mock('@/components/SourceEditor', async () => {
+vi.mock('@/components/SolidSourceEditorPane', async () => {
   const React = await import('react');
   return {
     __esModule: true,
@@ -135,6 +135,7 @@ export function installEditorFrame() {
   adoptRemote.mockClear();
   live.remote = null;
   live.adopted = false;
+  live.pending = false;
   env.posted = [];
   env.frameEl = document.createElement('iframe');
   document.body.appendChild(env.frameEl);

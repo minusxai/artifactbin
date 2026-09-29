@@ -146,6 +146,9 @@ async function build() {
   const extrasStubs = {
     name: 'offline-extras-stubs',
     setup(b) {
+      // The file:// editor retains its offline-capable React pane. The site loads the Solid pane;
+      // bundling that site-only adapter into a single-script offline file would pull in Solid JSX.
+      b.onResolve({ filter: /\/components\/SolidSourceEditorPane$/ }, () => ({ path: path.join(root, 'components/SourceEditorPane.tsx') }));
       // CodeMirror's packages compare their own instances, so the file never
       // imports them one by one: the engine module arrives whole from the extras.
       b.onResolve({ filter: /\/source-editor\/codemirror$/ }, () => ({ path: 'source-editor/codemirror', namespace: 'offline-extras' }));
