@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { brotliCompressSync } from 'node:zlib';
+import { performance } from 'node:perf_hooks';
 import { compilePage, compileSources, declaredValues, generate, KIT } from '../compiler';
 import { browserModuleCode, buildDocumentModules, defaultSsrImports, evaluateModule, loadSsrModule, renderSkeleton, ssrImportTable, ssrModuleCode, transformSolid, type SsrImports } from '../bundle.server';
 import { createModuleStore, createTemplateResourceStore } from '../modules.server';
@@ -49,6 +50,28 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('compiles an 11 MB static run inside an island within a bounded time', async () => {
+    const text = 'abcdefghijklmnopqrstuvwxyz0123456789'.repeat(300);
+    const rows = Array.from({ length: 1_100 }, (_, i) => `<p id="row-${i}">Static row ${i} ${text}</p>`).join('');
+    const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger></TabsList><TabsContent value="one">${rows}</TabsContent></Tabs>`);
+    const start = performance.now();
+    const generated = generate(input);
+    const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: null, values: {} });
+    expect(built.html).toContain('Static row 1099');
+    expect(performance.now() - start).toBeLessThan(8_000);
+  }, 30_000);
+  it('restores long hostile static text in both the browser templates and a reloaded SSR module', async () => {
+    const hostile = `begin </script><script>alert(1)</script> & {braces} backtick \` interpolation \${value} ${'x'.repeat(2_000)} end`;
+    const input = await inputOf(`<Tabs defaultValue="one"><TabsContent value="one"><p>${hostile.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;')}</p></TabsContent></Tabs>`);
+    const generated = generate(input);
+    const browser = await browserModuleCode(generated.browserIslands, loadCompilerBuild(), null, undefined, generated.staticTexts);
+    expect(new JSDOM([...browser.templates.values()].join('')).window.document.body.textContent).toContain(hostile);
+    const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: null, values: {} });
+    const reloaded = await loadSsrModule(built.ssr!);
+    const html = reloaded.render({ values: {}, results: null, mermaidImages: {}, drawings: {} });
+    expect(dom(html).textContent).toContain(hostile);
+    expect(html).not.toContain('</script><script>alert(1)</script>');
+  });
   it('keeps large island markup in the rendered story and a lazy resource, not the browser module', async () => {
     const marker = 'panel-content-' + 'A'.repeat(50_000);
     const input = await inputOf(`<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p>${marker}</p></TabsContent><TabsContent value="two"><p>Second panel</p></TabsContent></Tabs>`);
@@ -73,7 +96,8 @@ describe('compilePage', () => {
     const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
     const bytes = (await store.get(built.module!.sha))!;
     expect(Buffer.byteLength(blocks)).toBeGreaterThan(3_000_000);
-    expect(brotliCompressSync(generated.islands).byteLength).toBeGreaterThan(100_000);
+    expect(brotliCompressSync(generated.islands).byteLength).toBeLessThan(10_000);
+    expect(Object.values(generated.staticTexts).join('')).toContain(blocks.slice(3, 120));
     expect(dom(built.html).querySelectorAll('template[data-mx-island-template]')).toHaveLength(0);
     expect(built.html).not.toContain(blocks.slice(3, 120));
     expect(Buffer.byteLength(built.html)).toBeLessThan(50_000);
