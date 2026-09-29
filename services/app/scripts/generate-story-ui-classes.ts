@@ -18,6 +18,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPONENTS_DIR = join(ROOT, 'components', 'kit');
+/** Kit modules can keep framework-free class contracts outside their React component source. */
+const KIT_IMPORTED_CLASS_SOURCES = [join(ROOT, 'lib', 'story-ui', 'icon-contract.ts')];
 
 /**
  * Sources OUTSIDE components/kit whose class literals still reach a story —
@@ -71,6 +73,7 @@ export function extractFileClasses(file: string): string[] {
 export function recipeSourceFiles(dir: string, extraFiles: string[] = []): string[] {
   return [
     ...readdirSync(dir).filter((f) => f.endsWith('.tsx')).sort().map((f) => join(dir, f)),
+    ...(dir === COMPONENTS_DIR ? KIT_IMPORTED_CLASS_SOURCES : []),
     ...extraFiles.filter((f) => existsSync(f)),
   ];
 }
