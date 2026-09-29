@@ -6,7 +6,7 @@
   "main": "./src/main.ts",
   "types": "./src/main.ts",
   "scripts": {
-    "build": "node scripts/build-server-reader.mjs && node ../../scripts/build-islands.mjs && node scripts/generate-routes.mjs && vite build --config ../../vite.config.mts",
+    "build": "node scripts/build-prep.mjs && vite build --config ../../vite.config.mts",
     "build:islands": "node ../../scripts/build-islands.mjs",
     "generate:routes": "node scripts/generate-routes.mjs",
     "test": "vitest run --config ../../vitest.config.ts --project=api && vitest run --config ../../vitest.config.ts --project=node && vitest run --config ../../vitest.config.ts --project=ui && vitest run --config ../../vitest.config.ts --project=islands",
@@ -135,6 +135,7 @@
     "jsdom": "30.0.1",
     "lucide-react": "1.30.0",
     "lucide-solid": "1.30.0",
+    "lucide-static": "1.30.0",
     "maplibre-gl": "5.24.0",
     "mermaid": "12.0.0",
     "prettier": "3.9.6",

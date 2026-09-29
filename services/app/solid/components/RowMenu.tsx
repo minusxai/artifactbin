@@ -34,12 +34,13 @@ const ICON_ACTION =
 export default function RowMenu(props: { name: string; items: RowMenuItem[] }): JSX.Element {
   const [open, setOpen] = createSignal(false);
   let box!: HTMLSpanElement;
+  let trigger!: HTMLButtonElement;
 
   // A menu that outlives the click that dismissed it is the bug every hand-rolled popover ships once.
   createEffect(() => {
     if (!open()) return;
-    const away = (e: MouseEvent) => { if (!box.contains(e.target as Node)) setOpen(false); };
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const away = (e: MouseEvent) => { if (!box.contains(e.target as Node)) { setOpen(false); trigger.focus(); } };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); trigger.focus(); } };
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', esc);
     onCleanup(() => {
@@ -53,6 +54,7 @@ export default function RowMenu(props: { name: string; items: RowMenuItem[] }): 
       <span ref={box} class="relative z-10 inline-flex">
         <Tooltip content="more">
           <button
+            ref={trigger}
             type="button"
             class={`${ICON_ACTION} ${open() ? 'text-fg' : 'hover:text-accent'}`}
             aria-label={`More actions for ${props.name}`}

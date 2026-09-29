@@ -14,19 +14,25 @@
  * (lib/story-runtime/pristine): the author's script shares this realm, so
  * "the frame said so" is not evidence of anything.
  */
+/*
+ * REACT-FREE BY DESIGN: this module is dynamically imported on the compiled-DOM
+ * path (components/IslandStory) with no React runtime dependency — only type
+ * imports, erased at compile time. The React-rendered path's two render seams
+ * (`decorate`/`decorateChildren`) live in ./session-decorate, a separate React
+ * module that `EditorStoryRuntime` alone loads via `decorateFactory`. Keep it
+ * that way: a runtime `from 'react'` (or from a React component) here regresses
+ * the split — see the "reaches no react" assertion in __tests__/session.test.ts.
+ */
 import type { ReactElement, ReactNode } from 'react';
-import { cloneElement, createElement } from 'react';
-import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { captureBookmark, restoreBookmark, type EditorBookmark, type EditorSelectionChange } from '@/lib/editor-v2/bookmark';
-import { FlowEditor } from '@/lib/editor-v2/flow-editor';
+import type { JsxElement, JsxNode } from '@/lib/jsx';
+import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-v2/bookmark';
 import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-v2/node-chrome';
 import { createBlockSelection } from '@/lib/editor-v2/block-selection';
 import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
-import { isProseTree, inlineStates, toggleInline, pasteFragment, editorSchema } from '@/lib/editor-v2/model';
+import { inlineStates, toggleInline, pasteFragment, editorSchema } from '@/lib/editor-v2/model';
 import { clipboardAst } from '@/lib/editor-v2/clipboard';
 import type { EditorView } from 'prosemirror-view';
-import { isEditableTextHost } from '@/lib/story-ui/host-classify';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
@@ -56,8 +62,7 @@ import {
 } from '../contract';
 import { ancestorCrumbs, describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
-import { EditableHost } from './editable-host';
-import { GridEdit } from './grid-edit';
+import type { EditableHostSession } from './editable-host';
 import { imageFileFromTransfer } from './image-drop';
 import { collectTextRegions, createRegionGeometry, navigateAcrossRegions } from './arrow-navigation';
 import { SELECTION_PRESENTATION } from '../selection-presentation';
@@ -105,10 +110,36 @@ const EDIT_MODE_CSS = [
 
 const EDIT_CSS_ATTR = 'data-mx-edit-css';
 
-export interface FrameEditSession {
+/**
+ * The React-rendered path's render seam, provided by ./session-decorate — only
+ * `EditorStoryRuntime` (the live-interpreted `StoryRuntimeApp` tree) passes a
+ * `decorateFactory`; the compiled-DOM path (`IslandStory`) never does, so
+ * `decorate`/`decorateChildren` are absent there and this module never touches
+ * React at runtime.
+ */
+export interface EditSessionDecorateAPI {
   /** Wrap a rendered element for edit mode. Chained after the runtime's own decorator. */
   decorateChildren(children: ReactNode[], nodes: JsxNode[], parentPath: string): ReactNode;
   decorate(element: ReactElement, node: JsxElement, path: string): ReactNode;
+}
+
+/** What ./session-decorate's `decorate`/`decorateChildren` read and write in the core session. */
+export interface EditSessionDecorateInternals {
+  win: Window;
+  hostSession: EditableHostSession;
+  views: Set<EditorView>;
+  getBodyEpoch(): number;
+  blockSelectionPaths(): string[];
+  post(message: Record<string, unknown>): void;
+  reportTyping(isTyping: boolean): void;
+  restorePending(): void;
+  reportSelection(selection: StoryEditSelection | null, block?: boolean): void;
+  describeWithQuote(el: Element): StoryEditSelection | null;
+  setLastView(view: EditorView | null): void;
+  restoreScroll(position: { x: number; y: number }): void;
+}
+
+export interface FrameEditSession extends Partial<EditSessionDecorateAPI> {
   /** Attach the Solid edit regions and text-host listeners to a server-compiled story. */
   mountCompiledDom(): Promise<void>;
   /** Release Solid prose regions before a compiled DOM morph; the session and its commands stay live. */
@@ -139,6 +170,13 @@ interface FrameEditSessionOptions {
   requestRender: () => void;
   /** Browser-only Solid boundary; the server's React SSR bundle does not import it. */
   mountCompiled?: (root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks) => CompiledEditMount;
+  /**
+   * Builds the React render seam (./session-decorate), given once at creation.
+   * Only `EditorStoryRuntime` passes this — the only caller that still renders
+   * through React's `StoryRuntimeApp`. Absent, `decorate`/`decorateChildren`
+   * are absent from the returned session and this module reaches no React.
+   */
+  decorateFactory?: (internals: EditSessionDecorateInternals) => EditSessionDecorateAPI;
 }
 
 export function createFrameEditSession({
@@ -147,6 +185,7 @@ export function createFrameEditSession({
   requestRender,
   root,
   mountCompiled,
+  decorateFactory,
 }: FrameEditSessionOptions): FrameEditSession {
   const doc = win.document;
   const scope = root ?? doc;
@@ -164,8 +203,6 @@ export function createFrameEditSession({
   let typingReported = false;
   let bodyEpoch = 0;
   let disposed = false;
-  let entering = true;
-  const entryScroll = { x: win.scrollX, y: win.scrollY };
   const restoreScroll = (position: { x: number; y: number }) => {
     if (win.scrollX !== position.x || win.scrollY !== position.y) win.scrollTo(position.x, position.y);
   };
@@ -827,7 +864,24 @@ export function createFrameEditSession({
     post({ type: STORY_TEXT_EDIT_MESSAGE, path, innerHtml: channel.innerHtmlOf(host) });
   };
 
+  const decorateApi = decorateFactory?.({
+    win,
+    hostSession,
+    views,
+    getBodyEpoch: () => bodyEpoch,
+    blockSelectionPaths: () => blockSelection.paths(),
+    post,
+    reportTyping,
+    restorePending,
+    reportSelection,
+    describeWithQuote,
+    setLastView: (view) => { lastView = view; },
+    restoreScroll,
+  });
+
   return {
+    decorate: decorateApi?.decorate,
+    decorateChildren: decorateApi?.decorateChildren,
     canApplyDraft() { return !typingReported && !active?.userEdited; },
     unmountCompiledDom() {
       const toolbarFocus = doc.activeElement instanceof HTMLElement
@@ -866,131 +920,6 @@ export function createFrameEditSession({
       win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
         if (!disposed) restoreScroll(readerScroll);
       }));
-    },
-    decorateChildren(children: ReactNode[], source: JsxNode[], parentPath: string): ReactNode {
-      const result: ReactNode[] = [];
-      for (let index = 0; index < source.length;) {
-        const start = index;
-        // Inline children belong to their parent textblock, never nested editors.
-        const isBlock = (n: JsxNode) =>
-          n.type === 'element' &&
-          ![
-            'thead',
-            'tbody',
-            'tfoot',
-            'tr',
-            'td',
-            'th',
-            'span',
-            'strong',
-            'b',
-            'em',
-            'i',
-            'a',
-            'code',
-            'br',
-            'small',
-            'sup',
-            'sub',
-            's',
-            'del',
-            'u',
-          ].includes(n.tag) &&
-          isProseTree(n);
-        if (!isBlock(source[index])) {
-          result.push(children[index++]);
-          continue;
-        }
-        index++;
-        while (
-          index < source.length &&
-          (isBlock(source[index]) ||
-            (source[index].type === 'text' && !(source[index] as { value: string }).value.trim()))
-        )
-          index++;
-        let previous = source.slice(start, index);
-        const path = [parentPath, String(start)].filter(Boolean).join('.');
-        const first = previous[0];
-        const id = first.type === 'element' ? first.attributes.find((a) => a.name === 'id')?.value : null;
-        let regionView: EditorView | null = null;
-        result.push(
-          createElement(FlowEditor, {
-            key: id?.static ? String(id.json) : path,
-            nodes: previous,
-            path,
-            onError(message: string) {
-              post({ type: 'mx:edit-error', message });
-            },
-            onBusy: reportTyping,
-            canEdit: () => blockSelection.paths().length === 0,
-            onView(view: EditorView | null) {
-              if (regionView) views.delete(regionView);
-              regionView = view;
-              if (view) {
-                views.add(view);
-                win.requestAnimationFrame(restorePending);
-                if (view.hasFocus()) {
-                  lastView = view;
-                  win.queueMicrotask(() => {
-                    const anchor = doc.getSelection()?.anchorNode;
-                    const el = (anchor?.nodeType === 1 ? (anchor as Element) : anchor?.parentElement)?.closest(
-                      '[data-mx-ast]',
-                    );
-                    if (el && view.dom.contains(el)) reportSelection(describeWithQuote(el));
-                  });
-                }
-              }
-              if (view && entering)
-                win.requestAnimationFrame(() => {
-                  restoreScroll(entryScroll);
-                  entering = false;
-                });
-            },
-            onChange(next: JsxNode[], group?: string, selection?: EditorSelectionChange) {
-              post({
-                type: STORY_FLOW_EDIT_MESSAGE,
-                path,
-                expected: serializeJsx(previous),
-                replacement: serializeJsx(next),
-                group,
-                selection,
-              });
-              previous = next;
-            },
-          }),
-        );
-      }
-      return result;
-    },
-    decorate(element: ReactElement, node: JsxElement, path: string): ReactNode {
-      // A grid becomes draggable: only the document knows how wide its columns
-      // are, so the drag happens here and the rects travel (edit/grid-edit).
-      if (node.isComponent && node.tag === 'Grid') {
-        // Flow uses the reader tree unchanged; overlay handles own its layout gestures.
-        if (node.attributes.some((a) => a.name === 'mode' && a.value?.static && a.value.json === 'flow'))
-          return element;
-        return createElement(GridEdit, {
-          key: (element as ReactElement).key ?? path,
-          props: (element as ReactElement<Record<string, unknown>>).props,
-          onLayout: (rects) => post({ type: STORY_LAYOUT_EDIT_MESSAGE, rects }),
-        });
-      }
-      /*
-       * A <Video> card is an <a> to the video's own page. While editing, that
-       * link would swallow the click meant to SELECT the embed and take the
-       * author out of their own document; the kit already has the seam for it.
-       */
-      if (node.isComponent && node.tag === 'Video') {
-        return cloneElement(element as ReactElement<Record<string, unknown>>, { interactive: false });
-      }
-      if (node.isComponent || !isEditableTextHost(node)) return element;
-      return createElement(EditableHost, {
-        key: (element as ReactElement).key ?? path,
-        path,
-        session: hostSession,
-        bodyEpoch,
-        children: element as ReactElement<Record<string, unknown>>,
-      });
     },
     renameSlide(path: string, title: string) {
       post({ type: STORY_SLIDE_TITLE_MESSAGE, path, title });

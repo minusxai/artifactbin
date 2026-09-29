@@ -1,14 +1,12 @@
-import type { ArtifactRole } from './share-roles';
-
 /**
- * The document shell changes only for view-only readers for now. Browser gates proved that
- * admitting editor/commenter/owner breaks documents with a managed iframe (an author script's
- * sandbox, `window.mx`): CLI/agent mutation and collaborative gates (gate-managed-iframe,
- * gate-testusers, gate-collab-edit, gate-inplace-edit and others) all depend on machinery
- * Document.tsx does not mount yet. Widen this once that runtime lands.
+ * The document shell now serves readers and commenters (solid/document/AnnotationLayer carries
+ * the annotation rail both need). Editor and owner stay on React: browser gates proved those
+ * roles need machinery Document.tsx does not mount yet — CLI/agent mutation via the managed
+ * iframe on write-capable sessions, the owner's share dialog and in-place editing (gate-managed-
+ * iframe, gate-testusers, gate-collab-edit, gate-inplace-edit). Widen further once that lands.
  */
 export function solidDocumentReader(role: ArtifactRole, format: string, capture: boolean): boolean {
-  return !capture && format === 'markup' && role === 'viewer';
+  return !capture && format === 'markup' && (role === 'viewer' || role === 'commenter');
 }
 
 /** Candidate Solid routes. Admitted document roles select their idle entry at serve time. */

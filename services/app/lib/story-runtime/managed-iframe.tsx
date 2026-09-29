@@ -1,3 +1,8 @@
+// Solid port already lives and is live in production: lib/islands/kit/embed.tsx `Iframe` +
+// embed/frame-engine.ts `mountManagedFrame`, mounting the same sandboxed author realm through the
+// same createManagedAssetResolver/prepareManagedContent/startAuthorScript/managedAuthorDocument
+// calls this file uses. This React view now has one caller (StoryRuntimeApp -> EditorStoryRuntime,
+// the live-interpreted editor tree) and can be deleted with it.
 import {useEffect,useRef,useState} from 'react';
 import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
 import type {DataflowStore} from './store';
