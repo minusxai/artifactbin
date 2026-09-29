@@ -1,0 +1,66 @@
+/** Ephemeral server compile for an editor's unsaved source. */
+import { getArtifactById, dataflowForRow, refDataForRow } from '@/lib/artifacts';
+import { compileStoryCss } from '@/lib/data/story/story-css.server';
+import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
+import { json, readJson } from '@/lib/http';
+import { ID_RE } from '@/lib/ids';
+import { canEdit } from '@/lib/share-roles';
+import { renderDraftPreview } from '@/lib/story/draft-preview.server';
+import { requestOrSessionActor, roleFor } from '@/lib/viewer';
+import { refusesCrossSite } from '@/lib/auth';
+import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
+import { collectExternalAssetUrls } from '@/lib/story/external-images';
+import { lookupWebAssets } from '@/lib/web-assets';
+import { collectRefUses } from '@/lib/story/refs';
+
+const MAX_SOURCE_LENGTH = 1024 * 1024;
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
+export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  const { id } = await ctx.params;
+  if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404, NO_STORE);
+  const artifact = await getArtifactById(id);
+  if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
+  const actor = await requestOrSessionActor(request);
+  if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403, NO_STORE);
+  if (!canEdit(await roleFor(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  const body = await readJson(request);
+  if (!body || typeof body.source !== 'string' || typeof body.editId !== 'string' || body.source.length > MAX_SOURCE_LENGTH) {
+    return json({ error: 'invalid_draft' }, 400, NO_STORE);
+  }
+  if (body.editId !== artifact.edit_id) return json({ error: 'stale_edit' }, 409, NO_STORE);
+  const meta = (artifact.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
+  const theme = body.theme === null || (typeof body.theme === 'string' && STORY_THEME_NAMES.includes(body.theme as StoryThemeName))
+    ? body.theme as StoryThemeName | null : meta.theme;
+  const colorMode = body.colorMode === 'light' || body.colorMode === 'dark' ? body.colorMode : meta.colorMode;
+  const design = resolveStoredStoryDesign(theme, colorMode);
+  // The source can introduce an uploaded image before the next save has written
+  // its reference graph. Resolve only references the editor can actually read.
+  const uses = collectRefUses(body.source);
+  const refs = uses ? [...new Map(uses.map((use) => [use.id, { id: use.id, kind: use.kind }])).values()] : [];
+  const draft = { ...artifact, source: body.source, meta: { ...(artifact.meta ?? {}), refs } };
+  try {
+    const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
+      compileStoryCss(body.source, { force: true }),
+      dataflowForRow(draft, { viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null } }),
+      refDataForRow(draft),
+      lookupWebAssets(collectExternalAssetUrls(body.source).all),
+    ]);
+    const html = await renderDraftPreview({
+      source: body.source,
+      title: artifact.title,
+      theme: design.theme,
+      template: meta.template ?? null,
+      colorMode: design.colorMode,
+      compiledCss,
+      dataflow,
+      refData,
+      assetUrls,
+    });
+    return json({ html }, 200, { ...NO_STORE, 'X-Content-Type-Options': 'nosniff' });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'draft source is incomplete') return json({ error: 'invalid_draft' }, 422, NO_STORE);
+    throw error;
+  }
+}

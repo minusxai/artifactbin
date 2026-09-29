@@ -417,14 +417,9 @@ try {
 // ── a chart INSIDE A GRID selects on the FIRST click ────────────────────────
 /*
  * The dashboard case, which the legs above cannot see: edit mode wraps a
- * <Grid> in react-grid-layout, and RGL inserts its drag placeholder on plain
- * MOUSEDOWN — before any movement — at the pressed tile's own cell, painted
- * over the tile (z-index 2). The mouseup then landed on the placeholder, the
- * targets differed, and the browser retargeted the click to the grid
- * container: selecting a chart took a drag-and-shake. The placeholder is
- * "display only" in RGL's own words and is now pointer-events: none, so ONE
- * plain click must open the inspector. Only a real browser can check this —
- * jsdom has no hit-testing, so the retarget cannot happen there at all.
+ * A chart inside a grid must open the inspector on one plain click. The
+ * Solid editor mounts a separate grip over each tile, so the chart itself
+ * must remain clickable. Only a real browser can check hit testing here.
  */
 {
   const gridDoc = `<Helmet><Import name="gsales_data" src="ref:${sales.id}" /><Query name="gsales">{\`select * from gsales_data.rows\`}</Query></Helmet>`
@@ -440,9 +435,9 @@ try {
   await pg.goto(`${B}/a/${gd.id}#edit`, { waitUntil: 'load' });
   await pg.waitForFunction(() => !!document.querySelector('[data-mx-inline-story]'), { timeout: 40000 });
   const gf = () => pg.mainFrame();
-  // Edit is LIVE when RGL's drag layer exists — that layer is the thing under test.
-  for (let i = 0; i < 120 && !(await gf()?.locator('.react-grid-item').count().catch(() => 0)); i++) await pg.waitForTimeout(150);
-  check((await gf().locator('.react-grid-item').count()) > 0, 'edit mode wrapped the grid in the drag layer — otherwise this proves nothing');
+  // Edit is live when the Solid grid grips are mounted.
+  for (let i = 0; i < 120 && !(await gf()?.locator('.mx-grid-grip').count().catch(() => 0)); i++) await pg.waitForTimeout(150);
+  check((await gf().locator('.mx-grid-grip').count()) > 0, 'edit mode mounted grid controls');
   for (let i = 0; i < 40 && !(await gf().locator('svg.marks, canvas').count().catch(() => 0)); i++) await pg.waitForTimeout(250);
   // ONE plain click, dead center on the chart — no drag, no shake.
   await gf().locator('[aria-label="Question embed"]').first().click();

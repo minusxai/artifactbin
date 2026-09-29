@@ -1,7 +1,7 @@
 import { runtimeId } from './runtime-id';
 import { installMx } from './mx';
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import type { StoryDocumentUpdate, StoryIslandData } from './contract';
+import type { StoryController, StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
 import { createDataflowStore } from './store';
 import { pageEngineFor } from './page-sqlite';
@@ -31,16 +31,7 @@ function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
   return null;
 }
 
-/** Private, instance-scoped application/runtime endpoint. Never published on window or sent to author frames. */
-export interface StoryController {
-  readonly nonce: string;
-  send(command: unknown): void;
-  update(document: StoryDocumentUpdate): void;
-  invalidate(datasets: string[]): void;
-  subscribe(listener: (event: unknown) => void): () => void;
-  getViewportRect(): DOMRect;
-  dispose(): void;
-}
+export type { StoryController } from './contract';
 
 export interface EditorStoryRuntimeProps {
   data: StoryIslandData;

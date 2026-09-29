@@ -431,7 +431,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
     const editor = currentRuntime();
-    expect(editor).not.toBe(win);
+    expect(editor).toBe(win);
     expect(granted(editor).at(-1)).toMatchObject({ edit: false, annotate: false });
 
     await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
@@ -457,7 +457,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
 
     // Under the editor the rail drops below BOTH bars and becomes the edit
     // panel's Comments tab; the document was laid out beside it, so the panel
-    // keeps that reserve. Editing swaps the compiled reader for the editor.
+    // keeps that reserve. Editing attaches to the same compiled document.
     const reserved = watchPaddingRight(viewport);
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
@@ -472,7 +472,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     fireEvent.click(screen.getByLabelText('Toggle comments'));
     expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '320px'});
     expect(await reserved()).toEqual(['320px']);
-    expect(currentRuntime()).not.toBe(win);
+    expect(currentRuntime()).toBe(win);
   });
 
   it('edit mode takes the panel out of an empty margin once, and comments never move the document', async () => {

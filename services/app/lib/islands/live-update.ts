@@ -21,6 +21,7 @@
  * this module: the app's bundle holds a second copy of this module over the same page.
  */
 import { currentAnchor } from '@/lib/story-runtime/anchor';
+import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
 import { writeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 
 export interface StoryUpdateOptions {
@@ -41,8 +42,8 @@ const STATE_KEY = '__mxStoryUpdate';
 interface UpdateState { running: Promise<StoryUpdateOutcome> | null; again: boolean }
 
 /** The fallback: reload the compiled page, keeping the reader's place (put back by lib/islands/page). */
-export function reloadKeepingPlace(win: Window): void {
-  const anchor = currentAnchor(win);
+export function reloadKeepingPlace(win: Window, preUnmountAnchor?: ScrollAnchor | null): void {
+  const anchor = preUnmountAnchor ?? currentAnchor(win);
   if (anchor) writeReloadAnchor(win, anchor);
   win.location.reload();
 }

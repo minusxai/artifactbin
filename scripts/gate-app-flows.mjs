@@ -282,7 +282,14 @@ const c0 = await cls();
 await p.click('[aria-label="Increase font size"]'); await p.waitForTimeout(500);
 check((await cls()) !== c0, 'font-size step applies');
 await surface().locator('h1').first().evaluate(el=>{const range=document.createRange();range.selectNodeContents(el);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
-await p.click('[aria-label="Toggle italic"]'); await p.waitForTimeout(500);
+await p.click('[aria-label="Toggle italic"]');
+// Source edits save and recompile asynchronously. Finish that handover before
+// opening the next toolbar menu, whose trigger can be replaced during morph.
+for (let i = 0; i < 40; i++) {
+  if (/<em[^>]*>/.test((await J(`/api/artifacts/${dataDoc.id}`, {}, T)).body.markup)) break;
+  await p.waitForTimeout(200);
+}
+await p.waitForTimeout(500);
 await p.click('[aria-label="Alignment"]');
 await p.click('[aria-label="Align center"]'); await p.waitForTimeout(500);
 await p.getByRole('button',{name:'Document options',exact:true}).click();

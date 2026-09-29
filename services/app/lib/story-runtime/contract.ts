@@ -281,6 +281,10 @@ export const STORY_DOCUMENT_MESSAGE = 'mx:document';
 export interface StoryDocumentUpdate {
   type: typeof STORY_DOCUMENT_MESSAGE;
   nodes: JsxNode[];
+  /** Unsaved source for the server compiler while the adopted document is in edit mode. */
+  source?: string;
+  /** The editor's current head pointer; a page chrome snapshot may lag its own save. */
+  editId?: string;
   /**
    * Refs the document did not have when it was served — MERGED, not replaced.
    * An image inserted while editing is a brand-new artifact, so the island's
@@ -308,6 +312,17 @@ export interface StoryDocumentUpdate {
    * as it is, with no CSS parser.
    */
   sheet?: { css: string; overrides?: StyleOverride[]; base: StoryBaseCssRecipe };
+}
+
+/** Private page-to-document capability, shared by the compiled and legacy editor bridges. */
+export interface StoryController {
+  readonly nonce: string;
+  send(command: unknown): void;
+  update(document: StoryDocumentUpdate): void;
+  invalidate(datasets: string[]): void;
+  subscribe(listener: (event: unknown) => void): () => void;
+  getViewportRect(): DOMRect;
+  dispose(): void;
 }
 
 /**
