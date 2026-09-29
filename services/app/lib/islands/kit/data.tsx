@@ -411,14 +411,13 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
   let controller: IslandChart | undefined;
   let started = false;
   let disposed = false;
-  const [loading, setLoading] = createSignal(false);
   const [showLoading, setShowLoading] = createSignal(false);
   let indicatorTimer: ReturnType<typeof setTimeout> | undefined;
   let readiness: MutationObserver | undefined;
   const stopLoading = () => {
     if (indicatorTimer) clearTimeout(indicatorTimer);
     indicatorTimer = undefined;
-    setLoading(false);
+    if (el) el.setAttribute('aria-busy', 'false');
     setShowLoading(false);
   };
   let cancelDraw = () => {};
@@ -427,7 +426,7 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
     if (started) return;
     started = true;
     const before = el.getAttribute(CHART_STATE_ATTR);
-    setLoading(true);
+    el.setAttribute('aria-busy', 'true');
     indicatorTimer = setTimeout(() => setShowLoading(true), 150);
     el.setAttribute(CHART_STATE_ATTR, 'pending');
     cancelDraw = deferEngine(el, () => { void (async () => {
@@ -457,7 +456,7 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
   }, { defer: true }));
   onCleanup(() => { disposed = true; cancelDraw(); readiness?.disconnect(); stopLoading(); controller?.destroy(); });
   return <>
-    <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} aria-busy={loading() ? 'true' : 'false'} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />
+    <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />
     <Show when={showLoading()}><span role="status" aria-label="Chart loading; interactions available when ready" class="pointer-events-none absolute right-2 top-2 z-10 flex size-6 items-center justify-center rounded-full border border-border bg-background/85 text-muted-foreground shadow-sm"><span aria-hidden="true" class="size-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent motion-reduce:animate-none" /></span></Show>
   </>;
 }
