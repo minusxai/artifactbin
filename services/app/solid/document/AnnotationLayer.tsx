@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
@@ -35,6 +35,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const screenshotExport: { current: (() => Promise<ScreenshotDrawing>) | null } = { current: null };
   const [items, setItems] = createSignal<AnnotationWire[]>([]);
   const [resolved, setResolved] = createSignal<AnnotationWire[]>([]);
+  const [recentResolved, setRecentResolved] = createSignal<Record<string, { row: AnnotationWire; remaining: number }>>({});
   const [selection, setSelection] = createSignal<StoryEditSelection | null>(props.initialSelection ?? null);
   const [draft, setDraft] = createSignal('');
   const [reply, setReply] = createSignal<Record<string, string>>({});
@@ -66,15 +67,35 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     const live = props.liveAnnotations;
     if (!live) return;
     const expanded = openId();
-    const disappeared = expanded && items().some(row => row.id === expanded) && !live.some(row => row.id === expanded);
+    const removed = new Set(items().filter(row => !live.some(next => next.id === row.id)).map(row => row.id));
     setItems(live);
-    if (disappeared) void backend.listAnnotations('resolved').then(rows => { setResolved(rows); if (rows.some(row => row.id === expanded)) setShowResolved(true); }).catch(() => {});
+    if (removed.size) void backend.listAnnotations('resolved').then(rows => {
+      setResolved(rows);
+      if (expanded && rows.some(row => row.id === expanded)) setShowResolved(true);
+      setRecentResolved(previous => {
+        const next = { ...previous };
+        for (const row of rows) {
+          if (!removed.has(row.id) && !previous[row.id]) continue;
+          const old = previous[row.id];
+          next[row.id] = { row, remaining: old?.row.revision === row.revision ? old.remaining : 10000 };
+        }
+        return next;
+      });
+    }).catch(() => {});
+  });
+  createEffect(() => {
+    const open = new Set(items().map(row => row.id));
+    setRecentResolved(previous => {
+      const next = Object.fromEntries(Object.entries(previous).filter(([id]) => !open.has(id)));
+      return Object.keys(next).length === Object.keys(previous).length ? previous : next;
+    });
   });
   createEffect(() => { props.onAnnotationsChange?.(items()); });
   createEffect(() => {
     if (!props.sessionNonce || !props.runtimeRef) return;
     const expandedResolved = resolved().find(row => row.id === openId());
-    const pins = [...items(), ...(expandedResolved ? [expandedResolved] : [])].filter(row => !row.orphaned && row.anchor).map(row => {
+    const recent = Object.values(recentResolved()).filter(value => value.remaining > 0 && value.row.id !== expandedResolved?.id).map(value => value.row);
+    const pins = [...items(), ...(expandedResolved ? [expandedResolved] : []), ...recent].filter(row => !row.orphaned && row.anchor).map(row => {
       const anchor = row.anchor! as typeof row.anchor & { nodeId?: string | null };
       return { id: row.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: row.range };
     });
@@ -137,6 +158,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       const answer = await backend.actOnAnnotation(id, body);
       setItems(previous => answer.status === 'resolved' ? previous.filter(row => row.id !== id) : previous.some(row => row.id === id) ? previous.map(row => row.id === id ? answer : row) : [...previous, answer]);
       setResolved(previous => answer.status === 'open' ? previous.filter(row => row.id !== id) : previous.some(row => row.id === id) ? previous.map(row => row.id === id ? answer : row) : [...previous, answer]);
+      if (answer.status === 'resolved') setRecentResolved(previous => ({ ...previous, [id]: { row: answer, remaining: 10000 } }));
+      else setRecentResolved(previous => { const next = { ...previous }; delete next[id]; return next; });
       if (body.reply) setReply(previous => ({ ...previous, [id]: replyMentionPrefix(answer.thread) }));
       if (answer.status === 'resolved') setOpenId(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update this comment.'); }
@@ -177,6 +200,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setPick(null);
     setOpenId(id);
     const row = [...items(), ...resolved()].find(item => item.id === id);
+    if (row?.status === 'resolved') setShowResolved(true);
     if (row) setReply(previous => previous[id] !== undefined ? previous : { ...previous, [id]: replyMentionPrefix(row.thread) });
     setFolds(unfold(props.id, { threads: [id], comments: row?.thread.at(-1) ? [row.thread.at(-1)!.id] : [] }));
     props.onRailOpenChange(true);
@@ -210,6 +234,35 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const foldThread = (id: string) => setFolds(toggleFold(props.id, 'threads', id));
   const foldComment = (id: string) => setFolds(toggleFold(props.id, 'comments', id));
   const preview = (body: string) => plainText(parseMarkdownLite(body));
+  const floatingRows = createMemo(() => [...items(), ...Object.values(recentResolved()).filter(value => value.remaining > 0 && !items().some(row => row.id === value.row.id)).map(value => value.row)]);
+  const floating = () => !props.railOpen && Boolean(props.showViewComments) && floatingRows().length > 0;
+  const placed = createMemo(() => floating() ? positionedComments(floatingRows(), anchorRects(), props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) ?? { top: 0, height: innerHeight } : { top: 0, height: innerHeight }, innerHeight) : []);
+  const visibleRecent = createMemo(() => placed().filter(item => recentResolved()[item.annotation.id] && item.top >= 0 && item.top + 36 <= innerHeight).map(item => item.annotation.id).join(','));
+  const hasRecent = createMemo(() => Object.values(recentResolved()).some(value => value.remaining > 0));
+  createEffect(() => {
+    if (!floating() || !hasRecent()) return;
+    const visible = visibleRecent();
+    const hover = hoverId();
+    const open = openId();
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now();
+      const elapsed = Math.min(250, now - last);
+      last = now;
+      if (document.visibilityState !== 'visible') return;
+      const visibleIds = new Set(visible.split(','));
+      setRecentResolved(previous => {
+        let changed = false;
+        const next = Object.fromEntries(Object.entries(previous).map(([id, value]) => {
+          if (value.remaining <= 0 || !visibleIds.has(id) || id === hover || id === open) return [id, value];
+          changed = true;
+          return [id, { ...value, remaining: Math.max(0, value.remaining - elapsed) }];
+        }));
+        return changed ? next : previous;
+      });
+    }, 100);
+    onCleanup(() => clearInterval(timer));
+  });
   const thread = (row: AnnotationWire) => <article aria-label={`Annotation ${row.id}`} data-thread-id={row.id} class="rounded border border-edge bg-surface p-3 text-sm">
     <For each={row.remote_work ?? []}>{work => <p role="status"><a href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer">@{work.name}</a> {remoteWorkLabel(work)}</p>}</For>
     <Show when={isFolded(folds(), 'threads', row.id)} fallback={<>
@@ -253,8 +306,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         <Show when={showResolved()}><div role="separator" aria-label="resolved" /><For each={resolved()}>{thread}</For></Show>
       </div>
     </AnnotationRail>
-    <Show when={!props.railOpen && props.showViewComments && items().length > 0}><div data-capture-chrome aria-label="Open annotation comments" class="pointer-events-none fixed inset-0 z-20"><For each={positionedComments(items(), anchorRects(), props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) ?? { top: 0, height: innerHeight } : { top: 0, height: innerHeight }, innerHeight)}>{placed =>
-      <AnnotationPreview row={placed.annotation} top={placed.top} hovered={hoverId() === placed.annotation.id} onHover={setHoverId} onOpen={() => openThread(placed.annotation.id)} />
+    <Show when={floating()}><div data-capture-chrome aria-label="Open annotation comments" class="pointer-events-none fixed inset-0 z-20"><For each={placed()}>{position =>
+      <AnnotationPreview row={position.annotation} top={position.top} remaining={recentResolved()[position.annotation.id]?.remaining} hovered={hoverId() === position.annotation.id} onHover={setHoverId} onOpen={() => openThread(position.annotation.id)} />
     }</For></div></Show>
     <Show when={error()}><p role="alert" class="fixed bottom-2 left-2 z-50 rounded border border-danger bg-surface px-3 py-2 text-xs text-danger">{error()}</p></Show>
     <Show when={deleting()}>{id => <ConfirmDialog title="Delete annotation?" description="This comment and its replies will be deleted." action="Delete annotation" confirmLabel="Confirm delete annotation" danger busy={busy()} onCancel={() => setDeleting(null)} onConfirm={() => void remove(id())} />}</Show>

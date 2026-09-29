@@ -57,7 +57,7 @@ export function positionedComments(annotations: AnnotationWire[], rects: Record<
 }
 
 /** A quiet author mark expands to a preview at its anchored document y. */
-export function AnnotationPreview(props: { row: AnnotationWire; top: number; hovered: boolean; onHover: (id: string | null) => void; onOpen: () => void }): JSX.Element {
+export function AnnotationPreview(props: { row: AnnotationWire; top: number; remaining?: number; hovered: boolean; onHover: (id: string | null) => void; onOpen: () => void }): JSX.Element {
   const [expanded, setExpanded] = createSignal(false);
   const first = () => props.row.thread[0];
   const name = () => first() ? labelOf(first()!.author) : 'Unknown';
@@ -76,9 +76,10 @@ export function AnnotationPreview(props: { row: AnnotationWire; top: number; hov
     class={`pointer-events-auto fixed right-3 overflow-hidden border bg-raised shadow-md ${props.hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5' : 'border-transparent'}`}
     style={{ top: `${props.top}px`, width: props.hovered ? '288px' : `${count() > 9 ? 48 : count() > 1 ? 44 : 36}px`, height: props.hovered ? expanded() ? 'auto' : '108px' : '36px', 'border-radius': props.hovered ? '5px' : '50% 50% 50% 3px' }}>
     <button type="button" aria-label={`Open annotation conversation by ${name()}, ${count()} message${count() === 1 ? '' : 's'}`} onClick={props.onOpen} class="absolute inset-0 z-0 w-full" />
+    <Show when={props.remaining !== undefined}><span role="status" class="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil((props.remaining ?? 0) / 1000)} seconds</span></Show>
     <Show when={props.row.status === 'resolved'}><span aria-label="Resolved" class="pointer-events-none absolute bottom-0 right-0 text-accent">✓</span></Show>
     <Show when={work()}>{current => <span class="sr-only">{remoteWorkLabel(current())}</span>}</Show>
-    <Show when={first()}>{comment => <Show when={props.hovered} fallback={<span class="pointer-events-none absolute inset-0 flex items-center pl-[7px]"><AuthorMark author={comment().author} compact decorative /><Show when={count() > 1}><span data-thread-count class="absolute right-1.5 text-[9px]">{count() > 9 ? '9+' : count()}</span></Show></span>}>
+    <Show when={first()}>{comment => <Show when={props.hovered} fallback={<span class="pointer-events-none absolute inset-0 flex items-center pl-[7px]"><span class="relative"><AuthorMark author={comment().author} compact decorative /><Show when={props.remaining !== undefined}><svg aria-hidden="true" class="pointer-events-none absolute -left-1 -top-1 h-[30px] w-[30px] motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="2" pathLength="100" stroke-dasharray={`${(props.remaining ?? 0) / 100} 100`} transform="rotate(-90 20 20)" /></svg></Show></span><Show when={count() > 1}><span data-thread-count class="absolute right-1.5 text-[9px]">{count() > 9 ? '9+' : count()}</span></Show></span>}>
       <div class="pointer-events-none relative z-10 flex h-full flex-col">
         <div class="flex items-center justify-between gap-2"><span class="flex items-center gap-2"><span aria-label={`${name()} avatar`} class="size-[22px]"><AuthorMark author={comment().author} /></span><span>{name()}</span></span><CommentTime iso={comment().created_at} /></div>
         <p class="mt-1.5 line-clamp-2 font-sans text-sm">{preview()}</p>

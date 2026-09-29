@@ -15,7 +15,7 @@ const backend = (overrides: Partial<ArtifactBackend> = {}) => ({
   createAnnotation: vi.fn(async () => thread), deleteAnnotation: vi.fn(async () => {}), unavailable: vi.fn(() => null),
   remoteSessions: vi.fn(async () => ({ sessions: [] })), members: vi.fn(async () => ({ people: [] })), ...overrides,
 }) as unknown as ArtifactBackend;
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('loads open comments and resolves a thread through the backend', async () => {
   const service = backend(); const changed = vi.fn();
@@ -144,6 +144,37 @@ it('keeps an expanded thread visible when another viewer resolves it', async () 
   await waitFor(() => expect(service.listAnnotations).toHaveBeenCalledWith('resolved'));
   await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1' })] }));
   await waitFor(() => expect(view.getByRole('button', { name: 'Reopen annotation' })).toBeTruthy());
+});
+
+it('keeps a resolved marker for ten visible seconds and pauses while hovered', async () => {
+  const located = { ...thread, anchor: { path: '0', key: 'k' }, revision: 1 } as AnnotationWire;
+  const resolvedElsewhere = { ...located, status: 'resolved', revision: 2 } as AnnotationWire;
+  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [resolvedElsewhere] : [located]) });
+  let receive: ((data: unknown) => void) | undefined;
+  const runtime = { send: vi.fn(), subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; },
+    getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
+  let changeLive!: (rows: AnnotationWire[]) => void;
+  const view = render(() => {
+    const [live, setLive] = createSignal<AnnotationWire[]>([located]);
+    changeLive = setLive;
+    return <AnnotationLayer id="abc" backend={service} railOpen={false} onRailOpenChange={() => {}} runtimeRef={{ current: runtime }}
+      sessionNonce="private" showViewComments liveAnnotations={live()} />;
+  });
+  receive?.({ type: 'mx:annotation-layout', nonce: 'private', positions: [{ id: 'ann1', rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'performance'] });
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  changeLive([]);
+  await Promise.resolve(); await Promise.resolve();
+  expect(view.getByRole('status')).toHaveTextContent('10 seconds');
+  const marker = view.getByRole('button', { name: /Open annotation conversation by Ana/ });
+  vi.advanceTimersByTime(4000);
+  expect(view.getByRole('status')).toHaveTextContent('6 seconds');
+  fireEvent.mouseEnter(marker.closest('[data-annotation-id]')!);
+  vi.advanceTimersByTime(3000);
+  expect(view.getByRole('status')).toHaveTextContent('6 seconds');
+  fireEvent.mouseLeave(marker.closest('[data-annotation-id]')!);
+  vi.advanceTimersByTime(6100);
+  expect(view.queryByRole('button', { name: /Open annotation conversation by Ana/ })).toBeNull();
 });
 
 it('shows an orphaned passage only while its resolved conversation is expanded', async () => {
