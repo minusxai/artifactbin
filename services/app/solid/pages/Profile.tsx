@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, lazy, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
@@ -12,8 +12,11 @@ import { takeBootstrap } from '@/web/bootstrap';
 import { Avatar } from '../components/Avatar';
 import { usePageData } from '../web/use-page-data';
 import { NotFoundPage } from './NotFound';
-import { FolderRoute } from './Folder';
-import { DatasetEditorPage } from './DatasetEditor';
+
+// Lazy, like every other route chunk (solid/App.tsx): a profile visit should not download the
+// folder listing or the (large) dataset editor until an alias actually resolves to one.
+const FolderRoute = lazy(() => import('./Folder').then((m) => ({ default: m.FolderRoute })));
+const DatasetEditorPage = lazy(() => import('./DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 
 interface ProfileAnswer {
   kind: 'public-profile' | 'redirect' | 'artifact';
