@@ -356,7 +356,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // disposes its islands. Return to the compiled page at the reader's place.
     if (editedCompiledPage.current) {
       // Removing the reserved editor bar shifts every compiled block up by its
-      // 88px inset. Compensate before the browser preserves scroll on reload.
+      // reserved inset. Compensate before the browser preserves scroll on reload.
       const target = Math.max(0, (exitScroll.current ?? window.scrollY) - EDIT_BAR_H);
       const anchor = exitAnchor.current;
       // Let the reduced inset and the scroll adjustment paint before reload;
