@@ -2,10 +2,9 @@
  * THE OFFLINE FILE, OPENED THE WAY A READER OPENS IT: a double-clicked `.html`
  * from file://, in Chromium, Firefox and WebKit, with no server anywhere.
  *
- * Renders the checked-in fixture (scripts/fixtures/offline-file, a small
- * dashboard) through the real lib/offline/file-html writer with the real
- * core and mermaid offline bundles, writes them to a temp dir and asserts, per
- * bundle and engine:
+ * Publishes the checked-in dashboard fixture to the gate's isolated server,
+ * downloads its compiled Solid offline file, writes it to a temp dir and
+ * asserts in each browser engine:
  *  - the title and body render, from inside the file;
  *  - the table shows the snapshot's rows, and changing the Select runs the
  *    query LIVE on the file's own SQLite engine over the rows it holds (the
@@ -22,8 +21,8 @@
  *    violation fires (a blocked fetch never reaches the request log, so this
  *    is the check that would catch one), and no page error is thrown.
  *
- * And then, with the core bundle in each engine, what a reader DOES with the
- * file (lib/offline/file-backend, components/offline/OfflineApp):
+ * And then, with the Solid editor in each engine, what a reader DOES with the
+ * file (lib/offline/file-backend, lib/offline/solid-entry):
  *  - Save starts disabled ("No changes to save"); Edit asks "What should we
  *    call you?" the first time; a heading edited in place shows on the page,
  *    marks the file unsaved, and Save downloads a file;
@@ -53,9 +52,8 @@
  * rebuilt from the new source with "Changed outside the file" in Changes; an
  * invalid source keeps the last good render under a banner naming the error.
  *
- * The base URL the gate runner passes is deliberately unused: this gate's
- * whole claim is that no server is needed. Every request to the file's origin
- * is intercepted, so no run ever reaches a real server.
+ * The base URL seeds and downloads the fixture before any file:// browser
+ * opens it. Every browser request to the file's origin is intercepted.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -108,7 +106,7 @@ const publish = async (body) => {
 };
 const fixture = JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8'));
 const rows = fixture.snapshot.held.sales_data.rows.rows;
-const salesId = await publish({ dataset: rows, visibility: 'unlisted', access: 'read' });
+const salesId = await publish({ dataset: rows, visibility: 'unlisted', access: 'readwrite' });
 const targetsId = await publish({ dataset: rows, visibility: 'unlisted', access: 'read' });
 const source = readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/dashboard.jsx'), 'utf8')
   .replace('ref:Ds1a2b', `ref:${salesId}`).replace('ref:Tg9z8y', `ref:${targetsId}`);
@@ -141,8 +139,7 @@ async function serveOrigin(context, mode) {
   });
 }
 /*
- * Both bundles open the same Mermaid-free fixture: core is what this file would
- * carry; mermaid proves the larger bundle also loads and runs under the CSP.
+ * One downloaded file carries this document's compiled module and engines.
  */
 const files = ['solid'].map((kind) => {
   const htmlPath = path.join(work, `Regional sales (${kind}).html`);
@@ -172,7 +169,7 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
     const pageErrors = [];
     const consoleErrors = [];
     page.on('request', (request) => { if (!/^(file|data):/.test(request.url())) requests.push(request.url()); });
-    page.on('pageerror', (error) => pageErrors.push(String(error)));
+    page.on('pageerror', (error) => pageErrors.push(error.stack ?? String(error)));
     page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
     await page.addInitScript(() => {
       window.__cspViolations = [];
@@ -245,7 +242,7 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
     await old.addInitScript(() => { delete globalThis.DecompressionStream; });
     await old.goto(url);
     await expect(old.getByRole('alert')).toHaveText(ARTIFACT_FILE_UNSUPPORTED);
-    await expect(old.getByRole('heading', { name: 'Regional sales' })).toHaveCount(0);
+    await expect(old.getByRole('heading', { name: 'Regional sales' })).toBeVisible();
     assert.deepEqual(oldErrors, [], `${name}: page errors without DecompressionStream`);
 
     console.log(`${name}: title, body, top bar, snapshot rows (${baseRows.length}) → live west query (${westRows.length}), frozen input, mutation reason, chart, 0 requests, 0 CSP violations, 0 page errors, unsupported-browser message — passed in ${((Date.now() - started) / 1000).toFixed(1)}s${consoleErrors.length ? ` (console errors: ${consoleErrors.join(' | ')})` : ''}`);
@@ -267,7 +264,7 @@ const downloads = {};
 async function watchedPage(context, sink) {
   const page = await context.newPage();
   page.on('request', (request) => { if (!/^(file|data|blob):/.test(request.url())) sink.requests.push(request.url()); });
-  page.on('pageerror', (error) => sink.pageErrors.push(String(error)));
+  page.on('pageerror', (error) => sink.pageErrors.push(error.stack ?? String(error)));
   return page;
 }
 async function newContext(browser, { picker = false, origin = 'offline' } = {}) {
@@ -322,7 +319,7 @@ const savedFile = (html) => {
 const saveButton = (page) => page.getByRole('button', { name: 'Save', exact: true });
 
 for (const [engineName, engine] of ENGINES) {
-  const name = `${engineName} (core, editing)`;
+  const name = `${engineName} (solid, editing)`;
   const browser = await engine.launch();
   const started = Date.now();
   const sink = { requests: [], pageErrors: [] };
@@ -485,7 +482,7 @@ for (const [engineName, engine] of ENGINES) {
 // ── code view online: the extras from the file's origin ──────────────────────
 
 for (const [engineName, engine] of ENGINES) {
-  const name = `${engineName} (core, code view online)`;
+  const name = `${engineName} (solid, code view online)`;
   const browser = await engine.launch();
   const started = Date.now();
   const sink = { requests: [], pageErrors: [] };
@@ -544,18 +541,20 @@ for (const [engineName, engine] of ENGINES) {
 /** What a coding agent does: a JSON round-trip of the `#afbin-file` block, changing `source` and nothing else. */
 const agentEdited = (html, edit) => html.replace(
   /(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/,
-  (_all, open, json, close) => { const value = JSON.parse(json); value.source = edit(value.source); return `${open}${JSON.stringify(value)}${close}`; },
+  (_all, open, json, close) => { const value = JSON.parse(json); value.source = edit(value.source); return `${open}${JSON.stringify(value).replace(/</g, '\\u003c')}${close}`; },
 );
 const coreHtml = readFileSync(new URL(core.url), 'utf8');
 const agentFiles = {
   valid: path.join(work, 'agent-valid.html'),
   invalid: path.join(work, 'agent-invalid.html'),
+  query: path.join(work, 'agent-query.html'),
 };
 writeFileSync(agentFiles.valid, agentEdited(coreHtml, (source) => source.replace('Regional sales</h1>', 'Sales, edited by an agent</h1>')));
 writeFileSync(agentFiles.invalid, agentEdited(coreHtml, (source) => source.replace('<Button run', '<p>{$missing}</p>\n  <Button run')));
+writeFileSync(agentFiles.query, agentEdited(coreHtml, (source) => source.replace('select region, month, revenue from sales_data.rows where', 'select region, month, revenue * 2 as revenue from sales_data.rows where')));
 
 for (const [engineName, engine] of ENGINES) {
-  const name = `${engineName} (core, edited by an agent)`;
+  const name = `${engineName} (solid, edited by an agent)`;
   const browser = await engine.launch();
   const started = Date.now();
   const sink = { requests: [], pageErrors: [] };
@@ -589,6 +588,13 @@ for (const [engineName, engine] of ENGINES) {
     assert.deepEqual(await violations(invalid), [], `${name}: CSP violations with an invalid source`);
     seen.push('invalid source: banner with the error over the last good render');
 
+    const changedQuery = await watchedPage(context, sink);
+    await changedQuery.goto(pathToFileURL(agentFiles.query).href);
+    await expect(changedQuery.getByText(OFFLINE_QUERY_REASON, { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+    await expect(changedQuery.getByRole('table').first().getByText('2026-07')).toHaveCount(0);
+    assert.deepEqual(await violations(changedQuery), [], `${name}: CSP violations after an agent changes the query`);
+    seen.push('changed query: no stale rows');
+
     assert.deepEqual(sink.requests, [], `${name}: network requests`);
     assert.deepEqual(sink.pageErrors, [], `${name}: page errors`);
     console.log(`${name}: ${seen.join(', ')}, 0 requests, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
@@ -602,4 +608,4 @@ for (const [engineName, engine] of ENGINES) {
 console.log(`downloads: ${Object.entries(downloads).map(([engineName, scheme]) => `${engineName} ${scheme}:`).join(', ')}`);
 
 if (failures.length) throw new AggregateError(failures, 'Offline file checks failed');
-console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundles; editing, comments, Save, code view offline and online, and agent-edited files with the core bundle`);
+console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundle; editing, comments, Save, code view offline and online, and agent-edited files`);

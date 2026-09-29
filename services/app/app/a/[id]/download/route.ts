@@ -7,7 +7,7 @@
 import { requestOrSessionActor } from '@/lib/viewer';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
-import { assembleArtifactFile } from '@/lib/offline/assemble.server';
+import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES } from '@/lib/offline/assemble.server';
 import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 
@@ -31,6 +31,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     return json({ error: 'not_found' }, 404);
   }
   const html = renderArtifactFileHtml(await offlineFileParts(file));
+  if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({
+    error: 'too_large',
+    message: 'This document is too large to download for offline use. Remove large images or open it online.',
+  }, 413);
   const name = fileName(file.metadata.title);
   return new Response(html, {
     headers: {

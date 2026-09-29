@@ -11,6 +11,7 @@ import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest, type Artifact
 import { ARTIFACT_FILE_IDS, readArtifactFileParts, type ArtifactFileParts } from './file-html';
 import { clearDraft, readDraft, readName, writeDraft, writeName } from './local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-file';
+import { unranQueriesOf } from './snapshot-current';
 
 declare const __AFBIN_APP_CSS__: string;
 declare global { interface Window { __afbinOfflineReady?: Promise<void>; } }
@@ -138,7 +139,7 @@ function OfflineShell(props: Opened) {
       const current = revisedCompiled(file(), story);
       const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current.metadata.title), handle: saveHandle });
       if (result.outcome !== 'cancelled') {
-        saveHandle = result.handle; clearDraft(current); setDirty(false);
+        saveHandle = result.handle; window.clearTimeout(draftTimer); clearDraft(current); setDirty(false);
       }
     } catch (error) { setSaveError(error instanceof Error ? `Could not save: ${error.message}` : 'Could not save this file.'); }
     finally { setSaving(false); }
@@ -167,9 +168,13 @@ function OfflineShell(props: Opened) {
     if (editing() || commenting()) return;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) { setSelected(null); return; }
-    const node = selection.anchorNode?.parentElement?.closest<HTMLElement>('[id][data-mx-ast]');
-    if (!node || !story.contains(node)) return;
-    setSelected({ id: node.id, quote: selection.toString() });
+    const quote = selection.toString().trim();
+    const range = selection.getRangeAt(0);
+    const node = [...story.querySelectorAll<HTMLElement>('[id][data-mx-ast]')]
+      .filter((candidate) => range.intersectsNode(candidate) && candidate.textContent?.includes(quote))
+      .sort((a, b) => (a.textContent?.length ?? Infinity) - (b.textContent?.length ?? Infinity))[0];
+    if (!node) return;
+    setSelected({ id: node.id, quote });
   };
   document.addEventListener('selectionchange', selectionChanged);
   onCleanup(() => document.removeEventListener('selectionchange', selectionChanged));
@@ -219,8 +224,8 @@ function OfflineShell(props: Opened) {
       <Show when={dataMenu()}><div>shape unavailable — {OFFLINE_QUERY_REASON}</div></Show>
       <Show when={sourceMode()}><div class="h-[45vh] bg-neutral-900 p-2 text-white">
         <button disabled={extrasState() !== 'ready'} aria-description={extrasState() === 'ready' ? undefined : FORMATTING_OFFLINE} onClick={format}>View formatted</button>
+        <Show when={extrasState() === 'ready'} fallback={<><textarea aria-label="Markup source" aria-description={RICH_EDITOR_OFFLINE} class="h-2/3 w-full text-black" value={source()} onInput={(event) => queueSource(event.currentTarget.value)} /><p>{RICH_EDITOR_OFFLINE}</p></>}><SourceEditor value={source()} revision={sourceRevision()} onChange={queueSource} /></Show>
         <Show when={formatted()}><div>Formatted preview · read-only</div><SourceEditor value={formattedText()} revision={sourceRevision()} onChange={() => {}} readOnly ariaLabel="Formatted JSX" /></Show>
-        <Show when={!formatted()}><Show when={extrasState() === 'ready'} fallback={<><textarea aria-label="Markup source" aria-description={RICH_EDITOR_OFFLINE} class="h-2/3 w-full text-black" value={source()} onInput={(event) => queueSource(event.currentTarget.value)} /><p>{RICH_EDITOR_OFFLINE}</p></>}><SourceEditor value={source()} revision={sourceRevision()} onChange={queueSource} /></Show></Show>
       </div></Show>
     </div></Show>
     <Show when={asking() || renaming()}><div role="dialog" aria-label="What should we call you?" class="fixed left-1/2 top-1/3 z-[2000] border bg-white p-4"><label>Your name <input aria-label="Your name" id="afbin-name" /></label><button onClick={() => answerName((document.getElementById('afbin-name') as HTMLInputElement).value)}>Save</button><button onClick={() => answerName(null)}>Cancel</button></div></Show>
@@ -231,8 +236,13 @@ let mountedDispose: (() => void) | null = null;
 export function disposeSolidOfflineFile(): void { mountedDispose?.(); mountedDispose = null; }
 export async function mountSolidOfflineFile(): Promise<void> {
   disposeSolidOfflineFile();
-  const parts = readArtifactFileParts(document);
-  const rebuilt = sourceChangedOutside(parts.file) ? await rebuildArtifactFile(parts.file, readName()) : { file: parts.file, rebuilt: false, error: null };
+  const openedParts = readArtifactFileParts(document);
+  const migrating = openedParts.file.bundle !== 'solid';
+  if (migrating && openedParts.file.compiled?.module && !openedParts.compiledCode) {
+    throw new Error('This older interactive file needs a fresh export from artifactbin before it can use the Solid editor.');
+  }
+  const parts = migrating ? { ...openedParts, file: { ...openedParts.file, bundle: 'solid' as const } } : openedParts;
+  const rebuilt = sourceChangedOutside(parts.file) ? await rebuildArtifactFile(parts.file, readName()) : { file: parts.file, rebuilt: migrating, error: null };
   const draft = readDraft(parts.file);
   const host = document.createElement('div');
   document.body.insertBefore(host, document.getElementById(ARTIFACT_FILE_IDS.root));
@@ -249,7 +259,8 @@ export async function mountSolidOfflineFile(): Promise<void> {
     else clearDraft(parts.file);
   }
   window.__afbinOfflineFile = opened.file;
-  if (opened.file.compiledFlowDigest && opened.file.compiledFlowDigest !== sourceDigest(JSON.stringify(opened.file.island.dataflow?.flow ?? null))) {
+  if ((opened.file.compiledFlowDigest && opened.file.compiledFlowDigest !== sourceDigest(JSON.stringify(opened.file.island.dataflow?.flow ?? null)))
+      || unranQueriesOf(opened.file).size > 0) {
     const story = document.querySelector<HTMLElement>('[data-mx-inline-story]');
     for (const island of opened.file.compiled?.islands ?? []) {
       if (!island.readsData) continue;

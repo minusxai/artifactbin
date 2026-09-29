@@ -1,49 +1,13 @@
 /**
- * Bundles the OFFLINE FILE's code (lib/offline/entry.tsx) — what a downloaded
- * `.html` carries in `#afbin-code` (lib/offline/file-html) — to
- * lib/build-assets/offline/, which ships with the server exactly like
- * the SSR bundle beside it. lib/offline/bundle.server.ts reads it back.
+ * Build one classic, inline-safe Solid editor script for a downloaded file.
+ * The compiled document browser module and its immutable shared chunks are
+ * packed separately at download time; SQLite wasm, Vega, and Mermaid travel
+ * only with documents that need them. CodeMirror and prettier stay behind the
+ * SRI-pinned extras script loaded when a reader opens source view.
  *
- * ONE entry, TWO bundles, because Mermaid alone is about as large as
- * everything else together and most documents draw no diagram:
- *  - `core`    everything but Mermaid, maps, the source editor and prettier;
- *  - `mermaid` core plus Mermaid.
- * Maps (deck.gl, MapLibre, h3-js) are stubbed in both: an offline file draws a
- * "Needs a connection" stand-in for them (components/offline/OfflineApp).
- *
- * And a THIRD artifact the file does not carry: `extras`
- * (lib/offline/extras-entry) — CodeMirror for code view and prettier for "View
- * formatted", which a reader who never opens code view should not download.
- * It is a classic IIFE with NO React that sets `globalThis.__afbinExtras`;
- * in core and mermaid lib/source-editor/codemirror and every prettier import
- * are stubbed to read that global back, and the modules that import them (SourceEditor,
- * format-jsx-preview) are only reached through a dynamic import, which this
- * non-splitting build evaluates lazily — after lib/offline/extras has loaded
- * the script. It is written as `extras-<hash>.js` beside the bundles, served
- * immutable at `/offline/extras-<hash>.js` (server/app.ts), and the manifest
- * records its SRI hash (sha384) for the file's `<script integrity>`. Only the
- * current build's extras are kept: an older hash is pruned here, and a file
- * that still names it falls back to the plain editor.
- * The build FAILS if CodeMirror or prettier reach core or mermaid, or React
- * reaches extras.
- *
- * The shape is forced by file://, probed in Chromium, Firefox and WebKit:
- * modules, chunk loading, Blob-URL scripts and workers are refused there, so
- * each bundle is ONE classic IIFE the file runs as inline script text. Two
- * consequences handled here:
- *  - `import.meta.url` is empty in an IIFE, so it is mapped to a global the
- *    entry sets from the file's own origin; any OTHER `import.meta` use fails
- *    the build rather than shipping an empty object;
- *  - the app's stylesheet cannot come from Vite (`?inline`), so it is compiled
- *    here from app/globals.css with the same Tailwind sources and handed to the
- *    entry as `__AFBIN_APP_CSS__`;
- *  - the SQLite wasm cannot be fetched, so its bytes are handed in as
- *    `__AFBIN_SQLITE_WASM__` (base64; gzip takes most of that back).
- *
- * Always minified production code: it is a download, never a dev asset.
- *
- * `--cache` skips the build when nothing that feeds it changed (the same
- * contract as build-server-reader.mjs, which invokes this before its own build.
+ * File URLs cannot reliably load module chunks, Blob scripts or workers in
+ * all three supported engines. This bundle is a single minified IIFE. The
+ * app stylesheet and authoring Tailwind inputs are embedded for local edits.
  */
 import esbuild from 'esbuild';
 import crypto from 'node:crypto';

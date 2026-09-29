@@ -100,4 +100,18 @@ describe('Solid offline file', () => {
     expect(readDraft(file)?.file.localIds).toEqual(['x']);
     expect(suggestedFileName('Sales', { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).html');
   });
+
+  it('migrates an older saved payload in a Solid shell when its compiled view is available', async () => {
+    const file = { ...fixture(), bundle: 'core' as const };
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    shell(file); await mountSolidOfflineFile();
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(written).toHaveLength(1));
+    const json = /<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)?.[1];
+    expect(JSON.parse(json!).bundle).toBe('solid');
+  });
 });

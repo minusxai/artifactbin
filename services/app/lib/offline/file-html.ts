@@ -135,7 +135,11 @@ export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
   if (parts.wasm && !BASE64.test(parts.wasm)) throw new ArtifactFileError('The SQLite engine is not base64.');
   const { file } = parts;
   const title = escapeHtml(file.metadata.title);
-  const compiledStory = file.compiled ? inlineStoryElement(file.compiled.html, file.metadata.colorMode ?? 'light', file.metadata.theme) : '';
+  // A large document's module reads its dataflow literal by the reader page's
+  // fixed id. The normal reader shell adds that id; this file owns its shell.
+  const compiledHtml = file.compiled?.html.replace(/<script type="application\/json" data-mx-module-data(?:="")?>/,
+    '<script type="application/json" id="mx-story-data" data-mx-module-data>') ?? '';
+  const compiledStory = file.compiled ? inlineStoryElement(compiledHtml, file.metadata.colorMode ?? 'light', file.metadata.theme) : '';
   // `source` right after `format`: the first "source" in the text is the one to edit, not `base.source`.
   const { format, source, ...rest } = file;
   return `<!doctype html>\n<!-- ${commentSafe(artifactFileAgentNote(file))} -->\n<html lang="en">\n<head>\n<meta charset="utf-8">\n`

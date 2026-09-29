@@ -19,6 +19,14 @@ describe('renderArtifactFileHtml', () => {
     expect(doc.querySelector('[data-mx-inline-story] [data-mx-ast="0"]')?.textContent).toBe('Compiled sales');
   });
 
+  it('makes a large compiled module literal addressable by the reader module', () => {
+    for (const attribute of ['data-mx-module-data', 'data-mx-module-data=""']) {
+      const compiled = { ...file, compiled: { html: `<script type="application/json" ${attribute}>{"moduleData":[]}</script>` } as NonNullable<typeof file.compiled> };
+      const doc = parse(renderArtifactFileHtml({ file: compiled, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=' }));
+      expect(doc.getElementById('mx-story-data')?.textContent).toBe('{"moduleData":[]}');
+    }
+  });
+
   it('round-trips the packed compiled script and optional SQLite bytes for Save', () => {
     const parts = { file, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', compiledCode: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', wasm: 'AA==', templates: { a: '<div>offline</div>' } };
     const doc = parse(renderArtifactFileHtml(parts));
