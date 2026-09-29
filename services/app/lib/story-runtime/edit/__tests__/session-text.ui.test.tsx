@@ -29,6 +29,25 @@ beforeEach(installEditSession);
 afterEach(disposeEditSessions);
 
 describe('createFrameEditSession — going in', () => {
+  it('restores the text selection when a draft remount follows a typography toolbar action', async () => {
+    const root = document.body.appendChild(document.createElement('div'));
+    root.innerHTML = '<p id="first" data-mx-ast="0">alpha</p>';
+    const toolbar = document.body.appendChild(document.createElement('div'));
+    toolbar.setAttribute('aria-label', 'Typography toolbar');
+    const action = toolbar.appendChild(document.createElement('button'));
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => window.setTimeout(() => callback(0), 0));
+    const session = createFrameEditSession({ win: window, root, channel: env.channel, requestRender: () => {}, mountCompiled: mountCompiledEditRegions });
+    session.setNodes(nodesOf('<p id="first">alpha</p>'));
+    await session.mountCompiledDom();
+    root.querySelector<HTMLElement>('.ProseMirror')!.focus();
+    action.focus();
+    session.unmountCompiledDom();
+    root.innerHTML = '<p id="first" data-mx-ast="0">alpha</p>';
+    await session.mountCompiledDom();
+    await waitFor(() => expect(document.activeElement).toHaveClass('ProseMirror'));
+    session.dispose(); toolbar.remove(); root.remove();
+  });
+
   it('keeps an undo bookmark across the compiled DOM replacement', async () => {
     const root = document.body.appendChild(document.createElement('div'));
     root.innerHTML = '<p id="first" data-mx-ast="0">alXvo second paragraph</p>';

@@ -30,6 +30,16 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('uses immutable compiled carriers when request-specific SSR supplies only the visible story', () => {
+    const compiledHtml = '<div class="mx-doc">seed</div><script type="application/json" data-mx-island-literals="aaaaaaaaaaaaaaaa">["chart"]</script><script type="application/json" data-mx-module-data>{"moduleData":[{"rows":[1]}]}</script>';
+    const page = assembleReaderPage(input({ compiled: compiled({ html: compiledHtml }), story: '<div class="mx-doc"><p id="request">request values</p></div>' }));
+    const doc = dom(page);
+    expect(doc.querySelector('#mx-story-root #request')?.textContent).toBe('request values');
+    expect(doc.querySelector('#mx-story-root [data-mx-island-literals]')).toBeNull();
+    expect(doc.querySelector('script[data-mx-island-literals="aaaaaaaaaaaaaaaa"]')?.textContent).toBe('["chart"]');
+    expect(JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!).moduleData).toEqual([{ rows: [1] }]);
+  });
+
   it('keeps inert island banks while moving the trailing module data carrier', () => {
     const story = '<div class="mx-doc">visible</div><template data-mx-island-template="abc">&lt;p&gt;later&lt;/p&gt;</template><script type="application/json" data-mx-island-literals="def">["label"]</script><script type="application/json" data-mx-module-data>{"moduleData":[{"rows":[1]}]}</script>';
     const page = assembleReaderPage(input({ story }));

@@ -25,11 +25,12 @@ export function CollapsibleTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonEle
   onMount(() => createEffect(() => { const id = ctx.open() ? ctx.panelId() : null; if (id) button.setAttribute('aria-controls', id); else button.removeAttribute('aria-controls'); }));
   return <button ref={button} type="button" aria-controls={ctx.open() ? ctx.panelId() : undefined} aria-expanded={ctx.open()} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-trigger" on:click={() => ctx.setOpen(!ctx.open())} {...props} />;
 }
-export function CollapsibleContent(props: JSX.HTMLAttributes<HTMLDivElement>) {
+export function CollapsibleContent(props: JSX.HTMLAttributes<HTMLDivElement> & { forceMount?: boolean }) {
   const ctx = useContext(CollapsibleContext)!; let node: HTMLDivElement | undefined;
   if (props.id) ctx.setPanelId(props.id);
   collapsibleStyle(() => node, ctx.open);
-  return <div ref={node} id={props.id ?? ctx.contentId} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-content" hidden={!ctx.open()} {...props}>{ctx.open() ? props.children : null}</div>;
+  const [local, rest] = splitProps(props, ['forceMount', 'children']);
+  return <div ref={node} id={props.id ?? ctx.contentId} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-content" hidden={!ctx.open()} {...rest}>{local.forceMount || ctx.open() ? local.children : null}</div>;
 }
 export function Popover(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }) {
   const ctx = makeState(props);
@@ -42,8 +43,21 @@ export function PopoverTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
   const ctx = useContext(PopoverContext)! as PopupState;
   return <button ref={ctx.setTrigger} type="button" aria-haspopup="dialog" aria-expanded={ctx.open()} aria-controls={undefined} data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-trigger" on:click={() => { if (!ctx.open()) ctx.announce(); ctx.setOpen(!ctx.open()); }} {...props} />;
 }
-export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { align?: string; sideOffset?: number }) {
-  const ctx = useContext(PopoverContext)! as PopupState; const { align: _align, sideOffset: _sideOffset, ...rest } = props;
+export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { align?: string; sideOffset?: number; forceMount?: boolean }) {
+  const ctx = useContext(PopoverContext)! as PopupState; const island = useIsland(); const { align: _align, sideOffset: _sideOffset, forceMount, ...rest } = props;
+  let node!: HTMLDivElement;
+  if (forceMount) {
+    onMount(() => {
+      const home = document.createComment('popover-home'); node.before(home);
+      createEffect(() => {
+        const destination = ctx.open() ? island.trustedPortal() : null;
+        if (destination) destination.append(node);
+        else home.parentNode?.insertBefore(node, home.nextSibling);
+      });
+      onCleanup(() => home.remove());
+    });
+    return <div ref={el => { node = el; ctx.setPanel(el); }} id={props.id ?? ctx.contentId} role="dialog" data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-content" data-story-floating="" hidden={!ctx.open()} {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); ctx.trigger()?.focus(); } }}>{props.children}</div>;
+  }
   return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}><div ref={ctx.setPanel} id={props.id ?? ctx.contentId} role="dialog" data-state="open" data-slot="popover-content" data-story-floating="" {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); ctx.trigger()?.focus(); } }}>{props.children}</div></TrustedOverlay></Show>;
 }
 type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; panel: () => HTMLElement | undefined; setPanel: (el: HTMLElement) => void; announce: () => void };
@@ -119,9 +133,9 @@ export function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
 const ARROW_TRANSFORM: Record<Side, string> = { top: 'translateY(100%)', right: 'translateY(50%) rotate(90deg) translateX(-50%)', bottom: 'rotate(180deg)', left: 'translateY(50%) rotate(-90deg) translateX(50%)' };
 const ARROW_ORIGIN: Record<Side, string> = { top: '', right: '0 0', bottom: 'center 0', left: '100% 0' };
 const OPPOSITE: Record<Side, Side> = { top: 'bottom', right: 'left', bottom: 'top', left: 'right' };
-export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { side?: Side; align?: Align; sideOffset?: number }) {
+export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { side?: Side; align?: Align; sideOffset?: number; forceMount?: boolean }) {
   const ctx = useContext(TooltipContext)!; const island = useIsland();
-  const [local, rest] = splitProps(props, ['id', 'children', 'side', 'align', 'sideOffset']);
+  const [local, rest] = splitProps(props, ['id', 'children', 'side', 'align', 'sideOffset', 'forceMount']);
   // Radix: an authored id is the content's id, and so what the trigger names.
   createRenderEffect(() => ctx.setContentId(local.id));
   onMount(() => {
@@ -130,6 +144,19 @@ export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
     document.addEventListener(TOOLTIP_OPEN, onOtherOpen); document.addEventListener('keydown', onKey); window.addEventListener('scroll', onScroll, { capture: true });
     onCleanup(() => { document.removeEventListener(TOOLTIP_OPEN, onOtherOpen); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll, { capture: true }); });
   });
+  if (local.forceMount) {
+    let holder!: HTMLDivElement;
+    onMount(() => {
+      const home = document.createComment('tooltip-home'); holder.before(home);
+      createEffect(() => {
+        const destination = ctx.open() ? island.trustedPortal() ?? document.body : null;
+        if (destination) destination.append(holder);
+        else home.parentNode?.insertBefore(holder, home.nextSibling);
+      });
+      onCleanup(() => home.remove());
+    });
+    return <div ref={holder} hidden={!ctx.open()}><TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper></div>;
+  }
   return <Show when={ctx.open() && !isServer}>
     <Portal mount={overlayDestination(island) ?? document.body}>{storyPortalHost(<TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper>)}</Portal>
   </Show>;
@@ -137,7 +164,8 @@ export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
 /** The portaled content: placed once ITS OWN elements exist (a portal renders after hydration, so never from the owner's mount). */
 function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideOffset?: number; rest: JSX.HTMLAttributes<HTMLDivElement>; children?: JSX.Element }) {
   const ctx = p.ctx; let wrapper!: HTMLDivElement; let content!: HTMLDivElement; let arrow!: HTMLSpanElement;
-  onMount(() => {
+  onMount(() => createEffect(() => {
+    if (!ctx.open()) return;
     const anchor = ctx.trigger(); if (!anchor) return;
     wrapper.style.zIndex = getComputedStyle(content).zIndex;
     let live = true;
@@ -147,7 +175,7 @@ function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideO
       stop = placePopper(anchor, wrapper, arrow, { side: p.side ?? 'top', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: ctx.setPlaced });
     }); });
     onCleanup(() => { live = false; cancel(); stop(); ctx.setPlaced(undefined); });
-  });
+  }));
   const side = () => ctx.placed()?.side ?? 'top';
   return <div data-mx-theme-host="">
     <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>

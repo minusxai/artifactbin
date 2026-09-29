@@ -105,7 +105,6 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
     if (incoming.FLOW && !store) throw refuse('the new version declares data the running islands have no store for');
     // The new module selected its own pinned resource. Fetch before touching the adopted tree:
     // a failure leaves the old document intact for the caller's reload path.
-    await seam.prepareTemplates();
   }
 
   // The islands to keep (new render id → old), and the ones to let go.
@@ -139,7 +138,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
 
   const override = options.mode?.() ?? readerMode(win);
   syncAttributes(root, nextRoot, override);
-  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? [])) });
+  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])), preserveCharts: !!newModule && newModule === oldModule });
 
   syncHead(doc, next, { adopted: !!options.adopted, override });
   const data = next.getElementById(ISLAND_DATA_ID);
@@ -258,14 +257,14 @@ function syncModuleRecord(doc: Document, next: Document): void {
  */
 async function takeModule(seam: IslandMorphSeam, url: string, importModule: NonNullable<MorphDependencies['importModule']>): Promise<IslandModule> {
   let taken: IslandModule | null = null;
-  seam.take = (module) => { taken = module; seam.modules.set(module.ISLANDS, module); };
-  let exports: { ISLANDS?: readonly IslandEntry[] } | null;
+  seam.take = (module) => { taken = module; seam.modules.set(module.ISLANDS, module); if (module.TREE) seam.trees.set(module.TREE, module); };
+  let exports: { ISLANDS?: readonly IslandEntry[]; TREE?: IslandEntry[1] } | null;
   try {
-    exports = (await importModule(url)) as { ISLANDS?: readonly IslandEntry[] } | null;
+    exports = (await importModule(url)) as { ISLANDS?: readonly IslandEntry[]; TREE?: IslandEntry[1] } | null;
   } finally {
     delete seam.take;
   }
-  const module = taken ?? (exports?.ISLANDS ? seam.modules.get(exports.ISLANDS) : undefined);
+  const module = taken ?? (exports?.ISLANDS ? seam.modules.get(exports.ISLANDS) : exports?.TREE ? seam.trees.get(exports.TREE) : undefined);
   if (!module) throw refuse('the new version\'s module did not hand in its islands');
   return module;
 }
@@ -279,7 +278,9 @@ function renderIdOf(node: Node): string | null {
   if (node.nodeType !== 1) return null;
   const key = (node as Element).getAttribute(HK);
   const dash = key ? key.indexOf('-') : -1;
-  return dash > 0 ? key!.slice(0, dash + 1) : null;
+  const renderId = dash > 0 ? key!.slice(0, dash + 1) : null;
+  // The d- key covers the whole document; its descendants are ordinary morphable nodes.
+  return renderId === 'd-' ? null : renderId;
 }
 
 /** Each island's top-level nodes (its root first), by render id: what hydration handed the island. */
@@ -315,6 +316,8 @@ interface MorphContext {
   used: Set<Node>;
   /** Every node of a kept island: moved into place, never removed with its old parent. */
   kept: ReadonlySet<Node>;
+  /** The same browser module still owns live chart drawings after a prose-only edit. */
+  preserveCharts?: boolean;
   /** Unchanged authored components whose painted root survives a draft compile. */
   stableElementIds?: ReadonlySet<string>;
   stableElementPaths?: ReadonlySet<string>;
@@ -383,10 +386,15 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
       : byStablePath && !ctx.used.has(byStablePath) ? byStablePath : softMatch(at, next, ctx, nextIds);
     if (match && !ctx.used.has(match) && sameKind(match, next)) {
       if (match.nodeType === 1) {
-        if (!ctx.stableElementIds?.has((match as Element).id)
+        const oldElement = match as Element;
+        const newElement = next as Element;
+        const sameChart = ctx.preserveCharts && oldElement.getAttribute('aria-label') === 'Question embed'
+          && newElement.getAttribute('aria-label') === 'Question embed'
+          && oldElement.getAttribute(AST_PATH_ATTR) === newElement.getAttribute(AST_PATH_ATTR);
+        if (!sameChart && !ctx.stableElementIds?.has(oldElement.id)
           && !(path && ctx.stableElementPaths?.has(path))) {
-          syncAttributes(match as Element, next as Element, null);
-          morphChildren(match as Element, next as Element, ctx);
+          syncAttributes(oldElement, newElement, null);
+          morphChildren(oldElement, newElement, ctx);
         }
       } else if (match.nodeValue !== next.nodeValue) {
         match.nodeValue = next.nodeValue;
@@ -424,7 +432,8 @@ export function disposeChangedDraftIslands(root: HTMLElement, stableIds: Readonl
   if (!seam) return;
   for (const [rid, [, dispose]] of [...seam.islands]) {
     const element = unitsOf(root, [rid]).get(rid)?.[0];
-    if (element && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? ''))) continue;
+    // A one-tree root spans every component; one stable child cannot retain its old reactive owner.
+    if (rid !== 'd-' && element && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? ''))) continue;
     seam.islands.delete(rid);
     dispose();
   }
@@ -450,13 +459,22 @@ export async function hydrateDraftIslands(
   let module: IslandModule;
   try { module = await takeModule(seam, url, importModule); }
   finally { carrier?.remove(); }
-  await seam.prepareTemplates();
   if (module.FLOW && running.store && JSON.stringify(module.FLOW) !== JSON.stringify(running.store.flow))
     running.store.replaceFlow({ flow: module.FLOW });
   for (const entry of module.ISLANDS) {
     const element = unitsOf(root, [entry[0]]).get(entry[0])?.[0];
-    if (!element || stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? '')) continue;
+    if (!element || (entry[0] !== 'd-' && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? '')))) continue;
     seam.hydrate(entry);
+    if (entry[0] === 'd-' && running.mode?.() === 'edit') {
+      const draft = preview.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
+      if (!draft) continue;
+      // The browser tree owns only keyed runs. Restore the server's static runs after
+      // hydration while keeping every newly hydrated component at its authored path.
+      const live = draft.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}][${HK}]`);
+      const ids = new Set([...stableIds, ...[...live].map((node) => node.id).filter(Boolean)]);
+      const paths = new Set([...stablePaths, ...[...live].map((node) => node.getAttribute(AST_PATH_ATTR)).filter((path): path is string => !!path)]);
+      morphDraftDom(root, draft, ids, paths);
+    }
   }
 }
 
