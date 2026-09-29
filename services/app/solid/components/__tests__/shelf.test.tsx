@@ -42,3 +42,11 @@ it('switches list and grid and keeps search accessible', () => {
   expect(screen.getByLabelText('Open Doc one')).toBeInTheDocument();
   expect(screen.queryByLabelText('Open Doc two')).toBeNull();
 });
+
+it('opens a folder action menu without recursive updates', () => {
+  render(() => <Shelf rows={[folder]} scopeParentId={null} actions="full" />);
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for Reports' }));
+  expect(screen.getByRole('button', { name: 'Delete Reports' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Delete Reports' }));
+  expect(screen.getByRole('dialog', { name: 'Delete Reports?' })).toBeInTheDocument();
+});

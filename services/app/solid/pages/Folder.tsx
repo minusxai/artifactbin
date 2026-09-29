@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { useParams } from '@solidjs/router';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { writeBrowserArtifact } from '@/lib/browser-artifact-write';
@@ -25,6 +25,7 @@ export function FolderPage(props: FolderProps): JSX.Element {
   const [workspace, setWorkspace] = createSignal(props.workspace);
   const [editing, setEditing] = createSignal(false);
   const [draft, setDraft] = createSignal('');
+  const folderId = createMemo(() => folder().id);
   const mayWrite = () => canEdit(props.role);
   createEffect(() => { if (props.folder.id !== folder().id) { setFolder(props.folder); setWorkspace(props.workspace); } });
   const reread = () => {
@@ -35,7 +36,7 @@ export function FolderPage(props: FolderProps): JSX.Element {
       .catch(() => {});
   };
   createEffect(() => {
-    const id = folder().id;
+    const id = folderId();
     const source = new EventSource(`/a/${id}/events`);
     source.addEventListener(STORY_DATA_EVENT, reread);
     onCleanup(() => { source.removeEventListener(STORY_DATA_EVENT, reread); source.close(); });

@@ -209,7 +209,9 @@ describe('the home page on a verified host', () => {
   it('serves the built stylesheet and its fonts on the host, never a script', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'domain-home-web-'));
     mkdirSync(join(dir, 'assets'));
-    writeFileSync(join(dir, 'index.html'), '<!doctype html><html><head><link rel="stylesheet" crossorigin href="/assets/shell-Ab12cd.css"><script type="module" crossorigin src="/assets/main-Cd34ef.js"></script></head><body><div id="root"></div></body></html>');
+    const shellHtml = '<!doctype html><html><head><link rel="stylesheet" crossorigin href="/assets/shell-Ab12cd.css"><script type="module" crossorigin src="/assets/main-Cd34ef.js"></script></head><body><div id="root"></div></body></html>';
+    writeFileSync(join(dir, 'index.html'), shellHtml);
+    writeFileSync(join(dir, 'trash.html'), shellHtml);
     writeFileSync(join(dir, 'assets', 'shell-Ab12cd.css'), 'body{color:red}');
     writeFileSync(join(dir, 'assets', 'main-Cd34ef.js'), 'console.log(1)');
     writeFileSync(join(dir, 'assets', 'plex-Ef56ab.woff2'), 'wOF2');

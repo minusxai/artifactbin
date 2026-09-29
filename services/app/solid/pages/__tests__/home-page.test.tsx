@@ -53,3 +53,12 @@ it('explains first creation on an empty account', async () => {
   expect(screen.getByLabelText('Create dataset')).toHaveAttribute('href', '/datasets/new');
   await waitFor(() => expect(screen.queryByRole('heading', { name: /activity/i })).toBeNull());
 });
+
+it('renders a populated folder workspace without recursive updates', async () => {
+  const folderRow = { ...core.artifacts[0], id: 'fold01', url: '/a/fold01', title: 'Reports', format: 'folder', ancestor_ids: [] };
+  const childRow = { ...core.artifacts[0], id: 'child', title: 'Child', ancestor_ids: ['fold01'] };
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: [folderRow, childRow] } : { signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0, sparklines: {} }))));
+  open();
+  expect(await screen.findByLabelText('Open folder Reports')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Open Child')).toBeNull();
+});

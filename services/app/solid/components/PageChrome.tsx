@@ -20,7 +20,7 @@ export default function ArtifactPageChrome(props: { authed: boolean; anon: boole
   const [open, setOpen] = createSignal(false);
   return <aside class="fixed right-4 top-4 z-40">
     <button type="button" aria-label="Open artifact controls" aria-expanded={open()} onClick={() => setOpen(value => !value)} class="rounded border border-edge bg-surface px-3 py-2 text-xs text-fg">{props.title || 'Artifact'} ···</button>
-    <Show when={open()}><div aria-label={props.label} class="absolute right-0 mt-2 w-64 rounded border border-edge bg-surface p-3 shadow-xl">{props.children}</div></Show>
+    <Show when={open()}><div role="dialog" aria-label={props.label} class="absolute right-0 mt-2 w-64 rounded border border-edge bg-surface p-3 shadow-xl"><div class="mb-3 flex items-center justify-between"><h1 class="font-mono text-xs font-semibold">{props.label.toLowerCase()}</h1><button type="button" aria-label={`Dismiss ${props.label.toLowerCase()}`} onClick={() => setOpen(false)}>×</button></div>{props.children}</div></Show>
   </aside>;
 }
 

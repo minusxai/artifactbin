@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/te
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { FolderPage } from '@/solid/pages/Folder';
 import type { FolderPage as FolderData } from '@/lib/folders';
+import type { AccountWorkspace } from '@/lib/workspace';
 
 const row = (id: string, format = 'markup', title = `Doc ${id}`) => ({ id, url: `/a/${id}`, title, format, version: 1, visibility: 'public' as const, parent_id: 'fold01', ancestor_ids: ['fold01'], updated_at: '2026-09-01T00:00:00.000Z' });
 const folder = (over: Record<string, unknown> = {}) => ({ id: 'fold01', title: 'Reports', trail: [], count: { documents: 2, folders: 1 }, rows: [row('aaa111'), row('bbb222'), row('ccc333', 'folder', 'Q3')], ...over }) as FolderData;
@@ -44,4 +45,25 @@ it('keeps an empty folder actionable for writers and quiet for viewers', () => {
   open('viewer', folder({ rows: [], count: { documents: 0, folders: 0 } }));
   expect(screen.getByLabelText('Empty folder')).not.toHaveTextContent('parent_id');
   expect(screen.queryByLabelText('New folder')).toBeNull();
+});
+
+it('mounts the owner listing and workspace rail without recursive updates', () => {
+  const data = folder();
+  const workspace = { artifacts: data.rows, shared: [], stats: { artifacts: 2, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0 } as unknown as AccountWorkspace;
+  render(() => <FolderPage folder={data} role="owner" workspace={workspace} />);
+  expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();
+  expect(screen.getByLabelText('Open Doc aaa111')).toBeInTheDocument();
+  expect(screen.getByLabelText('Dashboard metrics')).toBeInTheDocument();
+});
+
+it('keeps one live stream when a folder refresh updates its data but not its id', async () => {
+  let changed: (() => void) | undefined;
+  let connections = 0;
+  vi.stubGlobal('EventSource', class { constructor() { connections++; } addEventListener(_name: string, callback: () => void) { changed = callback; } removeEventListener() {} close() {} });
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ folder: folder({ title: 'Updated' }) })));
+  open('owner');
+  expect(connections).toBe(1);
+  changed?.();
+  await screen.findByRole('heading', { name: 'Updated' });
+  expect(connections).toBe(1);
 });
