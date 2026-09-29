@@ -156,15 +156,16 @@ export function createDocumentPreloader(webDir: string, mermaidModulesFile = MER
  * no such entry: the page is then the document and its islands without the app.
  */
 export const SPA_IDLE_ENTRY = 'spa-idle.ts';
-export function createSpaEntry(webDir: string): () => { entry: string; preload: string[] } | null {
+export const SOLID_SPA_IDLE_ENTRY = 'solid-spa-idle.ts';
+export function createSpaEntry(webDir: string, key = SPA_IDLE_ENTRY): () => { entry: string; preload: string[] } | null {
   let cached: { entry: string; preload: string[] } | null | undefined;
   return () => {
     if (cached !== undefined) return cached;
     try {
       const manifest = readManifest(webDir);
-      const chunk = manifest[SPA_IDLE_ENTRY];
+      const chunk = manifest[key];
       if (!chunk) throw Error('no app idle entry');
-      const hints = closureHints(manifest, [SPA_IDLE_ENTRY]).filter((hint) => !hint.style);
+      const hints = closureHints(manifest, [key]).filter((hint) => !hint.style);
       cached = { entry: `/${chunk.file}`, preload: hints.map((hint) => hint.href).filter((href) => href !== `/${chunk.file}`) };
     } catch {
       console.warn('[reader] the app idle entry is not in the build manifest; compiled pages load no app');
