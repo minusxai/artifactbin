@@ -6,9 +6,10 @@ import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import type { Align, Placed, Side } from './popper';
 import { TrustedOverlay } from './trusted-overlay';
+import { popupDismiss } from './popup-dismiss';
 
 type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string; panelId: () => string; setPanelId: (id: string) => void };
-const CollapsibleContext = createContext<State>(); const PopoverContext = createContext<State>();
+const CollapsibleContext = createContext<State>(); const PopoverContext = createContext<PopupState>();
 function makeState(props: { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }): State {
   const [local, setLocal] = createSignal(!!props.defaultOpen); const contentId = createUniqueId(); const [panelId, setPanelId] = createSignal(contentId);
   return { open: () => props.open ?? local(), setOpen: value => { setLocal(value); props.onOpenChange?.(value); }, contentId, panelId, setPanelId };
@@ -31,16 +32,21 @@ export function CollapsibleContent(props: JSX.HTMLAttributes<HTMLDivElement>) {
   return <div ref={node} id={props.id ?? ctx.contentId} data-state={ctx.open() ? 'open' : 'closed'} data-slot="collapsible-content" hidden={!ctx.open()} {...props}>{ctx.open() ? props.children : null}</div>;
 }
 export function Popover(props: JSX.HTMLAttributes<HTMLSpanElement> & { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void }) {
-  const ctx = makeState(props); return <PopoverContext.Provider value={ctx}>{props.children}</PopoverContext.Provider>;
+  const ctx = makeState(props);
+  const [trigger, setTrigger] = createSignal<HTMLElement>();
+  const [panel, setPanel] = createSignal<HTMLElement>();
+  const announce = popupDismiss(ctx.open, () => ctx.setOpen(false), trigger, panel);
+  return <PopoverContext.Provider value={{...ctx, trigger, setTrigger, panel, setPanel, announce}}>{props.children}</PopoverContext.Provider>;
 }
 export function PopoverTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const ctx = useContext(PopoverContext)!;
-  return <button type="button" aria-haspopup="dialog" aria-expanded={ctx.open()} aria-controls={undefined} data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-trigger" on:click={() => ctx.setOpen(!ctx.open())} {...props} />;
+  const ctx = useContext(PopoverContext)! as PopupState;
+  return <button ref={ctx.setTrigger} type="button" aria-haspopup="dialog" aria-expanded={ctx.open()} aria-controls={undefined} data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-trigger" on:click={() => { if (!ctx.open()) ctx.announce(); ctx.setOpen(!ctx.open()); }} {...props} />;
 }
 export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { align?: string; sideOffset?: number }) {
-  const ctx = useContext(PopoverContext)!; const { align: _align, sideOffset: _sideOffset, ...rest } = props;
-  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}><div id={props.id ?? ctx.contentId} role="dialog" data-state="open" data-slot="popover-content" data-story-floating="" {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); } }}>{props.children}</div></TrustedOverlay></Show>;
+  const ctx = useContext(PopoverContext)! as PopupState; const { align: _align, sideOffset: _sideOffset, ...rest } = props;
+  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}><div ref={ctx.setPanel} id={props.id ?? ctx.contentId} role="dialog" data-state="open" data-slot="popover-content" data-story-floating="" {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); ctx.trigger()?.focus(); } }}>{props.children}</div></TrustedOverlay></Show>;
 }
+type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; panel: () => HTMLElement | undefined; setPanel: (el: HTMLElement) => void; announce: () => void };
 /**
  * TOOLTIP — today's story tooltip (components/Tooltip over @radix-ui/react-tooltip): the trigger is the popper
  * anchor (no `type`, `data-state` closed / delayed-open / instant-open, described by the content while open,

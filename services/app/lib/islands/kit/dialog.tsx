@@ -79,7 +79,7 @@ export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement>
     else if (openedDialog?.open) { if (typeof openedDialog.close === 'function') openedDialog.close(); else openedDialog.removeAttribute('open'); openedDialog = null; queueMicrotask(() => ctx.trigger()?.focus()); }
   });
   onCleanup(() => { if (openedDialog?.open && typeof openedDialog.close === 'function') openedDialog.close(); });
-  return <TrustedOverlay open={ctx.open}><dialog ref={dialog} role={ctx.open() ? 'dialog' : undefined} aria-modal="true" tabIndex={props.tabIndex ?? -1} {...rest} on:keydown={event => {
+  return <TrustedOverlay open={ctx.open}><dialog ref={dialog} role={ctx.open() ? 'dialog' : undefined} aria-modal="true" tabIndex={props.tabIndex ?? -1} {...rest} on:click={event => { if (event.target === dialog && !ctx.busy()) ctx.setOpen(false); }} on:keydown={event => {
     if (event.key === 'Escape') { event.preventDefault(); if (!ctx.busy()) ctx.setOpen(false); }
     if (event.key === 'Tab') {
       const stops = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')].filter(el => !el.closest('[hidden], [inert], fieldset[disabled]'));

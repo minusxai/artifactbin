@@ -191,6 +191,19 @@ describe('disclosure', () => {
     </>);
     expect(parityOf('<Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover><Avatar id="av"><AvatarImage src="/a.png" alt="A" /><AvatarFallback>AB</AvatarFallback></Avatar>', host)).toEqual([]);
   });
+  it('opening another Popover dismisses the first and Escape restores focus', () => {
+    const { host, dispose } = mount(() => <><Popover><PopoverTrigger>First</PopoverTrigger><PopoverContent>First body</PopoverContent></Popover><Popover><PopoverTrigger>Second</PopoverTrigger><PopoverContent>Second body</PopoverContent></Popover></>);
+    document.body.append(host);
+    try {
+      const triggers = host.querySelectorAll<HTMLButtonElement>('[data-slot="popover-trigger"]');
+      triggers[0]!.click(); triggers[1]!.click();
+      expect(triggers[0]!.getAttribute('aria-expanded')).toBe('false');
+      expect(triggers[1]!.getAttribute('aria-expanded')).toBe('true');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(triggers[1]!.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(triggers[1]);
+    } finally { dispose(); host.remove(); }
+  });
 });
 
 describe('tooltip, as today\'s story tooltip runs', () => {
