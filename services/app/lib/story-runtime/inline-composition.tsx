@@ -1,9 +1,6 @@
 /**
- * THE inline reader's story tree — one composition, rendered to a string by the
- * server (ssr-entry renderInlineStory, placed by server/app withInitialStory)
- * and hydrated with the same props by the browser (InlineStoryRuntime), so the
- * two agree by construction: same root, same `useId` paths, same `<style>`
- * text, same dialog scope.
+ * The browser editor's inline story tree. Published readers use the compiled
+ * page; edit mode still mounts this composition with its CSS and dialog scope.
  *
  * The CSS assembly and the node isolation are part of the same contract
  * (lib/story/inline-css), so neither side can drift into a second way of

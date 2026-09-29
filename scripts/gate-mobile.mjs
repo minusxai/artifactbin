@@ -169,7 +169,8 @@ await view.close();
 const edit = await open(PHONE, '#edit');
 await edit.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await edit.waitForTimeout(2000);
-// The theme picker lives in the EDITOR bar now.
+// Appearance controls live in the mobile Selection sheet.
+await edit.getByRole('button', { name: 'Show selection settings', exact: true }).click();
 await edit.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
 await edit.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
 await edit.waitForTimeout(300);
@@ -185,6 +186,7 @@ const clipped = await edit.locator('[aria-label^="Theme "]').evaluateAll(element
 check(clipped === 0, `theme popover: no theme card is cut off (${clipped} clipped)`);
 await edit.keyboard.press('Escape');
 await edit.waitForTimeout(300);
+await edit.keyboard.press('Escape');
 const done = await fitsAcross(edit, 'Exit edit mode');
 check(done.fits, `editor: \`done\` is on screen (${done.left}..${done.right}px of ${done.viewport}px)`);
 check(!(await overflows(edit)), 'editor: the page does not scroll sideways');

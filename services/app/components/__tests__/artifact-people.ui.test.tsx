@@ -19,7 +19,12 @@ it('offers explicit access sharing and unrestricted invitation lookup',async()=>
  const fetch=vi.fn(async(url:string,_opts?:RequestInit)=>new Response(JSON.stringify(url.includes('?')?{people:[{user_id:'u1',username:'alex',name:'Alex'}]}:state)));
  vi.stubGlobal('fetch',fetch);render(<ArtifactPeople artifactId="abc123"/>);
  fireEvent.click(screen.getByRole('button',{name:'People'}));
- fireEvent.click(await screen.findByRole('button',{name:'Invite @alex'}));
+ const search=await screen.findByRole('combobox',{name:'Find people by username'});
+ expect(screen.queryByRole('listbox')).toBeNull();
+ fireEvent.focus(search);
+ fireEvent.click(await screen.findByRole('option',{name:'@alex Alex'}));
+ expect(screen.queryByRole('listbox')).toBeNull();
+ expect(screen.getByRole('button',{name:'Remove @alex'})).toBeVisible();
  fireEvent.click(screen.getByLabelText('Include viewing access'));
  fireEvent.click(screen.getByRole('button',{name:'Invite 1 people'}));
  await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.body===JSON.stringify({action:'invite',usernames:['@alex'],includeAccess:true}))).toBe(true));
@@ -32,8 +37,8 @@ it('accepts an invitation directly from its notification',async()=>{
  vi.stubGlobal('fetch',fetch);render(<PeopleInbox/>);
  fireEvent.click(await screen.findByRole('button',{name:'Accept invitation'}));
  await waitFor(()=>expect(fetch.mock.calls.some(([url,o])=>url.endsWith('/abc123/members')&&o?.body===JSON.stringify({action:'accept'}))).toBe(true));
- expect(await screen.findByText('Accepted — you’ve joined this artefact.')).toBeInTheDocument();
- expect(screen.getByRole('link',{name:'Open artefact'}).getAttribute('href')).toBe('/a/abc123');
+ expect(await screen.findByText('Accepted — you’ve joined this artifact.')).toBeInTheDocument();
+ expect(screen.getByRole('link',{name:'Open artifact'}).getAttribute('href')).toBe('/a/abc123');
  expect(screen.queryByRole('button',{name:'Block @sam'})).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'More actions for notification from @sam'}));
  expect(screen.getByRole('button',{name:'Block @sam'})).toBeVisible();
@@ -62,14 +67,34 @@ it('keeps conversation updates focused on the comment rather than membership',as
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({autoAccept:true,blocks:[],notifications:[{id:'n1',artifact_id:'abc123',user_id:'alex',sender_id:'sam',username:'sam',kind:'reply_resolved',status:'accepted',direction:'invitation',title:'Tasks',read_at:null,source:'comment:ann1',revision:1}]}))));
  render(<PeopleInbox/>);
  expect(await screen.findByRole('link',{name:'@sam replied and resolved your comment in Tasks'})).toHaveAttribute('href','/a/abc123?thread=ann1');
- expect(screen.queryByText('You’ve joined this artefact.')).toBeNull();
+ expect(screen.queryByText('You’ve joined this artifact.')).toBeNull();
 });
 it('lets an automatically accepted member explicitly join without leaving',async()=>{
  let explicit=false;
  const fetch=vi.fn(async(_url:string,options?:RequestInit)=>{if(options?.method==='POST')explicit=true;return Response.json({members:[],pending:[],self:{status:'accepted',direction:'invitation',explicit_join:explicit},canManage:false,canInvite:false});});
  vi.stubGlobal('fetch',fetch);render(<ArtifactPeople artifactId="abc123" initialOpen/>);
- fireEvent.click(await screen.findByRole('button',{name:'Join artefact'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Join artifact'}));
  await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.body===JSON.stringify({action:'join'}))).toBe(true));
  expect(await screen.findByText('You’re a member')).toBeVisible();
- expect(screen.queryByRole('button',{name:'Join artefact'})).toBeNull();
+ expect(screen.queryByRole('button',{name:'Join artifact'})).toBeNull();
+});
+
+it('supports keyboard selection and dismisses the people dropdown',async()=>{
+ const state={members:[],pending:[],self:null,canManage:true,canInvite:true};
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>Response.json(url.includes('?')?{people:[{user_id:'u1',username:'alex',name:'Alex'}]}:state)));
+ render(<ArtifactPeople artifactId="abc123" initialOpen/>);
+ const search=await screen.findByRole('combobox',{name:'Find people by username'});
+ fireEvent.focus(search);
+ await screen.findByRole('option',{name:'@alex Alex'});
+ fireEvent.keyDown(search,{key:'Escape'});
+ expect(search).toHaveAttribute('aria-expanded','false');
+ fireEvent.change(search,{target:{value:'alex'}});
+ await screen.findByRole('option',{name:'@alex Alex'});
+ fireEvent.keyDown(search,{key:'ArrowDown'});
+ fireEvent.keyDown(search,{key:'Enter'});
+ expect(screen.getByRole('button',{name:'Remove @alex'})).toBeVisible();
+ expect(screen.queryByRole('listbox')).toBeNull();
+ fireEvent.focus(search);
+ fireEvent.blur(search,{relatedTarget:document.body});
+ expect(screen.queryByRole('listbox')).toBeNull();
 });

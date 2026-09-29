@@ -83,7 +83,7 @@ export default function ShareLink({
   /** Known before sharing loads; the API also supplies this for shelf callers. */
   datasetKind?: DatasetCatalog['kind'];
   /** `menu` is a document-control row; `dialog` opens directly from an external menu. */
-  variant?: 'chip' | 'menu' | 'dialog';
+  variant?: 'chip' | 'menu' | 'dialog' | 'embedded';
   /** Explicit artifact address when opened from a shelf or table. */
   url?: string;
   /** Dialog-only callers unmount the sharing surface when dismissed. */
@@ -98,7 +98,7 @@ export default function ShareLink({
   initialOpen?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const [open, setOpen] = useState(variant === 'dialog' || initialOpen);
+  const [open, setOpen] = useState(variant === 'dialog' || variant === 'embedded' || initialOpen);
   const [state, setState] = useState<SharingState | null>(null);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -194,8 +194,8 @@ export default function ShareLink({
   };
   const toggle = () => setOpen((o) => !o);
   return (
-    <span className={variant === 'menu' ? 'relative block' : 'relative inline-flex items-center gap-1'}>
-      {variant === 'dialog' ? null : variant === 'menu' ? (
+    <span className={variant === 'menu' || variant === 'embedded' ? 'relative block' : 'relative inline-flex items-center gap-1'}>
+      {variant === 'dialog' || variant === 'embedded' ? null : variant === 'menu' ? (
         <button
           type="button"
           aria-label="Share"
@@ -223,7 +223,7 @@ export default function ShareLink({
       </Tooltip>
       )}
       {open && (
-        <SharePanel title={shareTitle(title, format)} onClose={() => { setOpen(false); onClose?.(); }}>
+        <SharePanel embedded={variant === 'embedded'} title={shareTitle(title, format)} onClose={() => { setOpen(false); onClose?.(); }}>
           <button
             type="button"
             aria-label="Copy link"

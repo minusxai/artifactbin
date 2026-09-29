@@ -14,12 +14,5 @@ export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity:
     const [user, ...rest] = path.slice(1).split('/');
     return { identity: path, code: [routePages.ProfilePage], key: `/api/page/profile/${encodeURIComponent(user)}${rest.length ? '/' + rest.join('/') : ''}` };
   }
-  const app: Record<string, { code: typeof routePages.HomePage; key?: string }> = {
-    '/': { code: routePages.HomePage, key: '/api/page/home?part=core' },
-    // Custom fallback/error loaders stay with their pages. Copying those here
-    // would change retry semantics; code loading still overlaps their route.
-    '/assets': { code: routePages.AssetsPage },
-  };
-  const match = app[path] ?? (path.startsWith('/datasets/') ? { code: routePages.DatasetEditorPage } : null);
-  return match ? { identity: path, ...match, code: [match.code] } : null;
+  return null;
 }

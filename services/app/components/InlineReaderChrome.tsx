@@ -15,6 +15,8 @@ import { wireFaceFallback } from '@/lib/story-runtime/reader-chrome-actions';
  * Preserve the fetched GitHub count across reaction/title updates. */
 function updateChrome(current: Element, next: Element) {
   if (current.hasAttribute('data-mx-github-star')) return;
+  // React owns the editor field inside this slot, including its focus and caret.
+  if (current.hasAttribute('data-mx-title-editor') && next.hasAttribute('data-mx-title-editor')) return;
   for (const attribute of [...current.attributes]) if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
   for (const attribute of [...next.attributes]) if (current.getAttribute(attribute.name) !== attribute.value) current.setAttribute(attribute.name, attribute.value);
   const oldChildren = [...current.childNodes], newChildren = [...next.childNodes];
@@ -35,7 +37,7 @@ const triggerLabel=(which:PagePanelName,open:boolean)=>which==='notifications'?'
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 /** `editing`: on a phone the rail would sit over the document being edited, so it steps off (the editor bar has Done). */
 /** `onIntent`: a control is being reached for (hover, focus, press start) — the page warms what it opens. */
-export function InlineReaderChrome({ input, onAction,onShare,onIntent,pinned=false,editing=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;onIntent?:(action:string)=>void;pinned?:boolean;editing?:boolean }): ReactNode {
+export function InlineReaderChrome({ input, onAction,onShare,onIntent,pinned=false,editing=false,onTitleHost }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;onIntent?:(action:string)=>void;pinned?:boolean;editing?:boolean;onTitleHost?:(host:HTMLElement|null)=>void }): ReactNode {
   const notifications=useNotifications();
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
@@ -49,10 +51,13 @@ export function InlineReaderChrome({ input, onAction,onShare,onIntent,pinned=fal
     const container=holder.current;
     if(!container)return;
     const template=document.createElement('template');template.innerHTML=html;
+    const titleSlot=template.content.querySelector<HTMLElement>('.mx-reader-title');
+    if(editing && onTitleHost && titleSlot){titleSlot.textContent='';titleSlot.setAttribute('data-mx-title-editor','');}
     const next=template.content.firstElementChild;
     if(!next)return;
     if(container.firstElementChild)updateChrome(container.firstElementChild,next);
     else container.append(next);
+    onTitleHost?.(editing ? container.querySelector<HTMLElement>('[data-mx-title-editor]') : null);
     if(artifact.current!==input.artifactId){state.current=null;artifact.current=input.artifactId;}
     const root=holder.current?.querySelector<HTMLElement>('[data-mx-reader-chrome]');
     if(!root)return;
@@ -91,7 +96,7 @@ export function InlineReaderChrome({ input, onAction,onShare,onIntent,pinned=fal
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();
     return ()=>{stopGithubStar();stopFaces();stopSheets();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
-  },[html,pinned,editing,input.artifactId]);
+  },[html,pinned,editing,input.artifactId,onTitleHost]);
   const intent=(target:EventTarget)=>{
     if(!onIntent||!(target instanceof Element))return;
     const control=target.closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger]');

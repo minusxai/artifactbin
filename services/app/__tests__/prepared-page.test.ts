@@ -40,16 +40,6 @@ vi.mock('@/lib/story/inline-css', async (original) => {
     inlineStoryNodes: (...args: Parameters<typeof actual.inlineStoryNodes>) => { spies.nodes++; return actual.inlineStoryNodes(...args); },
   };
 });
-vi.mock('@/lib/story/ssr.server', async (original) => {
-  const actual = await original<typeof import('@/lib/story/ssr.server')>();
-  return {
-    ...actual,
-    loadStorySsr: () => {
-      const bundle = actual.loadStorySsr();
-      return { ...bundle, renderInlineStory: (...args: Parameters<typeof bundle.renderInlineStory>) => { spies.render++; return bundle.renderInlineStory(...args); } };
-    },
-  };
-});
 const sessionUser = { id: '', email: '' };
 vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 
@@ -125,6 +115,12 @@ describe('the reader payload', () => {
 });
 
 describe('the prepared page store', () => {
+  it('stores compiled output without a legacy React render', async () => {
+    const { id } = await world();
+    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    expect(stored.page.ssr).toBeUndefined();
+    expect(stored.page.compiled?.html).toContain('Quarterly notes');
+  });
   it('is written at publish, served on a hit without parsing, CSS work or a server render, and rebuilt when stale', async () => {
     const { id } = await world();
     expect((await slots(id)).map((s) => s.slot)).toEqual(['head']);
@@ -166,8 +162,9 @@ describe('the prepared page store', () => {
     expect(new JSDOM(html).window.document.querySelector('[data-mx-story-root]')!.textContent).toContain('Six is 6');
     // The overlay carries the rows, so its digest is not the stored anonymous render's: one fresh render, nothing else.
     expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
-    const stored = (await (await harness.db()).query<{ page: { ssr: { html: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
-    expect(stored.page.ssr.html).not.toContain('Six is 6');
+    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    expect(stored.page.ssr).toBeUndefined();
+    expect(stored.page.compiled?.html).not.toContain('Six is 6');
   });
 
   it('writes back on a read miss and keys each archived version in its own slot', async () => {

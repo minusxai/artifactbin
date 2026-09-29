@@ -5,7 +5,7 @@ import PageChrome from "../components/PageChrome";
 import ShareLink from "../components/ShareLink";
 import { DatasetPolicies } from "../components/DatasetPolicies";
 import { createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
-import { Navigate, useParams, useNavigate } from "@solidjs/router";
+import { Navigate, useParams } from "@solidjs/router";
 import { ChevronDown, ChevronRight, Database, DatabasePlus, Plus, Play, Code2 } from "lucide-solid";
 import { Button, Input, PANEL } from "../components/ui";
 import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } from "../components/DatasetCatalogView";
@@ -89,7 +89,6 @@ export function DatasetEditorPage({
     id: string;
   }>();
   const id = artifactId ?? params.id;
-  const navigate = useNavigate();
   const {
     session
   } = useSession();
@@ -881,7 +880,10 @@ export function DatasetEditorPage({
                 })
               }, metadataOnly ? "PATCH" : id ? "PUT" : "POST");
               await onSaved?.();
-              navigate(`/a/${data.id}`);
+              // Cross the Solid/React entry after consumers have read the save response.
+              // A same-task document navigation can discard its body in Chromium.
+              await new Promise(resolve => setTimeout(resolve, 250));
+              window.location.assign(`/a/${data.id}`);
             })}>
                   {busy() === "save" ? "Saving…" : id ? "Save changes" : "Create dataset"}
                 </Button>

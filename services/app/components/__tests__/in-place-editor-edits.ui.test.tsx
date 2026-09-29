@@ -146,7 +146,7 @@ it('retries a remote code-pane edit after local saving has finished', async () =
 it('keeps the code pane open if the page refreshes while editing', async () => {
   window.history.replaceState(null, '', '#edit');
   const first = mount();
-  fireEvent.click(screen.getByRole('button', { name: 'Edit the source' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
   expect(screen.getByLabelText('Source pane')).toBeTruthy();
   first.unmount();
   const second = mount();

@@ -52,7 +52,7 @@ describe('Solid offline file', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     fireEvent.click(screen.getByRole('button', { name: 'Image…' }));
     expect(screen.getByRole('textbox', { name: 'Image URL' }).getAttribute('aria-description')).toBe(OFFLINE_ASSET_REASON);
-    fireEvent.click(screen.getByRole('button', { name: 'Show data' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Show data' }));
     expect(document.body.textContent).toContain(OFFLINE_QUERY_REASON);
   });
 

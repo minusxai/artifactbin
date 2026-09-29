@@ -33,7 +33,7 @@ afterEach(teardownEditorFrame);
 describe('the chrome the selection drives', () => {
   it('keeps document actions stable and formatting separate as selection changes', async () => {
     mount();
-    expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '88px' });
+    expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '44px' });
     const actions = screen.getByLabelText('Document actions');
     // This case is about the toolbar's actions half staying put; the view
     // switch and the panel are components/__tests__/in-place-editor-panel's.
@@ -42,7 +42,8 @@ describe('the chrome the selection drives', () => {
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
     expect(screen.getByLabelText('Title')).toBe(title);
     const formatting = screen.getByLabelText('Primary formatting controls');
-    expect(formatting).toContainElement(screen.getByLabelText('Undo'));
+    expect(screen.getByLabelText('Editor toolbar')).toContainElement(screen.getByLabelText('Undo'));
+    expect(formatting).not.toContainElement(screen.getByLabelText('Undo'));
     expect(formatting).toContainElement(screen.getByLabelText('Toggle bold'));
     expect(formatting).not.toContainElement(screen.getByLabelText('Delete element'));
     expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('>Paragraph');

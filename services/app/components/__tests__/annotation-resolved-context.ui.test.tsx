@@ -146,7 +146,7 @@ it('restarts a resolved indicator only for a new revision and cancels it on reop
  act(()=>vi.advanceTimersByTime(12000));expect(screen.getByLabelText(/Open annotation conversation/)).toBeVisible();
 });
 
-it('opens a notification target when navigation changes the query on the same artefact',async()=>{
+it('opens a notification target when navigation changes the query on the same artifact',async()=>{
  const {frame,postMessage}=makeFrame();const open=vi.fn();
  const view=render(layer(frame,{onRailOpenChange:open}));await flush();await flush();
  try{

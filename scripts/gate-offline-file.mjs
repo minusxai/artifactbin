@@ -334,7 +334,7 @@ for (const [engineName, engine] of ENGINES) {
     await expect(saveButton(page)).toHaveAccessibleDescription(NOTHING_TO_SAVE);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await answerName(page, 'Asha');
-    await expect(page.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
     await selectHeading(page, 'Regional'.length);
     // One edit transaction keeps WebKit's selection stable while the offline editor rerenders.
     await page.keyboard.insertText('Quarterly');
@@ -354,9 +354,9 @@ for (const [engineName, engine] of ENGINES) {
     await expect(imageUrl).toHaveAccessibleDescription(OFFLINE_ASSET_REASON);
     await expect(page.getByRole('button', { name: 'Import image from URL' })).toBeDisabled();
     await page.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByRole('button', { name: 'Show data' }).click();
+    await page.getByRole('tab', { name: 'Show data' }).click();
     await expect(page.getByText(`shape unavailable — ${OFFLINE_QUERY_REASON}`).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Show data' }).click();
+    await page.getByRole('tab', { name: 'Edit on the page' }).click();
     seen.push('history, image URL and query notebook reasons');
 
     await page.getByRole('button', { name: 'Done editing' }).click();
@@ -385,7 +385,7 @@ for (const [engineName, engine] of ENGINES) {
     await reopened.getByRole('button', { name: 'Edit', exact: true }).click(); // the name is remembered: no prompt
     await expect(reopened.getByRole('dialog', { name: 'What should we call you?' })).toHaveCount(0);
     assert.deepEqual(sink.requests, [], `${name}: requests before code view`);
-    await reopened.getByRole('button', { name: 'Edit the source' }).click();
+    await reopened.getByRole('tab', { name: 'Edit the source' }).click();
     // Offline, code view is the plain editor, and says so in place; the one request was its extras.
     const plain = reopened.getByRole('textbox', { name: 'Markup source' });
     await expect(plain).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
@@ -456,7 +456,7 @@ for (const [engineName, engine] of ENGINES) {
       await pickerPage.goto(core.url);
       await pickerPage.getByRole('button', { name: 'Edit', exact: true }).click();
       await answerName(pickerPage, 'Mei');
-      await expect(pickerPage.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+      await expect(pickerPage.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
       await selectHeading(pickerPage, 'Regional'.length);
       await pickerPage.keyboard.type('Picked');
       await expect(saveButton(pickerPage)).toBeEnabled({ timeout: 10_000 });
@@ -494,9 +494,9 @@ for (const [engineName, engine] of ENGINES) {
     await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await answerName(page, 'Lin');
-    await expect(page.getByRole('button', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
     assert.deepEqual(sink.requests, [], `${name}: nothing requested before code view`);
-    await page.getByRole('button', { name: 'Edit the source' }).click();
+    await page.getByRole('tab', { name: 'Edit the source' }).click();
     await page.locator('.cm-editor').first().waitFor({ timeout: 30_000 });
     const tag = page.locator('script[data-afbin-extras]');
     await expect(tag).toHaveCount(1);
@@ -520,7 +520,7 @@ for (const [engineName, engine] of ENGINES) {
       await other.goto(core.url);
       await other.getByRole('button', { name: 'Edit', exact: true }).click();
       await answerName(other, 'Lin');
-      await other.getByRole('button', { name: 'Edit the source' }).click();
+      await other.getByRole('tab', { name: 'Edit the source' }).click();
       await expect(other.getByRole('textbox', { name: 'Markup source' })).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
       await expect(other.locator('.cm-editor')).toHaveCount(0);
       assert.equal(await other.evaluate(() => typeof globalThis.__afbinExtras), 'undefined', `${name}: tampered extras never ran`);

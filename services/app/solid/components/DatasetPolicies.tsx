@@ -4,6 +4,7 @@ import { parse as parseYaml } from 'yaml';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils/dataset-grants';
 import type { DatasetAccessPolicy, DatasetOperation, DatasetTablePolicy, InsertPermission, UpdatePermission, DeletePermission } from '@artifactbin/contracts';
 import { Button } from './ui';
+import { PolicyConditions } from './PolicyConditions';
 
 type Table = { schema: string; name: string; columns: Array<{ name: string }> };
 type PolicyState = { canManage?: boolean; policy: DatasetAccessPolicy | null; revision: number; tables: Table[]; writtenBy: Array<{ id: string; title: string | null; mutations: string[] }> };
@@ -81,6 +82,8 @@ function PolicyEditor(props: { artifactId: string }): JSX.Element {
             <Show when={current() && 'columns' in current()!}><div class="mt-3 space-y-2"><label class="flex gap-2"><input type="checkbox" aria-label={`${op} all columns`} checked={(current() as InsertPermission | UpdatePermission).columns === '*'} onChange={event => setPermission(op, { ...current(), columns: event.currentTarget.checked ? '*' : [] } as Permission)} />Allow all columns</label>
               <Show when={(current() as InsertPermission | UpdatePermission).columns !== '*'}><For each={columns()}>{column => <label class="flex gap-2"><input type="checkbox" aria-label={`${op} column ${column.name}`} checked={((current() as InsertPermission | UpdatePermission).columns as string[] ?? []).includes(column.name)} onChange={event => { const prior = ((current() as InsertPermission | UpdatePermission).columns as string[] ?? []); setPermission(op, { ...current(), columns: event.currentTarget.checked ? [...prior, column.name] : prior.filter(name => name !== column.name) } as Permission); }} />{column.name}</label>}</For></Show>
             </div></Show>
+            <Show when={current() && 'filter' in current()!}><PolicyConditions label={`${op} filter`} title="Which existing rows can change?" value={(current() as UpdatePermission | DeletePermission).filter ?? {}} columns={columns()} onChange={filter => setPermission(op, { ...current(), filter } as Permission)} /></Show>
+            <Show when={current() && op !== 'delete'}><PolicyConditions label={`${op} check`} title="What must the new values satisfy?" value={(current() as InsertPermission | UpdatePermission).check ?? {}} columns={columns()} onChange={check => setPermission(op, { ...current(), check } as Permission)} /></Show>
           </section>;
         }}</For></Show>
         <label class="grid gap-1">Blocked functions<input aria-label="Denied functions" class={control} value={deniedText()} onInput={event => { const text = event.currentTarget.value; setDeniedText(text); const policy = draft(); if (policy) change({ ...policy, execution: { ...policy.execution, functions: { ...policy.execution?.functions, deny: text.split(',').map(item => item.trim()).filter(Boolean) } } }); }} /></label>

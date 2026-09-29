@@ -99,12 +99,12 @@ describe('the reader page carries its first results', () => {
     expect(results.tables.regions!.rows.map((r) => r.region)).toEqual(['East', 'North', 'South', 'West']);
   });
 
-  it('never stores data in the prepared page: its anonymous render is still the declarations alone', async () => {
+  it('never stores snapshot rows in the prepared page', async () => {
     const { id } = await dashboard();
     expect(storyText(await html(id))).toContain(KPI);
-    const stored = (await (await harness.db()).query<{ page: { ssr: { html: string } | null } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
-    expect(stored.page.ssr?.html).toBeTruthy();
-    expect(stored.page.ssr!.html).not.toContain(KPI);
+    const stored = (await (await harness.db()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    expect(stored.page.ssr).toBeUndefined();
+    expect(stored.page.compiled?.html).not.toContain(KPI);
   });
 
   it('serves exactly what the query route answers the same viewer, anonymous and signed in', async () => {

@@ -215,10 +215,13 @@ function OfflineShell(props: Opened) {
     <Show when={commenting()}><div class="fixed right-4 top-14 z-50 border bg-white p-3"><textarea aria-label="Annotation comment" value={commentBody()} onInput={(event) => setCommentBody(event.currentTarget.value)} /><button onClick={() => void createComment()}>Save annotation</button></div></Show>
     <Show when={comments()}><aside class="fixed right-0 top-12 z-40 max-h-[80vh] w-80 overflow-auto border bg-white p-3" aria-label="Comments"><For each={threads()}>{(thread) => <section aria-label={thread.status === 'resolved' ? 'Resolved annotation thread' : 'Annotation thread'} class="mb-3 border-b pb-2"><For each={thread.thread}>{(reply) => <p>{reply.author.label}: {reply.body}</p>}</For><Show when={thread.status === 'open'}><textarea aria-label="Reply to annotation" value={replies()[thread.id] ?? ''} onInput={(event) => setReplies({ ...replies(), [thread.id]: event.currentTarget.value })} /><button onClick={() => void backend.actOnAnnotation(thread.id, { reply: replies()[thread.id] }).then(refreshThreads)}>Send reply</button><button onClick={() => void backend.actOnAnnotation(thread.id, { resolve: true }).then(refreshThreads)}>Resolve annotation</button></Show></section>}</For></aside></Show>
     <Show when={editing()}><div class="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-2 text-sm">
-      <button onClick={openSource}>Edit the source</button>{' · '}
-      <button role="tab" disabled aria-description="Version history lives on artifactbin. Open the live version.">History</button>{' · '}
+      <span role="tablist" aria-label="Editor view" class="inline-flex gap-2">
+        <button role="tab" aria-selected={!sourceMode() && !dataMenu()} onClick={() => { setSourceMode(false); setDataMenu(false); }}>Edit on the page</button>
+        <button role="tab" aria-selected={sourceMode()} onClick={openSource}>Edit the source</button>
+        <button role="tab" aria-selected={dataMenu()} onClick={() => { setSourceMode(false); setDataMenu(true); }}>Show data</button>
+        <button role="tab" disabled aria-description="Version history lives on artifactbin. Open the live version.">History</button>
+      </span>{' · '}
       <button onClick={() => setInsertMenu(!insertMenu())}>Insert</button>{' · '}
-      <button onClick={() => setDataMenu(!dataMenu())}>Show data</button>
       <Show when={insertMenu()}><button onClick={() => setImageMenu(true)}>Image…</button></Show>
       <Show when={imageMenu()}><div><input aria-label="Image URL" disabled aria-description={OFFLINE_ASSET_REASON} /><button disabled>Import image from URL</button><button onClick={() => setImageMenu(false)}>Close</button></div></Show>
       <Show when={dataMenu()}><div>shape unavailable — {OFFLINE_QUERY_REASON}</div></Show>

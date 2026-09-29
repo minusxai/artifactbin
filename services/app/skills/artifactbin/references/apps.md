@@ -6,7 +6,7 @@ order: 1
 ## Read first
 
 New stored datasets allow public reads and mutations through their owner’s
-artefacts by default. Publish the dataset, reference it in a page’s saved
+artifacts by default. Publish the dataset, reference it in a page’s saved
 `<Mutation>`, and invite people. Accepted members can run those actions; comments
 and replies depend on sharing permissions, not membership. Existing version 1
 policies keep their previous behaviour until explicitly upgraded. Explicit legacy
@@ -32,9 +32,9 @@ People → Add people is the same UI operation. A recipient who follows the send
 joins immediately unless they disabled automatic acceptance in Account → People
 & notifications. Mutual follows qualify; following the recipient yourself does
 not. Otherwise the invitation stays pending, labelled Pending, until accepted.
-For private artefacts, explicitly include viewing access with People → Include viewing access or `afbin invite <ref> @alex --include-access`. This requires sharing authority and saves access and invitation together. Without it, share first.
+For private artifacts, explicitly include viewing access with People → Include viewing access or `afbin invite <ref> @alex --include-access`. This requires sharing authority and saves access and invitation together. Without it, share first.
 
-For artefacts with dataset mutations, Join sits beside the title; signed-out readers go through login. Pending/Joined opens People. Follow stays beside the author. Owners and editors join immediately; other readers request approval:
+For artifacts with dataset mutations, Join sits beside the title; signed-out readers go through login. Pending/Joined opens People. Follow stays beside the author. Owners and editors join immediately; other readers request approval:
 
 ```sh
 afbin join <board-ref> --json
@@ -44,15 +44,15 @@ afbin members <board-ref> dismiss --json
 afbin members <board-ref> leave --json
 ```
 
-There is one relationship per person and artefact. Joining does not grant edit or
+There is one relationship per person and artifact. Joining does not grant edit or
 comment permission. Pending members cannot run persistent data actions. Filters,
 local table controls and reads do not require joining. Each sender, including all
 agents acting for them, has at most 30 outstanding pending invitations/requests.
-Accepting, declining or withdrawing frees a slot for other people. A declined or withdrawn invitation cannot be resent to the same person, even from another artefact; they can request to join themselves. Explicit invitations can target non-followers. The narrower follower/member rule below applies to tagging, not explicit invitations.
+Accepting, declining or withdrawing frees a slot for other people. A declined or withdrawn invitation cannot be resent to the same person, even from another artifact; they can request to join themselves. Explicit invitations can target non-followers. The narrower follower/member rule below applies to tagging, not explicit invitations.
 
 ## Show members
 
-`_members` is the read-only table of accepted members of the current artefact.
+`_members` is the read-only table of accepted members of the current artifact.
 It has `user_id` and `joined_at`; it never includes pending invitations. Do not
 create a dataset table or a mutation to implement joining.
 
@@ -81,7 +81,7 @@ afbin mention <board-ref> @alex --json
 This returns stable-ID `markdown` for a comment and `markup` for a document. Put
 the returned fragment in the comment/document, then post/push it. Resolution
 itself sends nothing. Autocomplete and the server allow only recipients who
-follow the sender or already belong to that artefact, excluding blocks.
+follow the sender or already belong to that artifact, excluding blocks.
 
 A new mention invites a non-member; an accepted member gets a normal mention.
 Repeated saves do not notify again, and further tags while pending reuse the
@@ -99,15 +99,15 @@ The new default policy is:
 ]}
 ```
 
-`from.user` matches the acting user; `from.artifact` matches a saved artefact ID;
+`from.user` matches the acting user; `from.artifact` matches a saved artifact ID;
 `from.artifactOwner` matches its owner. Use a stable ID, `*`, or `$owner` (the
 dataset owner; not valid for `artifact`). Multiple selectors in one rule all
-have to match. Any matching rule grants its actions. The artefact context is
+have to match. Any matching rule grants its actions. The artifact context is
 server-derived, never a caller-supplied impersonation flag.
 
 Examples: `{"user":"$owner"}` allows the owner directly;
 `{"user":"usr_alex"}` allows Alex; `{"artifact":"abc123"}` allows one
-artefact; `{"artifact":"*"}` allows all artefacts. Artefact mutations still
+artifact; `{"artifact":"*"}` allows all artifacts. artifact mutations still
 require accepted membership. `allow: []` locks reads and writes; administration
 remains available to owners/editors. Private sharing remains an audience ceiling
 for reads. Grant changes are revision-checked and apply at mutation commit.

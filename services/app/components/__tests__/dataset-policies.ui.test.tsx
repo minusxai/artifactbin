@@ -231,7 +231,7 @@ it('edits grant defaults without introducing table restrictions',async()=>{
  vi.stubGlobal('fetch',fetch);render(<DatasetPolicies artifactId="ds123"/>);
  fireEvent.click(screen.getByRole('button',{name:'Manage access policies'}));
  expect(await screen.findByLabelText('Public reads')).toBeChecked();
- expect(screen.getByLabelText('Owner’s artefacts can change data')).toBeChecked();
+ expect(screen.getByLabelText('Owner’s artifacts can change data')).toBeChecked();
  fireEvent.click(screen.getByLabelText('Public reads'));
  fireEvent.click(screen.getByRole('button',{name:'Save access policies'}));
  await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true));
@@ -239,7 +239,7 @@ it('edits grant defaults without introducing table restrictions',async()=>{
  expect(saved).toEqual({version:2,allow:[policy.allow[1]]});
 });
 
-it('offers named people and artefacts while storing stable grant IDs',()=>{
+it('offers named people and artifacts while storing stable grant IDs',()=>{
  const onChange=vi.fn();
  render(<DatasetGrants value={{version:2,allow:[{actions:['read'],from:{user:'$owner',artifact:'abc123'}}]}} onChange={onChange} people={[{user_id:'usr_alex',username:'alex',name:'Alex'}]} artifacts={[{id:'abc123',title:'Tasks'}]}/>);
  fireEvent.change(screen.getByRole('combobox',{name:'Rule 1 user'}),{target:{value:'usr_alex'}});

@@ -175,3 +175,17 @@ it('keeps the existing editor reachable when the thumbnail cannot load', () => {
   expect(editPreview).toHaveBeenCalledOnce();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
+
+
+it('embeds sharing controls without a modal or body scroll lock', async () => {
+  render(<ShareLink className="" artifactId="Ab3xK9" owner variant="embedded" />);
+  expect(await screen.findByLabelText('Make public')).toBeTruthy();
+  expect(screen.queryByRole('dialog', { name: 'Sharing' })).toBeNull();
+  expect(screen.queryByLabelText('Close sharing')).toBeNull();
+  expect(document.body.style.overflow).not.toBe('hidden');
+  fireEvent.click(screen.getByLabelText('Make public'));
+  await waitFor(() => expect(sharingState.visibility).toBe('public'));
+  expect(screen.getByLabelText('Invite email')).toBeTruthy();
+  fireEvent.click(screen.getByLabelText('Copy link'));
+  expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
+});
