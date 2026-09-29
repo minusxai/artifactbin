@@ -4,6 +4,7 @@ import { render, fireEvent } from '@testing-library/react';
 import { useEffect } from 'react';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { createFrameEditSession } from '@/lib/story-runtime/edit/session';
+import { createEditSessionDecorator } from '@/lib/story-runtime/edit/session-decorate';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 describe('prose integration preserves the served runtime', () => {
@@ -22,6 +23,7 @@ describe('prose integration preserves the served runtime', () => {
     const options = { components: { Question } };
     const view = render(<>{renderStoryNodes(parsed.nodes, options)}</>);
     const session = createFrameEditSession({
+      decorateFactory: createEditSessionDecorator,
       win: window,
       requestRender: () => {},
       channel: {
@@ -63,6 +65,7 @@ it('keeps the prose editor mounted across changed source renders with live sibli
   };
   const first = read('<div id="root"><p id="a">one</p><p id="b">two</p><Question id="q" /></div>');
   const session = createFrameEditSession({
+      decorateFactory: createEditSessionDecorator,
     win: window,
     requestRender: () => {},
     channel: {
@@ -104,6 +107,7 @@ it('retains live islands inside flow columns when entering editing', () => {
   const options = { components: { Grid, GridItem, Question } };
   const view = render(<>{renderStoryNodes(parsed.nodes, options)}</>);
   const session = createFrameEditSession({
+      decorateFactory: createEditSessionDecorator,
     win: window,
     requestRender: () => {},
     channel: { nonce: 'x'.repeat(32), post: () => {}, innerHtmlOf: (el) => el.innerHTML },
@@ -129,6 +133,7 @@ it('keeps a dragged text range from selecting its common layout ancestor', () =>
     '<div id="root"><p id="a">first paragraph</p><Grid mode="flow"><GridItem><h2 id="b">column heading</h2></GridItem></Grid></div>',
   );
   const session = createFrameEditSession({
+      decorateFactory: createEditSessionDecorator,
     win: window,
     requestRender: () => {},
     channel: { nonce: 'x'.repeat(32), post: () => {}, innerHtmlOf: (el) => el.innerHTML },
@@ -172,6 +177,7 @@ it('reports the actual source block for hover, click, and caret selection in for
   </section>`);
   const post = vi.fn();
   const session = createFrameEditSession({
+      decorateFactory: createEditSessionDecorator,
     win: window, requestRender: () => {},
     channel: { nonce: 'x'.repeat(32), post, innerHtmlOf: (el) => el.innerHTML },
   });
@@ -207,6 +213,7 @@ it('in a prose region, text is typed in and a container edge is neither outlined
   </section>`);
   const post = vi.fn();
   const session = createFrameEditSession({
+      decorateFactory: createEditSessionDecorator,
     win: window, requestRender: () => {},
     channel: { nonce: 'x'.repeat(32), post, innerHtmlOf: (el) => el.innerHTML },
   });
