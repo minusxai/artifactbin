@@ -36,3 +36,17 @@ export function FormatBadge(props: { format?: string }): JSX.Element {
 export function MicroLabel(props: { children: JSX.Element }): JSX.Element {
   return <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{props.children}</span>;
 }
+
+const BUTTON_VARIANTS = {
+  solid: 'bg-accent text-bg border border-accent hover:brightness-110 font-semibold',
+  ghost: 'bg-transparent text-fg border border-edge-bright hover:border-accent hover:text-accent',
+  danger: 'bg-transparent text-danger border border-edge-bright hover:border-danger hover:bg-danger-soft',
+} as const;
+
+/** Input and button styling for Solid asset forms. Native props keep accessible names and state. */
+export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof BUTTON_VARIANTS }): JSX.Element {
+  return <button {...props} class={`cursor-pointer rounded-[4px] px-3 py-1.5 font-mono text-xs transition-colors disabled:opacity-50 ${BUTTON_VARIANTS[props.variant ?? 'solid']} ${props.class ?? ''}`} />;
+}
+export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>): JSX.Element {
+  return <input {...props} class={`w-full rounded-[4px] border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none ${props.class ?? ''}`} />;
+}

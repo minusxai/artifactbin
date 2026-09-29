@@ -383,7 +383,7 @@ export function Question(props: QuestionProps) {
  * Drawing: a slot the server did not draw is drawn here at once, as today's reader draws every chart.
  * A served drawing is kept while it is current — the rows it was drawn from are the rows the page was
  * served with, and every later result is checked with `drawingIsCurrent` — and replaced when the
- * rows change or when the reader interacts with it (the lazy Vega chunk). The drawing fills its box
+ * reader readiness and visibility, when rows change, or on early input (the lazy Vega chunk). The drawing fills its box
  * from the first paint (`DRAWING_CLASS`; `fitDrawing` for one stored before that).
  */
 /** What Vega's initializeAria and cursor handling write on its container (vega-view). */
@@ -411,21 +411,34 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
   let controller: IslandChart | undefined;
   let started = false;
   let disposed = false;
+  const [showLoading, setShowLoading] = createSignal(false);
+  let indicatorTimer: ReturnType<typeof setTimeout> | undefined;
+  let readiness: MutationObserver | undefined;
+  const stopLoading = () => {
+    if (indicatorTimer) clearTimeout(indicatorTimer);
+    indicatorTimer = undefined;
+    if (el) el.setAttribute('aria-busy', 'false');
+    setShowLoading(false);
+  };
   let cancelDraw = () => {};
   let drawing: Promise<DrawnChart | null> = Promise.resolve(null);
   const draw = () => {
     if (started) return;
     started = true;
     const before = el.getAttribute(CHART_STATE_ATTR);
+    el.setAttribute('aria-busy', 'true');
+    indicatorTimer = setTimeout(() => setShowLoading(true), 150);
     el.setAttribute(CHART_STATE_ATTR, 'pending');
     cancelDraw = deferEngine(el, () => { void (async () => {
       let module: IslandChartModule;
-      try { module = await (props.chart ?? island.loadChart)(); } catch { if (before) el.setAttribute(CHART_STATE_ATTR, before); started = false; return; } // a failed chunk fetch: keep what is shown; the next trigger retries
+      try { module = await (props.chart ?? island.loadChart)(); } catch { if (before) el.setAttribute(CHART_STATE_ATTR, before); started = false; stopLoading(); return; } // a failed chunk fetch: keep what is shown; the next trigger retries
       if (disposed) return;
       controller = module.mountChart({ element: el, envelope: props.envelope(), rows: props.rows() });
     })(); });
   };
   onMount(() => {
+    readiness = new MutationObserver(() => { if (el.getAttribute(CHART_STATE_ATTR) === 'ready') stopLoading(); });
+    readiness.observe(el, { attributes: true, attributeFilter: [CHART_STATE_ATTR] });
     el.removeAttribute(CHART_SLOT_ATTR);
     if (props.drawn?.svg && !el.firstElementChild) { el.innerHTML = props.drawn.svg; el.setAttribute(CHART_STATE_ATTR, 'ready'); }
     const served = el.getAttribute(CHART_STATE_ATTR) === 'ready' && !!el.firstElementChild;
@@ -433,12 +446,17 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
     fitDrawing(el);
     const rows = props.rows();
     drawing = props.drawn ? Promise.resolve(props.drawn) : rowsDigest(rows).then(digest => ({ svg: '', table: props.table, rows: digest }), () => null);
+    // Schedule the large controller only after reader readiness and visibility; the SVG stays in place.
+    void draw();
   });
   createEffect(on(props.rows, rows => {
     if (controller) { controller.update?.(rows); return; }
     if (started) return;
     void drawing.then(async current => { if (!started && !disposed && !(await drawingIsCurrent(current, rows))) void draw(); });
   }, { defer: true }));
-  onCleanup(() => { disposed = true; cancelDraw(); controller?.destroy(); });
-  return <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />;
+  onCleanup(() => { disposed = true; cancelDraw(); readiness?.disconnect(); stopLoading(); controller?.destroy(); });
+  return <>
+    <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />
+    <Show when={showLoading()}><span role="status" aria-label="Chart loading; interactions available when ready" class="pointer-events-none absolute right-2 top-2 z-10 flex size-6 items-center justify-center rounded-full border border-border bg-background/85 text-muted-foreground shadow-sm"><span aria-hidden="true" class="size-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent motion-reduce:animate-none" /></span></Show>
+  </>;
 }

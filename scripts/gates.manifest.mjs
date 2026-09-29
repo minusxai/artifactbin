@@ -34,6 +34,7 @@ export const GATE_SPECS = Object.freeze([
   { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 240_000 },
   { name: 'cli-conformance', needsMail: true, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
+  { name: 'chart-width', needsMail: false, timeoutMs: 90_000 },
   { name: 'testusers', needsMail: true, timeoutMs: 60_000 },
   { name: 'comment-targets', needsMail: false, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, timeoutMs: 60_000 },

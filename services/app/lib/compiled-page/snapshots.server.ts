@@ -277,7 +277,7 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string
   // options and person cards are computed for whoever the run is for (the viewer overlay's to answer).
   const results = sharedResults({ tables: pick(state.tables, answered), errors: pick(state.errors, answered) });
   const { page } = await preparedPageFor(row, null, PUBLIC_BASE_URL);
-  const drawings = await drawSnapshotCharts(page.data.nodes, results, { colorMode: page.data.colorMode });
+  const drawings = await drawSnapshotCharts(page.data.nodes, results, { colorMode: page.data.colorMode, template: page.data.template });
   const snapshot: DataSnapshot = {
     key: { artifactId: key.artifactId, slot: key.slot, planKey: key.planKey, inputsKey: key.inputsKey },
     marks,

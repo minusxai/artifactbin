@@ -173,14 +173,34 @@ describe('DataTable', () => {
 });
 
 describe('Question', () => {
-  it('shows the server-drawn chart as ready and loads the chart engine only when its table changes or on interaction', async () => {
+  it('keeps the server drawing while the visible chart loads after reader readiness', async () => {
     const ctx = island();
     const loadChart = vi.fn(async () => ({ mountChart: () => ({ update() {}, destroy() {} }) }));
     const { host } = mount(ctx, () => <Question title="Revenue by month" data="$monthly" height="300px" viz={{ kind: 'vega-lite', spec: { mark: 'line' } }} id="AVkX" drawn={{ svg: '<svg data-drawn="1"></svg>', table: 'monthly', rows: 'r1' }} chart={loadChart} />);
-    expect(host.querySelector('[data-mx-chart-state="ready"] svg[data-drawn]')).toBeTruthy();
-    expect(loadChart).not.toHaveBeenCalled();
-    host.querySelector('[data-mx-chart-state]')!.dispatchEvent(new Event('pointerenter', { bubbles: true }));
+    expect(host.querySelector('[data-mx-chart-state="pending"] svg[data-drawn]')).toBeTruthy();
     await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
+    expect(host.querySelector('svg[data-drawn]')).toBeTruthy();
+  });
+  it('announces slow chart loading, ignores early input, and clears the indicator when Vega is ready', async () => {
+    const mountChart = vi.fn(({ element }: { element: HTMLElement }) => ({ destroy() {}, element }));
+    const loadChart = vi.fn(async () => ({ mountChart }));
+    const { host, dispose } = mount(undefined, () => <Question data="$monthly" viz={chart} drawn={{ svg: '<svg data-drawn="1"></svg>', table: 'monthly', rows: 'r1' }} chart={loadChart} />);
+    const slot = host.querySelector('[role="graphics-document"]') as HTMLElement;
+    expect(slot.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
+    slot.dispatchEvent(new Event('pointerenter', { bubbles: true }));
+    slot.click();
+    await new Promise(resolve => setTimeout(resolve, 180));
+    expect(host.querySelector('svg[data-drawn]')).toBeTruthy();
+    expect(host.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('Chart loading; interactions available when ready');
+    expect(host.querySelector('[role="status"] [aria-hidden="true"]')?.getAttribute('class')).toContain('motion-reduce:animate-none');
+    expect(loadChart).toHaveBeenCalledTimes(1);
+    expect(mountChart).toHaveBeenCalledTimes(1);
+    slot.setAttribute('data-mx-chart-state', 'ready');
+    await vi.waitFor(() => expect(slot.getAttribute('aria-busy')).toBe('false'));
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    dispose();
   });
   it('loads after a new table snapshot lands after boot', async () => {
     const ctx = island();
@@ -408,7 +428,7 @@ describe('data widget parity with the live reader', () => {
     const slot = host.querySelector('[role="graphics-document"]')!;
     expect(slot.textContent).not.toContain('Revenue by month');
     expect(body.firstElementChild?.textContent).toBe('Revenue by month');
-    expect(attrsOf(slot)).toEqual({ 'data-mx-chart-state': 'ready', 'aria-label': 'Vega visualization', class: 'h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block', role: 'graphics-document', 'aria-roledescription': 'visualization', style: 'cursor: default;' });
+    expect(attrsOf(slot)).toEqual({ 'data-mx-chart-state': 'pending', 'aria-label': 'Vega visualization', 'aria-busy': 'true', class: 'h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block', role: 'graphics-document', 'aria-roledescription': 'visualization', style: 'cursor: default;' });
     expect(slot.parentElement?.getAttribute('class')).toBe('relative min-h-0 w-full flex-1 overflow-hidden');
   });
 
@@ -438,25 +458,27 @@ describe('data widget parity with the live reader', () => {
     await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
 
-  it('Question keeps a current served drawing and its ready state when the same rows arrive again, and draws when they change', async () => {
+  it('Question keeps the served drawing during load and feeds changed rows to the mounted chart', async () => {
     const ctx = island();
     const [snapshot, setSnapshot] = createSignal(monthly);
     ctx.tableSnapshot = () => snapshot();
-    const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
+    const update = vi.fn();
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ update, destroy() {} }) }));
     const drawn = await drawnFor(monthly.rows);
     const { host } = mount(ctx, () => <Question data="$monthly" viz={chart} drawn={drawn} chart={loadChart} />);
     const slot = host.querySelector('[role="graphics-document"]')!;
     const served = slot.firstElementChild;
     setSnapshot({ ...monthly, rows: monthly.rows.map((r) => ({ ...r })) });
     await new Promise((r) => setTimeout(r, 20));
-    expect(loadChart).not.toHaveBeenCalled();
-    expect(slot.getAttribute('data-mx-chart-state')).toBe('ready');
+    expect(loadChart).toHaveBeenCalledTimes(1);
+    expect(slot.getAttribute('data-mx-chart-state')).toBe('pending');
     expect(slot.firstElementChild).toBe(served);
     setSnapshot({ ...monthly, rows: [...monthly.rows, { month: '2025-03-01', revenue: 10, units: 1 }] });
-    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(loadChart).toHaveBeenCalledTimes(1);
   });
 
-  it('Question leaves a responsive served drawing exactly as served: no inline size, no redraw', async () => {
+  it('Question leaves a responsive served drawing at the same size while the engine loads', async () => {
     const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
     const drawn = { ...(await drawnFor(monthly.rows)), svg: `<svg class="marks ${DRAWING_CLASS}" width="640" height="303" viewBox="0 0 640 303"></svg>` };
     // A box smaller than the nominal drawing (a fixed-height card): the drawing already fills it from the first paint.
@@ -467,7 +489,7 @@ describe('data widget parity with the live reader', () => {
       expect(svg.hasAttribute('style')).toBe(false);
     } finally { rect.mockRestore(); }
     await new Promise((r) => setTimeout(r, 20));
-    expect(loadChart).not.toHaveBeenCalled();
+    expect(loadChart).toHaveBeenCalledTimes(1);
   });
 
   it('Question feeds a chart drawn here the rows of every later result', async () => {
