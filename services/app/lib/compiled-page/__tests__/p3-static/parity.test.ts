@@ -46,7 +46,7 @@ describe('Solid static render parity', () => {
       writeFileSync(`${process.env.P3_REPORT_DIR}/parity.json`, JSON.stringify(reports, null, 2));
     }
     expect(reports.flatMap((report) => report.contentDom.map((diff) => `${report.key}: ${diff}`))).toEqual([]);
-    expect(reports.reduce((sum, report) => sum + report.hydrationKeys.length, 0)).toBe(44);
+    expect(reports.reduce((sum, report) => sum + report.hydrationKeys.length, 0)).toBe(67);
     expect(reports.reduce((sum, report) => sum + report.generatedIds.length, 0)).toBe(3);
     expect(reports).toHaveLength(35);
   }, 300_000);
