@@ -9,6 +9,7 @@ import type { Component } from 'solid-js';
 import { brotliCompressSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { kitchenSinkMarkup } from '@/lib/story/kitchen-sink';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const fixture = (source: string): { html: string; browserCode: string; flow: CompiledDataflow } => JSON.parse(execFileSync(
@@ -91,5 +92,32 @@ describe('one tree SSR to hydrate', () => {
     expect(warnings).not.toHaveBeenCalled();
     expect(errors).not.toHaveBeenCalled();
     dispose?.(); runtime.dispose(); host.remove(); warnings.mockRestore(); errors.mockRestore();
+  });
+
+  it('hydrates the kitchen sink through the shipped one-tree runtime', async () => {
+    const source = kitchenSinkMarkup({ dataset: 'Data01', recipe: 'Viz001', image: 'Image1', pdf: 'Paper1' });
+    const server = fixture(source);
+    const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
+    const pageData = host.querySelector('script[data-mx-module-data]')?.cloneNode(true) as HTMLScriptElement | undefined;
+    if (pageData) { pageData.id = 'mx-story-data'; document.body.append(pageData); }
+    for (const match of server.browserCode.matchAll(/document\.querySelector\(['"]([^'"]+)['"]\)/g)) {
+      expect(document.querySelector(match[1]!)).not.toBeNull();
+    }
+    let tree: Component | null = null;
+    const modules = new Map<string, Record<string, unknown>>();
+    const specifiers = [...server.browserCode.matchAll(/from\s*["'](\/islands\/[^"']+)["']/g)].map(match => match[1]!);
+    await Promise.all([...new Set(specifiers)].map(async specifier => {
+      if (specifier.includes('/boot-')) return;
+      const file = path.resolve(ROOT, 'services/app/public', specifier.slice(1));
+      modules.set(specifier, await import(/* @vite-ignore */ pathToFileURL(file).href) as Record<string, unknown>);
+    }));
+    await evaluateModule(server.browserCode, specifier => specifier.includes('/boot-')
+      ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
+      : modules.get(specifier)!, 'test/one-tree-kitchen.js');
+    expect(tree).not.toBeNull();
+    const shippedRt = modules.get(loadCompilerBuild().manifest['@mx/rt']!)!;
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: {} } }, shippedRt.createDataflowStore as typeof createDataflowStore);
+    (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree!, runtime.context, host);
+    runtime.dispose(); host.remove(); pageData?.remove();
   });
 });
