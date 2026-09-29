@@ -18,7 +18,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { evaluateModule, transformSolid } from '@/lib/compiled-page/bundle.server';
+import { evaluateModule } from '@/lib/compiled-page/bundle.server';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import { EDITABLE_CELLS_BODY, EDITABLE_CELLS_REFUSAL, EDITABLE_CELLS_ROWS, LEGACY_REFUSED_CELLS } from './fixtures/editable-cells';
@@ -40,7 +41,7 @@ const COLUMNS = [...DATASET, { name: 'pick', type: 'string' }, { name: 'action',
 /** The guest snapshot the page is served with: the rows are in the first paint, and the cells are hydrated in place. */
 const SNAPSHOT = { tables: { rows: { rows: EDITABLE_CELLS_ROWS, columns: COLUMNS } }, errors: {} };
 
-interface ServerHalf { html: string; islands: string; flow: CompiledDataflow }
+interface ServerHalf { html: string; islands: string; browserCode: string; flow: CompiledDataflow }
 let cached: ServerHalf | null = null;
 function serverHalf(): ServerHalf {
   if (cached) return cached;
@@ -78,11 +79,18 @@ async function page(refusal: string | null): Promise<Page> {
   const host = document.createElement('div');
   host.innerHTML = server.html;
   document.body.append(host);
+  const pageData = document.createElement('script');
+  pageData.id = 'mx-story-data'; pageData.type = 'application/json';
+  pageData.textContent = host.querySelector('script[data-mx-module-data]')?.textContent ?? '{}';
+  document.body.append(pageData);
   const rt = await shipped('@mx/rt');
-  const code = await transformSolid(server.islands, { generate: 'dom', hydratable: true }, { moduleName: '@mx/rt' });
+  const manifest = loadCompilerBuild().manifest;
   const kits = new Map<string, Record<string, unknown>>();
-  for (const spec of new Set([...server.islands.matchAll(/from "(@mx\/kit\/[a-z-]+)"/g)].map((m) => m[1]!))) kits.set(spec, await shipped(spec));
-  const { ISLANDS } = await evaluateModule(code, (spec) => (spec === '@mx/rt' ? rt : kits.get(spec) ?? (() => { throw new Error(`unexpected import ${spec}`); })()), 'test/islands.js') as { ISLANDS: Array<[string, unknown]> };
+  for (const spec of new Set([...server.islands.matchAll(/from "(@mx\/kit\/[a-z-]+)"/g)].map((m) => m[1]!))) kits.set(manifest[spec]!, await shipped(spec));
+  let tree: unknown = null;
+  await evaluateModule(server.browserCode, (spec) => spec === manifest['@mx/rt'] ? rt : spec === manifest['@mx/boot']
+    ? { boot: (value: { TREE: unknown }) => { tree = value.TREE; } }
+    : kits.get(spec) ?? (() => { throw new Error(`unexpected import ${spec}`); })(), 'test/islands.js');
   let markHydrated!: () => void; const hydrated = new Promise<void>((r) => { markHydrated = r; });
   const rows = EDITABLE_CELLS_ROWS.map((r) => ({ ...r }));
   const written: MutationRequest[] = [];
@@ -106,10 +114,10 @@ async function page(refusal: string | null): Promise<Page> {
   const runtime = (rt.createIslandRuntime as (d: unknown, s: (i: unknown) => unknown) => { context: unknown; store: { start(): void; invalidateDatasets(ids: string[]): void } | null; dispose(): void })(
     { dataflow: { flow: server.flow, values: {}, results: SNAPSHOT }, viewer: null }, (input) => (rt.createDataflowStore as (i: unknown, o: unknown) => unknown)(input, { transport }));
   runtime.store?.start();
-  const disposers = ISLANDS.map(([renderId, Island]) => (rt.hydrateIsland as (r: string, c: unknown, x: unknown, p: ParentNode) => (() => void) | null)(renderId, Island, runtime.context, host));
+  const disposeTree = (rt.hydrateIsland as (r: string, c: unknown, x: unknown, p: ParentNode) => (() => void) | null)('d-', tree, runtime.context, host);
   markHydrated();
   await until(() => !!host.querySelector('[aria-label="Item 1"]'), 'the first row\'s cells');
-  const result = { host, written, settle, refresh: () => runtime.store?.invalidateDatasets(['CELLS1']), dispose: () => { for (const d of disposers) d?.(); runtime.dispose(); host.remove(); } };
+  const result = { host, written, settle, refresh: () => runtime.store?.invalidateDatasets(['CELLS1']), dispose: () => { disposeTree?.(); runtime.dispose(); pageData.remove(); host.remove(); } };
   open = result;
   return result;
 }

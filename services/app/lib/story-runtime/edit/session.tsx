@@ -884,7 +884,9 @@ export function createFrameEditSession({
     decorateChildren: decorateApi?.decorateChildren,
     canApplyDraft() { return !typingReported && !active?.userEdited; },
     unmountCompiledDom() {
-      const focused = [...views].find((view) => view.hasFocus());
+      const toolbarFocus = doc.activeElement instanceof HTMLElement
+        && !!doc.activeElement.closest('[aria-label="Typography toolbar"]');
+      const focused = [...views].find((view) => view.hasFocus()) ?? (toolbarFocus ? lastView : null);
       // An explicit Undo/Redo target may name blocks that do not exist in the
       // currently painted draft. Keep it until the replacement DOM is mounted.
       if (focused && !pendingBookmark) pendingBookmark = captureBookmark(focused.state);
