@@ -6,7 +6,7 @@
   "main": "./src/main.ts",
   "types": "./src/main.ts",
   "scripts": {
-    "build": "node scripts/build-server-reader.mjs && node ../../scripts/build-islands.mjs && node scripts/generate-routes.mjs && vite build --config ../../vite.config.mts",
+    "build": "node scripts/build-prep.mjs && vite build --config ../../vite.config.mts",
     "build:islands": "node ../../scripts/build-islands.mjs",
     "generate:routes": "node scripts/generate-routes.mjs",
     "test": "vitest run --config ../../vitest.config.ts --project=api && vitest run --config ../../vitest.config.ts --project=node && vitest run --config ../../vitest.config.ts --project=ui && vitest run --config ../../vitest.config.ts --project=islands",

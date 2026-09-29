@@ -143,7 +143,7 @@ export const ISOLATED_GATES = Object.freeze(['editor-v2', 'hydration', 'offline-
  * it may not even be running). Keep this in step with the workflow's shard count — the test in
  * scripts/__tests__/ci-plan.test.mjs checks the matrix against it.
  */
-export const CI_GATE_SHARDS = 22;
+export const CI_GATE_SHARDS = 24;
 
 
 /**
