@@ -2,7 +2,7 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {TrustedUi} from '../TrustedUi';
 import {PageControls} from '../PageChrome';
-import {requestPageChrome} from '../page-chrome-state';
+import {openPageChromeOnceMounted,requestPageChrome} from '../page-chrome-state';
 import {NotificationSettings} from '../NotificationSettings';
 import {PeopleInbox} from '../PeopleInbox';
 import {NotificationProvider,NotificationBell,NotificationMenu} from '../NotificationCenter';
@@ -94,4 +94,19 @@ it('renders combined mutation messages in one card with trusted actor identity',
  expect(screen.getByRole('link',{name:'Bob'})).toHaveAttribute('href','/people/bob');
  expect(view.container.querySelectorAll('[data-notification-id]')).toHaveLength(1);
  expect(screen.getByText(/via agent/)).toBeVisible();
+});
+
+it('keeps the cold reader bell click until the signed-in session is loaded',async()=>{
+ identity.session=null;
+ vi.stubGlobal('EventSource',class{close=vi.fn();});
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({autoAccept:true,blocks:[],next:null,unread:0,notifications:[]})));
+ openPageChromeOnceMounted('notifications');
+ const view=render(<NotificationProvider><NotificationBell/><NotificationMenu/></NotificationProvider>);
+ expect(screen.queryByRole('dialog',{name:'Notifications'})).toBeNull();
+ identity.session={kind:'account',user:{id:'alice'}};
+ view.rerender(<NotificationProvider><NotificationBell/><NotificationMenu/></NotificationProvider>);
+ expect(await screen.findByRole('dialog',{name:'Notifications'})).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Close notifications'}));
+ view.rerender(<NotificationProvider><NotificationBell/><NotificationMenu/></NotificationProvider>);
+ expect(screen.queryByRole('dialog',{name:'Notifications'})).toBeNull();
 });
