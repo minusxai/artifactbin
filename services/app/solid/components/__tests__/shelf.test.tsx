@@ -69,3 +69,21 @@ it('opens a folder action menu without recursive updates', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Delete Reports' }));
   expect(screen.getByRole('dialog', { name: 'Delete Reports?' })).toBeInTheDocument();
 });
+
+it('filters the move picker to the account’s folders by name', () => {
+  const decks = doc('fold02', { title: 'Decks', format: 'folder' });
+  const row = doc('live01', { title: 'Live Note' });
+  render(() => <Shelf rows={[folder, decks, row]} scopeParentId={null} actions="full" />);
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for Live Note' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Move Live Note' }));
+  expect(screen.getByRole('dialog', { name: 'Move Live Note' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Move to root')).toBeInTheDocument();
+  expect(screen.getByLabelText('Move to Reports')).toBeInTheDocument();
+  expect(screen.getByLabelText('Move to Decks')).toBeInTheDocument();
+  fireEvent.input(screen.getByLabelText('Filter folders'), { target: { value: 'dec' } });
+  expect(screen.queryByLabelText('Move to Reports')).toBeNull();
+  expect(screen.getByLabelText('Move to Decks')).toBeInTheDocument();
+  expect(screen.getByLabelText('Move to root')).toBeInTheDocument();
+  fireEvent.input(screen.getByLabelText('Filter folders'), { target: { value: '' } });
+  expect(screen.getByLabelText('Move to Reports')).toBeInTheDocument();
+});
