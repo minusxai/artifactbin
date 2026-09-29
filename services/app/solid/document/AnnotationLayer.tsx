@@ -6,7 +6,7 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { loginHref } from '@/lib/login-href';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import { isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import { AnnotationRail } from './AnnotationRail';
 import { CommentMarkdown, CommentMarkdownField } from './CommentMarkdown';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -38,6 +38,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [showResolved, setShowResolved] = createSignal(false);
   const [deleting, setDeleting] = createSignal<string | null>(null);
   const [openId, setOpenId] = createSignal<string | null>(null);
+  let mutation = { signature: '', key: '' };
   const [folds, setFolds] = createSignal(readFolds(props.id));
   const [pick, setPick] = createSignal<'select' | null>(props.pickRequested ? 'select' : null);
   const [hoverId, setHoverId] = createSignal<string | null>(null);
@@ -60,6 +61,17 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   createEffect(() => {
     if (!props.initialSelection) return;
     setSelection(props.initialSelection);
+  });
+  createEffect(() => {
+    if (!pick() && !selection()) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      if (pick()) { setPick(null); capture.reset(); }
+      else { setSelection(null); capture.reset(); props.onSelectionConsumed?.(); sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null }); }
+    };
+    window.addEventListener('keydown', escape);
+    onCleanup(() => window.removeEventListener('keydown', escape));
   });
   onMount(() => {
     const controller = new AbortController();
@@ -121,10 +133,13 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     if (!target.nodeId) { setError('Wait for this change to save before commenting. Your draft is still here.'); return; }
     setBusy(true); setError('');
     try {
-      const imageId = await capture.stage();
-      const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}), ...(imageId ? { image_id: imageId } : {}) }, crypto.randomUUID());
+      const attachmentId = await capture.stage();
+      const signature = JSON.stringify([target, draft(), attachmentId]);
+      if (mutation.signature !== signature) mutation = { signature, key: crypto.randomUUID() };
+      const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}), ...(attachmentId ? { attachment_id: attachmentId, edit_id: capture.draft()!.editId } : {}) }, mutation.key);
       setItems(previous => [...previous.filter(item => item.id !== row.id), row]);
       setDraft(''); setSelection(null); capture.reset(); props.onSelectionConsumed?.();
+      sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
     } catch (cause) {
       if (cause instanceof BackendRequestError && cause.signInRequired) location.assign(loginHref(location, 'comment'));
       else setError(cause instanceof Error ? cause.message : 'Could not save the comment. Your draft is still here.');

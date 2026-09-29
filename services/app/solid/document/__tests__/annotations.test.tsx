@@ -147,3 +147,30 @@ it('subscribes when a lazy document runtime becomes ready after the layer mounts
   receive?.({ type: 'mx:annotation-pin', nonce: 'private', id: 'ann1', rect: { x: 0, y: 0, width: 1, height: 1 } });
   expect(opened).toHaveBeenCalledWith(true);
 });
+
+it('retries the same failed draft with the same idempotency key', async () => {
+  let fail = true;
+  const create = vi.fn(async (_body: Record<string, unknown>, _key: string) => { if (fail) throw new Error('temporary'); return thread; });
+  const service = backend({ createAnnotation: create });
+  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen={false} onRailOpenChange={() => {}}
+    initialSelection={{ kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [] }} />);
+  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Retry me' } });
+  fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+  fail = false;
+  fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  expect(create.mock.calls[1]?.[1]).toBe(create.mock.calls[0]?.[1]);
+});
+
+it('Escape cancels a draft and clears the document selection', () => {
+  const send = vi.fn();
+  const runtime = { send, subscribe: () => () => {} } as unknown as StoryController;
+  const view = render(() => <AnnotationLayer id="abc" backend={backend()} railOpen={false} onRailOpenChange={() => {}}
+    runtimeRef={{ current: runtime }} sessionNonce="private"
+    initialSelection={{ kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [] }} />);
+  expect(view.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+  expect(send).toHaveBeenCalledWith({ type: 'mx:select', path: null });
+});
