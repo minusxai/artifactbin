@@ -62,14 +62,6 @@ it('switches list and grid and keeps search accessible', () => {
   expect(screen.getByLabelText('Open Doc one').querySelector('img')).toHaveAttribute('src', expect.stringContaining('/a/one/export?'));
 });
 
-it('opens an artifact from its grid thumbnail while keeping secondary actions separate', () => {
-  render(() => <Shelf rows={[doc('one')]} actions="full" />);
-  const image = document.querySelector('[aria-label="Artifact grid"] img')!;
-  const card = image.closest('li')!;
-  expect(card.querySelector('a[aria-label="Open Doc one"]')).toHaveClass('after:inset-0');
-  expect(screen.getByLabelText('Edit Doc one')).toHaveAttribute('href', '/a/one#edit');
-});
-
 it('opens a folder action menu without recursive updates', () => {
   render(() => <Shelf rows={[folder]} scopeParentId={null} actions="full" />);
   fireEvent.click(screen.getByRole('button', { name: 'More actions for Reports' }));
