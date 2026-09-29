@@ -31,8 +31,9 @@ const COMPILED_PROBE = () => {
     if (!story) return;
     state.story = story;
     state.served = [...story.querySelectorAll('*')];
+    // One-tree keys also cover reactive chart and Mermaid roots; their drawn state is checked by their browser gates.
     state.staticNodes = [...story.querySelectorAll('[data-mx-ast]')]
-      .filter((node) => !node.closest('[data-hk^="s"]'))
+      .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [data-mx-mermaid-state]'))
       .map((node) => ({ node, attrs: [...node.attributes].map((attr) => [attr.name, attr.value]),
         text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') }));
   });

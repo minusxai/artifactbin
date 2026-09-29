@@ -60,6 +60,11 @@ describe('one document tree', () => {
     const after = generate(input('<p id="lede">Second</p><Question data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar"}}} />'));
     expect(after.browserIslands).toBe(before.browserIslands);
   });
+  it('hydrates a static wrapper without embedding its server-owned id in the browser module', () => {
+    const before = generate(input('<div id="first-wrap"><p>First</p><Question id="chart" data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar"}}} /></div>'));
+    const after = generate(input('<div id="second-wrap"><p>Second</p><Question id="chart" data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar"}}} /></div>'));
+    expect(after.browserIslands).toBe(before.browserIslands);
+  });
   it('imports kit components rendered only inside browser rows and table cells', () => {
     const result = generate(input('<Helmet><Value name="rows" type="table" value={[{"id":1}]} /></Helmet><For each={$rows} keyBy="id"><Badge>Row</Badge><Button run="$complete">Complete</Button></For><DataTable data="$rows"><Column col="id"><Button run="$complete">Cell</Button></Column></DataTable>'));
     expect(result.browserIslands).toMatch(/import \{[^}]*Badge[^}]*Button[^}]*\} from "@mx\/kit\/basic"/);

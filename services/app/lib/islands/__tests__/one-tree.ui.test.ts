@@ -116,8 +116,16 @@ describe('one tree SSR to hydrate', () => {
       : modules.get(specifier)!, 'test/one-tree-kitchen.js');
     expect(tree).not.toBeNull();
     const shippedRt = modules.get(loadCompilerBuild().manifest['@mx/rt']!)!;
-    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: {} } }, shippedRt.createDataflowStore as typeof createDataflowStore);
+    const portal = document.createElement('div'); document.body.append(portal);
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: {} } }, shippedRt.createDataflowStore as typeof createDataflowStore, { trustedPortal: () => portal });
     (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree!, runtime.context, host);
-    runtime.dispose(); host.remove(); pageData?.remove();
+    const dialogText = host.querySelector('dialog p');
+    expect(dialogText?.textContent).toContain('Dialog content opened from the gallery.');
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Open dialog')!.click();
+    expect(portal.querySelector('dialog p')).toBe(dialogText);
+    expect(portal.querySelector('dialog button')?.textContent).toBe('Close');
+    portal.querySelector<HTMLButtonElement>('dialog button')!.click();
+    expect(host.querySelector('dialog p')).toBe(dialogText);
+    runtime.dispose(); host.remove(); pageData?.remove(); portal.remove();
   });
 });

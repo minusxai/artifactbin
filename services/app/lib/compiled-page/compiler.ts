@@ -220,6 +220,8 @@ interface Ctx {
   island?: IslandBuild;
   /** Structural kit descendants of a live component must remain hydratable. */
   liveKit?: boolean;
+  /** The subtree may be created after the first hydration (a conditional branch). */
+  branch?: boolean;
 }
 
 /** What one generation produced: the sources and what they used. */
@@ -330,8 +332,8 @@ export function generate(input: GenerateInput): Generated {
         const yes = Boolean(evaluateReactive(node.control.test, ctx.preview.values));
         return node.control.kind === 'and' && !yes ? '' : emit(node.children[yes ? 0 : 1]!, `${path}.${yes ? 0 : 1}`, mode, ctx);
       }
-      const yes = emit(node.children[0]!, `${path}.0`, mode, ctx);
-      const no = emit(node.children[1]!, `${path}.1`, mode, ctx);
+      const yes = emit(node.children[0]!, `${path}.0`, mode, { ...ctx, branch: true });
+      const no = emit(node.children[1]!, `${path}.1`, mode, { ...ctx, branch: true });
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
     }
     if (INERT.has(node.tag)) return '';
@@ -468,6 +470,9 @@ export function generate(input: GenerateInput): Generated {
     const patch = resolveRefProps(node, props, refData);
     if (patch) props = { ...props, ...patch };
     if (ctx.preview) props = ctx.preview.rewrite(props);
+    // A static wrapper with live descendants is already served. Its id may be minted
+    // anew by an edit; leaving it to the DOM keeps the browser module reusable.
+    if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) delete props.id;
     const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
     const reactive = ctx.preview ? [] : node.attributes.filter((a) => !a.value.static && REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive));
