@@ -3,6 +3,8 @@ import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artif
 import {useAppHarness} from './harness';
 import {eraseTestUser} from '@/lib/testusers';
 import {getDb} from '@/lib/db';
+import {notificationAuthority} from '@/lib/notification-authority';
+import {seedOwnerJoin} from '@/lib/relation-state';
 import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notification-jobs';
 useAppHarness();
 const input:MutationNotificationJobInput={
@@ -86,10 +88,10 @@ it('rechecks source-free authority using immutable stored input and completes no
  await expect(store.complete(claim,{...plan,rules:plan.rules.map(rule=>({...rule,rows:[],sources:[]}))})).rejects.toThrow('authority revoked');expect(checked).toBe(true);
  expect((await db.query('SELECT status,plan FROM notification_jobs')).rows).toEqual([{status:'running',plan:null}]);
 });
-it('suppresses blocked, expired and human-self recipients and isolates testuser-origin output',async()=>{
+it('allows human-self recipients while suppressing blocked and expired recipients and isolates testuser-origin output',async()=>{
  const {db,store}=await fixture();await db.query("INSERT INTO users(id,expires_at) VALUES('blocked',NULL),('blocker',NULL),('expired','2025-01-01')");await db.query("INSERT INTO user_blocks VALUES('alice','blocked'),('blocker','alice')");
  await db.transaction(tx=>store.enqueue(tx,input));const claim=(await store.claim())!;const audience={...plan,rules:plan.rules.map(rule=>({...rule,rows:[{recipientIds:['alice','bob','blocked','blocker','expired','missing'],message:'Changed'}]}))};
- expect(await store.complete(claim,audience)).toBe(true);expect((await db.query('SELECT recipient_id FROM mutation_notifications')).rows).toEqual([{recipient_id:'bob'}]);
+ expect(await store.complete(claim,audience)).toBe(true);expect((await db.query('SELECT recipient_id FROM mutation_notifications ORDER BY recipient_id')).rows).toEqual([{recipient_id:'alice'},{recipient_id:'bob'}]);
  await db.query("UPDATE users SET kind='testuser' WHERE id='alice'");const agent={...input,origin:{...input.origin,mutationRunId:'run2'},initiator:{...input.initiator,execution:'agent' as const}};
  await db.transaction(tx=>store.enqueue(tx,agent));expect(await store.complete((await store.claim())!,audience)).toBe(true);
  expect((await db.query("SELECT recipient_id FROM mutation_notifications WHERE mutation_run_id='run2'")).rows).toEqual([{recipient_id:'alice'}]);
@@ -128,4 +130,21 @@ it('materializes the 2000-recipient run bound once per user across duplicate rul
  expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM mutation_notifications')).rows[0]?.count).toBe(2000);
  expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM event_outbox')).rows[0]?.count).toBe(2000);
  expect((await db.query<{messages:string[]}>('SELECT messages FROM mutation_notifications LIMIT 1')).rows[0]?.messages).toEqual(['Changed']);
+});
+
+it('delivers human self notifications only while explicitly joined',async()=>{
+ const {db}=await fixture();
+ await db.query("INSERT INTO tokens(id,token_hash,user_id) VALUES('self-token','self-hash','alice')");
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('doc','self-token','alice','markup','public')");
+ const store=createNotificationJobStore({db,authority:{...authority,admitRecipients:notificationAuthority.admitRecipients}});
+ const selfPlan={...plan,rules:plan.rules.map(rule=>({...rule,sources:[],rows:[{recipientIds:['alice'],message:'You changed your task'}]}))};
+ await db.transaction(tx=>store.enqueue(tx,input));await store.complete((await store.claim())!,selfPlan);
+ expect((await db.query('SELECT id FROM mutation_notifications')).rows).toEqual([]);
+ await seedOwnerJoin(db,'doc','alice');
+ await db.transaction(tx=>store.enqueue(tx,{...input,origin:{...input.origin,mutationRunId:'joined'}}));await store.complete((await store.claim())!,selfPlan);
+ expect((await db.query('SELECT mutation_run_id,recipient_id,messages FROM mutation_notifications')).rows).toEqual([{mutation_run_id:'joined',recipient_id:'alice',messages:['You changed your task']}]);
+ expect((await db.query('SELECT id FROM event_outbox')).rows).toHaveLength(1);
+ await db.query("UPDATE relations SET status='left',deleted_at=now() WHERE subject_id='alice'");
+ await db.transaction(tx=>store.enqueue(tx,{...input,origin:{...input.origin,mutationRunId:'left'}}));await store.complete((await store.claim())!,selfPlan);
+ expect((await db.query('SELECT id FROM mutation_notifications')).rows).toHaveLength(1);
 });

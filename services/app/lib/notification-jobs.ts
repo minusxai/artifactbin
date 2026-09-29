@@ -118,7 +118,7 @@ async function admitAccounts(tx:Queryable,input:MutationNotificationJobInput,ids
  const sender=input.bindings.userId;
  const senderKind=sender?(await tx.query<{kind:string}>('SELECT kind FROM users WHERE id=$1',[sender])).rows[0]?.kind:null;
  const users=(await tx.query<{id:string}>(`SELECT u.id FROM users u WHERE u.id=ANY($1::text[]) AND u.merged_into_user_id IS NULL AND (u.expires_at IS NULL OR u.expires_at>coalesce($2::timestamptz,clock_timestamp()))
-   AND ($3::text IS DISTINCT FROM 'testuser' OR u.kind='testuser') AND NOT ($4::boolean AND u.id=$5::text)
-   AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.user_id=u.id AND b.blocked_user_id=$5) OR (b.user_id=$5 AND b.blocked_user_id=u.id))`,[ids,at,senderKind,input.initiator.execution==='human',sender])).rows;
+   AND ($3::text IS DISTINCT FROM 'testuser' OR u.kind='testuser')
+   AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.user_id=u.id AND b.blocked_user_id=$4) OR (b.user_id=$4 AND b.blocked_user_id=u.id))`,[ids,at,senderKind,sender])).rows;
  return users.map(user=>user.id);
 }
