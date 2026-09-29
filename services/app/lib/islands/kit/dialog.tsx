@@ -29,8 +29,8 @@ export function DialogTrigger(props: TriggerProps) {
 }
 export function DialogClose(props: TriggerProps) {
   const ctx = state(); const { wrapsControl, type: _type, ref: _ref, ...rest } = props;
-  if (wrapsControl) return <span {...(rest as unknown as JSX.HTMLAttributes<HTMLSpanElement>)} class={`contents ${props.class ?? ''}`} on:click={() => { if (!ctx.busy()) ctx.setOpen(false); }}>{props.children}</span>;
-  return <button {...rest} type="button" disabled={props.disabled || ctx.busy()} on:click={() => ctx.setOpen(false)}>{props.children}</button>;
+  if (wrapsControl) return <span {...(rest as unknown as JSX.HTMLAttributes<HTMLSpanElement>)} data-mx-dialog-close="" class={`contents ${props.class ?? ''}`} on:click={() => { if (!ctx.busy()) ctx.setOpen(false); }}>{props.children}</span>;
+  return <button {...rest} data-mx-dialog-close="" type="button" disabled={props.disabled || ctx.busy()} on:click={() => ctx.setOpen(false)}>{props.children}</button>;
 }
 /**
  * `<DialogContent run="$add" args={{…}}>`: the dialog is a FORM that performs the named `<Mutation>` on
@@ -67,9 +67,20 @@ export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement>
   const { run: _run, args: _args, stacked: _stacked, onSubmitMutation: _onSubmitMutation, unavailable: _unavailable, conflictMessage: _conflictMessage, onKeyDown: _onKeyDown, ...rest } = props;
   const mutation = typeof props.run === 'string' ? refName(props.run) : null;
   onMount(() => {
+    const closeFromServedNode = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-mx-dialog-close]') : null;
+      if (target && dialog.contains(target) && !ctx.busy()) ctx.setOpen(false);
+    };
+    dialog.addEventListener('click', closeFromServedNode);
     const home = document.createComment('dialog-home'); dialog.before(home);
     createEffect(() => {
       const open = ctx.open();
+      // Native modal top-layer state belongs to the current portal; close it before reparenting.
+      if (!open && openedDialog?.open) {
+        if (typeof openedDialog.close === 'function') openedDialog.close(); else openedDialog.removeAttribute('open');
+        openedDialog = null;
+        queueMicrotask(() => ctx.trigger()?.focus());
+      }
       const destination = open ? island.trustedPortal() : null;
       if (destination) destination.append(dialog);
       else home.parentNode?.insertBefore(dialog, home.nextSibling);
@@ -81,9 +92,8 @@ export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement>
           if (dialog.open) (dialog.querySelector<HTMLElement>('[autofocus]') ?? dialog.querySelector<HTMLElement>('input:not([disabled]),textarea:not([disabled]),select:not([disabled])'))?.focus();
         });
       }
-      else if (openedDialog?.open) { if (typeof openedDialog.close === 'function') openedDialog.close(); else openedDialog.removeAttribute('open'); openedDialog = null; queueMicrotask(() => ctx.trigger()?.focus()); }
     });
-    onCleanup(() => home.remove());
+    onCleanup(() => { dialog.removeEventListener('click', closeFromServedNode); home.remove(); });
   });
   onCleanup(() => { if (openedDialog?.open && typeof openedDialog.close === 'function') openedDialog.close(); });
   return <dialog ref={dialog} role={ctx.open() ? 'dialog' : undefined} aria-modal="true" tabIndex={props.tabIndex ?? -1} {...rest} on:keydown={event => {
