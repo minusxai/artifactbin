@@ -75,7 +75,15 @@ describe('OSS single-host ownership', () => {
  */
 describe('ci.yml: one build, shared with the gates', () => {
   it('uploads the build from `build` and downloads it in `gates`, which rebuilds nothing', () => {
-    expect(ci.jobs.gates.needs).toEqual(expect.arrayContaining(['plan', 'build']));
+    // `gates` no longer sits behind `build` in the `needs` graph — it starts as soon as `plan`
+    // does, and its own steps (checkout, install, Playwright, sandbox prep) run while `build` is
+    // still assembling the artifact. It still cannot use that artifact before `build` has produced
+    // it, so it polls `build`'s status from the Actions API instead: a real dependency, just not
+    // one that stalls this job's own setup behind it.
+    expect(ci.jobs.gates.needs).toEqual(['plan']);
+    const wait = ci.jobs.gates.steps.find((step) => step.name === 'Wait for the build job');
+    expect(wait?.run).toContain('.name == "build"');
+    expect(wait?.run).toContain('completed success');
     const upload = ci.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-artifact'));
     expect(upload?.with?.name).toBe('app-build');
     // The whole of what `npm run build` (and the CLI's) writes: the SPA, compiled reader and
@@ -103,6 +111,10 @@ describe('ci.yml: one build, shared with the gates', () => {
     expect(upload?.with?.['include-hidden-files']).toBe(true);
     const download = ci.jobs.gates.steps.find((step) => step.uses?.startsWith('actions/download-artifact'));
     expect(download?.with?.name).toBe('app-build');
+    // The wait blocks the download, not this job's own setup: it comes after everything that needs
+    // nothing from `build`, and before the one step that does.
+    expect(ci.jobs.gates.steps.indexOf(wait)).toBeGreaterThan(0);
+    expect(ci.jobs.gates.steps.indexOf(wait)).toBeLessThan(ci.jobs.gates.steps.indexOf(download));
     for (const command of ['npm run build', 'npm run build -w services/cli']) {
       expect(ci.jobs.gates.steps.map((step) => step.run), command).not.toContain(command);
     }
