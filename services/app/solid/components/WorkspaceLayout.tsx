@@ -2,6 +2,7 @@
 import { Show, type JSX } from 'solid-js';
 import type { AccountWorkspace, AccountWorkspaceCore, AccountWorkspaceInsights } from '@/lib/workspace';
 import WorkspaceCreate from './WorkspaceCreate';
+import Dashboard from './Dashboard';
 
 export const HOME_WORKSPACE_COLUMN = 'mx-auto max-w-[80rem] px-4 sm:px-6';
 
@@ -16,7 +17,7 @@ export default function WorkspaceLayout(props: { workspace: AccountWorkspace | A
     <div class="min-w-0 lg:col-start-1 lg:row-start-1">{props.children}</div>
     <aside aria-label="Dashboard rail" class="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-24 lg:pl-6">
       <Show when={loaded()} fallback={<Show when={props.insightsError} fallback={<div aria-label="Loading workspace insights" role="status" aria-busy="true" class="min-h-80 motion-safe:animate-pulse"><span class="sr-only">Loading workspace insights</span><div class="h-32 rounded border border-edge bg-surface" /><div class="mt-6 h-40 rounded border border-edge bg-surface" /></div>}><div role="alert">Could not load workspace insights. <button type="button" aria-label="Retry workspace insights" onClick={props.onCreated}>Try again</button></div></Show>}>
-        {insights => <section aria-label="Dashboard metrics" class="space-y-3 font-mono text-xs"><h2 class="text-[10px] uppercase tracking-[0.14em] text-faint">dashboard</h2><dl class="grid grid-cols-2 gap-3"><div><dt>artifacts</dt><dd class="text-xl text-fg">{insights().stats?.artifacts ?? props.workspace.artifacts.filter(row => row.format === 'markup').length}</dd></div><div><dt>assets</dt><dd class="text-xl text-fg">{insights().stats?.assets ?? 0}</dd></div><div><dt>views</dt><dd class="text-xl text-fg">{insights().stats?.views ?? 0}</dd></div><div><dt>forks</dt><dd class="text-xl text-fg">{insights().forks ?? 0}</dd></div></dl></section>}
+        {insights => <Dashboard rows={props.workspace.artifacts.map(row => ({ ...row, views: insights().views?.[row.id] ?? ('views' in row ? row.views : 0) }))} stats={insights().stats} viewsOverTime={insights().viewsOverTime} likes={insights().likes} likesOverTime={insights().likesOverTime} followers={insights().followers} forks={insights().forks} />}
       </Show>
     </aside>
   </div>;

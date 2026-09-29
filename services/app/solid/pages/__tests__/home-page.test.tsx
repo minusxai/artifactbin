@@ -62,3 +62,18 @@ it('renders a populated folder workspace without recursive updates', async () =>
   expect(await screen.findByLabelText('Open folder Reports')).toBeInTheDocument();
   expect(screen.queryByLabelText('Open Child')).toBeNull();
 });
+
+it('keeps the working shelf before the account dashboard and links to assets, trash, and dataset creation', async () => {
+  const insights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2, sparklines: {} };
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : url.includes('claimable') ? { claimable: [] } : insights))));
+  const view = open();
+  const shelf = await screen.findByLabelText('Shelf');
+  const dashboard = await screen.findByLabelText('Dashboard');
+  expect(view.container.querySelector('main')?.className).toContain('max-w-[80rem]');
+  expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
+  expect(screen.getByLabelText('Assets')).toHaveAttribute('href', '/assets');
+  expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
+  fireEvent.click(screen.getByLabelText('Create'));
+  expect(screen.getByRole('menuitem', { name: 'Dataset' })).toHaveAttribute('href', '/datasets/new');
+});
