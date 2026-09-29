@@ -70,7 +70,7 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         index: path.join(webRoot, 'index.html'),
-        trash: path.join(webRoot, 'trash.html'),
+        'solid-app': path.join(webRoot, 'solid-app.html'),
         // The compiled reader page's loader (web/spa-idle): an entry of its own, so the server names
         // it from the manifest (`spa-idle.ts`) and the page loads the app only when it is wanted.
         'spa-idle': path.join(webRoot, 'spa-idle.ts'),

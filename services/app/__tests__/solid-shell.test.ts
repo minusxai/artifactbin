@@ -13,11 +13,12 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 it('serves the Solid entry for ported routes, while React owns other URLs', async () => {
   expect(isSolidPage('/@cee')).toBe(true);
   expect(isSolidPage('/@cee/doc-id')).toBe(false);
+  expect(isSolidPage('/a/doc-id')).toBe(false);
   expect(isSolidPage('/missing', 404)).toBe(true);
   const dir = mkdtempSync(path.join(tmpdir(), 'afbin-shell-'));
   dirs.push(dir);
   writeFileSync(path.join(dir, 'index.html'), '<html><head></head><body><script src="/main.tsx"></script></body></html>');
-  writeFileSync(path.join(dir, 'trash.html'), '<html><head></head><body><script src="/solid-entry.tsx"></script></body></html>');
+  writeFileSync(path.join(dir, 'solid-app.html'), '<html><head></head><body><script src="/solid-entry.tsx"></script></body></html>');
   const app = createAppServer({ webDir: dir });
   const accept = { Accept: 'text/html' };
   const trash = await app.request('http://localhost/trash', { headers: accept });
@@ -29,6 +30,8 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   }
   const chat = await app.request('http://localhost/chat', { headers: accept });
   expect(await chat.text()).toContain('/solid-entry.tsx');
+  const profile = await app.request('http://localhost/@cee', { headers: accept });
+  expect(await profile.text()).toContain('/solid-entry.tsx');
   const missing = await app.request('http://localhost/definitely-missing', { headers: accept });
   expect(missing.status).toBe(404);
   expect(await missing.text()).toContain('/solid-entry.tsx');
