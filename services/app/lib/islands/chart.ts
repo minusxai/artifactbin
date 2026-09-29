@@ -1,8 +1,8 @@
 /**
  * THE LAZY CHART MODULE. A `<Question>` island's drawing box arrives drawn by the server (the
  * assembler finds it by `data-mx-chart-slot`, its handle only — the island removes the attribute on
- * mount); Vega loads in the browser only when the chart must be drawn here — its table changed
- * since the drawing, or the reader interacts (docs/phase2-architecture.md §2.4). `loadChart` imports
+ * mount); Vega loads in the browser after reader readiness when the chart becomes visible (or at
+ * idle), when its table changes, or when the reader interacts. `loadChart` imports
  * the controller chunk (chart-controller.ts: Vega and lib/viz) on the first call, once per page;
  * nothing here imports Vega statically. Islands reach it as `IslandContext.loadChart` (boot injects it).
  */
