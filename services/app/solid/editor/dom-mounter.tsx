@@ -8,6 +8,7 @@ import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import type { EditorView } from 'prosemirror-view';
 import { isEditableTextHost } from '@/lib/story-ui/host-classify';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
+import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
 import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
 import { FlowEditor } from '@/solid/editor/FlowEditor';
 import { GridEdit, type GridTile } from '@/solid/editor/GridEdit';
@@ -34,6 +35,16 @@ const isBlock = (node: JsxNode): boolean => node.type === 'element'
 /** One region replaces only its authored prose siblings; adjacent compiled islands keep their DOM identity. */
 export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks): CompiledEditMount {
   const cleanups: Array<() => void> = [];
+  // GridEdit's grip/resize affordances (STORY_GRID_EDIT_CSS's [data-mx-grid-tile]/.mx-grid-resize
+  // rules) are structural, not authored content — same reasoning as the React adapter's own
+  // `<style data-mx-grid-css>`, injected inside the story surface rather than the app's <head>.
+  if (!root.querySelector('style[data-mx-grid-css]')) {
+    const style = root.ownerDocument.createElement('style');
+    style.dataset.mxGridCss = '';
+    style.textContent = STORY_GRID_EDIT_CSS;
+    root.prepend(style);
+    cleanups.push(() => style.remove());
+  }
   const railRows = root.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row');
   discoverSlides(nodes).forEach((slide, index) => {
     const row = railRows[index];
