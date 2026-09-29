@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mermaidDispatch, mermaidKindModules } from './mermaid-graph.mjs';
 import { preparationInputs, fingerprintInputs } from './preparation-fingerprint.mjs';
+import { readLucideIcons } from './lucide-icons.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.join(root, 'lib/build-assets');
@@ -27,6 +28,9 @@ const modules = mermaidKindModules(MERMAID_DIAGRAMS, mermaidDispatch(
   fileURLToPath(import.meta.resolve('@mermaid-js/parser')),
 ));
 fs.writeFileSync(path.join(output, 'mermaid-modules.json'), JSON.stringify({ kinds: modules }, null, 2) + '\n');
+
+// Lucide's icon data: the icon packages are browser dependencies, so the server reads this copy.
+fs.writeFileSync(path.join(output, 'lucide-icons.json'), JSON.stringify(readLucideIcons(root)));
 
 // MapLibre's worker is a build dependency; the server serves this copy.
 const require = createRequire(path.join(root, 'package.json'));
