@@ -59,6 +59,8 @@ try{
  await a.goto(server.url);await b.goto(server.url);
  await a.locator('#text').waitFor();assert.equal(await a.locator('#text').textContent(),'Draft paragraph');
  await a.getByRole('img',{name:'Local image'}).evaluate((image:HTMLImageElement)=>image.decode());
+ // Links select content while editing; follow them from the reader.
+ await a.getByRole('button',{name:'Exit edit mode',exact:true}).click();
  await a.getByRole('link',{name:'Local appendix'}).click();await a.locator('#text').filter({hasText:'Unpublished appendix'}).waitFor();await a.goto(server.url);await a.locator('#text').waitFor();
  console.log('PASS offline CLI add, ID preview, image and JSX link resolve before publication');
  // The preview mounts the production editor immediately; the second page is a clean reader.
