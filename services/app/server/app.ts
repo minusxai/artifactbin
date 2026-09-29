@@ -291,7 +291,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   let indexCache: string | null = null;
   const index = async (url: string, status?: 200 | 404, artifactFormat?: string): Promise<string> => {
     if (opts.indexHtml) return opts.indexHtml(url, status, artifactFormat);
-    if (isSolidPage(new URL(url).pathname, status, artifactFormat)) return readFileSync(path.join(webDir, 'trash.html'), 'utf8');
+    if (isSolidPage(new URL(url).pathname, status, artifactFormat)) return readFileSync(path.join(webDir, 'solid-app.html'), 'utf8');
     return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
   };
   // A verified custom domain is answered by its own boundary before any app

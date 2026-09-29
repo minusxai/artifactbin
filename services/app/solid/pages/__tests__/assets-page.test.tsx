@@ -25,6 +25,8 @@ it('links to upload and dataset creation and searches assets', async () => {
   const table = await screen.findByRole('table');
   expect(table).toHaveTextContent('Revenue.csv');
   expect(table).toHaveTextContent('Research Map.svg');
+  expect(table).toHaveTextContent('v2');
+  expect(screen.getByRole('columnheader', { name: 'ver' })).toBeInTheDocument();
   expect(screen.getByLabelText('Search assets')).toHaveAttribute('placeholder', 'search assets');
   expect(screen.getByLabelText('Filter dataset')).toBeInTheDocument();
   expect(screen.getByLabelText('Filter image')).toBeInTheDocument();

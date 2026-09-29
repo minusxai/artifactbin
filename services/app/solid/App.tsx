@@ -21,6 +21,7 @@ const FolderRoute = lazy(() => import('./pages/Folder').then((m) => ({ default: 
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
 const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
+const ChatPage = lazy(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage })));
 
 function PendingPage(): JSX.Element {
   return <main aria-label="Loading page" role="status" aria-busy="true" class="mx-auto max-w-5xl px-4 py-10"><span class="sr-only">Loading page…</span><div aria-hidden="true" class="h-7 w-48 rounded bg-raised" /></main>;
@@ -51,6 +52,7 @@ export function App(): JSX.Element {
       <Route path="/datasets/new" component={DatasetEditorPage} />
       <Route path="/files/new" component={FileUploadPage} />
       <Route path="/a/:id/edit" component={DatasetEditorPage} />
+      <Route path="/chat" component={ChatPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/start" component={StartPage} />
       <Route path="/welcome" component={WelcomePage} />

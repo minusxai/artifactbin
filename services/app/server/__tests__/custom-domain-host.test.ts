@@ -211,7 +211,7 @@ describe('the home page on a verified host', () => {
     mkdirSync(join(dir, 'assets'));
     const shellHtml = '<!doctype html><html><head><link rel="stylesheet" crossorigin href="/assets/shell-Ab12cd.css"><script type="module" crossorigin src="/assets/main-Cd34ef.js"></script></head><body><div id="root"></div></body></html>';
     writeFileSync(join(dir, 'index.html'), shellHtml);
-    writeFileSync(join(dir, 'trash.html'), shellHtml);
+    writeFileSync(join(dir, 'solid-app.html'), shellHtml);
     writeFileSync(join(dir, 'assets', 'shell-Ab12cd.css'), 'body{color:red}');
     writeFileSync(join(dir, 'assets', 'main-Cd34ef.js'), 'console.log(1)');
     writeFileSync(join(dir, 'assets', 'plex-Ef56ab.woff2'), 'wOF2');

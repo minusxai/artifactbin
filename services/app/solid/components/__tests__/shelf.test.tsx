@@ -20,6 +20,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it('shows only immediate children and keeps the root shelf separate', () => {
   render(() => <Shelf rows={[folder, doc('child', { parent_id: 'fold01' }), doc('root')]} scopeParentId={null} actions="full" />);
   expect(screen.getByLabelText('Open folder Reports')).toBeInTheDocument();
+  expect(screen.getByLabelText('Preview of folder Reports')).toHaveTextContent('1 artifact');
   expect(screen.getByLabelText('Open Doc root')).toBeInTheDocument();
   expect(screen.queryByLabelText('Open Doc child')).toBeNull();
   expect(screen.getByLabelText('Open Doc root')).toHaveAttribute('rel', 'external');

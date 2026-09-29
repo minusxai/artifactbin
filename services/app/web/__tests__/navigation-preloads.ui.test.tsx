@@ -33,7 +33,6 @@ it('route mapping shares artifact/folder keys, keeps static routes data-free, an
   const map=(path:string)=>routeLoading(new URL(path,'http://localhost'));
   expect(map('/@alice/ABC123-folder?key=x')?.key).toBe('/api/page/artifact/ABC123?key=x');
   expect(map('/@alice')?.key).toBe('/api/page/profile/%40alice');
-  for(const path of ['/','/assets','/datasets/new','/files/new','/trash','/login','/start','/welcome','/notifications','/account']) expect(map(path)).toBeNull();
-  expect(map('/chat')?.key).toBeUndefined();
+  for(const path of ['/','/assets','/datasets/new','/files/new','/trash','/chat','/login','/start','/welcome','/notifications','/account']) expect(map(path)).toBeNull();
   for(const path of ['/a/ABC123/raw','/api/query','/docs','/api/auth/callback','/not-an-app']) expect(map(path)).toBeNull();
 });
