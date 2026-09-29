@@ -48,11 +48,12 @@ it('opens the reader settings and phone menu and applies document mode to the ad
   expect(screen.getByRole('navigation', { name: 'Menu' })).toHaveClass('mx-reader-panel--menu');
 });
 
-it('a commenter sees comments and fork in the controls panel but no edit or delete', () => {
+it('a commenter sees comments in the controls panel but no duplicate fork, edit or delete', () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   expect(screen.getByRole('button', { name: 'Toggle comments' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Fork artifact' })).toBeInTheDocument();
+  // Fork is already a direct rail action (data-mx-reader-action="fork"); the panel must not duplicate it.
+  expect(screen.queryByRole('button', { name: 'Fork artifact' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
   expect(screen.queryByRole('button', { name: /^Delete/ })).toBeNull();
 });

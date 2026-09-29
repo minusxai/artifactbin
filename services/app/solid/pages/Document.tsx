@@ -169,7 +169,7 @@ export function DocumentPage(): JSX.Element {
         <DocumentActions id={id!} title={page?.surface?.title ?? 'Untitled'} version={currentVersion()} archived={archivedNow()}
           owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()}
           like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { setPanel(null); setRailOpen(open); }}
-          openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null}
+          openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork
           onEdit={goToEdit}
           onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />
       </section></Show>

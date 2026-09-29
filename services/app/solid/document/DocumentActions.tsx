@@ -23,6 +23,8 @@ export interface DocumentActionsProps {
   forkedFrom?: { label: string; href?: string | null } | null;
   /** Only a loaded markup source lets an editor open the social preview crop editor (SocialPreviewEditor). */
   format?: string; source?: string | null; editId?: string;
+  /** The caller's own chrome already offers a direct fork action (e.g. the reader rail): skip this panel's own, so settings never duplicates it. */
+  hideFork?: boolean;
 }
 /** Controls own only panel state; the document page owns editing and annotation lifetimes. */
 export function DocumentActions(props: DocumentActionsProps): JSX.Element {
@@ -42,7 +44,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={activeCommenter()}><button type="button" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW}><MessageSquare size={14} /><span class="flex-1">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></button></Show>
       <Show when={activeEditor()}><button type="button" aria-label="Edit artifact" onClick={props.onEdit} class={ROW}><Pencil size={14} />edit artifact</button></Show>
       <DownloadOffline id={props.id} version={props.archived ? props.version : undefined} />
-      <ForkArtifact id={props.id} title={props.title} />
+      <Show when={!props.hideFork}><ForkArtifact id={props.id} title={props.title} /></Show>
       <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />
     </section>
     <Show when={activeOwner()}><section aria-label="Owner actions" class="space-y-1"><h2 class="px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
