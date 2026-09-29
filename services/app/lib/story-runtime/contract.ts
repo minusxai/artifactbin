@@ -588,19 +588,6 @@ export interface StoryDataUpdate {
   datasets: string[];
 }
 
-/** Shape of the prebuilt SSR bundle (lib/story-runtime/dist/story-ssr.cjs). */
-export interface StorySsrBundle {
-  renderStoryBody: (data: StoryIslandData) => string;
-  /** The inline reader's story (lib/story-runtime/inline-composition), which the browser hydrates. */
-  renderInlineStory: (data: StoryIslandData, css: string) => string;
-  /**
-   * The document's `<Icon>` glyphs. Reached through the bundle rather than
-   * imported, for the same reason renderStoryBody is: resolving one renders
-   * lucide's client components, which a route handler may not do.
-   */
-  glyphsForNodes: (nodes: JsxNode[]) => GlyphMap;
-}
-
 /* ────────────────────────────────────────────────────────────────────────────
  * IN-PLACE EDITING — edit mode is a mode the runtime enters, in the frame the
  * reader is already looking at (there is no second document).
