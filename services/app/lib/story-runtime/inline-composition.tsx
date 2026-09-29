@@ -5,6 +5,12 @@
  * The CSS assembly and the node isolation are part of the same contract
  * (lib/story/inline-css), so neither side can drift into a second way of
  * joining the stylesheets.
+ *
+ * No Solid port exists or is needed: the compiled-DOM path (components/IslandStory +
+ * lib/story-runtime/edit/session.tsx) dissolved this composition's role into server-side CSS
+ * assembly (lib/story/prepared-page.server) plus island adoption, rather than a tree render this
+ * shape wraps. This file's only caller is EditorStoryRuntime (the live-interpreted editor tree)
+ * and it is dead once that tree is retired.
  */
 import type { ReactNode } from 'react';
 import { ArtifactDialogScope } from '@/components/kit/dialog';
