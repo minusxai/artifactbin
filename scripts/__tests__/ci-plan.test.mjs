@@ -516,11 +516,11 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
     expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
   });
-  it('splits the node project into eight shards, and every shard runs its eighth', () => {
+  it('splits the node project into ten shards, and every shard runs its tenth', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/8)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/8');
+    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/10)');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/10');
   });
   it('builds the CLI only on the shard that runs its source suite', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
