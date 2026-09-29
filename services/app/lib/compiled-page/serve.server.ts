@@ -10,12 +10,9 @@
  * it says so).
  *
  * THE STEPS, each of which may end in a fallback that names its reason:
- *  1. The stored compile. None → `not-compiled`. A recorded failure of THIS
- *     build → its own reason (`compile-error`, `unported`). A compile (or a
- *     failure) from another build, or made when no island build could be read
- *     (`build: 'none'`) → recompile inline under COMPILE_INLINE_BUDGET_MS; over
- *     it → `over-budget` (the detached compile still writes back, so the next
- *     read is a hit), a failed recompile → its reason. A version's author script
+ *  1. The stored compile, independent of the current deployment. None, or a
+ *     hand-raised compatibility minimum → compile inline and wait. A recorded
+ *     failure keeps its reason (`compile-error`, `unported`). A version's author script
  *     is served by the compiled page (the lazy author host, lib/islands/author-host);
  *     a compile that does not carry it → `unported`: a page must be whole.
  *  2. The data. Only the head of a document a guest may read has a guest
@@ -44,8 +41,8 @@
  *  - `legacy` (today): every reason above answers `{ mode: 'legacy' }` and the
  *    route serves today's renderer for this request.
  *  - `compiled-only` (once Wave 4 deletes today's reader; w4-flip-docs removes
- *    the switch and the `legacy` branch): `not-compiled` and `build-mismatch`
- *    compile inline and WAIT (one compile per version shared by concurrent
+ *    the switch and the `legacy` branch): a missing or incompatible compile
+ *    compiles inline and WAITs (one compile per version shared by concurrent
  *    readers); `over-budget` is gone — the budget only decides whether the
  *    inline compile is logged as slow; `compile-error` (and any reason still
  *    left after the wait) answers `{ mode: 'failed', status: 500 }`, reported
@@ -70,6 +67,7 @@ import { assembleReaderPage } from './assembler';
 import { loadCompilerBuild } from './build.server';
 import {
   COMPILE_INLINE_BUDGET_MS, isCompileFailure, SNAPSHOT_MAX_AGE_MS,
+  MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT,
   type AssembleHead, type AssembleInput, type AssembleOverlay, type CompiledPage, type CompilerBuild, type DataSnapshot,
   type ReaderFallbackReason, type SnapshotKey, type StoredCompile,
 } from './contract';
@@ -216,31 +214,15 @@ async function compileAndWait(row: ArtifactRow, page: PreparedPage, at: Archived
   return usableOf(compiled);
 }
 
-/** Step 1: the stored compile, recompiled inline when it is missing or from another build. */
+/** Step 1: one compile per document version; only a hand-raised minimum can invalidate it. */
 async function compiledOf(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild, policy: FallbackPolicy): Promise<Usable> {
   const stored = page.compiled;
-  if (stored?.build === build.id) {
+  if (stored && page.pageFormat >= MIN_PAGE_FORMAT && page.handoverContract >= MIN_HANDOVER_CONTRACT && (isCompileFailure(stored) || stored.sharedBuild)) {
     if (isCompileFailure(stored)) logOnce(row, stored.reason, stored.error);
     return usableOf(stored);
   }
-  if (policy === 'compiled-only') return compileAndWait(row, page, at, build);
-  if (!stored) return { reason: 'not-compiled' };
-  // Deploy lag or a compile made without an island build: this build's compile, within the budget.
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<'late'>((resolve) => { timer = setTimeout(() => resolve('late'), COMPILE_INLINE_BUDGET_MS); });
-  const compile = recompilePage(row, at, page);
-  // The race's loser must never surface as an unhandled rejection; the write-back is recompilePage's own.
-  void compile.catch(() => {});
-  try {
-    const recompiled = await Promise.race([compile, late]);
-    if (recompiled === 'late') return { reason: 'over-budget' };
-    if (!recompiled) return { reason: 'build-mismatch' };
-    if (recompiled.build !== build.id) return { reason: 'build-mismatch' };
-    if (isCompileFailure(recompiled)) logOnce(row, recompiled.reason, recompiled.error);
-    return usableOf(recompiled);
-  } finally {
-    clearTimeout(timer);
-  }
+  if (policy === 'compiled-only' || stored) return compileAndWait(row, page, at, build);
+  return { reason: 'not-compiled' };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -335,7 +317,7 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   // server build, which a process without a usable compiled page never needs
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
-  const module = await loadSsrModule(compiled.ssr);
+  const module = await loadSsrModule(compiled.ssr, undefined, undefined, compiled.sharedBuild?.ssr);
   const html = module.render({ values: input.values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
   if (cacheKey) {
     renders.set(cacheKey, html);
@@ -380,7 +362,13 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
   try {
     let build: CompilerBuild;
     try {
-      build = loadCompilerBuild();
+      const stored = page.compiled;
+      const compatible = page.pageFormat >= MIN_PAGE_FORMAT && page.handoverContract >= MIN_HANDOVER_CONTRACT;
+      if (compatible && stored && isCompileFailure(stored)) {
+        logOnce(row, stored.reason, stored.error);
+        return refuse(stored.reason, stored.error);
+      }
+      build = compatible && stored && !isCompileFailure(stored) && stored.sharedBuild ? stored.sharedBuild : loadCompilerBuild();
     } catch (error) {
       logOnce(row, 'build-mismatch', error instanceof Error ? error.message : String(error));
       return refuse('build-mismatch', error instanceof Error ? error.message : String(error));
@@ -390,10 +378,6 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     // The author's script runs from the compiled page's data (boot's lazy author host). A compile that
     // does not carry this version's script would serve the page without it: a page must be whole.
     const carriesScript = (compiled: CompiledPage) => (page.authorScript || null) === (compiled.authorScript || null);
-    if (!carriesScript(usable.page) && policy === 'compiled-only') {
-      usable = await compileAndWait(row, page, reader.at, build);
-      if ('reason' in usable) return refuse(usable.reason, 'the version has no compile this build can serve');
-    }
     const compiled = usable.page;
     if (!carriesScript(compiled)) {
       logOnce(row, 'unported', 'the stored compile does not carry the version\'s author script');
@@ -416,7 +400,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     ]);
     // Local tables need the page engine even without a holdable import.
     const sqliteWasm = flow && reader.doors && (hold.length || flow.values.some((value) => value.kind === 'table'))
-      ? build.sqliteWasm ?? null : null;
+      ? compiled.sharedBuild?.sqliteWasm ?? null : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot
@@ -447,8 +431,8 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
       overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
-      spa: reader.spa,
-      build,
+      spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT ? reader.spa : null,
+      build: compiled.sharedBuild ?? build,
       head: reader.head,
       live: reader.live,
       footer: reader.footer ?? null,

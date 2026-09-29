@@ -5,10 +5,12 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mermaidDispatch, mermaidKindModules } from './mermaid-graph.mjs';
+import { preparationInputs, fingerprintInputs } from './preparation-fingerprint.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.join(root, 'lib/build-assets');
 fs.mkdirSync(output, { recursive: true });
+fs.writeFileSync(path.join(output, 'prepared-sources.sha256'), `${fingerprintInputs(path.resolve(root, '../..'), await preparationInputs(path.resolve(root, '../..')))}\n`);
 
 await import('./build-offline.mjs');
 await import('./build-libraries.mjs');

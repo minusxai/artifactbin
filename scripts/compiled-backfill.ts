@@ -1,15 +1,15 @@
 /**
- * THE COMPILED-PAGE BACKFILL (services/app/lib/compiled-page/backfill.server): every live document
- * head — with `--all`, every archived version too — gets its compiled page stored, so the first reader
- * after a deploy is served a stored compile instead of paying for one.
+ * THE COMPILED-PAGE BACKFILL (services/app/lib/compiled-page/backfill.server): deliberately recompile
+ * selected document versions on the running server. A deploy alone never changes stored compiles.
  *
  *   AUTH__SECRET=<the server's> npx tsx scripts/compiled-backfill.ts --db <database url> --base <server origin>
- *     [--all] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]
+ *     [--all] [--where compiler_version!=<fingerprint>] [--island-build <id>]
+ *     [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]
  *
  * From the repository root, against a RUNNING server of the deploy being backfilled. The script only
  * decides what to warm: each version is prepared and compiled by that server, through its own reader
  * door (`/a/<id>/raw`, admitted by a one-minute export key), because a stored prepared
- * page is keyed by the serving process's own build and a compile made here would be a miss there.
+ * page is compiled by the serving process, with its own assets and compiler fingerprint.
  *
  * Preconditions, each of which the run checks or states:
  *  - `--db` (or `DATABASE_URL`) is the server's database: the targets and the census are read there.
@@ -21,29 +21,40 @@
  *
  * On the production host, after a deploy has rolled out (the new server is the one answering):
  *
- *   1. `--dry-run` first: how many versions, and roughly how many a previous run already stored.
- *   2. Heads: the command above with `--concurrency 3`. Idempotent: a version this deployment already
- *      stored (its prepared-page key ends with this deployment's suffix) is skipped, so an interrupted
- *      run is resumed by running it again, and a second run warms only its probe.
- *   3. Optionally `--all` for archived versions (read by their editors only; each in its own slot).
+ *   1. Pick a recorded version: `--where compiler_version!=<current>` selects old compilers;
+ *      `--island-build <old>` selects one island build; `--format-below N` selects old formats.
+ *      Filters combine with AND. Without filters, only versions lacking a compile are selected.
+ *   2. Run `--dry-run`, then rerun without it. Repeat after interruption: rows that no longer match
+ *      the filter are skipped. Use `--all` to include archived versions.
  *
- * The last line is the census from the database: versions stored by this deployment, compiled, and
+ * The last line is the census from the database: selected versions stored, compiled, and
  * recorded failures by reason (`compile-error`, `unported` — both expected to be 0). Exit status 1 when
  * any request failed or any failure is recorded.
  */
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import type { BackfillFilter, BackfillColumn } from '@/lib/compiled-page/backfill.server';
 
 async function main() {
   const { values } = parseArgs({ options: {
     db: { type: 'string' }, base: { type: 'string' }, all: { type: 'boolean' }, concurrency: { type: 'string' },
     limit: { type: 'string' }, timeout: { type: 'string' }, 'dry-run': { type: 'boolean' },
+    where: { type: 'string' }, 'island-build': { type: 'string' }, 'format-below': { type: 'string' },
   } });
-  const usage = 'usage: AUTH__SECRET=<the server\'s> compiled-backfill.ts --db <url> --base <server origin> [--all] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]';
+  const usage = 'usage: AUTH__SECRET=<the server\'s> compiled-backfill.ts --db <url> --base <server origin> [--all] [--where compiler_version!=<x>] [--island-build <id>] [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]';
   const db = values.db ?? process.env.DATABASE_URL;
   const base = values.base ?? process.env.APP__PUBLIC_BASE_URL;
   if (!db || !base) throw new Error(usage);
   if (!process.env.AUTH__SECRET) throw new Error(`AUTH__SECRET is not set: the export keys must be minted under the server's own secret.\n${usage}`);
+  const filters: BackfillFilter[] = [];
+  if (values.where) {
+    const match = /^(compiler_version|island_build|css_version|ssr_bundle|page_format|handover_contract)(!=|=|<)([\w.-]+)$/.exec(values.where);
+    if (!match) throw new Error(`invalid --where: ${values.where}\n${usage}`);
+    const column = match[1] as BackfillColumn;
+    filters.push({ column, op: match[2] as BackfillFilter['op'], value: column === 'page_format' || column === 'handover_contract' ? Number(match[3]) : match[3]! });
+  }
+  if (values['island-build']) filters.push({ column: 'island_build', op: '=', value: values['island-build'] });
+  if (values['format-below']) filters.push({ column: 'page_format', op: '<', value: Number(values['format-below']) });
   process.env.DATABASE_URL = db;
   // After the environment is set: lib/config reads it on first import.
   const [{ getDb }, { mintExportKey }, { backfillCompiledPages }] = await Promise.all([
@@ -53,14 +64,14 @@ async function main() {
   try {
     const report = await backfillCompiledPages({
       db: database, base, fetch: (url, init) => fetch(url, init), mintKey: (id) => mintExportKey(id),
-      all: !!values.all, dryRun: !!values['dry-run'],
+      all: !!values.all, dryRun: !!values['dry-run'], filters,
       ...(values.concurrency ? { concurrency: Number(values.concurrency) } : {}),
       ...(values.limit ? { limit: Number(values.limit) } : {}),
       ...(values.timeout ? { timeoutMs: Number(values.timeout) * 1000 } : {}),
       log: (line) => console.log(line),
     });
     if (values['dry-run']) {
-      console.log(`dry run: ${report.considered} version(s) considered, ~${report.done} already compiled by build ${report.build ?? '(none stored)'}; nothing warmed`);
+      console.log(`dry run: ${report.considered} version(s) selected, ${report.done} skipped; nothing warmed`);
       return;
     }
     if (!report.considered) { console.log('no live document versions: nothing to warm'); return; }
@@ -69,7 +80,7 @@ async function main() {
     for (const e of report.errors.slice(0, 20)) console.log(`  error ${e.id}${e.head ? '' : ` v${e.version}`}: ${e.error}`);
     const census = report.census!;
     const failures = Object.entries(census.failures).map(([reason, n]) => `${reason} ${n}`).join(', ') || 'none';
-    console.log(`census (build ${report.build}): ${census.stored} stored by this deployment, ${census.compiled} compiled, failures ${failures}, ${census.missing} not stored`);
+    console.log(`census: ${census.stored} selected versions stored, ${census.compiled} compiled, failures ${failures}, ${census.missing} not stored`);
     if (report.errors.length || Object.keys(census.failures).length) process.exitCode = 1;
   } finally {
     await database.close();

@@ -233,15 +233,16 @@ function readSsrHalf(root: string): SsrHalf | null {
   return { url: half.url, exports: half.exports };
 }
 
-async function islandSsrNamespace(specifier: string, root: string): Promise<Record<string, unknown>> {
-  const half = readSsrHalf(root);
+async function islandSsrNamespace(specifier: string, root: string, retained?: SsrHalf): Promise<Record<string, unknown>> {
+  const half = retained ?? readSsrHalf(root);
   if (!half) throw new IslandSsrUnavailable(specifier, 'the island build has no server half');
   const name = half.exports[specifier];
   if (!name) throw new IslandSsrUnavailable(specifier, 'the server half does not export it');
   const file = path.resolve(root, path.dirname(ISLANDS_MANIFEST_PATH), half.url.slice('/islands/'.length));
   let loaded = islandSsrHalves.get(file);
   if (!loaded) {
-    loaded = evaluateModule(readFileSync(file, 'utf8'), (spec) => {
+    const bytes = retained ? await (await import('./shared-builds.server')).retainedIslandFile(path.basename(file)) : null;
+    loaded = evaluateModule(bytes ? bytes.toString('utf8') : readFileSync(file, 'utf8'), (spec) => {
       const namespace = SOLID[spec];
       if (!namespace) throw new IslandSsrUnavailable(spec, `imported by the server half ${half.url}`);
       return namespace;
@@ -265,12 +266,12 @@ async function importsOf(code: string): Promise<string[]> {
  * The default import table for a server module: this process's Solid, and the shared build's
  * server half for `@mx/*` (read relative to `root`, the app's cwd by default).
  */
-export async function defaultSsrImports(code: string, root = process.cwd()): Promise<SsrImports> {
+export async function defaultSsrImports(code: string, root = process.cwd(), half?: SsrHalf): Promise<SsrImports> {
   const islands: Record<string, Record<string, unknown>> = {};
   for (const spec of await importsOf(code)) {
     if (SOLID[spec]) continue;
     if (!spec.startsWith('@mx/')) throw new IslandSsrUnavailable(spec, 'not a shared-build specifier');
-    islands[spec] = await islandSsrNamespace(spec, root);
+    islands[spec] = await islandSsrNamespace(spec, root, half);
   }
   return ssrImportTable(islands);
 }
@@ -321,16 +322,18 @@ export async function ssrModuleOf(code: string, name: string, imports?: SsrImpor
  * evaluated once per sha in this process. Rejects with `IslandSsrUnavailable` when the shared build
  * has no server half for what it imports.
  */
-export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModuleStore(), imports?: SsrImports): Promise<SsrModule> {
-  let loaded = ssrModules.get(ref.sha);
+export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModuleStore(), imports?: SsrImports, half?: SsrHalf): Promise<SsrModule> {
+  const key = `${ref.sha}:${half?.url ?? 'current'}`;
+  let loaded = ssrModules.get(key);
   if (!loaded) {
     loaded = (async () => {
       const bytes = await store.get(ref.sha);
       if (!bytes) throw new Error(`island SSR: module ${ref.sha} is not in the store`);
-      return ssrModuleOf(Buffer.from(bytes).toString('utf8'), ref.sha, imports);
+      const code = Buffer.from(bytes).toString('utf8');
+      return ssrModuleOf(code, ref.sha, imports ?? await defaultSsrImports(code, process.cwd(), half));
     })();
-    loaded.catch(() => ssrModules.delete(ref.sha));
-    ssrModules.set(ref.sha, loaded);
+    loaded.catch(() => ssrModules.delete(key));
+    ssrModules.set(key, loaded);
   }
   return loaded;
 }

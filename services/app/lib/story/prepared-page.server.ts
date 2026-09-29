@@ -21,13 +21,11 @@
  * first reader of a version may be its owner; the stored render is still the
  * anonymous one.
  *
- * WHEN AN ENTRY IS STALE: its key is a digest of every stored field
- * preparation reads (source, meta, title, format) plus the CSS compile version
- * and the server build, so a representation-only migration, a new Tailwind
- * union or a deploy all miss. Inputs owned by OTHER rows — the datasets an
- * uncompiled document's data compiles against, the web assets it holds copies
- * of, the fonts it imports — are fingerprinted and checked on every read. A
- * miss prepares, serves and writes back; the write never fails the read.
+ * A slot's key is only the document version. A deploy, compiler change, CSS
+ * change or dependency change does not rebuild a published version. The
+ * separate recorded columns let an operator select old versions for a
+ * deliberate backfill. A version miss prepares, serves and writes back; the
+ * write never fails the read.
  *
  * Produced at publish too (warmPreparedPage, after commit, off the write's
  * path) so the first reader of a new version is already a hit.
@@ -35,9 +33,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { getDb } from '@/lib/db';
-import { ASSETS_ORIGIN, IS_DEV, PUBLIC_BASE_URL } from '@/lib/config';
+import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/config';
 import type { ArtifactRow, Viewer } from '@/lib/artifacts';
 import { declarationsForRow, holdableImports, LIVE_ARTIFACT_SQL, refDataForRow, viewerIdentityFor, type RoleActor } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifact-document';
@@ -66,13 +63,17 @@ import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/c
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
+import { archiveSharedBuild } from '@/lib/compiled-page/shared-builds.server';
 import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
+import { MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 
-/** Bump when the stored shape changes; old entries then miss and are overwritten. */
-const PAGE_FORMAT = 2;
+/** Raise manually when older prepared pages cannot be read. */
+const PAGE_FORMAT = MIN_PAGE_FORMAT;
 
 /** One version, prepared for the reader. Nothing in it depends on who reads. */
 export interface PreparedPage {
+  pageFormat: number;
+  handoverContract: number;
   data: Pick<StoryIslandData, 'nodes' | 'colorMode' | 'template' | 'chrome' | 'glyphs'>;
   css: string;
   overrides: StyleOverride[];
@@ -122,23 +123,9 @@ export interface ReaderContext {
 }
 
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
-
-let staticBuild: string | null = null;
-/**
- * Everything that produces a stored byte: the SSR bundle and this server's own
- * code (in production, the one bundled file this module is part of). A
- * development server is rebuilt at will, so its entries live for its process.
- */
-function buildId(): string {
-  if (staticBuild && !IS_DEV) return staticBuild;
-  const hash = createHash('sha256');
-  const read = (file: string) => { try { hash.update(readFileSync(file)); } catch { hash.update(`missing:${file}`); } };
-  read(path.join(process.cwd(), 'lib', 'build-assets', 'story-ssr.cjs'));
-  read(fileURLToPath(import.meta.url));
-  if (IS_DEV) hash.update(String(BOOT));
-  return (staticBuild = hash.digest('hex').slice(0, 16));
-}
-const BOOT = Date.now();
+const buildAsset = (name: string): Buffer => readFileSync(path.join(process.cwd(), 'lib/build-assets', name));
+const compilerFingerprint = (): string => buildAsset('prepared-sources.sha256').toString('utf8').trim();
+const ssrBundleFingerprint = (): string => createHash('sha256').update(buildAsset('story-ssr.cjs')).digest('hex');
 
 /**
  * JSON with its object keys in one order. The overlay carries the STORED flow,
@@ -157,11 +144,10 @@ function compilerBuild(): { build: CompilerBuild | null; error: string | null } 
     return { build: null, error: error instanceof Error ? error.message : String(error) };
   }
 }
-/** Every stored field preparation reads, the CSS compile version, the build, and the compiler build (a deploy or a flag change misses). */
-const keyOf = (row: ArtifactRow, compiler: ReturnType<typeof compilerBuild>): string =>
-  `${PAGE_FORMAT}:${sha(canonical([row.format, row.title, row.meta, row.source ?? '', !!row.previousEngine]))}:${storyCssCompileVersion()}:${buildId()}:${compiler ? compiler.build?.id ?? 'none' : 'off'}`;
+/** Only an edit changes a document's preparation identity. The slot is the other half of the key. */
+const keyOf = (row: ArtifactRow): string => `v:${row.version}`;
 
-/** The current state of the other rows an entry was built from. Empty when it depends on none. */
+/** Recorded provenance of other rows used by a new preparation; never invalidates a stored version. */
 async function fingerprint(deps: PreparedDeps): Promise<string> {
   const parts: unknown[] = [];
   if (deps.datasets.length) {
@@ -210,6 +196,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
   const build = compiler.build;
   if (!build) return { build: 'none', error: compiler.error ?? 'no island build', reason: 'compile-error' };
   try {
+    await archiveSharedBuild(build);
     // Imported on first compile, not at the top: the compiler carries Babel, Solid and today's React
     // kit (it renders static components at compile time), and this module sits under lib/artifacts,
     // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
@@ -258,6 +245,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
     ? [...new Set([...(declared?.flow.imports ?? []).map((i) => i.ref), ...(meta.refs ?? []).filter((r) => r.kind === 'dataset').map((r) => r.id)])].sort()
     : [];
   const page: PreparedPage = {
+    pageFormat: PAGE_FORMAT, handoverContract: MIN_HANDOVER_CONTRACT,
     data: {
       nodes, colorMode: runtime.data.colorMode, template: runtime.data.template ?? null, chrome: runtime.data.chrome,
       ...(runtime.data.glyphs ? { glyphs: runtime.data.glyphs } : {}),
@@ -284,23 +272,26 @@ function servedOf(page: PreparedPage, input: ReaderOverlay): ServedStoryRuntime 
 }
 const renderStory = (page: PreparedPage, input: ReaderOverlay): string => servedStoryHtml(servedOf(page, input), loadStorySsr().renderInlineStory);
 
-interface StoredRow { page_key: string; deps: string; page: PreparedPage }
+interface StoredRow { page_key: string; deps: string; page: PreparedPage; page_format: number | null; handover_contract: number | null }
 
 /** The stored entry for this version when it is current, else a fresh one, written back. */
 export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<{ row: ArtifactRow; page: PreparedPage }> {
   const row = await servedRow(stored, at);
   const compiler = compilerBuild();
-  const key = keyOf(row, compiler);
+  const key = keyOf(row);
   const slot = slotOf(at);
   const db = await getDb();
-  const found = (await db.query<StoredRow>('SELECT page_key, deps, page FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [row.id, slot])).rows[0];
-  if (found && found.page_key === key && found.deps === await fingerprint(found.page.deps)) return { row, page: found.page };
+  const found = (await db.query<StoredRow>('SELECT page_key, deps, page, page_format, handover_contract FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [row.id, slot])).rows[0];
+  if (found && found.page_key === key && found.page.compiled) return { row, page: { ...found.page, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0 } };
   const page = await build(row, at, origin, compiler);
   try {
     await db.query(
-      `INSERT INTO prepared_pages (artifact_id, slot, page_key, deps, page, updated_at) VALUES ($1, $2, $3, $4, $5::jsonb, now())
-       ON CONFLICT (artifact_id, slot) DO UPDATE SET page_key = EXCLUDED.page_key, deps = EXCLUDED.deps, page = EXCLUDED.page, updated_at = now()`,
-      [row.id, slot, key, await fingerprint(page.deps), JSON.stringify(page)],
+      `INSERT INTO prepared_pages (artifact_id, slot, page_key, deps, page, compiler_version, island_build, css_version, ssr_bundle, page_format, handover_contract, updated_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, now())
+       ON CONFLICT (artifact_id, slot) DO UPDATE SET page_key = EXCLUDED.page_key, deps = EXCLUDED.deps, page = EXCLUDED.page,
+       compiler_version = EXCLUDED.compiler_version, island_build = EXCLUDED.island_build, css_version = EXCLUDED.css_version,
+       ssr_bundle = EXCLUDED.ssr_bundle, page_format = EXCLUDED.page_format, handover_contract = EXCLUDED.handover_contract, updated_at = now()`,
+      [row.id, slot, key, await fingerprint(page.deps), JSON.stringify(page), compilerFingerprint(), page.compiled?.build ?? 'none', storyCssCompileVersion(), ssrBundleFingerprint(), PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
     );
   } catch (error) {
     // A cache that cannot be written is a slower next read, never a failed one.
@@ -310,23 +301,25 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
 }
 
 /**
- * RECOMPILE A STORED PAGE with this deployment's compiler (docs/phase2-architecture.md §6): the
- * stored compile is from another build, or no island build could be read when it was made. The
+ * RECOMPILE A STORED PAGE deliberately, or after a hand-raised compatibility minimum (§6). The
  * compile (or its recorded failure) is written back beside the page — only onto the entry this read
  * was served from (the same key), so a newer entry written meanwhile is never overwritten with an
- * older version's compile. Null when this deployment does not compile. The serve path
- * (lib/compiled-page/serve.server) races it against its inline budget; a compile that loses the race
- * still lands here and the next read is a hit.
+ * older version's compile. Null when this deployment does not compile.
  */
 export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null, page: PreparedPage): Promise<StoredCompile | null> {
   const compiler = compilerBuild();
   if (!compiler) return null;
   const compiled = await compiledFor(row, page, await refDataForRow(row), compiler);
+  page.pageFormat = PAGE_FORMAT;
+  page.handoverContract = MIN_HANDOVER_CONTRACT;
+  page.compiled = compiled;
   try {
     const db = await getDb();
     await db.query(
-      `UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $4::jsonb), updated_at = now() WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
-      [row.id, slotOf(at), keyOf(row, compiler), JSON.stringify(compiled)],
+      `UPDATE prepared_pages SET page = $4::jsonb, compiler_version = $5, island_build = $6,
+       css_version = $7, ssr_bundle = $8, page_format = $9, handover_contract = $10, updated_at = now()
+       WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
+      [row.id, slotOf(at), keyOf(row), JSON.stringify(page), compilerFingerprint(), compiled.build, storyCssCompileVersion(), ssrBundleFingerprint(), PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
     );
   } catch (error) {
     console.warn('[prepared-page] compile write-back failed', row.id, error);

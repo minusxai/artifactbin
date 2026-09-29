@@ -5,7 +5,7 @@
  * manifest and a build id (docs/phase2-architecture.md §1, §3; lib/compiled-page/contract CompilerBuild).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { existsSync, readFileSync, mkdtempSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { buildIslands, ISLAND_SPECIFIERS } from '../build-islands.mjs';
@@ -32,9 +32,11 @@ describe('buildIslands', () => {
   let first;
   beforeAll(async () => {
     outDir = mkdtempSync(path.join(tmpdir(), 'islands-build-'));
+    writeFileSync(path.join(outDir, 'prior-0000000000000000.js'), 'prior build');
     first = await buildIslands({ outDir });
   }, 120_000);
   it('names every specifier a compiled page may import', () => {
+    expect(readFileSync(path.join(outDir, 'prior-0000000000000000.js'), 'utf8')).toBe('prior build');
     expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
     expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js')), 'generated code reaches Solid only through @mx/rt').toEqual([]);
   });

@@ -13,6 +13,14 @@ const read = (f: string) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const rendered = renderedSchema;
 
 describe('the rendered schema', () => {
+  it('records queryable compile versions for filtered backfills', () => {
+    const schema = read('SCHEMA.sql');
+    const prepared = schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS app.prepared_pages'), schema.indexOf('CREATE TABLE IF NOT EXISTS app.data_snapshots'));
+    for (const column of ['compiler_version', 'island_build', 'css_version', 'ssr_bundle', 'page_format', 'handover_contract']) {
+      expect(prepared).toContain(column);
+      expect(schema).toContain(`idx_prepared_${column}`);
+    }
+  });
   it('SCHEMA.sql is exactly what the renderer produces (regenerate with npm run render:schema)', () => {
     const schema = rendered().schema;
     expect(read('SCHEMA.sql')).toBe(schema);

@@ -58,6 +58,7 @@ import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
+import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
 
 /**
@@ -529,6 +530,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
     const bytes = sha ? await speculationRules.get(sha) : null;
     return bytes ? islandFile(c, `s/${sha}`, bytes, SPECULATION_RULES_CONTENT_TYPE) : c.notFound();
+  });
+  app.on(['GET', 'HEAD'], '/islands/:file', async (c, next) => {
+    const name = c.req.param('file');
+    const local = path.join(publicDir, 'islands', name);
+    if (existsSync(local)) return next();
+    const bytes = await retainedIslandFile(name);
+    if (!bytes) return c.notFound();
+    return islandFile(c, `shared/${name}`, bytes, name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8');
   });
   /*
    * The offline file's code-view extras (lib/offline/extras): the source editor and prettier,
