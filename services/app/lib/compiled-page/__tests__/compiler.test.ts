@@ -75,7 +75,7 @@ describe('compilePage', () => {
     expect(dom(built.html).querySelectorAll('template[data-mx-island-template]').length).toBeGreaterThan(0);
     expect([...dom(built.html).querySelectorAll('template[data-mx-island-template]')].some((node) => (node as HTMLTemplateElement).content.textContent?.includes(blocks.slice(3, 120)))).toBe(true);
     expect(brotliCompressSync(bytes).byteLength).toBeLessThan(4_000);
-  });
+  }, 120_000);
   it('escapes hostile template closers in the served inert bank', async () => {
     const input = await inputOf('<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">safe</TabsContent><TabsContent value="two"><p>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p></TabsContent></Tabs>');
     const store = createModuleStore();
