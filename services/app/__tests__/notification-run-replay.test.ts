@@ -7,7 +7,9 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {POST as apiMutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as browserMutate} from '@/app/a/[id]/mutate/route';
-import {getArtifactById} from '@/lib/artifacts';
+import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
+import {liveFrameFor} from '@/lib/story/frame';
+import {readerIslandData} from '@/lib/story/prepare-runtime.server';
 import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
 import {services,setServices} from '@/lib/services';
@@ -15,11 +17,11 @@ import {loadDatasetRows} from '@/lib/story/dataset-store';
 import {newEditId} from '@/lib/story/splice';
 
 useAppHarness();
-async function fixture(predicate=''){
+async function fixture(predicate='',readerQuery=false){
  const token=await mintToken('mxmx_test_notification_run_replay');
  const datasetResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:0}],access:'readwrite'}}));
  expect(datasetResponse.status,await datasetResponse.clone().text()).toBe(201);const dataset=await datasetResponse.json();
- const markup=`<Helmet><Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount ${predicate}\`}</Mutation><Notify name="first_status" on="increment">{\`select null as "to", 'Changed' as message from tasks.rows\`}</Notify><Notify name="second_status" on="increment">{\`select null as "to", 'Reviewed' as message\`}</Notify></Helmet><p>Counter</p>`;
+ const markup=`<Helmet><Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount ${predicate}\`}</Mutation>${readerQuery ? '<Query name="current">{`select n from tasks.rows`}</Query>' : ''}<Notify name="first_status" on="increment">{\`select null as "to", 'Changed' as message from tasks.rows\`}</Notify><Notify name="second_status" on="increment">{\`select null as "to", 'Reviewed' as message\`}</Notify></Helmet><p>Counter</p>`;
  const documentResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup}}));
  expect(documentResponse.status,await documentResponse.clone().text()).toBe(201);const document=await documentResponse.json();
  const context={params:Promise.resolve({id:document.id})};
@@ -82,4 +84,18 @@ it.each(['api','browser'] as const)('shares one canonical receipt across %s-firs
  expect(apiBody.mutationRunId).toEqual(expect.any(String));expect(await rows()).toEqual([{n:1}]);
  expect((await db.query('SELECT mutation_run_id FROM notification_jobs')).rows).toEqual([{mutation_run_id:apiBody.mutationRunId}]);
  expect((await db.query('SELECT response FROM mutation_receipts WHERE response IS NOT NULL')).rows).toHaveLength(1);
+});
+
+it('projects notification rules out of page bootstrap and live-frame runtime data',async()=>{
+ const {document}=await fixture('',true);const row=(await getArtifactById(document.id))!;
+ const declared=(await declarationsForRow(row))!;
+ expect(declared.flow.notifications).toHaveLength(2);
+ const runtime=readerIslandData({refData:{},dataflow:{flow:declared.flow}});
+ const frame=await liveFrameFor(row);
+ for(const flow of [runtime.dataflow?.flow,frame.dataflow?.flow]){
+  expect(flow).toBeDefined();expect(flow!.notifications).toBeUndefined();
+  expect(flow!.mutations[0]?.notifies).toBe(true);
+  expect(JSON.stringify(flow)).not.toContain('first_status');
+ }
+ expect(declared.flow.notifications).toHaveLength(2);
 });
