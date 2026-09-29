@@ -267,13 +267,21 @@ const after = await readerFrame.evaluate(async () => {
   }
   return document.querySelector('img[alt="wide"]')?.getAttribute('src') ?? null;
 });
-check(after !== before && ASSET_URL.test(after ?? ''), `the refreshed asset is served at a new ?v= (${before} → ${after})`);
+check(after === before, `a refresh leaves the published version's stored compile pinned (${before} → ${after})`);
+const republished = await fetch(`${B}/api/artifacts/${owner.id}`, {
+  method: 'PUT', headers: auth, body: JSON.stringify({ title: 'web assets refreshed', markup }),
+});
+check(republished.status === 200, `an edit publishes the refreshed asset as a new document version (${republished.status})`);
+await reader.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
+const refreshedFrame = await artifactDocument(reader, { timeout: 30_000 });
+const publishedSrc = await refreshedFrame.evaluate(() => document.querySelector('img[alt="wide"]')?.getAttribute('src') ?? null);
+check(publishedSrc !== before && ASSET_URL.test(publishedSrc ?? ''), `the edited version serves the refreshed asset at a new ?v= (${before} → ${publishedSrc})`);
 /* The VERSION is what must have moved; WHICH width this reader picks is the
  * browser's business (a 1200px DPR-1 page needs 768 device pixels, so it takes
  * the 1280 copy — the srcset working). */
-const newVersion = new URL(after ?? '', B).searchParams.get('v');
+const newVersion = new URL(publishedSrc ?? '', B).searchParams.get('v');
 check(
-  fetchedAfter.some((u) => u.startsWith(new URL(after ?? '', B).pathname) && u.includes(`v=${newVersion}`)),
+  fetchedAfter.some((u) => u.startsWith(new URL(publishedSrc ?? '', B).pathname) && u.includes(`v=${newVersion}`)),
   `…and the reader's browser fetched the new version (${fetchedAfter.filter((u) => u.includes('/assets/')).join(' ') || 'nothing'})`,
 );
 await reader.close();

@@ -305,7 +305,8 @@ Deliberate backfills use `scripts/compiled-backfill.ts`. Select versions by reco
 example `--where compiler_version!=<current>`, `--island-build <old>` or `--format-below 3`. Run
 `--dry-run` first. The running server recompiles each selected version through its admitted reader
 door; a repeated filtered run skips versions that no longer match. The script ends with a database
-census. A deploy by itself triggers no backfill.
+census. A deploy by itself triggers no backfill. A refreshed external asset is incorporated when its
+document is edited into a new version or deliberately backfilled; the existing version stays pinned.
 
 ## 7. Coexistence with the React app and the editor
 
