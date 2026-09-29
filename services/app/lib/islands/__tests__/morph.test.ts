@@ -100,7 +100,49 @@ afterEach(() => {
 
 const morph = (win: Window, options: MorphOptions) => morphStory(win, { surface: 'raw', ...options });
 
+const tree = (label: string) => {
+  const tmpl = template('<div class="mx-doc"><div id="w"><p id="lede"></p><b id="live"></b></div></div>');
+  return function Document() {
+    const context = useIsland();
+    const root = getNextElement(tmpl) as HTMLElement;
+    insert(root.querySelector('#live')!, () => `${label}:${String(context.value('region'))}`);
+    return root;
+  };
+};
+const TREE_A = tree('A');
+const TREE_B = tree('B');
+const treePage = (edit: string, module: string, lede: string, label = 'A', region = 'All') => served({ edit, module, islands: [], lede, region, extra: `<b id="live" data-mx-ast="0.1a">${label}:${region}</b>` })
+  .replace('<div class="mx-doc">', '<div class="mx-doc" data-hk="d-0000">');
+
 describe('the live morph', () => {
+  it('morphs one tree in place, keeping static identity and hydrating a changed module on the same store', async () => {
+    load(treePage('e1', '/islands/d/aaaaaaaaaaaaaaaa.js', 'first'));
+    const doc = boot({ TREE: TREE_A, FLOW: flow }) as MorphableIslandDocument;
+    booted = doc;
+    const lede = $('lede'); const store = doc.store!;
+    expect($('live')?.textContent).toBe('A:All');
+    await morph(window, { fetch: answer(treePage('e2', '/islands/d/aaaaaaaaaaaaaaaa.js', 'second')), importModule: vi.fn() });
+    expect($('lede')).toBe(lede);
+    expect(lede?.textContent).toBe('second');
+    doc.context.setValue('region', 'East');
+    expect($('live')?.textContent).toBe('A:East');
+    await morph(window, { fetch: answer(treePage('e3', '/islands/d/bbbbbbbbbbbbbbbb.js', 'third', 'B', 'East')), importModule: vi.fn(async () => { boot({ TREE: TREE_B, FLOW: flow }); return { TREE: TREE_B }; }) });
+    expect($('lede')).toBe(lede);
+    expect(doc.store).toBe(store);
+    expect($('live')?.textContent).toBe('B:East');
+    doc.context.setValue('region', 'North');
+    expect($('live')?.textContent).toBe('B:North');
+  });
+  it('keeps a live chart drawing when only prose changes in the same one-tree module', async () => {
+    const chart = (page: string, content: string) => page.replace('<b id="live"', `<div id="chart" data-mx-ast="0.1b" aria-label="Question embed"><div aria-label="Chart">${content}</div></div><b id="live"`);
+    load(chart(treePage('e1', '/islands/d/aaaaaaaaaaaaaaaa.js', 'first'), '<svg id="drawing"></svg>'));
+    const doc = boot({ TREE: TREE_A, FLOW: flow }) as MorphableIslandDocument;
+    booted = doc;
+    const drawing = $('drawing');
+    await morph(window, { fetch: answer(chart(treePage('e2', '/islands/d/aaaaaaaaaaaaaaaa.js', 'second'), '<div aria-label="Chart placeholder"></div>')), importModule: vi.fn() });
+    expect($('lede')?.textContent).toBe('second');
+    expect($('drawing')).toBe(drawing);
+  });
   it('a static edit: every node keeps its identity, the text changes in place, the islands keep running', async () => {
     load(served({ edit: 'e1' }));
     const doc = start();

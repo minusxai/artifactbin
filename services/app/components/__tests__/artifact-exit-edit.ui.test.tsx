@@ -138,7 +138,7 @@ describe('coming back from edit mode', () => {
     expect(viewport.style.top).toBe(readingTop);
   });
 
-  it('compensates for the 88px editor inset before reloading the reader', async () => {
+  it('compensates for the 44px editor inset before reloading the reader', async () => {
     vi.spyOn(window, 'scrollY', 'get').mockReturnValue(806);
     const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
@@ -149,7 +149,7 @@ describe('coming back from edit mode', () => {
     surfaceSpies.reload.mockClear();
     leaveEdit();
     await waitFor(() => expect(surfaceSpies.reload).toHaveBeenCalled());
-    expect(scroll).toHaveBeenCalledWith(0, 718);
+    expect(scroll).toHaveBeenCalledWith(0, 762);
     expect(scroll.mock.invocationCallOrder.at(-1)!).toBeLessThan(surfaceSpies.reload.mock.invocationCallOrder.at(-1)!);
   });
 

@@ -168,7 +168,9 @@ describe('dialog', () => {
     const { host, dispose } = mount(() => <Dialog><DialogTrigger id="trigger" wrapsControl={true}><Button id="add" class={cls('Button')}>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task" class={cls('DialogContent')}><DialogClose class={cls('DialogClose')}>Cancel</DialogClose></DialogContent></Dialog>);
     document.body.append(host);
     try {
-      expect(parityOf('<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>', host)).toEqual([]);
+      // The one-tree close marker adds only an internal attribute so an adopted button can close its modal.
+      expect(parityOf('<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>', host)
+        .filter(diff => !diff.includes('@data-mx-dialog-close: undefined vs ""'))).toEqual([]);
       const before = host.innerHTML;
       (host.querySelector('#add') as HTMLButtonElement).click();
       const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');

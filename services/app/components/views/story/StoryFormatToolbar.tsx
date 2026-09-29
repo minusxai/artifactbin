@@ -64,6 +64,8 @@ import { nodeName } from '@/lib/story-ui/node-names';
 
 
 interface StoryFormatToolbarProps {
+  /** Panel controls wrap into rows; the compact toolbar scrolls horizontally. */
+  layout?: 'toolbar' | 'panel';
   artifactId?:string;
   selection: StoryEditSelection | null;
   frameRef?: { current: HTMLIFrameElement | null };
@@ -107,6 +109,7 @@ export interface ImageControls {
 }
 
 export default function StoryFormatToolbar({
+  layout = 'toolbar',
   artifactId, selection,
   onApply,
   onApplyLink,
@@ -202,10 +205,10 @@ export default function StoryFormatToolbar({
   );
 
   return (
-    <div aria-label="Typography toolbar" className="flex h-9 min-w-0 flex-1 items-center rounded-lg bg-raised">
+    <div aria-label="Typography toolbar" className={layout === 'panel' ? 'flex min-w-0 flex-col gap-2' : 'flex h-9 min-w-0 flex-1 items-center rounded-lg bg-raised'}>
       {/* Where this element sits, and a way up to its container. */}
       <div
-        className="flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-r border-edge px-2"
+        className={layout === 'panel' ? 'flex h-8 min-w-0 max-w-full items-center gap-1' : 'flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-r border-edge px-2'}
         aria-label="Selection breadcrumb"
       >
         <div ref={crumbsRef} className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
@@ -242,7 +245,7 @@ export default function StoryFormatToolbar({
         </div>
       </div>
       <div
-        className="flex h-9 min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2"
+        className={layout === 'panel' ? 'flex min-w-0 flex-wrap items-center gap-1 rounded-lg bg-raised p-2' : 'flex h-9 min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2'}
         aria-label="Primary formatting controls"
       >
         {historyControls}
@@ -494,7 +497,7 @@ export default function StoryFormatToolbar({
         )}
         {insertionControls}
       </div>
-      <div aria-label="Selection actions" className="ml-auto flex shrink-0 items-center gap-2 border-l border-edge px-2">
+      <div aria-label="Selection actions" className={layout === 'panel' ? 'flex items-center justify-end gap-2' : 'ml-auto flex shrink-0 items-center gap-2 border-l border-edge px-2'}>
         {onComment && (
           <Tooltip content="comment on this (⌘⌥M)">
             <button

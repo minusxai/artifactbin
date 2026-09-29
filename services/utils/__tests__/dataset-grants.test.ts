@@ -8,7 +8,7 @@ const context: DatasetGrantContext = { owner, caller: bob, artifact: { id: 'a1B2
 const policy = (from: DatasetGrantPolicy['allow'][number]['from']): DatasetGrantPolicy => ({ version: 2, allow: [{ actions: ['update'], from }] });
 
 describe('dataset grant contract', () => {
-  it('defaults to anonymous reads and writes through the dataset owner’s saved artefacts', () => {
+  it('defaults to anonymous reads and writes through the dataset owner’s saved artifacts', () => {
     const p = parseDatasetGrants(defaultDatasetGrants());
     expect(datasetGrantAllows(p, 'read', { owner, caller: { userId: null, tokenId: null } })).toBe(true);
     for (const operation of ['insert', 'update', 'delete'] as const) {

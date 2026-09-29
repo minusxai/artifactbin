@@ -7,7 +7,7 @@
  *  - data refs must be datasets; recipe refs viz recipes; src refs images
  *  - vega-lite/vega encoding fields are checked against the dataset's columns
  *    (via the ported lib/viz/field-refs collector)
- *  - recipe uses are checked slot-by-slot: every declared slot bound, bound
+ *  - recipe uses are checked slot-by-slot: every required slot bound, bound
  *    columns exist and match the slot's `accepts` kinds
  * Dependents warnings on dataset/viz refresh re-run the same checks.
  */
@@ -325,23 +325,24 @@ export function validateVizAgainstColumns(viz: Record<string, unknown>, columns:
 export type BoundColumn = Pick<DatasetColumn, 'name'> & { type: DatasetColumn['type'] | null };
 
 /**
- * recipe use: every declared slot bound; bound columns exist + match accepts
+ * recipe use: every required slot bound; bound columns exist + match accepts
  * (a column of unknown type — no sample row reached it — is not judged by type).
  * `recipeLabel` names the recipe in diagnostics — `ref:<id>` for a viz
  * artifact, the registry id (`minusx/trend@1`) for a shipped recipe.
  */
 export function validateRecipeUse(
   viz: Record<string, unknown>,
-  recipe: Pick<VizRecipeContent, 'bindings'>,
+  recipe: { bindings: readonly (VizRecipeBinding & { optional?: boolean })[] },
   columns: readonly BoundColumn[] | null,
   recipeLabel: string,
 ): string[] {
   const out: string[] = [];
   const bindings = (viz.bindings ?? {}) as Record<string, unknown>;
-  const slots = (recipe.bindings ?? []) as VizRecipeBinding[];
+  const slots = recipe.bindings ?? [];
   for (const slot of slots) {
     const bound = bindings[slot.name];
     if (bound === undefined || bound === null) {
+      if (slot.optional) continue;
       out.push(`recipe ${recipeLabel} slot "${slot.name}" is not bound`);
       continue;
     }

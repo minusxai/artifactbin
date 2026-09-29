@@ -302,7 +302,7 @@ interface StoryInput {
   resultsId: string | null;
 }
 
-async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
+export async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
   const plain = !input.state && !input.assetsUrl && !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
   if (!compiled.ssr || plain) return compiled.html;
   const cacheKey = input.resultsId === null && input.results ? null
@@ -318,7 +318,15 @@ async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<strin
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
   const module = await loadSsrModule(compiled.ssr, undefined, undefined, compiled.sharedBuild?.ssr);
-  const html = module.render({ values: input.values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
+  const rendered = module.render({ values: input.values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
+  // The SSR module renders only the document tree. Its browser literals and large module data
+  // are version-owned inert siblings stored with the first render; keep them for snapshot renders.
+  const literalOpen = '<script type="application/json" data-mx-island-literals=';
+  const dataOpen = '<script type="application/json" data-mx-module-data>';
+  const literalAt = compiled.html.lastIndexOf(literalOpen);
+  const dataAt = compiled.html.lastIndexOf(dataOpen);
+  const carrierAt = literalAt < 0 ? dataAt : dataAt < 0 ? literalAt : Math.min(literalAt, dataAt);
+  const html = compiled.islands[0]?.renderId === 'd-' && carrierAt >= 0 ? rendered + compiled.html.slice(carrierAt) : rendered;
   if (cacheKey) {
     renders.set(cacheKey, html);
     while (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);

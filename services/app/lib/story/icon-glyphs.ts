@@ -11,35 +11,26 @@
  * glyphs a document actually uses; those travel in the island beside `refData` and
  * the client renders them from data (components/kit/icon).
  *
- * Lucide's pinned icon modules export their path data (`__iconNode`). Read that
- * data as source, without importing the modules (which import React), and serialize
- * the small subset this document uses. Guarded by
- * lib/story/__tests__/icon-glyphs.test.tsx.
- */
-import { createRequire } from 'node:module';
-import { readFileSync, readdirSync } from 'node:fs';
+ * Lucide's path data is extracted at build time (scripts/lucide-icons.mjs, written by
+ * scripts/build-server-reader.mjs to lib/build-assets/lucide-icons.json): the icon
+ * packages are browser dependencies and the production server does not install them.
+ * Read lazily, on the first document that draws an icon. Guarded by
+ * lib/story/__tests__/icon-glyphs.test.tsx. */
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { JsxNode } from '@/lib/jsx';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap, type IconGlyph } from '@/lib/story-ui/icon-contract';
 import { FILE_GLYPH_NAMES } from '@/lib/story-ui/file-glyphs';
 
-const require = createRequire(import.meta.url);
-const iconDir = path.join(path.dirname(require.resolve('lucide-react')), '..', 'esm', 'icons');
-const files = new Map(readdirSync(iconDir).filter((file) => file.endsWith('.mjs')).map((file) => [iconGlyphKey(file.slice(0, -4)), file]));
+type LucideIcon = { name: string; nodes: Array<[string, Record<string, string>]> };
+let icons: Record<string, LucideIcon> | null = null;
+const lucideIcons = (): Record<string, LucideIcon> =>
+  (icons ??= JSON.parse(readFileSync(path.join(process.cwd(), 'lib/build-assets/lucide-icons.json'), 'utf8')) as Record<string, LucideIcon>);
 const escapeAttribute = (value: string): string => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function sourceFor(key: string): { name: string; nodes: Array<[string, Record<string, string>]> } {
-  let file = files.get(key) ?? files.get(FALLBACK_ICON_KEY)!;
-  for (let depth = 0; depth < 4; depth++) {
-    const source = readFileSync(path.join(iconDir, file), 'utf8');
-    const alias = /export \{ default \} from '\.\/(.+\.mjs)'/.exec(source);
-    if (alias) { file = alias[1]!; continue; }
-    const data = /const __iconNode = (\[[\s\S]*?\]);\nconst /.exec(source)?.[1];
-    if (!data) throw new Error(`Lucide icon data missing: ${file}`);
-    const nodes = JSON.parse(data.replace(/([,{]\s*)([A-Za-z][A-Za-z0-9]*):/g, '$1"$2":')) as Array<[string, Record<string, string>]>;
-    return { name: file.slice(0, -4), nodes };
-  }
-  throw new Error(`Lucide icon alias cycle: ${file}`);
+function sourceFor(key: string): LucideIcon {
+  const all = lucideIcons();
+  return all[key] ?? all[FALLBACK_ICON_KEY]!;
 }
 
 /**

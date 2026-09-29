@@ -243,6 +243,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const readerFace = useMemo(() => person ? { id: person.id, name: person.username || person.email || '', image: person.image } : null, [person]);
   const { id, editId, format, title, source = null, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
+  const [titleHost, setTitleHost] = useState<HTMLElement | null>(null);
   const editedCompiledPage = useRef(false);
   const exitAnchor = useRef<ScrollAnchor | null>(null);
   const exitScroll = useRef<number | null>(null);
@@ -355,7 +356,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // disposes its islands. Return to the compiled page at the reader's place.
     if (editedCompiledPage.current) {
       // Removing the reserved editor bar shifts every compiled block up by its
-      // 88px inset. Compensate before the browser preserves scroll on reload.
+      // reserved inset. Compensate before the browser preserves scroll on reload.
       const target = Math.max(0, (exitScroll.current ?? window.scrollY) - EDIT_BAR_H);
       const anchor = exitAnchor.current;
       // Let the reduced inset and the scroll adjustment paint before reload;
@@ -909,7 +910,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * direct action in the reader bar (and the mobile action rail). */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
-      {format==='markup'&&<ArtifactPeople initialOpen={invitationLanding} hideJoin artifactId={id} revision={membershipRevision} onChange={()=>onLiveData({datasets:['_members']})}/>}
+      {!editing&&format==='markup'&&<ArtifactPeople initialOpen={invitationLanding} hideJoin artifactId={id} revision={membershipRevision} onChange={()=>onLiveData({datasets:['_members']})}/>}
       {(props.author?.forkedFrom || format === 'markup' || canEdit) && <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
         {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">
@@ -951,7 +952,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {/* The offline file: anyone who can view the page may have it, for the
             version the page shows (an archived render names its version). */}
         {format === 'markup' && <DownloadOffline id={id} version={archived?.version} className={CONTROL_ROW} onSaved={close} />}
-        {canEdit && !owner && (
+        {canEdit && !owner && !editing && (
           <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canPreview && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
       </section>}
@@ -974,7 +975,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && canPreview && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          {!editing && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && canPreview && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />}
         </section>
       )}
     </div>
@@ -1011,7 +1012,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <ArtifactBackendProvider backend={backend}>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onIntent={warmFor} onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations?membership.status:undefined, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={onChromeAction} />
+        <InlineReaderChrome onTitleHost={editing && !phone ? setTitleHost : undefined} onIntent={warmFor} onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} editing={editing} input={{artifactId:id, ground:readerMode, editing, membership:hasDataMutations&&!editing?membership.status:undefined, share:owner&&!editing, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={onChromeAction} />
         {membership.error && <div role="alert" className="fixed left-4 top-16 z-50 rounded-lg border border-edge bg-surface p-3 text-sm text-danger">{membership.error}</div>}
         {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={canPreview && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
@@ -1132,6 +1133,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             commentsOpen={railOpen}
             onCommentsOpenChange={canAnnotate ? setRailOpen : undefined}
             onCommentsHost={setCommentsHost}
+            titleHost={phone ? null : titleHost}
+            sharingContent={canEdit ? <div className="mx-auto max-w-3xl space-y-6">
+              <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable format={format} variant="embedded" className="" onSocialPreview={canPreview ? () => setSocialPreviewOpen(true) : undefined} />
+              <hr className="border-edge" />
+              <ArtifactPeople initialOpen artifactId={id} revision={membershipRevision} onChange={membershipChanged} />
+            </div> : undefined}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}

@@ -135,5 +135,5 @@ export function TabsContent(props: JSX.HTMLAttributes<HTMLDivElement> & { value:
   createEffect(on(ctx.value, rerender, { defer: true }));
   // As an attribute: served as React serves it, and left alone while hydrating.
   const served = [typeof authorStyle === 'string' ? authorStyle : '', prevented ? 'animation-duration:0s' : ''].filter(Boolean).join(';') || undefined;
-  return <div ref={panel} data-state={active() ? 'active' : 'inactive'} data-orientation={ctx.orientation} role="tabpanel" aria-labelledby={ctx.triggerId(value)} data-slot="tabs-content" id={props.id ?? ctx.contentId(value)} tabIndex={0} hidden={!active()} {...rest} {...({ 'attr:style': served } as JSX.HTMLAttributes<HTMLDivElement>)}>{active() ? props.children : null}</div>;
+  return <div ref={panel} data-state={active() ? 'active' : 'inactive'} data-orientation={ctx.orientation} role="tabpanel" aria-labelledby={ctx.triggerId(value)} data-slot="tabs-content" id={props.id ?? ctx.contentId(value)} tabIndex={0} hidden={!active()} {...rest} {...({ 'attr:style': served } as JSX.HTMLAttributes<HTMLDivElement>)}>{_forceMount ? props.children : active() ? props.children : null}</div>;
 }

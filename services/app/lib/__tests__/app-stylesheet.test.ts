@@ -32,6 +32,21 @@ async function appStylesheet(): Promise<string> {
 }
 
 describe('the compiled app stylesheet', () => {
+  it('paints kit popups inside the trusted overlay using the app palette', async () => {
+    const css = await appStylesheet();
+    for (const [name, property, token] of [
+      ['bg-popover', 'background-color', '--color-surface'],
+      ['text-popover-foreground', 'color', '--color-fg'],
+      ['bg-background', 'background-color', '--color-bg'],
+      ['text-foreground', 'color', '--color-fg'],
+      ['border-border', 'border-color', '--color-edge'],
+      ['border-input', 'border-color', '--color-edge-bright'],
+      ['text-muted-foreground', 'color', '--color-muted'],
+    ]) {
+      expect(css).toContain(`.${name} {\n    ${property}: var(${token});`);
+    }
+  }, 60_000);
+
   it('is CSS a browser keeps — rules, not one long mangled line', async () => {
     const css = await appStylesheet();
     expect(css.length).toBeGreaterThan(10_000);

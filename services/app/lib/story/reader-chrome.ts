@@ -320,7 +320,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + (title ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
     + (title || (!archived && input.membership) ? '<span class="mx-reader-title-group">' : '')
     + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
-    + (!archived && input.membership ? `<button type="button" class="mx-reader-membership" data-mx-reader-action="membership" aria-label="${input.membership === 'joined' ? 'Joined — view people' : input.membership === 'pending' ? 'Pending — view request' : 'Join artefact'}">${input.membership === 'joined' ? 'Joined' : input.membership === 'pending' ? 'Pending' : 'Join'}</button>` : '')
+    + (!archived && input.membership ? `<button type="button" class="mx-reader-membership" data-mx-reader-action="membership" aria-label="${input.membership === 'joined' ? 'Joined — view people' : input.membership === 'pending' ? 'Pending — view request' : 'Join artifact'}">${input.membership === 'joined' ? 'Joined' : input.membership === 'pending' ? 'Pending' : 'Join'}</button>` : '')
     + (title || (!archived && input.membership) ? '</span>' : '')
     + '</div>';
 

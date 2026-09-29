@@ -20,7 +20,7 @@ const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   });
 
 describe('renderReaderChrome', () => {
-  it('pairs membership with the title and hides it for archived or non-mutating artefacts', () => {
+  it('pairs membership with the title and hides it for archived or non-mutating artifacts', () => {
     const html = chrome({membership: 'joined'});
     expect(html).toContain('data-mx-reader-action="membership"');
     expect(html).toContain('>Joined</button>');
@@ -94,7 +94,7 @@ describe('renderReaderChrome', () => {
     expect(html).toContain('<a class="mx-reader-author" href="/@ada" target="_top" aria-label="View @ada\'s profile">@ada</a>');
     expect(html).toContain('<span class="mx-reader-title">A &lt;b&gt;bold&lt;/b&gt; &amp; &quot;quoted&quot; title</span>');
     expect(html).toContain('<button type="button" class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="ada" aria-label="Follow @ada" data-mx-tip="Follow @ada">follow</button>');
-    // Follow belongs to the author, before the artefact title.
+    // Follow belongs to the author, before the artifact title.
     expect(html.indexOf('mx-reader-follow')).toBeLessThan(html.indexOf('mx-reader-title'));
     expect(html).not.toContain('mx-reader-create');
     expect(html).not.toContain('New artifact');

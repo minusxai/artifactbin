@@ -20,7 +20,7 @@ import type {DocumentGraph} from '@artifactbin/contracts';
  */
 import { type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { Home, Lock } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import InPlaceEditor from '@/components/InPlaceEditor';
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
@@ -56,7 +56,7 @@ interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost }: {
+export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onRightInsetChange, rightInset = 0, commentsOpen, onCommentsOpenChange, onCommentsHost, titleHost, sharingContent }: {
   /** The artifact being edited; its requests go through the ArtifactBackendProvider above. */
   id: string;
   seed?: EditorSeed;
@@ -76,6 +76,8 @@ export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runti
   commentsOpen?: boolean;
   onCommentsOpenChange?: (open: boolean) => void;
   onCommentsHost?: (host: HTMLElement | null) => void;
+  titleHost?: HTMLElement | null;
+  sharingContent?: ReactNode;
   rightInset?: number;
   /**
    * Where the mounted editor publishes its drain, so the page can empty it
@@ -214,6 +216,8 @@ export default function ArtifactEditor({ seed, onExit, flushRef, frameRef, runti
       commentsOpen={commentsOpen}
       onCommentsOpenChange={onCommentsOpenChange}
       onCommentsHost={onCommentsHost}
+      titleHost={titleHost}
+      sharingContent={sharingContent}
     />
   );
 }

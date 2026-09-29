@@ -12,6 +12,7 @@ import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
 import { existingPaste } from '@/lib/agent-copy';
 import { router, resetRouter } from '@/test/setup/router';
 import { useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { setupSurface } from '@/test/helpers/inline-surface';
 import type { StoryController, EditorStoryRuntimeProps } from '@/lib/story-runtime/EditorStoryRuntime';
 
@@ -63,9 +64,9 @@ vi.mock('@/components/AnnotationLayer', () => ({
   default: (props: Record<string, unknown>) => { layerProps.push(props); return null; },
 }));
 vi.mock('@/components/ArtifactEditor', () => ({
-  default: (props: { onExit: () => void }) => (
+  default: (props: { onExit: () => void; titleHost?: HTMLElement | null }) => (
     <header aria-label="Editor toolbar">
-      <input aria-label="Title" />
+      {props.titleHost && createPortal(<input aria-label="Title" />, props.titleHost)}
       <button aria-label="Exit edit mode" className="text-accent" onClick={props.onExit}><span className="lucide-check" />done</button>
     </header>
   ),
@@ -287,11 +288,12 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
-    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 132 });
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 88 });
     expect(screen.getByLabelText('Exit edit mode')).toHaveClass('text-accent');
     expect(screen.getByLabelText('Exit edit mode').querySelector('.lucide-check')).toBeTruthy();
     expect(screen.getByLabelText('Exit edit mode')).toHaveTextContent('done');
-    expect(screen.getByLabelText('Editor toolbar')).toContainElement(screen.getByLabelText('Title'));
+    expect(screen.getByLabelText('Editor toolbar')).not.toContainElement(screen.getByLabelText('Title'));
+    expect(screen.getByLabelText('Title').closest('.mx-reader-title')).toBeTruthy();
     // The trusted reader controls remain available alongside the editor.
     expect(screen.getByLabelText('Open menu')).toHaveAttribute('data-mx-reader-trigger', 'menu');
     expect(document.querySelector('[data-mx-reader-trigger="controls"]')).toBeInTheDocument();
@@ -462,15 +464,15 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
     await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
-    expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '320px'});
-    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 132, panelWidth: 320, railSheet: false });
+    expect(viewport).toHaveStyle({paddingTop: '88px', paddingRight: '320px'});
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 88, panelWidth: 320, railSheet: false });
 
     // Closing comments inside the session moves nothing — at no point.
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
-    expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '320px'});
+    expect(viewport).toHaveStyle({paddingTop: '88px', paddingRight: '320px'});
     expect(await reserved()).toEqual(['320px']);
     expect(currentRuntime()).toBe(win);
   });
