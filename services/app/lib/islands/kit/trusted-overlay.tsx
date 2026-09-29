@@ -6,8 +6,10 @@ import type { IslandContext } from '../contract';
 
 export function overlayDestination(island: IslandContext): HTMLElement | null {
   if (typeof document === 'undefined') return null;
-  return document.querySelector('[data-mx-inline-story]') && document.querySelector('style[data-mx-story-css], style[data-mx-tw]')
-    ? document.body : island.trustedPortal();
+  // Inside the story root, the overlay inherits the story's font and theme, not the app shell's.
+  const story = document.querySelector<HTMLElement>('[data-mx-inline-story]');
+  return story && document.querySelector('style[data-mx-story-css], style[data-mx-tw]')
+    ? story : island.trustedPortal();
 }
 
 /** Story CSS lives in the document, outside the app's shadow portal. Keep compiled kit
