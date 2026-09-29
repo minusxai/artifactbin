@@ -3,10 +3,7 @@
  *
  * The census on #156's compiler found every refusal in one place: a REGISTERED component with no
  * Solid port (`Slide`, `SlideDeck`, `Icon`, `Table`…) that holds an interactive descendant, holds a
- * `$` value, or sits in a `<For>` row fell to `unported`. Those components are containers with no
- * behaviour of their own, so they compile as a SHELL: today's React kit renders the wrapper at compile
- * time and the children compile into it (islands inside hydrate). An unregistered legacy tag
- * (`<Param>`) renders nothing, exactly as the interpreter does.
+ * `$` value, or sits in a `<For>` row fell to `unported`.
  */
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
@@ -261,13 +258,13 @@ describe('the static part of a large document', () => {
 });
 
 describe('an unregistered legacy tag', () => {
-  it('<Param> renders nothing, with or without a $ value, and refuses nothing', async () => {
+  it('<Param> is reported as unported by the compiler', async () => {
     const source = '<Helmet><Value name="y" type="string" default="v" /></Helmet><div id="w"><Param name="a" value="$y" /><Param name="b">inner {$y}</Param><p id="after">after</p></div>';
     const input = await inputOf(source);
     const page = await compilePage(input, loadCompilerBuild());
-    expect(page.unported).toEqual([]);
-    expect(page.islands).toEqual([]);
-    expect(columnParity(page.html, input, { y: 'v' })).toEqual([]);
-    expect([...dom(page.html).querySelector('#w')!.children].map((c) => c.id)).toEqual(['after']);
+    // The deleted legacy unregistered-tag rule cannot silently discard stored author content.
+    expect(page.unported).toEqual(['Param']);
+    expect(page.html).toBe('');
+    expect(page.module).toBeNull();
   });
 });

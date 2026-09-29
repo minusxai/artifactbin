@@ -7,6 +7,7 @@
  * server-drawn chart until its table changes and loads Vega only then.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
@@ -49,6 +50,31 @@ describe('Number', () => {
 });
 
 describe('Select', () => {
+  it('keeps one placeholder and an opaque popup for a nullable options table', () => {
+    const ctx = fakeIsland({ department: null as unknown as string });
+    ctx.table = () => ({ rows: [{ value: null, label: 'All' }, { value: 'Police', label: 'Police' }], columns: [{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }] });
+    const { host, dispose } = mount(ctx, () => <Select label="Department" value="$department" options="$departments" placeholder="All departments" />);
+    host.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click();
+    expect([...document.querySelectorAll('[role="option"]')].map(option => option.getAttribute('aria-label'))).toEqual(['All departments', 'Police']);
+    expect(document.querySelector('[role="listbox"]')?.parentElement?.className).toContain('bg-popover');
+    dispose();
+  });
+  it('closes on another select, outside pointer, and Escape, restoring trigger focus', () => {
+    const ctx = fakeIsland({ department: null as unknown as string, job: null as unknown as string });
+    const { host, dispose } = mount(ctx, () => <><Select label="Department" value="$department" options={['Police']} /><Select label="Job title" value="$job" options={['Officer']} /></>);
+    const department = host.querySelector<HTMLButtonElement>('[aria-label="Department"]')!;
+    const job = host.querySelector<HTMLButtonElement>('[aria-label="Job title"]')!;
+    department.click(); job.click();
+    expect(department).toHaveAttribute('aria-expanded', 'false');
+    expect(job).toHaveAttribute('aria-expanded', 'true');
+    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    expect(job).toHaveAttribute('aria-expanded', 'false');
+    expect(document.activeElement).toBe(job);
+    department.click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(department).toHaveAttribute('aria-expanded', 'false');
+    expect(document.activeElement).toBe(department);
+    dispose();
+  });
   it('writes a chosen literal option immediately', () => {
     const ctx = fakeIsland({ region: 'West' }); ctx.setValue = vi.fn();
     const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['West','East']} />);
@@ -71,8 +97,23 @@ describe('Select', () => {
       host.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click();
       expect((portal ?? host).querySelector('[role="listbox"]')).toBeTruthy();
       if (portal) expect(host.querySelector('[role="listbox"]')).toBeNull();
+      (portal ?? host).querySelector<HTMLButtonElement>('[role="option"]')!.click();
+      expect((portal ?? host).querySelector('[role="listbox"]')).toBeNull();
       dispose();
     }
+  });
+  it('keeps compiled popups in the document that owns their story CSS', () => {
+    const story = document.createElement('div'); story.setAttribute('data-mx-inline-story', '');
+    const css = document.createElement('style'); css.setAttribute('data-mx-story-css', ''); css.textContent = '.bg-popover { background-color: white; }';
+    const portal = document.createElement('div');
+    document.body.append(story, css);
+    const ctx = fakeIsland({ region: 'West' }); ctx.trustedPortal = () => portal;
+    const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['West', 'East']} />);
+    try {
+      host.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click();
+      expect(document.body.querySelector('[role="listbox"]')).toBeTruthy();
+      expect(portal.querySelector('[role="listbox"]')).toBeNull();
+    } finally { dispose(); story.remove(); css.remove(); }
   });
   it('offers the options table and writes the chosen value', () => {
     const ctx = island(); ctx.setValue = vi.fn();

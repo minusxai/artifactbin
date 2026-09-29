@@ -19,6 +19,7 @@ import { IconGlyphProvider } from '@/components/kit/icon';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button, Icon } from '../kit/basic';
+import { Progress, Separator } from '../kit/static/misc';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../kit/tabs';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../kit/accordion';
 import { Dialog, DialogTrigger, DialogContent, DialogClose } from '../kit/dialog';
@@ -64,6 +65,19 @@ describe('basic', () => {
       <Card id="c" class={cls('Card')}><CardHeader id="ch" class={cls('CardHeader')}><CardTitle id="ct" class={cls('CardTitle')}>Title</CardTitle></CardHeader><CardContent id="cc" class={cls('CardContent')}><Button id="btn" variant="outline" class={cls('Button', { variant: 'outline' })}>Go</Button></CardContent></Card>
     </>);
     expect(parityOf('<Badge id="b" variant="secondary">beta</Badge><Alert id="a"><AlertTitle id="at">Heads up</AlertTitle><AlertDescription id="ad">Text.</AlertDescription></Alert><Card id="c"><CardHeader id="ch"><CardTitle id="ct">Title</CardTitle></CardHeader><CardContent id="cc"><Button id="btn" variant="outline">Go</Button></CardContent></Card>', host)).toEqual([]);
+  });
+});
+
+describe('progress and separator', () => {
+  it('a value renders Radix\'s loading/complete state and aria-valuenow, matching today\'s render', () => {
+    const { host } = mount(() => <>
+      <Progress id="p1" value={42} class={cls('Progress', {})} />
+      <Progress id="p2" value={100} class={cls('Progress', {})} />
+      <Progress id="p3" class={cls('Progress', {})} />
+      <Separator id="s1" class={cls('Separator', {})} />
+      <Separator id="s2" orientation="vertical" decorative={false} class={cls('Separator', {})} />
+    </>);
+    expect(parityOf('<Progress id="p1" value={42} /><Progress id="p2" value={100} /><Progress id="p3" /><Separator id="s1" /><Separator id="s2" orientation="vertical" decorative={false} />', host)).toEqual([]);
   });
 });
 
@@ -168,7 +182,9 @@ describe('dialog', () => {
     const { host, dispose } = mount(() => <Dialog><DialogTrigger id="trigger" wrapsControl={true}><Button id="add" class={cls('Button')}>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task" class={cls('DialogContent')}><DialogClose class={cls('DialogClose')}>Cancel</DialogClose></DialogContent></Dialog>);
     document.body.append(host);
     try {
-      expect(parityOf('<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>', host)).toEqual([]);
+      // The one-tree close marker adds only an internal attribute so an adopted button can close its modal.
+      expect(parityOf('<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>', host)
+        .filter(diff => !diff.includes('@data-mx-dialog-close: undefined vs ""'))).toEqual([]);
       const before = host.innerHTML;
       (host.querySelector('#add') as HTMLButtonElement).click();
       const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
@@ -190,6 +206,19 @@ describe('disclosure', () => {
       <Avatar id="av" class={cls('Avatar')}><AvatarImage src="/a.png" alt="A" class={cls('AvatarImage')} /><AvatarFallback class={cls('AvatarFallback')}>AB</AvatarFallback></Avatar>
     </>);
     expect(parityOf('<Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover><Avatar id="av"><AvatarImage src="/a.png" alt="A" /><AvatarFallback>AB</AvatarFallback></Avatar>', host)).toEqual([]);
+  });
+  it('opening another Popover dismisses the first and Escape restores focus', () => {
+    const { host, dispose } = mount(() => <><Popover><PopoverTrigger>First</PopoverTrigger><PopoverContent>First body</PopoverContent></Popover><Popover><PopoverTrigger>Second</PopoverTrigger><PopoverContent>Second body</PopoverContent></Popover></>);
+    document.body.append(host);
+    try {
+      const triggers = host.querySelectorAll<HTMLButtonElement>('[data-slot="popover-trigger"]');
+      triggers[0]!.click(); triggers[1]!.click();
+      expect(triggers[0]!.getAttribute('aria-expanded')).toBe('false');
+      expect(triggers[1]!.getAttribute('aria-expanded')).toBe('true');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(triggers[1]!.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(triggers[1]);
+    } finally { dispose(); host.remove(); }
   });
 });
 

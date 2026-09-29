@@ -2,6 +2,7 @@
 import { For, Show, createEffect, createSignal, untrack, type JSX } from 'solid-js';
 import { format as d3format } from 'd3-format';
 import { Portal } from 'solid-js/web';
+import { popupDismiss } from './popup-dismiss';
 import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
 import { coerceScalarInput } from '@/lib/story/scalar-input';
 import { useIsland } from '../context';
@@ -87,12 +88,13 @@ export function DatePicker(p: Props) {
   const outOfRange = (date: string) => (typeof p.min === 'string' && date < p.min) || (typeof p.max === 'string' && date > p.max);
   const choose = (date: string) => { const n = nameOf(p); if (n) island.setValue(n,date,undefined); setOpen(false); };
   const move = (delta: number) => { const next = shown().m + delta; setView({ y:shown().y + Math.floor((next-1)/12), m:((next-1+12)%12)+1 }); };
-  let root!: HTMLDivElement;
-  return <Shell authored={p}><div ref={root} class="relative"><button type="button" aria-label={str(p.label)} aria-haspopup="dialog" aria-expanded={open()} disabled={!active(p)} on:click={() => { setView(null); setOpen(!open()); }}
+  let root!: HTMLDivElement; let trigger!: HTMLButtonElement; let popup: HTMLDivElement | undefined;
+  const announce = popupDismiss(open, () => setOpen(false), () => trigger, () => popup);
+  return <Shell authored={p}><div ref={root} class="relative"><button ref={trigger} type="button" aria-label={str(p.label)} aria-haspopup="dialog" aria-expanded={open()} disabled={!active(p)} on:click={() => { setView(null); if (!open()) announce(); setOpen(!open()); }}
     class="inline-flex items-center justify-between rounded-md text-sm tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 w-40 gap-2 border border-input bg-background px-3 shadow-xs hover:bg-muted/40">
     <span class={join('truncate',value() === null && 'text-muted-foreground')}>{value() ?? 'Pick a date'}</span>{calendar()}</button>
-    <Show when={open()}><Portal mount={root.ownerDocument.body}><div role="dialog" aria-label={p.label ? `${p.label} calendar` : 'calendar'}
-      class="rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:'256px'}}>
+    <Show when={open()}><Portal mount={root.ownerDocument.body}><div ref={popup} role="dialog" aria-label={p.label ? `${p.label} calendar` : 'calendar'} data-theme={root.closest<HTMLElement>('[data-theme]')?.dataset.theme}
+      class="rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:'256px', '--popover':getComputedStyle(root).getPropertyValue('--popover'), '--popover-foreground':getComputedStyle(root).getPropertyValue('--popover-foreground'), '--border':getComputedStyle(root).getPropertyValue('--border')}}>
       <div class="flex items-center justify-between"><span class="px-1 text-sm font-medium">{MONTHS[shown().m-1]} {shown().y}</span><span class="flex items-center gap-1">
         <button type="button" aria-label="Previous month" on:click={() => move(-1)} class="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">‹</button>
         <button type="button" aria-label="Next month" on:click={() => move(1)} class="flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">›</button>

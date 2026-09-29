@@ -74,6 +74,7 @@ export default defineConfig({
         // The compiled reader page's loader (web/spa-idle): an entry of its own, so the server names
         // it from the manifest (`spa-idle.ts`) and the page loads the app only when it is wanted.
         'spa-idle': path.join(webRoot, 'spa-idle.ts'),
+        'solid-spa-idle': path.join(webRoot, 'solid-spa-idle.ts'),
       },
       // The shell's /fonts files are the app server's (appFontFaces above), never Vite assets.
       external: [/^\/fonts\//],
