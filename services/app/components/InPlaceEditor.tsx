@@ -1708,7 +1708,7 @@ export default function InPlaceEditor({
 
       {mode === 'design' && !preview && (contentView === 'files' || contentView === 'sharing') && (
         <aside aria-label={contentView === 'files' ? 'Files' : 'Sharing settings'} className="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6" style={{ top: barTop + barH, left: 0, right: panelWidth }}>
-          {contentView === 'files' ? <ReferenceFilesPanel refs={art.refs ?? []} /> : sharingContent}
+          {contentView === 'files' ? <div className="mx-auto max-w-3xl"><ReferenceFilesPanel refs={art.refs ?? []} /></div> : sharingContent}
         </aside>
       )}
 
