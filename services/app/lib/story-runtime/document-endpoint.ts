@@ -1,4 +1,4 @@
-import type { StoryController } from './EditorStoryRuntime';
+import type { StoryController } from './contract';
 
 /** Explicit local document capability. No Window-like object is created. */
 export type DocumentRuntimeRef = { current: StoryController | null };

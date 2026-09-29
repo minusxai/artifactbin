@@ -1,0 +1,126 @@
+/** @jsxImportSource solid-js */
+/** Attach prose editing to the compiler's `data-mx-ast` DOM without interpreting the document again. */
+import { createSignal } from 'solid-js';
+import { render } from 'solid-js/web';
+import { serializeJsx, type JsxNode } from '@/lib/jsx';
+import { isProseTree } from '@/lib/editor-v2/model';
+import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
+import type { EditorView } from 'prosemirror-view';
+import { isEditableTextHost } from '@/lib/story-ui/host-classify';
+import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
+import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
+import { FlowEditor } from '@/solid/editor/FlowEditor';
+import { GridEdit, type GridTile } from '@/solid/editor/GridEdit';
+
+export interface CompiledEditCallbacks {
+  onFlow(path: string, expected: string, replacement: string, group?: string, selection?: EditorSelectionChange): void;
+  onLayout?(rects: StoryLayoutRect[]): void;
+  onError?(message: string): void;
+  onBusy?(busy: boolean): void;
+  onView?(view: EditorView | null): void;
+  onHostFocus?(path: string, element: HTMLElement): void;
+  onHostInput?(path: string): void;
+  onHostBlur?(path: string): void;
+}
+
+export interface CompiledEditMount { dispose(): void }
+
+const isBlock = (node: JsxNode): boolean => node.type === 'element'
+  && !['thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u'].includes(node.tag)
+  && isProseTree(node);
+
+/** One region replaces only its authored prose siblings; adjacent compiled islands keep their DOM identity. */
+export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks): CompiledEditMount {
+  const cleanups: Array<() => void> = [];
+  const at = (path: string): HTMLElement | null => root.querySelector<HTMLElement>(`[data-mx-ast="${CSS.escape(path)}"]`);
+  const staticProp = (node: JsxNode, name: string): unknown => {
+    const value = node.type === 'element' ? node.attributes.find((attr) => attr.name === name)?.value : undefined;
+    return value?.static ? value.json : undefined;
+  };
+  const mountGrid = (node: JsxNode, path: string) => {
+    if (node.type !== 'element' || !node.isComponent || node.tag !== 'Grid' || staticProp(node, 'mode') === 'flow') return;
+    const grid = at(path);
+    if (!grid) return;
+    const cols = gridCols(staticProp(node, 'cols'));
+    const tiles: GridTile[] = node.children.flatMap((child, index) => {
+      if (child.type !== 'element' || child.tag !== 'GridItem') return [];
+      const itemPath = `${path}.${index}`;
+      if (!at(itemPath)) return [];
+      return [{ key: String(staticProp(child, 'id') ?? itemPath), path: itemPath,
+        rect: gridItemRect({ x: staticProp(child, 'x'), y: staticProp(child, 'y'), w: staticProp(child, 'w'), h: staticProp(child, 'h') }, cols),
+        children: () => <span /> }];
+    });
+    if (!tiles.length) return;
+    const overlay = root.ownerDocument.createElement('div');
+    overlay.dataset.mxGridEdit = path;
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:2;pointer-events:none';
+    const oldPosition = grid.style.position;
+    grid.style.position = 'relative';
+    grid.append(overlay);
+    const disposeSolid = render(() => <GridEdit cols={cols} rowHeight={gridRowHeight(staticProp(node, 'rowHeight'))}
+      tiles={tiles} onLayout={(rects) => callbacks.onLayout?.(rects)} renderFlow={() => <span />} />, overlay);
+    for (const grip of overlay.querySelectorAll<HTMLElement>('.mx-grid-grip,.mx-grid-resize')) grip.style.pointerEvents = 'auto';
+    cleanups.push(() => { disposeSolid(); overlay.remove(); grid.style.position = oldPosition; });
+  };
+  const visit = (siblings: JsxNode[], parentPath: string) => {
+    for (let index = 0; index < siblings.length;) {
+      const node = siblings[index]!;
+      const path = [parentPath, String(index)].filter(Boolean).join('.');
+      if (!isBlock(node)) {
+        mountGrid(node, path);
+        if (node.type === 'element' && isEditableTextHost(node)) {
+          const host = at(path);
+          if (host) {
+            host.contentEditable = 'true';
+            const focus = (event: FocusEvent) => { if (event.target === host) callbacks.onHostFocus?.(path, host); };
+            const input = (event: Event) => { if (event.target === host) callbacks.onHostInput?.(path); };
+            const blur = (event: FocusEvent) => { if (event.target === host) callbacks.onHostBlur?.(path); };
+            host.addEventListener('focus', focus);
+            host.addEventListener('input', input);
+            host.addEventListener('blur', blur);
+            cleanups.push(() => {
+              host.removeEventListener('focus', focus);
+              host.removeEventListener('input', input);
+              host.removeEventListener('blur', blur);
+              host.removeAttribute('contenteditable');
+            });
+          }
+        }
+        if (node.type === 'element') visit(node.children, path);
+        index++;
+        continue;
+      }
+      const start = index++;
+      while (index < siblings.length && (isBlock(siblings[index]!) || (siblings[index]!.type === 'text' && !(siblings[index] as { value: string }).value.trim()))) index++;
+      const region = siblings.slice(start, index);
+      const elements = Array.from({ length: index - start }, (_, offset) => at([parentPath, String(start + offset)].filter(Boolean).join('.')))
+        .filter((el): el is HTMLElement => !!el);
+      if (!elements.length || !elements[0]!.parentElement || !elements.every((el) => el.parentElement === elements[0]!.parentElement)) continue;
+      const parent = elements[0]!.parentElement;
+      const next = elements[elements.length - 1]!.nextSibling;
+      const mount = root.ownerDocument.createElement('div');
+      mount.dataset.mxEditRegion = path;
+      mount.style.display = 'contents';
+      parent.insertBefore(mount, elements[0]!);
+      for (const element of elements) element.remove();
+      let previous = region;
+      const [current] = createSignal(region);
+      const disposeSolid = render(() => <FlowEditor nodes={current()} path={path}
+        onError={callbacks.onError} onBusy={callbacks.onBusy}
+        onView={callbacks.onView}
+        onChange={(replacement, group, selection) => {
+          callbacks.onFlow(path, serializeJsx(previous), serializeJsx(replacement), group, selection);
+          previous = replacement;
+        }} />, mount);
+      cleanups.push(() => {
+        disposeSolid();
+        if (mount.isConnected) {
+          for (const element of elements) parent.insertBefore(element, next);
+          mount.remove();
+        }
+      });
+    }
+  };
+  visit(nodes, '');
+  return { dispose() { for (const cleanup of cleanups.reverse()) cleanup(); } };
+}

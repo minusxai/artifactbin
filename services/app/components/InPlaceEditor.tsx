@@ -25,7 +25,7 @@ import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
  */
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import SourceEditor from '@/components/SourceEditorPane';
+import SourceEditor from '@/components/SolidSourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
 import { ChartColumn, Check, Code, Database, Hash, History, MessageSquare, Undo2, Redo2, Paintbrush, SlidersHorizontal, Workflow, X } from 'lucide-react';
@@ -201,10 +201,28 @@ export default function InPlaceEditor({
     art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null,
   );
   const [source, setSource] = useState(art.markup ?? '');
+  const previewEditId = useRef(art.edit_id);
   /** Every request this editor makes (lib/artifact-backend), from the page's provider. */
   const backend = useArtifactBackend();
   const [css, setCss] = useState<string | null>(art.compiledCss ?? null);
-  const [mode, setMode] = useState<'design' | 'code'>('design');
+  const viewKey = `artifactbin:editor-view:${art.id}`;
+  const [mode, setMode] = useState<'design' | 'code'>(() => {
+    try { return window.location.hash === '#edit' && window.sessionStorage.getItem(viewKey) === 'code' ? 'code' : 'design'; }
+    catch { return 'design'; }
+  });
+  const chooseMode = (next: 'design' | 'code') => {
+    setMode(next);
+    try { window.sessionStorage.setItem(viewKey, next); } catch { /* storage can be unavailable */ }
+  };
+  useEffect(() => {
+    const clearOnExit = () => {
+      if (window.location.hash !== '#edit') {
+        try { window.sessionStorage.removeItem(viewKey); } catch { /* storage can be unavailable */ }
+      }
+    };
+    window.addEventListener('hashchange', clearOnExit);
+    return () => window.removeEventListener('hashchange', clearOnExit);
+  }, [viewKey]);
   const [dataflowState, setDataflowState] = useState<DataflowState | null>(art.dataflow?.state ?? null);
   const [imageError, setImageError] = useState<string | null>(null);
   const selectionRef = useRef<StoryEditSelection | null>(null);
@@ -295,6 +313,8 @@ export default function InPlaceEditor({
         {
           type: 'mx:document',
           nodes: parts.nodes,
+          source: next,
+          editId: previewEditId.current,
           ...(parts.authorCss !== null ? { authorCss: parts.authorCss } : {}),
           /*
            * Absent means "unchanged"; NULL means "this document has no stylesheet".
@@ -353,7 +373,8 @@ export default function InPlaceEditor({
    */
   const [sourceRevision, setSourceRevision] = useState(0);
   const onRemoteDocument = useCallback(
-    (next: string) => {
+    (next: string, editId: string) => {
+      previewEditId.current = editId;
       sourceRef.current = next;
       setSource(next);
       setSourceRevision((n) => n + 1);
@@ -383,6 +404,7 @@ export default function InPlaceEditor({
     onRemoteDocument,
     isUserEditing,
   });
+  previewEditId.current = live.editId;
   const queueRef = useRef(queue);
   queueRef.current = queue;
 
@@ -508,31 +530,42 @@ export default function InPlaceEditor({
   const remote = useLiveArtifact(backend, art.id, art.edit_id, art.version, true, isOwnEdit);
   useEffect(() => {
     if (!remote || remote.format !== 'markup' || typeof remote.source !== 'string') return;
-    if (!adoptRemote(remote.editId, remote.source, remote.by,remote.document,remote.version,{title:remote.title,theme:remote.theme,template:remote.template,colorMode:remote.colorMode})) return;
-    /*
-     * The document under the inspector is not the one it opened on. AST paths
-     * are POSITIONAL, so a node inserted before the selected chart shifts it
-     * and the panel would go on editing whatever now sits at that path —
-     * plausibly a different <Question>, which no tag guard downstream would
-     * question. Only an ADOPTED write does this: our own echo returns down the
-     * same stream, and closing on that would shut the inspector every time the
-     * user changed something in it.
-     */
-    editRef.current?.select(null);
-    if (remote.compiledCss !== undefined) setCss(remote.compiledCss);
-  }, [remote, adoptRemote]);
+    if (remote.version <= live.version || remote.editId === live.editId) return;
+    let timer: number | null = null;
+    let adopted = false;
+    const attempt = () => {
+      if (!adoptRemote(remote.editId, remote.source!, remote.by, remote.document, remote.version,
+        { title: remote.title, theme: remote.theme, template: remote.template, colorMode: remote.colorMode })) return;
+      adopted = true;
+      if (timer !== null) window.clearInterval(timer);
+      timer = null;
+      // AST paths are positional. A remote insertion can shift the selected
+      // chart, so close its inspector only after that version is adopted.
+      editRef.current?.select(null);
+      if (remote.compiledCss !== undefined) setCss(remote.compiledCss);
+    };
+    attempt();
+    // A ping can arrive while the previous local save is still in flight.
+    // Keep its complete frame until the save drains; there may be no next ping.
+    if (!adopted) timer = window.setInterval(attempt, 250);
+    return () => { if (timer !== null) window.clearInterval(timer); };
+  }, [remote, adoptRemote, live.editId, live.version, live.pending]);
 
   // ── draft compile ─────────────────────────────────────────────────────────
   const cssCache = useRef(new Map<string, string>());
   const compileTimer = useRef(0);
-  const lastCompiled = useRef<string | null>(art.compiledCss ? (art.markup ?? '') : null);
+  // The served document already carries its first stylesheet, including a
+  // deliberately sheetless page. Only a changed source needs a draft compile.
+  const lastCompiled = useRef<string | null>(art.markup ?? '');
   useEffect(() => {
     const key = source;
     if (lastCompiled.current === key) return;
     const cached = cssCache.current.get(key);
     if (cached !== undefined) {
-      setCss(cached);
-      showInDocument(key, { compiledCss: cached });
+      if (cached !== cssRef.current) {
+        setCss(cached);
+        showInDocument(key, { compiledCss: cached });
+      }
       return;
     }
     const run = async () => {
@@ -545,9 +578,10 @@ export default function InPlaceEditor({
         const first = cssCache.current.keys().next().value;
         if (first !== undefined) cssCache.current.delete(first);
       }
-      setCss(body.css);
+      const changed = body.css !== cssRef.current;
+      if (changed) setCss(body.css);
       // New utilities need to reach the document that is already showing them.
-      if (sourceRef.current === key) showInDocument(key, { compiledCss: body.css });
+      if (changed && sourceRef.current === key) showInDocument(key, { compiledCss: body.css });
     };
     window.clearTimeout(compileTimer.current);
     compileTimer.current = window.setTimeout(() => {
@@ -559,6 +593,11 @@ export default function InPlaceEditor({
   // ── draft data ────────────────────────────────────────────────────────────
   /** Keyed on the DECLARATIONS: a prose edit re-runs nothing. */
   const flowSignature = useMemo(() => storyUpdateParts(source)?.declarations ?? null, [source]);
+  const initialFlowSignature = useRef(storyUpdateParts(art.markup ?? '')?.declarations ?? null);
+  const hasDeclarations = (signature: string): boolean => {
+    const groups = JSON.parse(signature) as Record<string, unknown>;
+    return Object.values(groups).some((value) => Array.isArray(value) && value.length > 0);
+  };
   /*
    * What was already run FOR us — so a draft whose declarations have not moved
    * re-runs nothing. The test is `state`, not the dataflow itself: paint-first
@@ -566,10 +605,11 @@ export default function InPlaceEditor({
    * DECLARES data has had none of it run. Keying on the dataflow left the
    * chart panel offering columns nobody had fetched.
    */
-  const ranSignature = useRef<string | null>(art.dataflow?.state ? flowSignature : null);
+  const ranSignature = useRef<string | null>(art.dataflow?.state || (flowSignature !== null && !hasDeclarations(flowSignature)) ? flowSignature : null);
   const queriesUnavailable = backend.unavailable('runQueries');
   useEffect(() => {
     if (flowSignature === null || flowSignature === ranSignature.current) return;
+    if (!hasDeclarations(flowSignature)) { ranSignature.current = flowSignature; return; }
     // A backend that cannot run queries (the offline file) keeps the results the document shipped with.
     if (queriesUnavailable) return;
     let alive = true;
@@ -586,7 +626,10 @@ export default function InPlaceEditor({
           dataflowRef.current = next;
           // The browser has no compiler: the draft's compiled declarations come back with its rows.
           compiledRef.current = body.flow ?? null;
-          showInDocument(sourceRef.current);
+          // An initial query pass populates the inspector. The served compiled
+          // document already owns its chart; re-sending identical source here
+          // would replace that drawing with an unsaved static preview.
+          if (flowSignature !== initialFlowSignature.current) showInDocument(sourceRef.current);
         })
         .catch(() => { if (alive) setDataflowPending(false); });
     }, 400);
@@ -1325,7 +1368,7 @@ export default function InPlaceEditor({
                 aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
                 aria-pressed={active}
                 onClick={() => {
-                  setMode(m);
+                  chooseMode(m);
                   setQueriesOpen(false);
                 }}
                 className={`inline-flex h-6 cursor-pointer items-center gap-1 rounded-[3px] px-1 font-mono text-[11px] sm:px-1.5 ${
@@ -1345,7 +1388,7 @@ export default function InPlaceEditor({
                 aria-pressed={queriesOpen}
                 onClick={() => {
                   setQueriesOpen((v) => !v);
-                  setMode('design');
+                  chooseMode('design');
                   // The notebook is a view over the document: nothing on the page is selected under it.
                   if (!queriesOpen) edit.select(null);
                 }}
@@ -1373,6 +1416,7 @@ export default function InPlaceEditor({
                 {
                   type: 'mx:document',
                   nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
+                  source: sourceRef.current,
                   theme: t,
                   colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
                 },
@@ -1471,6 +1515,7 @@ export default function InPlaceEditor({
               aria-label="Exit edit mode"
               onClick={(event) => {
                 event.currentTarget.blur();
+                try { window.sessionStorage.removeItem(viewKey); } catch { /* storage can be unavailable */ }
                 void onDone();
               }}
               className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4px] border border-accent/40 bg-accent-soft px-2 font-mono text-[11px] text-accent hover:border-accent"

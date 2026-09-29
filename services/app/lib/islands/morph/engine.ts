@@ -315,6 +315,9 @@ interface MorphContext {
   used: Set<Node>;
   /** Every node of a kept island: moved into place, never removed with its old parent. */
   kept: ReadonlySet<Node>;
+  /** Unchanged authored components whose painted root survives a draft compile. */
+  stableElementIds?: ReadonlySet<string>;
+  stableElementPaths?: ReadonlySet<string>;
 }
 
 type Movable = Element & { moveBefore?: (node: Node, child: Node | null) => void };
@@ -332,7 +335,13 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
   const doc = from.ownerDocument;
   const olds = [...from.childNodes];
   const byId = new Map<string, Element>();
-  for (const node of olds) if (node.nodeType === 1 && !renderIdOf(node) && (node as Element).id) byId.set((node as Element).id, node as Element);
+  const byPath = new Map<string, Element>();
+  for (const node of olds) if (node.nodeType === 1 && (!renderIdOf(node) || ctx.stableElementIds?.has((node as Element).id)) && (node as Element).id)
+    byId.set((node as Element).id, node as Element);
+  for (const node of olds) if (node.nodeType === 1) {
+    const path = (node as Element).getAttribute(AST_PATH_ATTR);
+    if (path && ctx.stableElementPaths?.has(path)) byPath.set(path, node as Element);
+  }
   let at: ChildNode | null = from.firstChild;
   const place = (node: Node) => {
     ctx.used.add(node);
@@ -347,7 +356,15 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     const rid = renderIdOf(next);
     if (rid) {
       const oldRid = ctx.keep.get(rid);
-      if (oldRid === undefined) { place(doc.importNode(next, true)); continue; }
+      if (oldRid === undefined) {
+        const id = (next as Element).id;
+        const stable = id && ctx.stableElementIds?.has(id) ? byId.get(id) : undefined;
+        const path = (next as Element).getAttribute(AST_PATH_ATTR);
+        const byStablePath = path && ctx.stableElementPaths?.has(path) ? byPath.get(path) : undefined;
+        const retained = stable ?? byStablePath;
+        place(retained && sameKind(retained, next) ? retained : doc.importNode(next, true));
+        continue;
+      }
       // A kept island: every node it runs, where the new page has it, once.
       if (placedIslands.has(rid)) continue;
       placedIslands.add(rid);
@@ -360,11 +377,17 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     // By persistent id first; else (no id, or an id the current page does not have — a node minted anew)
     // the next free node of the same kind whose own id the new version no longer names.
     const byOwnId = next.nodeType === 1 && (next as Element).id ? byId.get((next as Element).id) : undefined;
-    const match = byOwnId && !ctx.used.has(byOwnId) ? byOwnId : softMatch(at, next, ctx, nextIds);
+    const path = next.nodeType === 1 ? (next as Element).getAttribute(AST_PATH_ATTR) : null;
+    const byStablePath = path && ctx.stableElementPaths?.has(path) ? byPath.get(path) : undefined;
+    const match = byOwnId && !ctx.used.has(byOwnId) ? byOwnId
+      : byStablePath && !ctx.used.has(byStablePath) ? byStablePath : softMatch(at, next, ctx, nextIds);
     if (match && !ctx.used.has(match) && sameKind(match, next)) {
       if (match.nodeType === 1) {
-        syncAttributes(match as Element, next as Element, null);
-        morphChildren(match as Element, next as Element, ctx);
+        if (!ctx.stableElementIds?.has((match as Element).id)
+          && !(path && ctx.stableElementPaths?.has(path))) {
+          syncAttributes(match as Element, next as Element, null);
+          morphChildren(match as Element, next as Element, ctx);
+        }
       } else if (match.nodeValue !== next.nodeValue) {
         match.nodeValue = next.nodeValue;
       }
@@ -374,6 +397,24 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     place(fresh(doc, next, ctx));
   }
   for (const node of olds) if (!ctx.used.has(node) && !ctx.kept.has(node) && node.parentNode === from) from.removeChild(node);
+}
+
+/** Morph an unsaved editor compile in the adopted root. Only caller-approved component IDs keep
+ * their hydrated DOM; a changed component takes the compiler's fresh static preview instead. */
+export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableComponentIds: ReadonlySet<string>, stableComponentPaths: ReadonlySet<string> = new Set()): void {
+  const renderIds = (tree: ParentNode) => [...new Set([...tree.querySelectorAll(`[${HK}]`)].map(renderIdOf).filter((id): id is string => !!id))];
+  const oldUnits = unitsOf(root, renderIds(root));
+  const nextUnits = unitsOf(next, renderIds(next));
+  const oldById = new Map([...oldUnits].map(([rid, elements]) => [elements[0]?.id, rid] as const));
+  const keep = new Map<string, string>();
+  for (const [rid, elements] of nextUnits) {
+    const id = elements[0]?.id;
+    const oldRid = id && stableComponentIds.has(id) ? oldById.get(id) : undefined;
+    if (oldRid && ![...keep.values()].includes(oldRid)) keep.set(rid, oldRid);
+  }
+  const kept = new Set<Node>([...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? []));
+  syncAttributes(root, next, null);
+  morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds, stableElementPaths: stableComponentPaths });
 }
 
 /** A new node that matched nothing: an element is built through the morph, so a kept island inside it still lands. */
