@@ -61,7 +61,7 @@ describe('compilePage', () => {
     expect(performance.now() - start).toBeLessThan(8_000);
   }, 30_000);
   it('restores long hostile static text in both the browser templates and a reloaded SSR module', async () => {
-    const hostile = `begin </script><script>alert(1)</script> & {braces} backtick \` interpolation \${value} ${'x'.repeat(2_000)} end`;
+    const hostile = `begin </script><script>alert(1)</script> & {braces} backslash \\ backtick \` interpolation \${value} ${'x'.repeat(2_000)} end`;
     const input = await inputOf(`<Tabs defaultValue="one"><TabsContent value="one"><p>${hostile.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;')}</p></TabsContent></Tabs>`);
     const generated = generate(input);
     const browser = await browserModuleCode(generated.browserIslands, loadCompilerBuild(), null, undefined, generated.staticTexts);

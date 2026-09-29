@@ -582,12 +582,21 @@ export const ssrModuleCode = async (islands: string, skeletonHtml: string, flow:
 };
 
 const htmlText = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const jsStringText = (value: string): string => value
+  .replace(/\\/g, '\\\\')
+  .replace(/"/g, '\\"')
+  .replace(/'/g, "\\'")
+  .replace(/`/g, '\\`')
+  .replace(/\$\{/g, '\\${')
+  .replace(/[\u0000-\u001f\u007f]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029');
 function restoreStaticText(value: string, texts: Readonly<Record<string, string>>, code = false): string {
   if (!Object.keys(texts).length) return value;
   return value.replace(/MXSTATIC[0-9a-f]{16}\d+END/g, (marker) => {
     const raw = texts[marker];
     if (raw === undefined) return marker;
     const html = htmlText(raw);
-    return code ? escapeRaw(JSON.stringify(html).slice(1, -1)).replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/'/g, "\\'") : html;
+    return code ? jsStringText(html) : html;
   });
 }
