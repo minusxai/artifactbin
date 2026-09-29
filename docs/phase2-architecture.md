@@ -31,7 +31,7 @@ is typed against the existing react-free store (`lib/story-runtime/store`), neve
 | Codegen safety harness | `lib/compiled-page/codegen-safety.ts` | `shapeOf` (AST with every literal blanked), the hostile string set, `hostileDocument` and `structureIndependent` — the test harness the compiler is proven with. Landed in step 0. | step 0 |
 | Shared island build | `scripts/build-islands.mjs` → `public/islands/` | Once per deploy: `solid-js`, the runtime and each kit module as content-addressed browser chunks + `public/islands/manifest.json` (specifier → URL) + the compiler build id. Replaces the standalone story runtime build (#175). | w1-toolchain |
 | Module store | `lib/compiled-page/modules.server.ts` + `GET /islands/d/:sha.js` | The per-document module's bytes, content-addressed in the object store (`lib/object-store`), served immutable under `script-src 'self'`. | w1-assembler |
-| Compiled page store | `lib/story/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored WITH the prepared page, in the same row and under the same key discipline plus the compiler build id. A read whose stored compile is from another build recompiles inline (budgeted) or falls back. | w2-compiler |
+| Compiled page store | `lib/story/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored with the prepared page, keyed by document version. Deploys do not invalidate it. | w2-compiler |
 | Reader selection | `lib/compiled-page/reader-mode.ts` | Compiled documents serve by default; editing and commenting views use their dedicated paths. | w4-flip-docs |
 | Data plan | `lib/compiled-page/plan.ts` | `planOf(flow, access) → DataPlan`: every query classified `shared` / `viewer` / `page` from the compiled dataflow's reads and the datasets' access facts; the datasets a snapshot depends on; the values that key a snapshot. Pure. | w1-planners |
 | Snapshot store | `lib/compiled-page/snapshots.server.ts` + `app.data_snapshots` | Guest snapshots keyed by version + plan + inputs; marks of every dataset read; freshness decided on read by comparing marks (the correctness rule) and eagerly by the dataset write hook (the optimisation); background revalidation; server-drawn charts stored with the snapshot. | w1-snapshots |
@@ -137,9 +137,8 @@ its place.
 
 `CompiledPage` (contract):
 
-- `build`: the compiler build id — a digest of the compiler's own bundle, the shared island build
-  manifest and the kit sources. A stored compile whose `build` differs from the serving server's is a
-  miss (deploy lag; §6).
+- `build`: the shared island build id recorded at compile time. The compile also records the exact
+  shared manifest and server half it needs. A newer server serves this stored build unchanged.
 - `html`: the story element's inner HTML, static parts final, each island rendered in its DECLARED
   state at its slot (served only when no snapshot exists), `<mx-slot>` never left in the output.
 - `ssr`: `ModuleRef | null` — the server build of the same islands (`render(data) → story HTML`), stored
@@ -154,8 +153,12 @@ its place.
   and `unported.length > 0` means the compile is refused (fallback), never a page with holes.
 - `behaviors`: framework-free behaviour chunks the page needs (`deck`).
 
-Stored inside `prepared_pages.page` as `compiled`, so the existing key and dependency fingerprint
-discipline applies unchanged; the compiler build id joins `page_key` so a deploy misses and recompiles.
+Stored inside `prepared_pages.page` as `compiled`. `page_key` is only the document version (`v:<n>`)
+within its head or archived slot. `compiler_version`, `island_build`, `css_version`, `ssr_bundle`,
+`page_format` and `handover_contract` are separate, queryable columns. The compiler fingerprint comes
+from the esbuild input graph of preparation and compilation and is emitted with the server build
+assets. The island build's immutable files and server half are retained in the object store; the
+local output directory also accumulates content-addressed files and reports bytes added per build.
 
 ## 4. Islands and the data plan
 
@@ -282,9 +285,11 @@ not committed — established:
 
 ## 6. Failure and fallback
 
-A prepared page stores the compiled result or a recorded compile failure with the compiler build id.
-A read with a missing or outdated compile recompiles inline, shared by concurrent readers for that
-version. `COMPILE_INLINE_BUDGET_MS` records a slow compile; it does not select another renderer.
+A prepared page stores the compiled result or a recorded compile failure with its recorded build
+versions. A read keeps serving that compile across deploys. An edit changes the document version and
+compiles again. Only a hand-raised `MIN_PAGE_FORMAT` or `MIN_HANDOVER_CONTRACT` invalidates an older
+stored compile automatically; missing compiles compile inline. `COMPILE_INLINE_BUDGET_MS` records a
+slow compile; it does not select another renderer.
 If compilation still fails, `/raw` returns a reported 500 and the app page raises
 `CompiledPageFailed`. The response names the reason in `x-mx-reader-fallback`; a successful
 response names `x-mx-reader: compiled`. Access is checked before either result.
@@ -296,9 +301,12 @@ viewer overlay leaves its neutral placeholder and can retry. If a snapshot is mi
 the request tries shared queries within `SERVED_RESULTS_BUDGET_MS` and otherwise serves the
 declarations for the island to refresh after paint.
 
-Backfill after a deploy uses `scripts/compiled-backfill.ts`. The running server prepares each
-version through `/a/<id>/raw`, admitted by a short-lived export key; the script resumes from the
-stored build suffix and ends with a database census.
+Deliberate backfills use `scripts/compiled-backfill.ts`. Select versions by recorded columns, for
+example `--where compiler_version!=<current>`, `--island-build <old>` or `--format-below 3`. Run
+`--dry-run` first. The running server recompiles each selected version through its admitted reader
+door; a repeated filtered run skips versions that no longer match. The script ends with a database
+census. A deploy by itself triggers no backfill. A refreshed external asset is incorporated when its
+document is edited into a new version or deliberately backfilled; the existing version stays pinned.
 
 ## 7. Coexistence with the React app and the editor
 
@@ -368,8 +376,9 @@ reader's URL); the hint set is computed from the compiled page and carried by th
 
 ## 10. Reader selection
 
-Prepared documents compile with the deployed island build. Reader requests use the compiled page
-where its stored build matches. Editing and commenting views keep their dedicated editing paths.
+Prepared documents compile with the deployed island build. Reader requests use the version's stored
+compile and its recorded island build across deployments. Editing and commenting views keep their
+dedicated editing paths.
 Every document response names its path with `x-mx-reader`; when a compile cannot serve, the
 response includes `x-mx-reader-fallback` with the reason (§6). No deployment flag or reader query
 parameter selects another runtime.

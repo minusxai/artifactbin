@@ -10,8 +10,9 @@
  * adoption of the served node with compiler-shaped hydratable code.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Show } from 'solid-js';
+import { Show, type JSX } from 'solid-js';
 import { boot } from '../boot';
+import { configureTemplateResource, templateFromPage } from '../rt';
 import { startPage } from '../page';
 import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
@@ -47,9 +48,100 @@ afterEach(() => {
   document.body.removeAttribute('data-mx-live-id');
   document.body.removeAttribute('data-mx-live-edit');
   vi.unstubAllGlobals();
+  configureTemplateResource(null);
 });
 
 describe('boot', () => {
+  it('makes served islands ready and starts queries without requesting templates', async () => {
+    const url = '/islands/t/bbbbbbbbbbbbbbbb.json';
+    configureTemplateResource(url);
+    page({ ...snapshot, results: null, queryUrl: '/a/abc/query' });
+    const requests: Array<{ url: string; ready: boolean }> = [];
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const requested = String(input);
+      requests.push({ url: requested, ready: document.documentElement.hasAttribute('data-mx-ready') });
+      return Promise.resolve(Response.json({ tables: { total: { rows: [{ n: 42 }], columns: [{ name: 'n', type: 'number' }] } }, errors: {} }));
+    }));
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    expect(document.documentElement.hasAttribute('data-mx-ready')).toBe(true);
+    await vi.waitFor(() => expect(requests.some((request) => request.url.includes('/a/abc/query'))).toBe(true));
+    expect(requests.some((request) => request.url === url)).toBe(false);
+    expect(requests.find((request) => request.url.includes('/a/abc/query'))?.ready).toBe(true);
+  });
+  it('defers only a cold island while a served sibling is already interactive', async () => {
+    const url = '/islands/t/cccccccccccccccc.json';
+    configureTemplateResource(url);
+    page(snapshot);
+    const root = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
+    root.insertAdjacentHTML('beforeend', '<p data-hk="s1-0" id="cold">Served placeholder</p>');
+    const placeholder = document.getElementById('cold');
+    let answer!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const Cold = () => templateFromPage('cold')() as unknown as JSX.Element;
+    booted = boot({ ISLANDS: [['s0-', Total], ['s1-', Cold]], FLOW: flow });
+    expect(booted.ready()).toBe(true);
+    booted.context.setValue('region', 'East');
+    expect(document.getElementById('island')?.textContent).toContain('East');
+    expect(document.getElementById('cold')).toBe(placeholder);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    answer(Response.json({ cold: '<p id="cold">Loaded island</p>' }));
+    await vi.waitFor(() => expect(document.getElementById('cold')?.textContent).toBe('Loaded island'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('fetches once on the first tab switch and replays that switch', async () => {
+    const url = '/islands/t/dddddddddddddddd.json';
+    configureTemplateResource(url);
+    document.body.innerHTML = '<div data-mx-inline-story=""><button data-hk="s0-0" role="tab">Other</button></div>';
+    let answer!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    let switches = 0;
+    const Tab = () => <button role="tab" onClick={() => {
+      switches++;
+      document.querySelector('[data-mx-inline-story]')?.append(templateFromPage('panel')());
+    }}>Other</button>;
+    booted = boot({ ISLANDS: [['s0-', Tab]] });
+    expect(booted.ready()).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    document.querySelector<HTMLButtonElement>('[role="tab"]')!.click();
+    expect(switches).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    answer(Response.json({ panel: '<p>New panel</p>' }));
+    await vi.waitFor(() => expect(switches).toBe(1));
+    expect(document.querySelector('[data-mx-inline-story] p')?.textContent).toBe('New panel');
+    document.querySelector<HTMLButtonElement>('[role="tab"]')!.click();
+    expect(switches).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('waits for cold factories before starting queries that create rows', async () => {
+    const url = '/islands/t/eeeeeeeeeeeeeeee.json';
+    configureTemplateResource(url);
+    page({ ...snapshot, results: null, queryUrl: '/a/abc/query' });
+    document.getElementById('island')!.replaceWith(Object.assign(document.createElement('div'), { id: 'rows' }));
+    document.getElementById('rows')!.setAttribute('data-hk', 's0-0');
+    let answer!: (response: Response) => void;
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const requested = String(input);
+      requests.push(requested);
+      return requested === url ? new Promise<Response>((resolve) => { answer = resolve; })
+        : Promise.resolve(Response.json({ tables: { total: { rows: [{ n: 42 }], columns: [{ name: 'n', type: 'number' }] } }, errors: {} }));
+    }));
+    const Row = () => templateFromPage('row')() as unknown as JSX.Element;
+    const Rows = () => {
+      const island = useIsland();
+      return <Show when={island.table('total')} fallback={<div id="rows">Loading</div>}>
+        <Row />
+      </Show>;
+    };
+    booted = boot({ ISLANDS: [['s0-', Rows]], FLOW: flow });
+    expect(booted.ready()).toBe(true);
+    expect(requests).toEqual([url]);
+    answer(Response.json({ row: '<div id="rows">Loaded rows</div>' }));
+    await vi.waitFor(() => expect(document.getElementById('rows')?.textContent).toBe('Loaded rows'));
+    expect(requests.filter((request) => request === url)).toHaveLength(1);
+  });
   it('replaces cold DataTable and Question placeholders when their query answers, including a multi-root island', async () => {
     const cold = { ...snapshot, results: null, queryUrl: '/a/abc/query' };
     document.body.innerHTML = '<div data-mx-inline-story="" id="mx-story-root">'

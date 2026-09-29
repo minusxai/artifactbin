@@ -54,7 +54,7 @@ import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/custo
 import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
 import type { StorySurface } from '@/lib/compiled-page/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
-import { preparedPageFor } from '@/lib/story/prepared-page.server';
+import { preparedPageFor, recompilePage } from '@/lib/story/prepared-page.server';
 import { documentStyleSheets } from '@/lib/story/document-styles';
 import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
@@ -361,6 +361,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       {
         const capture = byExportKey && !chrome;
         const prepared = await preparedPageFor(artifact, at, base);
+        if (byExportKey && request.headers.get('x-mx-compiled-backfill') === 'recompile') {
+          const compiled = await recompilePage(prepared.row, at, prepared.page);
+          if (compiled) prepared.page.compiled = compiled;
+        }
         const flow = prepared.page.declared?.flow ?? null;
         // The exporter photographs this page: its run is settled, and carries whoever asked (see the
         // capture's run below) — never the guest snapshot's rows, never cached.

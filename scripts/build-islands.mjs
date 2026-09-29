@@ -192,7 +192,7 @@ export function closureOf(files, urls) {
 }
 
 /**
- * Build the shared islands into `outDir` (wiped first). Returns `{ build, manifest, files, closure }`;
+ * Build the shared islands into `outDir` (append-only). Returns `{ build, manifest, files, closure }`;
  * the same sources give the same build id, manifest and bytes whatever `outDir` is.
  */
 export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
@@ -238,8 +238,15 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const url = (name) => `${ISLANDS_PATH}/${name}`;
   const rewrite = (text) => text.replace(/(["'])\.\/([\w-]+\.js)\1/g, (match, quote, name) => (byOldName.has(name) ? `${quote}./${byOldName.get(name).newName}${quote}` : match));
 
-  fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
+  const writeImmutable = (name, bytes) => {
+    const file = path.join(outDir, name);
+    if (fs.existsSync(file)) {
+      if (!fs.readFileSync(file).equals(Buffer.from(bytes))) throw new Error(`build-islands: immutable file changed: ${name}`);
+      return;
+    }
+    fs.writeFileSync(file, bytes);
+  };
   const files = {};
   const manifest = {};
   const outputs = Object.entries(result.metafile.outputs);
@@ -249,7 +256,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     const stale = [...text.matchAll(/["']\.\/([\w-]+\.js)["']/g)].map((m) => m[1]).filter((n) => byOldName.has(n));
     if (stale.length) throw new Error(`build-islands: ${newName} still names ${stale.join(', ')}`);
     const bytes = Buffer.from(text);
-    fs.writeFileSync(path.join(outDir, newName), bytes);
+    writeImmutable(newName, bytes);
     const meta = outputs.find(([key]) => path.basename(key) === oldName)?.[1];
     if (!meta) throw new Error(`build-islands: no metafile entry for ${oldName}`);
     files[url(newName)] = {
@@ -261,25 +268,25 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     if (entry) manifest[entry.specifier] = url(newName);
   }
   for (const lazy of standalone) {
-    fs.writeFileSync(path.join(outDir, lazy.fileName), lazy.bytes);
+    writeImmutable(lazy.fileName, lazy.bytes);
     files[url(lazy.fileName)] = { ...sizes(lazy.bytes), imports: [] };
   }
   const catalog = glyphCatalog();
   const catalogName = `glyphs-${sha256(catalog).slice(0, 16)}.js`;
-  fs.writeFileSync(path.join(outDir, catalogName), catalog);
+  writeImmutable(catalogName, catalog);
   files[url(catalogName)] = { ...sizes(catalog), imports: [] };
   manifest['@mx/glyphs'] = url(catalogName);
   // The page engine fetches its wasm; emit it beside the reader modules.
   const sqliteBytes = fs.readFileSync(SQLITE_WASM);
   const sqliteName = `sqlite3-${sha256(sqliteBytes).slice(0, 16)}.wasm`;
-  fs.writeFileSync(path.join(outDir, sqliteName), sqliteBytes);
+  writeImmutable(sqliteName, sqliteBytes);
   const sqliteWasm = url(sqliteName);
   files[sqliteWasm] = { ...sizes(sqliteBytes), imports: [] };
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
   if (missing.length) throw new Error(`build-islands: no chunk for ${missing.join(', ')}`);
 
   const ssrName = `ssr-${sha256(ssrHalf.bytes).slice(0, 16)}.js`;
-  fs.writeFileSync(path.join(outDir, ssrName), ssrHalf.bytes);
+  writeImmutable(ssrName, ssrHalf.bytes);
   const ssr = { url: url(ssrName), exports: SSR_EXPORTS };
 
   const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs'].map((s) => [s, manifest[s]]));
@@ -384,10 +391,14 @@ async function main(argv) {
     console.log('build-islands: inputs unchanged, skipping rebuild (cache hit)');
     return;
   }
+  const before = fs.existsSync(outDir) ? new Map(fs.readdirSync(outDir).map((name) => [name, fs.statSync(path.join(outDir, name)).size])) : new Map();
   const { build, manifest, files, closure, inputs } = await buildIslands({ outDir });
+  const added = fs.readdirSync(outDir).filter((name) => !before.has(name)).reduce((n, name) => n + fs.statSync(path.join(outDir, name)).size, 0);
+  const retained = [...before.values()].reduce((n, size) => n + size, 0);
   console.log(describePrecompression(`build-islands ${ISLANDS_PATH}`, await precompressTree(outDir)));
   const br = (urls) => closure(urls).reduce((n, u) => n + files[u].br, 0);
   console.log(`build-islands: build ${build}, ${Object.keys(files).length} chunks; rt+boot ${br([manifest['@mx/rt'], manifest['@mx/boot']])} B br`);
+  console.log(`build-islands: retained ${retained} B; this build added ${added} B`);
   fs.mkdirSync(path.dirname(CACHE_MARKER), { recursive: true });
   fs.writeFileSync(CACHE_MARKER, JSON.stringify({ outDir, toolHash: toolHash(), sources: sourceHashes(trackedSources(inputs)) }, null, 1) + '\n');
 }

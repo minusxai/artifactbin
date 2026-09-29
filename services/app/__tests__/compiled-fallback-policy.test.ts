@@ -1,7 +1,8 @@
 /**
  * THE FALLBACK CONTRACT AFTER WAVE 4 (docs/phase2-architecture.md §6; lib/compiled-page/serve.server
- * `fallbackPolicy`). With the standalone renderer deleted (`compiled-only`), a missing compile or one from another
- * build is compiled inline and waited for, the inline budget only decides whether that is logged as
+ * `fallbackPolicy`). With the standalone renderer deleted (`compiled-only`), a missing compile or one below
+ * a hand-raised compatibility minimum is compiled inline and waited for; a compile from another build is served.
+ * The inline budget only decides whether that is logged as
  * slow, and a compile that fails is a reported 500. Real routes, the harness's database, the reader
  * inline budget at zero for this file (every inline compile is "over budget").
  */
@@ -53,7 +54,7 @@ describe('fallbackPolicy', () => {
 });
 
 describe('a compile from another build', () => {
-  it('compiled-only: compiled inline and waited for, however long it takes; the slow compile is logged, not refused', async () => {
+  it('compiled-only: the stored compile keeps serving without an inline compile', async () => {
     setFallbackPolicyForTests('compiled-only');
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
@@ -64,16 +65,16 @@ describe('a compile from another build', () => {
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
     expect(new JSDOM(await res.text()).window.document.querySelector('#mx-story-root [role="tablist"]')).toBeTruthy();
-    expect(warn.mock.calls.some(([line]) => String(line).includes(`${id} v`) && String(line).includes('compiled inline'))).toBe(true);
-    expect(await storedBuild(id)).not.toBe('0000000000000000');
+    expect(warn.mock.calls.some(([line]) => String(line).includes(`${id} v`) && String(line).includes('compiled inline'))).toBe(false);
+    expect(await storedBuild(id)).toBe('0000000000000000');
     warn.mockRestore();
   });
 
-  it('compiled-only: concurrent readers of one stale version share one inline compile', async () => {
+  it('compiled-only: concurrent readers below the format minimum share one inline compile', async () => {
     setFallbackPolicyForTests('compiled-only');
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
-    await (await harness.db()).query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
+    await (await harness.db()).query(`UPDATE prepared_pages SET page_format = 0 WHERE artifact_id = $1`, [id]);
     const warn = vi.spyOn(console, 'warn');
     const answers = await Promise.all([raw(id), raw(id), raw(id)]);
     expect(answers.map((r) => r.headers.get(READER_MODE_HEADER))).toEqual(['compiled', 'compiled', 'compiled']);

@@ -99,7 +99,7 @@ async function publish(codes: string[], visibility = 'public') {
 const jobs = async (id: string) => (await (await getDb()).query<{ version: number; state: string; attempts: number; retry_after: string | null; images: Record<string, Record<string, string>> | null }>(
   'SELECT version,state,attempts,retry_after,images FROM mermaid_harvests WHERE artifact_id=$1 ORDER BY version', [id])).rows;
 const raw = async (id: string, query = '', ua = '') => (await serveArtifact(reader(`/a/${id}/raw${query}`, ua), params({ id }))).text();
-const island = (html: string) => JSON.parse(/<script[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/.exec(html)![1].replace(/\\u003c/g, '<')) as { mermaidImages?: Record<string, { src: string; palette: string; type: string; width?: number; height?: number; metrics?: number[] }> };
+const island = (html: string) => JSON.parse(/<script type="application\/json" id="mx-story-data">([\s\S]*?)<\/script>/.exec(html)![1].replace(/\\u003c/g, '<')) as { mermaidImages?: Record<string, { src: string; palette: string; type: string; width?: number; height?: number; metrics?: number[] }> };
 const head = (html: string) => html.split('</head>')[0];
 
 describe('a published Mermaid document', () => {

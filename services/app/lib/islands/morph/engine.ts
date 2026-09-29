@@ -95,8 +95,17 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   const newModuleHref = newModule ? new URL(newModule, doc.baseURI).href : null;
   let incoming: IslandModule | null = null;
   if (seam && newModuleHref && newModule !== oldModule) {
-    incoming = await takeModule(seam, newModuleHref, importModule);
+    // Generated modules read their literal carrier at evaluation. Lend the next version's
+    // carrier before importing; the current story stays untouched until import succeeds.
+    const nextLiterals = next.querySelector<HTMLScriptElement>('script[data-mx-island-literals]');
+    const temporaryLiterals = nextLiterals ? doc.importNode(nextLiterals, true) : null;
+    if (temporaryLiterals) doc.body.append(temporaryLiterals);
+    try { incoming = await takeModule(seam, newModuleHref, importModule); }
+    finally { temporaryLiterals?.remove(); }
     if (incoming.FLOW && !store) throw refuse('the new version declares data the running islands have no store for');
+    // The new module selected its own pinned resource. Fetch before touching the adopted tree:
+    // a failure leaves the old document intact for the caller's reload path.
+    await seam.prepareTemplates();
   }
 
   // The islands to keep (new render id → old), and the ones to let go.

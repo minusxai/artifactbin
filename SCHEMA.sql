@@ -1157,6 +1157,12 @@ CREATE TABLE IF NOT EXISTS app.prepared_pages (
   page_key TEXT NOT NULL,
   deps TEXT NOT NULL DEFAULT '',
   page JSONB NOT NULL,
+  compiler_version TEXT,
+  island_build TEXT,
+  css_version TEXT,
+  ssr_bundle TEXT,
+  page_format INTEGER,
+  handover_contract INTEGER,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (artifact_id, slot)
 );
@@ -1171,7 +1177,31 @@ ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS deps TEXT NOT NULL DEFAU
 
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS page JSONB NOT NULL;
 
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS compiler_version TEXT;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS island_build TEXT;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS css_version TEXT;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS ssr_bundle TEXT;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS page_format INTEGER;
+
+ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS handover_contract INTEGER;
+
 ALTER TABLE app.prepared_pages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_prepared_compiler_version ON app.prepared_pages (compiler_version);
+
+CREATE INDEX IF NOT EXISTS idx_prepared_island_build ON app.prepared_pages (island_build);
+
+CREATE INDEX IF NOT EXISTS idx_prepared_css_version ON app.prepared_pages (css_version);
+
+CREATE INDEX IF NOT EXISTS idx_prepared_ssr_bundle ON app.prepared_pages (ssr_bundle);
+
+CREATE INDEX IF NOT EXISTS idx_prepared_page_format ON app.prepared_pages (page_format);
+
+CREATE INDEX IF NOT EXISTS idx_prepared_handover_contract ON app.prepared_pages (handover_contract);
 
 CREATE TABLE IF NOT EXISTS app.data_snapshots (
   artifact_id TEXT NOT NULL,

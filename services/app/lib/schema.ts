@@ -611,9 +611,23 @@ const PREPARED_PAGES: Table = {
     { name: 'page_key', type: 'TEXT', notNull: true },
     { name: 'deps', type: 'TEXT', notNull: true, default: "''" },
     { name: 'page', type: 'JSONB', notNull: true },
+    { name: 'compiler_version', type: 'TEXT' },
+    { name: 'island_build', type: 'TEXT' },
+    { name: 'css_version', type: 'TEXT' },
+    { name: 'ssr_bundle', type: 'TEXT' },
+    { name: 'page_format', type: 'INTEGER' },
+    { name: 'handover_contract', type: 'INTEGER' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['artifact_id', 'slot'],
+  indexes: [
+    { name: 'idx_prepared_compiler_version', columns: ['compiler_version'] },
+    { name: 'idx_prepared_island_build', columns: ['island_build'] },
+    { name: 'idx_prepared_css_version', columns: ['css_version'] },
+    { name: 'idx_prepared_ssr_bundle', columns: ['ssr_bundle'] },
+    { name: 'idx_prepared_page_format', columns: ['page_format'] },
+    { name: 'idx_prepared_handover_contract', columns: ['handover_contract'] },
+  ],
 };
 
 /**

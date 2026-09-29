@@ -33,6 +33,7 @@ import type { PersonCard } from '@artifactbin/contracts';
 import { IslandProvider, useIsland } from './context';
 import type { IslandChartModule, IslandContext, IslandViewer, WriteStatusFeed } from './contract';
 import { trustedPortalOf } from './trusted-portal';
+import { template as solidTemplate } from 'solid-js/web';
 
 /*
  * THE GENERATED-CODE SURFACE. Islands are compiled with `moduleName: '@mx/rt'`, so every DOM
@@ -50,6 +51,80 @@ export {
 /** For the SSR module's `render(data)`, which builds the same runtime without a transport. */
 export { IslandProvider } from './context';
 export { createDataflowStore } from '@/lib/story-runtime/store';
+
+/** Pinned document modules select their own immutable resource, including during a live morph. */
+let templateResourceUrl: string | null = null;
+const templateResources = new Map<string, Readonly<Record<string, string>>>();
+const templateLoads = new Map<string, Promise<void>>();
+
+export function configureTemplateResource(url: string | null): void { templateResourceUrl = url; }
+export function currentTemplateResource(): string | null { return templateResourceUrl; }
+
+/** Signals that this island needs its pinned factory before hydration can finish. */
+export class TemplateUnavailableError extends Error {
+}
+
+/** Deduplicated, retryable fetch. No author markup is evaluated as code. */
+export function loadTemplateResource(url: string = templateResourceUrl ?? ''): Promise<void> {
+  if (!url) return Promise.resolve();
+  if (templateResources.has(url)) return Promise.resolve();
+  const pending = templateLoads.get(url);
+  if (pending) return pending;
+  const loading = fetch(url).then(async (response) => {
+    if (!response.ok) throw new Error(`island templates: HTTP ${response.status}`);
+    const data: unknown = await response.json();
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Object.values(data).every((v) => typeof v === 'string')) {
+      throw new Error('invalid island templates');
+    }
+    templateResources.set(url, data as Record<string, string>);
+  }).catch((error: unknown) => {
+    templateLoads.delete(url);
+    throw error;
+  });
+  templateLoads.set(url, loading);
+  return loading;
+}
+
+/** Hold the first reader action until the cold factories are available, then replay it once. */
+export function installTemplateInteractionGate(root: Element, doc: Document = document): () => void {
+  const url = templateResourceUrl;
+  if (!url || templateResources.has(url)) return () => {};
+  const kinds = ['click', 'keydown', 'input', 'change'];
+  let stopped = false;
+  const capture = (event: Event) => {
+    const target = event.target;
+    if (stopped || templateResources.has(url) || !(target instanceof Node) || !root.contains(target)) return;
+    const element = target instanceof Element ? target : target.parentElement;
+    if (!element?.closest('[role=tab],[aria-haspopup],[data-slot]')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void loadTemplateResource(url).then(() => {
+      if (stopped || !target.isConnected) return;
+      target.dispatchEvent(new (event.constructor as { new(type: string, init: Event): Event })(event.type, event));
+    }).catch((error: unknown) => console.error('[islands] templates failed', error));
+  };
+  for (const kind of kinds) doc.addEventListener(kind, capture, true);
+  return () => { stopped = true; for (const kind of kinds) doc.removeEventListener(kind, capture, true); };
+}
+
+/** Clone a browser template only when Solid creates a new node; hydration adopts served nodes. */
+export function templateFromPage(key: string, isImportNode?: boolean, isSVG?: boolean, isMathML?: boolean): (() => Node) & { cloneNode: () => Node } {
+  const url = templateResourceUrl;
+  // The pinned Solid implementation accepts MathML and attaches cloneNode; its declarations omit both.
+  const factory = solidTemplate as unknown as (html: string, importNode?: boolean, svg?: boolean, mathML?: boolean) => (() => Node) & { cloneNode: () => Node };
+  let made: ReturnType<typeof factory> | null = null;
+  const clone = () => {
+    if (!made) {
+      // Older pinned modules still use the page bank. New modules carry the resource URL.
+      const source = !url ? document.querySelector(`template[data-mx-island-template="${key}"]`) : null;
+      const markup = url ? templateResources.get(url)?.[key] : (source as HTMLTemplateElement | null)?.content.textContent;
+      if (!markup) throw new TemplateUnavailableError(`island template ${key} is unavailable`);
+      made = factory(markup, isImportNode, isSVG, isMathML);
+    }
+    return made();
+  };
+  return Object.assign(clone, { cloneNode: clone });
+}
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The store bridge
@@ -367,11 +442,12 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
       const children = [...host.childNodes].filter((node) => node === root || !(node as Element).getAttribute?.('data-hk')?.startsWith(renderId));
       return (() => children.map((node) => node === root ? (typeof live === 'function' ? (live as () => unknown)() : live) : node)) as unknown as JSX.Element;
     }), host, { renderId });
-  } catch {
+  } catch (error) {
     // Solid's development build refuses to create nodes while hydrating (a mismatch); render the
     // island fresh instead, as the production build does on its own.
     disposeIsland();
     output = undefined;
+    if (error instanceof TemplateUnavailableError) throw error;
     createRoot((dispose) => {
       mount(dispose);
       // A non-hydratable or mismatched root still needs Solid's insertion effect: a

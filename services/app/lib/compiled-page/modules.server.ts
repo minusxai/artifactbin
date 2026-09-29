@@ -21,6 +21,21 @@ import { contentSha, speculationRulesOf, SPECULATION_RULES_CONTENT_TYPE, type Sp
 const MODULE_PREFIX = 'islands';
 /** Speculation rules live beside them under their own prefix, so a module URL can never serve a rule file or the reverse. */
 const RULES_PREFIX = 'islands/s';
+const TEMPLATES_PREFIX = 'islands/t';
+export const TEMPLATE_RESOURCE_PATH = '/islands/t';
+
+/** One resource per compiled version; old content addresses remain readable with pinned builds. */
+export function createTemplateResourceStore(objects: ObjectStore = objectStore()) {
+  return {
+    async put(templates: Readonly<Record<string, string>>): Promise<string> {
+      const bytes = new TextEncoder().encode(JSON.stringify(templates));
+      const sha = contentSha(bytes);
+      await objects.put(`${TEMPLATES_PREFIX}/${sha}`, Buffer.from(bytes), 'application/json');
+      return `${TEMPLATE_RESOURCE_PATH}/${sha}.json`;
+    },
+    get: (sha: string) => read(objects, TEMPLATES_PREFIX, sha),
+  };
+}
 
 /** The bytes at `<prefix>/<sha>`, or null for a malformed sha (never looked up) or one nothing wrote. */
 async function read(objects: ObjectStore, prefix: string, sha: string): Promise<Uint8Array | null> {

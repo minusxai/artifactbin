@@ -49,7 +49,7 @@ import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
 import type { GeneratedSources } from './codegen-safety';
-import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
+import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
 import { planOf } from './plan';
 import { buildDocumentModules } from './bundle.server';
@@ -807,7 +807,7 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   const outline = input.chrome && (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes)
     ? discoverOutline(input.nodes) : [];
   const base = {
-    build: build.id, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
+    build: build.id, sharedBuild: build, handoverContract: MIN_HANDOVER_CONTRACT, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,
@@ -815,5 +815,5 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   if (generated.unported.length) return { ...base, html: '', module: null, ssr: null };
   // A version with an author script boots even with no island: its store and its author host start there.
   const built = await buildDocumentModules(generated, { build, flow: input.flow, values: declaredValues(input.flow), boot: !!base.authorScript });
-  return { ...base, html: built.html, module: built.module, ssr: built.ssr };
+  return { ...base, html: built.html, module: built.module, ssr: built.ssr, templateBrBytes: built.templateBrBytes };
 }

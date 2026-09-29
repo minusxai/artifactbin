@@ -31,6 +31,7 @@ import * as solid from 'solid-js';
 import * as solidWeb from 'solid-js/web';
 import * as solidStore from 'solid-js/store';
 import { readFileSync } from 'node:fs';
+import { brotliCompressSync } from 'node:zlib';
 import path from 'node:path';
 import vm from 'node:vm';
 import { readerDataflow, type CompiledDataflow } from '@/lib/story/compiled-dataflow';
@@ -40,7 +41,7 @@ import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type Mod
 import type { GeneratedSources } from './codegen-safety';
 import { syncRailPreview } from './rail-preview.server';
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
-import { createModuleStore } from './modules.server';
+import { createModuleStore, createTemplateResourceStore } from './modules.server';
 import { contentSha } from './speculation';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -87,6 +88,78 @@ function escapeLiterals(): PluginObj {
     },
   };
 }
+
+/** Move Solid's DOM factories into inert HTML. The module keeps only their content addresses. */
+async function externalizeDomTemplates(code: string): Promise<{ code: string; templates: Map<string, string> }> {
+  const templates = new Map<string, string>();
+  const out = await transformAsync(code, {
+    filename: 'document.js', babelrc: false, configFile: false, sourceType: 'module', compact: true, comments: false,
+    plugins: [({ types: t }: { types: typeof BabelTypes }): PluginObj => ({
+      visitor: {
+        Program(p) {
+          const names = new Set<string>();
+          for (const statement of p.node.body) {
+            if (!t.isImportDeclaration(statement)) continue;
+            for (const spec of statement.specifiers) {
+              if (t.isImportSpecifier(spec) && t.isIdentifier(spec.imported, { name: 'template' })) {
+                names.add(spec.local.name);
+                spec.imported = t.identifier('templateFromPage');
+              }
+            }
+          }
+          if (!names.size) return;
+          p.traverse({ CallExpression(call) {
+            if (!t.isIdentifier(call.node.callee) || !names.has(call.node.callee.name)) return;
+            const first = call.node.arguments[0];
+            const markup = t.isStringLiteral(first) ? first.value
+              : t.isTemplateLiteral(first) && first.expressions.length === 0 ? first.quasis[0]?.value.cooked : undefined;
+            if (markup === undefined || markup === null) throw new Error('compile: Solid template must be a literal');
+            const key = contentSha(markup);
+            templates.set(key, markup);
+            call.node.arguments[0] = t.stringLiteral(key);
+          } });
+        },
+      },
+    })],
+  });
+  if (!out?.code) throw new Error('compile: template extraction produced nothing');
+  return { code: out.code, templates };
+}
+
+/** Author-derived text and attributes are page data too; only import specifiers stay as JS literals. */
+async function externalizeLiterals(code: string): Promise<{ code: string; literals: string[]; key: string }> {
+  const literals: string[] = [];
+  const indexes = new Map<string, number>();
+  const out = await transformAsync(code, {
+    filename: 'document.js', babelrc: false, configFile: false, sourceType: 'module', compact: true, comments: false,
+    plugins: [({ types: t }: { types: typeof BabelTypes }): PluginObj => ({ visitor: {
+      StringLiteral(p) {
+        if (p.parentPath.isImportDeclaration() && p.key === 'source') return;
+        if (p.parentPath.isObjectProperty() && p.key === 'key' && !p.parentPath.node.computed) return;
+        if (p.parentPath.isMemberExpression() && p.key === 'property' && !p.parentPath.node.computed) return;
+        let index = indexes.get(p.node.value);
+        if (index === undefined) { index = literals.push(p.node.value) - 1; indexes.set(p.node.value, index); }
+        p.replaceWith(t.memberExpression(t.identifier('$mxL'), t.numericLiteral(index), true));
+        p.skip();
+      },
+      TemplateLiteral(p) {
+        if (p.node.expressions.length !== 0) return;
+        const value = p.node.quasis[0]?.value.cooked;
+        if (value === undefined || value === null) return;
+        let index = indexes.get(value);
+        if (index === undefined) { index = literals.push(value) - 1; indexes.set(value, index); }
+        p.replaceWith(t.memberExpression(t.identifier('$mxL'), t.numericLiteral(index), true));
+        p.skip();
+      },
+    } })],
+  });
+  if (!out?.code) throw new Error('compile: literal extraction produced nothing');
+  const key = contentSha(JSON.stringify(literals));
+  return { code: literals.length ? `const $mxL=JSON.parse(document.querySelector('script[data-mx-island-literals="${key}"]').textContent);\n${out.code}` : out.code, literals, key };
+}
+
+const literalsHtml = (key: string, literals: readonly string[]): string =>
+  literals.length ? `<script type="application/json" data-mx-island-literals="${key}">${escapeRaw(JSON.stringify(literals)).replace(/&/g, '\\u0026')}</script>` : '';
 
 /** A Babel plugin: every static import's specifier through `rewrite` (which throws on one it does not know). */
 function rewriteImports(rewrite: (specifier: string) => string): () => PluginObj {
@@ -233,15 +306,16 @@ function readSsrHalf(root: string): SsrHalf | null {
   return { url: half.url, exports: half.exports };
 }
 
-async function islandSsrNamespace(specifier: string, root: string): Promise<Record<string, unknown>> {
-  const half = readSsrHalf(root);
+async function islandSsrNamespace(specifier: string, root: string, retained?: SsrHalf): Promise<Record<string, unknown>> {
+  const half = retained ?? readSsrHalf(root);
   if (!half) throw new IslandSsrUnavailable(specifier, 'the island build has no server half');
   const name = half.exports[specifier];
   if (!name) throw new IslandSsrUnavailable(specifier, 'the server half does not export it');
   const file = path.resolve(root, path.dirname(ISLANDS_MANIFEST_PATH), half.url.slice('/islands/'.length));
   let loaded = islandSsrHalves.get(file);
   if (!loaded) {
-    loaded = evaluateModule(readFileSync(file, 'utf8'), (spec) => {
+    const bytes = retained ? await (await import('./shared-builds.server')).retainedIslandFile(path.basename(file)) : null;
+    loaded = evaluateModule(bytes ? bytes.toString('utf8') : readFileSync(file, 'utf8'), (spec) => {
       const namespace = SOLID[spec];
       if (!namespace) throw new IslandSsrUnavailable(spec, `imported by the server half ${half.url}`);
       return namespace;
@@ -265,12 +339,12 @@ async function importsOf(code: string): Promise<string[]> {
  * The default import table for a server module: this process's Solid, and the shared build's
  * server half for `@mx/*` (read relative to `root`, the app's cwd by default).
  */
-export async function defaultSsrImports(code: string, root = process.cwd()): Promise<SsrImports> {
+export async function defaultSsrImports(code: string, root = process.cwd(), half?: SsrHalf): Promise<SsrImports> {
   const islands: Record<string, Record<string, unknown>> = {};
   for (const spec of await importsOf(code)) {
     if (SOLID[spec]) continue;
     if (!spec.startsWith('@mx/')) throw new IslandSsrUnavailable(spec, 'not a shared-build specifier');
-    islands[spec] = await islandSsrNamespace(spec, root);
+    islands[spec] = await islandSsrNamespace(spec, root, half);
   }
   return ssrImportTable(islands);
 }
@@ -321,16 +395,18 @@ export async function ssrModuleOf(code: string, name: string, imports?: SsrImpor
  * evaluated once per sha in this process. Rejects with `IslandSsrUnavailable` when the shared build
  * has no server half for what it imports.
  */
-export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModuleStore(), imports?: SsrImports): Promise<SsrModule> {
-  let loaded = ssrModules.get(ref.sha);
+export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModuleStore(), imports?: SsrImports, half?: SsrHalf): Promise<SsrModule> {
+  const key = `${ref.sha}:${half?.url ?? 'current'}`;
+  let loaded = ssrModules.get(key);
   if (!loaded) {
     loaded = (async () => {
       const bytes = await store.get(ref.sha);
       if (!bytes) throw new Error(`island SSR: module ${ref.sha} is not in the store`);
-      return ssrModuleOf(Buffer.from(bytes).toString('utf8'), ref.sha, imports);
+      const code = Buffer.from(bytes).toString('utf8');
+      return ssrModuleOf(code, ref.sha, imports ?? await defaultSsrImports(code, process.cwd(), half));
     })();
-    loaded.catch(() => ssrModules.delete(ref.sha));
-    ssrModules.set(ref.sha, loaded);
+    loaded.catch(() => ssrModules.delete(key));
+    ssrModules.set(key, loaded);
   }
   return loaded;
 }
@@ -414,6 +490,7 @@ export interface DocumentModules {
   html: string;
   module: ModuleRef | null;
   ssr: ModuleRef | null;
+  templateBrBytes: number | null;
 }
 
 export interface BuildOptions {
@@ -423,6 +500,8 @@ export interface BuildOptions {
   values: Record<string, Scalar>;
   /** The browser modules' store (served at `/islands/d/<sha>.js`). */
   store?: ModuleStore;
+  /** Injectable content-addressed resource store for browser-only DOM factories. */
+  templateStore?: ReturnType<typeof createTemplateResourceStore>;
   /** The SSR modules' store (never served; `createSsrModuleStore`). */
   ssrStore?: ModuleStore;
   /** The server import table (tests); the default is this process's Solid and the shared build's server half. */
@@ -443,41 +522,61 @@ export interface BuildOptions {
  */
 export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; statics?: readonly string[]; browserIslands?: string; moduleData?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
   const renderedSkeleton = spliceStatics(await renderSkeleton(sources.skeleton, options.imports), sources.statics ?? []);
-  if (!sources.islandRefs.length && !options.boot) return { html: renderedSkeleton, module: null, ssr: null };
+  if (!sources.islandRefs.length && !options.boot) return { html: renderedSkeleton, module: null, ssr: null, templateBrBytes: null };
   const moduleData = [...(sources.moduleData ?? [])];
   const flowJson = options.flow ? JSON.stringify(readerDataflow(options.flow)) : null;
   const flowIndex = flowJson && flowJson.length > 1024 ? moduleData.push(flowJson) - 1 : undefined;
   const moduleDataTag = moduleData.length
     ? `<script type="application/json" data-mx-module-data>${escapeRaw(JSON.stringify({ moduleData: moduleData.map((value) => JSON.parse(value) as unknown) }))}</script>`
     : '';
-  const skeletonHtml = renderedSkeleton + moduleDataTag;
   const browserIslands = sources.browserIslands ?? sources.islands;
   const browserWithData = flowIndex !== undefined && !sources.moduleData?.length
     ? `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${browserIslands}`
     : browserIslands;
   const store = options.store ?? createModuleStore();
+  const templateStore = options.templateStore ?? createTemplateResourceStore();
   if (!sources.islandRefs.length) {
     const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
-    return { html: skeletonHtml, module: await store.put(new TextEncoder().encode(browser.code), browser.imports), ssr: null };
+    const templateBrBytes = templateBytes(browser.templates);
+    const url = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
+    return { html: renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag, module: await store.put(new TextEncoder().encode(withTemplateResource(browser.code, url, options.build, templateBrBytes, !!options.flow)), browser.imports), ssr: null, templateBrBytes };
   }
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
+  const templateBrBytes = templateBytes(browser.templates);
+  const templateUrl = browser.templates.size ? await templateStore.put(Object.fromEntries(browser.templates)) : null;
+  const skeletonHtml = renderedSkeleton + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
   const ssrCode = await ssrModuleCode(sources.islands, skeletonHtml, options.flow);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const html = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
   const [module, ssr] = await Promise.all([
-    store.put(new TextEncoder().encode(browser.code), browser.imports),
+    store.put(new TextEncoder().encode(withTemplateResource(browser.code, templateUrl, options.build, templateBrBytes, !!options.flow)), browser.imports),
     ssrStore.put(new TextEncoder().encode(ssrCode), await importsOf(ssrCode)),
   ]);
-  return { html, module, ssr };
+  return { html, module, ssr, templateBrBytes };
+}
+
+const templateBytes = (templates: Map<string, string>): number | null => templates.size
+  ? brotliCompressSync(JSON.stringify(Object.fromEntries(templates))).byteLength : null;
+
+/** The URL is build-owned data, inserted after author literal extraction. */
+function withTemplateResource(code: string, url: string | null, build: CompilerBuild, brBytes: number | null, hasFlow: boolean): string {
+  if (!url) return code;
+  const rt = build.manifest['@mx/rt'];
+  if (!rt) throw new Error('compile: the island build has no @mx/rt');
+  const small = hasFlow && brBytes !== null && brBytes < 16_384;
+  const prefetch = small
+    ? `\nconst $mxPreload=()=>{void $mxLoad(${JSON.stringify(url)}).catch(()=>{})};\nif(typeof requestIdleCallback==='function')requestIdleCallback($mxPreload,{timeout:1});else setTimeout($mxPreload,0);`
+    : '';
+  return `import {configureTemplateResource as $mxTemplates${small ? ',loadTemplateResource as $mxLoad' : ''}} from ${JSON.stringify(rt)};\n$mxTemplates(${JSON.stringify(url)});\n${code}${prefetch}`;
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */
-export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number): Promise<{ code: string; imports: string[] }> {
+export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number): Promise<{ code: string; imports: string[]; templates: Map<string, string>; literals: string[]; literalKey: string }> {
   const direct = new Set<string>();
   // `moduleName: '@mx/rt'`: Solid's DOM helpers come from the runtime's one import surface, never
   // from the whole `solid-js/web` chunk.
-  const code = await transformSolid(browserSource(islands, flow, flowIndex), { generate: 'dom', hydratable: true }, {
+  const compiled = await transformSolid(browserSource(islands, flow, flowIndex), { generate: 'dom', hydratable: true }, {
     minify: true, moduleName: '@mx/rt',
     rewrite: (specifier) => {
       const url = build.manifest[specifier];
@@ -486,7 +585,9 @@ export async function browserModuleCode(islands: string, build: CompilerBuild, f
       return url;
     },
   });
-  return { code, imports: closureOf(build, [...direct].sort()) };
+  const extracted = await externalizeDomTemplates(compiled);
+  const { code, literals, key } = await externalizeLiterals(extracted.code);
+  return { code, templates: extracted.templates, literals, literalKey: key, imports: closureOf(build, [...direct].sort()) };
 }
 
 /** The per-document SSR module: the islands compiled for the server and `render(data)` over the skeleton's HTML. */
