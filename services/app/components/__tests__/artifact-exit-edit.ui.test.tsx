@@ -13,6 +13,7 @@ vi.mock('@/lib/islands/live-update', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/islands/live-update')>(),
   reloadKeepingPlace: surfaceSpies.reload,
 }));
+vi.mock('@/lib/story-runtime/anchor', () => ({ currentAnchor: vi.fn(() => null) }));
 
 vi.mock('@/components/ArtifactEditor', () => ({
   default: ({ flushRef }: { flushRef?: { current: null | (() => Promise<void>) } }) => {
@@ -30,6 +31,7 @@ vi.mock('@/components/AnnotationLayer', () => ({
 
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import ArtifactShell from '../ArtifactShell';
+import { currentAnchor } from '@/lib/story-runtime/anchor';
 import { setupSurface, surfaceProps } from '@/test/helpers/inline-surface';
 
 class FakeEventSource {
@@ -45,6 +47,8 @@ class FakeEventSource {
 
 beforeEach(() => {
   setupSurface();
+  vi.mocked(currentAnchor).mockReset();
+  vi.mocked(currentAnchor).mockReturnValue(null);
   surfaceSpies.flush.mockClear();
   surfaceSpies.reload.mockClear();
   surfaceSpies.annotationProps.length = 0;
@@ -95,12 +99,14 @@ describe('coming back from edit mode', () => {
 
       goEdit();
       await vi.waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
-      expect(theFrame()).not.toBe(original);
+      expect(theFrame()).toBe(original);
       expect(theFrame()).toHaveTextContent('first');
 
+      const beforeExit = { path: '0.1', fraction: 0.25 };
+      vi.mocked(currentAnchor).mockReturnValueOnce(beforeExit).mockReturnValue({ path: '0.2', fraction: 0.75 });
       leaveEdit();
       await vi.waitFor(() => expect(screen.queryByLabelText('Editor stub')).toBeNull());
-      expect(surfaceSpies.reload).toHaveBeenCalledWith(window);
+      await vi.waitFor(() => expect(surfaceSpies.reload).toHaveBeenCalledWith(window, beforeExit));
     }
   });
 
@@ -112,7 +118,7 @@ describe('coming back from edit mode', () => {
     await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
     expect(loader()).toBeNull();
     leaveEdit();
-    await waitFor(() => expect(surfaceSpies.reload).toHaveBeenCalledWith(window));
+    await waitFor(() => expect(surfaceSpies.reload).toHaveBeenCalledWith(window, null));
   });
 
   it('keeps the frame where it is across edit mode — the document insets itself under the bars', async () => {
@@ -130,6 +136,21 @@ describe('coming back from edit mode', () => {
     leaveEdit();
     await waitFor(() => expect(screen.queryByLabelText('Editor stub')).toBeNull());
     expect(viewport.style.top).toBe(readingTop);
+  });
+
+  it('compensates for the 88px editor inset before reloading the reader', async () => {
+    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(806);
+    const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
+    await painted();
+    goEdit();
+    await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
+    scroll.mockClear();
+    surfaceSpies.reload.mockClear();
+    leaveEdit();
+    await waitFor(() => expect(surfaceSpies.reload).toHaveBeenCalled());
+    expect(scroll).toHaveBeenCalledWith(0, 718);
+    expect(scroll.mock.invocationCallOrder.at(-1)!).toBeLessThan(surfaceSpies.reload.mock.invocationCallOrder.at(-1)!);
   });
 
   it('does not retain a loader after the first runtime mount', async () => {

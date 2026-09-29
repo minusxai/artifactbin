@@ -5,7 +5,7 @@
  * paint-first page, and the recovery dialog for a fragment the engine refused.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, screen, fireEvent, waitFor } from '@testing-library/react';
 import {
   STORY_DOCUMENT_MESSAGE,
   STORY_EDIT_KEY_MESSAGE,
@@ -16,9 +16,12 @@ import {
   type EditorArt,
   art,
   env,
+  editorElement,
   fromFrame,
   installEditorFrame,
   lastQueued,
+  live,
+  adoptRemote,
   mount,
   queue,
   selection,
@@ -66,6 +69,14 @@ describe('what the document says', () => {
 });
 
 describe('drafts', () => {
+  it('does not replace the served document just to recompile its initial source', async () => {
+    mount({ art: { ...art, markup: '<div id="root"><p id="first">alpha</p></div>', compiledCss: null, dataflow: null } as EditorArt });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(sentToFrame(STORY_DOCUMENT_MESSAGE)).toHaveLength(0);
+    expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .some((call) => String(call[0]).includes('/api/preview'))).toBe(false);
+  });
+
   /*
    * PAINT FIRST reaches the editor too. The page sends the declarations rather
    * than running every query server-side and inlining the rows, which makes
@@ -85,6 +96,13 @@ describe('drafts', () => {
     await waitFor(() => expect(askedForQueries()).toBe(true), { timeout: 2000 });
   });
 
+  it('keeps the served drawing in place when initial query rows arrive', async () => {
+    mount({ art: { ...art, dataflow: flowOnly } as EditorArt });
+    await waitFor(() => expect(askedForQueries()).toBe(true), { timeout: 2000 });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sentToFrame(STORY_DOCUMENT_MESSAGE)).toHaveLength(0);
+  });
+
   it('runs nothing when the rows came with the page (a capture, or an older payload)', async () => {
     mount({ art: {
       ...art,
@@ -102,6 +120,39 @@ describe('drafts', () => {
         .some((c) => String(c[0]).includes('/api/preview'))).toBe(true);
     }, { timeout: 2000 });
   });
+
+  it('does not remount prose after a text edit when its compiled CSS is unchanged', async () => {
+    mount({ art: { ...art, compiledCss: '.compiled{}' } as EditorArt });
+    await fromFrame({ type: STORY_TEXT_EDIT_MESSAGE, path: '0.1', innerHtml: 'ordinary text' });
+    await waitFor(() => expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .some((call) => String(call[0]).includes('/api/preview'))).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sentToFrame(STORY_DOCUMENT_MESSAGE)).toHaveLength(0);
+  });
+});
+
+it('retries a remote code-pane edit after local saving has finished', async () => {
+  const view = mount();
+  live.remote = { format: 'markup', source: '<div>Agent wrote while code was open</div>', editId: 'e2', version: 5 };
+  live.pending = true;
+  await act(async () => { view.rerender(editorElement()); });
+  expect(adoptRemote).toHaveBeenCalledTimes(1);
+  live.pending = false;
+  live.adopted = true;
+  await act(async () => { view.rerender(editorElement()); });
+  await waitFor(() => expect(adoptRemote).toHaveBeenCalledTimes(2));
+});
+
+it('keeps the code pane open if the page refreshes while editing', async () => {
+  window.history.replaceState(null, '', '#edit');
+  const first = mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit the source' }));
+  expect(screen.getByLabelText('Source pane')).toBeTruthy();
+  first.unmount();
+  const second = mount();
+  expect(screen.getByLabelText('Source pane')).toBeTruthy();
+  second.unmount();
+  window.history.replaceState(null, '', '#');
 });
 
 it('keeps a refused engine fragment available for explicit recovery',async()=>{

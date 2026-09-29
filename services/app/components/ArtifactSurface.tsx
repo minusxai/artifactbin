@@ -25,7 +25,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
 import dynamic, { onDemand, useOnDemand, whenIdle } from '@/lib/dynamic';
 import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { StoryController } from '@/lib/story-runtime/EditorStoryRuntime';
+import type { StoryController } from '@/lib/story-runtime/contract';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { ArtifactBackendProvider } from '@/lib/artifact-backend/context';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
@@ -66,9 +66,9 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { IslandStory } from '@/components/IslandStory';
-import { islandDocumentOf } from '@/lib/islands/handover';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
 import { currentAnchor } from '@/lib/story-runtime/anchor';
+import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
 import { writeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { initialDocumentStory, initialIslandDocument, initialStoryIsCompiled } from '@/web/initial-story';
 import { takeChromeIntent } from '@/web/idle-boot';
@@ -244,6 +244,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const { id, editId, format, title, source = null, dataPreview, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
   const editedCompiledPage = useRef(false);
+  const exitAnchor = useRef<ScrollAnchor | null>(null);
+  const exitScroll = useRef<number | null>(null);
+  const reloadGeneration = useRef(0);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
   /**
@@ -336,22 +339,35 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * THE COMPILED PAGE'S DOCUMENT (docs/phase2-architecture.md §7): the served story root with its
    * islands running, adopted AS IT IS (components/IslandStory) — never hydrated, never drawn again.
    * Read once, by the surface the page was served for (web/initial-story clears it on any other
-   * route). The interpreter (EditorStoryRuntime) takes over, for good, only when the document must
-   * become something the islands cannot: an editor's draft. A newer version is drawn in place over the
-   * islands (IslandStory → lib/islands/live-update), never by the interpreter.
+   * route). IslandStory keeps this root for in-place editing and previews drafts from the server
+   * compiler. New reader versions are drawn in place by lib/islands/live-update.
    */
   const [servedCompiled] = useState(initialStoryIsCompiled);
   const [compiled] = useState(() => {
     const story = servedCompiled && isDocumentFormat && !props.captureKey && props.runtime ? initialDocumentStory() : null;
     return story ? { story, islands: initialIslandDocument() } : null;
   });
-  const [interpreting, setInterpreting] = useState(!compiled);
   useEffect(() => {
     if (!compiled) return;
+    const generation = ++reloadGeneration.current;
     if (editing) { editedCompiledPage.current = true; return; }
     // The compiled island document cannot re-enter read mode after the editor
     // disposes its islands. Return to the compiled page at the reader's place.
-    if (editedCompiledPage.current) reloadKeepingPlace(window);
+    if (editedCompiledPage.current) {
+      // Removing the reserved editor bar shifts every compiled block up by its
+      // 88px inset. Compensate before the browser preserves scroll on reload.
+      const target = Math.max(0, (exitScroll.current ?? window.scrollY) - EDIT_BAR_H);
+      const anchor = exitAnchor.current;
+      // Let the reduced inset and the scroll adjustment paint before reload;
+      // otherwise session restoration can retain the pre-exit pixel offset.
+      requestAnimationFrame(() => {
+        if (generation !== reloadGeneration.current) return;
+        window.scrollTo(0, target);
+        requestAnimationFrame(() => {
+          if (generation === reloadGeneration.current) reloadKeepingPlace(window, anchor);
+        });
+      });
+    }
   }, [editing, compiled]);
 
   const intentDone = useRef(false);
@@ -544,14 +560,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
   const initialRuntimeVersion = useMemo(() => version, [id]);
-  // Edit mode: the islands give way to the interpreter (a render-time adjustment, so no frame shows both).
-  // A newer version reaches the adopted islands through their controller's `update` (the effect below).
-  if (!interpreting && editing) setInterpreting(true);
-  const islandsLive = !!compiled && !interpreting && !!props.runtime;
-  // Edit mode begins: the islands are unmounted (`setMode('edit')`) before IslandStory disposes them
-  // (a microtask after this commit) and the interpreter the editor drives is already in their place.
-  // The document running on the story now: a version that brought a prose page its first islands booted one.
-  useLayoutEffect(() => { if (editing && compiled) (islandDocumentOf(compiled.story) ?? compiled.islands)?.setMode('edit'); }, [editing, compiled]);
+  // The compiled root stays mounted while the editor attaches its controls.
+  // A newer reader version reaches the adopted islands through their controller's `update`.
+  const islandsLive = !!compiled && !!props.runtime;
   const needsParse = isDocumentFormat && !props.runtime;
   const { module: parser, failed: parseFailed, retry: retryParse } = useOnDemand(updatePartsFeature, needsParse);
   const seedReady = !needsParse || !!parser;
@@ -615,8 +626,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     const sync = () => {
       if (route.pathname.endsWith('/edit') || window.location.hash === '#edit') { setEditing(true); return; }
-      if (compiled) {
+      if (compiled && editedCompiledPage.current) {
+        exitScroll.current = window.scrollY;
         const anchor = currentAnchor(window);
+        exitAnchor.current = anchor;
         if (anchor) writeReloadAnchor(window, anchor);
       }
       setInitialEditSelectionPath(null);
@@ -674,7 +687,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const beginEdit = useCallback((selectionPath: string | null) => {
     if (window.location.hash === '#edit') return;
     editScroll.current = window.scrollY;
-    if (compiled && !interpreting) setFrameLoaded(false);
     // pushState, not replaceState: entering edit mode is a place you can come
     // BACK from, and the browser's back button is the obvious way to do it. The
     // hashchange listener above turns that navigation into leaving edit mode.
@@ -682,7 +694,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     void navigate(window.location.pathname + window.location.search + '#edit', {state:route.state});
     pushedEdit.current = true;
     setEditing(true);
-  }, [compiled, interpreting, route.state]);
+  }, [route.state]);
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
   /*
@@ -759,7 +771,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // nothing of ours to pop, and going back would leave the app entirely.
     setInitialEditSelectionPath(null);
     if (compiled) {
+      exitScroll.current = window.scrollY;
       const anchor = currentAnchor(window);
+      exitAnchor.current = anchor;
       if (anchor) writeReloadAnchor(window, anchor);
     }
     if (pushedEdit.current) {
@@ -1057,9 +1071,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           {showStarter && <TrustedUi><StarterInstructions id={id} /></TrustedUi>}
           <div hidden={showStarter}>
           {islandsLive ? <IslandStory
+            id={id}
             story={compiled.story}
             islands={compiled.islands}
             nodes={props.runtime!.data.nodes}
+            source={seedMarkup}
+            editId={live?.editId ?? editId}
+            editing={editing}
             onController={onController}
           /> : editing && seedReady ? <EditorStoryRuntime
             key={id}

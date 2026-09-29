@@ -12,7 +12,7 @@ import { fireEvent, render } from '@/solid/__tests__/helpers';
 
 vi.mock('../SourceEditor', () => ({ default: (props: {
   value: string; onChange: (text: string) => void; readOnly?: boolean; ariaLabel?: string;
-}) => <textarea aria-label={props.ariaLabel ?? 'Markup source'} value={props.value} readOnly={props.readOnly} onChange={(event) => props.onChange(event.currentTarget.value)} /> }));
+}) => <textarea aria-label={props.ariaLabel ?? 'Markup source'} value={props.value} readOnly={props.readOnly} on:input={(event) => props.onChange(event.currentTarget.value)} /> }));
 import SourceEditorPane from '../SourceEditorPane';
 
 it('previews the current draft without emitting edits or replacing the editable buffer', async () => {
@@ -22,9 +22,10 @@ it('previews the current draft without emitting edits or replacing the editable 
     return <SourceEditorPane value={value()} revision={0} onChange={(text) => { setValue(text); save(text); }} />;
   }
   render(() => <Harness />);
-  const editor = await screen.findByLabelText('Markup source');
+  await waitFor(() => expect(screen.getByLabelText('Markup source')).not.toHaveClass('min-h-0'));
+  const editor = screen.getByLabelText('Markup source');
   const draft = '<section><p>Unsaved draft</p><p>Another line</p></section>';
-  fireEvent.change(editor, { target: { value: draft } });
+  fireEvent.input(editor, { target: { value: draft } });
   save.mockClear();
   fireEvent.click(screen.getByRole('button', { name: 'View formatted' }));
   const preview = await screen.findByLabelText('Formatted JSX');

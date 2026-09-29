@@ -147,9 +147,8 @@ check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document in 
  * There is no edit canvas to carry a CSP of its own any more: editing happens
  * in the served document, which already has one from its response headers. So
  * what has to be true is stronger and simpler — entering edit mode changes
- * nothing about the sandbox. The document stays opaque to the page (that is
- * what `contentDocument === null` means from here), and the frame keeps every
- * sandbox flag it had.
+ * nothing about the sandbox. Entering edit may stop the author realm entirely;
+ * if it remains, it must keep its sandbox and opaque origin.
  */
 await owner.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'attached' });
 const sandboxBefore = await owner.evaluate(() =>
@@ -164,8 +163,8 @@ const editing = await owner.evaluate(() => {
   try { reachable = !!f?.contentDocument; } catch { reachable = false; }
   return { sandbox: f?.getAttribute('sandbox') ?? null, reachable };
 });
-check(editing.sandbox === sandboxBefore && !!sandboxBefore,
-  'entering edit mode keeps every sandbox flag the author script had');
+check(!!sandboxBefore && (editing.sandbox === null || editing.sandbox === sandboxBefore),
+  'entering edit mode stops the author realm or keeps every sandbox flag');
 check(!editing.reachable,
   'and author code is STILL opaque to the page (contentDocument null)');
 

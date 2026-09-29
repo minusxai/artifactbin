@@ -58,7 +58,7 @@ export interface LiveEditsOptions {
   /** V2 snapshots lower to atomic source batches against this acknowledged base. */
   initialSource?: string;
   /** Called when the server's document should replace what the editor shows. */
-  onRemoteDocument: (source: string) => void;
+  onRemoteDocument: (source: string, editId: string) => void;
   /**
    * True while the user is mid-edit with changes the editor has not committed yet. An empty buffer
    * is NOT enough to call the editor idle: the engine commits a text edit on BLUR, so adopting a
@@ -125,7 +125,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
   let retryOwed = false;
 
   const isUserEditing = () => options().isUserEditing?.() ?? false;
-  const onRemoteDocument = (source: string) => options().onRemoteDocument(source);
+  const onRemoteDocument = (source: string) => options().onRemoteDocument(source, editId);
 
   const flush = async (): Promise<void> => {
     if (inFlight) return inFlight;

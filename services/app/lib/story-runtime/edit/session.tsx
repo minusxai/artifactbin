@@ -17,7 +17,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { cloneElement, createElement } from 'react';
 import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { restoreBookmark, type EditorBookmark, type EditorSelectionChange } from '@/lib/editor-v2/bookmark';
+import { captureBookmark, restoreBookmark, type EditorBookmark, type EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import { FlowEditor } from '@/lib/editor-v2/flow-editor';
 import { createNodeChrome, HOVER_GRIP_ATTR, NODE_CHROME_SELECTOR } from '@/lib/editor-v2/node-chrome';
 import { createBlockSelection } from '@/lib/editor-v2/block-selection';
@@ -63,6 +63,7 @@ import { collectTextRegions, createRegionGeometry, navigateAcrossRegions } from 
 import { SELECTION_PRESENTATION } from '../selection-presentation';
 import { canResize, editChromeKind, gripTarget, isComponentPart } from './edit-chrome';
 import { nodeName } from '@/lib/story-ui/node-names';
+import type { CompiledEditMount, CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
 
 /** Marks the selected node so the reader can see what the toolbar is pointed at. Value: 'block' when block-selected, else 'text' (typing). */
 export const EDIT_SELECTED_ATTR = 'data-mx-selected';
@@ -108,6 +109,12 @@ export interface FrameEditSession {
   /** Wrap a rendered element for edit mode. Chained after the runtime's own decorator. */
   decorateChildren(children: ReactNode[], nodes: JsxNode[], parentPath: string): ReactNode;
   decorate(element: ReactElement, node: JsxElement, path: string): ReactNode;
+  /** Attach the Solid edit regions and text-host listeners to a server-compiled story. */
+  mountCompiledDom(): Promise<void>;
+  /** Release Solid prose regions before a compiled DOM morph; the session and its commands stay live. */
+  unmountCompiledDom(): void;
+  /** A compiled draft may replace the DOM when no host text or composition is pending. */
+  canApplyDraft(): boolean;
   /** The nodes currently rendered — selection is classified against the SOURCE, not the DOM. */
   setNodes(nodes: JsxNode[]): void;
   /** A parent → frame edit message (already checked for direction and trust by the caller). */
@@ -130,6 +137,8 @@ interface FrameEditSessionOptions {
   root?: HTMLElement;
   /** Ask the runtime to re-render (a new body epoch releases the focus guard). */
   requestRender: () => void;
+  /** Browser-only Solid boundary; the server's React SSR bundle does not import it. */
+  mountCompiled?: (root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks) => CompiledEditMount;
 }
 
 export function createFrameEditSession({
@@ -137,6 +146,7 @@ export function createFrameEditSession({
   channel,
   requestRender,
   root,
+  mountCompiled,
 }: FrameEditSessionOptions): FrameEditSession {
   const doc = win.document;
   const scope = root ?? doc;
@@ -160,6 +170,7 @@ export function createFrameEditSession({
     if (win.scrollX !== position.x || win.scrollY !== position.y) win.scrollTo(position.x, position.y);
   };
   const views = new Set<EditorView>();
+  let compiledMount: CompiledEditMount | null = null;
   let pendingBookmark: EditorBookmark | undefined;
   const restorePending = () => {
     if (pendingBookmark)
@@ -817,6 +828,43 @@ export function createFrameEditSession({
   };
 
   return {
+    canApplyDraft() { return !typingReported && !active?.userEdited; },
+    unmountCompiledDom() {
+      const focused = [...views].find((view) => view.hasFocus());
+      // An explicit Undo/Redo target may name blocks that do not exist in the
+      // currently painted draft. Keep it until the replacement DOM is mounted.
+      if (focused && !pendingBookmark) pendingBookmark = captureBookmark(focused.state);
+      compiledMount?.dispose(); compiledMount = null;
+      views.clear();
+    },
+    async mountCompiledDom() {
+      if (!root || disposed) return;
+      const readerScroll = { x: win.scrollX, y: win.scrollY };
+      compiledMount?.dispose();
+      compiledMount = null;
+      if (disposed || !mountCompiled) return;
+      compiledMount = mountCompiled(root, nodes, {
+        onFlow(path, expected, replacement, group, selection) {
+          post({ type: STORY_FLOW_EDIT_MESSAGE, path, expected, replacement, group, selection });
+        },
+        onLayout(rects) { post({ type: STORY_LAYOUT_EDIT_MESSAGE, rects }); },
+        onSlideTitle(path, title) { post({ type: STORY_SLIDE_TITLE_MESSAGE, path, title }); },
+        onError(message) { post({ type: 'mx:edit-error', message }); },
+        onBusy: reportTyping,
+        onView(view) {
+          if (view) { views.add(view); lastView = view; win.requestAnimationFrame(restorePending); }
+          else { for (const entry of [...views]) if (!entry.dom.isConnected) views.delete(entry); }
+        },
+        onHostFocus: hostSession.onFocus,
+        onHostInput: hostSession.onInput,
+        onHostBlur: hostSession.onBlur,
+      });
+      // Replacing prose with ProseMirror briefly shortens the page. Put the reader back after
+      // layout settles; a draft recompile uses this same mounter and keeps its visible place.
+      win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
+        if (!disposed) restoreScroll(readerScroll);
+      }));
+    },
     decorateChildren(children: ReactNode[], source: JsxNode[], parentPath: string): ReactNode {
       const result: ReactNode[] = [];
       for (let index = 0; index < source.length;) {
@@ -1061,6 +1109,8 @@ export function createFrameEditSession({
       }
     },
     dispose() {
+      compiledMount?.dispose();
+      compiledMount = null;
       const leavingScroll = { x: win.scrollX, y: win.scrollY };
       win.requestAnimationFrame(() => restoreScroll(leavingScroll));
       disposed = true;
