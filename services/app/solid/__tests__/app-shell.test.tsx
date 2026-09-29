@@ -4,7 +4,7 @@
  * mocks but fetch), the browser-history router, and each route arriving as its own lazy module.
  */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 
@@ -30,9 +30,14 @@ describe('Solid shell', () => {
     render(() => <App />);
     const table = await screen.findByRole('table');
     await waitFor(() => expect(table).toHaveTextContent('Quarterly Review'));
-    expect(calls).toEqual(['/api/page/session', '/api/page/trash']);
-    expect(screen.getByRole('link', { name: 'Artifacts' })).toHaveAttribute('rel', 'external');
+    expect(calls.filter(url => url === '/api/page/session' || url === '/api/page/trash')).toEqual(['/api/page/session', '/api/page/trash']);
+    expect(screen.getByRole('banner', { name: 'Page bar' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Current page' })).toHaveTextContent('trash');
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(screen.getByRole('navigation', { name: 'Menu' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications');
+    fireEvent.click(screen.getByRole('button', { name: 'Open page controls' }));
+    expect(screen.getByRole('group', { name: 'Color mode' })).toBeInTheDocument();
   });
 
   it('renders the one 404 for an unknown path, with sign-in for a stranger', async () => {

@@ -15,7 +15,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { artifactPage as ArtifactPage } from '@/test/helpers/pages';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { ListingShell } from '@/components/Listing';
-import { ProfileListing } from '@/web/pages/ProfileIndex';
+import { ProfileListing } from '@/components/ProfileListing';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PATCH as patchArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { mintExportKey } from '@/lib/export-key';

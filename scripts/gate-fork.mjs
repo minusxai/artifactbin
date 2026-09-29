@@ -130,15 +130,22 @@ check(copyPath.startsWith('/@'), `the copy is at its new owner's address (${copy
 
 // ── 6. the copy is theirs, and says where it came from ────────────────────
 const copyId = /([A-Za-z0-9]{6,12})(?:-|$)/.exec(copyPath.split('/').pop() ?? '')?.[1] ?? '';
-const copyRow = await forker.evaluate(
-  async (id) => (await fetch(`/api/my/artifacts/${id}`, { credentials: 'same-origin' })).json(),
-  copyId,
-);
+// The new reader can still be navigating (or handing a new account to Welcome).
+// Use the browser context's authenticated request instead of its unloading page.
+const copyResponse = await forker.request.get(`${BASE}/api/my/artifacts/${copyId}`);
+check(copyResponse.ok(), `the fork owner can read the new copy (${copyResponse.status()})`);
+const copyRow = await copyResponse.json();
 check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
 check(copyRow.id !== doc.id, 'a new id — the original is untouched');
 
+// Let the copy navigation (and its possible Welcome redirect) settle before
+// checking onboarding. Otherwise a context change can make the helper mistake
+// a still-loading page for an already-onboarded account.
+await forker.waitForLoadState('networkidle');
 // A brand-new forker meets the welcome page once on this next navigation; confirm through it like a person.
 await passTheWelcomePage(forker, FORKER_EMAIL);
+await forker.waitForURL((u) => u.pathname === copyPath, { timeout: 30_000 });
+await forker.locator('[data-mx-reader-chrome]').waitFor({ state: 'attached', timeout: 30_000 });
 
 await openArtifactControls(forker);
 const credit = forker.locator('[data-mx-forked-from]');

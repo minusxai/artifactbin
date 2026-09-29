@@ -67,29 +67,24 @@ it('can warm the workshop entry and its static renderer dependencies without run
 it('keeps the listing pages out of the reader, and preloads them only for the listing they are', () => {
   const dir = fixture({
     'pages/Artifact.tsx': { file: 'assets/Artifact-abc.js', imports: ['shared'], dynamicImports: ['pages/Folder.tsx', 'share'] },
-    'pages/Profile.tsx': { file: 'assets/Profile-abc.js', imports: ['shared'], dynamicImports: ['pages/ProfileIndex.tsx'] },
+    'pages/Profile.tsx': { file: 'assets/Profile-abc.js', imports: ['shared'] },
     'pages/Folder.tsx': { file: 'assets/Folder-abc.js', imports: ['shelf'], isDynamicEntry: true },
-    'pages/ProfileIndex.tsx': { file: 'assets/ProfileIndex-abc.js', imports: ['shelf'], isDynamicEntry: true },
     shelf: { file: 'assets/Shelf-abc.js', imports: ['share'] },
     share: { file: 'assets/ShareLink-abc.js' },
   });
   const reader = createReaderPreloader(dir)(shell);
-  for (const lazy of ['Folder', 'ProfileIndex', 'Shelf', 'ShareLink']) expect(reader).not.toContain(`/assets/${lazy}-abc.js`);
+  for (const lazy of ['Folder', 'Shelf', 'ShareLink']) expect(reader).not.toContain(`/assets/${lazy}-abc.js`);
   const listing = createListingPreloader(dir);
   const folder = listing(shell, 'folder');
   expect(folder).toContain('rel="modulepreload" href="/assets/Folder-abc.js"');
   expect(folder).toContain('rel="modulepreload" href="/assets/Shelf-abc.js"');
   expect(folder).toContain('rel="modulepreload" href="/assets/ShareLink-abc.js"');
-  expect(folder).not.toContain('ProfileIndex');
-  const profile = listing(shell, 'profile-index');
-  expect(profile).toContain('rel="modulepreload" href="/assets/ProfileIndex-abc.js"');
-  expect(profile).not.toContain('/assets/Folder-abc.js');
 });
 
 it('names the listing page only from what the server inlined', () => {
   expect(listingPage({ artifact: { folder: { id: 'f' } } })).toBe('folder');
   expect(listingPage({ profile: { kind: 'artifact', id: 'f' }, artifact: { folder: { id: 'f' } } })).toBe('folder');
-  expect(listingPage({ profile: { kind: 'public-profile' } })).toBe('profile-index');
+  expect(listingPage({ profile: { kind: 'public-profile' } })).toBeNull();
   expect(listingPage({ profile: { kind: 'artifact', id: 'd' }, artifact: { surface: {} } })).toBeNull();
   expect(listingPage({ artifact: { surface: {} } })).toBeNull();
   expect(listingPage(null)).toBeNull();

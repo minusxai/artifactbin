@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AppBar, PageMenu } from '@/components/PageChrome';
 import { SessionProvider } from '@/web/session';
-import UsernameCard from '@/components/UsernameCard';
 import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 import { router, resetRouter } from '@/test/setup/router';
 
@@ -181,17 +180,7 @@ describe('the menu button draws who is signed in', () => {
     expect(screen.getByRole('button', { name: 'Open menu' }).querySelector('img')).toBeNull();
   });
 
-  it('draws the new handle\'s initial once the handle is saved', async () => {
-    answer = account({ username: 'barperson' });
-    render(<SessionProvider><AppBar /><PageMenu authed triggerless /><UsernameCard username="barperson" /></SessionProvider>);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Open menu' })).toHaveTextContent('B'));
 
-    answer = account({ username: 'zoe' });
-    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'zoe' } });
-    fireEvent.click(screen.getByLabelText('Save username'));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Open menu' })).toHaveTextContent('Z'));
-    expect(sessionReads).toBe(2);
-  });
 });
 
 describe('the old /tokens address', () => {

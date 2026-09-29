@@ -1,7 +1,8 @@
+/* @jsxImportSource solid-js */
 /** The human docs — the tour of the product. */
-import FlowSchematic from '@/components/FlowSchematic';
-import GetStarted from '@/components/GetStarted';
-import { FormatBadge, LINK, PAGE_COLUMN } from '@/components/ui';
+import FlowSchematic from './FlowSchematic';
+import GetStarted from './GetStarted';
+import { FormatBadge, LINK, PAGE_COLUMN } from './ui';
 import { STORY_THEMES } from '@/lib/data/story/story-themes';
 
 
@@ -28,7 +29,7 @@ const TOC = [
 ] as const;
 
 type SectionId = (typeof TOC)[number]['id'];
-const anchor = (id: SectionId) => ({ id, className: 'mt-8 scroll-mt-8' });
+const anchor = (id: SectionId) => ({ id, class: 'mt-8 scroll-mt-8' });
 
 /** The document genres, in the order an agent meets them. */
 const TEMPLATES = [
@@ -42,26 +43,26 @@ const TEMPLATES = [
 export default function DocsHuman() {
 
   return (
-    <main className={`${PAGE_COLUMN} mt-8 pb-24`}>
-      <h1 className="text-base font-semibold">
-        <span className="text-accent">&gt;</span> how this works
+    <main class={`${PAGE_COLUMN} mt-8 pb-24`}>
+      <h1 class="text-base font-semibold">
+        <span class="text-accent">&gt;</span> how this works
       </h1>
 
       <FlowSchematic className="mt-6 hidden sm:block" />
 
-      <p className={`mt-4 ${PROSE}`}>
+      <p class={`mt-4 ${PROSE}`}>
         artifactbin is Google Docs for agents. A coding agent publishes a self-contained page over
         the CLI (a report, a deck, a dashboard, a data story) and hands you back a share link.
         The link is unguessable, permanent, and safe to forward.
       </p>
 
-      <nav aria-label="Contents" className="mt-6 rounded-[6px] border border-edge bg-surface px-4 py-3">
-        <span className={SECTION}>contents</span>
-        <ol className="mt-2 grid gap-x-8 gap-y-1.5 font-mono text-xs sm:grid-cols-2">
+      <nav aria-label="Contents" class="mt-6 rounded-[6px] border border-edge bg-surface px-4 py-3">
+        <span class={SECTION}>contents</span>
+        <ol class="mt-2 grid gap-x-8 gap-y-1.5 font-mono text-xs sm:grid-cols-2">
           {TOC.map((s, i) => (
-            <li key={s.id}>
-              <a href={`#${s.id}`} className={LINK}>
-                <span className="mr-2 text-faint">{String(i + 1).padStart(2, '0')}</span>
+            <li>
+              <a href={`#${s.id}`} class={LINK}>
+                <span class="mr-2 text-faint">{String(i + 1).padStart(2, '0')}</span>
                 {s.label}
               </a>
             </li>
@@ -70,20 +71,20 @@ export default function DocsHuman() {
       </nav>
 
       <section {...anchor('get-started')}>
-        <h2 className={SECTION}>get started</h2>
-        <div className="mt-3">
+        <h2 class={SECTION}>get started</h2>
+        <div class="mt-3">
           <GetStarted heading={false} />
         </div>
-        <p className={PROSE}>
+        <p class={PROSE}>
           Setup installs local guidance for publishing, editing, themes and charts.
           Your agent can read the files and validate changes locally before publishing.
         </p>
       </section>
 
       <section {...anchor('publish')}>
-        <h2 className={SECTION}>what an agent can publish</h2>
-        <p className={PROSE}>Every request carries exactly one of four content fields.</p>
-        <ul className="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
+        <h2 class={SECTION}>what an agent can publish</h2>
+        <p class={PROSE}>Every request carries exactly one of four content fields.</p>
+        <ul class="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
           <li>
             <FormatBadge format="markup" /> the document tier, and the only one: slide decks,
             dashboards, stat tiles, real interactive charts, or plain prose written as ordinary
@@ -100,11 +101,11 @@ export default function DocsHuman() {
       </section>
 
       <section {...anchor('keep-your-work')}>
-        <h2 className={SECTION}>keep your work</h2>
-        <p className={PROSE}>
+        <h2 class={SECTION}>keep your work</h2>
+        <p class={PROSE}>
           Log in before you approve the agent&apos;s connection, and everything it publishes belongs
           to your account from the start. Every connection you have approved is listed on your{' '}
-          <a href="/account" className={LINK}>
+          <a href="/account" class={LINK}>
             account
           </a>{' '}
           page, where revoking one stops that agent.
@@ -112,57 +113,57 @@ export default function DocsHuman() {
       </section>
 
       <section {...anchor('editing')}>
-        <h2 className={SECTION}>edit anything, safely</h2>
-        <p className={PROSE}>
+        <h2 class={SECTION}>edit anything, safely</h2>
+        <p class={PROSE}>
           Every artifact you own opens in a visual editor. Click into text to rewrite it, restyle any
           element, drag dashboard tiles, switch themes. There is no save button: changes persist on
           their own, and an agent editing the same document at the same time is fine, because the
           two of you only collide if you touch the same paragraph.
         </p>
-        <p className={PROSE}>
+        <p class={PROSE}>
           Every version is kept. Open the version list from the editor to look at any earlier one and
           restore it in a click. Restoring makes a new version rather than erasing anything, so it is
           undoable too, and the share link never changes through any of it.
         </p>
       </section>
 
-      <hr className="mt-10 border-0 border-t border-edge" />
+      <hr class="mt-10 border-0 border-t border-edge" />
 
       <section {...anchor('themes')}>
-        <h2 className={SECTION}>
-          themes <span className="normal-case">· mx-markup</span>
+        <h2 class={SECTION}>
+          themes <span class="normal-case">· mx-markup</span>
         </h2>
-        <p className={PROSE}>
-          One <code className="text-accent">theme</code> field sets the whole personality: palette,
+        <p class={PROSE}>
+          One <code class="text-accent">theme</code> field sets the whole personality: palette,
           fonts, component chrome, chart colors. Every theme carries a light and a dark palette:
           the author picks the default, readers can flip the mode as they read.
         </p>
         {/* The registry's own previews, both modes per theme (defaultMode
             first), so this can never disagree with what a theme actually
             looks like. */}
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {STORY_THEMES.map((t) => {
             const modes: Array<'light' | 'dark'> = t.defaultMode === 'dark' ? ['dark', 'light'] : ['light', 'dark'];
             return (
-              <figure key={t.name} className="overflow-hidden rounded-[6px] border border-edge">
+              <figure class="overflow-hidden rounded-[6px] border border-edge">
                 {modes.map((mode) => (
                   /* eslint-disable-next-line @next/next/no-img-element -- fixed-size static previews */
                   <img
-                    key={mode}
+
                     src={`/story-themes/${t.name}${mode === 'dark' ? '-dark' : ''}.png`}
                     alt={`${t.label} theme, ${mode} mode`}
                     width={640}
                     height={400}
-                    className="block h-auto w-full"
+                    class="block h-auto w-full"
                   />
                 ))}
-                <figcaption className="flex items-center gap-1.5 px-2 py-1.5">
+                <figcaption class="flex items-center gap-1.5 px-2 py-1.5">
                   <span
                     aria-hidden="true"
-                    className="inline-block size-2.5 shrink-0 rounded-full"
+                    class="inline-block size-2.5 shrink-0 rounded-full"
                     style={{ background: t.cssVars['--primary'] }}
                   />
-                  <span className="font-mono text-[11px] text-fg">{t.name}</span>
+                  <span class="font-mono text-[11px] text-fg">{t.name}</span>
                 </figcaption>
               </figure>
             );
@@ -171,18 +172,18 @@ export default function DocsHuman() {
       </section>
 
       <section {...anchor('templates')}>
-        <h2 className={SECTION}>
-          templates <span className="normal-case">· mx-markup</span>
+        <h2 class={SECTION}>
+          templates <span class="normal-case">· mx-markup</span>
         </h2>
-        <p className={PROSE}>
-          A <code className="text-accent">template</code> names the document&apos;s genre. It sets
+        <p class={PROSE}>
+          A <code class="text-accent">template</code> names the document&apos;s genre. It sets
           the beats and the layout grammar the agent writes to, and all are built from the same
           components.
         </p>
-        <ul className="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
+        <ul class="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
           {TEMPLATES.map((t) => (
-            <li key={t.name}>
-              <span className="font-mono text-xs text-fg">{t.name}</span> {t.blurb}
+            <li>
+              <span class="font-mono text-xs text-fg">{t.name}</span> {t.blurb}
             </li>
           ))}
         </ul>

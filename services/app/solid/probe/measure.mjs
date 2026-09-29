@@ -41,15 +41,20 @@ const entry = map.find((c) => c.isEntry).file;
 const routeFile = (name) => map.find((c) => c.isDynamicEntry && c.modules.some((m) => new RegExp(`pages/${name}\\.tsx$`).test(m.id)))?.file;
 const total = (files) => rows.filter((r) => files.has(r.file)).reduce((sum, r) => ({ raw: sum.raw + r.raw, gzip: sum.gzip + r.gzip, brotli: sum.brotli + r.brotli, chunks: sum.chunks + 1 }), { raw: 0, gzip: 0, brotli: 0, chunks: 0 });
 const shell = closure([entry]);
-const trash = closure([entry, routeFile('Trash')]);
-const notFound = closure([entry, routeFile('NotFound')]);
-const result = { outDir, rows, totals: { shellOnly: total(shell), shellPlusTrash: total(trash), shellPlusNotFound: total(notFound), trashRouteIncrement: total(new Set([...trash].filter((f) => !shell.has(f)))) } };
+const routes = ['Trash', 'NotFound', 'Login', 'Start', 'Welcome', 'Notifications', 'Account', 'Docs', 'Profile'];
+const routeTotals = Object.fromEntries(routes.map(name => {
+  const file = routeFile(name);
+  const files = file ? closure([entry, file]) : new Set();
+  return [name, { ...total(files), increment: total(new Set([...files].filter(f => !shell.has(f)))) }];
+}));
+const result = { outDir, rows, totals: { shellOnly: total(shell), routes: routeTotals } };
 
 if (asJson) console.log(JSON.stringify(result, null, 1));
 else {
   console.log(`# ${outDir}`);
   console.log('file | kind | raw | gzip | brotli | pre-minify bytes by category');
   for (const r of rows) console.log(`${r.file} | ${r.kind} | ${r.raw} | ${r.gzip} | ${r.brotli} | ${Object.entries(r.cats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
-  for (const [name, t] of Object.entries(result.totals)) console.log(`TOTAL ${name}: ${t.chunks} chunks, raw ${t.raw}, gzip ${t.gzip}, brotli ${t.brotli}`);
+  console.log(`TOTAL shellOnly: ${result.totals.shellOnly.chunks} chunks, raw ${result.totals.shellOnly.raw}, gzip ${result.totals.shellOnly.gzip}, brotli ${result.totals.shellOnly.brotli}`);
+  for (const [name, t] of Object.entries(routeTotals)) console.log(`TOTAL ${name}: ${t.chunks} chunks, raw ${t.raw}, gzip ${t.gzip}, brotli ${t.brotli}; incremental brotli ${t.increment.brotli}`);
   for (const r of rows) console.log(`  top ${r.file}: ${r.top.join(', ')}`);
 }

@@ -3,35 +3,30 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { SessionProvider } from '../session';
-import { ProfilePage } from '../pages/Profile';
-import { AccountPage } from '../pages/Account';
 import { ArtifactPage } from '../pages/Artifact';
 import { pageDataChanged } from '../page-data-events';
 const disposed = vi.hoisted(() => vi.fn());
 vi.mock('@/components/ArtifactSurface', () => ({ default: ({ title }: { title: string }) => { useEffect(() => () => disposed(), []); return <div aria-label="Mounted author runtime">{title}</div>; } }));
 vi.mock('@/components/ArtifactShell', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
-vi.mock('@/components/TokensPanel', () => ({ default: () => null }));
 const response = (body: unknown) => new Response(JSON.stringify(body));
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com' } };
 function EditButton() { const navigate = useNavigate(); return <button aria-label="Enter edit" onClick={() => void navigate('/a/ABC123#edit')}>Edit</button>; }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); disposed.mockClear(); });
 
-it.each(['profile', 'account', 'artifact', 'folder'])('retains %s data across unmount while its Back refresh is held', async (kind) => {
-  const path = kind === 'profile' ? '/@alice' : kind === 'account' ? '/account' : '/a/ABC123';
-  const endpoint = kind === 'profile' ? '/api/page/profile/' : kind === 'account' ? '/api/page/account' : '/api/page/artifact/';
-  const payload = kind === 'profile' ? { kind: 'public-profile', handle: 'alice', files: [], authed: true, anon: false }
-    : kind === 'account' ? { username: 'alice' }
-      : kind === 'folder' ? { canonical: path, role: 'viewer', kind: 'account', folder: { id: 'ABC123', title: 'Cached folder', trail: [], count: { documents: 0, folders: 0 }, rows: [] } }
+it.each(['artifact', 'folder'])('retains %s data across unmount while its Back refresh is held', async (kind) => {
+  const path = '/a/ABC123';
+  const endpoint = '/api/page/artifact/';
+  const payload = kind === 'folder' ? { canonical: path, role: 'viewer', kind: 'account', folder: { id: 'ABC123', title: 'Cached folder', trail: [], count: { documents: 0, folders: 0 }, rows: [] } }
         : { canonical: path, role: 'viewer', kind: 'account', surface: { title: 'Cached artifact' } };
   let reads = 0;
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
   vi.stubGlobal('fetch', vi.fn((url: string) => url.includes('/session') ? Promise.resolve(response(session))
     : url.includes(endpoint) ? ++reads === 1 ? Promise.resolve(response(payload)) : new Promise<Response>(() => {}) : Promise.resolve(response({}))));
-  const node = kind === 'profile' ? <ProfilePage /> : kind === 'account' ? <AccountPage /> : <ArtifactPage id="ABC123" />;
-  const tree = (shown: boolean) => <MemoryRouter initialEntries={[path]}><SessionProvider>{shown && <Routes><Route path={kind === 'profile' ? '/:user/*' : '*'} element={node} /></Routes>}</SessionProvider></MemoryRouter>;
+  const node = <ArtifactPage id="ABC123" />;
+  const tree = (shown: boolean) => <MemoryRouter initialEntries={[path]}><SessionProvider>{shown && <Routes><Route path="*" element={node} /></Routes>}</SessionProvider></MemoryRouter>;
   const view = render(tree(true));
-  const content = () => kind === 'account' ? screen.getByLabelText('Username') : kind === 'artifact' ? screen.getByLabelText('Mounted author runtime') : screen.getByRole('heading', { level: 1 });
-  // The folder page and a profile's index are their own chunks: the FIRST
+  const content = () => kind === 'artifact' ? screen.getByLabelText('Mounted author runtime') : screen.getByRole('heading', { level: 1 });
+  // The folder page is its own chunk: the FIRST
   // mount waits for that download; the remount below must not wait for anything.
   await act(async () => {});
   await vi.waitFor(() => expect(content()).toBeInTheDocument(), { timeout: 5000 });
@@ -40,7 +35,6 @@ it.each(['profile', 'account', 'artifact', 'folder'])('retains %s data across un
   view.rerender(tree(true));
   expect(content()).toBeInTheDocument();
   expect(reads).toBe(2);
-  if (kind === 'account') expect(content()).toHaveValue('alice');
 });
 
 it('an acknowledged mutation expires an inactive artifact payload before Back', async () => {

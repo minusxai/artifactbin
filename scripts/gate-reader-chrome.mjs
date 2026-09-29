@@ -172,6 +172,10 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
     await revealReaderChrome(page);
     await page.locator(`[aria-label="${label}"]`).click();
     await page.waitForURL(/\/login\?callbackUrl=/, { timeout: 10_000 }).catch(() => {});
+    // The Solid login entry completes its own mount after the URL commits.
+    // Return only once the email form is visible and its requests have settled.
+    await page.getByRole('textbox', { name: 'Email' }).waitFor({ state: 'visible', timeout: 10_000 });
+    await page.waitForLoadState('networkidle');
     const at = page.url();
     check(at.includes('/login?callbackUrl=') && at.includes(`intent%3D${intent}`), `${name}: ${label} goes through login carrying intent=${intent} (${at})`);
     await page.goto(readerUrl(`${BASE}/a/${long.id}`), { waitUntil: 'load' });
