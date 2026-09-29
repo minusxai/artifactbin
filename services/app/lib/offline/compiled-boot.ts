@@ -24,6 +24,8 @@ declare global {
 
 export interface OfflineIslandModule {
   ISLANDS: readonly (readonly [string, Component, string?])[];
+  /** Single-tree modules (the compiler's one-Solid-tree shape) hand this instead of ISLANDS. */
+  TREE?: Component;
   FLOW?: CompiledDataflow | null;
 }
 
@@ -116,10 +118,14 @@ function explainWrites(root: HTMLElement, nodes: JsxNode[]): () => void {
   return () => { for (const stop of stops) stop(); };
 }
 
-export function boot(input: OfflineIslandModule | OfflineIslandModule['ISLANDS']): void {
+export function boot(input: OfflineIslandModule | { TREE: Component; FLOW?: CompiledDataflow | null } | OfflineIslandModule['ISLANDS']): void {
   const file = window.__afbinOfflineFile;
   if (!file) throw new Error('offline: document snapshot is unavailable');
-  const module: OfflineIslandModule = Array.isArray(input) ? { ISLANDS: input } : input as OfflineIslandModule;
+  // Same normalization as the online boot (lib/islands/boot.ts): a one-tree module hands
+  // { TREE, FLOW } instead of ISLANDS, wrapped here as this document's one island.
+  const module: OfflineIslandModule = Array.isArray(input) ? { ISLANDS: input }
+    : 'TREE' in input && input.TREE ? { ISLANDS: [['d-', input.TREE]], TREE: input.TREE, FLOW: input.FLOW }
+      : input as OfflineIslandModule;
   const root = document.querySelector<HTMLElement>('[data-mx-inline-story]');
   if (!root) throw new Error('offline: compiled story is unavailable');
   const flow = module.FLOW ?? file.island.dataflow?.flow ?? null;
@@ -149,7 +155,12 @@ export function boot(input: OfflineIslandModule | OfflineIslandModule['ISLANDS']
   const frozen = new Set(file.snapshot.frozen);
   const setValue = runtime.context.setValue;
   runtime.context.setValue = (name, value, options) => { if (!frozen.has(name)) setValue(name, value, options); };
-  const disposers = module.ISLANDS.map(([id, component], index) => staleFlow && file.compiled?.islands[index]?.readsData
+  // A one-tree module's single wrapped entry stands for every compiled island: stale-flow
+  // withholds it when any of them reads data (matching the per-island check for the old shape).
+  const readsData = (index: number) => module.TREE
+    ? (file.compiled?.islands ?? []).some((island) => island.readsData)
+    : !!file.compiled?.islands[index]?.readsData;
+  const disposers = module.ISLANDS.map(([id, component], index) => staleFlow && readsData(index)
     ? null : hydrateIsland(id, component, runtime.context, root)).filter((stop): stop is () => void => !!stop);
   const unfreeze = freezeControls(root, file.island.nodes, frozen);
   const stopWriteTips = explainWrites(root, file.island.nodes);

@@ -146,6 +146,15 @@ describe('the snapshot', () => {
     // This fixture's Question is a table, not a Vega visualization.
     expect(packed?.code.includes('Axes cannot be shared in concatenated')).toBe(false);
   });
+  it('ships every island-literals carrier the packed module reads by DOM lookup, even though the file only carries a fresh SSR render', async () => {
+    const w = await world();
+    const file = await download(w.doc, w.owner.actor);
+    const packed = await packCompiledBrowserModule(file.compiled!, { offline: { sqlite: true, chart: false } });
+    const keys = [...packed!.code.matchAll(/data-mx-island-literals="([0-9a-f]{16})"/g)].map((m) => m[1]!);
+    // A document whose compiled module hoists no large literal proves nothing either way.
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) expect(file.compiled?.html).toContain(`data-mx-island-literals="${key}"`);
+  });
   it('carries the rows of every import the downloader may hold, so their queries run live and nothing is precomputed for them', async () => {
     const w = await world();
     const file = await download(w.doc, w.owner.actor);

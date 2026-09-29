@@ -63,7 +63,7 @@ const commentSafe = (text: string) => text.replace(/-(?=-)/g, '- ');
  * The note an agent reads first: what the file is and how to edit it
  * correctly — change the top-level `source` and nothing else. Every claim is
  * what the file really does (lib/offline/file-backend's rebuildArtifactFile,
- * components/offline/OfflineApp's banner); pinned by file-html.ui.test.
+ * lib/offline/solid-entry's banner); pinned by file-html.ui.test.
  */
 export function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveUrl' | 'metadata'>): string {
   const help = agentDiscovery(file.origin);
