@@ -9,17 +9,13 @@
  *   - the isolated stylesheet (exactly what lib/story/inline-css produces) and
  *     the node tree with the style values that policy rewrote (style-overrides);
  *   - glyphs, fonts, the resolved colour mode, the lazy-code manifest, the
- *     declared dataflow;
- *   - the ANONYMOUS reader's server render of the story, with a digest of the
- *     per-reader inputs it was rendered with.
+ *     declared dataflow and the pinned compiled page.
  *
  * Nothing per viewer is stored. A request overlays what only it decides — who
  * reads, their `$` values, what they may hold, the other artifacts the document
  * embeds — through the same writer the whole preparation uses
- * (prepare-runtime.server `readerIslandData`), and reuses the stored render only
- * when that overlay is byte-identical to the one it was rendered with. The
- * first reader of a version may be its owner; the stored render is still the
- * anonymous one.
+ * (prepare-runtime.server `readerIslandData`). The compiled serve path renders
+ * request data through the compiled page's pinned SSR module.
  *
  * A slot's key is only the document version. A deploy, compiler change, CSS
  * change or dependency change does not rebuild a published version. The
@@ -51,8 +47,7 @@ import { inlineStoryCss, inlineStoryNodes } from './inline-css';
 import { styleOverrides, type StyleOverride } from './style-overrides';
 import { readerStorySheet } from './reader-sheet.server';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
-import { servedStoryHtml } from '@/lib/story/legacy-story-html';
-import { loadStorySsr } from './ssr.server';
+import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { lazyCodeOf, type LazyCode } from './lazy-code';
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
 import { readUrlValues } from './url-values';
@@ -89,8 +84,8 @@ export interface PreparedPage {
   declared: StoryIslandDataflow | null;
   /** What other rows this entry was built from; fingerprinted on every read. */
   deps: PreparedDeps;
-  /** The anonymous reader's render of the story element, and the digest of the overlay it was rendered with. */
-  ssr: { overlay: string; html: string } | null;
+  /** Older stored pages may carry a legacy render. New preparations omit it. */
+  ssr?: { overlay: string; html: string } | null;
   /** The compiled page (lib/compiled-page), or its recorded failure. */
   compiled?: StoredCompile;
 }
@@ -125,15 +120,7 @@ export interface ReaderContext {
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
 const buildAsset = (name: string): Buffer => readFileSync(path.join(process.cwd(), 'lib/build-assets', name));
 const compilerFingerprint = (): string => buildAsset('prepared-sources.sha256').toString('utf8').trim();
-const ssrBundleFingerprint = (): string => createHash('sha256').update(buildAsset('story-ssr.cjs')).digest('hex');
 
-/**
- * JSON with its object keys in one order. The overlay carries the STORED flow,
- * and a JSONB column hands objects back in its own key order: a digest of plain
- * JSON would call a byte-identical overlay different, and never reuse a render.
- */
-const canonical = (value: unknown): string => JSON.stringify(value, (_key, v: unknown) =>
-  v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v);
 const slotOf = (at: ArchivedRender | null): string => (at ? `v:${at.version}` : 'head');
 /** The standalone reader is retired, so every prepared page needs a compile. */
 function compilerBuild(): { build: CompilerBuild | null; error: string | null } | null {
@@ -184,7 +171,6 @@ async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declar
   };
 }
 type ReaderOverlay = ReaderIslandInput & { colorMode?: 'light' | 'dark' };
-const overlayDigest = (input: ReaderOverlay): string => sha(canonical({ ...readerIslandData(input), ...(input.colorMode ? { colorMode: input.colorMode } : {}) }));
 
 /**
  * The version compiled to static HTML and islands (lib/compiled-page/compiler), or the recorded
@@ -254,11 +240,9 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
     theme: runtime.theme, title: runtime.title, fontPreloads: runtime.fontPreloads ?? [],
     lazyCode: lazyCodeOf(nodes), declared: declared ?? null,
     deps: { datasets, assets: assetUrls, fonts: parts.docFonts.families },
-    ssr: null,
   };
-  // The anonymous reader's render, whoever asked first.
+  // Only the version's compiled output is stored; request data is rendered by its pinned SSR module.
   const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '', origin });
-  page.ssr = { overlay: overlayDigest(anonymous), html: renderStory(page, anonymous) };
   if (compiler) page.compiled = await compiledFor(row, page, anonymous.refData, compiler);
   return page;
 }
@@ -270,7 +254,11 @@ function servedOf(page: PreparedPage, input: ReaderOverlay): ServedStoryRuntime 
     authorScript: page.authorScript, theme: page.theme, title: page.title, fontPreloads: page.fontPreloads,
   };
 }
-const renderStory = (page: PreparedPage, input: ReaderOverlay): string => servedStoryHtml(servedOf(page, input), loadStorySsr().renderInlineStory);
+const renderStory = (page: PreparedPage, input: ReaderOverlay): string => {
+  const compiled = page.compiled;
+  if (!compiled || !('html' in compiled)) throw new Error('prepared page has no compiled story');
+  return inlineStoryElement(`<style>${page.css}</style>${compiled.html}`, input.colorMode ?? page.data.colorMode, page.theme);
+};
 
 interface StoredRow { page_key: string; deps: string; page: PreparedPage; page_format: number | null; handover_contract: number | null }
 
@@ -291,7 +279,7 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
        ON CONFLICT (artifact_id, slot) DO UPDATE SET page_key = EXCLUDED.page_key, deps = EXCLUDED.deps, page = EXCLUDED.page,
        compiler_version = EXCLUDED.compiler_version, island_build = EXCLUDED.island_build, css_version = EXCLUDED.css_version,
        ssr_bundle = EXCLUDED.ssr_bundle, page_format = EXCLUDED.page_format, handover_contract = EXCLUDED.handover_contract, updated_at = now()`,
-      [row.id, slot, key, await fingerprint(page.deps), JSON.stringify(page), compilerFingerprint(), page.compiled?.build ?? 'none', storyCssCompileVersion(), ssrBundleFingerprint(), PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
+      [row.id, slot, key, await fingerprint(page.deps), JSON.stringify(page), compilerFingerprint(), page.compiled?.build ?? 'none', storyCssCompileVersion(), null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
     );
   } catch (error) {
     // A cache that cannot be written is a slower next read, never a failed one.
@@ -319,7 +307,7 @@ export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null,
       `UPDATE prepared_pages SET page = $4::jsonb, compiler_version = $5, island_build = $6,
        css_version = $7, ssr_bundle = $8, page_format = $9, handover_contract = $10, updated_at = now()
        WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
-      [row.id, slotOf(at), keyOf(row), JSON.stringify(page), compilerFingerprint(), compiled.build, storyCssCompileVersion(), ssrBundleFingerprint(), PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
+      [row.id, slotOf(at), keyOf(row), JSON.stringify(page), compilerFingerprint(), compiled.build, storyCssCompileVersion(), null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
     );
   } catch (error) {
     console.warn('[prepared-page] compile write-back failed', row.id, error);
@@ -328,9 +316,9 @@ export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null,
 }
 
 /**
- * THE READER'S RUNTIME for one request: the stored version under this
- * request's overlay. `storyHtml` renders only when the overlay differs from
- * the one the stored render was made with.
+ * THE READER'S RUNTIME for one request. `storyHtml` supplies static compiled
+ * markup to remaining editor/API consumers; reader data is rendered by the
+ * compiled serve path.
  */
 export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: ReaderContext): Promise<{ runtime: ServedStoryRuntime & { css: string }; storyHtml: () => string }> {
   // Only the head's answers are the query route's: an archived render, and a
@@ -340,18 +328,12 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
     readerInputFor(row, page, reader),
     servable ? servedResultsFor(row, servable, { admit: reader.results!.admit, viewer: reader.viewer, search: reader.search }) : Promise.resolve(null),
   ]);
-  /*
-   * The results ride in the overlay, beside the request's other facts (its
-   * stored diagram drawings), so its digest differs from the stored anonymous
-   * render's and the story is rendered fresh WITH them. The stored render
-   * never holds data: its key does not follow the datasets.
-   */
+  // Results belong to this request's runtime; compiledPageFor renders them into the page.
   const input: ReaderOverlay = results && overlay.dataflow ? { ...overlay, dataflow: { ...overlay.dataflow, results } } : overlay;
   const runtime = servedOf(page, input);
   return {
     runtime,
-    // An overlay carrying results can never be the stored one's: render it, and hash nothing the size of its rows.
-    storyHtml: () => (!results && page.ssr && page.ssr.overlay === overlayDigest(input) ? page.ssr.html : renderStory(page, input)),
+    storyHtml: () => renderStory(page, input),
   };
 }
 

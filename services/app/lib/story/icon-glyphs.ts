@@ -11,28 +11,36 @@
  * glyphs a document actually uses; those travel in the island beside `refData` and
  * the client renders them from data (components/kit/icon).
  *
- * This module is reached only through the SSR bundle (lib/story-runtime/ssr-entry),
- * which lib/story/ssr.server loads with createRequire from a prebuilt file OUTSIDE
- * the app's module graph — so the client components it renders never enter the
- * server's own graph.
- *
- * The glyph is extracted by RENDERING lucide's own component and keeping what is
- * inside its <svg>, rather than reaching for the `__iconNode` data: that data is not
- * re-exported from the package barrel (1600 modules would collide on the name), and
- * rendering is what guarantees the client's copy is byte-identical to what lucide
- * would have emitted — which is the whole safety property here, since a document is
- * rendered twice and a differing tree is a hydration mismatch. Guarded by
+ * Lucide's pinned icon modules export their path data (`__iconNode`). Read that
+ * data as source, without importing the modules (which import React), and serialize
+ * the small subset this document uses. Guarded by
  * lib/story/__tests__/icon-glyphs.test.tsx.
  */
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { icons } from 'lucide-react';
+import { createRequire } from 'node:module';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import type { JsxNode } from '@/lib/jsx';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap, type IconGlyph } from '@/lib/story-ui/icon-contract';
 import { FILE_GLYPH_NAMES } from '@/lib/story-ui/file-glyphs';
 
-const SVG_OPEN = /^<svg\b[^>]*>/;
-const CLASS_ATTR = /\bclass="([^"]*)"/;
+const require = createRequire(import.meta.url);
+const iconDir = path.join(path.dirname(require.resolve('lucide-react')), '..', 'esm', 'icons');
+const files = new Map(readdirSync(iconDir).filter((file) => file.endsWith('.mjs')).map((file) => [iconGlyphKey(file.slice(0, -4)), file]));
+const escapeAttribute = (value: string): string => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function sourceFor(key: string): { name: string; nodes: Array<[string, Record<string, string>]> } {
+  let file = files.get(key) ?? files.get(FALLBACK_ICON_KEY)!;
+  for (let depth = 0; depth < 4; depth++) {
+    const source = readFileSync(path.join(iconDir, file), 'utf8');
+    const alias = /export \{ default \} from '\.\/(.+\.mjs)'/.exec(source);
+    if (alias) { file = alias[1]!; continue; }
+    const data = /const __iconNode = (\[[\s\S]*?\]);\nconst /.exec(source)?.[1];
+    if (!data) throw new Error(`Lucide icon data missing: ${file}`);
+    const nodes = JSON.parse(data.replace(/([,{]\s*)([A-Za-z][A-Za-z0-9]*):/g, '$1"$2":')) as Array<[string, Record<string, string>]>;
+    return { name: file.slice(0, -4), nodes };
+  }
+  throw new Error(`Lucide icon alias cycle: ${file}`);
+}
 
 /**
  * Render one lucide glyph and split it into the parts the client re-assembles.
@@ -44,18 +52,15 @@ const resolved = new Map<string, IconGlyph>();
 function resolveGlyph(name: string): IconGlyph {
   const key = iconGlyphKey(name);
   const hit = resolved.get(key);
-  // A glyph never changes, and a document renders on every request (no caching
-  // above this), so resolving one twice is pure waste. Grows to at most the number
+  // A glyph never changes, so resolving one twice is pure waste. Grows to at most the number
   // of DISTINCT icons this process has served, never freed — the icon set is the
   // only ceiling, and it is a fixed ~1600 entries of small strings.
   if (hit) return hit;
-  const Glyph = (icons as Record<string, React.ComponentType>)[key]
-    ?? (icons as Record<string, React.ComponentType>)[FALLBACK_ICON_KEY];
-  const markup = renderToStaticMarkup(createElement(Glyph));
-  const open = markup.match(SVG_OPEN)?.[0] ?? '';
-  // `lucide lucide-grid2x2 lucide-grid-2x2` — everything after the bare marker.
-  const cls = (open.match(CLASS_ATTR)?.[1] ?? '').split(/\s+/).filter((c) => c && c !== 'lucide').join(' ');
-  const glyph: IconGlyph = { cls, inner: markup.slice(open.length).replace(/<\/svg>$/, '') };
+  const { name: resolvedName, nodes } = sourceFor(key);
+  const canonical = resolvedName.replace(/-(?=\d)/g, '');
+  const cls = [`lucide-${canonical}`, ...(canonical === resolvedName ? [] : [`lucide-${resolvedName}`])].join(' ');
+  const inner = nodes.map(([tag, attrs]) => `<${tag}${Object.entries(attrs).filter(([attr]) => attr !== 'key').map(([attr, value]) => ` ${attr}="${escapeAttribute(value)}"`).join('')}></${tag}>`).join('');
+  const glyph: IconGlyph = { cls, inner };
   resolved.set(key, glyph);
   return glyph;
 }

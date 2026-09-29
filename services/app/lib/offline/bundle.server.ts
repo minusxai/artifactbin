@@ -1,8 +1,7 @@
 /**
  * The offline bundle a downloaded file carries in `#afbin-code`, read from what
- * scripts/build-offline.mjs wrote beside the SSR bundle
- * (lib/build-assets/offline/, shipped with the server) and located the
- * way lib/story/ssr.server finds its bundle.
+ * scripts/build-offline.mjs wrote under lib/build-assets/offline/, shipped
+ * with the server.
  *
  * gzip then base64, exactly as the file stores it. Read, checked against the
  * build's manifest and encoded ONCE per process per kind: every download of a
