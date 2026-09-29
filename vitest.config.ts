@@ -132,12 +132,13 @@ export default defineConfig({
         // hydratable code. Only lib/islands goes through Solid's transform; the React kit a parity
         // test imports keeps Vite's own (react-jsx) transform.
         extends: true,
-        plugins: [solid({ include: ['services/app/lib/islands/**/*.{tsx,jsx}', 'services/app/solid/**/*.{tsx,jsx}'], hot: false })],
+        plugins: [solid({ include: ['services/app/lib/islands/**/*.{tsx,jsx}', 'services/app/solid/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
         test: {
           name: 'islands',
           environment: 'jsdom',
           include: [ISLAND_TESTS, SOLID_TESTS],
           exclude: ['**/node_modules/**'],
+          server: { deps: { inline: [/@solidjs\/router/, /@solidjs\/testing-library/, /lucide-solid/] } },
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
       },

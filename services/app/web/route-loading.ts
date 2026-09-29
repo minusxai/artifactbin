@@ -18,7 +18,6 @@ export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity:
     '/': { code: routePages.HomePage, key: '/api/page/home?part=core' },
     '/notifications': { code: routePages.NotificationsPage },
     '/account': { code: routePages.AccountPage, key: '/api/page/account' },
-    '/trash': { code: routePages.TrashPage, key: '/api/page/trash' },
     // Custom fallback/error loaders stay with their pages. Copying those here
     // would change retry semantics; code loading still overlaps their route.
     '/assets': { code: routePages.AssetsPage }, '/chat': { code: routePages.ChatPage },

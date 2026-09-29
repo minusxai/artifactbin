@@ -147,7 +147,7 @@ it('route mapping shares artifact/folder keys, keeps static routes data-free, an
   expect(map('/@alice/ABC123-folder?key=x')?.key).toBe('/api/page/artifact/ABC123?key=x');
   expect(map('/@alice')?.key).toBe('/api/page/profile/%40alice');
   expect(map('/')?.key).toBe('/api/page/home?part=core');
-  expect(map('/trash')?.key).toBe('/api/page/trash');
+  expect(map('/trash')).toBeNull();
   for(const path of ['/chat','/assets','/login','/login']) expect(map(path)?.key).toBeUndefined();
   for(const path of ['/a/ABC123/raw','/api/query','/docs','/api/auth/callback','/not-an-app']) expect(map(path)).toBeNull();
 });

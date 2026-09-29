@@ -6,6 +6,7 @@
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import solid from 'vite-plugin-solid';
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { describePrecompression, precompressTree } from './scripts/lib/precompress.mjs';
@@ -54,7 +55,7 @@ const appFontFaces = (): Plugin => ({
 
 export default defineConfig({
   root: webRoot,
-  plugins: [appFontFaces(), react(), tailwindcss(), precompressAssets()],
+  plugins: [appFontFaces(), react({ exclude: /\/solid\/.*\.tsx$/ }), solid({ include: [/\/services\/app\/solid\/.*\.(?:tsx|jsx)$/, /\/services\/app\/web\/solid-entry\.tsx$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },
@@ -69,6 +70,7 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         index: path.join(webRoot, 'index.html'),
+        trash: path.join(webRoot, 'trash.html'),
         // The compiled reader page's loader (web/spa-idle): an entry of its own, so the server names
         // it from the manifest (`spa-idle.ts`) and the page loads the app only when it is wanted.
         'spa-idle': path.join(webRoot, 'spa-idle.ts'),
