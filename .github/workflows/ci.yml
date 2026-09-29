@@ -137,14 +137,18 @@ jobs:
   # FOUR shards. Three was the measured optimum on 2026-09-04 (the files summed to
   # ~337s of work, the slowest single file is 36s, and vitest shards by FILE
   # COUNT rather than duration). Only shard 3 runs the CLI source suite, so only
-  # that shard needs the CLI build. The other three shards run source tests and
-  # shard 1 also runs the browser/Docker integration suite.
+  # that shard needs the CLI build — and it downloads `build`'s artifact rather
+  # than repeating the build (88s on run 36611975484, the same duplicate cost the
+  # `gates` job's note above describes), polling `build`'s status the same way.
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
     name: node tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -185,7 +189,34 @@ jobs:
         run: npx playwright install chromium
       - if: matrix.shard == 1
         run: docker pull postgres:17-alpine
-      - if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
+      # Same wait as `gates` (see its job-level note): poll `build`'s status rather than a job-level
+      # `needs: [build]`, which would stall shards 1, 2 and 4 — they never touch this artifact. Only
+      # when `build` is ITSELF selected: a CLI-only change (`cli-tests` true, `app` untouched) skips
+      # `build` entirely (scripts/lib/ci-plan.mjs), and this shard rebuilds for itself exactly as
+      # before rather than waiting on a job this run never scheduled.
+      - name: Wait for the build job
+        if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true' && needs.plan.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 150); do
+            build_status=$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "build") | (.status + " " + (.conclusion // "-"))')
+            case "$build_status" in
+              "completed success") exit 0 ;;
+              completed*) echo "::error::the build job did not succeed: ${build_status}" >&2; exit 1 ;;
+              "") if [ "$attempt" -gt 5 ]; then echo "::error::no build job found on this run" >&2; exit 1; fi ;;
+            esac
+            sleep 4
+          done
+          echo "::error::timed out waiting for the build job" >&2
+          exit 1
+      - if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true' && needs.plan.outputs.build == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: app-build
+      - if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true' && needs.plan.outputs.build != 'true'
         run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
@@ -381,7 +412,7 @@ jobs:
   gates:
     needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/16)
+    name: browser gates (${{ matrix.shard }}/22)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -390,7 +421,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -423,8 +454,8 @@ jobs:
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/16)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/16)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/22)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/22)" >> "$GITHUB_OUTPUT"
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -460,14 +491,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for _ in $(seq 1 150); do
-            status=$(gh api --paginate \
+          for attempt in $(seq 1 150); do
+            build_status=$(gh api --paginate \
               "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
               --jq '.jobs[] | select(.name == "build") | (.status + " " + (.conclusion // "-"))')
-            case "$status" in
+            case "$build_status" in
               "completed success") exit 0 ;;
-              completed*) echo "::error::the build job did not succeed: ${status}" >&2; exit 1 ;;
-              "") echo "::error::no build job found on this run" >&2; exit 1 ;;
+              completed*) echo "::error::the build job did not succeed: ${build_status}" >&2; exit 1 ;;
+              # Empty the first few polls just means the run's job list has not listed `build` yet
+              # (this step starts within seconds of the run itself); only a genuine absence this far
+              # into the retry budget is worth failing on.
+              "") if [ "$attempt" -gt 5 ]; then echo "::error::no build job found on this run" >&2; exit 1; fi ;;
             esac
             sleep 4
           done
@@ -488,10 +522,12 @@ jobs:
       # shards: the set ran 213s and ~170s of gate work in two shards on main run
       # 34697938970, and further shards divide that work rather than the machine.
       #
-      # Sixteen shards (up from twelve) keep the one compiled gate set comfortably under budget, with
+      # Twenty-two shards (up from twelve) keep the one compiled gate set comfortably under budget —
+      # sixteen still put one shard (2m03s work) close to the 240s per-job budget on run 36611975484 —
+      # with
       # editor-v2, hydration and offline-file on separate runners.
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/16
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/22
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

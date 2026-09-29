@@ -522,12 +522,24 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/4)');
     expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/4');
   });
-  it('builds the CLI only on the shard that runs its source suite', () => {
+  it('gets the CLI build only on the shard that runs its source suite, from `build` when it ran', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    const builds = jobs.node.steps.filter(step => step.run === 'npm run build -w services/cli');
-    expect(builds).toHaveLength(1);
-    expect(builds[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
-    expect(jobs.node.steps.indexOf(builds[0])).toBeLessThan(jobs.node.steps.findIndex(step => (step.run ?? '').includes('npm test -w services/cli')));
+    const cliTestShard = "matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'";
+    // The common case: `build` also ran (an ordinary app-affecting change, or the full suite), so
+    // this shard downloads what it produced instead of repeating an 88s build for itself.
+    const wait = jobs.node.steps.find(step => step.name === 'Wait for the build job');
+    expect(wait.if).toBe(`${cliTestShard} && needs.plan.outputs.build == 'true'`);
+    const download = jobs.node.steps.find(step => step.uses?.startsWith('actions/download-artifact') && step.if?.includes('matrix.shard == 3'));
+    expect(download.if).toBe(`${cliTestShard} && needs.plan.outputs.build == 'true'`);
+    expect(download.with.name).toBe('app-build');
+    expect(jobs.node.steps.indexOf(wait)).toBeLessThan(jobs.node.steps.indexOf(download));
+    // A CLI-only change selects `cli-tests` without `build` (scripts/lib/ci-plan.mjs: `build` follows
+    // `app`, not `cli`) — this shard falls back to building for itself rather than waiting on a job
+    // this run never scheduled.
+    const rebuild = jobs.node.steps.find(step => step.run === 'npm run build -w services/cli');
+    expect(rebuild.if).toBe(`${cliTestShard} && needs.plan.outputs.build != 'true'`);
+    expect(jobs.node.steps.indexOf(rebuild)).toBeLessThan(jobs.node.steps.findIndex(step => (step.run ?? '').includes('npm test -w services/cli')));
+    expect(jobs.node.steps.indexOf(download)).toBeLessThan(jobs.node.steps.findIndex(step => (step.run ?? '').includes('npm test -w services/cli')));
   });
   it('spreads the API test files over ten shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
