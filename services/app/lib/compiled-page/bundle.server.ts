@@ -40,7 +40,7 @@ import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type Mod
 import type { GeneratedSources } from './codegen-safety';
 import { syncRailPreview } from './rail-preview.server';
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
-import { createModuleStore, createTemplateResourceStore } from './modules.server';
+import { createModuleStore } from './modules.server';
 import { contentSha } from './speculation';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -345,14 +345,6 @@ export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModu
  * One version's modules
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** Compile-time render of the complete document in its declared state. */
-export async function renderSkeleton(skeleton: string, imports?: SsrImports): Promise<string> {
-  const source = `${skeleton}import { renderToString as $renderToString } from 'solid-js/web';\nexport function render() { return $renderToString(() => <Document />, { renderId: 'd-' }); }\n`;
-  const code = await transformSolid(source, { generate: 'ssr', hydratable: true });
-  const exports = await evaluateModule(code, imports ?? await defaultSsrImports(code), 'mx-ssr/skeleton.js');
-  return (exports.render as () => string)();
-}
-
 /** The SSR module renders the authored document once, with one hydration context. */
 function ssrSource(document: string, flow: CompiledDataflow | null): string {
   return `${document}import { renderToString as $renderToString } from 'solid-js/web';
@@ -412,8 +404,6 @@ export interface BuildOptions {
   values: Record<string, Scalar>;
   /** The browser modules' store (served at `/islands/d/<sha>.js`). */
   store?: ModuleStore;
-  /** Injectable content-addressed resource store for browser-only DOM factories. */
-  templateStore?: ReturnType<typeof createTemplateResourceStore>;
   /** The SSR modules' store (never served; `createSsrModuleStore`). */
   ssrStore?: ModuleStore;
   /** The server import table (tests); the default is this process's Solid and the shared build's server half. */
@@ -443,12 +433,12 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const browserWithData = flowIndex !== undefined && !sources.moduleData?.length
     ? `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${browserIslands}`
     : browserIslands;
-  const ssrCode = await ssrModuleCode(sources.skeleton, '', options.flow, sources.staticTexts);
+  const ssrCode = await ssrModuleCode(sources.skeleton, options.flow, sources.staticTexts);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const rendered = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
   if (!sources.islandRefs.length && !options.boot) return { html: rendered.replace(/\sdata-hk="[^"]*"/g, ''), module: null, ssr: null, templateBrBytes: null };
   const store = options.store ?? createModuleStore();
-  const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex, sources.staticTexts);
+  const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
   const html = rendered + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
   if (!sources.islandRefs.length) return { html, module: await store.put(new TextEncoder().encode(browser.code), browser.imports), ssr: null, templateBrBytes: null };
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
@@ -460,7 +450,7 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */
-export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number, staticTexts: Readonly<Record<string, string>> = {}): Promise<{ code: string; imports: string[]; templates: Map<string, string>; literals: string[]; literalKey: string }> {
+export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number): Promise<{ code: string; imports: string[]; literals: string[]; literalKey: string }> {
   const direct = new Set<string>();
   // `moduleName: '@mx/rt'`: Solid's DOM helpers come from the runtime's one import surface, never
   // from the whole `solid-js/web` chunk.
@@ -473,14 +463,12 @@ export async function browserModuleCode(islands: string, build: CompilerBuild, f
       return url;
     },
   });
-  const extracted = await externalizeDomCode(compiled);
-  for (const [key, markup] of extracted.templates) extracted.templates.set(key, restoreStaticText(markup, staticTexts));
-  return { code: extracted.code, templates: extracted.templates, literals: extracted.literals, literalKey: extracted.key, imports: closureOf(build, [...direct].sort()) };
+  const extracted = await externalizeLiterals(compiled);
+  return { code: extracted.code, literals: extracted.literals, literalKey: extracted.key, imports: closureOf(build, [...direct].sort()) };
 }
 
-/** Extract templates and author literals while Babel holds a single parsed AST. */
-async function externalizeDomCode(source: string): Promise<{ code: string; templates: Map<string, string>; literals: string[]; key: string }> {
-  const templates = new Map<string, string>();
+/** Keep author literals in the page's inert JSON carrier, outside executable browser bytes. */
+async function externalizeLiterals(source: string): Promise<{ code: string; literals: string[]; key: string }> {
   const literals: string[] = [];
   const indexes = new Map<string, number>();
   const out = await transformAsync(source, {
@@ -511,12 +499,12 @@ async function externalizeDomCode(source: string): Promise<{ code: string; templ
   });
   if (!out?.code) throw new Error('compile: document extraction produced nothing');
   const key = contentSha(JSON.stringify(literals));
-  return { code: literals.length ? `const $mxL=JSON.parse(document.querySelector('script[data-mx-island-literals="${key}"]').textContent);\n${out.code}` : out.code, templates, literals, key };
+  return { code: literals.length ? `const $mxL=JSON.parse(document.querySelector('script[data-mx-island-literals="${key}"]').textContent);\n${out.code}` : out.code, literals, key };
 }
 
-/** The per-document SSR module: the islands compiled for the server and `render(data)` over the skeleton's HTML. */
-export const ssrModuleCode = async (islands: string, _skeletonHtml: string, flow: CompiledDataflow | null, staticTexts: Readonly<Record<string, string>> = {}): Promise<string> => {
-  const code = await transformSolid(ssrSource(islands, flow), { generate: 'ssr', hydratable: true });
+/** The per-document SSR module renders the same generated tree as the browser. */
+export const ssrModuleCode = async (document: string, flow: CompiledDataflow | null, staticTexts: Readonly<Record<string, string>> = {}): Promise<string> => {
+  const code = await transformSolid(ssrSource(document, flow), { generate: 'ssr', hydratable: true });
   return restoreStaticText(code, staticTexts, true);
 };
 

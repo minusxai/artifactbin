@@ -6,6 +6,9 @@ import { createDataflowStore } from '@/lib/story-runtime/store';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { Component } from 'solid-js';
+import { brotliCompressSync } from 'node:zlib';
+import { pathToFileURL } from 'node:url';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const fixture = (source: string): { html: string; browserCode: string; flow: CompiledDataflow } => JSON.parse(execFileSync(
@@ -47,5 +50,46 @@ describe('one tree SSR to hydrate', () => {
     dispose?.();
     expect(host.querySelector('#heading')).toBe(heading);
     runtime.dispose(); host.remove(); warnings.mockRestore(); errors.mockRestore();
+  });
+
+  it('hydrates shipped Tabs with 1,100 static rows and a sibling live Switch', async () => {
+    const rows = Array.from({ length: 1_100 }, (_, i) => `<p id="row-${i}">Static row ${i}</p>`).join('');
+    const server = fixture(`<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p id="first">First panel</p></TabsContent><TabsContent value="two">${rows}</TabsContent></Tabs><Switch label="Live switch" checked="$flag" id="live-switch" />`);
+    const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
+    const last = host.querySelector('#row-1099');
+    const first = host.querySelector('#first');
+    const keys = [...host.querySelectorAll('[data-hk]')].map(el => el.getAttribute('data-hk'));
+    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const manifest = loadCompilerBuild().manifest;
+    const shipped = async (specifier: string): Promise<Record<string, unknown>> => {
+      const file = path.resolve(ROOT, 'services/app/public', manifest[specifier]!.slice(1));
+      return import(/* @vite-ignore */ pathToFileURL(file).href) as Promise<Record<string, unknown>>;
+    };
+    const [shippedRt, tabs, controls] = await Promise.all([shipped('@mx/rt'), shipped('@mx/kit/tabs'), shipped('@mx/kit/controls')]);
+    let tree: Component | null = null;
+    await evaluateModule(server.browserCode, spec => {
+      if (spec.includes('/rt-')) return shippedRt;
+      if (spec.includes('/kit-tabs-')) return tabs;
+      if (spec.includes('/kit-controls-')) return controls;
+      if (spec.includes('/boot-')) return { boot: (module: { TREE: Component }) => { tree = module.TREE; } };
+      throw new Error(`unexpected import ${spec}`);
+    }, 'test/one-tree-kit.js');
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: { flag: false } } }, shippedRt.createDataflowStore as typeof createDataflowStore);
+    const dispose = (shippedRt.hydrateDocument as typeof rt.hydrateDocument)(tree!, runtime.context, host);
+    expect(dispose).toBeTypeOf('function');
+    expect(host.querySelector('#row-1099')).toBe(last);
+    expect(host.querySelector('#first')).toBe(first);
+    expect([...host.querySelectorAll('[data-hk]')].map(el => el.getAttribute('data-hk'))).toEqual(keys);
+    host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]!.click();
+    expect(host.querySelector('#row-1099')).toBe(last);
+    expect(last?.closest('[role="tabpanel"]')?.hasAttribute('hidden')).toBe(false);
+    const toggle = host.querySelector<HTMLElement>('[role="switch"]')!;
+    toggle.click();
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(brotliCompressSync(server.browserCode).byteLength).toBeLessThan(5 * 1024);
+    expect(warnings).not.toHaveBeenCalled();
+    expect(errors).not.toHaveBeenCalled();
+    dispose?.(); runtime.dispose(); host.remove(); warnings.mockRestore(); errors.mockRestore();
   });
 });

@@ -65,7 +65,7 @@ describe('compilePage', () => {
     const input = await inputOf(`<Tabs defaultValue="one"><TabsContent value="one"><p>${hostile.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;')}</p></TabsContent></Tabs>`);
     const generated = generate(input);
     // One-tree static content is server owned; the deleted browser template resource has no assertion here.
-    const browser = await browserModuleCode(generated.browserIslands, loadCompilerBuild(), null, undefined, generated.staticTexts);
+    const browser = await browserModuleCode(generated.browserIslands, loadCompilerBuild());
     expect(browser.code).not.toContain('alert(1)');
     const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: null, values: {} });
     expect(dom(built.html).textContent).toContain(hostile);
@@ -574,7 +574,7 @@ describe('the generated modules, compiled', () => {
     const verdict = await structureIndependent(async (doc) => {
       const generated = generate(doc);
       // The deleted standalone skeleton render is replaced by the one-tree SSR source.
-      return { skeleton: await ssrModuleCode(generated.skeleton, '', doc.flow), islands: (await browserModuleCode(generated.browserIslands, build)).code };
+      return { skeleton: await ssrModuleCode(generated.skeleton, doc.flow), islands: (await browserModuleCode(generated.browserIslands, build)).code };
     });
     expect(verdict).toEqual({ skeletonIndependent: true, islandsIndependent: true, leaked: [] });
   });
