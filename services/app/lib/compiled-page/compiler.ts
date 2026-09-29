@@ -53,6 +53,7 @@ import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileI
 import { linkHintsOf } from './links';
 import { planOf } from './plan';
 import { buildDocumentModules } from './bundle.server';
+import { contentSha } from './speculation';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -179,7 +180,11 @@ export function domAttrs(tag: string, props: Props): Attr[] {
   }
   return attrs;
 }
+// Keep literal DOM attributes in JSX so Solid can optimize static elements.
+// Entity encoding keeps author text inert in generated source.
+const jsxLiteral = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/\u2028/g, '&#8232;').replace(/\u2029/g, '&#8233;');
 const attrsJsx = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}={${lit(v)}}`).join('');
+const staticAttrsJsx = (attrs: Attr[]): string => attrs.map(([n, v]) => ` ${safeAttr(n)}="${jsxLiteral(v)}"`).join('');
 
 interface P5Node { nodeName: string; tagName?: string; value?: string; attrs?: Array<{ name: string; value: string; prefix?: string }>; childNodes?: P5Node[]; content?: { childNodes: P5Node[] } }
 
@@ -194,12 +199,12 @@ export function htmlToJsx(html: string, svg = false, options: HtmlToJsxOptions =
   const frag = parseFragment(svg ? `<svg>${html}</svg>` : html) as unknown as P5Node;
   const nodes = svg ? frag.childNodes?.[0]?.childNodes ?? [] : frag.childNodes ?? [];
   const walk = (n: P5Node): string => {
-    if (n.nodeName === '#text') return n.value ? `{${lit(n.value)}}` : '';
+    if (n.nodeName === '#text') return n.value ? (/\r|\n/.test(n.value) ? `{${lit(n.value)}}` : jsxLiteral(n.value)) : '';
     if (n.nodeName === '#comment' || !n.tagName) return '';
     if (options.hole && n.tagName === 'template' && n.attrs?.some((a) => a.name === HOLE_ATTR)) return options.hole();
     const tag = safeTag(n.tagName);
     const pairs = (n.attrs ?? []).map((a): Attr => [safeAttr(a.prefix ? `${a.prefix}:${a.name}` : a.name), a.value]);
-    const attrs = options.attrs ? options.attrs(pairs) : pairs.map(([name, value]) => ` ${name}={${lit(value)}}`).join('');
+    const attrs = options.attrs ? options.attrs(pairs) : staticAttrsJsx(pairs);
     const kids = ((n.tagName === 'template' ? n.content?.childNodes : n.childNodes) ?? []).map(walk).join('');
     return VOID.test(tag) ? `<${tag}${attrs} />` : `<${tag}${attrs}>${kids}</${tag}>`;
   };
@@ -273,6 +278,7 @@ interface Ctx {
 export interface Generated extends GeneratedSources {
   browserIslands: string;
   moduleData: string[];
+  staticTexts: Record<string, string>;
   islandRefs: IslandRef[];
   kit: { skeleton: string[]; islands: string[] };
   reactStatic: string[];
@@ -298,6 +304,13 @@ export function generate(input: GenerateInput): Generated {
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
   const statics: string[] = [];
+  const staticTexts: Record<string, string> = {};
+  const staticText = (value: string): string => {
+    if (value.length <= 1024) return jsxLiteral(value);
+    const marker = `MXSTATIC${contentSha(value)}${Object.keys(staticTexts).length}END`;
+    staticTexts[marker] = value;
+    return marker;
+  };
   const rowIconNames = new Set<string>();
   const visitRowIcons = (node: JsxNode): void => {
     if (!isElement(node)) return;
@@ -437,7 +450,7 @@ export function generate(input: GenerateInput): Generated {
   function emit(node: JsxNode, path: string, mode: Mode, ctx: Ctx): string {
     if (node.type === 'text') {
       if (ctx.row && /\{\s*\$_row\./.test(node.value)) return `{rt.sub(${lit(node.value)}, ${ctx.row})}`;
-      return node.value === '' ? '' : `{${lit(node.value)}}`;
+      return node.value === '' ? '' : (node.value.length <= 1024 && /\r|\n/.test(node.value) ? `{${lit(node.value)}}` : staticText(node.value));
     }
     if (node.type === 'expression') {
       if (!node.value.static) {
@@ -587,7 +600,7 @@ export function generate(input: GenerateInput): Generated {
     const booleanJsx = reactive.map((a) => ` {...(rt.expr(${json(a.value.static ? null : a.value.reactive)}, ${ctx.row ?? 'undefined'}) ? { ${safeAttr(a.name)}: true } : {})}`).join('');
     if (ctx.row && lower === 'img') (mode === 'static' ? kitUsed.skeleton : kitUsed.islands).add('rowImageAttrs');
     const rowAttrs = ctx.row ? `${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})` : '';
-    const open = ctx.row ? `<${tag} {...${lower === 'img' ? `rowImageAttrs(${rowAttrs})` : rowAttrs}}${booleanJsx}>` : `<${tag}${attrsJsx(attrs)}${booleanJsx}>`;
+    const open = ctx.row ? `<${tag} {...${lower === 'img' ? `rowImageAttrs(${rowAttrs})` : rowAttrs}}${booleanJsx}>` : `<${tag}${staticAttrsJsx(attrs)}${booleanJsx}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     return `${open}${children(inner)}</${tag}>`;
   }
@@ -748,6 +761,7 @@ export function generate(input: GenerateInput): Generated {
     partial: [...partial].sort(),
     behaviors: deck ? [DECK_BEHAVIOR] : [],
     statics,
+    staticTexts,
   };
 }
 
