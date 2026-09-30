@@ -13,7 +13,7 @@
  */
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {escapeHtml} from './story/reader-chrome';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import {AGENT_HELP_TITLE,type AgentDiscovery} from './agent-discovery-tags';
 export {AGENT_HELP_TITLE,agentDiscovery,agentDiscoveryHead,type AgentDiscovery} from './agent-discovery-tags';
 const BASE_TAG='[[ base ]]';

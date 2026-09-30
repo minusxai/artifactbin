@@ -16,6 +16,7 @@
  * packages are browser dependencies and the production server does not install them.
  * Read lazily, on the first document that draws an icon. Guarded by
  * lib/story/__tests__/icon-glyphs.test.tsx. */
+import { escapeAttr } from '@artifactbin/utils/escape';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { JsxNode } from '@/lib/jsx';
@@ -26,7 +27,6 @@ type LucideIcon = { name: string; nodes: Array<[string, Record<string, string>]>
 let icons: Record<string, LucideIcon> | null = null;
 const lucideIcons = (): Record<string, LucideIcon> =>
   (icons ??= JSON.parse(readFileSync(path.join(process.cwd(), 'lib/build-assets/lucide-icons.json'), 'utf8')) as Record<string, LucideIcon>);
-const escapeAttribute = (value: string): string => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** Is this spelling one of lucide's glyphs (aliases included) — the publish-time icon check. */
 export function isLucideIcon(name: string): boolean {
@@ -55,7 +55,7 @@ function resolveGlyph(name: string): IconGlyph {
   const { name: resolvedName, nodes } = sourceFor(key);
   const canonical = resolvedName.replace(/-(?=\d)/g, '');
   const cls = [`lucide-${canonical}`, ...(canonical === resolvedName ? [] : [`lucide-${resolvedName}`])].join(' ');
-  const inner = nodes.map(([tag, attrs]) => `<${tag}${Object.entries(attrs).filter(([attr]) => attr !== 'key').map(([attr, value]) => ` ${attr}="${escapeAttribute(value)}"`).join('')}></${tag}>`).join('');
+  const inner = nodes.map(([tag, attrs]) => `<${tag}${Object.entries(attrs).filter(([attr]) => attr !== 'key').map(([attr, value]) => ` ${attr}="${escapeAttr(value)}"`).join('')}></${tag}>`).join('');
   const glyph: IconGlyph = { cls, inner };
   resolved.set(key, glyph);
   return glyph;

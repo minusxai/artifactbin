@@ -28,6 +28,7 @@
  * content, a conditional branch, and the closed parts of a disclosure (a tab
  * panel, an accordion or dialog body).
  */
+import { escapeHtml } from '@artifactbin/utils/escape';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { STORY_FAMILY_ASSETS, type StoryFontAsset } from '@/lib/data/story/story-fonts';
 import { STORY_THEMES } from '@/lib/data/story/story-themes';
@@ -180,13 +181,11 @@ export function readerChromeFonts(input: Omit<FirstScreenFontsInput, 'nodes'>): 
   return facesFor(['mono:normal'], input);
 }
 
-const escapeAttr = (value: string): string => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
 /**
  * The head tags for font preloads. `crossorigin` is load-bearing: a font is
  * always fetched in CORS mode, and a preload without it warms an entry the
  * real request cannot use — the font would download twice.
  */
 export function fontPreloadTags(urls: readonly string[], highPriority = false): string {
-  return [...new Set(urls)].map((url) => `<link ${highPriority ? 'fetchpriority="high" ' : ''}rel="preload" href="${escapeAttr(url)}" as="font" type="font/woff2" crossorigin>`).join('');
+  return [...new Set(urls)].map((url) => `<link ${highPriority ? 'fetchpriority="high" ' : ''}rel="preload" href="${escapeHtml(url)}" as="font" type="font/woff2" crossorigin>`).join('');
 }

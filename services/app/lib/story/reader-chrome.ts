@@ -41,6 +41,7 @@
  * it at all.
  */
 
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { visibilityIconPaths, sharingIconFor } from '@/lib/visibility-icons';
 import type { Visibility } from '@/lib/artifacts';
 import { REPO_URL } from '@/lib/repo';
@@ -167,16 +168,6 @@ export const READER_CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
 
 /** `data-mx-reader-state` values: what the policy last decided. */
 export type ReaderChromeState = 'hidden' | 'shown';
-
-/**
- * THE ONE ESCAPE RULE the served document is assembled with — shared with
- * lib/story/document rather than copied, so the chrome and the head can never
- * disagree about what a hostile handle or title turns into. `<`, `>`, `&` and
- * `"` cover both positions this module writes into (text and a quoted
- * attribute); nothing here is ever written unquoted.
- */
-export const escapeHtml = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /*
  * The glyphs, inline. Lucide's shapes at lucide's stroke, drawn here rather

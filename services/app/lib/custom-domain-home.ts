@@ -18,7 +18,7 @@
  * render the same markup, less the follow header and the toolbar (script the
  * domain page cannot run).
  */
-import { escapeHtml } from '@/lib/story/reader-chrome';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styles';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
 import { personFaceBackground, personInitial } from '@/lib/person-face';
@@ -50,7 +50,7 @@ export interface DomainHomeInput {
   profile: ProfileListingData | null;
   /** Where the footer's "artifactbin" points: the owner's profile on the app. */
   footerHref: string;
-  /** The stylesheets the app page links, in its order (web/index.html, as served). */
+  /** The stylesheets the app page links, in its order (web/solid-app.html, as served). */
   stylesheets: string[];
 }
 
