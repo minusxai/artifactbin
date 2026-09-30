@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom } from '../morph/engine';
+import { disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom, sameDataflow } from '../morph/engine';
 import { ISLAND_DOCUMENT_KEY } from '../contract';
 
 it('updates compiled prose while keeping an unchanged live island element', () => {
@@ -105,5 +105,29 @@ it('keeps compiled static prose and newly hydrated components during a one-tree 
   expect(hydrate).toHaveBeenCalledWith(entries[0]);
   expect(root.querySelector('#f6')?.textContent).toBe('EDITED IN PLACE');
   expect(root.querySelector('#chart svg.marks')).not.toBeNull();
+  root.remove();
+});
+
+it('keeps the running store when a version declares the same data at other source offsets (charts keep their rows)', async () => {
+  const query = { name: 'q', engine: 'sqlite', sql: 'select 1 as n', params: [], reads: { imports: [], queries: [], values: [], builtins: [] }, columns: [{ name: 'n', type: 'number' }] };
+  const draftFlow = { imports: [], values: [], queries: [query], mutations: [] } as any;
+  const savedFlow = { imports: [], values: [], queries: [{ start: 169, end: 241, ...query }], mutations: [] } as any;
+  expect(sameDataflow(draftFlow, savedFlow)).toBe(true);
+  expect(sameDataflow(draftFlow, { ...savedFlow, queries: [{ ...query, sql: 'select 2 as n' }] })).toBe(false);
+
+  const root = document.createElement('div');
+  root.setAttribute('data-mx-inline-story', '');
+  root.innerHTML = '<div data-mx-ast="1" data-hk="s0-0">chart</div>';
+  document.body.append(root);
+  const store = { flow: draftFlow, replaceFlow: vi.fn() };
+  const seam = { islands: new Map(), hydrate: vi.fn(), modules: new WeakMap() } as any;
+  (root as any)[ISLAND_DOCUMENT_KEY] = { morph: seam, store, mode: () => 'edit' };
+  const preview = document.implementation.createHTMLDocument();
+  preview.body.innerHTML = '<script type="module" src="/islands/d/saved.js"></script>';
+  const entries = [['s0-', () => null, 'chart']] as const;
+  await hydrateDraftIslands(window, root, preview, new Set(), new Set(), async () => ({ ISLANDS: entries, FLOW: savedFlow }), { ISLANDS: entries, FLOW: savedFlow } as any);
+  expect(store.replaceFlow).not.toHaveBeenCalled();
+  await hydrateDraftIslands(window, root, preview, new Set(), new Set(), async () => null, { ISLANDS: entries, FLOW: { ...savedFlow, queries: [{ ...query, sql: 'select 2 as n' }] } } as any);
+  expect(store.replaceFlow).toHaveBeenCalledTimes(1);
   root.remove();
 });

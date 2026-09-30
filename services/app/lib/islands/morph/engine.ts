@@ -33,6 +33,7 @@ import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { ISLAND_DOCUMENT_KEY, type IslandHost } from '../contract';
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
+import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 
 const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 const LIVE_ID_ATTR = 'data-mx-live-id';
@@ -45,6 +46,22 @@ const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-webfonts', '
 /** How often a version the server is still compiling is asked for again, and how long apart. */
 const NOT_READY_RETRIES = 6;
 const NOT_READY_DELAY_MS = 250;
+
+/**
+ * Whether two versions declare the same data: the same values, queries and mutations, whatever SOURCE OFFSETS
+ * the compiler recorded for them (`start`/`end`). An editor draft's compile carries none and a saved version's
+ * does, and replacing the store's declarations over offsets alone re-runs every query: charts empty out while
+ * their rows come back.
+ */
+export function sameDataflow(a: CompiledDataflow | null | undefined, b: CompiledDataflow | null | undefined): boolean {
+  if (!a || !b) return a === b;
+  const key = (flow: CompiledDataflow) => JSON.stringify({
+    ...flow,
+    queries: flow.queries.map(({ start: _start, end: _end, ...query }) => query),
+    mutations: flow.mutations.map(({ start: _start, end: _end, ...mutation }) => mutation),
+  });
+  return key(a) === key(b);
+}
 
 /** A new version this engine will not draw in place: the caller reloads. */
 export class MorphRefused extends Error {}
@@ -155,7 +172,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
     seam.islands.clear();
     for (const [rid, oldRid] of keep) { const island = byOld.get(oldRid); if (island) seam.islands.set(rid, island); }
     if (incoming) {
-      if (incoming.FLOW && store && JSON.stringify(incoming.FLOW) !== JSON.stringify(store.flow)) store.replaceFlow({ flow: incoming.FLOW });
+      if (incoming.FLOW && store && !sameDataflow(incoming.FLOW, store.flow)) store.replaceFlow({ flow: incoming.FLOW });
       for (const entry of incoming.ISLANDS) if (!keep.has(entry[0])) seam.hydrate(entry);
     }
   } else if (newModuleHref) {
@@ -226,6 +243,8 @@ const moduleScript = (doc: Document): HTMLScriptElement | null =>
   [...doc.querySelectorAll<HTMLScriptElement>('script[type="module"][src]')]
     .find((script) => script.getAttribute('src')!.startsWith(`${DOCUMENT_MODULE_PATH}/`)) ?? null;
 const moduleUrl = (doc: Document): string | null => moduleScript(doc)?.getAttribute('src') ?? null;
+/** The per-document module a page (or a draft's compile) runs: content-addressed, so equal URLs run the same code. */
+export const versionModuleUrl = moduleUrl;
 
 /** The shared boot chunk a page's module runs on (its preload), which names the island build. */
 const bootLink = (doc: Document): HTMLLinkElement | null =>
@@ -526,7 +545,7 @@ export async function hydrateDraftIslands(
   if (!seam) return;
   const module = loaded !== undefined ? loaded : await loadDraftModule(win, root, preview, importModule);
   if (!module) return;
-  if (module.FLOW && running.store && JSON.stringify(module.FLOW) !== JSON.stringify(running.store.flow))
+  if (module.FLOW && running.store && !sameDataflow(module.FLOW, running.store.flow))
     running.store.replaceFlow({ flow: module.FLOW });
   for (const entry of module.ISLANDS) {
     const element = unitsOf(root, [entry[0]]).get(entry[0])?.[0];

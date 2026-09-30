@@ -140,6 +140,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
   };
   /** The authored tree the page shows now: what the next draw decides stability against. */
   let lastDrawn: JsxNode[] | null = null;
+  /** What the last draw put on screen, hydrated and running: its compiled module and the source it was compiled from. */
+  let shown: { module: string | null; source: string | null } | null = null;
   let quietDraftTimer: number | null = null;
   let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string | null; sequence: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
@@ -196,7 +198,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const drawDraft = async (allowFocused: boolean) => {
     const pending = pendingDraft;
     if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !drafting() || pending.sequence !== draftSequence) return;
-    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom }, { storyUpdateParts }] = await Promise.all([
+    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdateParts }] = await Promise.all([
       import('@/lib/islands/morph/engine'), import('@/lib/story/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
@@ -224,6 +226,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module);
     nodes = pending.nodes;
     lastDrawn = after;
+    shown = { module: versionModuleUrl(pending.document), source: pending.source };
     drawnSequence = pending.sequence;
     edit?.setNodes(nodes);
     await edit?.mountCompiledDom();
@@ -265,17 +268,29 @@ export function createIslandController({ win, root, islands, nodes: served, port
         if (!response.ok) throw new Error(`story fragment answered ${response.status}`);
         next = new DOMParser().parseFromString(await response.text(), 'text/html');
       }
-      const { adoptVersionRecord, readRestoreBlocker } = await import('@/lib/islands/morph/engine');
+      const { adoptVersionRecord, readRestoreBlocker, versionModuleUrl } = await import('@/lib/islands/morph/engine');
       if (!current()) return;
       const blocked = readRestoreBlocker(root, win.document, next);
       if (blocked) throw new Error(blocked);
       if (!current()) return;
-      const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]')!;
-      pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: nextNodes ?? nodes, source: restoreSource, sequence };
-      await applyDraft();
       while (drawing) await drawing;
       if (!current()) return;
-      if (drawnSequence !== sequence) throw new Error('the saved version was not drawn');
+      // The last draft drawn IS the saved version (compiled from the same source; the two compiles' modules differ
+      // only in what they record, not in what they draw) and its islands run already: nothing is drawn again, so no
+      // chart is re-hydrated and none redraws.
+      const alreadyShown = !!shown && shown.source !== null && shown.source === restoreSource && !!shown.module === !!versionModuleUrl(next);
+      if (alreadyShown) {
+        if (nextNodes) nodes = nextNodes;
+        annotate?.setNodes(nodes);
+        selection?.setNodes(nodes);
+      } else {
+        const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]')!;
+        pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: nextNodes ?? nodes, source: restoreSource, sequence };
+        await applyDraft();
+        while (drawing) await drawing;
+        if (!current()) return;
+        if (drawnSequence !== sequence) throw new Error('the saved version was not drawn');
+      }
       adoptVersionRecord(win.document, next);
       // The version's compiled colour never replaces the reader's own choice (as the reader's morph keeps it).
       if (mode) { root.classList.toggle('dark', mode === 'dark'); root.classList.toggle('light', mode !== 'dark'); }
