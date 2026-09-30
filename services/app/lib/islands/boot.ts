@@ -210,13 +210,20 @@ export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDat
   let stopLive = () => {};
   const liveId = doc.body?.getAttribute(LIVE_ID_ATTR);
   const liveEdit = doc.body?.getAttribute(LIVE_EDIT_ATTR);
-  if (win.parent === win && typeof (win as { EventSource?: unknown }).EventSource === 'function' && liveId && liveEdit) {
+  const holdsLive = win.parent === win && typeof (win as { EventSource?: unknown }).EventSource === 'function' && !!liveId && !!liveEdit;
+  /** Open the stream from the version the page shows now (its `<body>` names it), picking up at `since`. */
+  const openLive = (since: string | null) => {
+    const edit = doc.body?.getAttribute(LIVE_EDIT_ATTR);
+    if (!holdsLive || !liveId || !edit) return;
+    void import('./live').then(({ startIslandLive }) => {
+      if (!disposed && mode === 'read') { stopLive(); stopLive = startIslandLive(win, liveId, edit, since); }
+    }).catch((error: unknown) => console.error('[islands] live failed', error));
+  };
+  if (holdsLive) {
     if (store) hooks[STORY_DATA_HOOK] = (datasets: string[]) => store.invalidateDatasets(datasets);
     // From the snapshot's marks: a dataset written since the snapshot was taken re-runs at once (live.ts).
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
-    void import('./live').then(({ startIslandLive }) => {
-      if (!disposed && mode === 'read') stopLive = startIslandLive(win, liveId, liveEdit, data.results?.since ?? null);
-    }).catch((error: unknown) => console.error('[islands] live failed', error));
+    openLive(data.results?.since ?? null);
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
   let stopUrl = () => {};
@@ -242,7 +249,29 @@ export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDat
     context,
     mode: () => mode,
     setMode: (next) => {
-      if (disposed || next === mode || next === 'read') return;
+      if (disposed || next === mode) return;
+      if (next === 'read') {
+        /*
+         * Back to reading IN PLACE (the page's controller has already drawn the saved version on this
+         * context, lib/story-runtime/island-controller `restoreRead`, and synced the page's records): the
+         * document's stream, the public API and the version's author script resume as boot started them.
+         * The stream opens from the snapshot's marks, so a dataset written while editing re-runs at once.
+         */
+        mode = 'read';
+        openLive(data.results?.since ?? null);
+        if (store && win.parent === win) void import('./mx-host').then(({ publicMxFor }) => {
+          if (disposed || mode !== 'read') return;
+          uninstallMx();
+          const api = publicMxFor(store);
+          const host = root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void };
+          host[PUBLIC_MX_KEY] = () => { if (win.mx === api) delete win.mx; delete host[PUBLIC_MX_KEY]; };
+          win.mx = api;
+        }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
+        const script = readPageData(doc).authorScript;
+        void restartAuthor(typeof script === 'string' && script ? script : null).catch((error: unknown) => console.error('[islands] author host failed', error));
+        emit({ type: 'mode', mode });
+        return;
+      }
       stopAuthor();
       uninstallMx();
       // The interpreter owns edits and their live updates. A version ping from this compiled

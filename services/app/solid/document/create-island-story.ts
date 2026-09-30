@@ -39,8 +39,11 @@ export interface IslandStoryOptions {
 export interface IslandStory {
   controller: Accessor<StoryController | null>;
   nonce: Accessor<string | null>;
-  /** Leave edit mode in the document (the editor turns it on itself, after it subscribes). */
-  stopEditing(): void;
+  /**
+   * Leave edit mode in the document (the editor turns it on itself, after it subscribes). Settles once the page
+   * reads again in place (the controller's `restored`); a rejection means it cannot, and the caller reloads.
+   */
+  stopEditing(): Promise<void>;
 }
 
 export function createIslandStory(options: IslandStoryOptions): IslandStory {
@@ -73,6 +76,6 @@ export function createIslandStory(options: IslandStoryOptions): IslandStory {
   return {
     controller: current,
     nonce,
-    stopEditing: () => controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false }),
+    stopEditing: () => { controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false }); return controller.restored(); },
   };
 }

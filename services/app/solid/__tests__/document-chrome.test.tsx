@@ -6,13 +6,15 @@ import { within } from '@testing-library/dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 let mockRole = 'commenter';
-vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, surface: { id: 'doc12345', title: 'A copy', format: 'markup', version: 3, author: { forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+let mockTitle: string | null = 'A copy';
+vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, surface: { id: 'doc12345', title: mockTitle, format: 'markup', version: 3, author: { forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/web/initial-story', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/web/initial-story')>()), adoptInitialStory: () => null }));
 
-import { DocumentPage, readerProvenancePath } from '../pages/Document';
+import { DocumentPage, markChromeEditing, readerProvenancePath } from '../pages/Document';
 
 beforeEach(() => {
   mockRole = 'commenter';
+  mockTitle = 'A copy';
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
@@ -105,6 +107,39 @@ it('an owner opens edit mode on #edit: the editor toolbar, the pinned rail and t
   expect(chrome.querySelector<HTMLElement>('[data-mx-reader-action="like"]')!.hidden).toBe(true);
   expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('A copy');
   expect(screen.getByLabelText('Artifact viewport').style.paddingTop).toBe('88px');
+});
+
+it('edit mode names a document with no typed title as the reader did: its first heading, not "untitled"', async () => {
+  mockRole = 'owner';
+  mockTitle = null;
+  const source = '<div><h1 id="title">Quarterly field report</h1><p>hi</p></div>';
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+    const url = String(input);
+    if (url.includes('?part=editor')) return Response.json({ editId: 'e1', version: 3, source, compiledCss: null, authorCss: null });
+    if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
+    if (url.includes('/api/my/artifacts/doc12345')) return Response.json({ id: 'doc12345', title: null, markup: source, theme: null, version: 3, edit_id: 'e1' });
+    return Response.json({});
+  }));
+  const { chrome } = mount('/a/doc#edit', '<button data-mx-reader-action="edit" aria-label="Edit"></button><span class="mx-reader-title">Quarterly field report</span>');
+  expect(await trusted(1).findByRole('button', { name: 'Exit edit mode' }, { timeout: 4000 })).toBeInTheDocument();
+  const field = screen.getByRole('textbox', { name: 'Title' });
+  expect(field).toHaveValue('Quarterly field report');
+  expect(chrome.querySelector('.mx-reader-title')).toHaveAttribute('data-mx-title-editor');
+});
+
+it('leaving edit mode puts the name the editor last showed back in the breadcrumb', () => {
+  const chrome = document.createElement('div');
+  chrome.innerHTML = '<button data-mx-reader-action="edit" aria-label="Edit"></button><span class="mx-reader-title">Old name</span>';
+  const slot = markChromeEditing(chrome, true, true, null);
+  expect(slot).not.toBeNull();
+  expect(slot!.textContent).toBe('');
+  markChromeEditing(chrome, false, false, 'Renamed report');
+  expect(chrome.querySelector('.mx-reader-title')).toHaveTextContent('Renamed report');
+  expect(chrome.querySelector('.mx-reader-title')).not.toHaveAttribute('data-mx-title-editor');
+  // No title from the editor (it never opened): the served text stays.
+  markChromeEditing(chrome, true, true, null);
+  markChromeEditing(chrome, false, false, null);
+  expect(chrome.querySelector('.mx-reader-title')).toHaveTextContent('Renamed report');
 });
 
 it('a viewer asking for #edit reads the document', () => {

@@ -13,6 +13,7 @@
  *          `mx:document`, which the controller previews through the server compiler.
  */
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, For, Show, untrack, type JSX } from 'solid-js';
+import { firstHeadingTitle } from '@/lib/story/title';
 import { Portal } from 'solid-js/web';
 import { useBeforeLeave } from '@solidjs/router';
 import ChartColumn from 'lucide-solid/icons/chart-column';
@@ -140,13 +141,22 @@ export interface InPlaceEditorProps {
   onEditorMount?: () => void;
   /** The document is editable, or shown in a view that needs no editing session (code, a preview). */
   onEditorReady?: () => void;
+  /** The name the title field shows (the typed title, else the first heading): the breadcrumb's once editing ends. */
+  onTitleChange?: (title: string) => void;
 }
 
 export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const art = props.art;
   const backend = props.backend;
   const runtimeRef = props.runtimeRef;
-  const [title, setTitle] = createSignal(art.title ?? '');
+  /**
+   * The title someone TYPED (null until they do, when the document has none): what the field saves. The field
+   * shows what the reader's breadcrumb shows (lib/story/title `displayTitle`) — the typed title, else the
+   * document's first heading, following it as it is edited — so edit mode names the document as reading did.
+   */
+  const [title, setTitle] = createSignal<string | null>(art.title?.trim() ? art.title : null);
+  const shownTitle = () => title() ?? firstHeadingTitle(source()) ?? '';
+  createEffect(() => props.onTitleChange?.(shownTitle()));
   const [theme, setTheme] = createSignal<StoryThemeName | null>((art.theme as StoryThemeName) ?? null);
   const [colorMode, setColorMode] = createSignal<'light' | 'dark' | null>(art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null);
   const [source, setSource] = createSignal(art.markup ?? '');
@@ -672,9 +682,9 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       onSelect={inPlace.select} onDelete={deleteSelected} onComment={props.onComment} image={imageControls()} backend={formatBackend} />;
   };
   const titleEditor = () => (
-    <input aria-label="Title" value={title()} placeholder="untitled"
+    <input aria-label="Title" value={shownTitle()} placeholder="untitled"
       onInput={(e) => { setTitle(e.currentTarget.value); queue({ title: e.currentTarget.value }); }}
-      style={{ width: `calc(${Math.max(9, Math.min(title().length + 2, 64))}ch + 14px)`, 'max-width': '100%' }}
+      style={{ width: `calc(${Math.max(9, Math.min(shownTitle().length + 2, 64))}ch + 14px)`, 'max-width': '100%' }}
       class="min-w-0 text-ellipsis rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none" />
   );
   const selectionBody = () => <>
@@ -893,7 +903,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       </Show>
       <Show when={mode() === 'design' && !preview() && contentView() === 'pwa' && pwaEnabled()}>
         <aside aria-label="PWA" class="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6" style={{ top: `${barTop() + barH}px`, left: '0px', right: '0px' }}>
-          <PwaSettingsPanel id={art.id} title={title()} source={source()} onChange={commitStructural} onUpload={uploadImage} beforeInstall={() => live.flushForNavigation(() => inPlace.commitPending(true))} />
+          <PwaSettingsPanel id={art.id} title={shownTitle()} source={source()} onChange={commitStructural} onUpload={uploadImage} beforeInstall={() => live.flushForNavigation(() => inPlace.commitPending(true))} />
         </aside>
       </Show>
       <Show when={mode() === 'design' && !preview() && (contentView() === 'files' || contentView() === 'sharing')}>

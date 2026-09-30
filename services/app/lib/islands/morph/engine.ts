@@ -444,6 +444,36 @@ export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableCompon
   morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds, stableElementPaths: stableComponentPaths });
 }
 
+/**
+ * Why the page cannot return to reading `next` (a version's served story) in place, or null when it can: its
+ * module needs a running island document to hydrate on, and the island build it runs on must be this page's.
+ */
+export function readRestoreBlocker(root: HTMLElement, doc: Document, next: Document): string | null {
+  if (!next.querySelector(STORY_ROOT_SELECTOR)) return 'the fragment carries no story';
+  if (!moduleUrl(next)) return null;
+  if (!(root as IslandHost)[ISLAND_DOCUMENT_KEY]) return 'the version has islands and the page runs none';
+  const here = bootUrl(doc), there = bootUrl(next);
+  return here && there && here !== there ? 'the island build changed under the page' : null;
+}
+
+/**
+ * The page now runs `next`, drawn in place of its drafts (lib/story-runtime/island-controller): its sheets,
+ * its data island (the author script, the page's values), its live edit id and its module record become the
+ * page's, so the next version is compared with what is on screen, exactly as after a reader's morph.
+ */
+export function adoptVersionRecord(doc: Document, next: Document): void {
+  syncHead(doc, next, { adopted: true, override: null });
+  const data = next.getElementById(ISLAND_DATA_ID);
+  if (data) {
+    const here = doc.getElementById(ISLAND_DATA_ID);
+    if (here) here.textContent = data.textContent;
+    else doc.body.append(doc.importNode(data, true));
+  }
+  const nextEdit = next.body.getAttribute(LIVE_EDIT_ATTR);
+  if (nextEdit) doc.body.setAttribute(LIVE_EDIT_ATTR, nextEdit);
+  syncModuleRecord(doc, next);
+}
+
 /** Release only changed draft islands before their compiled roots are morphed. */
 export function disposeChangedDraftIslands(root: HTMLElement, stableIds: ReadonlySet<string>, stablePaths: ReadonlySet<string>): void {
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
