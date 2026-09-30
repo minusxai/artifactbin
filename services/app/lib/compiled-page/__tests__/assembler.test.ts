@@ -153,10 +153,12 @@ describe('assembleReaderPage', () => {
     expect(raw.querySelector(`[${SPA_IDLE_ATTR}]`)).toBeNull();
   });
 
-  it('emits the link hints: prefetch links in the head, prerender rules as the Speculation-Rules header, never an inline rules script', () => {
+  it('emits the link hints as speculation rules only, on hover/press intent — never an eager prefetch tag or an inline rules script', () => {
     const page = assembleReaderPage(input());
     const doc = dom(page);
-    expect(doc.querySelector('link[rel="prefetch"][href="/a/Btruq6"]')).toBeTruthy();
+    // Every hint (prefetch's full list, prerender's first few) waits for intent inside the
+    // rules file the Speculation-Rules header names; no <link rel="prefetch"> loads on parse.
+    expect(doc.querySelector('link[rel="prefetch"]')).toBeNull();
     expect(doc.querySelector('script[type="speculationrules"]')).toBeNull();
     expect(page.headers[SPECULATION_RULES_HEADER]).toMatch(/^"\/islands\/s\/[0-9a-f]{16}\.json"$/);
     const none = assembleReaderPage(input({ compiled: compiled({ links: { prefetch: [], prerender: [] } }) }));

@@ -81,7 +81,7 @@ export async function compileDocument(input: CompileDocumentInput): Promise<Comp
  // The assembler names a prerender rule file by its sha in the `Speculation-Rules` header
  // (assembleDocument, below); a real browser fetches that URL, so the file must already be
  // on disk under the same local store `readSpeculationRules` reads back from.
- await createSpeculationRulesStore().put(compiled.links.prerender);
+ await createSpeculationRulesStore().put(compiled.links);
  return compiled;
 }
 

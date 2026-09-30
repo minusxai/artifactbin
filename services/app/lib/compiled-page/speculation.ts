@@ -10,7 +10,7 @@
  * disagree about which bytes a sha names.
  */
 import { createHash } from 'node:crypto';
-import { ISLANDS_PATH, PRERENDER_LIMIT } from './contract';
+import { ISLANDS_PATH, PRERENDER_LIMIT, type LinkHints } from './contract';
 
 /** Where speculation-rule files are served (`/islands/s/<sha>.json`). */
 export const SPECULATION_RULES_PATH = `${ISLANDS_PATH}/s`;
@@ -31,17 +31,24 @@ export const contentSha = (bytes: Uint8Array | string): string => createHash('sh
 export const isNavigable = (url: string): boolean => (url.startsWith('/') && !url.startsWith('//')) || /^https?:\/\/[^/\\]/i.test(url);
 
 /**
- * The rule set for a page's prerender hints, or null when there is nothing to
- * prerender. Root-relative paths and http(s) URLs only (links.ts emits
- * nothing else; this re-checks rather than trusts — a rule file must never
- * carry a `javascript:` or `data:` URL), deduplicated in document order,
- * at most PRERENDER_LIMIT, `eagerness: moderate` so hover or pointer-down
- * triggers them and a page full of links does not prerender them all on load.
+ * The rule set for a page's link hints, or null when there is nothing to
+ * hint. Root-relative paths and http(s) URLs only (links.ts emits nothing
+ * else; this re-checks rather than trusts — a rule file must never carry a
+ * `javascript:` or `data:` URL), deduplicated in document order. Every hint
+ * — `prefetch`'s full list and `prerender`'s first PRERENDER_LIMIT — carries
+ * `eagerness: moderate`, so a 200ms hover or a pointer-down triggers it and
+ * a page full of links fetches none of them just by loading (size target 3):
+ * this is the ONLY way a link hint reaches the network, never an eager
+ * `<link rel="prefetch">` in the head.
  */
-export function speculationRulesOf(prerender: readonly string[]): SpeculationRules | null {
-  const urls = [...new Set(prerender.filter(isNavigable))].slice(0, PRERENDER_LIMIT);
-  if (!urls.length) return null;
-  const text = JSON.stringify({ prerender: [{ source: 'list', urls, eagerness: 'moderate' }] });
+export function speculationRulesOf(links: LinkHints): SpeculationRules | null {
+  const prefetch = [...new Set(links.prefetch.filter(isNavigable))];
+  const prerender = [...new Set(links.prerender.filter(isNavigable))].slice(0, PRERENDER_LIMIT);
+  if (!prefetch.length && !prerender.length) return null;
+  const rules: { prefetch?: unknown[]; prerender?: unknown[] } = {};
+  if (prefetch.length) rules.prefetch = [{ source: 'list', urls: prefetch, eagerness: 'moderate' }];
+  if (prerender.length) rules.prerender = [{ source: 'list', urls: prerender, eagerness: 'moderate' }];
+  const text = JSON.stringify(rules);
   const sha = contentSha(text);
   return { text, sha, url: `${SPECULATION_RULES_PATH}/${sha}.json` };
 }

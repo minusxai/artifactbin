@@ -4,8 +4,9 @@
  * Every `<a href>` in a version that names an artifact on THIS deployment —
  * `/a/<id>`, `/@user/<id>-slug`, or either absolute on one of the deployment's
  * origins — collected at compile, in document order, once each. The assembler
- * turns `prefetch` into `<link rel="prefetch" as="document">` and `prerender`
- * (the first `PRERENDER_LIMIT`) into speculation rules.
+ * (lib/compiled-page/speculation) turns both `prefetch` and `prerender` (the
+ * first `PRERENDER_LIMIT`) into ONE speculation-rules file, `eagerness:
+ * moderate` throughout: nothing here reaches the network just from a page load.
  *
  * Only a static, same-deployment artifact address qualifies: an external host,
  * `mailto:`, `javascript:`, an anchor, a non-artifact path (`/login`, a

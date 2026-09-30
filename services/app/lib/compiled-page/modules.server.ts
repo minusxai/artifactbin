@@ -14,7 +14,7 @@
  * (a 404), never a compile.
  */
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
-import { DOCUMENT_MODULE_PATH, DOCUMENT_MODULE_RE, type ModuleRef, type ModuleStore } from './contract';
+import { DOCUMENT_MODULE_PATH, DOCUMENT_MODULE_RE, type LinkHints, type ModuleRef, type ModuleStore } from './contract';
 import { contentSha, speculationRulesOf, SPECULATION_RULES_CONTENT_TYPE, type SpeculationRules } from './speculation';
 
 /** The object-store prefix of per-document modules (`islands/<sha>`). */
@@ -65,19 +65,19 @@ export function createModuleStore(objects: ObjectStore = objectStore()): ModuleS
 /** The speculation-rule files the assembler names in `Speculation-Rules` (`/islands/s/<sha>.json`). */
 export interface SpeculationRulesStore {
   /**
-   * Write the rule file for these prerender hints (idempotent); null when there
-   * is nothing to prerender. The sha is `speculationRulesOf`'s, so it is the
-   * one the assembler names for the same hints.
+   * Write the rule file for these link hints (idempotent); null when there
+   * are none. The sha is `speculationRulesOf`'s, so it is the one the
+   * assembler names for the same hints.
    */
-  put(prerender: readonly string[]): Promise<SpeculationRules | null>;
+  put(links: LinkHints): Promise<SpeculationRules | null>;
   /** The file's bytes for a sha this store wrote, or null. */
   get(sha: string): Promise<Uint8Array | null>;
 }
 
 export function createSpeculationRulesStore(objects: ObjectStore = objectStore()): SpeculationRulesStore {
   return {
-    async put(prerender) {
-      const rules = speculationRulesOf(prerender);
+    async put(links) {
+      const rules = speculationRulesOf(links);
       if (rules) await objects.put(`${RULES_PREFIX}/${rules.sha}`, rules.text, SPECULATION_RULES_CONTENT_TYPE);
       return rules;
     },

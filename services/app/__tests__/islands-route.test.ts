@@ -46,13 +46,17 @@ describe('the rest of /islands', () => {
   });
 
   it('serves the speculation rules the store wrote, under the URL the assembler names, and nothing else', async () => {
-    const rules = (await createSpeculationRulesStore().put(['/a/Btruq6']))!;
-    expect(rules.url).toBe(speculationRulesOf(['/a/Btruq6'])!.url);
+    const links = { prefetch: ['/a/Btruq6'], prerender: ['/a/Btruq6'] };
+    const rules = (await createSpeculationRulesStore().put(links))!;
+    expect(rules.url).toBe(speculationRulesOf(links)!.url);
     const res = await app.request(rules.url);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/speculationrules+json');
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
-    expect(await res.json()).toEqual({ prerender: [{ source: 'list', urls: ['/a/Btruq6'], eagerness: 'moderate' }] });
+    expect(await res.json()).toEqual({
+      prefetch: [{ source: 'list', urls: ['/a/Btruq6'], eagerness: 'moderate' }],
+      prerender: [{ source: 'list', urls: ['/a/Btruq6'], eagerness: 'moderate' }],
+    });
     // A module sha is not a rule file, nor the reverse: two prefixes, two routes.
     const module = await createModuleStore().put(new TextEncoder().encode('export {};'), []);
     expect((await app.request(`/islands/s/${module.sha}.json`)).status).toBe(404);
