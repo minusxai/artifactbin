@@ -167,10 +167,16 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const drawDraft = async (allowFocused: boolean) => {
     const pending = pendingDraft;
     if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !drafting() || pending.sequence !== draftSequence) return;
-    const [{ disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom }, { storyUpdateParts }] = await Promise.all([
+    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom }, { storyUpdateParts }] = await Promise.all([
       import('@/lib/islands/morph/engine'), import('@/lib/story/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
+    // Fetch the draft's module while the editor is still mounted. From here to the remount nothing
+    // awaits: a keystroke typed during a slow module fetch otherwise lands on no editor, and the
+    // caret comes back where it was when the fetch began (mid-word).
+    const module = await loadDraftModule(win, root, pending.document);
+    if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
+    if (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) return;
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
     // What stays is decided against the draft the page shows NOW. The served AST may carry resolved
@@ -186,7 +192,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     edit?.unmountCompiledDom();
     disposeChangedDraftIslands(root, stableIds, stablePaths);
     morphDraftDom(root, pending.root, stableIds, stablePaths);
-    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths);
+    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module);
     nodes = pending.nodes;
     lastDrawn = after;
     edit?.setNodes(nodes);
@@ -285,7 +291,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode }),
+          body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode, search: win.location.search }),
         }).then(async (response) => {
           // A failed or superseded compile leaves the last good preview in place.
           if (response.status === 422 || disposed || sequence !== draftSequence) return;

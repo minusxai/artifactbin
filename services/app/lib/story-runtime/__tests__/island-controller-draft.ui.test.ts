@@ -5,10 +5,13 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const hold = vi.hoisted(() => ({ on: false }));
 const engine = vi.hoisted(() => {
-  const state = { active: 0, overlapped: false, applied: [] as string[], releases: [] as Array<() => void> };
+  const state = { active: 0, overlapped: false, applied: [] as string[], releases: [] as Array<() => void>, loads: [] as Array<() => void> };
   return {
     state,
+    // Resolves at once unless a test holds it (a slow production module fetch).
+    loadDraftModule: () => new Promise<null>((resolve) => { if (state.loads.length === 0 && !hold.on) resolve(null); else state.loads.push(() => resolve(null)); }),
     disposeChangedDraftIslands: () => {},
     morphDraftDom: (root: HTMLElement, next: HTMLElement) => { root.innerHTML = next.innerHTML; },
     hydrateDraftIslands: (_win: Window, root: HTMLElement) => {
@@ -79,6 +82,43 @@ describe('island controller editor drafts', () => {
     // Every unmount of the editor is matched by its remount once the drafts settle.
     expect(editSession.mounts).toBe(editSession.unmounts + 1);
     controller.dispose();
+  });
+
+  it("keeps the editor mounted while a draft's module loads, and sends the reader's values with the draft", async () => {
+    engine.state.applied.length = 0;
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const { source } = JSON.parse(String(init.body)) as { source: string };
+      return new Response(JSON.stringify({ html: `<div data-mx-inline-story>${source}</div>` }), { status: 200 });
+    });
+    vi.spyOn(window, 'fetch').mockImplementation(fetch as typeof window.fetch);
+    window.history.replaceState(null, '', '/a/doc?$fruit=banana');
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null },
+    });
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > 0);
+    const unmounts = editSession.unmounts;
+    hold.on = true;
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1' });
+    await settle(() => engine.state.loads.length === 1);
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)).search).toBe('?$fruit=banana');
+    // The module is still on its way: the page must not have taken the editable DOM away yet.
+    expect(editSession.unmounts).toBe(unmounts);
+    expect(root.textContent).toBe('v0');
+    hold.on = false;
+    engine.state.loads.shift()!();
+    await settle(() => engine.state.releases.length === 1);
+    expect(editSession.unmounts).toBe(unmounts + 1);
+    engine.state.releases.shift()!();
+    await settle(() => engine.state.active === 0);
+    expect(root.textContent).toBe('v1');
+    controller.dispose();
+    window.history.replaceState(null, '', '/');
   });
 
   it('draws a version that lands after Done through the draft path, never the reader morph that reloads', async () => {

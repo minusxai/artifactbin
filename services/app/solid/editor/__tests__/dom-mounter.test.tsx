@@ -23,6 +23,26 @@ describe('compiled DOM edit mounter', () => {
     mounted.dispose();
     root.remove();
   });
+  it('writes nothing just for entering edit mode: mounting a CLI-shaped document reports no edit', async () => {
+    const source = '<div id="r"><h1 id="h">Preview QA</h1><p id="a">First paragraph.</p><p id="b">Chosen fruit: {$fruit}</p>'
+      + '<Grid id="g"><GridItem x={0} w={6} h={2} id="g1"><p id="t1">Card A</p></GridItem><GridItem x={6} w={6} h={2} id="g2"><p id="t2">Card B</p></GridItem></Grid>'
+      + '<ul id="l"><li id="l1">one <strong id="s">bold</strong></li></ul><p id="z">Last paragraph.</p></div>';
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0" id="r"><h1 data-mx-ast="0.0" id="h">Preview QA</h1><p data-mx-ast="0.1" id="a">First paragraph.</p>'
+      + '<p data-mx-ast="0.2" id="b"><!--$-->Chosen fruit: <!--/--><!--$-->apple<!--/--></p>'
+      + '<div data-mx-ast="0.3" id="g"><div data-mx-ast="0.3.0" id="g1"><p data-mx-ast="0.3.0.0" id="t1">Card A</p></div><div data-mx-ast="0.3.1" id="g2"><p data-mx-ast="0.3.1.0" id="t2">Card B</p></div></div>'
+      + '<ul data-mx-ast="0.4" id="l"><li data-mx-ast="0.4.0" id="l1">one <strong data-mx-ast="0.4.0.1" id="s">bold</strong></li></ul><p data-mx-ast="0.5" id="z">Last paragraph.</p></div>';
+    document.body.append(root);
+    const onFlow = vi.fn(), onLayout = vi.fn(), onSlideTitle = vi.fn();
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow, onLayout, onSlideTitle });
+    expect(root.querySelector('[role="textbox"][aria-label="Document text"]')).not.toBeNull();
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onFlow).not.toHaveBeenCalled();
+    expect(onLayout).not.toHaveBeenCalled();
+    expect(onSlideTitle).not.toHaveBeenCalled();
+    mounted.dispose();
+    root.remove();
+  });
   it('makes stamped text hosts editable and reports only their own input', () => {
     const root = document.createElement('div');
     root.innerHTML = '<div data-mx-ast="0"><button data-mx-ast="0.0">Label</button><div data-mx-ast="0.1">Other</div></div>';

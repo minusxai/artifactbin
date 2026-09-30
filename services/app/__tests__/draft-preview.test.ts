@@ -56,6 +56,24 @@ describe('the editor draft preview door', () => {
     const document = new JSDOM(((await answer.json()) as { html: string }).html).window.document;
     expect(document.querySelector('p')?.textContent).toBe('After');
   });
+  it("renders bound text at the editor's current values, as the running store holds them", async () => {
+    const { token } = await mintToken('draft-preview-values');
+    const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_values_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    await claimToken(user.id, token);
+    const source = '<Helmet><Value name="fruit" type="string" default="apple" /></Helmet><div><p id="chosen">Chosen fruit: {$fruit}</p><Select label="Fruit" value="$fruit" options={["apple","banana"]} /></div>';
+    const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: { title: 'Draft', markup: source, visibility: 'private' } }));
+    expect(made.status).toBe(201);
+    const id = ((await made.json()) as { id: string }).id;
+    const row = (await getArtifactById(id))!;
+    const draft = source.replace('<div>', '<div><p>Typed</p>');
+    const at = async (search?: string) => {
+      const answer = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: { editId: row.edit_id, source: draft, ...(search !== undefined ? { search } : {}) } }), params(id));
+      expect(answer.status).toBe(200);
+      return new JSDOM(((await answer.json()) as { html: string }).html).window.document.querySelector('#chosen')?.textContent;
+    };
+    expect(await at()).toBe('Chosen fruit: apple');
+    expect(await at('?$fruit=banana')).toBe('Chosen fruit: banana');
+  });
   it('compiles an admitted unsaved draft without changing the published source', async () => {
     const { token } = await mintToken('draft-preview');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_${Math.random().toString(36).slice(2, 8)}@example.com` }));
