@@ -1,5 +1,6 @@
 /** Ephemeral server compile for an editor's unsaved source. */
-import { getArtifactById, dataflowForRow, refDataForRow } from '@/lib/artifacts';
+import { getArtifactById, dataflowForRow, declarationsForRow, refDataForRow } from '@/lib/artifacts';
+import { readUrlValues } from '@/lib/story/url-values';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
@@ -41,10 +42,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const uses = collectRefUses(body.source);
   const refs = uses ? [...new Map(uses.map((use) => [use.id, { id: use.id, kind: use.kind }])).values()] : [];
   const draft = { ...artifact, source: body.source, meta: { ...(artifact.meta ?? {}), refs } };
+  // Rendered at the editor's CURRENT values (its address carries them, as the reader's story fragment
+  // does): the draft's islands hydrate against the running store, and hydration keeps the server's text.
+  const search = typeof body.search === 'string' && body.search.length <= 8192 ? body.search : '';
+  const declared = search ? await declarationsForRow(draft) : null;
+  const values = declared?.flow ? readUrlValues(search, declared.flow) : undefined;
   try {
     const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
       compileStoryCss(body.source, { force: true }),
-      dataflowForRow(draft, { viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null } }),
+      dataflowForRow(draft, { ...(values ? { values } : {}), viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null } }),
       refDataForRow(draft),
       lookupWebAssets(collectExternalAssetUrls(body.source).all),
     ]);

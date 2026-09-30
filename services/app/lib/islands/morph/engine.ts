@@ -458,6 +458,29 @@ export function disposeChangedDraftIslands(root: HTMLElement, stableIds: Readonl
   }
 }
 
+/**
+ * Import a draft compile's island module, ready for `hydrateDraftIslands`. Separate so the editor can
+ * fetch it (a network round trip in production) BEFORE it takes the editable DOM away: the swap from
+ * the old draft to the new one then happens without an await, and no keystroke lands in between.
+ */
+export async function loadDraftModule(
+  win: Window,
+  root: HTMLElement,
+  preview: Document,
+  importModule: NonNullable<MorphDependencies['importModule']> = defaultImport,
+): Promise<IslandModule | null> {
+  const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
+  const seam = running?.morph;
+  const script = moduleScript(preview);
+  if (!seam || !script) return null;
+  const url = new URL(script.getAttribute('src')!, win.document.baseURI).href;
+  const literals = preview.querySelector<HTMLScriptElement>('script[data-mx-island-literals]');
+  const carrier = literals ? win.document.importNode(literals, true) : null;
+  if (carrier) win.document.body.append(carrier);
+  try { return await takeModule(seam, url, importModule); }
+  finally { carrier?.remove(); }
+}
+
 /** Boot newly compiled draft islands on the existing store after their static DOM is in place. */
 export async function hydrateDraftIslands(
   win: Window,
@@ -466,18 +489,13 @@ export async function hydrateDraftIslands(
   stableIds: ReadonlySet<string>,
   stablePaths: ReadonlySet<string>,
   importModule: NonNullable<MorphDependencies['importModule']> = defaultImport,
+  loaded?: IslandModule | null,
 ): Promise<void> {
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   const seam = running?.morph;
-  const script = moduleScript(preview);
-  if (!seam || !script) return;
-  const url = new URL(script.getAttribute('src')!, win.document.baseURI).href;
-  const literals = preview.querySelector<HTMLScriptElement>('script[data-mx-island-literals]');
-  const carrier = literals ? win.document.importNode(literals, true) : null;
-  if (carrier) win.document.body.append(carrier);
-  let module: IslandModule;
-  try { module = await takeModule(seam, url, importModule); }
-  finally { carrier?.remove(); }
+  if (!seam) return;
+  const module = loaded !== undefined ? loaded : await loadDraftModule(win, root, preview, importModule);
+  if (!module) return;
   if (module.FLOW && running.store && JSON.stringify(module.FLOW) !== JSON.stringify(running.store.flow))
     running.store.replaceFlow({ flow: module.FLOW });
   for (const entry of module.ISLANDS) {
