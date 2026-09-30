@@ -277,6 +277,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
       if (!current()) return;
       if (drawnSequence !== sequence) throw new Error('the saved version was not drawn');
       adoptVersionRecord(win.document, next);
+      // The version's compiled colour never replaces the reader's own choice (as the reader's morph keeps it).
+      if (mode) { root.classList.toggle('dark', mode === 'dark'); root.classList.toggle('light', mode !== 'dark'); }
       frozen = false;
       restoreSource = null;
       islands?.setMode('read');

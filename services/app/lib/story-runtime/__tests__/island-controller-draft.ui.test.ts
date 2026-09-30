@@ -17,7 +17,7 @@ const engine = vi.hoisted(() => {
     readRestoreBlocker: () => engine.blocker,
     adopted: 0,
     adoptVersionRecord: () => { engine.adopted++; },
-    morphDraftDom: (root: HTMLElement, next: HTMLElement) => { root.innerHTML = next.innerHTML; },
+    morphDraftDom: (root: HTMLElement, next: HTMLElement) => { root.className = next.className; root.innerHTML = next.innerHTML; },
     hydrateDraftIslands: (_win: Window, root: HTMLElement) => {
       state.active++;
       if (state.active > 1) state.overlapped = true;
@@ -42,7 +42,7 @@ vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () 
 vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
 import { createIslandController } from '../island-controller';
-import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE } from '../contract';
+import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 // Time-bounded, not tick-bounded: the first dynamic import of a module is slow when other suites transform alongside.
@@ -137,7 +137,7 @@ describe('island controller editor drafts', () => {
       if (url.startsWith('/a/doc/story')) {
         // The saved version is still compiling for a moment: the draft stays on screen meanwhile.
         if (compiling-- > 0) return new Response('', { status: 409 });
-        return new Response('<html><body><div data-mx-inline-story><p>saved v3</p></div></body></html>', { status: 200 });
+        return new Response('<html><body><div data-mx-inline-story class="light"><p>saved v3</p></div></body></html>', { status: 200 });
       }
       return new Response('{}', { status: 500 });
     });
@@ -147,6 +147,8 @@ describe('island controller editor drafts', () => {
       win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
+    // The reader chose dark: the saved version's compiled colour must not replace it.
+    controller.send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' });
     controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
     await settle(() => editSession.mounts > 0);
     expect(islands.setMode).toHaveBeenLastCalledWith('edit');
@@ -163,6 +165,7 @@ describe('island controller editor drafts', () => {
     await settle(() => restored);
 
     expect(root.textContent).toBe('saved v3');
+    expect(root.classList.contains('dark')).toBe(true);
     expect(islands.setMode).toHaveBeenLastCalledWith('read');
     expect(engine.adopted, 'the page runs the saved version\'s records now').toBe(1);
     expect(liveUpdate.updateCompiledStory).not.toHaveBeenCalled();
