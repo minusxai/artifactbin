@@ -41,6 +41,22 @@ export interface FlowView {
  * current props, never a snapshot); `onCompositionSettled` asks the adapter to sync again once
  * a composition has ended (the source may have moved underneath it).
  */
+/**
+ * Home/End move the caret to the start/end of the visual line. Left to the browser, macOS
+ * Chromium treats them as document scroll keys and the caret stays put (typing then lands
+ * mid-word), so the editor performs the line move itself with the platform's own
+ * Selection.modify; the resulting DOM selection is read back by ProseMirror as usual.
+ */
+function moveToLineBoundary(view: EditorView, event: KeyboardEvent): boolean {
+  if ((event.key !== 'Home' && event.key !== 'End') || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return false;
+  if (!(view.state.selection instanceof TextSelection)) return false;
+  const selection = view.dom.ownerDocument.defaultView?.getSelection();
+  if (!selection || typeof selection.modify !== 'function') return false;
+  selection.modify(event.shiftKey ? 'extend' : 'move', event.key === 'Home' ? 'backward' : 'forward', 'lineboundary');
+  event.preventDefault();
+  return true;
+}
+
 export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, onCompositionSettled: () => void): FlowView {
   const state = { composing: false };
   let plainPaste = false;
@@ -190,7 +206,8 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         return false;
       },
     },
-    handleKeyDown(_view, event) {
+    handleKeyDown(view, event) {
+      if (moveToLineBoundary(view, event)) return true;
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') plainPaste = true;
       else plainPaste = false;
       return false;
