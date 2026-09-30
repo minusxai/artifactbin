@@ -46,3 +46,15 @@ export function applyAnchor(win: Window, anchor: ScrollAnchor): number | null {
   win.scrollTo({ top: target });
   return target;
 }
+
+/**
+ * Change the layout around the document without moving what the reader is looking at: the edit
+ * bar reserving its height, the edit panel its width. Measured, changed and put back in one task,
+ * so the frame that paints the change already paints the reader where they were. At the very top
+ * the document is left to move down, so its first line is never tucked under the new bar.
+ */
+export function keepReadingPlace(win: Window, change: () => void): void {
+  const anchor = win.scrollY > 0 ? currentAnchor(win) : null;
+  change();
+  if (anchor) applyAnchor(win, anchor);
+}

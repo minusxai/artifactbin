@@ -105,7 +105,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
     // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story
     // root is the body's own child (a rule on the root itself does not hold).
-    + (spa ? styleTag('data-mx-app-reserve', `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`) : '')
+    // Its ground too: the document's own (solid/pages/Document DOCUMENT_GROUND), never the app's dotted
+    // page, so a reload (leaving edit mode) does not flash the dots in the margins before the app adopts it.
+    + (spa ? styleTag('data-mx-app-reserve', `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`
+      + 'body:has(> [data-mx-inline-story]){background:#ffffff;background-image:none}body:has(> [data-mx-inline-story].dark){background:#0b0b0c}') : '')
     + (input.css && !input.sheets ? styleTag('data-mx-story-css', input.css) : '')
     + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
 

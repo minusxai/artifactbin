@@ -442,6 +442,7 @@ describe('the one reader path', () => {
     expect(payload.artifact.surface.runtime.css, 'the sheet rides once, in the head').toBeUndefined();
     expect(page.head.querySelector('style[data-mx-story-css]')?.textContent).toMatch(/\S/);
     expect(page.head.querySelector('style[data-mx-app-reserve]')?.textContent, 'the app bar is reserved before first paint').toContain('body:has(> [data-mx-inline-story])');
+    expect(page.head.querySelector('style[data-mx-app-reserve]')?.textContent, 'the served page wears the document ground, not the app\'s dots').toContain('body:has(> [data-mx-inline-story]){background:#ffffff;background-image:none}');
     expect(doc.head.querySelector('style[data-mx-app-reserve]'), '/raw has no app to reserve for').toBeNull();
   });
 });

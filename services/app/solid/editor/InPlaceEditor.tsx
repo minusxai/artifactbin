@@ -136,6 +136,10 @@ export interface InPlaceEditorProps {
   /** The page owns sharing authority and supplies its controls. */
   sharingContent?: () => JSX.Element;
   onPwaEnabledChange?: (enabled: boolean) => void;
+  /** The editor's bar is drawn (the page's entry skeleton gives way to it). */
+  onEditorMount?: () => void;
+  /** The document is editable, or shown in a view that needs no editing session (code, a preview). */
+  onEditorReady?: () => void;
 }
 
 export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
@@ -315,6 +319,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   createEffect(() => {
     if (inPlace.ready() && props.initialSelectionPath) inPlace.select(props.initialSelectionPath);
   });
+  onMount(() => props.onEditorMount?.());
+  createEffect(() => { if (inPlace.ready() || mode() !== 'design' || preview()) props.onEditorReady?.(); });
 
   // ⌘⌥M: comment on what the editor has selected.
   onMount(() => {
