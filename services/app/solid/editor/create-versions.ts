@@ -17,7 +17,7 @@
  * `currentVersion` re-triggers `refresh` with no dependency list to keep in
  * step — the whole point, since an editor keeps saving under this.
  */
-import { createEffect, createSignal, type Accessor } from 'solid-js';
+import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
 import { restoreBrowserArtifact } from '@/lib/browser-artifact-write';
 import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary } from '@/lib/artifact-backend/types';
 
@@ -43,20 +43,36 @@ export function createArtifactVersions(options: ArtifactVersionsOptions): Artifa
   const [versions, setVersions] = createSignal<ArtifactVersionSummary[]>([]);
   const [busy, setBusy] = createSignal(false);
 
-  const refresh = async (): Promise<void> => {
+  // One history request at a time: asks that arrive while one is in flight share it and trigger ONE trailing
+  // read, so an out-of-order response can never replace a newer list and a burst of saves costs two requests.
+  let inflight: Promise<void> | null = null;
+  let again = false;
+  const refresh = (): Promise<void> => {
     // A backend without history (the offline file) has nothing to list.
-    if (options.backend.unavailable('versions')) return;
-    const rows = await options.backend.versions();
-    if (!rows) return; // not ours, or not yet authorized: keep what we have
-    setVersions(rows);
+    if (options.backend.unavailable('versions')) return Promise.resolve();
+    if (inflight) { again = true; return inflight; }
+    inflight = (async () => {
+      do {
+        again = false;
+        const rows = await options.backend.versions();
+        if (rows && !again) setVersions(rows); // null: not ours, or not yet authorized: keep what we have
+      } while (again);
+    })().finally(() => { inflight = null; });
+    return inflight;
   };
 
+  let first = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   createEffect(() => {
     // Tracked reads: a Solid props object makes both live, exactly like the React deps list.
     void options.currentVersion;
     void options.backend;
-    void refresh();
+    // The list loads at once; later version moves (saves, collaborators' saves over the live stream) settle briefly first.
+    if (first) { first = false; void refresh(); return; }
+    clearTimeout(timer);
+    timer = setTimeout(() => void refresh(), 300);
   });
+  onCleanup(() => clearTimeout(timer));
 
   const fetchVersion = (version: number): Promise<ArtifactVersionSnapshot | null> => options.backend.version(version);
 

@@ -74,9 +74,10 @@ export default function RowMenu(props: { name: string; items: RowMenuItem[] }): 
                   disabled={item().disabled}
                   class={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent enabled:cursor-pointer enabled:hover:bg-raised ${item().danger ? 'enabled:hover:text-danger' : 'enabled:hover:text-fg'}`}
                   onClick={() => {
-                    // Callers may open a dialog and move focus there; focusing the
-                    // trigger first recursively reopens its tooltip during disposal.
+                    // The item unmounts with the menu; focus goes back to the trigger first so a dialog
+                    // the caller opens remembers a live element to return to on close (not BODY).
                     setOpen(false);
+                    trigger.focus({ preventScroll: true });
                     item().onSelect();
                   }}
                 >

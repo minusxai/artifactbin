@@ -23,6 +23,10 @@ export function popupDismiss(open: () => boolean, close: () => void, trigger: ()
     doc.addEventListener('pointerdown', away);
     doc.addEventListener('keydown', escape);
     onCleanup(() => {
+      // A menu item that unmounts with its menu (to open a dialog) leaves focus on BODY; hand it back to the
+      // trigger so whatever opens next remembers a live element to return to.
+      const active = doc.activeElement;
+      if (target?.isConnected && (!active || active === doc.body)) target.focus();
       doc.removeEventListener(OPEN, other);
       doc.removeEventListener('pointerdown', away);
       doc.removeEventListener('keydown', escape);

@@ -65,7 +65,7 @@ export function VersionHistory(props: VersionHistoryProps): JSX.Element {
         </div>;
       }}</For>
     </div>
-    <p class="border-t border-edge px-3 py-2 font-mono text-[10px] leading-relaxed text-muted">restoring makes a new version — the current one is kept, so it can be undone.</p>
+    <p class="border-t border-edge px-3 py-2 font-mono text-[10px] leading-relaxed text-muted">edits within two minutes of each other are saved as one version, so version numbers can skip. restoring makes a new version — the current one is kept, so it can be undone.</p>
   </>;
   if (isPhoneViewport() || props.sheet) {
     return <MobileSheet label="Version history" onClose={() => props.onClose()} size="half" header={head()} swipeToClose={props.sheet}>
