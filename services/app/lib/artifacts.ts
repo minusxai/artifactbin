@@ -1,4 +1,4 @@
-import { executeDocumentQueries, type DocumentQuerySourceMode } from './sql/document-queries';
+import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from './sql/document-queries';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import {commitDocumentUpdate} from './story/document-update-write';
 import {queueMermaidHarvest} from './mermaid-images/store';
@@ -2348,14 +2348,7 @@ export async function dataflowForRow(
   // session to hand over.
   const flow = declared?.flow;
   const members = await acceptedMembers(row.id);
-  const resolve = datasetResolverForRow(row, opts.viewer ?? null);
-  const shared = opts.importCache;
-  const resolver: DatasetResolver = shared ? (id, mode) => {
-    if (mode !== undefined && mode !== 'import') return resolve(id, mode);
-    let held = shared.get(id);
-    if (!held) { held = resolve(id, mode); shared.set(id, held); }
-    return held;
-  } : resolve;
+  const resolver = sharedImports(datasetResolverForRow(row, opts.viewer ?? null), opts.importCache);
   const result = flow ? await runDeclaredDataflow(flow, resolver, {...opts,members}) : null;
   // A document NAMES people when a user-typed value or column reaches it, and
   // now also when it draws a <User> — which a document with no user data at all
@@ -2391,6 +2384,40 @@ export async function dataflowForRow(
   }
   if (result?.flow.mutations.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, result.state, opts.viewer ?? null);
   return result;
+}
+
+/** A resolver whose import reads go through `cache` (one caller's repeated runs); authority checks never do. */
+function sharedImports(resolve: DatasetResolver, cache: ImportCache | undefined): DatasetResolver {
+  if (!cache) return resolve;
+  return (id, mode) => {
+    if (mode !== undefined && mode !== 'import') return resolve(id, mode);
+    let held = cache.get(id);
+    if (!held) { held = resolve(id, mode); cache.set(id, held); }
+    return held;
+  };
+}
+
+/**
+ * The document's queries once per entry of `runs` (each its own values and `only`), as `viewer` —
+ * dataflowForRow's run, resolver and access rule, but ONE engine call over imports loaded once:
+ * the offline file's precomputed filters. Only the tables and errors of each run, in `runs` order
+ * (no people, options or mutation access: a variant carries none of them). Empty for a document
+ * that declares nothing; a document that cannot run answers its one fixed state for every run.
+ */
+export async function dataflowRunsForRow(
+  stored: ArtifactRow,
+  opts: Pick<DataflowRunOptions, 'viewer' | 'tz' | 'importCache'>,
+  runs: ReadonlyArray<{ values?: Record<string, Scalar>; only?: Iterable<string> }>,
+): Promise<Array<Pick<DataflowState, 'tables' | 'errors'>>> {
+  if (!stored.source || !runs.length) return runs.map(() => ({ tables: {}, errors: {} }));
+  const row = await inCurrentSyntax(stored);
+  const declared = await declarationsForRow(row);
+  if (declared?.state) return runs.map(() => ({ tables: declared.state!.tables, errors: declared.state!.errors }));
+  if (!declared?.flow) return runs.map(() => ({ tables: {}, errors: {} }));
+  const members = await acceptedMembers(row.id);
+  const resolver = sharedImports(datasetResolverForRow(row, opts.viewer ?? null), opts.importCache);
+  const { state } = await executeDocumentQueriesMany(declared.flow, resolver, { members, userId: opts.viewer?.userId ?? null, tz: readerZone(opts.tz) }, runs);
+  return state.map(({ tables, errors }) => ({ tables, errors }));
 }
 
 /** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions.

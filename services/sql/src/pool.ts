@@ -15,13 +15,14 @@ import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, SqlService } from '@artifactbin/contracts';
+import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput, SqlService } from '@artifactbin/contracts';
 import { queryBounds } from './bounds';
 import { DEFAULT_CAPS, type SqlCaps } from './caps';
 import type { ReadBounds, WriteBounds } from './sqlite/index';
 
 export type PoolRequest =
   | { id: number; method: 'run'; input: RunInput; bounds: ReadBounds }
+  | { id: number; method: 'runMany'; input: RunManyInput; bounds: ReadBounds[] }
   | { id: number; method: 'mutate'; input: MutationInput; bounds: WriteBounds }
   | { id: number; method: 'dryRun'; input: DryRunInput }
   | { id: number; method: 'dryRunMutations'; input: DryRunMutationsInput };
@@ -139,6 +140,15 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
       const bounds: ReadBounds = { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit };
       return call<Record<string, QueryOutcome>>({ method: 'run', input, bounds }, timeoutMs * Math.max(1, input.queries.length),
         (error) => Object.fromEntries(input.queries.map((q) => [q.name, timedOut(error) ? { error: `<Query name="${q.name}"> ran too long and was stopped (limit ${timeoutMs}ms) — narrow it (filter, aggregate, or LIMIT)`, timedOut: true } : { error }])));
+    },
+    runMany: (input) => {
+      const clamp = (run: { limit?: number; timeoutMs?: number }): ReadBounds => { const { limit, timeoutMs } = queryBounds(run, caps); return { limit, timeoutMs, pageLimit: limit }; };
+      // The shared run's bounds last (index -1 in the engine's callback).
+      const bounds: ReadBounds[] = [...input.runs.map(clamp), clamp(input.shared ?? {})];
+      // The thread's deadline is every statement's own, summed: the runs share one database, one after another.
+      const deadlineMs = [...input.runs, ...(input.shared ? [input.shared] : [])].reduce((sum, run, i) => sum + bounds[i === input.runs.length ? bounds.length - 1 : i]!.timeoutMs * Math.max(1, run.queries.length), 0);
+      return call<Array<Record<string, QueryOutcome>>>({ method: 'runMany', input, bounds }, Math.max(caps.timeoutMs, deadlineMs),
+        (error) => input.runs.map((run, i) => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map((q) => [q.name, timedOut(error) ? { error: `<Query name="${q.name}"> ran too long and was stopped (limit ${bounds[i]!.timeoutMs}ms) — narrow it (filter, aggregate, or LIMIT)`, timedOut: true } : { error }]))));
     },
     mutate: (input) => {
       const bounds = queryBounds(input, caps);

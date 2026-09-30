@@ -88,6 +88,20 @@ export interface RunInput {
   page?: { name: string } & QueryPage;
 }
 
+/**
+ * `run`, many times over ONE set of imports: the imports travel and are loaded once, then `shared`
+ * runs once — its tables and every result loaded WHOLE and kept, for every run to read by name —
+ * then each run is an ordinary `run` of its own tables, queries and values over all of that (a
+ * filter's variants: only the values change, and what reads no value is computed once). A run's own
+ * tables and results are gone when it returns. Answers one outcome map per run, in order, each with
+ * the `shared` outcomes beside its own.
+ */
+export interface RunManyInput {
+  imports?: RunInput['imports'];
+  shared?: Omit<RunInput, 'imports' | 'catalog' | 'page'>;
+  runs: Array<Omit<RunInput, 'imports' | 'catalog' | 'page'>>;
+}
+
 export interface MutationInput {
   policy?: DatasetMutationPolicy;
   /** Internal capability preview: analyze only, never execute effects. */
@@ -152,13 +166,14 @@ export interface DryRunMutationsResult { errors: Array<{ name: string; error: st
 
 export interface SqlService {
   run(input: RunInput): Promise<Record<string, QueryOutcome>>;
+  runMany(input: RunManyInput): Promise<Array<Record<string, QueryOutcome>>>;
   mutate(input: MutationInput): Promise<MutationOutcome>;
   dryRun(input: DryRunInput): Promise<DryRunResult>;
   dryRunMutations(input: DryRunMutationsInput): Promise<DryRunMutationsResult>;
 }
 
 /** The wire: one POST per method. `serveSql`/`sqlClient` (the sql package) implement exactly this. */
-export const SQL_ROUTES = { run: '/run', mutate: '/mutate', dryRun: '/dry-run', dryRunMutations: '/dry-run-mutations' } as const;
+export const SQL_ROUTES = { run: '/run', runMany: '/run-many', mutate: '/mutate', dryRun: '/dry-run', dryRunMutations: '/dry-run-mutations' } as const;
 
 /** End-to-end mutation response budget, including persistence and downstream execution. */
 export const MUTATION_REPLY_TIMEOUT_MS = 200_000;

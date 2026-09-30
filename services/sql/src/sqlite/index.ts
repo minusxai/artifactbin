@@ -7,9 +7,9 @@
  * structural — except a `held` database, which the page keeps open over the
  * imports it holds.
  */
-import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, StatementAnalysis } from '@artifactbin/contracts';
+import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput, StatementAnalysis } from '@artifactbin/contracts';
 import { SqliteDatabase, type Relation } from './database';
-import { dryRunQueries, heldDatabase, runQueries, type HeldDatabase, type ReadBounds } from './reads';
+import { dryRunQueries, heldDatabase, runManyQueries, runQueries, type HeldDatabase, type ReadBounds } from './reads';
 import { dryRunMutations, runMutation, type WriteBounds } from './writes';
 import { loadSqliteModule, type Sqlite3 } from './wasm';
 import type { SqlExtensions } from '../extensions';
@@ -33,6 +33,8 @@ export interface SqliteEngine {
    */
   analyze(sql: string, schema: Relation[], options?: { mode: 'write'; extensions?: SqlExtensions }): StatementAnalysis;
   run(input: RunInput, bounds: ReadBounds): Record<string, QueryOutcome>;
+  /** `run` once per entry of `input.runs`, the imports loaded once for all of them; `bounds` per run. */
+  runMany(input: RunManyInput, bounds: (run: RunManyInput['runs'][number], index: number) => ReadBounds): Array<Record<string, QueryOutcome>>;
   /**
    * `run`, many times over the same imports: a database kept open, each
    * import table loaded once (and again when given different rows), with the
@@ -63,6 +65,7 @@ function engine(sqlite3: Sqlite3): SqliteEngine {
       return prepared.analysis;
     }),
     run: (input, bounds) => runQueries(sqlite3, input, bounds),
+    runMany: (input, bounds) => runManyQueries(sqlite3, input, bounds),
     held: (schemas) => heldDatabase(sqlite3, schemas),
     mutate: (input, bounds, extensions) => runMutation(sqlite3, input, bounds, extensions),
     dryRun: (input) => dryRunQueries(sqlite3, input),

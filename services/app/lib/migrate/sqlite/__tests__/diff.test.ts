@@ -28,7 +28,7 @@ function stub(answers: Record<string, QueryOutcome>, seen: RunInput[] = []): Sql
   const unused = () => Promise.reject(new Error('not used'));
   return {
     run: async (input) => { seen.push(input); return Object.fromEntries(input.queries.map((q) => [q.name, answers[q.sql] ?? { error: `no answer for ${q.sql}` }])); },
-    mutate: unused, dryRun: unused, dryRunMutations: unused,
+    runMany: unused, mutate: unused, dryRun: unused, dryRunMutations: unused,
   };
 }
 

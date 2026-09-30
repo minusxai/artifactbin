@@ -10,7 +10,7 @@
  * document may read and hands their rows in, and runs a connected Postgres
  * query inside its database through `sourceQuery`.
  */
-import { DISPLAY_ROWS, isQueryFailure, MEMBER_COLUMNS, type ColumnType, type QueryPage, type SqlService, type TableResult } from '@artifactbin/contracts';
+import { DISPLAY_ROWS, isQueryFailure, MEMBER_COLUMNS, type ColumnType, type QueryOutcome, type QueryPage, type RunInput, type SqlService, type TableResult } from '@artifactbin/contracts';
 import { BUILTIN_TABLES, platformValues } from '@/lib/story/builtins';
 import type { CompiledDataflow, CompiledQuery } from '@/lib/story/compiled-dataflow';
 import { bindParams, bindTypes, initialValues, selectQueries, typedResult, valueTypes, type ImportTables } from '@/lib/story/compiled-flow';
@@ -22,7 +22,8 @@ export class DataflowResultError extends Error {
   constructor(readonly reason: 'capacity' | 'timeout' | 'query') { super(`Document query ${reason}: complete results required`); }
 }
 
-interface DataflowEngine { run: SqlService['run'] }
+/** `runMany` loads imports once for many runs; an engine without it (the CLI's) runs them one at a time. */
+interface DataflowEngine { run: SqlService['run']; runMany?: SqlService['runMany'] }
 
 export type { ImportTables } from '@/lib/story/compiled-flow';
 
@@ -61,6 +62,70 @@ export interface RunDataflowOptions {
  * failed.
  */
 export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDataflow, imports: ImportTables, opts: RunDataflowOptions = {}): Promise<DataflowState> {
+  const prepared = await prepareRun(engine, flow, imports, opts);
+  if ('state' in prepared) return prepared.state;
+  return prepared.finish(await engine.run({ ...prepared.run, imports: prepared.imports, page: opts.page }));
+}
+
+/**
+ * The document once per entry of `runs` — each its own `values` and `only` over the same imports
+ * and the rest of `opts` — as ONE engine call that loads the imports once (`SqlService.runMany`).
+ * What an offline file's precomputed filters need: many value combinations, the same data.
+ * Answers the states in `runs` order. Not for durable consumers (`completeResults`) or pages.
+ */
+export async function evaluateDataflowMany(engine: DataflowEngine, flow: CompiledDataflow, imports: ImportTables, opts: Omit<RunDataflowOptions, 'values' | 'only' | 'page' | 'completeResults'>, runs: ReadonlyArray<Pick<RunDataflowOptions, 'values' | 'only'>>): Promise<DataflowState[]> {
+  const prepared = await Promise.all(runs.map((run) => prepareRun(engine, flow, imports, { ...opts, ...run })));
+  const pending = prepared.flatMap((p, i) => ('state' in p ? [] : [{ i, p }]));
+  const states: DataflowState[] = prepared.map((p) => ('state' in p ? p.state : null!));
+  if (!pending.length) return states;
+  if (!engine.runMany) {
+    const outs = await Promise.all(pending.map(({ p }) => engine.run({ ...p.run, imports: p.imports })));
+    pending.forEach(({ i, p }, k) => { states[i] = p.finish(outs[k] ?? {}); });
+    return states;
+  }
+  // One import set for every run: the union of what each reads (each run still names only its own queries).
+  const read = new Set(pending.flatMap(({ p }) => Object.keys(p.imports)));
+  const held = Object.fromEntries(Object.entries(imports).filter(([name]) => read.has(name)));
+  /*
+   * What reads no value — directly or through what it reads, and no connected database — has one
+   * result for every run (a `select * from <import>` stage, typically): it runs ONCE, with the
+   * tables every run shares (the built-ins and table Values), and each run reads it by name.
+   */
+  const invariant = new Map<string, boolean>();
+  const readsNoValue = (name: string): boolean => {
+    let known = invariant.get(name);
+    if (known === undefined) {
+      known = selectQueries(flow, { only: [name] }).every((q) => !q.source && q.params.length === 0);
+      invariant.set(name, known);
+    }
+    return known;
+  };
+  const sharedNames = new Set(pending.flatMap(({ p }) => p.run.queries.map((q) => q.name).filter(readsNoValue)));
+  const queryNames = new Set(flow.queries.map((q) => q.name));
+  const first = pending[0]!.p.run;
+  const shared = sharedNames.size ? {
+    tables: Object.fromEntries(Object.entries(first.tables).filter(([name]) => !queryNames.has(name))),
+    queries: selectQueries(flow, { only: [...sharedNames] }).map((q) => ({ name: q.name, sql: q.sql })),
+    params: {}, paramTypes: {}, limit: first.limit, timeoutMs: first.timeoutMs,
+  } : undefined;
+  const outs = await engine.runMany({
+    imports: held,
+    ...(shared ? { shared } : {}),
+    runs: pending.map(({ p }) => (shared ? {
+      ...p.run,
+      tables: Object.fromEntries(Object.entries(p.run.tables).filter(([name]) => queryNames.has(name))),
+      queries: p.run.queries.filter((q) => !sharedNames.has(q.name)),
+    } : p.run)),
+  });
+  pending.forEach(({ i, p }, k) => { states[i] = p.finish(outs[k] ?? {}); });
+  return states;
+}
+
+type EngineRun = Omit<RunInput, 'imports' | 'catalog' | 'page'>;
+type PreparedRun = { state: DataflowState } | { run: EngineRun; imports: ImportTables; finish: (out: Record<string, QueryOutcome>) => DataflowState };
+
+/** Everything of one run up to the engine call: values, connected-database queries, the local queries' input. */
+async function prepareRun(engine: DataflowEngine, flow: CompiledDataflow, imports: ImportTables, opts: RunDataflowOptions): Promise<PreparedRun> {
   const values = initialValues(flow);
   for (const [k, v] of Object.entries(opts.values ?? {})) if (Object.hasOwn(values, k)) values[k] = v;
   const logical: Record<string, Scalar> = { ...values, ...opts.bindings?.values, ...platformValues({ userId: opts.userId ?? null, now: opts.now ?? new Date().toISOString(), tz: opts.tz ?? 'UTC' }) };
@@ -80,7 +145,7 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
   }
 
   const queries = selectQueries(flow, opts);
-  if (queries.length === 0) return { values, tables, errors };
+  if (queries.length === 0) return { state: { values, tables, errors } };
 
   if (opts.completeResults) {
     const started = performance.now();
@@ -106,7 +171,7 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
       if(opts.resultBytes !== undefined && bytes > opts.resultBytes) throw new DataflowResultError('capacity');
       tables[query.name] = inputs[query.name] = typedResult(query.columns,result);
     }
-    return {values,tables,errors};
+    return { state: {values,tables,errors} };
   }
 
   // Connected databases first: nothing they read is computed here.
@@ -128,21 +193,21 @@ export async function evaluateDataflow(engine: DataflowEngine, flow: CompiledDat
     if (missing) errors[q.name] = `<Query name="${q.name}"> reads ${missing} (ref:${unavailable.get(missing)}), which is unavailable — deleted, or no longer readable here`;
     return !missing;
   });
-  if (!local_.length) return { values, tables, errors };
+  if (!local_.length) return { state: { values, tables, errors } };
   const read = new Set(local_.flatMap((q) => q.reads.imports));
   const params = Object.assign({}, ...local_.map((q) => bindParams(q.params, logical))) as Record<string, Scalar>;
   const paramTypes = Object.assign({}, ...local_.map((q) => bindTypes(q.params, types))) as Record<string, ColumnType>;
-  const out = await engine.run({
-    tables: inputs,
+  return {
+    run: { tables: inputs, queries: local_.map((q) => ({ name: q.name, sql: q.sql })), params, paramTypes, limit: opts.limit ?? DISPLAY_ROWS, timeoutMs: opts.timeoutMs },
     imports: Object.fromEntries(Object.entries(imports).filter(([name]) => read.has(name))),
-    queries: local_.map((q) => ({ name: q.name, sql: q.sql })),
-    params, paramTypes, limit: opts.limit ?? DISPLAY_ROWS, timeoutMs: opts.timeoutMs, page: opts.page,
-  });
-  for (const q of local_) {
-    const o = out[q.name];
-    if (!o) continue;
-    if (isQueryFailure(o)) errors[q.name] = o.error;
-    else tables[q.name] = typedResult(q.columns, o);
-  }
-  return { values, tables, errors };
+    finish: (out) => {
+      for (const q of local_) {
+        const o = out[q.name];
+        if (!o) continue;
+        if (isQueryFailure(o)) errors[q.name] = o.error;
+        else tables[q.name] = typedResult(q.columns, o);
+      }
+      return { values, tables, errors };
+    },
+  };
 }

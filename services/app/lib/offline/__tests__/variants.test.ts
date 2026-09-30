@@ -33,8 +33,13 @@ describe('valueDomains', () => {
   });
 });
 
+type Runs = Array<{ values: Record<string, Scalar>; only: string[] }>;
+/** A batch runner from a one-run function, as the engine answers: one result per run, in order. */
+const batched = (one: (values: Record<string, Scalar>, only: string[]) => Promise<{ tables: Record<string, unknown>; errors: Record<string, string> }>) =>
+  vi.fn(async (runs: Runs) => Promise.all(runs.map((r) => one(r.values, r.only))) as never);
+
 describe('precomputeVariants', () => {
-  const run = vi.fn(async (values: Record<string, Scalar>, only: string[]) => ({
+  const run = batched(async (values, only) => ({
     tables: Object.fromEntries(only.map((q) => [q, { rows: [{ v: JSON.stringify(values) }], columns: [{ name: 'v', type: 'string' as const }] }])),
     errors: {},
   }));
@@ -45,22 +50,17 @@ describe('precomputeVariants', () => {
     const out = await precomputeVariants({ flow: twoFilters, base: { ...base, values: { region: null, paid: null, note: null } }, domains, run });
     expect(out.frozen).toEqual(['note']);
     expect(out.variants).toHaveLength(3 * 3 - 1);
-    expect(run).toHaveBeenCalledTimes(8);
+    // Every combination in ONE engine call: the imports are loaded once for all of them.
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]![0]).toHaveLength(8);
     expect(out.variants.every((v) => Object.keys(v.tables).every((q) => q === 'sales'))).toBe(true);
   });
 
-  it('runs combinations concurrently yet keeps the plan order and the byte budget', async () => {
-    let inFlight = 0, peak = 0;
-    const slow = async (values: Record<string, Scalar>, only: string[]) => {
-      inFlight++; peak = Math.max(peak, inFlight);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      inFlight--;
-      return run(values, only);
-    };
+  it('runs a plan in batches yet keeps the plan order and the byte budget', async () => {
+    const slow = run;
     const domains = new Map<string, Scalar[] | null>([['region', [null, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']]]);
     const state = { ...base, values: { region: null } };
     const all = await precomputeVariants({ flow, base: state, domains, run: slow, caps: { maxVariants: 100, maxBytes: 1e9 } });
-    expect(peak).toBeGreaterThan(1);
     expect(all.variants.map((v) => v.values.region)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']);
     // Budget for exactly three variants: the first three in plan order survive, the rest freeze the Value.
     const one = new TextEncoder().encode(JSON.stringify(all.variants[0])).length;
@@ -86,6 +86,17 @@ describe('precomputeVariants', () => {
     expect(out.frozen).toEqual(['region']);
   });
 
+  it('leaves out a result equal to the base one: the transport answers it from the base', async () => {
+    const state = { values: { region: null, paid: null, note: null }, tables: { sales: { rows: [{ v: 'base' }], columns: [{ name: 'v', type: 'string' as const }] } }, errors: {} };
+    // Only `region` changes the result; `paid` leaves it as the base has it.
+    const same = batched(async (values, only) => ({ tables: Object.fromEntries(only.map((q) => [q, values.region === null ? state.tables.sales : { rows: [{ v: String(values.region) }], columns: state.tables.sales.columns }])), errors: {} }));
+    const domains = new Map<string, Scalar[] | null>([['region', [null, 'west']], ['paid', [null, true]]]);
+    const out = await precomputeVariants({ flow: twoFilters, base: state, domains, run: same });
+    expect(out.variants).toHaveLength(3);
+    expect(out.variants.find((v) => v.values.region === null && v.values.paid === true)!.tables).toEqual({});
+    expect(out.variants.filter((v) => v.values.region === 'west').every((v) => v.tables.sales!.rows[0]!.v === 'west')).toBe(true);
+  });
+
   it('does nothing for a document whose queries read no Value', async () => {
     run.mockClear();
     const out = await precomputeVariants({ flow: { ...flow, values: [], queries: flow.queries.slice(0, 1) }, base, domains: new Map(), run });
@@ -96,7 +107,7 @@ describe('precomputeVariants', () => {
 
 describe('variant values', () => {
   it('carry every relevant Value, frozen ones at their base, so the transport can match on a query\'s params', async () => {
-    const run = async (_values: Record<string, Scalar>, only: string[]) => ({ tables: Object.fromEntries(only.map((q) => [q, { rows: [], columns: [] }])), errors: {} });
+    const run = batched(async (_values, only) => ({ tables: Object.fromEntries(only.map((q) => [q, { rows: [], columns: [] }])), errors: {} }));
     const domains = new Map<string, Scalar[] | null>([['region', [null, 'west']], ['paid', null], ['note', null]]);
     const out = await precomputeVariants({ flow: twoFilters, base: { ...base, values: { region: null, paid: true, note: 'x' } }, domains, run });
     expect(out.variants).toEqual([{ values: { region: 'west', paid: true, note: 'x' }, tables: { sales: { rows: [], columns: [] } }, errors: {} }]);

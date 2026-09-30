@@ -34,6 +34,7 @@ const replacer = (_k: string, v: unknown) => (v instanceof Set ? [...v] : v);
 export function serveSql(svc: SqlService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
   const routes: Record<string, (body: unknown) => Promise<unknown>> = {
     [SQL_ROUTES.run]: async (b) => ({ results: await svc.run(b as Parameters<SqlService['run']>[0]) }),
+    [SQL_ROUTES.runMany]: async (b) => ({ results: await svc.runMany(b as Parameters<SqlService['runMany']>[0]) }),
     [SQL_ROUTES.mutate]: async (b) => ({ result: await svc.mutate(b as Parameters<SqlService['mutate']>[0]) }),
     [SQL_ROUTES.dryRun]: (b) => svc.dryRun(b as Parameters<SqlService['dryRun']>[0]),
     [SQL_ROUTES.dryRunMutations]: (b) => svc.dryRunMutations(b as Parameters<SqlService['dryRunMutations']>[0]),
