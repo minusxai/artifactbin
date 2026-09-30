@@ -1,0 +1,45 @@
+/* @jsxImportSource solid-js */
+import { afterEach, expect, it, vi } from 'vitest';
+import { screen } from '@testing-library/dom';
+import { fireEvent, render } from '../../__tests__/helpers';
+import { InstallArtifact, InstallArtifactLink } from '../InstallArtifact';
+import { captureInstallPrompt } from '@/lib/pwa-install';
+import { PwaSettingsPanel } from '../../editor/PwaSettingsPanel';
+import { readPwaSettings } from '@/lib/story/pwa-settings';
+
+afterEach(() => window.history.replaceState(null, '', '/'));
+it('links to a clean stable install page and prompts only on click', async () => {
+  window.history.replaceState(null, '', '/a/Abc123/app/?install=1&key=secret');
+  const dispose = captureInstallPrompt(window);
+  render(() => <><InstallArtifactLink id="Abc123" /><InstallArtifact id="Abc123" title="Budget" /></>);
+  expect(screen.getByRole('link', { name: 'Install app' }).getAttribute('href')).toBe('/a/Abc123/app/?install=1');
+  expect(screen.getByRole('dialog').textContent).toContain('Add to Home Screen');
+  const prompt = vi.fn().mockResolvedValue({ outcome: 'dismissed' });
+  const event = new Event('beforeinstallprompt', { cancelable: true });
+  Object.assign(event, { prompt });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(true);
+  expect(prompt).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Install app' }));
+  await Promise.resolve();
+  expect(prompt).toHaveBeenCalledTimes(1);
+  dispose();
+});
+it('does not use a prompt belonging to another artifact', () => {
+  window.history.replaceState(null, '', '/a/Abc123/app/');
+  const dispose = captureInstallPrompt(window);
+  window.dispatchEvent(Object.assign(new Event('beforeinstallprompt'), { prompt: vi.fn() }));
+  window.history.replaceState(null, '', '/a/Xyz456/app/?install=1');
+  render(() => <InstallArtifact id="Xyz456" title="Other" />);
+  expect(screen.queryByRole('button', { name: 'Install app' })).toBeNull();
+  dispose();
+});
+it('edits separate PWA metadata through the editor source callback', () => {
+  const change = vi.fn();
+  render(() => <PwaSettingsPanel id="Abc123" title="Document title" source={'<p id="one">Keep me</p>'} onChange={change} onUpload={vi.fn()} />);
+  fireEvent.input(screen.getByLabelText('App name'), { target: { value: 'My app' } });
+  fireEvent.blur(screen.getByLabelText('App name'));
+  expect(readPwaSettings(change.mock.lastCall![0])).toEqual({ name: 'My app' });
+  expect(change.mock.lastCall![0]).toContain('<p id="one">Keep me</p>');
+  expect(screen.getByLabelText('Upload app icon')).toBeTruthy();
+});

@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { InstallArtifact } from '../document/InstallArtifact';
 import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { startIslandLive } from '@/lib/islands/live';
@@ -470,6 +471,7 @@ export function DocumentPage(): JSX.Element {
     <div ref={host} aria-label="Artifact viewport" />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
+      <InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} />
       <style>{PANEL_CSS}</style>
       <Show when={panel()}>
         <Show when={panel() === 'controls'} fallback={<button type="button" aria-label="Close the menu" onClick={() => setPanel(null)} class={`fixed inset-0 z-40 cursor-default border-0 p-0 ${phone() ? 'bg-black/25' : 'bg-transparent'}`} />}>

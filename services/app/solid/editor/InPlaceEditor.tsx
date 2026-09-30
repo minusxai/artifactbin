@@ -19,6 +19,8 @@ import ChartColumn from 'lucide-solid/icons/chart-column';
 import Check from 'lucide-solid/icons/check';
 import Code from 'lucide-solid/icons/code';
 import Database from 'lucide-solid/icons/database';
+import Smartphone from 'lucide-solid/icons/smartphone';
+import { PwaSettingsPanel } from './PwaSettingsPanel';
 import Files from 'lucide-solid/icons/files';
 import Share2 from 'lucide-solid/icons/share-2';
 import Hash from 'lucide-solid/icons/hash';
@@ -162,7 +164,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   });
   const [dataflowState, setDataflowState] = createSignal<DataflowState | null>(art.dataflow?.state ?? null);
   const [imageError, setImageError] = createSignal<string | null>(null);
-  const [contentView, setContentView] = createSignal<'data' | 'files' | 'sharing' | null>(null);
+  const [contentView, setContentView] = createSignal<'data' | 'files' | 'sharing' | 'pwa' | null>(null);
   const queriesOpen = () => contentView() === 'data';
   const [queryFocus, setQueryFocus] = createSignal<string | null>(null);
   const [dataflowPending, setDataflowPending] = createSignal(false);
@@ -697,6 +699,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     { key: 'design', label: 'App', aria: 'Edit on the page', tip: 'edit on the page', icon: <Paintbrush size={12} />, active: mode() === 'design' && contentView() === null, choose: () => { chooseMode('design'); setContentView(null); } },
     { key: 'code', label: 'Code', aria: 'Edit the source', tip: 'edit the source', icon: <Code size={12} />, active: mode() === 'code', choose: () => { chooseMode('code'); setContentView(null); } },
     ...(queryNotebook().length > 0 ? [{ key: 'data', label: 'Data', aria: 'Show data', tip: "the document's queries", icon: <Database size={12} />, active: queriesOpen(), choose: () => { const was = queriesOpen(); setContentView('data'); chooseMode('design'); if (!was) inPlace.select(null); } }] : []),
+    { key: 'pwa', label: 'PWA', aria: 'Show PWA settings', tip: 'PWA settings', icon: <Smartphone size={12} />, active: contentView() === 'pwa', choose: () => { setContentView('pwa'); chooseMode('design'); inPlace.select(null); } },
     { key: 'files', label: 'Files', aria: 'Show files', tip: 'Files', icon: <Files size={12} />, active: contentView() === 'files', choose: () => { setContentView('files'); chooseMode('design'); inPlace.select(null); } },
     ...(props.sharingContent ? [{ key: 'sharing', label: 'Sharing', aria: 'Show sharing', tip: 'Sharing', icon: <Share2 size={12} />, active: contentView() === 'sharing', choose: () => { setContentView('sharing'); chooseMode('design'); inPlace.select(null); } }] : []),
   ];
@@ -873,6 +876,11 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           style={{ top: `${barTop() + barH}px`, left: '0px', right: '0px', 'padding-right': `${wide() ? editPanelWidth(false) + 16 : 16}px` }}>
           <QueryNotebookPanel cells={queryNotebook()} onSqlChange={onQuerySqlChange} onSpotlight={inPlace.spotlight} focus={queryFocus()} backend={backend}
             titles={Object.fromEntries((art.refs ?? []).map((r) => [r.id, r.title ?? null]))} />
+        </aside>
+      </Show>
+      <Show when={mode() === 'design' && !preview() && contentView() === 'pwa'}>
+        <aside aria-label="PWA" class="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6" style={{ top: `${barTop() + barH}px`, left: '0px', right: '0px' }}>
+          <PwaSettingsPanel id={art.id} title={title()} source={source()} onChange={commitStructural} onUpload={uploadImage} />
         </aside>
       </Show>
       <Show when={mode() === 'design' && !preview() && (contentView() === 'files' || contentView() === 'sharing')}>

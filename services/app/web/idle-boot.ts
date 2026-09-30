@@ -137,7 +137,7 @@ export function stampSavedTheme(win: Window = window): void {
 
 /** A deep link that asks for the app's own behaviour at once: edit mode, an open comment, a carried intent. */
 const wantsAppNow = (location: Location): boolean =>
-  location.hash === '#edit' || /[?&](?:comment|intent)=/.test(location.search);
+  location.hash === '#edit' || /[?&](?:comment|intent|install)=/.test(location.search);
 
 /** Owner or editor: the served chrome offers Edit (lib/story/reader-chrome renders it only for a writer). */
 export const capabilityOf = (doc: Document): SpaCapability =>

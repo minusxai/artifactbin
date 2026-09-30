@@ -3,6 +3,7 @@ import { createSignal, lazy, Show, Suspense, type JSX } from 'solid-js';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import Pencil from 'lucide-solid/icons/pencil';
 import { DeleteAction } from './DeleteAction';
+import { InstallArtifactLink } from './InstallArtifact';
 import { DownloadOffline } from './DownloadOffline';
 import { DocumentSharing } from './DocumentSharing';
 import { ForkArtifact } from './ForkArtifact';
@@ -46,6 +47,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
       <Show when={activeCommenter()}><button type="button" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW}><MessageSquare size={14} /><span class="flex-1">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></button></Show>
       <Show when={activeEditor()}><button type="button" aria-label="Edit artifact" onClick={props.onEdit} class={ROW}><Pencil size={14} />edit artifact</button></Show>
+      <InstallArtifactLink id={props.id} class={ROW} />
       <DownloadOffline id={props.id} version={props.archived ? props.version : undefined} />
       <Show when={!props.hideFork}><ForkArtifact id={props.id} title={props.title} /></Show>
       <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />
