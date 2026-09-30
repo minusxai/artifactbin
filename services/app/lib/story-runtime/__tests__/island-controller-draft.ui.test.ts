@@ -20,6 +20,8 @@ const engine = vi.hoisted(() => {
   };
 });
 vi.mock('@/lib/islands/morph/engine', () => engine);
+const liveUpdate = vi.hoisted(() => ({ updateCompiledStory: vi.fn(async () => 'reloaded' as const) }));
+vi.mock('@/lib/islands/live-update', () => liveUpdate);
 const editSession = vi.hoisted(() => ({
   unmounts: 0,
   mounts: 0,
@@ -76,6 +78,37 @@ describe('island controller editor drafts', () => {
     expect(root.textContent).toBe('v2');
     // Every unmount of the editor is matched by its remount once the drafts settle.
     expect(editSession.mounts).toBe(editSession.unmounts + 1);
+    controller.dispose();
+  });
+
+  it('draws a version that lands after Done through the draft path, never the reader morph that reloads', async () => {
+    engine.state.applied.length = 0;
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const fetch = vi.fn(async (url: string) => {
+      if (url.startsWith('/a/doc/story')) return new Response('<html><body><div data-mx-inline-story><p>saved v3</p></div></body></html>', { status: 200 });
+      return new Response('{}', { status: 500 });
+    });
+    vi.spyOn(window, 'fetch').mockImplementation(fetch as typeof window.fetch);
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null },
+    });
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > 0);
+    // Done: the islands stay frozen in edit mode, so the reader's in-place morph would refuse them
+    // ('the document is being edited') and fall back to reloading the whole page.
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] });
+    await settle(() => engine.state.releases.length === 1);
+    engine.state.releases.shift()!();
+    await settle(() => root.textContent === 'saved v3');
+
+    expect(liveUpdate.updateCompiledStory).not.toHaveBeenCalled();
+    expect(String(fetch.mock.calls[0]?.[0])).toMatch(/^\/a\/doc\/story\?/);
+    expect(root.textContent).toBe('saved v3');
     controller.dispose();
   });
 });

@@ -18,6 +18,7 @@ import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
 import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { updateCompiledStory } from '@/lib/islands/live-update';
+import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 import {
   STORY_ANNOTATIONS_MESSAGE, type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
   STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, isEditParentMessage,
@@ -108,9 +109,10 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const drafting = () => editRequested || frozen;
   let editLoading = false;
   let draftSequence = 0;
-  let lastDraftSource: string | null = null;
+  /** The authored tree the page shows now: what the next draw decides stability against. */
+  let lastDrawn: JsxNode[] | null = null;
   let quietDraftTimer: number | null = null;
-  let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string; sequence: number } | null = null;
+  let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string | null; sequence: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
     const found = new Map<string, string>();
     const visit = (items: JsxNode[]) => { for (const item of items) {
@@ -174,9 +176,10 @@ export function createIslandController({ win, root, islands, nodes: served, port
     // What stays is decided against the draft the page shows NOW. The served AST may carry resolved
     // assets or generated properties, so compare two parses of the authored source for component
     // identity; both use the same body-relative paths as the compiled DOM.
-    const baseline = lastDraftSource ?? initialSource();
-    const before = baseline ? storyUpdateParts(baseline)?.nodes ?? nodes : nodes;
-    const after = storyUpdateParts(pending.source)?.nodes ?? pending.nodes;
+    // A saved version drawn after Done has no source: its served nodes stand in (fewer components match, never a wrong one).
+    const baseline = initialSource();
+    const before = lastDrawn ?? (baseline ? storyUpdateParts(baseline)?.nodes : null) ?? nodes;
+    const after = (pending.source !== null ? storyUpdateParts(pending.source)?.nodes : null) ?? pending.nodes;
     const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
     if (pending.sheet && sheet) sheet.textContent = pending.sheet.textContent;
@@ -185,11 +188,20 @@ export function createIslandController({ win, root, islands, nodes: served, port
     morphDraftDom(root, pending.root, stableIds, stablePaths);
     await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths);
     nodes = pending.nodes;
-    lastDraftSource = pending.source;
+    lastDrawn = after;
     edit?.setNodes(nodes);
     await edit?.mountCompiledDom();
     annotate?.setNodes(nodes);
     selection?.setNodes(nodes);
+  };
+  /** Parse a compiled page and queue it as the draft to draw (the newest wins). */
+  const queueDraw = async (html: string, nodes: JsxNode[], source: string | null, sequence: number) => {
+    const next = new DOMParser().parseFromString(html, 'text/html');
+    if (disposed || sequence !== draftSequence || !drafting()) return;
+    const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]');
+    if (!nextRoot) throw new Error('draft preview carried no story');
+    pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes, source, sequence };
+    await applyDraft();
   };
   const onFocusOut = () => { queueMicrotask(() => { void applyDraft(); }); };
   win.document.addEventListener('focusout', onFocusOut, true);
@@ -279,16 +291,30 @@ export function createIslandController({ win, root, islands, nodes: served, port
           if (response.status === 422 || disposed || sequence !== draftSequence) return;
           if (!response.ok) throw new Error(`draft preview answered ${response.status}`);
           const payload = await response.json() as { html: string };
-          const next = new DOMParser().parseFromString(payload.html, 'text/html');
-          if (disposed || sequence !== draftSequence || !drafting()) return;
-          const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]');
-          if (!nextRoot) throw new Error('draft preview carried no story');
-          pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: command.nodes, source, sequence };
-          await applyDraft();
+          await queueDraw(payload.html, command.nodes, source, sequence);
           if (pendingDraft?.sequence === sequence && quietDraftTimer === null) {
             quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(true); }, 500);
           }
         }).catch((error) => { if (!disposed) console.error('Failed to compile editor draft', error); });
+        return;
+      }
+      if (frozen) {
+        // Editing froze the islands, and they stay in edit mode after Done (boot never returns to read):
+        // the reader's morph refuses such a page and reloads it. A version that lands now (Done's own save,
+        // another writer) is drawn like a draft, from the version's served story.
+        const sequence = ++draftSequence;
+        const load = async (attempt = 0): Promise<void> => {
+          const response = await win.fetch(storyFragmentUrl(id, win.location.search, 'app'), { credentials: 'same-origin', cache: 'no-store' });
+          if (disposed || sequence !== draftSequence) return;
+          // Compiled off the write's path: a version this fresh may still be compiling.
+          if (response.status === 409 && attempt < 6) {
+            await new Promise((resolve) => win.setTimeout(resolve, 250 * (attempt + 1)));
+            return load(attempt + 1);
+          }
+          if (!response.ok) throw new Error(`story fragment answered ${response.status}`);
+          await queueDraw(await response.text(), command.nodes, null, sequence);
+        };
+        void load().catch((error) => { if (!disposed) console.error('Failed to draw the saved version', error); });
         return;
       }
       // The version's source nodes, for the comments and selections classified against them — re-stamped
