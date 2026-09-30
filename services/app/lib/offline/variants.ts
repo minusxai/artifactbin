@@ -15,7 +15,7 @@
  * database; lib/offline/download.server.ts wires `run` to dataflowForRow as
  * the downloader.
  */
-import { normalizeControlOptions } from '@/components/kit/controls';
+import { normalizeControlOptions } from '@/lib/story/control-options';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { coerceScalarInput, refName, REF_ATTRS, type DataflowState, type Scalar } from '@/lib/story/dataflow';
 import type { CompiledDataflow, CompiledValue } from '@/lib/story/compiled-dataflow';

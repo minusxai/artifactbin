@@ -46,8 +46,6 @@
     "hono": "4.13.5",
     "kysely": "0.28.17",
     "pg": "8.17.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
     "vega": "6.3.1"
   },
   "devDependencies": {
@@ -55,7 +53,6 @@
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22.13.0",
     "@types/pg": "8.16.0",
-    "@vitejs/plugin-react": "6.0.5",
     "esbuild": "0.28.2",
     "jsdom": "30.0.1",
     "tailwindcss": "4.2.1",

@@ -5,7 +5,6 @@
  */
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
 import solid from 'vite-plugin-solid';
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
@@ -55,7 +54,7 @@ const appFontFaces = (): Plugin => ({
 
 export default defineConfig({
   root: webRoot,
-  plugins: [appFontFaces(), react({ exclude: [/\/solid\/.*\.tsx$/, /\/node_modules\//] }), solid({ include: [/\/services\/app\/solid\/.*\.(?:tsx|jsx)$/, /\/services\/app\/web\/solid-entry\.tsx$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
+  plugins: [appFontFaces(), solid({ include: [/\/services\/app\/(?!node_modules\/).*\.(?:tsx|jsx)$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },
@@ -69,11 +68,9 @@ export default defineConfig({
     outDir, emptyOutDir: true, sourcemap: false, manifest: true,
     rolldownOptions: {
       input: {
-        index: path.join(webRoot, 'index.html'),
         'solid-app': path.join(webRoot, 'solid-app.html'),
-        // The compiled reader page's loader (web/spa-idle): an entry of its own, so the server names
-        // it from the manifest (`spa-idle.ts`) and the page loads the app only when it is wanted.
-        'spa-idle': path.join(webRoot, 'spa-idle.ts'),
+        // The compiled reader page's loader (web/solid-spa-idle): an entry of its own, so the server names
+        // it from the manifest (`solid-spa-idle.ts`) and the page loads the app only when it is wanted.
         'solid-spa-idle': path.join(webRoot, 'solid-spa-idle.ts'),
       },
       // The shell's /fonts files are the app server's (appFontFaces above), never Vite assets.

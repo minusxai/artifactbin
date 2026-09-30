@@ -3,44 +3,19 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
-import { isSolidPage, solidDocumentReader } from '@/lib/solid-routes';
-import { useAppHarness } from './harness';
+import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { mintToken } from '@/lib/tokens';
+import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { request, useAppHarness } from './harness';
 
 useAppHarness();
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-it('serves the Solid entry for ported routes, while React owns other URLs', async () => {
-  for (const route of ['/', '/assets', '/datasets/new', '/files/new']) expect(isSolidPage(route)).toBe(true);
-  expect(isSolidPage('/a/fold01', 200, 'folder')).toBe(true);
-  expect(isSolidPage('/a/doc01', 200, 'markup')).toBe(false);
-  expect(isSolidPage('/a/data01', 200, 'dataset')).toBe(false);
-  expect(isSolidPage('/@cee/data01', 200, 'dataset')).toBe(false);
-  expect(isSolidPage('/a/data01/edit', 200, 'dataset')).toBe(true);
-  expect(isSolidPage('/a/doc01/edit', 200, 'markup')).toBe(false);
-  expect(isSolidPage('/@cee')).toBe(true);
-  expect(isSolidPage('/@cee/doc-id')).toBe(true);
-  expect(isSolidPage('/a/doc-id')).toBe(true);
-  expect(isSolidPage('/a/doc-id/edit')).toBe(false);
-  // A folder or dataset served at its OWNED pretty address (server/app documentPreparation heals
-  // /a/<id> to /@user/<id>-slug for any format once the owner has a username) is Solid too — not just
-  // the bare /a/<id> shape.
-  expect(isSolidPage('/@cee/fold01-my-folder', 200, 'folder')).toBe(true);
-  expect(isSolidPage('/@cee/fold01', 200, 'folder')).toBe(true);
-  expect(isSolidPage('/@cee/data01-my-dataset/edit', 200, 'dataset')).toBe(true);
-  expect(isSolidPage('/@cee/doc01-my-doc', 200, 'markup')).toBe(false);
-  expect(isSolidPage('/@cee/doc01-my-doc/edit', 200, 'markup')).toBe(false);
-  expect(solidDocumentReader('viewer', 'markup', false)).toBe(true);
-  expect(solidDocumentReader('commenter', 'markup', false)).toBe(true);
-  expect(solidDocumentReader('editor', 'markup', false)).toBe(true);
-  expect(solidDocumentReader('owner', 'markup', false)).toBe(true);
-  expect(solidDocumentReader('none', 'markup', false)).toBe(false);
-  expect(solidDocumentReader('viewer', 'folder', false)).toBe(false);
-  expect(solidDocumentReader('viewer', 'markup', true)).toBe(false);
-  expect(isSolidPage('/missing', 404)).toBe(true);
+it('serves the one Solid entry for every address the app answers, whatever the format', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'afbin-shell-'));
   dirs.push(dir);
-  writeFileSync(path.join(dir, 'index.html'), '<html><head></head><body><script src="/main.tsx"></script></body></html>');
   writeFileSync(path.join(dir, 'solid-app.html'), '<html><head></head><body><script src="/solid-entry.tsx"></script></body></html>');
   const app = createAppServer({ webDir: dir });
   const accept = { Accept: 'text/html' };
@@ -58,4 +33,28 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   const missing = await app.request('http://localhost/definitely-missing', { headers: accept });
   expect(missing.status).toBe(404);
   expect(await missing.text()).toContain('/solid-entry.tsx');
+  // A served address of every non-compiled kind the React SPA used to answer: the data tiers and the
+  // starter placeholder's read view. Each is the Solid entry now (index() never returns web/index.html).
+  const { token } = await mintToken('shell');
+  const publish = async (body: Record<string, unknown>) => {
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
+    expect(made.status).toBe(201);
+    return ((await made.json()) as { id: string }).id;
+  };
+  const svg = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>').toString('base64');
+  const served = {
+    image: await publish({ title: 'Picture', image: svg }),
+    dataset: await publish({ title: 'Rows', dataset: 'a,b\n1,2' }),
+    viz: await publish({ title: 'Recipe', viz: { description: 'd', engine: 'vega-lite', bindings: [{ name: 'x', label: 'X', accepts: ['nominal'] }], template: { mark: 'bar', encoding: { x: { field: '{{x}}', type: 'nominal' } } } } }),
+    file: await publish({ title: 'Notes', file: { filename: 'notes.txt', contentType: 'text/plain', base64: Buffer.from('hi').toString('base64') } }),
+    starter: await publish({ title: null, markup: START_PLACEHOLDER_MARKUP }),
+  };
+  await drainPreparedPageWarmups();
+  for (const [format, id] of Object.entries(served)) {
+    const response = await app.request(`http://localhost/a/${id}`, { headers: accept });
+    expect(response.status, format).toBe(200);
+    const html = await response.text();
+    expect(html, format).toContain('/solid-entry.tsx');
+    expect(html, format).not.toContain('/main.tsx');
+  }
 });

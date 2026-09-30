@@ -1,7 +1,7 @@
 /**
  * Compile-coverage guarantee for the story embed WRAPPER chrome (staging regression, Jul 2026).
  *
- * The story iframe's only stylesheet is the compiled story CSS (recipe union = kit +
+ * The story's only stylesheet is the compiled story CSS (recipe union = lib/islands/kit +
  * EXTRA_CLASS_SOURCES ∪ per-story authored candidates). Any component that renders chrome
  * INSIDE the iframe must therefore be in EXTRA_CLASS_SOURCES, or its Tailwind classes silently
  * miss the sheet and the chrome renders unstyled (the collapsed-embed bug).
@@ -13,16 +13,14 @@ import { EXTRA_CLASS_SOURCES } from '../../../scripts/generate-story-ui-classes'
 import { STORY_UI_RECIPE_CLASSES } from '../recipe-classes';
 
 const REQUIRED_FILES = [
-  'components/viz/VegaChart.tsx',
-  'components/views/story/InlineNumber.tsx',
-  'components/views/story/QuestionEmbed.tsx',
-  'lib/story-runtime/StoryRuntimeApp.tsx',
-  // A registered story component that lives outside components/kit is the same
-  // hazard by a different route: nothing about its NAME says its classes have
-  // stopped compiling.
-  'components/Tooltip.tsx',
-  'components/PersonMention.tsx',
-];
+  // The compiler writes the static shells (Grid geometry, native table cells) from its own literals.
+  'lib/compiled-page/compiler.ts',
+  'lib/compiled-page/rail-preview.server.ts',
+  'lib/islands/rt.tsx',
+  'lib/islands/chart.ts',
+  'lib/story-ui/icon-contract.ts',
+  'lib/viz/deck-chrome.ts',
+]
 
 describe('embed wrapper chrome is covered by the story CSS compile', () => {
   it('EXTRA_CLASS_SOURCES includes every file whose classes reach the iframe from outside kit', () => {

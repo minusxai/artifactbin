@@ -3,7 +3,7 @@ import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } fr
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
-import type { MermaidImage } from '@/components/kit/mermaid-render';
+import type { MermaidImage } from '@/lib/mermaid-images/mermaid-render';
 import type { Drawn } from '@/lib/mermaid-images/reader-draw';
 
 /**

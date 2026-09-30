@@ -164,7 +164,7 @@ describe('the address heals after checking read access', () => {
 });
 
 describe('the app\'s paths', () => {
-  // Every static address web/App.tsx routes is here: one the server does not
+  // Every static address solid/App.tsx routes is here: one the server does not
   // know answers 404 on a direct load or a reload — the SPA still paints it,
   // but a crawler and a `curl` read the status, and a caller that never asked
   // for HTML gets the JSON refusal instead of the page.

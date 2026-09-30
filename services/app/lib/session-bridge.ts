@@ -12,7 +12,7 @@
  * IN DEVELOPMENT that is wrong, and silently so. The SPA's modules are served by
  * Vite, which runs in FRONT of this process's listener (`server.ts`: the Vite chain
  * wraps the listener, not the app), so a session talking to the app object alone gets
- * 404 for `/@vite/client`, `/@react-refresh`, `/main.tsx` and `/shell.css`, and
+ * 404 for `/@vite/client`, `/solid-entry.tsx` and `/shell.css`, and
  * `window.mx` is never defined — every session-driven gate and eval fails on a page
  * that looks fine in a real browser. So in development the hop goes over loopback
  * HTTP, through EXACTLY the chain a real browser's request travels, with the actor in

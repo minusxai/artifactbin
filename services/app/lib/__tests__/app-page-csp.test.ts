@@ -12,7 +12,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { authorFrameResponse } from '@/server/author-frame';
 import { AUTHOR_SCRIPT_DOCUMENT } from '@/lib/story-runtime/author-script-bootstrap';
-import { managedAuthorDocument } from '@/lib/story-runtime/managed-iframe';
+import { managedAuthorDocument } from '@/lib/story-runtime/managed-author-document';
 import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
 import { DOMAIN_HOME_CSP } from '@/lib/custom-domain-home';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
@@ -101,13 +101,13 @@ describe('the app CSP', () => {
 
   /*
    * A HASH TYPED BESIDE A FILE IS A PROMISE ABOUT THAT FILE. The theme stamp
-   * in web/index.html flipped its default (light -> dark) and the hash stayed
+   * in the app shell flipped its default (light -> dark) and the hash stayed
    * on the old text, so every app page's first paint was silently blocked and
    * the toggle's stored choice stopped surviving a reload. Derive it here so
    * the next edit to that script turns this red instead of the browser.
    */
-  it('hashes the theme stamp that web/index.html actually carries', () => {
-    const html = readFileSync(path.resolve(__dirname, '..', '..', 'web', 'index.html'), 'utf8');
+  it('hashes the theme stamp that web/solid-app.html actually carries', () => {
+    const html = readFileSync(path.resolve(__dirname, '..', '..', 'web', 'solid-app.html'), 'utf8');
     const inline = [...html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
     expect(inline).toHaveLength(1);
     const hash = createHash('sha256').update(inline[0], 'utf8').digest('base64');

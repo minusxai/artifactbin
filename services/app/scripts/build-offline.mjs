@@ -131,16 +131,6 @@ async function build() {
       });
     },
   };
-  const gridKernelStub = {
-    name: 'offline-grid-kernel-react-stub',
-    setup(b) {
-      // `importer` carries the OS's own separators on Windows (`\`): a forward-slash-only check let
-      // react-grid-layout's own `import react` through there, and the reachability check below failed the build.
-      b.onResolve({ filter: /^react$/ }, (args) => args.importer.replaceAll('\\', '/').includes('/react-grid-layout/build/')
-        ? { path: 'react', namespace: 'offline-grid-react' } : undefined);
-      b.onLoad({ filter: /.*/, namespace: 'offline-grid-react' }, () => ({ contents: 'module.exports = {};', loader: 'js' }));
-    },
-  };
   const stubs = (kind) => ({
     name: `offline-stubs-${kind}`,
     setup(b) {
@@ -187,7 +177,7 @@ async function build() {
     ...KINDS.map((kind) => esbuild.build({
       ...common,
       entryPoints: [path.join(root, 'lib/offline/solid-entry.tsx')],
-      plugins: [extrasStubs, stubs(kind), gridKernelStub, solidTransform],
+      plugins: [extrasStubs, stubs(kind), solidTransform],
       outfile: path.join(outdir, `${kind}.js`),
     })),
   ]);

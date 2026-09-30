@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent } from '@testing-library/react';
+import { fireEvent } from '@testing-library/dom';
 import { createBlockSelection } from '../block-selection';
 let dispose: (() => void) | undefined;
 afterEach(() => {

@@ -1,7 +1,7 @@
 import {afterEach,describe,it,expect,vi} from 'vitest';
 import {createManagedAssetResolver,prepareManagedContent} from '../managed-assets';
 import {MANAGED_FETCH_BOOTSTRAP} from '../managed-fetch-bootstrap';
-import {managedAuthorDocument} from '../managed-iframe';
+import {managedAuthorDocument} from '../managed-author-document';
 afterEach(()=>vi.unstubAllGlobals());
 describe('managed asset adapter',()=>{
   it('prepares a bookshelf with bounded parallel requests, preserving document and script order',async()=>{

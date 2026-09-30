@@ -11,7 +11,6 @@ import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { readerRecipes, readerStorySheet } from '../reader-sheet.server';
 import { recipeReach } from '../../../scripts/generate-story-ui-classes';
 import { STORY_UI_RECIPE_BASE, STORY_UI_RECIPE_BY_TAG, STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
-import path from 'node:path';
 
 const PROSE = '<div className="p-4 text-lg"><h1>Notes</h1><p className="text-muted-foreground">Body</p></div>';
 const ACCORDION = '<div className="p-4"><Accordion type="single" collapsible><AccordionItem value="a"><AccordionTrigger>Open</AccordionTrigger><AccordionContent>inside</AccordionContent></AccordionItem></Accordion></div>';
@@ -77,7 +76,7 @@ describe('the reader sheet', () => {
   });
 
   it('knows each tag\'s recipes from a fresh reading of the kit, and a conditional\'s tags too', () => {
-    const fresh = recipeReach(path.join(__dirname, '..', '..', '..', 'components', 'kit'));
+    const fresh = recipeReach();
     expect(STORY_UI_RECIPE_BASE.map((i) => STORY_UI_RECIPE_CLASSES[i])).toEqual(fresh.base);
     expect(Object.fromEntries(Object.entries(STORY_UI_RECIPE_BY_TAG).map(([tag, list]) => [tag, list.map((i) => STORY_UI_RECIPE_CLASSES[i])]))).toEqual(fresh.byTag);
     const hidden = readerRecipes(parseJsxOrThrow('<div>{$_me.id ? <Accordion type="single"><AccordionItem value="a" /></Accordion> : <p>guest</p>}</div>').nodes);

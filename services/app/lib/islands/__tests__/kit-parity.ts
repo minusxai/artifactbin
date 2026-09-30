@@ -1,55 +1,29 @@
 // DESTINATION: services/app/lib/islands/__tests__/kit-parity.ts
 /**
- * KIT PARITY, AT UNIT LEVEL. The parity gate (scripts/gate-compiled-parity.mjs) is the definition of
- * "identical"; this helper lets a kit port prove the same thing in jsdom without a server: render a
- * markup snippet with today's React kit (the interpreter, as the reader renders it) and with the
- * Solid port, and compare the two DOMs element by element — tags, attribute sets (generated ids
+ * KIT PARITY, AT UNIT LEVEL: a markup snippet's recorded React-kit render (the retired interpreter, as the
+ * reader drew it) against the Solid port's, compared element by element — tags, attribute sets (generated ids
  * normalised, `data-hk`/`data-mx-ast` dropped, class tokens as a set), direct text.
  *
  * Owned by the toolchain track; every kit family's tests import it.
  */
-import { createElement, Fragment, type ComponentType } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { parseJsx } from '@/lib/jsx';
-import type { JsxNode } from '@/lib/jsx';
-import { renderStoryNodes } from '@/lib/story-ui/interpreter';
-import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
-import { IconGlyphProvider } from '@/components/kit/icon';
-import InlineNumber from '@/components/views/story/InlineNumber';
-import QuestionEmbed from '@/components/views/story/QuestionEmbed';
-import { SelectControl, normalizeControlOptions } from '@/components/kit/controls';
-import { DataTable } from '@/components/kit/data-table';
-import { parseColumnSpecs, parseSortSpec } from '@/lib/story/data-table';
-import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
+import type { Scalar, TableResult } from '@/lib/story/dataflow';
 
 export interface ParityData { tables?: Record<string, TableResult>; values?: Record<string, Scalar> }
 
-/** The reader's render of `markup` today: the interpreter over the parsed nodes, to static markup. */
+/**
+ * The React kit's render of `markup`, as the retired interpreter drew it — recorded (./fixtures/react-oracle.json,
+ * keyed by markup and data) from the React reader before it was deleted, so the Solid kit keeps proving the same
+ * DOM. A markup the oracle never saw has no reference: add the case with an explicit expected shape instead.
+ */
+let oracle: Record<string, string> | null = null;
 export function reactRender(markup: string, data?: ParityData): string {
-  const parsed = parseJsx(markup) as { nodes?: JsxNode[]; errors?: unknown[] };
-  if (!parsed.nodes || parsed.errors?.length) throw new Error(`markup does not parse: ${JSON.stringify(parsed.errors)}`);
-  const components = data ? { ...STORY_UI_COMPONENTS,
-    Number: (props: Record<string, unknown>) => createElement('span', { id: props.id as string, 'aria-busy': false }, createElement(InlineNumber, { data: props.data, ...props, tables: data.tables })),
-    Question: (props: Record<string, unknown>) => createElement(QuestionEmbed, { data: props.data, viz: props.viz as Record<string, unknown>, ...props, tables: data.tables, colorMode: 'light' }),
-    Select: (props: Record<string, unknown>) => {
-      const valueName = refName(props.value);
-      const optionName = refName(props.options);
-      return createElement(SelectControl, { label: props.label as string, placeholder: props.placeholder as string, className: props.className as string,
-        options: normalizeControlOptions(props.options, optionName ? data.tables?.[optionName] : undefined),
-        value: valueName ? String(data.values?.[valueName] ?? '') : String(props.value ?? ''), nullable: true,
-        onChange: () => {}, bound: [valueName && `value:$${valueName}`, optionName && `options:$${optionName}`].filter(Boolean).join(' '),
-        rest: { id: props.id },
-      });
-    },
-    DataTable: (props: Record<string, unknown>) => {
-      const table = data.tables?.[refName(props.data) ?? ''];
-      return createElement(DataTable as ComponentType<Record<string, unknown>>, { rows: table?.rows, columns: table?.columns, spec: parseColumnSpecs(props.columns), sort: parseSortSpec(props.sort), height: props.height as string,
-        className: props.className as string, id: props.id as string });
-    },
-  } : STORY_UI_COMPONENTS;
-  return renderToStaticMarkup(createElement(IconGlyphProvider, { value: {} }, createElement(Fragment, null, renderStoryNodes(parsed.nodes, { values: data?.values ?? {}, components }))))
-    .replace(/<link rel="preload"[^>]*>/g, '').replace(/<!-- -->/g, '');
+  oracle ??= JSON.parse(readFileSync(path.join(import.meta.dirname, 'fixtures', 'react-oracle.json'), 'utf8')) as Record<string, string>;
+  const recorded = oracle[JSON.stringify({ markup, data: data ?? null })];
+  if (recorded === undefined) throw new Error(`no recorded React render for ${JSON.stringify(markup).slice(0, 120)}`);
+  return recorded;
 }
 
 export interface Shape { tag: string; attrs: Record<string, string>; text: string; kids: Shape[] }

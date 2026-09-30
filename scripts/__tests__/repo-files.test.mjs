@@ -56,7 +56,7 @@ describe('lockfile-orphans', () => {
 describe('esm-globals', () => {
   const ROOT = REPO_ROOT;
   /** Where node runs this package's own code. `web/` is the browser's. */
-  const TREES = ['services/app/app', 'services/app/components', 'services/app/lib', 'scripts', 'services/app/server', 'services/contracts', 'services/utils', 'services/sql', 'services/browser', 'services/auth'];
+  const TREES = ['services/app/app', 'services/app/solid', 'services/app/lib', 'scripts', 'services/app/server', 'services/contracts', 'services/utils', 'services/sql', 'services/browser', 'services/auth'];
   const SKIP = new Set(['node_modules', 'dist', '__tests__', 'data', 'public']);
 
   function sources(dir, out = []) {

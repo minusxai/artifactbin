@@ -12,7 +12,7 @@ const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..'),app=resolve(cli,
 
 /**
  * esbuild plugin: Solid's JSX transform over every `.tsx` this bundle reaches (TypeScript and JSX
- * pragmas stripped by esbuild first — which also elides a type-only `import type ... from 'react'`,
+ * pragmas stripped by esbuild first — which also elides a type-only React type import,
  * so it never reaches the check below — then Babel's Solid preset, exactly as build-islands.mjs runs
  * it over lib/islands). A `.tsx` that still imports React VALUES after that refuses the build: this
  * bundle carries no react/react-dom (services/cli/test/preview.test.ts asserts it on the built file too).

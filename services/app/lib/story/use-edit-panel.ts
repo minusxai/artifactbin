@@ -1,23 +1,4 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W, isWideEditViewport } from './edit-bar';
-
-/**
- * Is the window wide enough for the edit panel to sit beside the document
- * (edit-bar's EDIT_PANEL_BREAKPOINT)? LIVE, like useIsPhoneViewport: a window
- * dragged across the line swaps the side panel for bottom sheets.
- */
-export function useWideEditViewport(): boolean {
-  const [wide, setWide] = useState(() => isWideEditViewport());
-  useEffect(() => {
-    const onResize = () => setWide(isWideEditViewport());
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return wide;
-}
+import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from './edit-bar';
 
 /**
  * The viewer's collapse choice for the edit panel. Per viewer, in this browser

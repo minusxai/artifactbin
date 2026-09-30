@@ -1,5 +1,7 @@
-import type { IconNode } from 'lucide-react';
 import type { Visibility } from '@/lib/artifacts';
+
+/** Lucide's icon node shape: `[tag, attributes]` pairs. */
+type IconNode = Array<[string, Record<string, string>]>;
 
 export interface SharingVerdict {
   visibility: Visibility;

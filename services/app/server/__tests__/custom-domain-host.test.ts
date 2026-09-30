@@ -12,8 +12,6 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,7 +30,6 @@ import { getArtifactById } from '@/lib/artifacts';
 import { setAvatar } from '@/lib/avatars';
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';
-import { ProfileListing } from '@/components/ProfileListing';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
@@ -47,7 +44,7 @@ useAppHarness();
 const APP = 'https://app.example.test';
 const HOST = 'https://blog.example.org';
 const TARGET_IP = '203.0.113.10';
-/** The SPA's shell, with the stylesheet the app page links (web/index.html). */
+/** The SPA's shell, with the stylesheet the app page links (web/solid-app.html). */
 const SHELL = '<!doctype html><html><head><title>artifactbin</title><link rel="stylesheet" href="/shell.css" /></head><body><div id="root"></div></body></html>';
 const app = () => createAppServer({ indexHtml: async () => SHELL });
 
@@ -135,40 +132,6 @@ describe('the home page on a verified host', () => {
     expect((await app().request(`${HOST}/`, { method: 'HEAD' })).status).toBe(200);
   });
 
-  it('is the same ProfileListing a guest gets on /@handle: the same markup, less the follow header and the toolbar, with host addresses', async () => {
-    const maya = await owner('maya');
-    const first = await create(maya.token, { markup: '<h1>One</h1>', title: 'First Light', description: 'Morning notes', visibility: 'public' });
-    const second = await create(maya.token, { markup: '<h1>Two</h1>', title: 'Second Wind', visibility: 'public' });
-    await create(maya.token, { markup: '<h1>Q</h1>', title: 'Quiet one', visibility: 'unlisted' });
-    await create(maya.token, { markup: '<h1>S</h1>', title: 'Secret one', visibility: 'private' });
-    await verified(maya.userId, 'maya.example.org');
-
-    // The app's answer for a guest, through the real route, drawn by the component /@maya mounts.
-    const data = await (await app().request(`${APP}/api/page/profile/@maya`)).json();
-    expect(data.kind).toBe('public-profile');
-    const expected = new JSDOM(renderToStaticMarkup(createElement(ProfileListing, { data }))).window.document.body;
-    // The documented differences, and nothing else:
-    // no follow header — counts, button and all (it needs a session and /api)…
-    const follows = expected.querySelector('[role="group"][aria-label="Follows"]');
-    expect(follows?.querySelector('[aria-label="Follow"]')).not.toBeNull();
-    follows!.remove();
-    // …no search/filter/view toolbar (controls that need the SPA's script)…
-    const toolbar = expected.querySelector('section[aria-label="Shelf"] > div');
-    expect(toolbar?.querySelector('[aria-label="Search artifacts"]')).not.toBeNull();
-    toolbar!.remove();
-    // …and addresses on this host instead of the app's.
-    for (const link of expected.querySelectorAll('a[href]')) link.setAttribute('href', link.getAttribute('href')!.replace(/^\/@maya(?:\/|$)/, '/'));
-
-    const page = await app().request('https://maya.example.org/', { headers: { accept: 'text/html' } });
-    expect(page.status).toBe(200);
-    const html = await page.text();
-    const listing = new JSDOM(html).window.document.querySelector('main');
-    expect(listing).not.toBeNull();
-    expect(listing!.innerHTML).toBe(expected.innerHTML);
-    expect(html).toContain(`href="/${first.id}-first-light"`);
-    expect(html).toContain(`href="/${second.id}-second-wind"`);
-    expect(html).not.toMatch(/Quiet one|Secret one/);
-  });
 
   it('links the stylesheet the app page links, and its policy admits only this host\'s styles, fonts and images', async () => {
     await world();
@@ -185,10 +148,10 @@ describe('the home page on a verified host', () => {
     expect(csp).not.toMatch(/https?:/);
   });
 
-  it('follows the theme the way the app page does: web/index.html\'s own stamp, admitted by its hash and nothing else', async () => {
+  it('follows the theme the way the app page does: web/solid-app.html\'s own stamp, admitted by its hash and nothing else', async () => {
     await world();
     // Parsed, not pattern-matched: the browser's own reading of each document.
-    const shell = new JSDOM(readFileSync(join(__dirname, '..', '..', 'web', 'index.html'), 'utf8')).window.document;
+    const shell = new JSDOM(readFileSync(join(__dirname, '..', '..', 'web', 'solid-app.html'), 'utf8')).window.document;
     const stamps = [...shell.querySelectorAll('script:not([src])')].map((script) => script.textContent ?? '');
     expect(stamps).toHaveLength(1);
     const res = await app().request(`${HOST}/`, { headers: { accept: 'text/html' } });
@@ -210,7 +173,6 @@ describe('the home page on a verified host', () => {
     const dir = mkdtempSync(join(tmpdir(), 'domain-home-web-'));
     mkdirSync(join(dir, 'assets'));
     const shellHtml = '<!doctype html><html><head><link rel="stylesheet" crossorigin href="/assets/shell-Ab12cd.css"><script type="module" crossorigin src="/assets/main-Cd34ef.js"></script></head><body><div id="root"></div></body></html>';
-    writeFileSync(join(dir, 'index.html'), shellHtml);
     writeFileSync(join(dir, 'solid-app.html'), shellHtml);
     writeFileSync(join(dir, 'assets', 'shell-Ab12cd.css'), 'body{color:red}');
     writeFileSync(join(dir, 'assets', 'main-Cd34ef.js'), 'console.log(1)');

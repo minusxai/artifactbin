@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 
-const SHELL = fs.readFileSync(path.resolve(__dirname, '../../web/index.html'), 'utf8');
+const SHELL = fs.readFileSync(path.resolve(__dirname, '../../web/solid-app.html'), 'utf8');
 const app = createAppServer({ actorSecret: 'test-secret', indexHtml: async () => SHELL });
 const BROWSER = { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' };
 

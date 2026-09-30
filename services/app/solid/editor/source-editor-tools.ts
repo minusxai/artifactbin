@@ -2,7 +2,7 @@
  * components/SourceEditorTools in SOLID: where code view gets its rich editor and its formatter.
  * On the site both are lazy chunks (the default below); an offline file would provide its own.
  * The rich editor chunk is solid/editor/SourceEditor plus lib/source-editor/codemirror, and the
- * latter is the same module the React pane loads (see solid/probe/codemirror-chunk.mjs).
+ * latter imports no framework.
  */
 import { createContext, useContext, type Component } from 'solid-js';
 import type { SourceEditorProps } from './SourceEditor';

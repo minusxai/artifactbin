@@ -176,7 +176,7 @@ try {
     compare('app dark document with author CSS and a grid tile', `${B}/a/${context}`, CONTEXT, null, { allStored: true }),
     compare('raw system font', `${B}/a/${systemFont}/raw`, [SENTINEL, ...SYSTEM_FONT]),
   ]);
-  // A READER'S OWN ENGINE DRAWING carries the page's font files too (components/kit/mermaid-fonts), so it shows
+  // A READER'S OWN ENGINE DRAWING carries the page's font files too (lib/mermaid-images/mermaid-fonts), so it shows
   // the theme's face as a stored one does — and a system-font drawing carries none.
   for (const [label, url, sample, carries] of [['raw', `${B}/a/${kinds}/raw`, STORED[0], true], ['app', `${B}/a/${kinds}`, STORED[0], true], ['raw system font', `${B}/a/${systemFont}/raw`, SYSTEM_FONT[0], false]]) {
     const own = await drawings(url, null, { blockStored: true });

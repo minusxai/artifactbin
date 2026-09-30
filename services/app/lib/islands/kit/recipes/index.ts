@@ -25,7 +25,8 @@ export { cn } from './cn';
 /** One component's recipe: its props → the class string its root element carries. */
 export type Recipe = (props: Record<string, unknown>) => string;
 
-const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, data, files, people, mermaid, embed, cells, static: staticKit };
+/** The recipes of each kit family (scripts/generate-story-ui-classes maps a tag to its family's sources). */
+export const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, data, files, people, mermaid, embed, cells, static: staticKit };
 
 function merge(families: typeof FAMILIES): Readonly<Record<string, Recipe>> {
   const merged: Record<string, Recipe> = {};
