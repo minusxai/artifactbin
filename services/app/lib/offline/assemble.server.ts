@@ -33,6 +33,9 @@ import { getDb } from '@/lib/db';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import type { JsxNode } from '@/lib/jsx';
 import { savedMentionStates } from '@/lib/membership';
+import { isCompileFailure } from '@/lib/compiled-page/contract';
+import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
+import { preparedPageFor } from '@/lib/story/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
@@ -78,6 +81,26 @@ class TooLarge extends Error {
 }
 
 const EMPTY_STATE: DataflowState = { values: {}, tables: {}, errors: {} };
+
+/**
+ * The compiled module's own immutable browser carriers (lib/compiled-page's
+ * `data-mx-island-literals` script tags): never visible story text, so a
+ * fresh per-request SSR render (compiled-page/bundle.server) may omit them
+ * even though the compiled module's boot code reads one by DOM lookup. They
+ * may then exist only in the page's stored first render (assembleReaderPage
+ * carries the same fallback online). Matches assembler.ts's own carrier shape.
+ */
+const ISLAND_LITERALS_RE = /<script type="application\/json" data-mx-island-literals="[0-9a-f]{16}">[\s\S]*?<\/script>/g;
+const islandLiteralsOf = (html: string): string => [...html.matchAll(ISLAND_LITERALS_RE)].map((match) => match[0]).join('');
+
+/**
+ * The compiled module's other DOM-read carrier: its "large constants" script
+ * (assembler.ts's `data-mx-module-data`, trailing, singular), which
+ * file-html.ts retags `id="mx-story-data"` for `document.getElementById`.
+ * Same gap as island literals: a fresh SSR render may omit it.
+ */
+const MODULE_DATA_RE = /<script type="application\/json" data-mx-module-data>[\s\S]*?<\/script>\s*$/;
+const moduleDataOf = (html: string): string => MODULE_DATA_RE.exec(html)?.[0] ?? '';
 
 /** The actor as the history and annotation scopes take it; null with no credential at all. */
 function tokenActorOf(actor: RoleActor): TokenActor | null {
@@ -229,6 +252,9 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   if (at === 'not_found') return refuse('not_found', `Version ${input.version} of this document is not available to you.`);
   const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
+  const { page } = await preparedPageFor(artifact, at, origin);
+  const compiled = page.compiled && !isCompileFailure(page.compiled) ? page.compiled : null;
+  if (!compiled) throw new Error(`offline file: compiled page unavailable for ${artifact.id}`);
 
   const meta = row.meta as { theme?: string | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
@@ -282,6 +308,22 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
    */
   const named = Object.keys(held).length ? await nameablePeople(row, actor) : {};
   const state = ran ? { ...ran.state, ...(Object.keys(named).length ? { people: { ...named, ...ran.state.people } } : {}) } : EMPTY_STATE;
+  let renderedCompiled = compiled;
+  if (compiled.ssr) {
+    const ssrHtml = (await loadSsrModule(compiled.ssr, undefined, undefined, compiled.sharedBuild?.ssr)).render({
+      values: state.values, state, results: state, mermaidImages: {}, drawings: {},
+    });
+    // A fresh per-request render never carries the compiled module's own island
+    // literals (never visible story text) and may drop its large-constants
+    // module-data carrier too; fall back to the stored render's, exactly as
+    // assembleReaderPage does online (assembler.ts splitModuleData).
+    const literals = islandLiteralsOf(ssrHtml) || islandLiteralsOf(compiled.html);
+    const moduleData = moduleDataOf(ssrHtml) || moduleDataOf(compiled.html);
+    renderedCompiled = {
+      ...compiled,
+      html: ssrHtml + (islandLiteralsOf(ssrHtml) ? '' : literals) + (moduleDataOf(ssrHtml) ? '' : moduleData),
+    };
+  }
   const placement = ran ? placeDataflow(ran.flow, Object.keys(held)) : null;
   const serverQueries = new Set(Object.entries(placement?.queries ?? {}).filter(([, where]) => where === 'server').map(([name]) => name));
   const { variants, frozen } = ran
@@ -304,7 +346,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const imageRefs = new Set(Object.entries(refData).filter(([, r]) => r.kind === 'image').map(([id]) => id));
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);
   const snapshot = { at: new Date().toISOString(), state, held, variants, frozen };
-  let inlined: { css: ArtifactFile['css']; island: StoryIslandData; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
+  let inlined: { css: ArtifactFile['css']; island: StoryIslandData; compiled: NonNullable<ArtifactFile['compiled']>; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
   try {
     inlined = {
       css: {
@@ -313,6 +355,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
         author: parts.runtime.authorCss ? await inliner.css(parts.runtime.authorCss) : null,
       },
       island: JSON.parse(await inliner.json(JSON.stringify(island))) as StoryIslandData,
+      compiled: JSON.parse(await inliner.json(JSON.stringify(renderedCompiled))) as NonNullable<ArtifactFile['compiled']>,
       snapshot: JSON.parse(await inliner.json(JSON.stringify(snapshot))) as ArtifactFile['snapshot'],
       threads: JSON.parse(await inliner.json(JSON.stringify(threads))) as AnnotationWire[],
     };
@@ -341,7 +384,8 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     ...inlined,
     journal: [],
     localIds: [],
-    bundle: /<Mermaid[\s/>]/.test(source) ? 'mermaid' : 'core',
+    bundle: 'solid',
+    compiledFlowDigest: sourceDigest(JSON.stringify(island.dataflow?.flow ?? null)),
     extras: await offlineExtrasRef(),
     // The island and stylesheets above were built from exactly this source.
     derivedFrom: sourceDigest(source),

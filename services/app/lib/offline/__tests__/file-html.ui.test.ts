@@ -13,6 +13,29 @@ describe('renderArtifactFileHtml', () => {
     expect(readArtifactFileParts(parse(html))).toEqual({ file, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=' });
   });
 
+  it('places the compiled reader output in the file for first paint', () => {
+    const compiled = { ...file, compiled: { html: '<h1 data-mx-ast="0">Compiled sales</h1>' } as NonNullable<typeof file.compiled> };
+    const doc = parse(renderArtifactFileHtml({ file: compiled, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=' }));
+    expect(doc.querySelector('[data-mx-inline-story] [data-mx-ast="0"]')?.textContent).toBe('Compiled sales');
+  });
+
+  it('makes a large compiled module literal addressable by the reader module', () => {
+    for (const attribute of ['data-mx-module-data', 'data-mx-module-data=""']) {
+      const compiled = { ...file, compiled: { html: `<script type="application/json" ${attribute}>{"moduleData":[]}</script>` } as NonNullable<typeof file.compiled> };
+      const doc = parse(renderArtifactFileHtml({ file: compiled, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=' }));
+      expect(doc.getElementById('mx-story-data')?.textContent).toBe('{"moduleData":[]}');
+    }
+  });
+
+  it('round-trips the packed compiled script and optional SQLite bytes for Save', () => {
+    const parts = { file, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', compiledCode: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', wasm: 'AA==', templates: { a: '<div>offline</div>' } };
+    const doc = parse(renderArtifactFileHtml(parts));
+    expect(readArtifactFileParts(doc)).toEqual(parts);
+    expect(doc.querySelector('#afbin-compiled-code')?.textContent).toBe(parts.compiledCode);
+    expect(doc.querySelector('#afbin-wasm')?.textContent).toBe(parts.wasm);
+    expect(doc.querySelector<HTMLTemplateElement>('template[data-mx-island-template="a"]')?.content.textContent).toBe(parts.templates.a);
+  });
+
   it('cannot be broken out of by document content', () => {
     const doc = parse(html);
     // the title contains `</script><script>alert(1)</script>`: it must stay data

@@ -16,6 +16,7 @@
  * this file is trusted by the server: a sync re-validates all of it.
  */
 import type { AnnotationWire } from '@/lib/annotations';
+import type { CompiledPage } from '@/lib/compiled-page/contract';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { DataflowState, Scalar, TableResult } from '@/lib/story/dataflow';
 import type { ImportTables } from '@/lib/story/compiled-flow';
@@ -111,6 +112,10 @@ export interface ArtifactFile {
   css: ArtifactFileCss;
   /** The runtime island for `source`, with no server URLs (queryUrl, mutateUrl, assetsUrl …) and images as data: URIs. */
   island: StoryIslandData;
+  /** Version-owned compiled reader output, retained for the file's Solid reader. */
+  compiled?: CompiledPage;
+  /** The flow baked into the compiled browser module, retained across local edits. */
+  compiledFlowDigest?: string;
   snapshot: ArtifactFileSnapshot;
   journal: ArtifactFileEdit[];
   /** Server threads visible to the downloader, plus threads and replies made in a file. */
@@ -118,7 +123,7 @@ export interface ArtifactFile {
   /** Ids of threads and replies created in a file and not yet on the server. */
   localIds: string[];
   /** Which offline bundle this file carries. */
-  bundle: 'core' | 'mermaid';
+  bundle: 'core' | 'mermaid' | 'solid';
   /** Code view's source editor and prettier, loaded on demand; absent in a file that cannot load them. */
   extras?: ArtifactFileExtras | null;
   /**
@@ -198,7 +203,7 @@ function isWellFormed(v: Json): boolean {
     && Array.isArray(v.journal) && v.journal.every(isEdit)
     && Array.isArray(v.threads) && v.threads.every(isObject)
     && isStringList(v.localIds)
-    && (v.bundle === 'core' || v.bundle === 'mermaid')
+    && (v.bundle === 'core' || v.bundle === 'mermaid' || v.bundle === 'solid')
     && isExtras(v.extras)
     && (v.derivedFrom === undefined || isString(v.derivedFrom));
 }

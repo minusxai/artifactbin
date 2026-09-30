@@ -27,7 +27,7 @@ import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/story-runtime/store';
 import { canonicalQuote, canonicalText } from '@/lib/story/annotation-range';
 import { isWebUrl } from '@/lib/story/asset-url';
-import { EMPTY_DATAFLOW, isEmptyDataflow, type Dataflow, type DataflowState, type QueryDecl } from '@/lib/story/dataflow';
+import { EMPTY_DATAFLOW, isEmptyDataflow, type Dataflow, type DataflowState } from '@/lib/story/dataflow';
 import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { declarationsOf } from '@/lib/story/helmet';
 import { createDocumentGraph, graphNodes, graphSource, type GraphAstNode } from '@/lib/story/document-graph';
@@ -41,6 +41,8 @@ import {
   OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest, type ArtifactFile, type ArtifactFileEdit,
 } from './file-format';
 import { createSnapshotTransport } from './snapshot-transport';
+import { ranFlowOf, unranQueries } from './snapshot-current';
+export { snapshotStateFor } from './snapshot-current';
 
 /** Why each feature is unavailable in a file, shown where its control would work. */
 export const OFFLINE_REASONS: Record<BackendFeature, string> = {
@@ -274,13 +276,6 @@ function authoringInputs(source: string): Set<string> {
 
 // ── queries: the snapshot answers only what the download ran ────────────────
 
-const sameQuery = (a: QueryDecl | undefined, b: QueryDecl) => !!a && a.sql === b.sql && (a.source ?? null) === (b.source ?? null);
-
-/** Names of the queries in `flow` whose SQL or source differs from what the snapshot ran (or that it never ran). */
-function unranQueries(flow: Dataflow, ran: Dataflow): Set<string> {
-  const before = new Map(ran.queries.map((q) => [q.name, q]));
-  return new Set(flow.queries.filter((q) => !sameQuery(before.get(q.name), q)).map((q) => q.name));
-}
 
 // ── what a source derives: exactly what a commit rebuilds ──────────────────
 
@@ -378,26 +373,6 @@ export async function rebuildArtifactFile(file: ArtifactFile, author: string | n
  * follows every edit — in the file, or outside it — so an edited query would
  * otherwise be answered with the rows the old SQL returned.
  */
-function ranFlowOf(file: ArtifactFile): Dataflow {
-  return declarationsOf(file.base.source) ?? EMPTY_DATAFLOW;
-}
-
-/**
- * The state the page seeds the runtime with: the snapshot, minus the results
- * of any query whose SQL or source is no longer what the download ran — those
- * say OFFLINE_QUERY_REASON, as the transport answers them.
- */
-export function snapshotStateFor(file: ArtifactFile): DataflowState {
-  const state = file.snapshot.state;
-  if (!file.island.dataflow?.flow) return state;
-  const unran = unranQueries(declarationsOf(file.source) ?? EMPTY_DATAFLOW, ranFlowOf(file));
-  if (!unran.size) return state;
-  const tables = Object.fromEntries(Object.entries(state.tables).filter(([name]) => !unran.has(name)));
-  const errors = { ...state.errors };
-  for (const name of unran) errors[name] = OFFLINE_QUERY_REASON;
-  return { ...state, tables, errors };
-}
-
 // ── the backend ─────────────────────────────────────────────────────────────
 
 export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks): ArtifactBackend {
