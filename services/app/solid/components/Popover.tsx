@@ -7,14 +7,16 @@
  * model the islands and solid/components/Tooltip already use, and portalled to the trusted UI host
  * when the page has one, else <body>.
  *
- * The caller owns `open`; this owns placement and dismissal: an outside pointerdown or Escape reports
- * a close, and opening never steals focus from the trigger (Radix's onOpenAutoFocus prevented) — a
+ * The caller owns `open`; this owns placement and dismissal through the kit's one popup contract
+ * (lib/islands/kit/popup-dismiss): an outside pointerdown or Escape reports a close, and opening one
+ * closes any other open popup. Opening never steals focus from the trigger (Radix's onOpenAutoFocus prevented) — a
  * field inside the panel that wants focus asks for it itself (the `autofocus` attribute, or a ref).
  */
-import { createEffect, createUniqueId, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, createUniqueId, on, onCleanup, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { placePopper, type Align, type Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
+import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
 
 export interface PopoverTriggerAttrs {
   ref: (el: HTMLElement) => void;
@@ -39,15 +41,19 @@ export function Popover(props: {
   onPanelKeyDown?: (event: KeyboardEvent) => void;
   children: JSX.Element;
 }): JSX.Element {
-  let anchor: HTMLElement | undefined;
+  const [anchor, setAnchor] = createSignal<HTMLElement>();
+  const [panel, setPanel] = createSignal<HTMLElement>();
   const id = createUniqueId();
+  const announce = popupDismiss(() => props.open, () => props.onOpenChange(false), anchor, panel);
+  createEffect(on(() => props.open, (open) => { if (open) announce(); }));
   return (
     <>
-      {props.trigger({ ref: (el) => { anchor = el; }, 'aria-haspopup': 'true', 'aria-expanded': props.open })}
+      {props.trigger({ ref: setAnchor, 'aria-haspopup': 'true', 'aria-expanded': props.open })}
       <Show when={props.open}>
         <Portal mount={trustedPortalOf(document) ?? document.body}>
           <PopoverPanel
-            anchor={() => anchor!}
+            anchor={() => anchor()!}
+            ref={setPanel}
             id={id}
             label={props.label}
             side={props.side ?? 'bottom'}
@@ -56,7 +62,6 @@ export function Popover(props: {
             class={props.class}
             role={props.role}
             onKeyDown={props.onPanelKeyDown}
-            onClose={() => props.onOpenChange(false)}
           >
             {props.children}
           </PopoverPanel>
@@ -76,7 +81,7 @@ function PopoverPanel(p: {
   class?: string;
   role?: 'listbox';
   onKeyDown?: (event: KeyboardEvent) => void;
-  onClose: () => void;
+  ref: (el: HTMLElement) => void;
   children: JSX.Element;
 }): JSX.Element {
   let wrapper!: HTMLDivElement;
@@ -89,27 +94,10 @@ function PopoverPanel(p: {
     });
     onCleanup(stop);
   });
-  createEffect(() => {
-    const onDown = (event: MouseEvent) => {
-      // Composed: inside a trusted shadow root a document listener sees only the host as its target.
-      const path = event.composedPath();
-      if (path.includes(wrapper) || (p.anchor() && path.includes(p.anchor()))) return;
-      p.onClose();
-    };
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); p.onClose(); } };
-    // pointerdown/mousedown, not click: closing on the SAME press that opened elsewhere would fire
-    // between the trigger's mousedown and click, reopening the panel it just closed.
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    onCleanup(() => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    });
-  });
   return (
     <div data-mx-theme-host="">
       <div
-        ref={wrapper}
+        ref={(el) => { wrapper = el; p.ref(el); }}
         data-story-popper-wrapper=""
         style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': '200' }}
       >

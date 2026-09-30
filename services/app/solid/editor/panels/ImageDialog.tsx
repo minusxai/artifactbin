@@ -15,7 +15,7 @@
  * takes `unavailable` as an explicit prop. Whoever wires this dialog into a live page
  * passes `backend.unavailable('webAssets')`.
  */
-import { createSignal, createUniqueId, onMount, Show, type JSX } from 'solid-js';
+import { createSignal, createUniqueId, Show, type JSX } from 'solid-js';
 import ImagePlus from 'lucide-solid/icons/image-plus';
 import Link2 from 'lucide-solid/icons/link-2';
 import X from 'lucide-solid/icons/x';
@@ -23,7 +23,7 @@ import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { FeatureGate } from '@/solid/components/FeatureGate';
 import { imageRawUrl } from '@/lib/story/ref-data';
 import type { ChosenImage, ImageChoice } from '@/lib/artifact-backend/types';
-import { useDialogKeyboard } from './dialog-keyboard';
+import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 
 export type { ChosenImage, ImageChoice };
 
@@ -63,10 +63,9 @@ export default function ImageDialog(props: {
   const unavailable = () => props.unavailable ?? null;
   /** Answers arriving after a newer choice (or after closing) are dropped. */
   let attempt = 0;
-  useDialogKeyboard(() => panel, () => props.onClose(), FOCUSABLE);
   // Solid sets `autofocus` as a plain attribute; jsdom (and some browsers) never act on it, so
   // the initial focus is set explicitly, the same outcome React's autoFocus prop gives at mount.
-  onMount(() => chooseFileButton?.focus());
+  createDialogShell({ panel: () => panel, onClose: () => props.onClose(), initialFocus: () => chooseFileButton, lockScroll: true, focusable: FOCUSABLE });
 
   const run = async (label: 'Uploading…' | 'Importing…', obtain: () => Promise<ImageChoice>) => {
     const mine = ++attempt;

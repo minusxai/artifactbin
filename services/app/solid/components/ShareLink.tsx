@@ -3,6 +3,7 @@ import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetAccess, SharingPatch, Visibility } from '@/lib/artifacts';
 import type { ShareEntry, ShareRole } from '@/lib/share-roles';
+import { DialogShell } from '@/solid/components/DialogShell';
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; access?: DatasetAccess;
   datasetKind?: DatasetCatalog['kind']; policyVersion?: number; canPrivate?: boolean;
@@ -38,7 +39,7 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
   const showWrites = () => props.format === 'dataset' && state() && !postgres() && state()?.policyVersion !== 2;
   return <>
     <Show when={!props.startOpen}><button type="button" aria-label="Share" class={props.class} onClick={() => canManage() ? setOpen(true) : copyLink()}>{copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}</button></Show>
-    <Show when={open()}><div role="dialog" aria-modal="true" aria-label="Sharing" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+    <Show when={open()}><DialogShell onClose={() => { setOpen(false); props.onClose?.(); }}><div role="dialog" aria-modal="true" aria-label="Sharing" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div class="max-h-[90vh] w-full max-w-lg space-y-4 overflow-auto rounded-xl border border-edge bg-surface p-6 text-sm text-fg">
         <div class="flex justify-between"><h2 class="text-lg font-semibold">Sharing {props.title}</h2><button type="button" aria-label="Close sharing" onClick={() => { setOpen(false); props.onClose?.(); }}>Close</button></div>
         <button type="button" aria-label="Copy link" onClick={copyLink} class="w-full rounded border border-edge p-2">{copied() ? 'copied' : 'copy link'}</button>
@@ -60,6 +61,6 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
         </>}</Show>
         <Show when={error()}><p role="alert" class="text-danger">{error()}</p></Show>
       </div>
-    </div></Show>
+    </div></DialogShell></Show>
   </>;
 }
