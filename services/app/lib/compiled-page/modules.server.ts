@@ -52,10 +52,10 @@ async function read(objects: ObjectStore, prefix: string, sha: string): Promise<
 /** Per-document modules over the object store; `objects` is injectable for a test, the configured store otherwise. */
 export function createModuleStore(objects: ObjectStore = objectStore()): ModuleStore {
   return {
-    async put(bytes, imports) {
+    async put(bytes, imports, specifiers) {
       const sha = contentSha(bytes);
       await objects.put(`${MODULE_PREFIX}/${sha}`, Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), 'text/javascript');
-      const ref: ModuleRef = { sha, url: `${DOCUMENT_MODULE_PATH}/${sha}.js`, bytes: bytes.byteLength, imports: [...imports] };
+      const ref: ModuleRef = { sha, url: `${DOCUMENT_MODULE_PATH}/${sha}.js`, bytes: bytes.byteLength, imports: [...imports], ...(specifiers ? { specifiers: [...specifiers] } : {}) };
       return ref;
     },
     get: (sha) => read(objects, MODULE_PREFIX, sha),

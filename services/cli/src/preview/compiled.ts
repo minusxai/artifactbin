@@ -14,6 +14,7 @@ import {loadCompilerBuild} from '../../../app/lib/compiled-page/build.server';
 import {assembleReaderPage} from '../../../app/lib/compiled-page/assembler';
 import {createModuleStore, createSpeculationRulesStore} from '../../../app/lib/compiled-page/modules.server';
 import {loadSsrModule} from '../../../app/lib/compiled-page/bundle.server';
+import {bindModuleCode} from '../../../app/lib/compiled-page/runtime-binding';
 import {ISLANDS_PATH, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
 import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared-runtime';
 import type {StoryIslandData, ServedResults} from '../../../app/lib/story-runtime/contract';
@@ -27,9 +28,13 @@ export const documentModuleSha = (pathname: string): string | null => {
  return match ? match[1]! : null;
 };
 
-/** The per-document module's bytes, from the same local store `compilePage` wrote them to. */
+/**
+ * The per-document module's bytes, from the same local store `compilePage` wrote them to, bound to the
+ * local island build's chunk URLs (the stored bytes name the runtime by specifier: runtime-binding).
+ */
 export async function readDocumentModule(sha: string): Promise<Uint8Array | null> {
- return createModuleStore().get(sha);
+ const bytes=await createModuleStore().get(sha);
+ return bytes ? new TextEncoder().encode(bindModuleCode(new TextDecoder().decode(bytes),compilerBuild())) : null;
 }
 
 /** `/islands/s/<sha>.json` — the prerender rule file `assembleDocument`'s `Speculation-Rules` header names. */

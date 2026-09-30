@@ -14,6 +14,7 @@ import { performance } from 'node:perf_hooks';
 import { compilePage, compileSources, declaredValues, generate, KIT } from '../compiler';
 import { browserModuleCode, buildDocumentModules, defaultSsrImports, evaluateModule, loadSsrModule, ssrImportTable, ssrModuleCode, transformSolid } from '../bundle.server';
 import { createModuleStore } from '../modules.server';
+import { bindModuleCode } from '../runtime-binding';
 import { shapeOf, diffShapes, reactRender } from '@/lib/islands/__tests__/kit-parity';
 import { loadCompilerBuild } from '../build.server';
 import { malformedTagDocument, namedHazardsDocument, structureIndependent } from '../codegen-safety';
@@ -542,10 +543,14 @@ describe('the one-tree module path', () => {
     expect(module.imports).toEqual(expect.arrayContaining([build.manifest['@mx/rt'], build.manifest['@mx/boot'], build.manifest['@mx/kit/tabs'], build.manifest['@mx/kit/accordion']]));
     const bytes = (await store.get(module.sha))!;
     const text = new TextDecoder().decode(bytes);
-    expect(text).not.toMatch(/from\s*["'](@mx\/|solid-js)/);
-    // Solid's DOM helpers come through the runtime's one import surface: every import is a shared-build URL of an @mx/* entry.
-    const entryUrls = new Set(Object.entries(build.manifest).filter(([spec]) => spec.startsWith('@mx/')).map(([, url]) => url));
-    for (const m of text.matchAll(/from\s*"([^"]+)"/g)) expect(entryUrls, m[1]).toContain(m[1]);
+    // The stored bytes name the runtime by specifier (bound to a build's URLs only when served, runtime-binding),
+    // and Solid's DOM helpers come through the runtime's one import surface: every import is an @mx/* entry.
+    expect(text).not.toMatch(/from\s*["'](\/islands\/|solid-js)/);
+    const entries = new Set(Object.keys(build.manifest).filter((spec) => spec.startsWith('@mx/')));
+    for (const m of text.matchAll(/from\s*"([^"]+)"/g)) expect(entries, m[1]).toContain(m[1]);
+    expect(module.specifiers).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/kit/tabs', '@mx/kit/accordion']));
+    const bound = bindModuleCode(text, build);
+    for (const m of bound.matchAll(/from\s*"([^"]+)"/g)) expect(Object.values(build.manifest), m[1]).toContain(m[1]);
     const br = brotliCompressSync(bytes).byteLength;
     // Target 2's per-document share (the brief: ≤ 5 KB br for the kit fixture); measured 2283 B raw / 614 B br.
     expect(br, `kit per-document module: ${bytes.byteLength} B raw, ${br} B br`).toBeLessThanOrEqual(5 * 1024);

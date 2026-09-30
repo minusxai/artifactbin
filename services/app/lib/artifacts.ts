@@ -2348,7 +2348,15 @@ export async function dataflowForRow(
   // session to hand over.
   const flow = declared?.flow;
   const members = await acceptedMembers(row.id);
-  const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), {...opts,members}) : null;
+  const resolve = datasetResolverForRow(row, opts.viewer ?? null);
+  const shared = opts.importCache;
+  const resolver: DatasetResolver = shared ? (id, mode) => {
+    if (mode !== undefined && mode !== 'import') return resolve(id, mode);
+    let held = shared.get(id);
+    if (!held) { held = resolve(id, mode); shared.set(id, held); }
+    return held;
+  } : resolve;
+  const result = flow ? await runDeclaredDataflow(flow, resolver, {...opts,members}) : null;
   // A document NAMES people when a user-typed value or column reaches it, and
   // now also when it draws a <User> — which a document with no user data at all
   // may do (`<User userId="$_me.id" />`). The viewer's own id is added for both,
@@ -2518,6 +2526,11 @@ export async function viewerIdentityFor(
 
 interface DataflowRunOptions {
   members?:Row[];
+  /**
+   * One caller's repeated runs (the offline file's precomputed filters) sharing the imports' rows: each
+   * import is read and parsed once per map, not once per run. The authority recheck ('verify') is never shared.
+   */
+  importCache?: ImportCache;
   /** Request-owned admission, rerun before cache hits, after waits and SQL. */
   authorize?: () => Promise<void>;
   signal?: AbortSignal;
@@ -2549,6 +2562,7 @@ interface DataflowRunOptions {
  * database resolves to its catalog, which its queries run inside.
  */
 type DatasetResolver = (id: string, mode?: DocumentQuerySourceMode) => Promise<RefData | null>;
+export type ImportCache = Map<string, Promise<RefData | null>>;
 
 /** What a resolved ref contributes to the run: its tables by import name, or the catalog a query runs inside. */
 type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
@@ -2611,6 +2625,25 @@ async function holdableDataset(row: ArtifactRow, ref: string, viewer: RoleActor 
     if (rows > HOLD_MAX_ROWS || bytes > HOLD_MAX_BYTES) return null;
   }
   return catalog;
+}
+
+/**
+ * WHAT THE DOCUMENT'S DATA IS, as one string that changes when it does: each imported dataset's
+ * catalog (stored tables are content-addressed objects), version and access revisions. Null when
+ * any import is not a stored dataset (a connected database can change under a constant key), so a
+ * caller that caches results by this key never caches those.
+ */
+export async function importsFingerprint(row: ArtifactRow, flow: CompiledDataflow): Promise<string | null> {
+  const refs = [...new Set(flow.imports.map((i) => i.ref))].sort();
+  if (flow.queries.some((q) => q.source)) return null;
+  const parts: unknown[] = [];
+  for (const ref of refs) {
+    const dataset = await importedArtifactFor(row, ref);
+    const catalog = dataset && dataset.format === 'dataset' ? catalogOf(dataset) : null;
+    if (!dataset || catalog?.kind !== 'stored') return null;
+    parts.push([ref, dataset.version, dataset.policy_revision ?? 0, dataset.sharing_revision ?? 0, catalog]);
+  }
+  return JSON.stringify(parts);
 }
 
 async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {

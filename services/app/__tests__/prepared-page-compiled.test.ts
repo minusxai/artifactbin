@@ -55,7 +55,9 @@ describe('the compiled page on the prepared page', () => {
     const compiled = (await stored(id)).compiled as CompiledPage;
     expect(compiled.html).toContain('role="tablist"');
     expect(compiled.module!.url).toBe(`${DOCUMENT_MODULE_PATH}/${compiled.module!.sha}.js`);
-    expect((await app.request(compiled.module!.url)).status).toBe(200);
+    // Bound to the serving build's runtime; unversioned, a module naming the runtime by specifier is never served.
+    expect((await app.request(`${compiled.module!.url}?b=${loadCompilerBuild().id}`)).status).toBe(200);
+    expect((await app.request(compiled.module!.url)).status).toBe(404);
     expect(compiled.ssr!.url).toBe(`islands-ssr/${compiled.ssr!.sha}`);
     expect((await app.request(`${DOCUMENT_MODULE_PATH}/${compiled.ssr!.sha}.js`)).status).toBe(404);
   });
