@@ -700,7 +700,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     { key: 'code', label: 'Code', aria: 'Edit the source', tip: 'edit the source', icon: <Code size={12} />, active: mode() === 'code', choose: () => { chooseMode('code'); setContentView(null); } },
     ...(queryNotebook().length > 0 ? [{ key: 'data', label: 'Data', aria: 'Show data', tip: "the document's queries", icon: <Database size={12} />, active: queriesOpen(), choose: () => { const was = queriesOpen(); setContentView('data'); chooseMode('design'); if (!was) inPlace.select(null); } }] : []),
     { key: 'pwa', label: 'PWA', aria: 'Show PWA settings', tip: 'PWA settings', icon: <Smartphone size={12} />, active: contentView() === 'pwa', choose: () => { setContentView('pwa'); chooseMode('design'); inPlace.select(null); } },
-    { key: 'files', label: 'Files', aria: 'Show files', tip: 'Files', icon: <Files size={12} />, active: contentView() === 'files', choose: () => { setContentView('files'); chooseMode('design'); inPlace.select(null); } },
+    ...((art.refs ?? []).some(ref => ref.kind !== 'dataset') ? [{ key: 'files', label: 'Files', aria: 'Show files', tip: 'Files', icon: <Files size={12} />, active: contentView() === 'files', choose: () => { setContentView('files'); chooseMode('design'); inPlace.select(null); } }] : []),
     ...(props.sharingContent ? [{ key: 'sharing', label: 'Sharing', aria: 'Show sharing', tip: 'Sharing', icon: <Share2 size={12} />, active: contentView() === 'sharing', choose: () => { setContentView('sharing'); chooseMode('design'); inPlace.select(null); } }] : []),
   ];
   const InspectIcon = (p: { size: number; class?: string }) => {
