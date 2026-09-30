@@ -3,11 +3,11 @@
 import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { useLocation } from '@solidjs/router';
-import { SessionProvider } from './web/session';
-import { usePageIntentPreload } from './web/use-page-data';
+import { SessionProvider } from './lib/session';
+import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
 import { OnboardingGate } from './components/OnboardingGate';
-import { InboxProvider } from './web/notifications';
+import { InboxProvider } from './lib/notifications';
 import { clearInitialStoryOnRoute, initialDocumentStory } from '@/web/initial-story';
 
 const TrashPage = lazy(() => import('./pages/Trash').then((m) => ({ default: m.TrashPage })));

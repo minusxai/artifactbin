@@ -3,9 +3,9 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
-import { SessionProvider } from '@/solid/web/session';
+import { SessionProvider } from '@/solid/lib/session';
 import { HomePage } from '@/solid/pages/Home';
-import { REFRESH_EVENT } from '@/solid/shared/page-data';
+import { REFRESH_EVENT } from '@/web/page-data-events';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com', username: 'one', image: null }, onboarded: true };
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };

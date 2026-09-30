@@ -1,5 +1,5 @@
 /**
- * Solid twin of lib/story/use-edit-panel's `useWideEditViewport`: is the
+ * `createWideEditViewport`: is the
  * window wide enough for the edit panel to sit beside the document (edit-bar's
  * EDIT_PANEL_BREAKPOINT)? LIVE — a window dragged across the line swaps the
  * side panel for bottom sheets.

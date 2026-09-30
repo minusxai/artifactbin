@@ -3,6 +3,7 @@ import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import Copy from 'lucide-solid/icons/copy';
 import { existingPaste } from '@/lib/agent-copy';
+import { copyText } from '../lib/copy-text';
 
 /**
  * First-party starter chrome (components/StarterInstructions in Solid). The paste is public, tokenless
@@ -15,8 +16,7 @@ export function StarterInstructions(props: { id: string }): JSX.Element {
   const [state, setState] = createSignal<'idle' | 'copied' | 'error'>('idle');
   const prompt = () => draft() ?? existingPaste(origin, props.id);
   const copy = async () => {
-    try { await navigator.clipboard.writeText(prompt()); setState('copied'); }
-    catch { setState('error'); }
+    setState(await copyText(prompt()) ? 'copied' : 'error');
   };
   onMount(() => {
     const frame = requestAnimationFrame(() => instructions.focus({ preventScroll: true }));

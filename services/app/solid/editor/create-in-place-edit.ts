@@ -1,5 +1,5 @@
 /**
- * Solid twin of lib/story/use-in-place-edit — THE PARENT HALF OF IN-PLACE EDITING.
+ * THE PARENT HALF OF IN-PLACE EDITING.
  *
  * The document the reader is looking at becomes editable where it stands; this
  * is the page's side of that conversation. It holds nothing about how editing

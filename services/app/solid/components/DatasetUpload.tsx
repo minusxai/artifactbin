@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
+import { apiFetch } from '../lib/api';
 
 interface Uploaded { id: string; title: string | null; columns: { name: string; type: string }[]; rowCount: number | null; totalRows?: number; truncated?: boolean }
 
@@ -14,7 +15,7 @@ export function DatasetUpload(): JSX.Element {
   const publish = async (body: Record<string, unknown>) => {
     setBusy(true); setError(null);
     try {
-      const response = await fetch('/api/my/artifacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const response = await apiFetch('/api/my/artifacts', 'POST', body);
       const data = await response.json().catch(() => ({})) as Uploaded & { details?: string[]; error?: string };
       if (!response.ok) { setError(data.details?.[0] ?? data.error ?? 'Upload failed.'); return; }
       setResult({ id: data.id, title: data.title ?? null, columns: data.columns ?? [], rowCount: data.rowCount ?? null, totalRows: data.totalRows, truncated: data.truncated });

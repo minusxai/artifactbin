@@ -213,45 +213,6 @@ export const MAX_PEOPLE_IDS = 1000;
 
 /** DOM contract between the builder and the entry. */
 export const STORY_ROOT_ID = 'mx-story-root';
-export const STORY_ISLAND_ID = 'mx-story-data';
-
-/**
- * The author's Helmet <script> is emitted with THIS type, which no browser
- * executes, and the runtime re-injects it as a real classic script once
- * hydration has finished (lib/story-runtime/entry).
- *
- * Ordering is the whole point: the runtime is a module (deferred), so a plain
- * inline script would run BEFORE hydration and any DOM it changed inside the
- * story root would be reconciled away — or worse, break hydration. Re-injecting
- * keeps classic-script semantics (globals, `var`, no module scope) while
- * guaranteeing the document the script sees is the hydrated one.
- */
-export const AUTHOR_SCRIPT_TYPE = 'text/mx-author';
-
-/** Fired on `document` after hydration and before the author script runs. */
-export const STORY_READY_EVENT = 'mx:ready';
-
-/**
- * Posted to the parent the moment the document's own markup has PARSED —
- * which is when it is visually ready, long before its scripts finish.
- *
- * The page shows its own copy of the text until the frame can take over, and
- * gating that on the frame's `load` event kept the fallback up until the last
- * byte of the runtime had arrived (measured: still swapped-out at 2.5s on a
- * slow link, for a document that had painted at ~700ms).
- */
-export const STORY_PAINTED_MESSAGE = 'mx:painted';
-
-/**
- * The other half of that signal: the page asking, rather than only listening.
- *
- * Announcing is a burst with an end, and the page's own listener attaches at
- * hydration — so a page that hydrates after the burst hears nothing and keeps
- * a live document hidden, transparent, forever. A question cannot be early or
- * late: the page asks until it is told.
- */
-export const STORY_HELLO_MESSAGE = 'mx:hello';
-
 /**
  * The QUERY RELAY — how a served document INSIDE A PARENT PAGE (the owner's
  * shell, the canvas, a capture) re-runs its queries after a value changes:
@@ -326,23 +287,6 @@ export interface StoryController {
 }
 
 /**
- * "Adopted." The page cannot assume a document can update itself: one with no
- * components ships no runtime at all, and one whose script threw never got
- * here. Silence is the signal to fall back to replacing the frame, so this ack
- * is what keeps a reader from sitting on a version that has moved on.
- */
-export const STORY_DOCUMENT_ACK_MESSAGE = 'mx:document-ack';
-
-/**
- * "I can adopt a new version." Announced by the hydration runtime as it starts,
- * so a page holding an update knows whether waiting for an ack is worth
- * anything: a document with no components ships no runtime at all, and waiting
- * three seconds to discover that is three seconds of a reader looking at an
- * edit that has already been made.
- */
-export const STORY_ADOPTS_MESSAGE = 'mx:adopts';
-
-/**
  * The runtime's private hook for adopting a new version of this document,
  * installed on `window` by the hydration entry.
  *
@@ -366,11 +310,6 @@ export const STORY_MODE_HOOK = '__mxSetColorMode';
 /** A trusted parent asks its opaque document frame to change the reader's
  * local appearance. It changes no stored document field and grants nothing. */
 export const STORY_READER_MODE_MESSAGE = 'mx:reader-mode';
-export interface StoryReaderModeMessage {
-  type: typeof STORY_READER_MODE_MESSAGE;
-  mode: 'light' | 'dark';
-}
-
 /**
  * A FRAMED document's reader chrome asks its trusted parent to act. The chrome
  * is drawn inside the document so it looks the same for everyone, but a frame
@@ -565,14 +504,6 @@ export interface StoryValuesMessage {
   values: Record<string, Scalar>;
 }
 
-/** A `mx:values` carrying THIS session's nonce — anything else is author code. */
-export function isValuesMessage(data: unknown, nonce: string): data is StoryValuesMessage {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as { type?: unknown; nonce?: unknown; values?: unknown };
-  return d.type === STORY_VALUES_MESSAGE && d.nonce === nonce
-    && !!d.values && typeof d.values === 'object' && !Array.isArray(d.values);
-}
-
 /**
  * The SSE event name a DATA wakeup carries on `/a/<id>/events` (the default,
  * unnamed frame stays the document). It lives HERE rather than beside the
@@ -582,11 +513,6 @@ export function isValuesMessage(data: unknown, nonce: string): data is StoryValu
  * build failure, not a size regression.
  */
 export const STORY_DATA_EVENT = 'data';
-
-export interface StoryDataUpdate {
-  type: typeof STORY_DATA_MESSAGE;
-  datasets: string[];
-}
 
 /* ────────────────────────────────────────────────────────────────────────────
  * IN-PLACE EDITING — edit mode is a mode the runtime enters, in the frame the

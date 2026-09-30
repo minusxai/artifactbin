@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
-import { preloadKeyFor } from '@/solid/web/use-page-data';
+import { preloadKeyFor } from '@/solid/lib/use-page-data';
 
 let calls: string[];
 beforeEach(() => {

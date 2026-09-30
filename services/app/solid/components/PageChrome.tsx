@@ -9,11 +9,11 @@ import { CHROME_IDENTITY } from '@/lib/chrome-identity';
 import { githubStarMarkup, wireGithubStar } from '@/lib/github-star';
 import { REPO_URL } from '@/lib/repo';
 import { forgetTokens } from '@/lib/browser-session';
-import { loginHref } from '../shared/login-href';
-import { useSession } from '../web/session';
+import { loginHref } from '@/lib/login-href';
+import { useSession } from '../lib/session';
 import { Tooltip } from './Tooltip';
 import { PeopleInbox } from './PeopleInbox';
-import { useInbox } from '../web/notifications';
+import { useInbox } from '../lib/notifications';
 import { Avatar } from './Avatar';
 
 /** Artifact controls from the editor seam; the named export below owns app pages. */

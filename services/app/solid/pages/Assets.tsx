@@ -12,8 +12,8 @@ import type { AssetSelection, WorkspaceAssets } from '@/lib/workspace-inventory'
 import type { ShelfRow } from '@/lib/shelf';
 import { MicroLabel, PANEL, FormatBadge, timeAgo } from '../components/ui';
 import { RowActions } from '../components/Shelf';
-import { usePageData } from '../web/use-page-data';
-import { useSession } from '../web/session';
+import { usePageData } from '../lib/use-page-data';
+import { useSession } from '../lib/session';
 
 /** The server owns search, filters and pagination; the page only serializes a selection. */
 export function AssetsPage(): JSX.Element {

@@ -27,7 +27,7 @@
  * opened by a mouse gets none — desktop hover is unchanged.
  *
  * Listeners live on the chart's `ownerDocument`: charts render inside the story iframe, and an
- * iframe's events never reach the top document (see `lib/viz/iframe-event-bridge.ts`).
+ * iframe's events never reach the top document.
  */
 
 /** How the card that is currently up was opened. */

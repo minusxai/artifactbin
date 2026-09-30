@@ -1,8 +1,8 @@
 /**
- * THE THEME STAMP — the inline script web/index.html runs before paint, and
+ * THE THEME STAMP — the inline script web/solid-app.html runs before paint, and
  * the CSP hash that admits it. One copy, so every page that carries the stamp
  * (the SPA shell, a custom domain's home page) carries the same bytes under
- * the same hash; lib/__tests__/app-page-csp derives both from web/index.html,
+ * the same hash; lib/__tests__/app-page-csp derives both from web/solid-app.html,
  * so an edit to either side turns red instead of silently blocking the script.
  *
  * LIGHT carries no attribute. A stored `mx_theme` (written by the app bar's

@@ -29,7 +29,7 @@
  * artifactbin — terminal-graphite design system.
  * LIGHT by default (no data-theme attribute); [data-theme='dark'] swaps the
  * palette to graphite. The toggle writes localStorage('mx_theme') and the
- * pre-paint script in web/index.html stamps the attribute FOUC-free.
+ * pre-paint script in web/solid-app.html stamps the attribute FOUC-free.
  *
  * Whichever mode is default must be the one on bare `:root`, because that is
  * what a reader gets before any script runs and if none ever does — so flipping

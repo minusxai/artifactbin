@@ -16,6 +16,7 @@
 import { createManagedAssetResolver, prepareManagedContent, type ManagedAssetRelay, type ManagedAssetsConfig } from '@/lib/story-runtime/managed-assets';
 import { startAuthorScript } from '@/lib/story-runtime/author-script';
 import { managedAuthorDocument } from '@/lib/story-runtime/managed-author-document';
+import { createRelayTransport } from '@/lib/story-runtime/relay-transport';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { createDataflowStore, type DataflowStore } from '@/lib/story-runtime/store';
 import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
@@ -50,7 +51,7 @@ export function pageAssetDoor(doc: Document, win: Window = doc.defaultView ?? wi
   const door = data?.managedAssets;
   const assets = door && typeof door.origin === 'string' && typeof door.resolveUrl === 'string' ? { origin: door.origin, resolveUrl: door.resolveUrl } : undefined;
   // The document transport's own rule (lib/story-runtime/document-transport): the relay exactly when framed.
-  const importAsset = createDocumentTransport(win, undefined, origin)?.importAsset;
+  const importAsset = createDocumentTransport(win, undefined, origin, undefined, undefined, { relay: { eager: createRelayTransport } })?.importAsset;
   return { ...(assets ? { assets } : {}), ...(importAsset ? { importAsset } : {}) };
 }
 

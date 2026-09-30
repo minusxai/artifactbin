@@ -1,8 +1,9 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { REFRESH_EVENT } from '../shared/page-data';
+import { REFRESH_EVENT } from '@/web/page-data-events';
 import { Button, PANEL } from './ui';
 import { ConfirmDialog } from './ConfirmDialog';
+import { apiFetch } from '../lib/api';
 
 interface Claimable { tokenId: string; titles: string[]; artifacts: number }
 /** Browser tokens remain in httpOnly cookies; this only names server-approved offers. */
@@ -27,7 +28,7 @@ export default function ClaimBanner(): JSX.Element {
     if (!selected.length) return;
     setBusy(true);
     const outcomes = await Promise.all(selected.map(async offer => {
-      const response = await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tokenId: offer.tokenId }) }).catch(() => null);
+      const response = await apiFetch('/api/tokens/claim', 'POST', { tokenId: offer.tokenId }).catch(() => null);
       return { offer, ok: Boolean(response?.ok) };
     }));
     const ok = outcomes.filter(item => item.ok).length; const failed = outcomes.length - ok;
@@ -38,7 +39,7 @@ export default function ClaimBanner(): JSX.Element {
   const reject = async () => {
     const tokenId = rejecting(); if (!tokenId) return;
     setRejectBusy(true); setRejectError('');
-    const response = await fetch('/api/tokens/reject', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tokenId }) }).catch(() => null);
+    const response = await apiFetch('/api/tokens/reject', 'POST', { tokenId }).catch(() => null);
     setRejectBusy(false);
     if (!response?.ok) { setRejectError('Could not reject these drafts. Try again.'); return; }
     setOffers(current => current.filter(offer => offer.tokenId !== tokenId));

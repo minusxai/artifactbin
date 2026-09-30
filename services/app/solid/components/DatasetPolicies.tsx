@@ -5,6 +5,7 @@ import { parseDatasetAccessPolicy } from '@artifactbin/utils/dataset-grants';
 import type { DatasetAccessPolicy, DatasetOperation, DatasetTablePolicy, InsertPermission, UpdatePermission, DeletePermission } from '@artifactbin/contracts';
 import { Button } from './ui';
 import { PolicyConditions } from './PolicyConditions';
+import { apiFetch } from '../lib/api';
 
 type Table = { schema: string; name: string; columns: Array<{ name: string }> };
 type PolicyState = { canManage?: boolean; policy: DatasetAccessPolicy | null; revision: number; tables: Table[]; writtenBy: Array<{ id: string; title: string | null; mutations: string[] }> };
@@ -58,7 +59,7 @@ function PolicyEditor(props: { artifactId: string }): JSX.Element {
     setSaving(true); setError('');
     try {
       const policy = draft() ? parseDatasetAccessPolicy(draft()) : null;
-      const response = await fetch(`/api/my/artifacts/${encodeURIComponent(props.artifactId)}/policy`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ policy, expectedPolicyRevision: loaded.revision }) });
+      const response = await apiFetch(`/api/my/artifacts/${encodeURIComponent(props.artifactId)}/policy`, 'PUT', { policy, expectedPolicyRevision: loaded.revision });
       const answer = await response.json();
       if (!response.ok) throw new Error(answer.detail ?? answer.error ?? 'Could not save policies.');
       setState({ ...loaded, policy: answer.policy, revision: answer.revision }); setDraft(answer.policy); setNotice('Access policies saved.');

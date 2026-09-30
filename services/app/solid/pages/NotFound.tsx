@@ -4,9 +4,9 @@
  * React page's `useLoginHref` hook becomes a signal set on mount and re-read on click.
  */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import { LINK } from '../shared/ui-tokens';
-import { loginHref } from '../shared/login-href';
-import { useSession } from '../web/session';
+import { LINK } from '../components/ui';
+import { loginHref } from '@/lib/login-href';
+import { useSession } from '../lib/session';
 import { useChromeVisibility } from '../components/PageChrome';
 
 const GLITCH_CSS = `

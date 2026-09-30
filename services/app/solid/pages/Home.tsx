@@ -10,8 +10,8 @@ import ClaimBanner from '../components/ClaimBanner';
 import SharedWithYou from '../components/SharedWithYou';
 import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../components/WorkspaceLayout';
-import { usePageData } from '../web/use-page-data';
-import { useSession } from '../web/session';
+import { usePageData } from '../lib/use-page-data';
+import { useSession } from '../lib/session';
 
 export function HomePage(): JSX.Element {
   const { session, sessionError, reload } = useSession();

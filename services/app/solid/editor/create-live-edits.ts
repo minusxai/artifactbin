@@ -1,5 +1,5 @@
 /**
- * lib/story/use-live-edits in SOLID: the framework-free core (solid/shared/live-edits-core) owned by
+ * lib/story/use-live-edits in SOLID: the framework-free core (solid/lib/live-edits-core) owned by
  * the current reactive scope. One signal mirrors the core's state; `onCleanup` is the unmount.
  *
  * `options` may be a Solid props object: the core reads it LIVE, so a new `onRemoteDocument` or
@@ -7,9 +7,9 @@
  * `initial*` fields are read once, like the hook's refs.
  */
 import { createSignal, getOwner, onCleanup } from 'solid-js';
-import { createLiveEditsCore, type LiveEditsOptions, type LiveEditState } from '@/solid/shared/live-edits-core';
+import { createLiveEditsCore, type LiveEditsOptions, type LiveEditState } from '@/solid/lib/live-edits-core';
 
-export type { LiveEditsOptions, LiveEditState, PendingChange } from '@/solid/shared/live-edits-core';
+export type { LiveEditsOptions, LiveEditState, PendingChange } from '@/solid/lib/live-edits-core';
 
 export function createLiveEdits(options: LiveEditsOptions) {
   const core = createLiveEditsCore(() => options);
