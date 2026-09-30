@@ -232,7 +232,7 @@ for (const viewport of [{ width: 1200, height: 800 }, { width: 390, height: 800 
   await popPage.waitForSelector('[data-mx-inline-story] h1', { timeout: 20000 });
   await popPage.waitForTimeout(1500);
   await popPage.getByRole('button', { name: 'Open popover' }).click();
-  await popPage.waitForFunction(() => /px/.test(document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''), null, { timeout: 5000 }).catch(() => {});
+  await popPage.waitForFunction(() => /px/.test(document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''), null, { timeout: 10000 }).catch(() => {});
   const box = await popPage.evaluate(() => {
     const t = document.querySelector('[data-slot="popover-trigger"]')?.getBoundingClientRect();
     const c = document.querySelector('[data-slot="popover-content"]')?.getBoundingClientRect();

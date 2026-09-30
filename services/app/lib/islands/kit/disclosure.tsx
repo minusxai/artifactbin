@@ -71,20 +71,22 @@ export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
  * centred, 4px off, 8px from the edges). Until placed it waits off-screen, so it never flashes at the viewport's corner.
  */
 function PopoverPopper(p: { ctx: PopupState; side?: Side; align?: Align; sideOffset?: number; children?: JSX.Element }) {
-  const ctx = p.ctx; let wrapper!: HTMLDivElement; const [placed, setPlaced] = createSignal<Placed>();
-  onMount(() => createEffect(() => {
-    if (!ctx.open()) return;
-    const anchor = ctx.trigger(); if (!anchor) return;
+  const ctx = p.ctx; const [wrapper, setWrapper] = createSignal<HTMLDivElement>(); const [placed, setPlaced] = createSignal<Placed>();
+  // Placement waits on all three (the open state, the trigger, its own element) as signals, whichever arrives last:
+  // a press can land while the page is still taking over, before the trigger's ref has run.
+  createEffect(() => {
+    const element = wrapper(); const anchor = ctx.trigger();
+    if (!ctx.open() || !element || !anchor) return;
     let live = true; let stop = () => {};
     // Opened by a press, so placed at once (no deferral): the lazy popper chunk is the only wait.
     void import('./popper').then(({ placePopper }) => {
       if (!live) return;
-      stop = placePopper(anchor, wrapper, null, { side: p.side ?? 'bottom', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 4, collisionPadding: 8, arrowWidth: 0, arrowHeight: 0, onPlaced: setPlaced });
+      stop = placePopper(anchor, element, null, { side: p.side ?? 'bottom', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 4, collisionPadding: 8, arrowWidth: 0, arrowHeight: 0, onPlaced: setPlaced });
     });
     onCleanup(() => { live = false; stop(); setPlaced(undefined); });
-  }));
-  createEffect(() => { const side = placed()?.side; const align = placed()?.align; const content = wrapper.firstElementChild; if (!content) return; if (side) { content.setAttribute('data-side', side); content.setAttribute('data-align', align ?? 'center'); } else { content.removeAttribute('data-side'); content.removeAttribute('data-align'); } });
-  return <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>{p.children}</div>;
+  });
+  createEffect(() => { const side = placed()?.side; const align = placed()?.align; const content = wrapper()?.firstElementChild; if (!content) return; if (side) { content.setAttribute('data-side', side); content.setAttribute('data-align', align ?? 'center'); } else { content.removeAttribute('data-side'); content.removeAttribute('data-align'); } });
+  return <div ref={setWrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>{p.children}</div>;
 }
 type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; panel: () => HTMLElement | undefined; setPanel: (el: HTMLElement) => void; announce: () => void };
 /**
