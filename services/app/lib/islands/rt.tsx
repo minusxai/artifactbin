@@ -17,7 +17,7 @@
  * Import-safe on the server (no DOM access at module scope): the SSR module renders the same
  * islands through `createIslandRuntime` + `withIsland`, with a store that has no transport.
  */
-import { batch, createComponent, createMemo, createRoot, createSignal, For, Show } from 'solid-js';
+import { batch, createComponent, createMemo, createRoot, createSignal, For, sharedConfig, Show } from 'solid-js';
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
@@ -349,8 +349,16 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
   const root = parent.querySelector(`[data-hk^="${renderId}"]`);
   const host = root?.parentNode as (Element & ParentNode) | null | undefined;
   if (!root || !host) return null;
-  const g = globalThis as { _$HY?: { events: unknown[]; completed: WeakSet<object>; r: Record<string, unknown> } };
+  const g = globalThis as { _$HY?: { done?: boolean; events: unknown[] | null; completed: WeakSet<object> | null; r: Record<string, unknown> } };
   g._$HY ??= { events: [], completed: new WeakSet(), r: {} };
+  // Solid ends the page's hydration phase at the first delegated event (the reader's first click) and
+  // from then on RENDERS instead of hydrating: a later island (an editor draft, a live version) would be
+  // drawn fresh and its static runs (`NoHydration`) would come out empty. Each island hydration is its own
+  // phase over server markup that is in the DOM right now, so reopen it.
+  g._$HY.done = false;
+  g._$HY.events ??= [];
+  g._$HY.completed ??= new WeakSet();
+  (sharedConfig as { done?: boolean }).done = false;
   let disposeIsland: () => void = () => {};
   let output: unknown;
   let live: unknown;

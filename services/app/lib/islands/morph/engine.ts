@@ -365,7 +365,8 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
         const path = (next as Element).getAttribute(AST_PATH_ATTR);
         const byStablePath = path && ctx.stableElementPaths?.has(path) ? byPath.get(path) : undefined;
         const retained = stable ?? byStablePath;
-        place(retained && sameKind(retained, next) ? retained : doc.importNode(next, true));
+        if (retained && sameKind(retained, next)) { adoptHydrationKeys(retained, next as Element); place(retained); }
+        else place(doc.importNode(next, true));
         continue;
       }
       // A kept island: every node it runs, where the new page has it, once.
@@ -395,7 +396,7 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
           && !(path && ctx.stableElementPaths?.has(path))) {
           syncAttributes(oldElement, newElement, null);
           morphChildren(oldElement, newElement, ctx);
-        }
+        } else if (!sameChart) adoptHydrationKeys(oldElement, newElement);
       } else if (match.nodeValue !== next.nodeValue) {
         match.nodeValue = next.nodeValue;
       }
@@ -405,6 +406,24 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     place(fresh(doc, next, ctx));
   }
   for (const node of olds) if (!ctx.used.has(node) && !ctx.kept.has(node) && node.parentNode === from) from.removeChild(node);
+}
+
+/**
+ * A kept component answers to the new compile's hydration keys and AST paths. It is unchanged, but
+ * both are positional: a block added ahead of it, or a first draft over a page served from differently
+ * spaced source, moves them. Hydrating under keys the draft module cannot find renders the component
+ * fresh, without its server-only static runs; stale paths hide it from the editor's mounter.
+ */
+function adoptHydrationKeys(kept: Element, next: Element): void {
+  for (const attr of [HK, AST_PATH_ATTR]) {
+    const from = [kept, ...kept.querySelectorAll(`[${attr}]`)].filter((el) => el.hasAttribute(attr));
+    const to = [next, ...next.querySelectorAll(`[${attr}]`)].filter((el) => el.hasAttribute(attr));
+    if (from.length !== to.length) continue;
+    from.forEach((el, index) => {
+      const value = to[index]!.getAttribute(attr)!;
+      if (el.getAttribute(attr) !== value) el.setAttribute(attr, value);
+    });
+  }
 }
 
 /** Morph an unsaved editor compile in the adopted root. Only caller-approved component IDs keep

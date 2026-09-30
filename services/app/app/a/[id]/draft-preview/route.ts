@@ -29,7 +29,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!body || typeof body.source !== 'string' || typeof body.editId !== 'string' || body.source.length > MAX_SOURCE_LENGTH) {
     return json({ error: 'invalid_draft' }, 400, NO_STORE);
   }
-  if (body.editId !== artifact.edit_id) return json({ error: 'stale_edit' }, 409, NO_STORE);
+  // No head check: the preview writes nothing, and the editor's draft is ahead of the head it last saw
+  // for as long as a save is in flight. Refusing the old `editId` blanked the preview on every such race.
   const meta = (artifact.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
   const theme = body.theme === null || (typeof body.theme === 'string' && STORY_THEME_NAMES.includes(body.theme as StoryThemeName))
     ? body.theme as StoryThemeName | null : meta.theme;

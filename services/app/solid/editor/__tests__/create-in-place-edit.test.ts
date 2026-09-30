@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { STORY_COMMITTED_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_COMMITTED_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
 import { createInPlaceEdit } from '../create-in-place-edit';
 import { renderHook } from '@/solid/__tests__/helpers';
 
@@ -91,4 +91,18 @@ it('drains a pending commit before inserting a dropped image, and reports the re
   emit({ type: STORY_COMMITTED_MESSAGE });
   await vi.waitFor(() => expect(dropped).toHaveLength(1));
   expect(dropped[0]![1]).toEqual({ replace: 'body.2' });
+});
+
+it('redraws the draft after a grid layout edit so the compiled tiles follow the overlay', () => {
+  const { runtimeRef, emit } = fakeRuntime();
+  const source = '<Grid><GridItem x={0} y={0} w={6} h={3}><p>Left</p></GridItem></Grid>';
+  const edited: Array<[string, boolean | undefined]> = [];
+  renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: source }, editing: true, sessionNonce: NONCE,
+    onSourceEdited: (next, render) => { edited.push([next, render]); },
+  }));
+  emit({ type: STORY_LAYOUT_EDIT_MESSAGE, rects: [{ path: '0.0', x: 0, y: 0, w: 4, h: 3 }] });
+  expect(edited).toHaveLength(1);
+  expect(edited[0]![0]).toContain('w={4}');
+  expect(edited[0]![1]).toBe(true);
 });
