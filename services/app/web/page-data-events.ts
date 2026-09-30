@@ -11,8 +11,6 @@ export const pageDataChanged = () => window.dispatchEvent(new Event(PAGE_DATA_CH
  * (solid/shared/page-data) call sites.
  */
 export const REFRESH_EVENT = 'mx:refresh';
-export const refreshPage = () => window.dispatchEvent(new Event(REFRESH_EVENT));
-
 /**
  * The signed-in person's own face changed — a picture uploaded or removed, a
  * handle saved (the app bar's initial is the handle's). The session is re-read

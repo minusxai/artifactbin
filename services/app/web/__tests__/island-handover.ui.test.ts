@@ -186,7 +186,7 @@ describe('a writer boots the app on idle', () => {
 
 describe('the saved theme applies without an inline script', () => {
   const cases: Array<[string | null, boolean]> = [['dark', false], ['light', true], [null, true], [null, false]];
-  it.each(cases)('stored %s, device dark %s: the same stamp as web/index.html\'s script', (stored, deviceDark) => {
+  it.each(cases)('stored %s, device dark %s: the same stamp as web/solid-app.html\'s script', (stored, deviceDark) => {
     const stamp = (run: () => void) => {
       delete document.documentElement.dataset.theme;
       localStorage.clear();
