@@ -361,13 +361,18 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       const anchor = exitAnchor.current;
       // Let the reduced inset and the scroll adjustment paint before reload;
       // otherwise session restoration can retain the pre-exit pixel offset.
-      requestAnimationFrame(() => {
+      let reloadFrame: number | undefined;
+      const scrollFrame = requestAnimationFrame(() => {
         if (generation !== reloadGeneration.current) return;
         window.scrollTo(0, target);
-        requestAnimationFrame(() => {
+        reloadFrame = requestAnimationFrame(() => {
           if (generation === reloadGeneration.current) reloadKeepingPlace(window, anchor);
         });
       });
+      return () => {
+        cancelAnimationFrame(scrollFrame);
+        if (reloadFrame !== undefined) cancelAnimationFrame(reloadFrame);
+      };
     }
   }, [editing, compiled]);
 

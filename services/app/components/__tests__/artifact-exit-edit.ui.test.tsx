@@ -153,6 +153,28 @@ describe('coming back from edit mode', () => {
     expect(scroll.mock.invocationCallOrder.at(-1)!).toBeLessThan(surfaceSpies.reload.mock.invocationCallOrder.at(-1)!);
   });
 
+  it('cancels pending scroll restoration when the surface unmounts', async () => {
+    const view = render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
+    await painted();
+    goEdit();
+    await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
+    const frames = new Map<number, FrameRequestCallback>();
+    let sequence = 0;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { frames.set(++sequence, callback); return sequence; });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => { frames.delete(id); });
+    leaveEdit();
+    await waitFor(() => expect(screen.queryByLabelText('Editor stub')).toBeNull());
+    await waitFor(() => expect(frames.size).toBeGreaterThan(0));
+    view.unmount();
+    surfaceSpies.reload.mockClear();
+    // Run both paints, if the disposed surface left them scheduled.
+    for (let paint = 0; paint < 2; paint++) {
+      const pending = [...frames.values()]; frames.clear();
+      act(() => { for (const callback of pending) callback(0); });
+    }
+    expect(surfaceSpies.reload).not.toHaveBeenCalled();
+  });
+
   it('does not retain a loader after the first runtime mount', async () => {
     render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
     await painted();
