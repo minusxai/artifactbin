@@ -48,7 +48,7 @@ describe('buildIslands', () => {
       expect(url, specifier).toMatch(/^\/islands\/[\w-]+-[0-9a-f]{8,}\.js$/);
       expect(existsSync(path.join(outDir, url.slice('/islands/'.length))), `${specifier} → ${url} exists`).toBe(true);
     }
-    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr, sqliteWasm: expect.stringMatching(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/) });
+    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr, offline: first.offline, sqliteWasm: expect.stringMatching(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/) });
     // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
     const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
     expect(withSolidWeb).toHaveLength(1);
@@ -59,6 +59,8 @@ describe('buildIslands', () => {
     expect(again.build).toBe(first.build);
     expect(again.manifest).toEqual(first.manifest);
     expect(again.ssr).toEqual(first.ssr);
+    expect(again.offline).toEqual(first.offline);
+    expect(first.offline).toMatch(/^\/islands\/offline-[0-9a-f]{16}\.json\.gzip$/);
   });
 
   it('ships an optional, content-addressed glyph catalog without React in the reader graph', () => {

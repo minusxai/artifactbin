@@ -191,8 +191,9 @@ describe('the snapshot', () => {
     expect(revenue(variantFor(file, 'west')?.tables.sales)).toBe(107);
     expect(revenue(variantFor(file, 'east')?.tables.sales)).toBe(200);
     // Only the queries a region changes travel in its variant.
-    expect(Object.keys(variantFor(file, 'west')!.tables).sort()).toEqual(['mine', 'sales']);
-    expect(revenue(variantFor(file, 'west')?.tables.mine)).toBe(7);
+    // `mine` comes out as the base has it, so the variant leaves it out and the transport answers it from the base.
+    expect(Object.keys(variantFor(file, 'west')!.tables).sort()).toEqual(['sales']);
+    expect(revenue(file.snapshot.state.tables.mine)).toBe(7);
     expect(file.snapshot.frozen).toEqual(['note']);
   });
 

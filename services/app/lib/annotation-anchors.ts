@@ -14,7 +14,7 @@
  * already imports lib/artifacts), the same reason lib/share-roles exists.
  */
 import { parseJsx } from '@/lib/jsx';
-import type { JsxNode } from '@/lib/jsx';
+import type { JsxElement, JsxNode } from '@/lib/jsx';
 
 /** The retired anchor attribute. Its value is an OPAQUE key — never comment text. */
 export const ANNOTATION_ANCHOR_ATTR = 'data-annotation-anchor';
@@ -45,3 +45,51 @@ export function sourceWithoutAnchors(source: string): string {
     .sort((a, b) => b.start - a.start)
     .reduce((text, at) => text.slice(0, text[at.start - 1] === ' ' ? at.start - 1 : at.start) + text.slice(at.end), source);
 }
+
+// ── the anchor, read against the parsed source (the server's comments and the offline file's) ──
+
+/** A node's anchor key: its own `id`, else the retired attribute; null when it carries neither. */
+export const anchorKeyOf = (node: JsxElement): string | null => {
+  const attr = node.attributes.find((a) => a.name === 'id')
+    ?? node.attributes.find((a) => a.name === ANNOTATION_ANCHOR_ATTR);
+  return attr && attr.value.static && typeof attr.value.json === 'string' ? attr.value.json : null;
+};
+
+/**
+ * An anchored node as the source knows it: the element, its SOURCE path, and
+ * the sibling list it sits in — a range part addressed `+1` names the anchor's
+ * next ELEMENT sibling, which cannot be reached from the node alone.
+ */
+export interface AnchorEntry {
+  node: JsxElement;
+  path: string;
+  siblings: JsxNode[];
+}
+
+/** Every anchor-carrying element in the source, by key, with its SOURCE path. */
+export function anchorIndex(source: string): Map<string, AnchorEntry> {
+  const out = new Map<string, AnchorEntry>();
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return out;
+  const walk = (nodes: JsxNode[], prefix: string) => {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (node.type !== 'element') continue;
+      const path = prefix ? `${prefix}.${i}` : String(i);
+      // First occurrence wins: a duplicated attribute (an agent copied the
+      // node) must not make the anchor jump between copies read to read.
+      const key = anchorKeyOf(node);
+      if (key && !out.has(key)) out.set(key, { node, path, siblings: nodes });
+      walk(node.children, path);
+    }
+  };
+  walk(parsed.nodes, '');
+  return out;
+}
+
+/** The longest snippet a thread keeps of its anchor's markup. */
+export const ANNOTATION_SNIPPET_MAX = 200;
+
+/** Markup slice → plain text: tags out, whitespace collapsed, capped. */
+export const snippetOf = (markup: string): string =>
+  markup.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, ANNOTATION_SNIPPET_MAX);

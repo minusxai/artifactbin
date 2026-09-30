@@ -16,7 +16,7 @@
  */
 import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate } from '@artifactbin/contracts';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
-import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
+import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/annotation-anchors';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend, BackendFeature, EditAnswer, FlushResponse, LoadedArtifact } from '@/lib/artifact-backend/types';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
@@ -140,32 +140,8 @@ export function fileAssetInliner(file: Pick<ArtifactFile, 'source' | 'island'>):
 
 // ── comments' anchors, against the current source ───────────────────────────
 
-interface Anchored { node: JsxElement; path: string }
-
-const anchorKeyOf = (node: JsxElement): string | null => {
-  const attr = node.attributes.find((a) => a.name === 'id') ?? node.attributes.find((a) => a.name === ANNOTATION_ANCHOR_ATTR);
-  return attr && attr.value.static && typeof attr.value.json === 'string' ? attr.value.json : null;
-};
-
-/** Every anchor-carrying element, by key, with its SOURCE path — first occurrence wins, as on the server. */
-function anchorIndex(source: string): Map<string, Anchored> {
-  const out = new Map<string, Anchored>();
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return out;
-  const walk = (nodes: JsxNode[], prefix: string) => nodes.forEach((node, i) => {
-    if (node.type !== 'element') return;
-    const path = prefix ? `${prefix}.${i}` : String(i);
-    const key = anchorKeyOf(node);
-    if (key && !out.has(key)) out.set(key, { node, path });
-    walk(node.children, path);
-  });
-  walk(parsed.nodes, '');
-  return out;
-}
-
 const textOf = (node: JsxNode): string =>
   node.type === 'text' ? node.value : node.type === 'element' ? node.children.map(textOf).join('') : '';
-const snippetOf = (markup: string): string => markup.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
 
 /**
  * A thread as the server would read it back now: anchor, snippet and quote

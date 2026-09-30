@@ -10,10 +10,11 @@ import { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } from '@/lib/config';
 import { services } from '@/lib/services';
 import { queryBounds as bounds } from '@artifactbin/utils';
 
-export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, QueryFailure, QueryOutcome, QueryPage, RunInput, SqlQuery } from '@artifactbin/contracts';
+export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, QueryFailure, QueryOutcome, QueryPage, RunInput, RunManyInput, SqlQuery } from '@artifactbin/contracts';
 export { isQueryFailure } from '@artifactbin/contracts';
 
 export const runQueries: SqlService['run'] = (input) => services().sql.run(input);
+export const runManyQueries: SqlService['runMany'] = (input) => services().sql.runMany(input);
 export const runMutation: SqlService['mutate'] = (input) => services().sql.mutate(input);
 export const dryRunQueries: SqlService['dryRun'] = (input) => services().sql.dryRun({ ...input, paramNames: [...input.paramNames] });
 export const dryRunMutations: SqlService['dryRunMutations'] = (input) => services().sql.dryRunMutations({ ...input, paramNames: [...input.paramNames] });

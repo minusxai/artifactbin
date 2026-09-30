@@ -1,39 +1,30 @@
 /** Pack one stored compiled browser module into a classic script for file://.
- * The compiler remains the sole owner of document code. This reads only the
- * module and the immutable shared build named by that compiled page.
+ * The compiler remains the sole owner of document code, and nothing is bundled at download: the
+ * shared runtime is the island build's OFFLINE HALF (scripts/build-islands.mjs buildOfflineHalf — every
+ * chunk a CommonJS factory, `@mx/boot` the snapshot-only file boot), and the document's own module is
+ * turned into a function of its imports by the same Babel pass that evaluates SSR modules. The file
+ * carries a tiny loader, the factories of the closure the module needs, and the module.
  */
-import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';
-import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { readFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import esbuild from 'esbuild';
+import { gunzipSync } from 'node:zlib';
+import { transformAsync, type types as BabelTypes } from '@babel/core';
 import type { CompiledPage } from '@/lib/compiled-page/contract';
+import { moduleToFunction } from '@/lib/compiled-page/bundle.server';
+import { ISLANDS_MANIFEST_PATH } from '@/lib/compiled-page/build.server';
 import { createModuleStore, createTemplateResourceStore } from '@/lib/compiled-page/modules.server';
 
-const SHARED = /^\/islands\/([A-Za-z0-9_-]+\.js)$/;
 const TEMPLATE = /["']\/islands\/t\/([0-9a-f]{16})\.json["']/g;
+const OFFLINE_HALF = /^\/islands\/(offline-[0-9a-f]{16}\.json\.gzip)$/;
 
-/**
- * `@artifactbin/<name>[/subpath]` → absolute file, read from each sibling workspace package's own
- * package.json "exports" map — the same technique the production bundler's static build aliases
- * with (artifactbin-server scripts/source-api.mjs sourceAliases). This build is a separate, LIVE
- * esbuild invocation (below): a compiled document that reaches `@artifactbin/sql/core` or
- * `@artifactbin/contracts` has nothing else to resolve those bare specifiers with, since production
- * never installs `@artifactbin/*` as an npm package (it ships whole into application.mjs instead) —
- * only `root`'s sibling package directories, copied there for this exact purpose.
- */
-function siblingAliases(root: string): Record<string, string> {
-  const aliases: Record<string, string> = {};
-  for (const name of ['contracts', 'utils', 'sql']) {
-    const source = path.join(root, name);
-    let manifest: { exports?: Record<string, string> };
-    try { manifest = JSON.parse(readFileSync(path.join(source, 'package.json'), 'utf8')); } catch { continue; }
-    for (const [sub, file] of Object.entries(manifest.exports ?? {})) {
-      aliases[`@artifactbin/${name}${sub === '.' ? '' : sub.slice(1)}`] = path.join(source, file);
-    }
-  }
-  return aliases;
+/** The island build's offline half, as scripts/build-islands.mjs writes it. */
+export interface OfflineHalf {
+  /** Import specifier → module id. */
+  entries: Record<string, string>;
+  /** The engines only the file's boot reaches, packed only when the file needs them. */
+  lazy: { sqlite: string; chart: string };
+  /** Module id → its CommonJS factory body and the ids it requires statically and lazily. */
+  modules: Record<string, { code: string; imports: string[]; dynamic: string[] }>;
 }
 
 export interface PackedCompiledModule {
@@ -43,86 +34,88 @@ export interface PackedCompiledModule {
   templates: Record<string, string>;
 }
 
+const halves = new Map<string, Promise<OfflineHalf>>();
+
+/** The current build's offline half (read and parsed once per process per build). */
+export function loadOfflineHalf(root = process.cwd()): Promise<OfflineHalf> {
+  return (async () => {
+    const manifest = JSON.parse(await readFile(path.resolve(root, ISLANDS_MANIFEST_PATH), 'utf8')) as { offline?: unknown };
+    const name = typeof manifest.offline === 'string' ? OFFLINE_HALF.exec(manifest.offline)?.[1] : undefined;
+    if (!name) throw new Error('offline: the island build has no offline half (run npm run build:islands)');
+    const file = path.resolve(root, path.dirname(ISLANDS_MANIFEST_PATH), name);
+    let half = halves.get(file);
+    if (!half) {
+      half = readFile(file).then((bytes) => JSON.parse(gunzipSync(bytes).toString('utf8')) as OfflineHalf);
+      halves.set(file, half);
+      half.catch(() => { if (halves.get(file) === half) halves.delete(file); });
+    }
+    return half;
+  })();
+}
+
+/** Defines the factories and requires them on demand; `require` of a module the file lacks throws (a lazy import then rejects). */
+const LOADER = '(function(g){var d={},c={};g.__mxOfflineDefine=function(i,f){d[i]=f};'
+  + 'var r=g.__mxOfflineRequire=function(i){i=String(i).replace(/^\\.\\//,"");var m=c[i];if(m)return m.exports;var f=d[i];'
+  + 'if(!f)throw new Error("offline: "+i+" is not in this file");m=c[i]={exports:{}};f.call(m.exports,m,m.exports,r);return m.exports};})(self);';
+
+/** The document module as a function body of `__mx_import`, and the specifiers it imports. */
+async function documentFunction(source: string): Promise<{ body: string; specifiers: string[] }> {
+  const out = await transformAsync(source, {
+    filename: 'offline-document.js', babelrc: false, configFile: false, sourceType: 'module', compact: true, comments: false,
+    parserOpts: { allowReturnOutsideFunction: true },
+    plugins: [({ types }: { types: typeof BabelTypes }) => moduleToFunction(types, { sideEffects: true })],
+  });
+  if (!out?.code) throw new Error('offline: the compiled module produced nothing');
+  const specifiers = [...new Set([...out.code.matchAll(/__mx_import\("((?:[^"\\]|\\.)*)"\)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string))];
+  return { body: out.code, specifiers };
+}
+
 export async function packCompiledBrowserModule(
   page: CompiledPage,
   options: {
     module?: Uint8Array;
-    sharedDir?: string;
-    /** The directory holding the sibling `contracts`/`utils`/`sql` workspace packages (tests only; defaults to `..` of cwd). */
-    workspaceRoot?: string;
     template?: (sha: string) => Promise<Uint8Array | null>;
-    /** Swap the network reader boot for the snapshot-only file boot. */
+    /** The offline half to pack against (tests); the current build's otherwise. */
+    half?: OfflineHalf;
+    /** Which boot-only engines travel: SQLite for held imports, Vega for charts. */
     offline?: { sqlite: boolean; chart: boolean };
   } = {},
 ): Promise<PackedCompiledModule | null> {
   if (!page.module) return null;
   const module = options.module ?? await createModuleStore().get(page.module.sha);
   if (!module) throw new Error(`offline: compiled module ${page.module.sha} is unavailable`);
-  const decoded = new TextDecoder().decode(module);
-  // A module of the current contract names the runtime by specifier; the file pins the build it was exported with.
-  const source = page.sharedBuild ? bindModuleCode(decoded, page.sharedBuild) : decoded;
-  const templateIds = [...source.matchAll(TEMPLATE)].map((match) => match[1]!);
+  const source = new TextDecoder().decode(module);
   const templates: Record<string, string> = {};
-  for (const sha of new Set(templateIds)) {
+  for (const sha of new Set([...source.matchAll(TEMPLATE)].map((match) => match[1]!))) {
     const bytes = await (options.template?.(sha) ?? createTemplateResourceStore().get(sha));
     if (!bytes) throw new Error(`offline: compiled templates ${sha} are unavailable`);
     Object.assign(templates, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, string>);
   }
   // A null resource makes rt.templateFromPage read the inert inline templates.
-  const inlineSource = source.replace(TEMPLATE, 'null');
-  const allowed = new Set(Object.values(page.sharedBuild?.manifest ?? {}));
-  for (const url of page.module.imports) allowed.add(url);
-  const bootUrl = page.sharedBuild?.manifest['@mx/boot'];
-  const rtUrl = page.sharedBuild?.manifest['@mx/rt'];
-  const sharedDir = options.sharedDir ?? path.join(process.cwd(), 'public', 'islands');
-  const result = await esbuild.build({
-    stdin: { contents: inlineSource, resolveDir: sharedDir, sourcefile: 'offline-compiled-entry.js', loader: 'js' },
-    bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2022', minify: true,
-    alias: { '@': process.cwd(), ...siblingAliases(options.workspaceRoot ?? path.dirname(process.cwd())) },
-    define: {
-      __AFBIN_OFFLINE_SQLITE__: String(options.offline?.sqlite ?? false),
-      __AFBIN_OFFLINE_CHART__: String(options.offline?.chart ?? false),
-      'process.env.NODE_ENV': '"production"',
-    },
-    plugins: [{
-      name: 'pinned-offline-islands',
-      setup(build) {
-        build.onResolve({ filter: /.*/ }, (args) => {
-          if (options.offline && args.path === '@/lib/islands/rt' && args.importer.endsWith('/compiled-boot.ts')) {
-            if (!rtUrl) throw new Error('offline: the compiled build has no runtime');
-            return { path: rtUrl, namespace: 'pinned-island' };
-          }
-          if (!args.path.startsWith('/islands/') && !args.path.startsWith('./')) return undefined;
-          if (args.namespace !== 'pinned-island' && !args.importer.endsWith('offline-compiled-entry.js')) return undefined;
-          const absolute = args.path.startsWith('/islands/') ? args.path
-            : args.path.startsWith('./') && args.importer.startsWith('/islands/')
-              ? `/islands/${path.posix.basename(args.path)}` : null;
-          const pinnedParent = args.namespace === 'pinned-island' && allowed.has(args.importer);
-          if (!absolute || !SHARED.test(absolute) || (!allowed.has(absolute) && !pinnedParent)) {
-            throw new Error(`offline: compiled module imports an unpinned asset: ${args.path}`);
-          }
-          // Relative imports are part of the pinned, content-addressed parent's
-          // immutable graph. Admit their own relative imports by the same rule.
-          allowed.add(absolute);
-          if (options.offline && absolute === bootUrl) {
-            return { path: path.join(process.cwd(), 'lib/offline/compiled-boot.ts') };
-          }
-          return { path: absolute, namespace: 'pinned-island' };
-        });
-        build.onLoad({ filter: /.*/, namespace: 'pinned-island' }, async (args) => {
-          const name = SHARED.exec(args.path)?.[1];
-          if (!name) throw new Error(`offline: invalid island path ${args.path}`);
-          // A page pinned to an older build names chunks this deploy may only hold in the retained store.
-          const contents = await readFile(path.join(sharedDir, name)).catch(async (error: unknown) => {
-            const retained = await retainedIslandFile(name);
-            if (!retained) throw error;
-            return retained;
-          });
-          return { contents, loader: 'js' };
-        });
-      },
-    }],
-    logLevel: 'silent',
-  });
-  return { code: result.outputFiles[0]!.text, templates };
+  const { body, specifiers } = await documentFunction(source.replace(TEMPLATE, 'null'));
+  const half = options.half ?? await loadOfflineHalf();
+  // A module of the current contract names the runtime by specifier; an older one names its pinned build's chunk URLs.
+  const pinned = new Map(Object.entries(page.sharedBuild?.manifest ?? {}).map(([specifier, url]) => [url, specifier]));
+  const ids: Record<string, string> = {};
+  for (const specifier of specifiers) {
+    const id = half.entries[pinned.get(specifier) ?? specifier];
+    if (!id) throw new Error(`offline: compiled module imports an unpinned asset: ${specifier}`);
+    ids[specifier] = id;
+  }
+  const skipped = new Set([...(options.offline?.sqlite ? [] : [half.lazy.sqlite]), ...(options.offline?.chart ? [] : [half.lazy.chart])]);
+  const closure = new Set<string>();
+  const visit = (id: string) => {
+    if (closure.has(id)) return;
+    const entry = half.modules[id];
+    if (!entry) throw new Error(`offline: the offline half has no module ${id}`);
+    closure.add(id);
+    for (const next of entry.imports) visit(next);
+    for (const next of entry.dynamic) if (!skipped.has(next)) visit(next);
+  };
+  for (const id of Object.values(ids)) visit(id);
+  const flags = { sqlite: !!options.offline?.sqlite, chart: !!options.offline?.chart };
+  const code = LOADER + `self.__mxOfflineFlags=${JSON.stringify(flags)};\n`
+    + [...closure].sort().map((id) => `__mxOfflineDefine(${JSON.stringify(id)},function(module,exports,require){"use strict";${half.modules[id]!.code}\n});\n`).join('')
+    + `(function(__mx_import){"use strict";${body}\n})(function(s){return __mxOfflineRequire(${JSON.stringify(ids)}[s])});\n`;
+  return { code, templates };
 }

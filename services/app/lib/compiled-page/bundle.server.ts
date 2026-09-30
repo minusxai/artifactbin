@@ -119,8 +119,11 @@ export class IslandSsrUnavailable extends Error {
   }
 }
 
-/** A Babel plugin turning a module's imports and exports into an injected-import function body. */
-function moduleToFunction(t: typeof BabelTypes): PluginObj {
+/**
+ * A Babel plugin turning a module's imports and exports into an injected-import function body.
+ * `sideEffects` keeps a bare `import "x"` as a `__mx_import("x")` call (the offline file's boot import).
+ */
+export function moduleToFunction(t: typeof BabelTypes, options: { sideEffects?: boolean } = {}): PluginObj {
   return {
     visitor: {
       Program: {
@@ -131,6 +134,7 @@ function moduleToFunction(t: typeof BabelTypes): PluginObj {
           for (const statement of p.node.body) {
             if (t.isImportDeclaration(statement)) {
               const namespace = t.callExpression(t.identifier('__mx_import'), [t.stringLiteral(statement.source.value)]);
+              if (options.sideEffects && statement.specifiers.length === 0) hoisted.push(t.expressionStatement(namespace));
               for (const s of statement.specifiers) {
                 const value = t.isImportNamespaceSpecifier(s) ? namespace
                   : t.isImportDefaultSpecifier(s) ? t.memberExpression(namespace, t.identifier('default'))

@@ -12,8 +12,8 @@
  * disabled offline with a reason.
  *
  * Pure apart from the injected `run`, so the policy is testable without a
- * database; lib/offline/download.server.ts wires `run` to dataflowForRow as
- * the downloader.
+ * database; lib/offline/assemble.server.ts wires `run` to dataflowRunsForRow
+ * as the downloader (every combination of a batch in one engine call).
  */
 import { normalizeControlOptions } from '@/lib/story/control-options';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
@@ -31,8 +31,12 @@ export interface VariantCaps {
 
 export const DEFAULT_VARIANT_CAPS: VariantCaps = { maxVariants: 200, maxBytes: 8 * 1024 * 1024 };
 
-/** Runs in flight at once: the SQL service answers them on its worker pool (services/sql pool.ts). */
-const VARIANT_CONCURRENCY = 8;
+/**
+ * Combinations per `run` call: each call is ONE engine run that loads the imports once
+ * (SqlService.runMany), so a document's whole plan is usually one or two calls. The byte budget is
+ * judged per call, in plan order: at most one call's worth of runs is spent past it.
+ */
+const VARIANT_BATCH = 64;
 
 /** What one bound control can set its Value to: a finite list, or anything (null). */
 type ControlDomain = { kind: 'options'; el: JsxElement } | { kind: 'boolean' } | { kind: 'open' };
@@ -128,8 +132,8 @@ export interface PrecomputeInput {
   flow: CompiledDataflow;
   base: DataflowState;
   domains: Map<string, Scalar[] | null>;
-  /** Runs the named queries (dependency-closed) with these values, as the downloader. */
-  run(values: Record<string, Scalar>, only: string[]): Promise<Pick<DataflowState, 'tables' | 'errors'>>;
+  /** Runs each entry's named queries (dependency-closed) with its values, as the downloader; answers in order. */
+  run(runs: Array<{ values: Record<string, Scalar>; only: string[] }>): Promise<Array<Pick<DataflowState, 'tables' | 'errors'>>>;
   /** The queries a variant carries (the ones the file cannot run itself); every query when absent. */
   queries?: ReadonlySet<string>;
   caps?: VariantCaps;
@@ -150,7 +154,7 @@ function cartesian(names: string[], choices: Map<string, Scalar[]>): Array<Recor
  * from the base values; if that still exceeds it, freezes the Values with the
  * largest domains until it fits. Stops adding variants at `maxBytes` and
  * freezes what is left. Each variant stores only the queries its values
- * change. Never includes the base combination itself.
+ * change, and of those only the results that differ from the base. Never includes the base combination itself.
  */
 export async function precomputeVariants(input: PrecomputeInput): Promise<{ variants: ArtifactFileVariant[]; frozen: string[] }> {
   const caps = input.caps ?? DEFAULT_VARIANT_CAPS;
@@ -187,20 +191,37 @@ export async function precomputeVariants(input: PrecomputeInput): Promise<{ vari
   const kept: Array<{ move: Record<string, Scalar>; variant: ArtifactFileVariant }> = [];
   let spent = 0;
   let stoppedAt = plan.length;
-  // Runs go in windows and are judged IN PLAN ORDER: at most one window of runs is wasted past the byte budget.
-  const runMove = async (move: Record<string, Scalar>) => {
-    const values = { ...input.base.values, ...baseValues, ...move };
-    const only = queriesReadingValues(input.flow, Object.keys(move)).filter((q) => !input.queries || input.queries.has(q));
-    const result = await input.run(values, only);
-    return {
-      values: { ...baseValues, ...move },
-      tables: Object.fromEntries(only.filter((q) => result.tables[q]).map((q) => [q, result.tables[q]])),
-      errors: Object.fromEntries(only.filter((q) => result.errors[q] !== undefined).map((q) => [q, result.errors[q]])),
-    } satisfies ArtifactFileVariant;
+  /*
+   * A variant carries only what differs from the base: a result equal to the base's is left out, and
+   * the transport answers it from the base (snapshot-transport) — the same table in every variant of
+   * a filter it does not read would otherwise travel once per variant.
+   */
+  const baseJson = new Map<string, string>();
+  const sameAsBase = (name: string, table: unknown): boolean => {
+    const base = input.base.tables[name];
+    if (!base || input.base.errors[name] !== undefined) return false;
+    if (!baseJson.has(name)) baseJson.set(name, JSON.stringify(base));
+    return baseJson.get(name) === JSON.stringify(table);
   };
-  windows: for (let start = 0; start < plan.length; start += VARIANT_CONCURRENCY) {
-    const window = plan.slice(start, start + VARIANT_CONCURRENCY);
-    const variants = await Promise.all(window.map(runMove));
+  // Runs go in batches and are judged IN PLAN ORDER: at most one batch of runs is wasted past the byte budget.
+  const runBatch = async (moves: Array<Record<string, Scalar>>): Promise<ArtifactFileVariant[]> => {
+    const runs = moves.map((move) => ({
+      values: { ...input.base.values, ...baseValues, ...move },
+      only: queriesReadingValues(input.flow, Object.keys(move)).filter((q) => !input.queries || input.queries.has(q)),
+    }));
+    const results = await input.run(runs);
+    return runs.map(({ only }, i) => {
+      const result = results[i] ?? { tables: {}, errors: {} };
+      return {
+        values: { ...baseValues, ...moves[i] },
+        tables: Object.fromEntries(only.filter((q) => result.tables[q] && !sameAsBase(q, result.tables[q])).map((q) => [q, result.tables[q]])),
+        errors: Object.fromEntries(only.filter((q) => result.errors[q] !== undefined).map((q) => [q, result.errors[q]])),
+      } satisfies ArtifactFileVariant;
+    });
+  };
+  windows: for (let start = 0; start < plan.length; start += VARIANT_BATCH) {
+    const window = plan.slice(start, start + VARIANT_BATCH);
+    const variants = await runBatch(window);
     for (let j = 0; j < window.length; j++) {
       const variant = variants[j]!;
       const bytes = byteLength(variant);

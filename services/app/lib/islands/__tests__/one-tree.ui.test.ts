@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import * as rt from '../rt';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
@@ -221,6 +222,14 @@ describe('one tree SSR to hydrate', () => {
     [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('Accordion section B'))!.click();
     expect(secondPanel.hidden).toBe(false);
     expect(secondPanel.textContent).toContain('Collapsed until clicked.');
+    // What the kit loads lazily on mount (Mermaid's engine) finishes loading here, not after the
+    // environment is torn down (an unhandled EnvironmentTeardownError otherwise, timing-dependent).
+    const lazy = new Set<string>();
+    for (const specifier of modules.keys()) {
+      const text = readFileSync(path.resolve(ROOT, 'services/app/public', specifier.slice(1)), 'utf8');
+      for (const match of text.matchAll(/import\(["']\.\/([\w-]+\.js)["']\)/g)) lazy.add(match[1]!);
+    }
+    await Promise.all([...lazy].map(name => import(/* @vite-ignore */ pathToFileURL(path.resolve(ROOT, 'services/app/public/islands', name)).href).catch(() => null)));
     runtime.dispose(); host.remove(); pageData?.remove(); portal.remove();
   });
 });
