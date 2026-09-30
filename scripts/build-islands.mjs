@@ -32,9 +32,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 import { precompressTree, describePrecompression } from './lib/precompress.mjs';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { icons } from 'lucide-react';
+import { readLucideIcons } from '../services/app/scripts/lucide-icons.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const APP = path.join(ROOT, 'services/app');
@@ -43,14 +41,19 @@ export const DEFAULT_OUT_DIR = path.join(APP, 'public/islands');
 const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
 const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm');
 
-/** The Icon port fetches this only when query rows name a glyph absent from the page's small inline map. */
+const escapeAttribute = (value) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/**
+ * The Icon port fetches this only when query rows name a glyph absent from the page's small inline map.
+ * Every lucide glyph (aliases included, lucide-static's data) as lib/story/icon-glyphs resolves one: the
+ * glyph's classes and its inner markup, as lucide's own component draws them.
+ */
 function glyphCatalog() {
   const glyphs = {};
-  for (const [name, component] of Object.entries(icons)) {
-    const markup = renderToStaticMarkup(createElement(component));
-    const open = /^<svg\b[^>]*>/.exec(markup)?.[0] ?? '';
-    const cls = (open.match(/\bclass="([^"]*)"/)?.[1] ?? '').split(/\s+/).filter((part) => part && part !== 'lucide').join(' ');
-    glyphs[name] = { cls, inner: markup.slice(open.length).replace(/<\/svg>$/, '') };
+  for (const [key, { name: resolvedName, nodes }] of Object.entries(readLucideIcons(ROOT))) {
+    const canonical = resolvedName.replace(/-(?=\d)/g, '');
+    const cls = [`lucide-${canonical}`, ...(canonical === resolvedName ? [] : [`lucide-${resolvedName}`])].join(' ');
+    const inner = nodes.map(([tag, attrs]) => `<${tag}${Object.entries(attrs).filter(([attr]) => attr !== 'key').map(([attr, value]) => ` ${attr}="${escapeAttribute(value)}"`).join('')}></${tag}>`).join('');
+    glyphs[key] = { cls, inner };
   }
   return Buffer.from(`export const glyphs=${JSON.stringify(glyphs)};\n`);
 }

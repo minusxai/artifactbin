@@ -12,8 +12,6 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,7 +30,6 @@ import { getArtifactById } from '@/lib/artifacts';
 import { setAvatar } from '@/lib/avatars';
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';
-import { ProfileListing } from '@/components/ProfileListing';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
@@ -135,40 +132,6 @@ describe('the home page on a verified host', () => {
     expect((await app().request(`${HOST}/`, { method: 'HEAD' })).status).toBe(200);
   });
 
-  it('is the same ProfileListing a guest gets on /@handle: the same markup, less the follow header and the toolbar, with host addresses', async () => {
-    const maya = await owner('maya');
-    const first = await create(maya.token, { markup: '<h1>One</h1>', title: 'First Light', description: 'Morning notes', visibility: 'public' });
-    const second = await create(maya.token, { markup: '<h1>Two</h1>', title: 'Second Wind', visibility: 'public' });
-    await create(maya.token, { markup: '<h1>Q</h1>', title: 'Quiet one', visibility: 'unlisted' });
-    await create(maya.token, { markup: '<h1>S</h1>', title: 'Secret one', visibility: 'private' });
-    await verified(maya.userId, 'maya.example.org');
-
-    // The app's answer for a guest, through the real route, drawn by the component /@maya mounts.
-    const data = await (await app().request(`${APP}/api/page/profile/@maya`)).json();
-    expect(data.kind).toBe('public-profile');
-    const expected = new JSDOM(renderToStaticMarkup(createElement(ProfileListing, { data }))).window.document.body;
-    // The documented differences, and nothing else:
-    // no follow header — counts, button and all (it needs a session and /api)…
-    const follows = expected.querySelector('[role="group"][aria-label="Follows"]');
-    expect(follows?.querySelector('[aria-label="Follow"]')).not.toBeNull();
-    follows!.remove();
-    // …no search/filter/view toolbar (controls that need the SPA's script)…
-    const toolbar = expected.querySelector('section[aria-label="Shelf"] > div');
-    expect(toolbar?.querySelector('[aria-label="Search artifacts"]')).not.toBeNull();
-    toolbar!.remove();
-    // …and addresses on this host instead of the app's.
-    for (const link of expected.querySelectorAll('a[href]')) link.setAttribute('href', link.getAttribute('href')!.replace(/^\/@maya(?:\/|$)/, '/'));
-
-    const page = await app().request('https://maya.example.org/', { headers: { accept: 'text/html' } });
-    expect(page.status).toBe(200);
-    const html = await page.text();
-    const listing = new JSDOM(html).window.document.querySelector('main');
-    expect(listing).not.toBeNull();
-    expect(listing!.innerHTML).toBe(expected.innerHTML);
-    expect(html).toContain(`href="/${first.id}-first-light"`);
-    expect(html).toContain(`href="/${second.id}-second-wind"`);
-    expect(html).not.toMatch(/Quiet one|Secret one/);
-  });
 
   it('links the stylesheet the app page links, and its policy admits only this host\'s styles, fonts and images', async () => {
     await world();

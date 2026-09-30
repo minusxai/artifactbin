@@ -1,15 +1,14 @@
 import path from 'path';
 import { generateTeaching } from './scripts/lib/generate-teaching.mjs';
 import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
 import solid from 'vite-plugin-solid';
 import yaml from '@rollup/plugin-yaml';
 
 // Discovery imports source consumers before global setup runs.
 generateTeaching();
 
-// The island tests (Solid, lib/islands): jsdom, the Solid JSX transform, never the React one. Every
-// other project matches `lib/**/__tests__` too, so they exclude this glob.
+// The island tests (Solid, lib/islands): jsdom and the Solid JSX transform. Every other project
+// matches `lib/**/__tests__` too, so they exclude this glob.
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
 // islands project because scripts/test-changed.mjs discovers only api/node/ui/islands.
@@ -17,8 +16,7 @@ const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
 
 // API exercises route handlers and persistence; Node covers libraries, services,
 // scripts and eval harnesses; UI uses jsdom; Islands is the Solid half of the reader (jsdom,
-// vite-plugin-solid). The CLI has its own Node test runner. React's plugin is per project, not
-// root-level, because project plugins ADD to the root's and the islands project must run without it.
+// vite-plugin-solid). The CLI has its own Node test runner.
 export default defineConfig({
   root: import.meta.dirname,
   plugins: [yaml()],
@@ -54,7 +52,6 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        plugins: [react()],
         test: {
           name: 'api',
           environment: 'node',
@@ -65,7 +62,6 @@ export default defineConfig({
       },
       {
         extends: true,
-        plugins: [react()],
         test: {
           name: 'node',
           environment: 'node',
@@ -100,7 +96,6 @@ export default defineConfig({
         // env/globalSetup via `extends`, the shared setup file — so the moved
         // tests behave identically; only the include set differs.
         extends: true,
-        plugins: [react()],
         test: {
           name: 'integration',
           environment: 'node',
@@ -116,24 +111,20 @@ export default defineConfig({
       },
       {
         extends: true,
-        // The React page hosts Solid editor islands through a single DOM mount.
-        plugins: [react({ exclude: /\/solid\/.*\.tsx$/ }), solid({ include: ['services/app/solid/**/*.{tsx,jsx}'], hot: false })],
+        plugins: [solid({ include: ['services/app/**/*.{tsx,jsx}'], hot: false })],
         test: {
           name: 'ui',
           environment: 'jsdom',
-          include: ['services/app/lib/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/web/**/__tests__/**/*.ui.test.{ts,tsx}'],
+          include: ['services/app/lib/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/web/**/__tests__/**/*.ui.test.{ts,tsx}'],
           exclude: ['**/node_modules/**', ISLAND_TESTS],
-          setupFiles: ['./services/app/test/setup/vitest.setup.ts', './services/app/test/setup/vitest.setup.ui.ts', './services/app/test/setup/router.tsx'],
+          setupFiles: ['./services/app/test/setup/vitest.setup.ts', './services/app/test/setup/vitest.setup.ui.ts'],
         },
       },
       {
-        // Solid files under lib/islands carry `/* @jsxImportSource solid-js */` (the root tsconfig
-        // stays react-jsx) and are compiled by babel-preset-solid, the transform the island build
-        // uses. One difference: tests render client-side (`hydratable` off), the build emits
-        // hydratable code. Only lib/islands goes through Solid's transform; the React kit a parity
-        // test imports keeps Vite's own (react-jsx) transform.
+        // The Solid transform the island build uses (babel-preset-solid). One difference: tests render
+        // client-side (`hydratable` off), the build emits hydratable code.
         extends: true,
-        plugins: [solid({ include: ['services/app/lib/islands/**/*.{tsx,jsx}', 'services/app/lib/offline/solid-entry.tsx', 'services/app/solid/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
+        plugins: [solid({ include: ['services/app/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
         test: {
           name: 'islands',
           environment: 'jsdom',

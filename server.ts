@@ -9,7 +9,6 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { developmentViteOptions } from './services/app/lib/dev-vite';
-import { isSolidPage } from './services/app/lib/solid-routes';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
@@ -211,11 +210,8 @@ async function main(): Promise<void> {
       ? { actorSecret: readEnv(env, 'CONTRACT__ACTOR_SECRET') || readEnv(env, 'AUTH__SECRET') }
       : dev && sessionActorSecret ? { actorSecret: sessionActorSecret } : {}),
     ...(reader ? { onTokenRevoked: (id) => reader.invalidate(id) } : {}),
-    ...(vite ? { indexHtml: async (url: string, status?: 200 | 404, artifactFormat?: string) => {
-      const pathname = new URL(url).pathname;
-      const legacyMarkup = artifactFormat === 'markup' && status !== 404 && (/^\/a\/[^/]+\/?$/.test(pathname) || /^\/@[^/]+\/[^/]+\/?$/.test(pathname));
-      return vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve(isSolidPage(pathname, status, artifactFormat) && !legacyMarkup ? 'web/solid-app.html' : 'web/index.html'), 'utf8'));
-    } } : {}),
+    ...(vite ? { indexHtml: async (url: string) =>
+      vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve('web/solid-app.html'), 'utf8')) } : {}),
   });
 
   /*

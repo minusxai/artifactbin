@@ -1,5 +1,5 @@
 /**
- * Freshness guard: lib/story-ui/recipe-classes.ts is GENERATED from the component sources
+ * Freshness guard: lib/story-ui/recipe-classes.ts is GENERATED from the story kit's sources
  * (npm run generate-story-ui-classes). If a component changes and the file is stale, the
  * compiled base sheet silently misses recipe classes — this test fails instead.
  */
@@ -7,12 +7,12 @@ import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { extractRecipeClasses, EXTRA_CLASS_SOURCES } from '../../../scripts/generate-story-ui-classes';
+import { extractRecipeClasses, EXTRA_CLASS_SOURCES, KIT_DIR } from '../../../scripts/generate-story-ui-classes';
 import { STORY_UI_RECIPE_CLASSES } from '../recipe-classes';
 
 describe('recipe-classes.ts freshness', () => {
-  it('matches a fresh extraction from components/kit + every source named beside it', () => {
-    const fresh = extractRecipeClasses(join(__dirname, '..', '..', '..', 'components', 'kit'), EXTRA_CLASS_SOURCES);
+  it('matches a fresh extraction from the story kit (lib/islands/kit) + every source named beside it', () => {
+    const fresh = extractRecipeClasses(KIT_DIR, EXTRA_CLASS_SOURCES);
     expect([...STORY_UI_RECIPE_CLASSES]).toEqual(fresh);
   });
 

@@ -1,21 +1,29 @@
 /**
- * PHASE 3 PROBE: the framework-free attribute writer (static-solid/attrs `reactAttrs`) against today's
- * `domAttrs` (React's server renderer, parsed back), over every attribute shape `rawBuildProps` can hand it.
+ * PHASE 3 PROBE: the framework-free attribute writer (static-solid/attrs `reactAttrs`) against
+ * `domAttrs` (React's server renderer, parsed back, as recorded), over every attribute shape `rawBuildProps` can hand it.
  */
 import { describe, expect, it } from 'vitest';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { reactAttrs, styleText } from '../../static-solid/attrs';
-import { rawBuildProps } from '@/lib/story-ui/interpreter';
+import { rawBuildProps } from '@/lib/story-ui/interpreter-primitives';
 import { parseJsx, type JsxElement } from '@/lib/jsx';
 
 type Props = Record<string, unknown>;
+/**
+ * React's server renderer's attributes for (tag, props), parsed back — recorded
+ * (../fixtures/react-attrs-oracle.json.gz) from react-dom/server before React left the app.
+ */
+let oracle: Record<string, Array<[string, string]>> | null = null;
+const oracleKey = (tag: string, props: Props) => JSON.stringify({ tag, props: Object.fromEntries(Object.entries(props)
+  .filter(([key]) => key !== 'children' && key !== 'dangerouslySetInnerHTML')
+  .map(([key, value]) => [key, typeof value === 'number' && Number.isNaN(value) ? '__NaN__' : value === undefined ? '__undefined__' : typeof value === 'function' ? '__fn__' : value])) });
 const domAttrs = (tag: string, props: Props): Array<[string, string]> => {
-  const { children: _children, dangerouslySetInnerHTML: _html, ...rest } = props;
-  const html = renderToStaticMarkup(createElement(tag, rest)).replace(/^(<link\b[^>]*>)+/, '');
-  const start = html.slice(0, html.indexOf('>') + 1);
-  return [...start.matchAll(/\s([^\s=/>]+)(?:="([^"]*)")?/g)].map((match) => [match[1]!, (match[2] ?? '')
-    .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')]);
+  oracle ??= JSON.parse(gunzipSync(readFileSync(path.join(import.meta.dirname, '..', 'fixtures', 'react-attrs-oracle.json.gz'))).toString('utf8')) as Record<string, Array<[string, string]>>;
+  const recorded = oracle[oracleKey(tag, props)];
+  if (!recorded) throw new Error(`no recorded React attributes for ${oracleKey(tag, props).slice(0, 160)}`);
+  return recorded;
 };
 
 const SCALARS: unknown[] = ['', 'x', 'a "b" & <c> \'d\'', 0, 1, -1, 2.5, true, false, null, undefined, NaN];

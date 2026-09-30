@@ -176,10 +176,10 @@ describe('the reader mode on /raw', () => {
 });
 
 describe('the HTML-first reader page', () => {
-  it('selects the Solid handover for readers and owners alike', async () => {
+  it('hands readers and owners alike to the Solid app', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Reader handover', markup: '<article><h1>Reader</h1></article>' });
-    const page = { spa: { entry: '/spa-idle.ts', preload: [] }, readerSpa: { entry: '/solid-spa-idle.ts', preload: [] } };
+    const page = { spa: { entry: '/solid-spa-idle.ts', preload: [] } };
     const guest = await artifactPageAnswer(request(`/a/${id}`), id, { page });
     const writer = await artifactPageAnswer(request(`/a/${id}`, { actor: { credential: 'session', userId: who.user.id, email: who.user.email!, emailVerified: true } }), id, { page });
     expect(guest.compiled?.html).toContain('/solid-spa-idle.ts');

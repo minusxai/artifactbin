@@ -24,7 +24,7 @@ import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
 import type { Dataflow } from '@/lib/story/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
-import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
@@ -259,7 +259,7 @@ describe('compilePage', () => {
 
   it('ports every registered component: none is served with its behaviour missing (partial) or refused (unported)', () => {
     // w3-behaviour: the managed <Iframe> and the <DeckGL> map were the last partial ones; each is an island now.
-    for (const tag of Object.keys(STORY_UI_COMPONENTS)) {
+    for (const tag of STORY_UI_COMPONENT_NAME_LIST) {
       const { nodes } = parseJsx(`<div><${tag} id="x" /></div>`) as { nodes: JsxNode[] };
       let generated: ReturnType<typeof generate>;
       // A part that only renders inside its parent (AvatarImage outside Avatar) is not a component a page holds alone.

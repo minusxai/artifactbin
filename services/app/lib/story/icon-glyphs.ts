@@ -28,6 +28,11 @@ const lucideIcons = (): Record<string, LucideIcon> =>
   (icons ??= JSON.parse(readFileSync(path.join(process.cwd(), 'lib/build-assets/lucide-icons.json'), 'utf8')) as Record<string, LucideIcon>);
 const escapeAttribute = (value: string): string => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Is this spelling one of lucide's glyphs (aliases included) — the publish-time icon check. */
+export function isLucideIcon(name: string): boolean {
+  return Object.hasOwn(lucideIcons(), iconGlyphKey(name));
+}
+
 function sourceFor(key: string): LucideIcon {
   const all = lucideIcons();
   return all[key] ?? all[FALLBACK_ICON_KEY]!;

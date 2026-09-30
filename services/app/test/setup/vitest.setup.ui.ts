@@ -4,7 +4,6 @@
  */
 import '@testing-library/jest-dom';
 import { vi, beforeAll, afterAll, afterEach } from 'vitest';
-import { cleanup } from '@testing-library/react';
 
 // structuredClone polyfill — jsdom doesn't expose Node's global to the window scope.
 if (typeof structuredClone === 'undefined') {
@@ -12,7 +11,7 @@ if (typeof structuredClone === 'undefined') {
   (global as any).structuredClone = (val: unknown) => v8.deserialize(v8.serialize(val));
 }
 
-// ResizeObserver polyfill (radix + react-grid-layout use it)
+// ResizeObserver polyfill
 global.ResizeObserver = vi.fn().mockImplementation(function (this: any) {
   this.observe = vi.fn();
   this.unobserve = vi.fn();
@@ -32,9 +31,8 @@ Object.defineProperties(HTMLElement.prototype, {
   hidePopover: { configurable:true, writable:true, value:function(this:HTMLElement) { this.removeAttribute('data-test-popover-open'); } },
 });
 
-// Let deferred React-root unmounts finish while the jsdom window is alive.
+// Let deferred unmounts finish while the jsdom window is alive.
 afterEach(async () => {
-  cleanup();
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
 
@@ -45,13 +43,13 @@ const preventJsdomNavigation = (event: MouseEvent) => {
   if (target) event.preventDefault();
 };
 beforeAll(() => {
-  // React and the navigation boundary run before this window-level listener,
-  // so link behavior is still exercised; only jsdom's unsupported default
+  // App link handlers run before this window-level listener, so link behavior
+  // is still exercised; only jsdom's unsupported default
   // full-document navigation is cancelled afterward.
   window.addEventListener('click', preventJsdomNavigation);
   console.error = (...args: any[]) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
-    if (msg.includes('Warning: ReactDOM.render') || msg.includes('act(') || msg.includes('Not implemented: navigation')) return;
+    if (msg.includes('Not implemented: navigation')) return;
     originalError(...args);
   };
 });

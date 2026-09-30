@@ -7,8 +7,8 @@
  */
 import { sha256Hex } from '@/lib/sha256';
 import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
-import type { MermaidImage, MermaidPalette } from '@/components/kit/mermaid-render';
-import { embedPageFonts, pageFontFaces } from '@/components/kit/mermaid-fonts';
+import type { MermaidImage, MermaidPalette } from '@/lib/mermaid-images/mermaid-render';
+import { embedPageFonts, pageFontFaces } from '@/lib/mermaid-images/mermaid-fonts';
 
 /**
  * The document's theme as Mermaid needs it: tokens resolved to hex (its colour
@@ -195,7 +195,7 @@ export async function drawForReader(element: HTMLElement, code: string, dark: bo
   if (engineAskedFor()) document.documentElement.style.setProperty('text-rendering', 'geometricPrecision');
   let palette = paletteFor(element, dark);
   // Intentional engine split: Mermaid is large and browser-only.
-  const [engine] = await Promise.all([import('@/components/kit/mermaid-render'), fontsFor(palette, code)]);
+  const [engine] = await Promise.all([import('@/lib/mermaid-images/mermaid-render'), fontsFor(palette, code)]);
   palette = paletteFor(element, dark);
   const before = measured(palette, code);
   const image = await engine.renderMermaid(code, palette);

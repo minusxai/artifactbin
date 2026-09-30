@@ -16,9 +16,6 @@ import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Number as KitNumber, Select, DataTable, Question } from '../kit/data';
 import type { TableResult } from '@/lib/story/dataflow';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { SelectControl } from '@/components/kit/controls';
 import { rowsDigest } from '../digest';
 import { DRAWING_CLASS } from '../chart';
 import { createIslandRuntime } from '../rt';
@@ -462,8 +459,8 @@ describe('data widget parity with the live reader', () => {
     const { host } = mount(undefined, () => <><KitNumber data="$monthly" col="revenue" id="n" /><Select label="Region" value="$region" options="$regions" id="s" /></>);
     expect(attrsOf(host.querySelector('#n'))).toEqual({ id: 'n', 'aria-busy': 'false' });
     expect(host.querySelector('#s')?.hasAttribute('data-mx-bound')).toBe(false);
-    const today = renderToStaticMarkup(createElement(SelectControl, { label: 'Region', options: [], value: null, onChange: () => {} }));
-    const trigger = /<button[^>]*class="([^"]*)"/.exec(today)?.[1];
+    // The retired React SelectControl's trigger classes, as it rendered them.
+    const trigger = 'inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 min-w-36 border border-input bg-background px-3 shadow-xs hover:bg-muted/40';
     expect(host.querySelector('#s button')?.getAttribute('class')).toBe(trigger);
   });
 

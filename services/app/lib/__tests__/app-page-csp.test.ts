@@ -12,7 +12,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { authorFrameResponse } from '@/server/author-frame';
 import { AUTHOR_SCRIPT_DOCUMENT } from '@/lib/story-runtime/author-script-bootstrap';
-import { managedAuthorDocument } from '@/lib/story-runtime/managed-iframe';
+import { managedAuthorDocument } from '@/lib/story-runtime/managed-author-document';
 import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
 import { DOMAIN_HOME_CSP } from '@/lib/custom-domain-home';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';

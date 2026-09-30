@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/dom';
 import { createNodeChrome, type NodeChrome } from '../node-chrome';
 let chrome: NodeChrome | undefined;
 afterEach(() => {

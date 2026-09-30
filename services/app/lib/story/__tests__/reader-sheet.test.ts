@@ -77,7 +77,7 @@ describe('the reader sheet', () => {
   });
 
   it('knows each tag\'s recipes from a fresh reading of the kit, and a conditional\'s tags too', () => {
-    const fresh = recipeReach(path.join(__dirname, '..', '..', '..', 'components', 'kit'));
+    const fresh = recipeReach();
     expect(STORY_UI_RECIPE_BASE.map((i) => STORY_UI_RECIPE_CLASSES[i])).toEqual(fresh.base);
     expect(Object.fromEntries(Object.entries(STORY_UI_RECIPE_BY_TAG).map(([tag, list]) => [tag, list.map((i) => STORY_UI_RECIPE_CLASSES[i])]))).toEqual(fresh.byTag);
     const hidden = readerRecipes(parseJsxOrThrow('<div>{$_me.id ? <Accordion type="single"><AccordionItem value="a" /></Accordion> : <p>guest</p>}</div>').nodes);

@@ -17,11 +17,10 @@ import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
 import type { Dataflow } from '@/lib/story/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
-import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
-import { renderStoryNodes } from '@/lib/story-ui/interpreter';
-import { IconGlyphProvider } from '@/components/kit/icon';
-import { createElement, Fragment } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { COMPILED_PARITY_FIXTURES } from '../../../../../scripts/fixtures/compiled-parity/index.mjs';
 import { buildGlyphMap } from '@/lib/story/icon-glyphs';
 import { loadSsrModule } from '../bundle.server';
@@ -41,10 +40,18 @@ async function inputOf(source: string, template: string | null = null): Promise<
   return { nodes: runtime.data.nodes, colorMode: 'light', template, chrome: true, glyphs: runtime.data.glyphs, refData: {}, flow, build: loadCompilerBuild().id };
 }
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
-/** Today's render of the story nodes at `values`, with the version's resolved glyphs (kit-parity's reactRender has none). */
-const todays = (input: CompileInput, values: Record<string, unknown>): string =>
-  renderToStaticMarkup(createElement(IconGlyphProvider, { value: input.glyphs ?? {} }, createElement(Fragment, null, renderStoryNodes(input.nodes, { values, components: STORY_UI_COMPONENTS }))))
-    .replace(/<link rel="preload"[^>]*>/g, '').replace(/<!-- -->/g, '');
+/**
+ * The React reader's render of the story nodes at `values`, with the version's resolved glyphs — recorded
+ * (./fixtures/react-coverage-oracle.json.gz) from the retired interpreter before React left the app.
+ */
+let oracle: Record<string, string> | null = null;
+const todays = (input: CompileInput, values: Record<string, unknown>): string => {
+  oracle ??= JSON.parse(gunzipSync(readFileSync(path.join(import.meta.dirname, 'fixtures', 'react-coverage-oracle.json.gz'))).toString('utf8')) as Record<string, string>;
+  const key = JSON.stringify({ nodes: input.nodes, values, glyphs: input.glyphs ?? {} });
+  const recorded = oracle[key];
+  if (recorded === undefined) throw new Error('no recorded React render for these nodes and values');
+  return recorded;
+};
 /** The compiled column's children against today's render of the same version at the same values. */
 const columnParity = (html: string, input: CompileInput, values: Record<string, unknown> = {}, drop: string[] = []): string[] => {
   const column = dom(html).querySelector('.mx-doc')!;
@@ -64,7 +71,7 @@ const CONTEXTS: Record<string, (tag: string) => string> = {
 describe('every registered component has a compile path', () => {
   // A part that only renders inside its parent (AvatarImage outside Avatar) is not a component a page holds alone;
   // the declaration-only tags are compiled by their owners (For, Column).
-  const tags = Object.keys(STORY_UI_COMPONENTS).filter((tag) => !['For', 'Column'].includes(tag));
+  const tags = [...STORY_UI_COMPONENT_NAME_LIST].filter((tag) => !['For', 'Column'].includes(tag));
   for (const [context, markup] of Object.entries(CONTEXTS)) {
     it(`${context}: nothing unported, nothing partial`, async () => {
       const refused: Array<{ tag: string; unported: string[]; partial: string[] }> = [];

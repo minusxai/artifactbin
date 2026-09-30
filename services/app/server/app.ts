@@ -41,8 +41,7 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createListingPreloader, createSpaEntry, listingPage, SOLID_SPA_IDLE_ENTRY } from './reader-preloads';
-import { isSolidPage } from '@/lib/solid-routes';
+import { createListingPreloader, createSpaEntry, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory } from '@/lib/artifact-page';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
@@ -152,7 +151,7 @@ export function withReaderHeadOrder(html: string): string {
 // Keeping the hashes explicit preserves the production policy while allowing
 // React Fast Refresh to install its hook when this server hosts Vite middleware.
 export const APP_INLINE_SCRIPT_HASHES = [
-  THEME_BOOTSTRAP_HASH, // theme bootstrap (web/index.html — lib/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
+  THEME_BOOTSTRAP_HASH, // theme bootstrap (web/solid-app.html — lib/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
   "'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='", // Vite React-refresh preamble
 ].join(' ');
 
@@ -208,8 +207,8 @@ export interface AppServerOptions {
   onTokenRevoked?: (id?: string) => void;
   /** Where the built SPA lives (dist/web). In dev, `index` is answered by Vite instead. */
   webDir?: string;
-  /** Dev: how index.html is produced (Vite transforms it); prod: read from webDir. */
-  indexHtml?: (url: string, status?: 200 | 404, artifactFormat?: string) => Promise<string>;
+  /** Dev: how the app shell (web/solid-app.html) is produced (Vite transforms it); prod: read from webDir. */
+  indexHtml?: (url: string) => Promise<string>;
   /** Dev: Vite's connect middleware, mounted before everything else for its own assets. */
   devMiddleware?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void;
   /** Dev only: the Vite socket port resolved by the server composition. */
@@ -289,14 +288,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
-  const index = async (url: string, status?: 200 | 404, artifactFormat?: string): Promise<string> => {
-    if (opts.indexHtml) return opts.indexHtml(url, status, artifactFormat);
-    const pathname = new URL(url).pathname;
-    const documentRoute = /^\/a\/[^/]+\/?$/.test(pathname) || /^\/@[^/]+\/[^/]+\/?$/.test(pathname);
-    const legacyMarkup = documentRoute && artifactFormat === 'markup' && status !== 404;
-    if (isSolidPage(pathname, status, artifactFormat) && !legacyMarkup) return readFileSync(path.join(webDir, 'solid-app.html'), 'utf8');
-    return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
+  /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
+  const index = async (url: string): Promise<string> => {
+    if (opts.indexHtml) return opts.indexHtml(url);
+    return (indexCache ??= readFileSync(path.join(webDir, 'solid-app.html'), 'utf8'));
   };
+
   // A verified custom domain is answered by its own boundary before any app
   // route can see it (server/custom-host); every other host passes straight on.
   // Its home page links the stylesheets THIS page links, read from the same shell.
@@ -329,11 +326,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
   // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
   /*
-   * The HTML-first page's app entry (web/spa-idle.ts): from the build's manifest in production; in
+   * The HTML-first page's app entry (web/solid-spa-idle.ts): from the build's manifest in production; in
    * development Vite serves the web root's sources as they are, the entry by its own path.
    */
-  const spaEntry = opts.indexHtml ? () => ({ entry: '/spa-idle.ts', preload: [] as string[] }) : createSpaEntry(webDir);
-  const readerSpaEntry = opts.indexHtml ? () => ({ entry: '/solid-spa-idle.ts', preload: [] as string[] }) : createSpaEntry(webDir, SOLID_SPA_IDLE_ENTRY);
+  const spaEntry = opts.indexHtml ? () => ({ entry: '/solid-spa-idle.ts', preload: [] as string[] }) : createSpaEntry(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
@@ -358,13 +354,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // document handlers pass their admission's 404 explicitly).
     const miss = data === null && new URL(url).pathname.split('/').filter(Boolean)[0]?.startsWith('@');
     const code = status ?? (miss ? 404 : 200);
-    const html = await index(url, code, admitted?.row.format);
+    const html = await index(url);
     // A dead end is answered in the language the caller asked in: a browser
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
     // The agent pointer is injected here, on the request base, for EVERY shell
-    // — the static index.html carries none, so there is one source (lib/agent-discovery).
+    // — the static web/solid-app.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const listing = listingPage(data);
     const shell = withGenericSocial(withShellFonts(listing ? preloadListing(discovered, listing) : discovered), baseUrl(c.req.raw));
@@ -427,7 +423,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const segments = url.pathname.split('/').filter(Boolean);
     // The row documentPreparation already fetched and admitted for this request rides along: one fetch, one check.
     const document = async (id: string) => {
-      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry(), readerSpa: readerSpaEntry() } }));
+      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry() } }));
       return answer.status === 200 ? answer : null;
     };
     if (segments.at(-1) === 'edit') segments.pop();

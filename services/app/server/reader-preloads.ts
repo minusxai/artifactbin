@@ -151,12 +151,11 @@ export function createDocumentPreloader(webDir: string, mermaidModulesFile = MER
 
 /**
  * THE HTML-FIRST PAGE'S APP ENTRY (docs/phase2-architecture.md §2.2, §7): the small module the
- * compiled reader page tags `data-mx-spa-idle` (web/spa-idle.ts, its own Vite entry), which loads
+ * compiled reader page tags `data-mx-spa-idle` (web/solid-spa-idle.ts, its own Vite entry), which loads
  * the app only when it is wanted, and its static closure to `modulepreload`. Null when this build has
  * no such entry: the page is then the document and its islands without the app.
  */
-export const SPA_IDLE_ENTRY = 'spa-idle.ts';
-export const SOLID_SPA_IDLE_ENTRY = 'solid-spa-idle.ts';
+export const SPA_IDLE_ENTRY = 'solid-spa-idle.ts';
 export function createSpaEntry(webDir: string, key = SPA_IDLE_ENTRY): () => { entry: string; preload: string[] } | null {
   let cached: { entry: string; preload: string[] } | null | undefined;
   return () => {

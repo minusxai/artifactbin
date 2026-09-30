@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
 import { collectRefNameUses, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/story/dataflow';
 import { PERSON_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
-import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
@@ -41,7 +40,6 @@ describe('the kit can show a person and ask a guest to sign in', () => {
   it('registers every person tag and SignIn as author components', () => {
     for (const name of ['User', 'UserImage', 'UserHandle', 'SignIn']) {
       expect(STORY_UI_COMPONENT_NAME_LIST).toContain(name);
-      expect(Object.keys(STORY_UI_COMPONENTS)).toContain(name);
     }
     // The person component list and the vocabulary must name the same tags:
     // a tag inside the set but outside the list could never be authored, and a
