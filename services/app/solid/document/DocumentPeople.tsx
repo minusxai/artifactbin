@@ -4,6 +4,7 @@ import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
 import { Button, Input } from '../components/ui';
 import { apiFetch } from '../lib/api';
+import { primeShared, sharedRequest } from '@/lib/shared-request';
 type Person = { user_id: string; username: string; name: string | null };
 
 /** The document controls' people panel (components/ArtifactPeople in Solid); membership and sharing remain separate grants. */
@@ -15,15 +16,22 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
   const [selected, setSelected] = createSignal<Person[]>([]);
   const [includeAccess, setIncludeAccess] = createSignal(false);
   const endpoint = () => `/api/my/artifacts/${encodeURIComponent(props.id)}/members`;
+  // One members request per document however many People panels are mounted (page, controls, edit mode);
+  // a membership change (revision) or this panel's own write refetches, opening or remounting does not.
+  const key = () => `members:${props.id}`;
+  let seenRevision = props.revision;
   createEffect(() => {
-    void props.revision; void open();
-    const controller = new AbortController();
-    void fetch(endpoint(), { signal: controller.signal }).then(async response => {
+    void open();
+    const force = props.revision !== seenRevision; seenRevision = props.revision;
+    let alive = true;
+    onCleanup(() => { alive = false; });
+    void sharedRequest(key(), async () => {
+      const response = await fetch(endpoint());
       const body = await response.json() as MembershipState & { detail?: string };
       if (!response.ok || !Array.isArray(body.members) || !Array.isArray(body.pending)) throw new Error(body.detail ?? 'Could not load people');
-      if (!controller.signal.aborted) { setState(body); setError(''); }
-    }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not load people'); });
-    onCleanup(() => controller.abort());
+      return body;
+    }, { ttl: 30000, force }).then(body => { if (alive) { setState(body); setError(''); } })
+      .catch(cause => { if (alive) setError(cause instanceof Error ? cause.message : 'Could not load people'); });
   });
   const act = async (input: MembershipInput) => {
     if (busy()) return;
@@ -32,7 +40,7 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
       const response = await apiFetch(endpoint(), 'POST', input);
       const body = await response.json() as MembershipState & { detail?: string };
       if (!response.ok || !Array.isArray(body.members) || !Array.isArray(body.pending)) throw new Error(body.detail ?? 'Could not update people');
-      setState(body); props.onChange?.();
+      setState(body); primeShared(key(), body); props.onChange?.();
       if (input.action === 'invite') setSelected([]);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update people'); }
     finally { setBusy(false); }

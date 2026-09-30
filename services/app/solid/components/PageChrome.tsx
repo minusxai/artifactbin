@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX, type Setter } from 'solid-js';
+import { createContext, createEffect, createSignal, For, on, onCleanup, Show, useContext, type JSX, type Setter } from 'solid-js';
 /** Shared Solid app chrome. One owner closes one panel before another opens. */
 import { Bell, BookOpen, ChevronRight, CircleUser, FileText, LogIn, LogOut, Moon, SlidersVertical, Sun, User, X } from 'lucide-solid';
 import { GitHubIcon } from './brand-icons';
@@ -60,7 +60,8 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const label = () => props.label ?? 'Page controls';
   const controlsName = () => label().toLowerCase();
   const modeClass = (value: 'light' | 'dark') => `flex flex-1 cursor-pointer items-center justify-center gap-2 border-0 px-3 py-2 font-mono text-xs transition-colors ${mode() === value ? 'bg-accent-soft text-accent' : 'bg-transparent text-muted hover:bg-raised hover:text-fg'}`;
-  const toggle = (next: Panel) => setPanel(current => current === next ? null : next);
+  let opener: HTMLElement | undefined;
+  const toggle = (next: Panel, event?: Event) => { opener = (event?.currentTarget as HTMLElement | null) ?? undefined; setPanel(current => current === next ? null : next); };
   const close = () => setPanel(null);
   const pick = (next: 'light' | 'dark') => {
     setMode(next);
@@ -69,6 +70,8 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
     try { localStorage.setItem('mx_theme', next); } catch { /* private mode */ }
   };
   const unread = () => Boolean(inbox.state()?.unread);
+  // Whatever closes a panel (Escape, scrim, its own close button, a link) returns focus to the bar button that opened it.
+  createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
   createEffect(() => {
     if (!panel()) return;
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
@@ -87,9 +90,9 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
       <div class="ml-auto flex shrink-0 items-center gap-1">
         <Star mobile={false} /><Star mobile={true} />
         {props.actions}
-        <Show when={person()}><Tooltip content="Notifications"><button type="button" aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={() => toggle('notifications')} class={`${BAR_BUTTON} relative`}><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" /></Show></button></Tooltip></Show>
-        <Tooltip content={controlsName()}><button type="button" aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={() => toggle('controls')} class={`${BAR_BUTTON} ${panel() === 'controls' ? 'text-accent' : ''}`}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</button></Tooltip>
-        <Tooltip content="menu"><button type="button" aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={() => toggle('menu')} class={BAR_BUTTON}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></button></Tooltip>
+        <Show when={person()}><Tooltip content="Notifications"><button type="button" aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class={`${BAR_BUTTON} relative`}><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" /></Show></button></Tooltip></Show>
+        <Tooltip content={controlsName()}><button type="button" aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)} class={`${BAR_BUTTON} ${panel() === 'controls' ? 'text-accent' : ''}`}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</button></Tooltip>
+        <Tooltip content="menu"><button type="button" aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)} class={BAR_BUTTON}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></button></Tooltip>
       </div>
     </header>
     <Show when={panel()}>

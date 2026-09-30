@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { DocumentPeople } from '../DocumentPeople';
-afterEach(() => vi.unstubAllGlobals());
+import { resetShared } from '@/lib/shared-request';
+afterEach(() => { vi.unstubAllGlobals(); resetShared(); });
 
 it('shows a pending request without suggesting comment access is blocked', async () => {
   const state = { members: [], pending: [], self: null, canManage: false, canInvite: true };

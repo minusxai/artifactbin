@@ -15,9 +15,10 @@ export async function GET(request:Request){
  const stream=new ReadableStream<Uint8Array>({
   async start(controller){
    const send=()=>{if(!closed)controller.enqueue(encoder.encode('data: {}\n\n'));};
+   const beat=()=>{if(!closed)controller.enqueue(encoder.encode(': keepalive\n\n'));};
    const close=()=>{if(closed)return;closed=true;clearInterval(timer);void stop?.();controller.close();};
    request.signal.addEventListener('abort',close,{once:true});
-   try{stop=await subscribeChannel(notificationChannel(actor.userId!),send);if(closed){await stop();return;}send();timer=setInterval(send,15000);}catch{close();}
+   try{stop=await subscribeChannel(notificationChannel(actor.userId!),send);if(closed){await stop();return;}send();timer=setInterval(beat,15000);}catch{close();}
   },
   cancel(){closed=true;clearInterval(timer);void stop?.();},
  });

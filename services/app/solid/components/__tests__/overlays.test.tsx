@@ -6,6 +6,7 @@ import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { DialogShell } from '../DialogShell';
 import { Popover } from '../Popover';
+import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
 
 function Dialog(props: { name: string; onClose: () => void; lock?: boolean }) {
   return <DialogShell onClose={props.onClose} lockScroll={props.lock} initialFocus="[data-first]">
@@ -79,4 +80,26 @@ it('keeps one popover open at a time and closes on an outside press or Escape', 
   fireEvent.click(screen.getByText('A'));
   fireEvent.pointerDown(screen.getByText('outside'));
   expect(a()).toBe(false);
+});
+
+it('returns focus to the trigger when a menu item that opened a dialog unmounts with its menu', () => {
+  function Host() {
+    const [menu, setMenu] = createSignal(false);
+    const [dialog, setDialog] = createSignal(false);
+    let trigger!: HTMLButtonElement; let root!: HTMLDivElement;
+    const announce = popupDismiss(menu, () => setMenu(false), () => trigger, () => root);
+    return <div ref={root}>
+      <button ref={trigger} onClick={() => { if (!menu()) announce(); setMenu(v => !v); }}>create</button>
+      <Show when={menu()}><button onClick={() => { setMenu(false); setDialog(true); }}>folder</button></Show>
+      <Show when={dialog()}><Dialog name="folder dialog" onClose={() => setDialog(false)} /></Show>
+    </div>;
+  }
+  render(() => <Host />);
+  screen.getByText('create').focus();
+  fireEvent.click(screen.getByText('create'));
+  screen.getByText('folder').focus();
+  fireEvent.click(screen.getByText('folder'));
+  expect(document.activeElement).toBe(screen.getByText('folder dialog first'));
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(document.activeElement).toBe(screen.getByText('create'));
 });

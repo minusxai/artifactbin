@@ -18,10 +18,12 @@ export function InboxProvider(props: { children: JSX.Element }): JSX.Element {
   const [error, setError] = createSignal('');
   let generation = 0;
   let limit = 50;
+  let lastRead = 0;
   const load = async (input?: object) => {
     const own = session()?.kind === 'account' ? session()?.user?.id : null;
     if (!own) return;
     const seq = ++generation;
+    lastRead = Date.now();
     try {
       const response = await fetch('/api/my/people', input ? { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) } : undefined);
       if (!response.ok) throw new Error('Could not load notifications');
@@ -33,9 +35,12 @@ export function InboxProvider(props: { children: JSX.Element }): JSX.Element {
         const page = await next.json() as InboxState;
         result.notifications.push(...page.notifications); result.next = page.next;
       }
+      lastRead = Date.now();
       if (seq === generation && session()?.user?.id === own) { setState(result); setError(''); }
     } catch { if (seq === generation) setError('Could not load notifications. Try again.'); }
   };
+  // Wakeups (the stream's first frame, focus, visibility) arrive in bursts right after a load: one fresh read covers them.
+  const refreshSoon = () => { if (Date.now() - lastRead > 1500) void load(); };
   const loadMore = async () => { limit += 50; await load(); };
   createEffect(() => {
     const user = session()?.kind === 'account' ? session()?.user?.id : null;
@@ -44,9 +49,9 @@ export function InboxProvider(props: { children: JSX.Element }): JSX.Element {
     void load();
     if (typeof EventSource === 'undefined') return;
     const source = new EventSource('/api/my/people/events');
-    source.onmessage = () => void load();
+    source.onmessage = refreshSoon;
     source.onerror = () => setError('Connection interrupted. Retrying…');
-    const refresh = () => { if (document.visibilityState === 'visible') void load(); };
+    const refresh = () => { if (document.visibilityState === 'visible') refreshSoon(); };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
     onCleanup(() => { source.close(); generation++; window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); });
