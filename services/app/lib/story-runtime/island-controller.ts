@@ -103,6 +103,9 @@ export function createIslandController({ win, root, islands, nodes: served, port
   let selectionLoading = false;
   let edit: FrameEditSession | null = null;
   let editRequested = false;
+  /** The islands were frozen for editing: from then on the page draws drafts (and versions) from the server compiler. */
+  let frozen = false;
+  const drafting = () => editRequested || frozen;
   let editLoading = false;
   let draftSequence = 0;
   let lastDraftSource: string | null = null;
@@ -144,9 +147,9 @@ export function createIslandController({ win, root, islands, nodes: served, port
   };
   const applyDraft = async (allowFocused = false) => {
     const pending = pendingDraft;
-    if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !editRequested || pending.sequence !== draftSequence) return;
+    if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !drafting() || pending.sequence !== draftSequence) return;
     const { disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom } = await import('@/lib/islands/morph/engine');
-    if (disposed || !editRequested || pending.sequence !== draftSequence || pendingDraft !== pending) return;
+    if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
     const sheet = docSheet(win.document);
@@ -193,7 +196,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
         if (!command.on) { draftSequence++; pendingDraft = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null; edit?.dispose(); edit = null; return; }
         if (edit || editLoading) return;
         editLoading = true;
-        freezeIslandPaint(root, islands);
+        if (!frozen) freezeIslandPaint(root, islands);
+        frozen = true;
         void Promise.all([import('@/lib/story-runtime/edit/session'), import('@/solid/editor/dom-mounter')]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }]) => {
           if (disposed || !editRequested) return;
           edit = createFrameEditSession({ win, root, channel, requestRender: () => {}, mountCompiled: mountCompiledEditRegions });
@@ -237,7 +241,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     },
     update(command: StoryDocumentUpdate) {
       if (disposed) return;
-      if (editRequested && command.source !== undefined) {
+      if (drafting() && command.source !== undefined) {
         const sequence = ++draftSequence;
         const source = command.source;
         void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
@@ -249,7 +253,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
           if (!response.ok) throw new Error(`draft preview answered ${response.status}`);
           const payload = await response.json() as { html: string };
           const next = new DOMParser().parseFromString(payload.html, 'text/html');
-          if (disposed || sequence !== draftSequence || !editRequested) return;
+          if (disposed || sequence !== draftSequence || !drafting()) return;
           const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]');
           if (!nextRoot) throw new Error('draft preview carried no story');
           // The served AST may carry resolved assets or generated properties.
