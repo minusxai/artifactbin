@@ -8,6 +8,8 @@ import {serializeJsx} from '../../app/lib/jsx';
 import {runCli} from '../src/dispatch';
 import {startPreview} from '../src/preview/session';
 import {prepareClientDocumentUpdate} from '../../app/lib/story/document-update-client';
+import {buildPreview} from '../scripts/build-preview.mjs';
+import {readdir} from 'node:fs/promises';
 
 test('file session HTTP saves reject stale revisions, preserve published metadata, query real data and persist comments',async()=>{
  const root=await mkdtemp(join(tmpdir(),'preview-http-'));
@@ -206,4 +208,66 @@ test('an image tracked as typed YAML serves its source bytes',async()=>{
   assert.doesNotMatch(frame.headers.get('content-security-policy')??'',/allow-same-origin/);
   assert.match(await frame.text(),/<!doctype html>/i);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('preview serves the compiled reader: no React, a live Select re-runs its query',async()=>{
+ const appDir=join(import.meta.dirname,'../../app');
+ const cwd=process.cwd();process.chdir(appDir);
+ const root=await mkdtemp(join(tmpdir(),'preview-compiled-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  const source='<Helmet><Value name="n" type="number" default={1} /><Query name="doubled">{`select $n * 2 as v`}</Query></Helmet><div><p id="prose">Some prose</p><Select label="Multiplier" value="$n" options={[{"label":"One","value":1},{"label":"Two","value":2}]} /><p>Doubled: <Number data="$doubled" col="v" /></p></div>';
+  await writeFile(join(root,'report.jsx'),source);
+  session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),assets:root,publicAssets:join(appDir,'public')});
+  const page=await fetch(session.url+'/workspace/report.jsx');
+  assert.equal(page.status,200);
+  const html=await page.text();
+  assert.doesNotMatch(html,/react-dom|"react"|from"react"/i);
+  assert.match(html,/data-mx-ast/);
+  assert.match(html,/Some prose/);
+  assert.match(html,/"queryUrl":"\/query\?file=report\.jsx"/);
+  const module=/<script type="module" src="(\/islands\/d\/[0-9a-f]{16}\.js)"/.exec(html);
+  assert.ok(module,html);
+  const bytes=await fetch(session.url+module![1]);
+  assert.equal(bytes.status,200);
+  assert.match(await bytes.text(),/\$boot\(|_\$createComponent/);
+  const query=await (await fetch(session.url+'/query?file=report.jsx',{method:'POST',headers:{'content-type':'application/json',origin:session.url},body:JSON.stringify({values:{n:3}})})).json();
+  assert.deepEqual(query.tables.doubled.rows,[{v:6}]);
+  const draft=await fetch(session.url+'/draft',{method:'POST',headers:{'content-type':'application/json',origin:session.url},body:JSON.stringify({file:'report.jsx',source:source.replace('Some prose','Edited prose')})});
+  assert.equal(draft.status,200);
+  const draftHtml=(await draft.json()).html as string;
+  assert.match(draftHtml,/Edited prose/);
+  assert.match(draftHtml,/data-mx-inline-story/);
+  const badDraft=await fetch(session.url+'/draft',{method:'POST',headers:{'content-type':'application/json',origin:session.url},body:JSON.stringify({file:'report.jsx',source:'<UnknownWidget />'})});
+  assert.equal(badDraft.status,400);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
+});
+
+test('a capture bakes its rows server-side and marks itself export-ready with no client round trip',async()=>{
+ const appDir=join(import.meta.dirname,'../../app');
+ const cwd=process.cwd();process.chdir(appDir);
+ const root=await mkdtemp(join(tmpdir(),'preview-capture-compiled-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<Helmet><Query name="two">{`select 1+1 as v`}</Query></Helmet><p>Value: <Number data="$two" col="v" /></p>');
+  session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),assets:root,publicAssets:join(appDir,'public'),capture:true});
+  const page=await fetch(session.url+'/workspace/report.jsx?capture=1');
+  assert.equal(page.status,200);
+  const html=await page.text();
+  assert.match(html,/<body[^>]*data-afbin-export-ready=""/);
+  assert.match(html,/Live number">2</);
+  assert.equal(session.failure(),undefined);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
+});
+
+test('the preview browser bundle carries no react or react-dom',async()=>{
+ const outdir=await mkdtemp(join(tmpdir(),'preview-bundle-'));
+ try{
+  await buildPreview(outdir);
+  const files=await readdir(outdir);
+  assert.ok(files.some(name=>name==='client.js'),files.join(', '));
+  for(const name of files){
+   if(!name.endsWith('.js'))continue;
+   const code=await readFile(join(outdir,name),'utf8');
+   assert.doesNotMatch(code,/from *["']react(?:-dom(?:\/client)?)?["']|require\(["']react["']\)/,`${name} pulls in react`);
+  }
+ }finally{await rm(outdir,{recursive:true,force:true});}
 });

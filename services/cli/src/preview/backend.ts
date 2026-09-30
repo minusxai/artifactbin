@@ -1,7 +1,7 @@
 /** Browser adapter: production components speak ArtifactBackend; only this module knows local routes. */
 import type {ArtifactBackend,BackendFeature,EditAnswer} from '../../../app/lib/artifact-backend/types';
 import {BackendRequestError} from '../../../app/lib/artifact-backend/errors';
-import type {PreviewDocument} from './workspace';
+import type {PreviewDocument} from './types';
 
 export function createPreviewBackend(file:string,onSaved:(document:PreviewDocument)=>void):ArtifactBackend {
  const request=async(path:string,body:object,signal?:AbortSignal)=>{

@@ -36,6 +36,7 @@ import {validateQueryValues} from '../../../app/lib/story/query-values';
 import {dataflowOf} from '../../../app/lib/story/helmet';
 import type {CompiledDataflow} from '../../../app/lib/story/compiled-dataflow';
 import {compileLocal,declaredRefs,runLocal} from '../local-dataflow';
+import {ISLANDS_PATH,assembleDocument,compileDocument,documentModuleSha,readDocumentModule,renderStoryHtml} from './compiled';
 
 class Refusal extends Error {constructor(readonly status:number,message:string){super(message);}}
 export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<LocalDataset>}){
@@ -94,6 +95,17 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(!options.dataset)throw new Refusal(422,`Remote dataset ${id} requires its host connection`);
   return options.dataset(id);
  };
+ /** The compiled reader's own query door: an anonymous GET (`?q=`, `lib/story-runtime/fetch-transport`'s default) or this editor's POST. */
+ const runQuery=async(file:string,input:{values?:unknown;only?:unknown;page?:unknown;tz?:unknown})=>{
+  // A document that does not compile fails the capture as a query error would: the export names it.
+  const current=await read(file).catch((error:unknown)=>{if(options.capture&&error instanceof Refusal)failure=error.message;throw error;}),datasets:Record<string,LocalDataset>={};
+  const invalid=validateQueryValues(current.flow,(input.values as Record<string,Scalar>)??{});if(invalid)throw new Refusal(400,invalid.code);
+  for(const id of declaredRefs(current.declared))datasets[id]??=await tableFor(id);
+  for(const [id,table] of Object.entries(datasets))datasetImages.set(id,new Set(table.rows.flatMap(row=>Object.values(row).flatMap(value=>{const ref=typeof value==='string'?imageReferenceId(value):null;return ref?[ref]:[];}))));
+  const result=await runLocal(current.flow,async id=>datasets[id],{values:input.values as Record<string,Scalar>,only:input.only as string[]|undefined,page:input.page as never,tz:typeof input.tz==='string'?input.tz:undefined});
+  if(options.capture&&Object.keys(result.errors).length)failure=Object.values(result.errors).join("; ");
+  return result;
+ };
  const save=async(file:string,revision:string,source:string,metadata?:DocumentMetadata)=>withLock(home,root,async()=>{
     const current=await read(file);
     if(revision!==current.revision)throw new Refusal(409,'File changed; draft retained');
@@ -136,6 +148,11 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&target.pathname==='/logo-128.png'&&options.publicAssets){res.setHeader('Content-Type','image/png');return res.end(await readFile(await confinedPath(options.publicAssets,'logo-128.png')));}
   if((req.method==='GET'||req.method==='HEAD')&&target.pathname==='/author-frame'){const response=authorFrameResponse(new Request(target,{method:req.method}),null,url);res.statusCode=response.status;response.headers.forEach((value,key)=>res.setHeader(key,value));return res.end(Buffer.from(await response.arrayBuffer()));}
   if(req.method==='GET'&&target.pathname==='/files')return json([...allowed]);
+  if(req.method==='GET'&&target.pathname==='/query'){
+   const raw=target.searchParams.get('q');if(!raw)throw new Refusal(400,'Missing query request');
+   let parsed:unknown;try{parsed=JSON.parse(raw);}catch{throw new Refusal(400,'Invalid query request');}
+   return json(await runQuery(file,parsed as Record<string,unknown>));
+  }
   if(req.method==='GET'&&target.pathname==='/image'){
    const current=await read(file),id=imageReferenceId(target.searchParams.get('u')??'');
    const sources=declaredRefs(current.declared);
@@ -148,7 +165,10 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(options.capture&&req.method!=='GET'&&!(req.method==='POST'&&target.pathname==='/query'))throw new Refusal(403,'Image export is read-only');
   if(req.method==='POST'){
    let bytes='';for await(const chunk of req){bytes+=chunk;if(bytes.length>1_000_000)throw new Refusal(413,'Body too large');}
-   const input=JSON.parse(bytes);await pathFor(input.file);
+   const input=JSON.parse(bytes);
+   // A compiled island's own POST (its query door is `/query?file=`) carries no body field for it.
+   if(typeof input.file!=='string')input.file=file;
+   await pathFor(input.file);
    if(target.pathname==='/save')return json(await serial(()=>save(input.file,input.revision,input.body)));
    if(target.pathname==='/editor')return json(await serial(async()=>{
     if(input.operation==='load')return editor.load(input.file);
@@ -171,15 +191,16 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     if(input.operation==='annotations.delete'){annotations.delete(input.id);return null;}
     throw new Refusal(400,'Unknown editor operation');
    }));
-   if(target.pathname==='/query'){
-    // A document that does not compile fails the capture as a query error would: the export names it.
-    const current=await read(input.file).catch((error:unknown)=>{if(options.capture&&error instanceof Refusal)failure=error.message;throw error;}),datasets:Record<string,LocalDataset>={};
-    const invalid=validateQueryValues(current.flow,input.values??{});if(invalid)throw new Refusal(400,invalid.code);
-    for(const id of declaredRefs(current.declared))datasets[id]??=await tableFor(id);
-    for(const [id,table] of Object.entries(datasets))datasetImages.set(id,new Set(table.rows.flatMap(row=>Object.values(row).flatMap(value=>{const ref=typeof value==='string'?imageReferenceId(value):null;return ref?[ref]:[];}))));
-    const result=await runLocal(current.flow,async id=>datasets[id],{values:input.values as Record<string,Scalar>,only:input.only,page:input.page,tz:typeof input.tz==='string'?input.tz:undefined});
-    if(options.capture&&Object.keys(result.errors).length)failure=Object.values(result.errors).join("; ");
-    return json(result);
+   if(target.pathname==='/query')return json(await runQuery(input.file,input));
+   if(target.pathname==='/draft'){
+    // Ephemeral compile of the editor's in-flight text — never staged, never written.
+    if(typeof input.source!=='string')throw new Refusal(400,'Invalid draft');
+    const current=await read(input.file);
+    const draft=await read(input.file,writeDocument({metadata:current.metadata,body:input.source}));
+    if(!draft.prepared)throw new Refusal(500,'Local preview has no runtime assets configured.');
+    const compiled=await compileDocument({data:draft.data,flow:draft.flow,authorScript:draft.prepared.authorScript,capture:false});
+    const assembled=assembleDocument({compiled,prepared:draft.prepared,colorMode:draft.data.colorMode,file:input.file,capture:false});
+    return json({html:assembled.html});
    }
    if(target.pathname==='/comments'){
     const current=await read(input.file);
@@ -190,7 +211,38 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     comments.put(root,'preview-comment',comment.id,comment);return json(comment);
    }
   }
-  if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){await pathFor(file);const directory=dirname(file);const base='/workspace/'+(directory==='.'?'':directory.split('/').map(encodeURIComponent).join('/')+'/');res.setHeader('Content-Type','text/html');return res.end(`<!doctype html><html><head><meta charset="utf-8"><base href="${base}"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifactbin preview</title><link rel="stylesheet" href="/bundle/chrome.css"></head><body><div id="root"></div><script type="module" src="/bundle/client.js"></script></body></html>`);}
+  if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){
+   const current=await read(file);
+   if(!current.prepared)throw new Refusal(500,'Local preview has no runtime assets configured.');
+   const directory=dirname(file),base='/workspace/'+(directory==='.'?'':directory.split('/').map(encodeURIComponent).join('/')+'/');
+   const compiled=await compileDocument({data:current.data,flow:current.flow,authorScript:current.prepared.authorScript,capture:!!options.capture}).catch((error:unknown)=>{if(options.capture)failure=error instanceof Error?error.message:String(error);throw error;});
+   // A capture bakes its own rows server-side (as `/raw`'s export path does): nothing for the
+   // headless page to wait on after paint, and no reader-side race to detect "settled".
+   let story:string|undefined,values:Record<string,Scalar>|undefined;
+   if(options.capture){
+    const datasets:Record<string,LocalDataset>={};
+    for(const id of declaredRefs(current.declared))datasets[id]??=await tableFor(id);
+    const ran=await runLocal(current.flow,async id=>datasets[id],{values:{}});
+    if(Object.keys(ran.errors).length)failure=Object.values(ran.errors).join('; ');
+    values=ran.values;story=await renderStoryHtml(compiled,{values:ran.values,results:{tables:ran.tables,errors:ran.errors}});
+   }
+   const assembled=assembleDocument({compiled,prepared:current.prepared,colorMode:current.data.colorMode,file,capture:!!options.capture,story,values});
+   let html=assembled.html.replace('<head>',`<head><base href="${base}">`)
+    .replace('</body>',`<link rel="stylesheet" href="/bundle/chrome.css"><script type="module" src="/bundle/client.js"></script></body>`);
+   if(options.capture)html=html.replace('<body','<body data-afbin-export-ready=""');
+   res.setHeader('Content-Type','text/html');
+   for(const [name,value] of Object.entries(assembled.headers))res.setHeader(name,value);
+   return res.end(html);
+  }
+  if(req.method==='GET'&&target.pathname.startsWith(ISLANDS_PATH+'/')){
+   const sha=documentModuleSha(target.pathname);
+   if(sha){const bytes=await readDocumentModule(sha);if(!bytes)throw new Refusal(404,'Not found');res.setHeader('Content-Type','text/javascript');res.setHeader('Cache-Control','public, max-age=31536000, immutable');return res.end(Buffer.from(bytes));}
+   if(!options.publicAssets)throw new Refusal(404,'Not found');
+   const path=await confinedPath(options.publicAssets,target.pathname.slice(1));
+   // The shared build's own chunks: `fileContentType` knows document/dataset kinds, not `.js`/`.wasm`.
+   const type=path.endsWith('.js')?'text/javascript':path.endsWith('.wasm')?'application/wasm':fileContentType(path)??'application/octet-stream';
+   res.setHeader('Content-Type',type);res.setHeader('Cache-Control','public, max-age=31536000, immutable');return res.end(await readFile(path));
+  }
   if(req.method==='GET'&&target.pathname.startsWith('/bundle/')&&options.assets){
    const path=await confinedPath(options.assets,target.pathname.slice('/bundle/'.length));
    const extension=relative(options.assets,path).endsWith('.css')?'css':relative(options.assets,path).endsWith('.js')?'js':null;
