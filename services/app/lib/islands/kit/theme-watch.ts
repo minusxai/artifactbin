@@ -1,5 +1,5 @@
-/** Watch the story's theme after a Mermaid island mounts, including detached hydration. */
-export function watchMermaidMode(host: HTMLElement, changed: () => void, changedWhileLoading: () => boolean): () => void {
+/** Watch a story element's theme after it mounts, including detached hydration. Shared by Mermaid and the chart engine. */
+export function watchThemeMode(host: HTMLElement, changed: () => void, changedWhileLoading: () => boolean): () => void {
   const observer = new MutationObserver(records => {
     if (records.some(record => record.oldValue !== (record.target as Element).getAttribute(record.attributeName ?? ''))) changed();
   });

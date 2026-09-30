@@ -3,7 +3,7 @@
 /**
  * `<Files>` — a LISTING of artifacts, as a document may draw one.
  *
- * A folder's own page is app chrome (web/pages/Folder) and does not come
+ * A folder's own page is app chrome (solid/pages/Folder) and does not come
  * through here. What this component is for is the power feature underneath it:
  * a document may declare `<Import name="f" src="ref:<folderId>" /><Query name="q">{`select * from f.rows`}</Query>`
  * over any folder it may read and bind the rows with `<Files data="$q" />`, so

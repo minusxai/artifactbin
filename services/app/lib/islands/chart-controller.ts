@@ -4,15 +4,17 @@
  * it on demand, so Vega arrives after reader readiness and chart visibility, a table change,
  * or a reader interaction.
  *
- * Builds the view, re-feeds rows, follows resizes and speaks the readiness contract
+ * Builds the view, re-feeds rows, follows resizes (rebuilding when a resize flips the legend-wrap or
+ * x-label-angle plan — those are compile-time constants baked into the parsed spec) and the reader's
+ * theme (rebuilding on a light/dark or `data-theme` change), and speaks the readiness contract
  * (`data-mx-chart-state`) through lib/viz/render-readiness. Not ported from VegaChart (parity gaps):
- * the shared multi-series tooltip guide, interactive-map zoom and view persistence, the legend-wrap
- * rebuild on resize, theme-change rebuilds.
+ * the shared multi-series tooltip guide, interactive-map zoom and view persistence.
  */
 import { beginChartRender, trackChartRender } from '@/lib/viz/render-readiness';
 import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVegaView, injectNamedAssets, resizeVegaView, resolveEnvelopeSpec, setMainData, toVegaSpec } from '@/lib/viz/render-vega';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { chartTokenRangeFromElement, resolveCssVarColors } from '@/lib/viz/chart-tokens';
+import { watchThemeMode } from './kit/theme-watch';
 import type { IslandChart, IslandChartInput } from './contract';
 
 type View = ReturnType<typeof createVegaView>;
@@ -34,44 +36,69 @@ const onError = (el: HTMLElement, error: unknown) => {
 };
 
 export function mountChart({ element: el, envelope, rows }: IslandChartInput): IslandChart {
-  const colorMode = colorModeOf(el);
   let view: View | null = null;
   let vl: Record<string, unknown> | null = null;
   let current: IslandChartInput['rows'] = rows;
   let disposed = false;
-  const finish = beginChartRender(el);
-  void (async () => {
-    try {
-      if (document.fonts?.ready) await document.fonts.ready;
-      const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(current));
-      if (!resolved.ok) throw new Error(resolved.error);
-      vl = resolved.engine === 'vega-lite' ? resolved.spec : null;
-      const legendPlan = vl ? computeLegendPlan(vl, current, el.clientWidth) : null;
-      const xLabelAngle = vl ? computeXLabelAngle(vl, current, el.clientWidth) : null;
-      const size = sizeOf(el);
-      const facetLayout = vl ? computeFacetLayoutPlan(vl, current, size.width, size.height) : null;
-      const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, facetLayout, categoryRange: chartTokenRangeFromElement(el) });
-      const cs = getComputedStyle(el);
-      resolveCssVarColors(vegaSpec, (name) => cs.getPropertyValue(name));
-      if (disposed) return;
-      el.replaceChildren();
-      view = createVegaView(vegaSpec, current, { renderer: 'svg', container: el, tooltipTheme: colorMode, ...(parserConfig ? { parserConfig } : {}), ...size, facetLayout });
-      await injectNamedAssets(view, resolved.assets);
-      await view.runAsync();
-      promoteFontAttrs(el);
-    } catch (error) {
-      onError(el, error);
-    } finally {
-      finish();
-    }
-  })();
+  let colorMode = colorModeOf(el);
+  // Legend wrap + x label angle are compile-time CONSTANTS baked into the parsed spec — when a resize
+  // flips either decision the view is rebuilt; plain resizes stay signal-only (resizeVegaView).
+  let legendFingerprint = 'null';
+  const legendFingerprintOf = (spec: Record<string, unknown> | null, width: number) => JSON.stringify({
+    legend: spec ? computeLegendPlan(spec, current, width) ?? null : null,
+    xAngle: spec ? computeXLabelAngle(spec, current, width) : null,
+  });
+
+  const build = () => {
+    const finish = beginChartRender(el);
+    void (async () => {
+      try {
+        if (document.fonts?.ready) await document.fonts.ready;
+        if (disposed) return;
+        colorMode = colorModeOf(el);
+        const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(current));
+        if (!resolved.ok) throw new Error(resolved.error);
+        vl = resolved.engine === 'vega-lite' ? resolved.spec : null;
+        const size = sizeOf(el);
+        const legendPlan = vl ? computeLegendPlan(vl, current, size.width) : null;
+        const xLabelAngle = vl ? computeXLabelAngle(vl, current, size.width) : null;
+        legendFingerprint = legendFingerprintOf(vl, size.width);
+        const facetLayout = vl ? computeFacetLayoutPlan(vl, current, size.width, size.height) : null;
+        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, facetLayout, categoryRange: chartTokenRangeFromElement(el) });
+        const cs = getComputedStyle(el);
+        resolveCssVarColors(vegaSpec, (name) => cs.getPropertyValue(name));
+        if (disposed) return;
+        view?.finalize();
+        el.replaceChildren();
+        view = createVegaView(vegaSpec, current, { renderer: 'svg', container: el, tooltipTheme: colorMode, ...(parserConfig ? { parserConfig } : {}), ...size, facetLayout });
+        await injectNamedAssets(view, resolved.assets);
+        await view.runAsync();
+        promoteFontAttrs(el);
+      } catch (error) {
+        onError(el, error);
+      } finally {
+        finish();
+      }
+    })();
+  };
+  build();
+
   const resize = new ResizeObserver(() => {
     const v = view;
     if (!v) return;
     const size = sizeOf(el);
+    if (vl) {
+      const next = legendFingerprintOf(vl, size.width);
+      if (next !== legendFingerprint) { build(); return; }
+    }
     trackChartRender(el, () => resizeVegaView(v, { ...size, facetLayout: vl ? computeFacetLayoutPlan(vl, current, size.width, size.height) : null }).runAsync()).catch(() => {});
   });
   resize.observe(el);
+
+  // Design-theme chart tokens (`--chart-1..5`) and light/dark both flow through this rebuild: a
+  // `data-theme` or `class` flip on an ancestor recolors the chart, same as VegaChart's colorMode prop.
+  const stopTheme = watchThemeMode(el, () => build(), () => colorModeOf(el) !== colorMode);
+
   return {
     update(next) {
       current = next;
@@ -83,6 +110,7 @@ export function mountChart({ element: el, envelope, rows }: IslandChartInput): I
     destroy() {
       disposed = true;
       resize.disconnect();
+      stopTheme();
       view?.finalize();
     },
   };

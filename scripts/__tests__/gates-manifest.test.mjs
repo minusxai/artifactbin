@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { GATE_RUNNERS, GATE_SPECS, ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, GATE_RUNNERS, GATE_SPECS, ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
@@ -169,13 +169,13 @@ it('balances the extra cross-browser setup without extending any test timeout', 
 });
 
 
-it('prints the same browser plan used by the twelve CI shards without starting servers', () => {
+it('prints the same browser plan used by the CI shards without starting servers', () => {
   const set = onDisk;
-  for (let index = 1; index <= 12; index++) {
-    const selected = shardOf(set, {index, total: 12}, shardWeight, { isolated: ISOLATED_GATES });
-    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/12`], {encoding: 'utf8'}).trim();
+  for (let index = 1; index <= CI_GATE_SHARDS; index++) {
+    const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight, { isolated: ISOLATED_GATES });
+    const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
-    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/12`], {encoding: 'utf8'}).trim();
+    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(postgres).toBe(String(selected.includes('postgres-datasets')));
   }
 

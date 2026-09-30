@@ -57,8 +57,8 @@ export function Mermaid(p: Props) {
     let stopMode = () => {};
     const modeAtMount = liveMode();
     // The late watcher compares the mode it finds with this first sample before deciding to resample.
-    void import('./mermaid-mode').then(({ watchMermaidMode }) => {
-      if (!disposed) stopMode = watchMermaidMode(host, () => setRevision(n => n + 1), () => liveMode() !== modeAtMount);
+    void import('./theme-watch').then(({ watchThemeMode }) => {
+      if (!disposed) stopMode = watchThemeMode(host, () => setRevision(n => n + 1), () => liveMode() !== modeAtMount);
     });
     onCleanup(() => { disposed = true; stopMode(); });
     // JSX evaluates the stored-image key before its figure ref is assigned.

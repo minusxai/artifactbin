@@ -1,17 +1,25 @@
 /* @jsxImportSource solid-js */
-import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, lazy, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
-import { canonicalArtifactPath } from '@/lib/urls';
+import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';
 import type { ProfileSocial } from '@/lib/profile-social';
 import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import { loginHref } from '../shared/login-href';
 import { pageDataChanged } from '@/web/page-data-events';
 import { takeBootstrap } from '@/web/bootstrap';
+import { initialDocumentStory } from '@/web/initial-story';
 import { Avatar } from '../components/Avatar';
 import { usePageData } from '../web/use-page-data';
 import { NotFoundPage } from './NotFound';
+
+// Lazy, like every other route chunk (solid/App.tsx): a profile visit should not download the
+// folder listing, the (large) dataset editor, or the compiled-document reader until an alias
+// actually resolves to one.
+const FolderRoute = lazy(() => import('./Folder').then((m) => ({ default: m.FolderRoute })));
+const DatasetEditorPage = lazy(() => import('./DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
+const DocumentPage = lazy(() => import('./Document').then((m) => ({ default: m.DocumentPage })));
 
 interface ProfileAnswer {
   kind: 'public-profile' | 'redirect' | 'artifact';
@@ -47,6 +55,37 @@ export function ProfilePage(): JSX.Element {
   </Show>;
 }
 
+/**
+ * `/:user/*` — every pretty artifact alias, e.g. `/@user/<id>-slug[/edit]` (also reached by address
+ * healing: server/app documentPreparation renders a `/a/<id>[/edit]` request at this address once its
+ * owner has a username). The ONE route for this shape — a sibling route keyed on a single named
+ * segment would overlap it and, being listed first, win the match for every one-segment alias
+ * (folders included), same as `/a/:id` does with `ArtifactRoute` in solid/App.tsx.
+ *
+ * Resolution is id-anchored, same grammar as web/pages/Profile.tsx's React twin (lib/urls
+ * parsePrettyPath) — the difference is what Solid does once it has the id: `initialDocumentStory()`
+ * (the same discriminator `ArtifactRoute` uses for `/a/:id`) says whether THIS load served a compiled
+ * document, so a folder renders here directly and a document defers to the compiled reader
+ * (`DocumentPage`) instead of guessing from the URL shape alone. "Nesting is not in the address" (see
+ * the profile API's own doc comment): a rest path that fails to parse as an id is a uniform 404, never
+ * a listing — there is no profile sub-page below the handle.
+ */
+export function ProfileAliasRoute(): JSX.Element {
+  const params = useParams<{ user: string; rest?: string }>();
+  const location = useLocation();
+  // A trailing slash (`/@user/`) is the bare handle, same as `/@user` — not a rest path.
+  const bare = createMemo(() => !(params.rest ?? '').split('/').filter(Boolean).length);
+  const editing = createMemo(() => /\/edit\/?$/.test(location.pathname));
+  const id = createMemo(() => parsePrettyPath(artifactViewPath(params.rest ?? '').split('/').filter(Boolean))?.id ?? null);
+  return <Show when={!bare()} fallback={<ProfilePage />}>
+    <Show when={id()} fallback={<NotFoundPage />}>
+      {resolvedId => <Show when={editing()} fallback={
+        <Show when={initialDocumentStory()} fallback={<FolderRoute id={resolvedId()} />}><DocumentPage /></Show>
+      }><DatasetEditorPage artifactId={resolvedId()} /></Show>}
+    </Show>
+  </Show>;
+}
+
 function Social(props: { ownerId: string; social: ProfileSocial; signedIn: boolean }): JSX.Element {
   const [following, setFollowing] = createSignal(props.social.relation?.youFollow ?? false);
   const [followers, setFollowers] = createSignal(props.social.followers);
@@ -77,7 +116,7 @@ function ProfileShelf(props: { handle: string; rows: ShelfRow[] }): JSX.Element 
     <div class="flex items-center gap-2 rounded-[6px] border border-edge bg-surface px-3 py-1.5"><Search size={13} class="text-faint" /><input aria-label="Search artifacts" placeholder="search artifacts" value={query()} onInput={e => setQuery(e.currentTarget.value)} class="h-7 min-w-0 flex-1 border-0 bg-transparent font-mono text-xs text-fg focus:outline-none" /><div role="group" aria-label="Shelf view" class="ml-auto flex border-l border-edge pl-1.5"><button type="button" aria-label="Grid view" aria-pressed={view() === 'grid'} onClick={() => choose('grid')} class="h-7 w-8"><LayoutGrid size={14} /></button><button type="button" aria-label="List view" aria-pressed={view() === 'list'} onClick={() => choose('list')} class="h-7 w-8"><List size={14} /></button></div></div>
     <Show when={query() && visible().documents.length + visible().folders.length === 0}><p aria-label="No matches" class="font-mono text-xs text-faint">nothing matches the active search</p></Show>
     <Show when={view() === 'grid'} fallback={<div aria-label="Artifact list" role="region"><For each={[...visible().folders, ...visible().documents]}>{row => <a href={url(row)} rel="external" aria-label={`Open ${row.title ?? row.id}`} class="flex items-center justify-between border-b border-edge py-3 text-sm text-fg no-underline"><span>{row.title ?? 'Untitled'}</span><span class="font-mono text-xs text-muted">{new Date(row.updated_at).toLocaleDateString('en-US')}</span></a>}</For></div>}>
-      <Show when={visible().folders.length}><section aria-label="Folders"><h2 class="mb-2 font-mono text-[10px] uppercase tracking-[0.13em] text-muted">folders</h2><ul class="grid grid-cols-2 gap-3 lg:grid-cols-4"><For each={visible().folders}>{row => <li class="rounded-md border border-edge p-3"><Folder size={24} class="mb-4 text-accent" /><a href={url(row)} rel="external" aria-label={`Open folder ${row.title ?? row.id}`} class="text-sm font-semibold text-fg no-underline">{row.title ?? 'Untitled'}</a></li>}</For></ul></section></Show>
+      <Show when={visible().folders.length}><section aria-label="Folders"><h2 class="mb-2 font-mono text-[10px] uppercase tracking-[0.13em] text-muted">folders</h2><ul class="grid grid-cols-2 gap-3 lg:grid-cols-4"><For each={visible().folders}>{row => <li class="rounded-md border border-edge p-3"><a href={url(row)} rel="external" aria-label={`Open folder ${row.title ?? row.id}`} class="block text-sm font-semibold text-fg no-underline"><Folder size={24} class="mb-4 text-accent" />{row.title ?? 'Untitled'}</a></li>}</For></ul></section></Show>
       <div aria-label="Artifact grid" role="region" class="flex flex-col gap-7"><For each={groupShelfByRecency(visible().documents)}>{group => <section aria-label={`${group.label} artifacts`}><h2 class="mb-2.5 font-mono text-[10px] uppercase tracking-[0.13em] text-muted">{group.label}</h2><ul class="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4"><For each={group.rows}>{row => <li class="reveal group relative flex min-w-0 flex-col rounded-md p-1 transition-colors hover:bg-raised/60 sm:p-2"><a href={url(row)} rel="external" aria-label={`Open ${row.title ?? row.id}`} class="block no-underline"><div class="aspect-[5/3] rounded-[4px] border border-edge bg-raised shadow-sm" style={{ 'background-image': `url(/a/${row.id}/export?format=jpg&mode=card&v=${row.version})`, 'background-position': 'center', 'background-size': 'cover' }} /><span class="mt-2 block text-center font-mono text-[13px] font-semibold text-fg">{row.title ?? 'Untitled'}</span></a><Show when={row.description}><p class="line-clamp-2 text-center text-xs text-muted">{row.description}</p></Show></li>}</For></ul></section>}</For></div>
     </Show>
   </section>;

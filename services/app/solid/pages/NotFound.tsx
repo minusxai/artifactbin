@@ -3,10 +3,11 @@
  * The app's ONE 404 (web/pages/NotFound.tsx) in Solid: same copy, same accessible names. The
  * React page's `useLoginHref` hook becomes a signal set on mount and re-read on click.
  */
-import { createSignal, onMount, Show, type JSX } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { LINK } from '../shared/ui-tokens';
 import { loginHref } from '../shared/login-href';
 import { useSession } from '../web/session';
+import { useChromeVisibility } from '../components/PageChrome';
 
 const GLITCH_CSS = `
 .nf-glitch { animation: nf-glitch 2.6s steps(1) infinite; }
@@ -23,8 +24,10 @@ const GLITCH_CSS = `
 
 export function NotFoundPage(): JSX.Element {
   const { session } = useSession();
+  const setChromeVisible = useChromeVisibility();
   const [href, setHref] = createSignal('/login');
-  onMount(() => setHref(loginHref(window.location)));
+  onMount(() => { setHref(loginHref(window.location)); setChromeVisible?.(false); });
+  onCleanup(() => setChromeVisible?.(true));
   return (
     <main aria-label="Not found" class="mx-auto mt-16 max-w-4xl px-6 pb-24 justify-center text-center">
       <style>{GLITCH_CSS}</style>
