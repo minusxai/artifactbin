@@ -16,7 +16,7 @@ const SocialPreviewEditor = lazy(() => import('./SocialPreviewEditor').then((m) 
 
 const ROW = 'flex w-full items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
 export interface DocumentActionsProps {
-  membershipAvailable?: boolean;
+  pwaEnabled?: boolean; membershipAvailable?: boolean;
   id: string; title: string; version: number; archived?: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;
   like: { liked: boolean; count: number }; onCommentsChange: (open: boolean) => void;
@@ -48,7 +48,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
       <Show when={activeCommenter()}><button type="button" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW}><MessageSquare size={14} /><span class="flex-1">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></button></Show>
       <Show when={activeEditor()}><button type="button" aria-label="Edit artifact" onClick={props.onEdit} class={ROW}><Pencil size={14} />edit artifact</button></Show>
-      <InstallArtifactLink id={props.id} class={ROW} />
+      <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} class={ROW} /></Show>
       <DownloadOffline id={props.id} version={props.archived ? props.version : undefined} />
       <Show when={!props.hideFork}><ForkArtifact id={props.id} title={props.title} /></Show>
       <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />

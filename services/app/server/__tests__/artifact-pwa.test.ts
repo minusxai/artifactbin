@@ -12,11 +12,11 @@ import { mintExportKey } from '@/lib/export-key';
 const harness = useAppHarness();
 const secret = 'vitest-actor-secret-0000000000000000';
 const app = createAppServer({ actorSecret: secret, indexHtml: async () => '<html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>' });
-async function world() {
-  const owner = await ensureUsername(await createUser({ email: 'mxmx_test_pwa@example.com' }));
+async function world(enabled = true) {
+  const owner = await ensureUsername(await createUser({ email: `mxmx_test_pwa_${enabled ? 'on' : 'off'}@example.com` }));
   const token = await mintToken('pwa');
   await claimToken(owner.id, token.token);
-  const make = async (visibility: 'public' | 'private') => (await (await createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token.token}` }, body: JSON.stringify({ markup: '<h1>Live app</h1>', title: 'My app <&>', visibility }) }))).json()) as { id: string };
+  const make = async (visibility: 'public' | 'private') => (await (await createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token.token}` }, body: JSON.stringify({ markup: `${enabled ? '<Helmet><meta name="artifactbin:pwa-enabled" content="true" /></Helmet>' : ''}<h1>Live app</h1>`, title: 'My app <&>', visibility }) }))).json()) as { id: string };
   return { public: await make('public'), private: await make('private'), headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: owner.id, email: owner.email }, secret) } };
 }
 
@@ -81,7 +81,7 @@ it('publishes a separate admitted icon and settings, while refusing foreign priv
   const upload = await create({ image: `data:image/png;base64,${image.toString('base64')}`, visibility: 'private' });
   expect(upload.status).toBe(201);
   const icon = await upload.json();
-  const markup = `<Helmet><meta name="artifactbin:pwa-name" content="Separate app" /><meta name="artifactbin:pwa-short-name" content="App" /><meta name="artifactbin:pwa-theme-color" content="#112233" /><meta name="artifactbin:pwa-icon" content="ref:${icon.id}" /></Helmet><h1>Original title</h1>`;
+  const markup = `<Helmet><meta name="artifactbin:pwa-enabled" content="true" /><meta name="artifactbin:pwa-name" content="Separate app" /><meta name="artifactbin:pwa-short-name" content="App" /><meta name="artifactbin:pwa-theme-color" content="#112233" /><meta name="artifactbin:pwa-icon" content="ref:${icon.id}" /></Helmet><h1>Original title</h1>`;
   const published = await create({ markup, visibility: 'public' });
   expect(published.status).toBe(201);
   const doc = await published.json();
@@ -100,4 +100,34 @@ it('publishes a separate admitted icon and settings, while refusing foreign priv
   expect(refused.status).toBe(400);
   expect(await refused.json()).toMatchObject({ error: 'invalid_refs' });
   expect((await app.request(`/a/${w.private.id}/app/icon-512.png`)).status).toBe(404);
+});
+
+it('advertises the same app from regular and pretty artifact pages, without exposing private metadata', async () => {
+  const w = await world();
+  const html = await (await app.request(`/a/${w.public.id}`)).text();
+  const manifest = `rel="manifest" href="/a/${w.public.id}/app/manifest.webmanifest"`;
+  expect(html).toContain(manifest);
+  expect(html).toContain('aria-label="Install app"');
+  const canonical = JSON.parse(/<script type="application\/json" id="mx-page-data">([\s\S]*?)<\/script>/.exec(html)![1]!).address;
+  expect(await (await app.request(canonical)).text()).toContain(manifest);
+  const privatePage = await app.request(`/a/${w.private.id}`, { headers: { accept: 'text/html' } });
+  expect(privatePage.status).toBe(404);
+  expect(await privatePage.text()).not.toContain('rel="manifest"');
+});
+
+it('requires explicit opt-in and stops discovery when disabled, while preserving installed launch URLs', async () => {
+  const w = await world(false);
+  const base = `/a/${w.public.id}/app/`;
+  for (const url of [`/a/${w.public.id}`, base]) {
+    const response = await app.request(url);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html.includes('rel="manifest"')).toBe(false);
+    expect(html.includes('aria-label="Install app"')).toBe(false);
+  }
+  for (const asset of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png']) expect((await app.request(base + asset)).status).toBe(404);
+  const on = await world();
+  expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(200);
+  await (await harness.db()).query('UPDATE artifacts SET source=$1, document=NULL WHERE id=$2', ['<h1>Disabled</h1>', on.public.id]);
+  expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(404);
 });

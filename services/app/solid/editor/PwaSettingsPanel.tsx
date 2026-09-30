@@ -42,8 +42,8 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
       <Show when={uploading()}><p role="status" class="text-sm text-muted">Uploading icon…</p></Show>
     </div>
     <div class="grid gap-5 sm:grid-cols-2">
-      <label class="text-sm text-muted">Theme color<input type="color" aria-label="Theme color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().themeColor ?? '#ffffff'} onChange={e => update({ themeColor: e.currentTarget.value })} /></label>
-      <label class="text-sm text-muted">Background color<input type="color" aria-label="Background color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().backgroundColor ?? '#ffffff'} onChange={e => update({ backgroundColor: e.currentTarget.value })} /></label>
+      <label class="text-sm text-muted">Theme color<input type="color" aria-label="Theme color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().themeColor ?? '#ffffff'} onChange={e => update({ themeColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">App title bar and browser toolbar, where supported.</span></label>
+      <label class="text-sm text-muted">Background color<input type="color" aria-label="Background color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().backgroundColor ?? '#ffffff'} onChange={e => update({ backgroundColor: e.currentTarget.value })} /><span class="mt-1 block text-xs">Loading screen and padding around your app icon.</span></label>
     </div>
     <Show when={error()}><p role="alert" class="text-sm text-danger">{error()}</p></Show>
     <div class="space-y-3 border-t border-edge pt-5"><InstallArtifactLink id={props.id} beforeNavigate={props.beforeInstall} class="inline-flex items-center gap-2 text-sm font-semibold text-accent" />
@@ -51,5 +51,23 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
       <p class="text-xs text-muted">Names and icons may take time to update in installed apps. Reinstall to see changes immediately.</p>
       <a href={artifactAppPath(props.id)} target="_self" class="block break-all text-xs text-muted underline">{window.location.origin}{artifactAppPath(props.id)}</a>
     </div>
+  </section>;
+}
+
+export function PwaSharingSetting(props: { source: string; onChange: (source: string) => void }) {
+  const settings = () => readPwaSettings(props.source);
+  return <section aria-label="App installation" class="mx-auto max-w-3xl border-t border-edge pt-5">
+    <label class="flex cursor-pointer items-center justify-between gap-4 text-sm font-medium text-fg">
+      <span>Allow installation as a PWA</span>
+      <span class="relative inline-flex shrink-0"><input type="checkbox" role="switch" aria-label="Allow installation as a PWA" checked={settings().enabled === true}
+        onChange={event => props.onChange(writePwaSettings(props.source, { ...settings(), enabled: event.currentTarget.checked }))}
+        class="peer sr-only" />
+        <span aria-hidden="true" class="relative h-6 w-11 rounded-full bg-raised ring-1 ring-edge transition-colors peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
+          <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform" style={{ transform: settings().enabled ? 'translateX(20px)' : 'translateX(0)' }} />
+        </span>
+      </span>
+    </label>
+    <p class="mt-2 text-sm text-muted">Let readers install this artifact on their home screen or desktop. Sharing permissions still apply.</p>
+    <Show when={settings().enabled}><p class="mt-2 text-xs text-muted">Customize its name, icon and colors in the PWA tab.</p></Show>
   </section>;
 }

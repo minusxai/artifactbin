@@ -12,7 +12,6 @@
  * the image, the preview and the title, and a dataset re-reads its catalog from the page door
  * (`/api/page/artifact/<id>`) — a version frame carries rows, not catalog definitions.
  */
-import { InstallArtifact } from '../document/InstallArtifact';
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { ArtifactRole } from '@/lib/share-roles';
 import { canEdit as canEditRole, canGovern } from '@/lib/share-roles';
@@ -124,7 +123,6 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
   </div>;
 
   return <>
-    <InstallArtifact id={id} title={title()} />
     <PageChrome title={title()} label="Artifact controls" actions={<ForkArtifact id={id} title={title()} variant="bar" />} controls={controls} />
     <main class="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">
       <Show when={format === 'image'}>

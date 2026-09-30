@@ -22,3 +22,11 @@ it('handles absent and self-closing Helmets, rejects unsafe icon URLs and colors
   expect(readPwaSettings('<Helmet><meta name="artifactbin:pwa-icon" content="https://example.com/a.png" /><meta name="artifactbin:pwa-theme-color" content="red;evil" /></Helmet>')).toEqual({});
   expect(() => writePwaSettings('<p>x</p>', { icon: 'https://example.com' })).toThrow();
 });
+
+it('defaults to disabled and preserves presentation when switched off', () => {
+  expect(readPwaSettings('<p>hello</p>').enabled).not.toBe(true);
+  const enabled = writePwaSettings('<p>hello</p>', { enabled: true, name: 'My app', icon: 'Abc123' });
+  expect(readPwaSettings(enabled)).toEqual({ enabled: true, name: 'My app', icon: 'Abc123' });
+  const disabled = writePwaSettings(enabled, { ...readPwaSettings(enabled), enabled: false });
+  expect(readPwaSettings(disabled)).toEqual({ enabled: false, name: 'My app', icon: 'Abc123' });
+});

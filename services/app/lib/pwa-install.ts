@@ -1,4 +1,4 @@
-/** Capture before React's lazy reader loads. A prompt belongs to one document
+/** Capture before the lazy reader loads. A prompt belongs to one document
  * path and must never be reused after SPA navigation to a different artifact. */
 export interface InstallPrompt extends Event {
   prompt(): Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -19,9 +19,13 @@ export function captureInstallPrompt(target: Window): () => void {
   if (capturing.has(target)) return () => {};
   capturing.add(target);
   const capture = (event: Event) => {
-    if (!/^\/a\/[a-zA-Z0-9]{6,12}\/app\/$/.test(target.location.pathname)) return;
-    event.preventDefault();
-    pending = { path: target.location.pathname, event: event as InstallPrompt };
+    const href = target.document.querySelector<HTMLLinkElement>('link[data-mx-pwa][rel="manifest"]')?.href;
+    const manifest = href ? new URL(href, target.location.href) : null;
+    const path = manifest?.origin === target.location.origin ? manifest.pathname.replace(/manifest\.webmanifest$/, '') : target.location.pathname;
+    if (!/^\/a\/[a-zA-Z0-9]{6,12}\/app\/$/.test(path)) return;
+    // Explicit install flow owns its prompt. Ordinary readers retain the browser's promotion.
+    if (new URLSearchParams(target.location.search).has('install')) event.preventDefault();
+    pending = { path, event: event as InstallPrompt };
     emit();
   };
   const clear = () => { pending = null; emit(); };

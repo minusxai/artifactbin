@@ -1,5 +1,4 @@
 /* @jsxImportSource solid-js */
-import { InstallArtifact, InstallArtifactLink } from '../document/InstallArtifact';
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { writeBrowserArtifact } from '@/lib/browser-artifact-write';
@@ -52,7 +51,6 @@ export function FolderPage(props: FolderProps): JSX.Element {
     <Shelf rows={workspace()?.artifacts.map(row => ({ ...row, sparkline: row.sparkline ?? undefined })) ?? folder().rows} actions={mayWrite() ? 'full' : 'share'} canCreateFolders={mayWrite() && !workspace()} parentId={folder().id} scopeParentId={folder().id} assets={false} />
   </>;
   return <main aria-label="Folder" class={`${workspace() ? HOME_WORKSPACE_COLUMN : PAGE_COLUMN} mt-8 pb-24`}>
-    <InstallArtifact id={folder().id} title={folder().title ?? 'Untitled folder'} /><InstallArtifactLink id={folder().id} class="inline-flex items-center gap-2 text-sm text-muted" />
     <Show when={workspace()} fallback={contents()}>{owned => <WorkspaceLayout workspace={owned()} parentId={folder().id} onCreated={reread} label="Folder workspace">{contents()}</WorkspaceLayout>}</Show>
   </main>;
 }

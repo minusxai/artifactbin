@@ -49,8 +49,11 @@ export async function artifactAppIcon(row: ArtifactRow, size: 192 | 512): Promis
   return sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="hsl(${hash % 360},50%,35%)"/>${tiles}</svg>`)).resize(size, size).png().toBuffer();
 }
 
+export const artifactPwaEnabled = (row: { source?: string | null }): boolean => readPwaSettings(row.source ?? '').enabled === true;
+
 /** Discovery belongs to the actual app document, including the compiled reader. */
 export function withArtifactAppHead(html: string, row: ArtifactRow): string {
+  if (!artifactPwaEnabled(row)) return html;
   const base = artifactAppPath(row.id);
   const theme = artifactManifest(row).theme_color;
   return html.replace('</head>', () => `<link data-mx-pwa rel="manifest" href="${base}manifest.webmanifest" crossorigin="use-credentials"><link data-mx-pwa rel="apple-touch-icon" href="${base}icon-192.png"><meta data-mx-pwa name="theme-color" content="${theme}"></head>`);

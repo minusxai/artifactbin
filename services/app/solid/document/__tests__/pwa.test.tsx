@@ -3,8 +3,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { InstallArtifact, InstallArtifactLink } from '../InstallArtifact';
-import { captureInstallPrompt } from '@/lib/pwa-install';
-import { PwaSettingsPanel } from '../../editor/PwaSettingsPanel';
+import { captureInstallPrompt, currentInstall } from '@/lib/pwa-install';
+import { PwaSettingsPanel, PwaSharingSetting } from '../../editor/PwaSettingsPanel';
 import { readPwaSettings } from '@/lib/story/pwa-settings';
 
 afterEach(() => window.history.replaceState(null, '', '/'));
@@ -51,4 +51,27 @@ it('waits for editor saves and stays put if saving fails', async () => {
   expect(save).toHaveBeenCalledTimes(1);
   await Promise.resolve();
   expect(window.location.pathname).toBe('/');
+});
+
+it('captures a regular artifact prompt without suppressing the browser promotion', () => {
+  window.history.replaceState(null, '', '/@owner/Abc123-report');
+  const link = document.createElement('link');
+  link.rel = 'manifest'; link.href = '/a/Abc123/app/manifest.webmanifest'; link.setAttribute('data-mx-pwa', '');
+  document.head.append(link);
+  const dispose = captureInstallPrompt(window);
+  const prompt = vi.fn();
+  const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), { prompt });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  expect(currentInstall()?.path).toBe('/a/Abc123/app/');
+  dispose(); link.remove();
+});
+
+it('offers an off-by-default Sharing switch that preserves existing PWA details', () => {
+  const change = vi.fn();
+  render(() => <PwaSharingSetting source={'<Helmet><meta name="artifactbin:pwa-name" content="Saved name" /></Helmet><p>Hello</p>'} onChange={change} />);
+  const toggle = screen.getByRole('switch', { name: 'Allow installation as a PWA' });
+  expect(toggle).not.toBeChecked();
+  fireEvent.click(toggle);
+  expect(readPwaSettings(change.mock.lastCall![0])).toEqual({ enabled: true, name: 'Saved name' });
 });

@@ -1,5 +1,5 @@
 import { artifactAppPath } from '@/lib/artifact-pwa';
-import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead } from '@/lib/artifact-pwa.server';
+import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/artifact-pwa.server';
 import { loginRedirectTarget } from '@/lib/safe-redirect';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
@@ -348,7 +348,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const found = status === 404 ? null : await bootstrapFor(c.req.raw, new URL(url).pathname, admitted);
     const data = found ? { ...found.data, ...(address ? { address } : {}) } : null;
     // The compiled reader's HTML-first page: the assembler's whole document, the page data beside it.
-    const appRow = admitted?.row && new URL(c.req.url).pathname === artifactAppPath(admitted.row.id) ? admitted.row : null;
+    const appRow = admitted?.row ?? null;
     if (found?.compiled && data) return compiledPage(c, appRow ? { ...found.compiled, html: withArtifactAppHead(found.compiled.html, appRow) } : found.compiled, data, status ?? 200);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
@@ -664,7 +664,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   });
   app.get('/a/:id/app/:asset', async c => {
     const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
-    if (!row) return c.notFound();
+    if (!row || !artifactPwaEnabled(row)) return c.notFound();
     const asset = c.req.param('asset');
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (asset === 'manifest.webmanifest') return new Response(JSON.stringify(artifactManifest(row)), { headers: { ...headers, 'content-type': 'application/manifest+json' } });
