@@ -140,6 +140,19 @@ describe('the prepared page store', () => {
     expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
   });
 
+  it('serves opted-in PWA metadata from the stored document without reparsing it', async () => {
+    const { id } = await world('<Helmet><meta name="artifactbin:pwa-enabled" content="true" /><meta name="artifactbin:pwa-name" content="Cached app" /></Helmet><h1>Cached PWA</h1>');
+    resetSpies();
+    const response = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('rel="manifest"');
+    expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
+    resetSpies();
+    const manifest = await app.request(`/a/${id}/app/manifest.webmanifest`);
+    expect(await manifest.json()).toMatchObject({ name: 'Cached app' });
+    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
+  });
+
   it('reuses the anonymous render of a document with data, whose stored flow comes back from JSONB in another key order', async () => {
     // Its one query reads the reader's zone, so no first results ride in the overlay (lib/story/served-results.server).
     const { id } = await world(`<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 3 as n, $_tz as tz\`}</Query></Helmet>

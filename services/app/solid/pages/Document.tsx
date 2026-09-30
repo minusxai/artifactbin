@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { InstallArtifact } from '../document/InstallArtifact';
 import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { startIslandLive } from '@/lib/islands/live';
@@ -69,7 +70,7 @@ interface DocumentAnswer {
     runtime?: ServedStoryRuntime;
     refs?: Array<{ id: string; kind: string; title?: string | null }>;
     template?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null;
-    heading?: string | null;
+    heading?: string | null; pwaEnabled?: boolean; membershipAvailable?: boolean;
   };
   archived?: { version: number; head: number } | null;
   like?: { liked: boolean; count: number };
@@ -98,7 +99,7 @@ export function adoptReaderDocument(host: HTMLElement): { story: HTMLElement | n
 }
 
 /** The served rail's reading actions: the draft is not the published document, so editing hides them. */
-const READING_ONLY = '[data-mx-reader-action="share"],[data-mx-reader-action="like"],[data-mx-reader-action="comment"],[data-mx-reader-action="fork"],[data-mx-reader-action="membership"],[data-mx-github-star]';
+const READING_ONLY = '[data-mx-reader-install],[data-mx-reader-action="share"],[data-mx-reader-action="like"],[data-mx-reader-action="comment"],[data-mx-reader-action="fork"],[data-mx-reader-action="membership"],[data-mx-github-star]';
 
 /** Put the served chrome in (or out of) edit mode; answers the breadcrumb slot the title editor renders into. */
 export function markChromeEditing(chrome: HTMLElement, editing: boolean, titleSlot: boolean): HTMLElement | null {
@@ -142,6 +143,7 @@ export function DocumentPage(): JSX.Element {
   const editable = () => canEditRole(role()) && !archivedNow() && page?.surface?.format === 'markup';
   const annotatable = () => canAnnotateRole(role()) && !archivedNow();
   const backend = id ? createHttpBackend(id) : null;
+  const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
   const [ready, setReady] = createSignal(false);
   const [railOpen, setRailOpen] = createSignal(false);
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
@@ -256,7 +258,14 @@ export function DocumentPage(): JSX.Element {
     window.history.replaceState(window.history.state, '', window.location.pathname.replace(/\/edit\/?$/, '') + window.location.search);
     setEditing(false);
   };
-  const finishEdit = async () => { await editorFlush.current?.(); exitEdit(); };
+  const finishEdit = async () => {
+    await editorFlush.current?.();
+    if (pwaEnabled() !== (page?.surface?.pwaEnabled === true)) {
+      window.location.replace(window.location.pathname.replace(/\/edit\/?$/, '') + window.location.search);
+      return;
+    }
+    exitEdit();
+  };
   const syncEditRoute = () => {
     if (editRoute()) { if (editable()) setEditing(true); return; }
     if (!editing()) return;
@@ -463,20 +472,21 @@ export function DocumentPage(): JSX.Element {
   });
   const sharingContent = () => <div class="mx-auto max-w-3xl space-y-6">
     <DocumentSharing id={id!} title={shownTitle()} owner={isOwner()} editable variant="embedded" version={currentVersion()} onSocialPreview={() => setSocialPreviewOpen(true)} />
-    <hr class="border-edge" />
-    <DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} />
+    <Show when={page?.surface?.membershipAvailable}><hr class="border-edge" />
+    <DocumentPeople id={id!} initialOpen revision={membershipRevision()} onChange={() => setMembershipRevision((n) => n + 1)} /></Show>
   </div>;
   return <Show when={id && page} fallback={<NotFoundPage />}>
     <div ref={host} aria-label="Artifact viewport" />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
+      <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
       <style>{PANEL_CSS}</style>
       <Show when={panel()}>
         <Show when={panel() === 'controls'} fallback={<button type="button" aria-label="Close the menu" onClick={() => setPanel(null)} class={`fixed inset-0 z-40 cursor-default border-0 p-0 ${phone() ? 'bg-black/25' : 'bg-transparent'}`} />}>
           <button type="button" aria-label="Close page controls" class="mx-reader-scrim" onClick={() => setPanel(null)} />
         </Show>
         <Show when={panel() === 'controls'}><section role="dialog" aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls" ref={placePanel}><div style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between' }}><h2>artifact controls</h2><button type="button" aria-label="Dismiss artifact controls" onClick={() => setPanel(null)} class="-mt-3 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg"><X size={14} /></button></div><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}><Sun size={14} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}><Moon size={14} />dark</button></div>
-          <DocumentActions id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
+          <DocumentActions pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
             owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
             like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { setPanel(null); setRailOpen(open); }}
             openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork
@@ -512,7 +522,7 @@ export function DocumentPage(): JSX.Element {
           onRightInsetChange={setEditorRightInset}
           commentsOpen={railOpen()} onCommentsOpenChange={annotatable() ? setRailOpen : undefined}
           onCommentsHost={setCommentsHost} titleHost={phone() ? null : titleHost()}
-          sharingContent={sharingContent} />
+          sharingContent={sharingContent} onPwaEnabledChange={setPwaEnabled} />
       </Suspense>
     </Show>
     <Show when={sharingOpen() && id}>

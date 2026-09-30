@@ -108,7 +108,7 @@ export function collectRefUses(source: string): RefUse[] | null {
       if (q.ok && q.decl.source) uses.push({ id: q.decl.source, kind: 'dataset', via: 'sql' });
       return;
     }
-    if (!el.isComponent && tag.toLowerCase() === 'meta' && attrValue(el, 'name') === 'artifactbin:og-image') {
+    if (!el.isComponent && tag.toLowerCase() === 'meta' && ['artifactbin:og-image', 'artifactbin:pwa-icon'].includes(String(attrValue(el, 'name')))) {
       const image = refId(attrValue(el, 'content'));
       if (image) uses.push({ id: image, kind: 'image' });
     }

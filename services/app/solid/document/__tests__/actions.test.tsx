@@ -44,3 +44,9 @@ it('opens the social preview editor from an editable markup document, not from a
   fireEvent.click(notMarkup.getByRole('button', { name: 'Share' }));
   expect(screen.queryByRole('button', { name: 'Edit social preview' })).toBeNull();
 });
+
+it('omits app membership controls from read-only artifacts', () => {
+  const view = render(() => <DocumentActions id="abc123" title="Report" version={1} owner canEdit canAnnotate
+    like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} />);
+  expect(view.queryByRole('button', { name: 'People' })).toBeNull();
+});

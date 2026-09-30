@@ -41,11 +41,15 @@ function IntentPreload(): JSX.Element {
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
   const servedDocument = !!initialDocumentStory();
-  const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/edit)?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
+  const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
   // Leaving the served document (a link, the onboarding redirect) takes its story and chrome off the page
   // and shows the app's root, which the served page kept hidden.
-  createEffect(() => clearInitialStoryOnRoute(location.pathname));
+  const initialPath = window.location.pathname;
+  createEffect(() => {
+    clearInitialStoryOnRoute(location.pathname);
+    if (location.pathname !== initialPath) document.querySelectorAll('[data-mx-pwa]').forEach(node => node.remove());
+  });
   return (
     <SessionProvider>
     <IntentPreload />
@@ -81,6 +85,7 @@ export function App(): JSX.Element {
     <Router root={Root}>
       <Route path="/" component={HomePage} />
       <Route path="/a/:id" component={ArtifactRoute} />
+      <Route path="/a/:id/app/" component={ArtifactRoute} />
       <Route path="/trash" component={TrashPage} />
       {/* The old tokens page lives in account settings now. */}
       <Route path="/tokens" component={() => <Navigate href="/account" />} />

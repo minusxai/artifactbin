@@ -287,3 +287,14 @@ describe('renderReaderChrome', () => {
     });
   });
 });
+
+ it('offers installation directly to readers, but not archived, editing or unhosted copies', () => {
+   const html = chrome({ install: true, share: false });
+   expect(html).toContain('aria-label="Install app"');
+   expect(html).toContain('href="/a/ab12cd/app/?install=1"');
+   expect(html).toContain('>Install app</span>');
+   for (const extra of [{ archived: { version: 1, head: 2 } }, { editing: true }, { artifactId: null }]) {
+     expect(chrome({ install: true, ...extra })).not.toContain('aria-label="Install app"');
+   }
+   expect(chrome()).not.toContain('aria-label="Install app"');
+ });

@@ -180,10 +180,10 @@ export function DocumentSharing(props: {
             <button type="button" aria-label={`Remove ${person.email}`} onClick={() => void put({ shares: current().shares.filter(entry => entry.email !== person.email) })} class="cursor-pointer text-muted hover:text-fg"><X size={11} /></button>
           </span>
         </div>}</For>
-        <form class="mt-1 flex gap-1" onSubmit={event => { event.preventDefault(); const address = email().trim(); if (!address) return; void put({ shares: [...current().shares, { email: address, role: 'viewer' }] }); setEmail(''); }}>
+        <form class="mt-2 flex gap-2" onSubmit={event => { event.preventDefault(); const address = email().trim(); if (!address) return; void put({ shares: [...current().shares, { email: address, role: 'viewer' }] }); setEmail(''); }}>
           <input aria-label="Invite email" placeholder="email@example.com" value={email()} onInput={event => setEmail(event.currentTarget.value)}
-            class="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-2 py-1 text-fg outline-none focus:border-edge-bright" />
-          <button type="submit" aria-label="Add email" class="cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-muted hover:border-edge-bright hover:text-fg">add</button>
+            class="min-h-10 min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-3 py-2 text-sm text-fg outline-none focus:border-edge-bright" />
+          <button type="submit" aria-label="Add email" class="min-h-10 cursor-pointer rounded-[4px] border border-edge px-4 py-2 text-sm text-muted hover:border-edge-bright hover:text-fg">Add</button>
         </form>
       </div>
       <Show when={props.format === 'dataset' && !postgres()}><a aria-label="Manage access policies" onClick={close} href={artifactEditPath(props.id)} class="mt-4 block rounded-lg border border-edge px-3 py-2 text-sm text-muted hover:border-accent hover:text-fg">Manage data actions ↗</a></Show>

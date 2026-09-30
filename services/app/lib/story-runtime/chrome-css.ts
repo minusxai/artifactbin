@@ -293,6 +293,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 }
 /* The words stay in the markup for the tests and screen readers; nobody needs
    "like" printed under a heart. */
+.mx-reader-install-text { display: none !important; }
+@media (display-mode: standalone) { .mx-reader-chrome .mx-reader-install { display: none !important; } }
 .mx-reader-label, .mx-reader-share-text { display: none !important; }
 /* The author's own link — selected THROUGH the byline rather than by its class
    name, because this stylesheet ships inside every document and an anonymous
@@ -495,6 +497,12 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-action[data-mx-reader-action="share"]:focus-visible { outline: 2px solid #004a77 !important; outline-offset: 2px !important; }
   [data-mx-visibility] { display: inline-flex !important; align-items: center !important; }
   .mx-reader-share-text { display: inline !important; }
+  .mx-reader-action.mx-reader-install {
+    width: auto !important; height: 32px !important; padding: 0 12px !important; gap: 6px !important;
+    border: 1px solid var(--mx-reader-border) !important; border-radius: 6px !important;
+    color: var(--mx-reader-accent) !important; font-size: 12px !important; white-space: nowrap !important;
+  }
+  .mx-reader-install-text { display: inline !important; }
   /* Tips hang under the bar. */
   .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
     top: calc(100% + 6px) !important; left: 50% !important; transform: translateX(-50%) !important;
@@ -507,6 +515,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 
 /* PHONE — logo top-left, action rail on the right edge, byline along the bottom. */
 @media (max-width: 639px) {
+  .mx-reader-install .mx-reader-label { display: block !important; font-size: 9px !important; }
   .mx-reader-chrome { inset: 0 !important; pointer-events: none !important; }
   /* The star is a desktop nicety: on a phone it only covered the document's
      first lines. The menu still links the repository. */

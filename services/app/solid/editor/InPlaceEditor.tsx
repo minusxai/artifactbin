@@ -19,6 +19,9 @@ import ChartColumn from 'lucide-solid/icons/chart-column';
 import Check from 'lucide-solid/icons/check';
 import Code from 'lucide-solid/icons/code';
 import Database from 'lucide-solid/icons/database';
+import Smartphone from 'lucide-solid/icons/smartphone';
+import { readPwaSettings } from '@/lib/story/pwa-settings';
+import { PwaSettingsPanel, PwaSharingSetting } from './PwaSettingsPanel';
 import Files from 'lucide-solid/icons/files';
 import Share2 from 'lucide-solid/icons/share-2';
 import Hash from 'lucide-solid/icons/hash';
@@ -132,6 +135,7 @@ export interface InPlaceEditorProps {
   titleHost?: HTMLElement | null;
   /** The page owns sharing authority and supplies its controls. */
   sharingContent?: () => JSX.Element;
+  onPwaEnabledChange?: (enabled: boolean) => void;
 }
 
 export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
@@ -142,6 +146,11 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const [theme, setTheme] = createSignal<StoryThemeName | null>((art.theme as StoryThemeName) ?? null);
   const [colorMode, setColorMode] = createSignal<'light' | 'dark' | null>(art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null);
   const [source, setSource] = createSignal(art.markup ?? '');
+  const pwaEnabled = () => readPwaSettings(source()).enabled === true;
+  createEffect(() => {
+    props.onPwaEnabledChange?.(pwaEnabled());
+    if (!pwaEnabled() && contentView() === 'pwa') setContentView('sharing');
+  });
   let previewEditId = art.edit_id;
   const [css, setCss] = createSignal<string | null>(art.compiledCss ?? null);
   const viewKey = `artifactbin:editor-view:${art.id}`;
@@ -162,7 +171,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   });
   const [dataflowState, setDataflowState] = createSignal<DataflowState | null>(art.dataflow?.state ?? null);
   const [imageError, setImageError] = createSignal<string | null>(null);
-  const [contentView, setContentView] = createSignal<'data' | 'files' | 'sharing' | null>(null);
+  const [contentView, setContentView] = createSignal<'data' | 'files' | 'sharing' | 'pwa' | null>(null);
   const queriesOpen = () => contentView() === 'data';
   const [queryFocus, setQueryFocus] = createSignal<string | null>(null);
   const [dataflowPending, setDataflowPending] = createSignal(false);
@@ -697,7 +706,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     { key: 'design', label: 'App', aria: 'Edit on the page', tip: 'edit on the page', icon: <Paintbrush size={12} />, active: mode() === 'design' && contentView() === null, choose: () => { chooseMode('design'); setContentView(null); } },
     { key: 'code', label: 'Code', aria: 'Edit the source', tip: 'edit the source', icon: <Code size={12} />, active: mode() === 'code', choose: () => { chooseMode('code'); setContentView(null); } },
     ...(queryNotebook().length > 0 ? [{ key: 'data', label: 'Data', aria: 'Show data', tip: "the document's queries", icon: <Database size={12} />, active: queriesOpen(), choose: () => { const was = queriesOpen(); setContentView('data'); chooseMode('design'); if (!was) inPlace.select(null); } }] : []),
-    { key: 'files', label: 'Files', aria: 'Show files', tip: 'Files', icon: <Files size={12} />, active: contentView() === 'files', choose: () => { setContentView('files'); chooseMode('design'); inPlace.select(null); } },
+    ...(pwaEnabled() ? [{ key: 'pwa', label: 'PWA', aria: 'Show PWA settings', tip: 'PWA settings', icon: <Smartphone size={12} />, active: contentView() === 'pwa', choose: async () => { if (await live.flushForNavigation(() => inPlace.commitPending(true))) { setContentView('pwa'); chooseMode('design'); inPlace.select(null); } } }] : []),
+    ...((art.refs ?? []).some(ref => ref.kind !== 'dataset') ? [{ key: 'files', label: 'Files', aria: 'Show files', tip: 'Files', icon: <Files size={12} />, active: contentView() === 'files', choose: () => { setContentView('files'); chooseMode('design'); inPlace.select(null); } }] : []),
     ...(props.sharingContent ? [{ key: 'sharing', label: 'Sharing', aria: 'Show sharing', tip: 'Sharing', icon: <Share2 size={12} />, active: contentView() === 'sharing', choose: () => { setContentView('sharing'); chooseMode('design'); inPlace.select(null); } }] : []),
   ];
   const InspectIcon = (p: { size: number; class?: string }) => {
@@ -875,10 +885,15 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
             titles={Object.fromEntries((art.refs ?? []).map((r) => [r.id, r.title ?? null]))} />
         </aside>
       </Show>
+      <Show when={mode() === 'design' && !preview() && contentView() === 'pwa' && pwaEnabled()}>
+        <aside aria-label="PWA" class="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6" style={{ top: `${barTop() + barH}px`, left: '0px', right: '0px' }}>
+          <PwaSettingsPanel id={art.id} title={title()} source={source()} onChange={commitStructural} onUpload={uploadImage} beforeInstall={() => live.flushForNavigation(() => inPlace.commitPending(true))} />
+        </aside>
+      </Show>
       <Show when={mode() === 'design' && !preview() && (contentView() === 'files' || contentView() === 'sharing')}>
         <aside aria-label={contentView() === 'files' ? 'Files' : 'Sharing settings'} class="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6"
           style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }}>
-          <Show when={contentView() === 'files'} fallback={props.sharingContent?.()}>
+          <Show when={contentView() === 'files'} fallback={<div class="space-y-6">{props.sharingContent?.()}<PwaSharingSetting source={source()} onChange={commitStructural} /></div>}>
             <div class="mx-auto max-w-3xl"><ReferenceFilesPanel refs={art.refs ?? []} /></div>
           </Show>
         </aside>

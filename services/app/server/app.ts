@@ -1,3 +1,5 @@
+import { artifactAppPath } from '@/lib/artifact-pwa';
+import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/artifact-pwa.server';
 import { loginRedirectTarget } from '@/lib/safe-redirect';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
@@ -358,10 +360,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string, address?: string, admitted?: Admitted) => {
     // A document served at a non-canonical address is rendered AS its canonical address (see documentAddress).
     const url = address ? new URL(address + new URL(c.req.url).search, c.req.url).href : c.req.url;
-    const found = await bootstrapFor(c.req.raw, new URL(url).pathname, admitted);
+    const found = status === 404 ? null : await bootstrapFor(c.req.raw, new URL(url).pathname, admitted);
     const data = found ? { ...found.data, ...(address ? { address } : {}) } : null;
     // The compiled reader's HTML-first page: the assembler's whole document, the page data beside it.
-    if (found?.compiled && data) return compiledPage(c, found.compiled, data, status ?? 200);
+    const appRow = admitted?.row ?? null;
+    if (found?.compiled && data) return compiledPage(c, appRow ? { ...found.compiled, html: withArtifactAppHead(found.compiled.html, appRow) } : found.compiled, data, status ?? 200);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
     // the body, so the person sees the app's own 404 page rather than a
@@ -384,7 +387,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Last, so the pointer is the page's final line whatever else was inlined.
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
     const inlined = data;
-    const ordered = withReaderHeadOrder(indexed);
+    const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
     return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
@@ -441,7 +444,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry() } }));
       return answer.status === 200 ? answer : null;
     };
-    if (segments.at(-1) === 'edit') segments.pop();
+    if (segments.at(-1) === 'edit' || (segments[0] === 'a' && segments.length === 3 && segments[2] === 'app')) segments.pop();
     if (segments[0] === 'a' && segments.length === 2) {
       const artifact = await document(segments[1]!);
       return artifact ? { data: { path: url.pathname, artifact: artifact.body }, ...documentParts(artifact) } : null;
@@ -689,6 +692,25 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return page(c, status === 404 ? 404 : undefined, canonical, address, admitted);
   };
 
+  // App identity stays at its stable URL; never heal it to the pretty reader address.
+  app.get('/a/:id/app/', async c => {
+    const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
+    return page(c, row ? 200 : 404, undefined, undefined, row ? { row } : undefined);
+  });
+  app.get('/a/:id/app', async c => {
+    const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
+    return row ? c.redirect(artifactAppPath(row.id), 302) : page(c, 404);
+  });
+  app.get('/a/:id/app/:asset', async c => {
+    const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
+    if (!row || !artifactPwaEnabled(row)) return c.notFound();
+    const asset = c.req.param('asset');
+    const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
+    if (asset === 'manifest.webmanifest') return new Response(JSON.stringify(artifactManifest(row)), { headers: { ...headers, 'content-type': 'application/manifest+json' } });
+    const size = asset === 'icon-192.png' ? 192 : asset === 'icon-512.png' ? 512 : null;
+    if (!size) return c.notFound();
+    return new Response(new Uint8Array(await artifactAppIcon(row, size)), { headers: { ...headers, 'content-type': 'image/png' } });
+  });
   app.get('/a/:id/edit', documentAddress);
   app.get('/a/:id', documentAddress);
   // A handle is `@name` in ONE segment — Hono's params are whole segments, so the shape is a regex param.

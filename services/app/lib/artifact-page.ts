@@ -1,3 +1,4 @@
+import { artifactPwaEnabled } from '@/lib/artifact-pwa.server';
 import { membershipState } from '@/lib/membership';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
@@ -216,6 +217,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
   const editAddress = /\/edit\/?$/.test(new URL(request.url).pathname);
 
+  const membershipAvailable = !at && prepared?.page.declared?.flow.mutations.some(m => 'import' in m.target) === true;
+  const pwaEnabled = !at && artifactPwaEnabled(row);
   const compiledMode = !!options.page && !!prepared && !(starterDoc && !editAddress && !exporting);
 
 
@@ -279,7 +282,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       // no islands (the app loads on intent, so until then the page holds it), the reader's place across
       // the reload a new version delivers, and their mode.
       behaviors: ['page'],
-      chrome: await readerChromeFor({ hasDataMutations: prepared.page.declared?.flow.mutations.some(m => 'import' in m.target) === true, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
+      chrome: await readerChromeFor({ hasDataMutations: membershipAvailable, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
       spa: options.page!.spa,
       head: {
@@ -298,6 +301,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     reader = { mode: 'compiled' };
   }
   const surface = {
+    pwaEnabled, membershipAvailable,
     captureKey: exporting ? key : null,
     id: artifact.id,
     editId: artifact.edit_id,
@@ -418,6 +422,7 @@ async function readerChromeFor(facts: {
     notifications: person ? {unread:0} : undefined,
     ground: facts.ground,
     share: owner,
+    install: artifactPwaEnabled(row),
     archived: at ? { version: at.version, head: at.head } : null,
     visibility: artifact.visibility,
     ...(facts.hasInvitedUsers === undefined ? {} : { hasInvitedUsers: facts.hasInvitedUsers }),
