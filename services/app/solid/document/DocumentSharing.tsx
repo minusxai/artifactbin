@@ -6,6 +6,7 @@ import { SHARE_ROLES, SHARE_ROLE_LABEL, type ShareEntry, type ShareRole } from '
 import type { SharingPatch, Visibility } from '@/lib/artifacts';
 import type { SharingVerdict } from '@/lib/visibility-icons';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 import { Tooltip } from '../components/Tooltip';
 import { SelectMenu } from '../components/SelectMenu';
 import { sharingIconFor, VISIBILITY_ICON_NODES, type SharingIcon } from '@/lib/visibility-icons';
@@ -85,6 +86,8 @@ export function DocumentSharing(props: {
     window.addEventListener('keydown', escape);
     onCleanup(() => { document.body.style.overflow = previous; window.removeEventListener('keydown', escape); });
   });
+  /** The card's address, built only from an id of the artifact id's own allowlisted shape. */
+  const previewSrc = () => ARTIFACT_ID_PATTERN.test(props.id) ? `/a/${props.id}/export?format=jpg&mode=card&v=${Number(props.version ?? 0)}&r=${CARD_RENDER_GENERATION}` : undefined;
   const body = () => <>
     <button type="button" aria-label="Copy link" onClick={copy} class="mb-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[5px] border border-edge bg-raised px-3 py-2.5 text-muted hover:border-edge-bright hover:text-fg">
       <Show when={copied()} fallback={<LinkIcon size={11} />}><Check size={11} /></Show> {copied() ? 'copied' : 'copy link'}
@@ -92,7 +95,7 @@ export function DocumentSharing(props: {
     <Show when={props.onSocialPreview}><figure class="mx-auto mb-5 w-full max-w-xs"><figcaption class="mb-2 text-center text-[11px] text-muted">Social preview</figcaption>
       <div class="relative aspect-[40/21] w-full overflow-hidden rounded-md border border-edge bg-raised">
         <Show when={previewStatus() !== 'ready'}><div role="status" class="absolute inset-0 flex items-center justify-center text-[11px] text-muted">{previewStatus() === 'loading' ? 'Loading preview…' : 'Preview unavailable'}</div></Show>
-        <Show when={previewStatus() !== 'error'}><img alt="Current social preview" src={`/a/${encodeURIComponent(props.id)}/export?format=jpg&mode=card&v=${props.version ?? 0}&r=${CARD_RENDER_GENERATION}`}
+        <Show when={previewStatus() !== 'error'}><img alt="Current social preview" src={previewSrc()}
           onLoad={() => setPreviewStatus('ready')} onError={() => setPreviewStatus('error')} class={`h-full w-full object-contain transition-opacity duration-200 motion-reduce:transition-none ${previewStatus() === 'ready' ? 'opacity-100' : 'opacity-0'}`} /></Show>
         <Tooltip content="Edit thumbnail"><button type="button" aria-label="Edit social preview" onClick={() => { close(); props.onSocialPreview?.(); }}
           class="absolute right-2 top-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-edge-bright bg-surface text-fg shadow-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"><PenLine size={15} /></button></Tooltip>
