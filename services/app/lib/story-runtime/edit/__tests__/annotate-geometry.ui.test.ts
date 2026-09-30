@@ -207,6 +207,25 @@ const rangedPin = (text: string) => ({
 const anchorNode = () => document.querySelector('main p')!;
 
 describe('painting the exact words', () => {
+  it.each(['block', 'text', 'area'])('clears a resolved %s highlight while retaining preview geometry', kind => {
+    const registry = installHighlightApi();
+    const pin = kind === 'text' ? rangedPin('Revenue') : kind === 'area'
+      ? { ...PIN, range: { v: 1 as const, kind: 'area' as const, box: { x: 0, y: 0, w: 1, h: 1 } } } : PIN;
+    env.session.update({ ...state('on'), pins: [pin] });
+    expect(anchorNode()).toHaveAttribute('data-mx-annotated');
+    env.session.update({ ...state('on'), pins: [{ ...pin, layoutOnly: true }], openId: pin.id, hoverId: pin.id });
+    expect(anchorNode()).not.toHaveAttribute('data-mx-annotated');
+    expect(anchorNode()).not.toHaveAttribute('data-mx-annotation-open');
+    expect(anchorNode()).not.toHaveAttribute('data-mx-annotation-hover');
+    expect(registry.size).toBe(0);
+    expect(document.querySelector('[data-mx-annotation-area]')).toBeNull();
+    expect(layouts().at(-1)).toMatchObject({ positions: [expect.objectContaining({ id: pin.id })] });
+    // Another unresolved comment on the same node must retain its own highlight.
+    env.session.update({ ...state('on'), pins: [{ ...pin, layoutOnly: true }, { ...pin, id: 'still-open' }] });
+    expect(anchorNode()).toHaveAttribute('data-mx-annotated');
+    if (kind === 'text') expect([...registry.keys()]).toEqual(['mx-annotation-still-open']);
+  });
+
   it('registers one highlight per thread over the selected words, and stops tinting the whole node', () => {
     const registry = installHighlightApi();
     env.session.update({ ...state('on'), pins: [rangedPin('Revenue')] });

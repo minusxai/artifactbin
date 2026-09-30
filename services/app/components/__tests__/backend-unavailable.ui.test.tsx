@@ -94,20 +94,22 @@ describe('the comment composer (commentImages)', () => {
     const { frame, contentWindow } = makeFrame();
     render(layer(frame, { railOpen: true, editId: 'edit-current' }, backend));
     await flush();
-    fireEvent.click(screen.getByLabelText('Select')); await flush();
+    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
     await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
     expectUnavailable(screen.getByRole('button', { name: 'Attach screenshot' }));
+    expectUnavailable(screen.getByRole('button', { name: 'Screenshot' }));
     expect(screen.queryByLabelText('Upload screenshot')).toBeNull();
     fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'Text only' } });
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
     expect(backend.uploadCommentImage).not.toHaveBeenCalled();
   });
 
-  it('keeps requiring a screenshot online, with no unavailable control', async () => {
+  it('requires an image only after choosing Screenshot online', async () => {
     const { frame, contentWindow } = makeFrame();
     render(layer(frame, { railOpen: true, editId: 'edit-current' }, fakeBackend()));
     await flush();
-    fireEvent.click(screen.getByLabelText('Select')); await flush();
+    expectAvailable(screen.getByRole('button', { name: 'Screenshot' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' })); await flush();
     await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
     expect(screen.queryByRole('button', { name: 'Attach screenshot' })).toBeNull();
     expect(screen.getByLabelText('Upload screenshot')).toBeTruthy();

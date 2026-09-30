@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { beginCapture } from '@/lib/capture/screen';
-import { CaptureError, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture/contract';
+import { CaptureError, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture/contract';
 import type { BrushStroke, CommentImageMetadata } from '../../../contracts/src/comment-image';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 
@@ -29,25 +29,27 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string) 
   };
   onCleanup(reset);
   const available = () => Boolean(editId && !backend.unavailable('commentImages'));
-  const start = async () => {
+  const start = async (): Promise<CaptureStartResult> => {
     reset();
-    if (!available()) return true;
+    if (!available()) return 'unavailable';
     const mine = generation;
     setRequired(true); setBusy(true);
     try {
-      const pending = beginCapture();
-      const next = await pending;
-      if (mine !== generation) { next.dispose(); return false; }
+      const next = await beginCapture();
+      if (mine !== generation) { next.dispose(); return 'superseded'; }
       session = next;
+      return 'ready';
     } catch (cause) {
-      if (mine === generation) setError(messages[cause instanceof CaptureError ? cause.code : 'unsupported']);
+      if (mine !== generation) return 'superseded';
+      if (cause instanceof CaptureError && cause.code === 'cancelled') { reset(); return 'cancelled'; }
+      setError(messages[cause instanceof CaptureError ? cause.code : 'unsupported']);
+      return 'unavailable';
     } finally { if (mine === generation) setBusy(false); }
-    return mine === generation;
   };
   const capture = async (rect: CaptureRect) => {
     if (!available()) return;
     setRequired(true);
-    const current = session; session = null;
+    const current = session;
     if (!current) { setError(value => value || messages.unsupported); return; }
     const mine = generation;
     setBusy(true);
@@ -58,6 +60,7 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string) 
     } catch (cause) {
       if (mine === generation) setError(messages[cause instanceof CaptureError ? cause.code : 'unsupported']);
     } finally {
+      if (session === current) session = null;
       current.dispose(); document.documentElement.classList.remove('mx-taking-screenshot');
       if (mine === generation) setBusy(false);
     }

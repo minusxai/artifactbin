@@ -29,6 +29,23 @@ it('marks comment targets, detects duplicate keys and restores highlights after 
   expect(document.querySelector('p')).toHaveAttribute('data-mx-annotation-open');
   runtime.dispose();expect(document.querySelector('p')).not.toHaveAttribute('data-mx-annotation-open');
 });
+it('retains resolved target geometry without highlights or hover interaction', () => {
+  const send = vi.fn();
+  document.body.innerHTML = '<p data-comment-key="customer">Alice</p>';
+  const runtime = createManagedCommentRuntime(window, send, COMMENT_PRESENTATION);
+  const pin = { id: 'resolved', target: { kind: 'key' as const, path: ['customer'] }, range: { v: 1 as const, kind: 'area' as const, box: { x: 0, y: 0, w: 1, h: 1 } } };
+  const state = { type: 'comment-state' as const, generation: 'a', enabled: true, picking: false, canComment: true, pins: [pin], openId: pin.id, hoverId: pin.id, selection: null };
+  try {
+  runtime.update(state);
+  runtime.update({ ...state, pins: [{ ...pin, layoutOnly: true }] });
+  expect(document.querySelector('p')).not.toHaveAttribute('data-mx-annotated');
+  expect(document.querySelector('[data-mx-annotation-area]')).toBeNull();
+  expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ positions: [expect.objectContaining({ id: pin.id, status: 'exact' })] }));
+  document.querySelector('p')!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+  expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'comment-hover', id: null }));
+  } finally { runtime.dispose(); }
+});
+
 it('keeps session IDs only on existing nodes and rejects a prior generation',()=>{
   const send=vi.fn();document.body.innerHTML='<p>Alice</p>';
   const runtime=createManagedCommentRuntime(window,send,COMMENT_PRESENTATION);

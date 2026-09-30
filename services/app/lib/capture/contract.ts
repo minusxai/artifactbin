@@ -14,6 +14,8 @@ export interface CaptureSession {
   capture(rect: CaptureRect): Promise<CapturedImage>;
   dispose(): void;
 }
+/** Permission cancellation returns to selection; superseded requests must not change the current tool. */
+export type CaptureStartResult = 'ready' | 'unavailable' | 'cancelled' | 'superseded';
 export type CaptureFailure = 'unsupported' | 'cancelled' | 'wrong-source' | 'ended' | 'timeout' | 'geometry';
 export type CaptureStage = 'permission' | 'playback' | 'initial-frame' | 'paint' | 'track-frame' | 'full-frame' | 'encode';
 export class CaptureError extends Error {
