@@ -106,7 +106,16 @@ describe('compiled DOM edit mounter', () => {
     const onLayout = vi.fn();
     const mounted = mountCompiledEditRegions(root, nodes, { onFlow: vi.fn(), onLayout });
     expect(root.querySelector('#first')).toBe(first);
+    expect(root.querySelector('style[data-mx-grid-css]')).not.toBeNull();
     expect(root.querySelectorAll('[aria-label^="Move GridItem"]')).toHaveLength(2);
+    // The overlay tile is `pointer-events:none`, so it can never match CSS `:hover` itself; hovering
+    // the REAL compiled tile underneath must reveal that tile's grip via a mirrored class instead.
+    const overlayTile = root.querySelector<HTMLElement>('[data-mx-grid-tile="first"]')!;
+    expect(overlayTile.classList.contains('mx-grid-hover')).toBe(false);
+    first!.dispatchEvent(new Event('pointerenter'));
+    expect(overlayTile.classList.contains('mx-grid-hover')).toBe(true);
+    first!.dispatchEvent(new Event('pointerleave'));
+    expect(overlayTile.classList.contains('mx-grid-hover')).toBe(false);
     const grip = root.querySelector<HTMLElement>('[aria-label="Move GridItem 0.0"]')!;
     grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
