@@ -41,7 +41,7 @@ it('preserves duplicate-ID repair for pasted source before matching graph identi
  expect(graphSource(result)).toContain('Alpha');expect(graphSource(result)).toContain('Beta');
 });
 it.each([
- {source:'<Grid id="grid"><GridItem id="left"><p id="a">Alpha</p></GridItem><GridItem id="right"><p id="b">Beta</p></GridItem></Grid>',root:0},
+ {source:'<Grid id="grid"><GridItem id="left" x={0} y={0}><p id="a">Alpha</p></GridItem><GridItem id="right" x={6} y={0}><p id="b">Beta</p></GridItem></Grid>',root:0},
  {source:'<Helmet><Value name="rows" type="table" value={[{"id":1,"a":1,"b":2}]} /></Helmet><For id="loop" each={$rows} keyBy="id"><section id="left"><p id="a">Alpha</p></section><section id="right"><p id="b">Beta</p></section></For>',root:1},
  {source:'<Helmet><Value name="rows" type="table" value={[{"id":1,"a":1,"b":2}]} /></Helmet><DataTable id="table" data="$rows"><Column col="a"><p id="a">Alpha</p></Column><Column col="b"><p id="b">Beta</p></Column></DataTable>',root:1},
 ])('independent descendant styles preserve component validity without replanning: $source',async({source,root})=>{
