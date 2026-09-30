@@ -157,7 +157,7 @@ async function prepareAppShell(doc: Document, stylesheet: string | null): Promis
     if (doc.querySelector('body > [data-mx-inline-story]')) root.hidden = true;
     doc.body.prepend(root);
   }
-  if (!stylesheet || Array.from(doc.head.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]')).some((link) => link.getAttribute('href') === stylesheet)) return;
+  if (!stylesheet || Array.from(doc.head.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]')).some((link) => link.href === new URL(stylesheet, doc.baseURI).href)) return;
   const link = doc.createElement('link');
   link.rel = 'stylesheet';
   link.href = stylesheet;

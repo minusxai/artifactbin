@@ -4,6 +4,7 @@ import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type J
 import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { useLocation } from '@solidjs/router';
 import { SessionProvider } from './web/session';
+import { usePageIntentPreload } from './web/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
 import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './web/notifications';
@@ -31,6 +32,12 @@ function PendingPage(): JSX.Element {
   return <main aria-label="Loading page" role="status" aria-busy="true" class="mx-auto max-w-5xl px-4 py-10"><span class="sr-only">Loading page…</span><div aria-hidden="true" class="h-7 w-48 rounded bg-raised" /></main>;
 }
 
+/** Under the SessionProvider: starts a linked page's data on hover, focus or press, ahead of its chunk. */
+function IntentPreload(): JSX.Element {
+  usePageIntentPreload();
+  return <></>;
+}
+
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
   const servedDocument = !!initialDocumentStory();
@@ -41,6 +48,7 @@ function Root(props: RouteSectionProps): JSX.Element {
   createEffect(() => clearInitialStoryOnRoute(location.pathname));
   return (
     <SessionProvider>
+    <IntentPreload />
     <InboxProvider>
     <OnboardingGate>
       <ChromeVisibilityContext.Provider value={setShowChrome}>
