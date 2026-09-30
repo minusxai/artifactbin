@@ -1,9 +1,10 @@
+import { escapeHtml } from './escape';
 /** Shared, dependency-free shell for proxy consent and CLI callback pages.
  * bodyHtml is trusted server-authored markup; callers escape interpolated data.
  * Each transport owns its status and security headers.
  */
 export function renderConnectionPage(title: string, bodyHtml: string): string {
-  const escapedTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapedTitle = escapeHtml(title);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedTitle}</title><style>
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background-color: #0b0e11; color: #e6edf3; font-family: var(--font-mono, ui-monospace), 'SF Mono', Menlo, monospace; font-size: 14px;
          background-image: radial-gradient(circle, #232c37 1px, transparent 1px); background-size: 26px 26px; }
