@@ -17,6 +17,7 @@ const REQUIRED_FILES = [
   'lib/compiled-page/compiler.ts',
   'lib/compiled-page/rail-preview.server.ts',
   'lib/islands/rt.tsx',
+  'lib/islands/chart.ts',
   'lib/story-ui/icon-contract.ts',
   'lib/viz/deck-chrome.ts',
 ]

@@ -32,7 +32,7 @@ describe('generic og image for non-artifact pages', () => {
   });
 
   it('the SPA shell carries the title and description, and leaves og:image to the server', () => {
-    const html = readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
+    const html = readFileSync(path.join(ROOT, 'web', 'solid-app.html'), 'utf8');
     expect(html).toContain('<title>artifactbin</title>');
     expect(html).toContain('name="description"');
     // A shell-side og:image would be relative and would collide with the tag

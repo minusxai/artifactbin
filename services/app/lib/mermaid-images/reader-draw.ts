@@ -66,7 +66,7 @@ export function mermaidPaletteKey(palette: MermaidPalette): string {
 /**
  * WHAT MERMAID WOULD MEASURE HERE: the SVG text box — width, height and y,
  * what Mermaid's own label measurement reads — of the label face at the label
- * size and of the edge-label face at its 11px (components/kit/mermaid-render
+ * size and of the edge-label face at its 11px (lib/mermaid-images/mermaid-render
  * documentStyles), over a fixed Latin probe plus the diagram's own other
  * characters. Measured in the page, as Mermaid measures, so every platform
  * difference that moves a drawing shows here: hinted (whole-pixel) advances,

@@ -21,7 +21,7 @@ export interface MermaidDiagram {
   /** Mermaid's detector, verbatim. */
   test: RegExp;
   /**
-   * The layout engines this kind loads under components/kit/mermaid-render's
+   * The layout engines this kind loads under lib/mermaid-images/mermaid-render's
    * configuration. Mermaid 12 makes `elk` its DEFAULT layout, so every kind
    * that asks the layout registry for "the configured layout" (flowcharts,
    * class, state, ER, requirement, agentflow, usecase) draws with elk, not only

@@ -56,16 +56,16 @@ const SCANS: Scan[] = [
     // missed HeaderBar's "0 artifacts — point an agent at /api", which shipped to production and
     // was found by clicking around rather than by any test.
     label: 'nothing links to /api — it moved to /docs and answers 404',
-    dirs: [`${APP}/app`, `${APP}/components`],
+    dirs: [`${APP}/app`, `${APP}/solid`],
     pattern: /href=(?:"\/api"|\{`\/api`\}|'\/api')/,
-    proof: { atLeast: 20, contains: `${APP}/components` },
+    proof: { atLeast: 20, contains: `${APP}/solid` },
   },
   {
     // The theme lineup is six dual-palette themes. The retirement touched the registry, the publish
     // gate, the docs, the guidance yaml, the seeds and the gates — a leftover in any one of them is
     // a contract an agent will believe.
     label: 'no retired theme name is used as a value outside the alias table',
-    dirs: [`${APP}/app`, `${APP}/components`, `${APP}/lib`, 'scripts'],
+    dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, 'scripts'],
     extensions: /\.(tsx?|mjs)$/,
     pattern: /['"](classical|broadsheet|nocturne)['"]/,
     allow: [`${APP}/lib/data/story/story-themes.ts`],
@@ -75,7 +75,7 @@ const SCANS: Scan[] = [
     // Two generations of docs addresses answer 404 with no alias: the pre-tree pages and the
     // six-skill tree's directories. They were hard-coded in a dozen places that are NOT generated.
     label: 'no live address names a retired docs page',
-    dirs: [`${APP}/app`, `${APP}/components`, `${APP}/lib`, `${APP}/server`, `${APP}/web`, 'scripts', '.github'],
+    dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, `${APP}/server`, `${APP}/web`, 'scripts', '.github'],
     extensions: /\.(tsx?|mjs|ya?ml)$/,
     pattern: /\/docs\/(?:llm|artifact-design|publishing|markup|themes|templates|design)(?![\w-])/,
     allow: [`${APP}/server/routes.generated.ts`],
@@ -86,7 +86,7 @@ const SCANS: Scan[] = [
     // fields. The retirement touched the input parser, the wire echo, the pages, the editor and
     // five docs sections; `format: 'html'` survived in a colour map past all of them.
     label: 'no source file treats html or markdown as a format',
-    dirs: [`${APP}/app`, `${APP}/components`, `${APP}/lib`],
+    dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`],
     pattern: new RegExp([
       /format\s*(?::|===|==|!==)\s*'html'/, /ArtifactFormat\s*=\s*[^;]*'html'/, /body\.(html|markdown)\b/,
       /format\s*\?\?\s*'html'/, /default:\s*"'html'"/, /format IN \([^)]*'html'/,
@@ -117,7 +117,7 @@ const SCANS: Scan[] = [
     // The human docs address is `/docs-human`, everywhere a person can click; `/docs` and below are
     // agents' only.
     label: 'no current code names the retired /docs/human address',
-    dirs: [`${APP}/app`, `${APP}/components`, `${APP}/lib`, `${APP}/server`, `${APP}/web`],
+    dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, `${APP}/server`, `${APP}/web`],
     pattern: /\/docs\/human/,
     proof: { atLeast: 50, contains: `${APP}/web` },
   },
@@ -181,14 +181,14 @@ describe('the surviving vocabulary', () => {
   });
 
   it('points every human link at /docs-human', () => {
-    for (const file of ['components/PageChrome.tsx', 'web/App.tsx', 'lib/story/reader-chrome.ts']) {
+    for (const file of ['solid/components/PageChrome.tsx', 'solid/App.tsx', 'lib/story/reader-chrome.ts']) {
       expect(codeOf(readFileSync(path.join(APP_ROOT, file), 'utf8')), file).toContain('/docs-human');
     }
   });
 
   it('serves the docs without sniffing Accept, and ships a shell carrying no agent pointer of its own', () => {
     expect(codeOf(readFileSync(path.join(APP_ROOT, 'lib/skills/serve.ts'), 'utf8'))).not.toContain('text/html');
-    const html = readFileSync(path.join(APP_ROOT, 'web/index.html'), 'utf8');
+    const html = readFileSync(path.join(APP_ROOT, 'web/solid-app.html'), 'utf8');
     expect(html).not.toContain('rel="help"');
     expect(html).not.toContain('name="afbin"');
   });

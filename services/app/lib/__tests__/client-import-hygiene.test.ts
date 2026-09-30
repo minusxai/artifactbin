@@ -34,11 +34,11 @@ const valueImportsOf = (src: string, mod: string) =>
 
 describe('client-import hygiene', () => {
   const root = process.cwd();
-  const clientFiles = [...walk(join(root, 'components')), ...walk(join(root, 'lib')), ...walk(join(root, 'app'))]
+  const clientFiles = [...walk(join(root, 'solid')), ...walk(join(root, 'lib')), ...walk(join(root, 'app'))]
     .filter((p) => isClientFile(readFileSync(p, 'utf8')));
 
   it('finds the client components it is meant to police', () => {
-    expect(clientFiles.some((p) => p.endsWith('components/ShareLink.tsx'))).toBe(true);
+    expect(clientFiles.some((p) => p.endsWith('lib/story-runtime/edit/session.ts'))).toBe(true);
   });
 
   it("no 'use client' file imports a value from a server module", () => {

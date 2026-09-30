@@ -34,6 +34,8 @@ export const EXTRA_CLASS_SOURCES = [
   join(ROOT, 'lib', 'compiled-page', 'compiler.ts'),
   join(ROOT, 'lib', 'compiled-page', 'rail-preview.server.ts'),
   join(ROOT, 'lib', 'islands', 'rt.tsx'),
+  // A served chart drawing's box (the chart island and the server's prerender share it).
+  join(ROOT, 'lib', 'islands', 'chart.ts'),
   // The icon kit's framework-free class contract.
   join(ROOT, 'lib', 'story-ui', 'icon-contract.ts'),
   // The <DeckGL> map's chrome classes (lib/islands/kit/embed/deck-engine).

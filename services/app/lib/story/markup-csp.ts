@@ -124,7 +124,7 @@ const ISLANDS_DIR_PATH = '/islands/';
  * …and the bundled font files (public/fonts, the manifest's faces): the kit
  * reads the files the page already loaded — from the HTTP cache — to put them
  * into its Mermaid drawings, which an `<img>` shows and which cannot reach the
- * page's fonts otherwise (components/kit/mermaid-fonts). Public, immutable
+ * page's fonts otherwise (lib/mermaid-images/mermaid-fonts). Public, immutable
  * files, like /geojson/ and /story/.
  */
 const FONTS_DIR_PATH = '/fonts/';

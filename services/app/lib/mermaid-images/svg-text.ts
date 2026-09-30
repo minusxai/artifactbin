@@ -1,7 +1,7 @@
 /**
  * WHICH FONT FILES A MERMAID DRAWING NEEDS TO CARRY — pure, shared by the
  * harvest (lib/mermaid-images/fonts: subsets of the bundled files) and the
- * kit's engine path in the browser (components/kit/mermaid-fonts: the files
+ * kit's engine path in the browser (lib/mermaid-images/mermaid-fonts: the files
  * the page already loaded). Both carry the same faces for the same drawing.
  *
  * A drawing can carry its fonts only when every face it sets text in is one

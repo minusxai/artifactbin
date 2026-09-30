@@ -2,7 +2,7 @@
  * A stored drawing is valid only for the engine that drew it
  * (lib/mermaid-images/engine). These pins make the engine string move when
  * what the engine draws can: the installed Mermaid, and the kit's render
- * module. Changing components/kit/mermaid-render? Bump
+ * module. Changing lib/mermaid-images/mermaid-render? Bump
  * MERMAID_KIT_RENDER_VERSION and record the new hash below — every stored
  * drawing is then ignored until the harvest redraws it.
  */
@@ -21,8 +21,8 @@ describe('the Mermaid render engine identity', () => {
     expect(MERMAID_RENDER_ENGINE).toBe(`mermaid@${installed}+kit${MERMAID_KIT_RENDER_VERSION}`);
   });
   it('is bumped with the kit render module (hash pinned here)', () => {
-    const source = readFileSync(path.resolve(import.meta.dirname, '../../../components/kit/mermaid-render.ts'));
-    expect(createHash('sha256').update(source).digest('hex'), 'components/kit/mermaid-render changed: bump MERMAID_KIT_RENDER_VERSION and update this hash').toBe(RENDER_MODULE_SHA256);
+    const source = readFileSync(path.resolve(import.meta.dirname, '../mermaid-render.ts'));
+    expect(createHash('sha256').update(source).digest('hex'), 'lib/mermaid-images/mermaid-render changed: bump MERMAID_KIT_RENDER_VERSION and update this hash').toBe(RENDER_MODULE_SHA256);
   });
   it('never prerenders a gantt chart (its "today" line moves), a cynefin chart (seeded by page order), a C4 diagram (its own system fonts) or a code the kit refuses', () => {
     expect(mermaidPrerenderable('gantt\n  title Plan')).toBe(false);

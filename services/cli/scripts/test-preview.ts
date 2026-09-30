@@ -100,7 +100,7 @@ try{
  await b.evaluate(() => document.querySelector('[aria-label="Select tool active"]')?.remove());
  await b.locator('#text').click();
  await b.getByRole('textbox').last().fill('Persistent note');
- await b.getByRole('button',{name:'Post'}).click();
+ await b.getByRole('button',{name:'Save annotation'}).click();
  await b.getByText('Persistent note',{exact:true}).first().waitFor();
  const port=Number(new URL(server.url).port);await server.close();server=await launch(port);
  await b.reload();await b.getByRole('button',{name:/Comments/,exact:false}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();
