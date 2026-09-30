@@ -116,6 +116,37 @@ export function toVegaSpec(
   return { vegaSpec: compileVegaLite(resolved.spec, mode, options) };
 }
 
+/** Fingerprint of the compile-time legend-wrap and x-label-angle plans: a resize that changes it must rebuild the view. */
+export function legendPlanKey(vl: Record<string, unknown> | null, rows: Parameters<typeof computeLegendPlan>[1], width: number): string {
+  return JSON.stringify({
+    legend: vl ? computeLegendPlan(vl, rows, width) ?? null : null,
+    xAngle: vl ? computeXLabelAngle(vl, rows, width) : null,
+  });
+}
+
+/**
+ * THE CHART PLAN, one place for the server drawing and the browser controller: the legend-wrap,
+ * x-label-angle and facet-layout decisions for a slot `size`, then the parsed-vega inputs compiled
+ * with them. Both tiers call this so a server-drawn chart and the island's redraw cannot diverge.
+ * `vl` is the Vega-Lite spec (null for native Vega); `legendKey` fingerprints the compile-time plans
+ * a resize must rebuild for.
+ */
+export function planVega(
+  resolved: { spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' },
+  rows: Parameters<typeof computeLegendPlan>[1],
+  size: { width: number; height: number },
+  mode: 'light' | 'dark',
+  categoryRange: string[] | null,
+) {
+  const vl = resolved.engine === 'vega-lite' ? resolved.spec : null;
+  const legendPlan = vl ? computeLegendPlan(vl, rows, size.width) : null;
+  const xLabelAngle = vl ? computeXLabelAngle(vl, rows, size.width) : null;
+  const facetLayout = vl ? computeFacetLayoutPlan(vl, rows, size.width, size.height) : null;
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { legendPlan, xLabelAngle, facetLayout, categoryRange });
+  const legendKey = legendPlanKey(vl, rows, size.width);
+  return { vl, vegaSpec, parserConfig, facetLayout, legendKey };
+}
+
 interface VegaViewOptions {
   renderer: 'svg' | 'canvas' | 'none';
   /** DOM container (browser only). */
