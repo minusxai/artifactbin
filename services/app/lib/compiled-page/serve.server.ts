@@ -226,12 +226,14 @@ async function compileAndWait(row: ArtifactRow, page: PreparedPage, at: Archived
  * that raises the contract upgrades pages as they are read, never as a stampede of waited compiles.
  */
 const UPGRADES_AT_ONCE = 1;
+/** Queued at most: a crawl across every old page must not hold every page in memory; a dropped one queues again on its next read. */
+const UPGRADES_QUEUED = 256;
 const upgrades = new Map<string, () => Promise<unknown>>();
 const upgrading = new Set<string>();
 let upgradeRuns: Promise<void>[] = [];
 function queueUpgrade(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null): void {
   const key = `${row.id}\u0000${at ? `v:${at.version}` : 'head'}\u0000${row.version}`;
-  if (upgrades.has(key) || upgrading.has(key)) return;
+  if (upgrades.has(key) || upgrading.has(key) || upgrades.size >= UPGRADES_QUEUED) return;
   upgrades.set(key, () => recompilePage(row, at, page));
   while (upgradeRuns.length < UPGRADES_AT_ONCE) {
     const run: Promise<void> = (async () => {

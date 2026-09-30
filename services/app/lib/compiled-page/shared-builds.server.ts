@@ -22,6 +22,8 @@ export function archiveSharedBuild(build: CompilerBuild): Promise<void> {
   if (archived === build.id) return Promise.resolve();
   if (archiving) return archiving;
   archiving = (async () => {
+    // Archived already (by an earlier process of this deploy): the manifest is written last, so all is there.
+    if (await objectStore().get(manifestKey(build.id)).then(() => true, () => false)) { archived = build.id; return; }
     const text = readFileSync(fileOf('manifest.json'), 'utf8');
     const manifest = JSON.parse(text) as { build: string; files: Record<string, unknown>; ssr: { url: string } };
     if (manifest.build !== build.id) throw new Error('island build changed while archiving');
