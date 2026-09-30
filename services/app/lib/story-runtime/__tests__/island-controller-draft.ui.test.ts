@@ -45,7 +45,8 @@ import { createIslandController } from '../island-controller';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE } from '../contract';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-const settle = async (until: () => boolean) => { for (let i = 0; i < 200 && !until(); i++) await tick(); };
+// Time-bounded, not tick-bounded: the first dynamic import of a module is slow when other suites transform alongside.
+const settle = async (until: () => boolean) => { for (const end = Date.now() + 5000; Date.now() < end && !until();) await tick(); };
 
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks(); });
 
