@@ -76,6 +76,23 @@ async function packedModule(page: NonNullable<ArtifactFile['compiled']>, sqlite:
   return made;
 }
 
+const wasmMemo = new Map<string, Promise<string | undefined>>();
+
+/**
+ * The build's SQLite engine as a file carries it: gzip then base64 (less than half the bytes of the
+ * raw wasm), read and compressed once per process per content-addressed name.
+ */
+function packedWasm(name: string): Promise<string | undefined> {
+  let made = wasmMemo.get(name);
+  if (!made) {
+    made = readFile(path.join(process.cwd(), 'public', 'islands', name)).catch(() => retainedIslandFile(name))
+      .then((bytes) => (bytes ? gzipSync(bytes, { level: 9 }).toString('base64') : undefined));
+    wasmMemo.set(name, made);
+    made.catch(() => { if (wasmMemo.get(name) === made) wasmMemo.delete(name); });
+  }
+  return made;
+}
+
 /** The exact inline resources a newly downloaded Solid file needs. */
 export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFileParts> {
   if (file.bundle !== 'solid') throw new Error('offline: a legacy file must be migrated before export');
@@ -93,7 +110,7 @@ export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFile
   const wasmUrl = file.compiled.sharedBuild?.sqliteWasm;
   const wasmName = /^\/islands\/(sqlite3-[0-9a-f]{16}\.wasm)$/.exec(wasmUrl ?? '')?.[1];
   if (sqlite && !wasmName) throw new Error('offline: the compiled build has no SQLite engine');
-  const wasm = wasmName && sqlite ? (await readFile(path.join(process.cwd(), 'public', 'islands', wasmName)).catch(() => retainedIslandFile(wasmName)))?.toString('base64') : undefined;
+  const wasm = wasmName && sqlite ? await packedWasm(wasmName) : undefined;
   return { file, code, ...(packed ? { compiledCode: packed.compiledCode, templates: packed.templates } : {}),
     ...(wasm ? { wasm } : {}) };
 }

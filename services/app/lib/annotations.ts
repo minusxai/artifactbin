@@ -27,7 +27,7 @@ import {
   type ArtifactRow, type Scope, type TokenActor
 } from '@/lib/artifacts';
 import { canGovern } from '@/lib/share-roles';
-import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
+import { ANNOTATION_ANCHOR_ATTR, anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry } from '@/lib/annotation-anchors';
 import { avatarUrl } from '@/lib/avatars';
 import { getDb, type Queryable } from '@/lib/db';
 import { actorSubject } from '@/lib/events';
@@ -158,7 +158,6 @@ export interface AnnotationAction {
 }
 
 /** ~ how much annotated text survives as the snippet. */
-const ANNOTATION_SNIPPET_MAX = 200;
 
 interface AnnotationRowDb {
   revision: number;
@@ -193,9 +192,6 @@ const scopedRow = async (q: Queryable, scope: Scope, id: string): Promise<Artifa
   return r.rows[0] ?? null;
 };
 
-/** Markup slice → plain text: tags out, whitespace collapsed, capped. */
-const snippetOf = (markup: string): string =>
-  markup.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, ANNOTATION_SNIPPET_MAX);
 
 const notify = (q: Queryable, artifactId: string, annotationId: string) =>
   q.query('SELECT pg_notify($1, $2)', [channelForAnnotations(artifactId), annotationId]);
@@ -230,43 +226,6 @@ const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => {
 
 // ── the anchor attribute, read and written against the parsed source ─────────
 
-const anchorKeyOf = (node: JsxElement): string | null => {
-  const attr = node.attributes.find((a) => a.name === 'id')
-    ?? node.attributes.find((a) => a.name === ANNOTATION_ANCHOR_ATTR);
-  return attr && attr.value.static && typeof attr.value.json === 'string' ? attr.value.json : null;
-};
-
-/**
- * An anchored node as the source knows it: the element, its SOURCE path, and
- * the sibling list it sits in — a range part addressed `+1` names the anchor's
- * next ELEMENT sibling, which cannot be reached from the node alone.
- */
-interface AnchorEntry {
-  node: JsxElement;
-  path: string;
-  siblings: JsxNode[];
-}
-
-/** Every anchor-carrying element in the source, by key, with its SOURCE path. */
-function anchorIndex(source: string): Map<string, AnchorEntry> {
-  const out = new Map<string, AnchorEntry>();
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return out;
-  const walk = (nodes: JsxNode[], prefix: string) => {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
-      if (node.type !== 'element') continue;
-      const path = prefix ? `${prefix}.${i}` : String(i);
-      // First occurrence wins: a duplicated attribute (an agent copied the
-      // node) must not make the anchor jump between copies read to read.
-      const key = anchorKeyOf(node);
-      if (key && !out.has(key)) out.set(key, { node, path, siblings: nodes });
-      walk(node.children, path);
-    }
-  };
-  walk(parsed.nodes, '');
-  return out;
-}
 
 
 

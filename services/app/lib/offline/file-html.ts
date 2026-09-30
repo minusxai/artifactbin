@@ -20,6 +20,7 @@
  * request but one — code view's extras script from the file's own origin
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
+import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/agent-discovery-tags';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
@@ -84,7 +85,7 @@ export interface ArtifactFileParts {
   code: string;
   /** The document's packed Solid module, gzip-compressed then base64-encoded. */
   compiledCode?: string;
-  /** Embedded SQLite wasm only when this reader may hold imports. */
+  /** Embedded SQLite wasm only when this reader may hold imports: gzip then base64 (raw base64 in older files). */
   wasm?: string;
   /** Compiled DOM factories, inert text until the Solid runtime clones one. */
   templates?: Record<string, string>;
@@ -117,15 +118,6 @@ unpack(${JSON.stringify(ARTIFACT_FILE_IDS.code)}).then(function(code){run(code);
 /** The boot placeholder's look: system fonts, centred, both colour schemes. */
 const BOOT_CSS = 'html{color-scheme:light dark}body{margin:0}#afbin-boot{font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#6b6b70;padding:48px 16px;text-align:center;margin:0}';
 
-const escapeHtml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-/**
- * JSON that is inert inside a `<script type="application/json">`: every `<`
- * escaped, so no `</script>` or `<!--` in any string can end or bend the
- * block. U+2028/9 are escaped too, so the text stays valid if anything ever
- * evaluates it as script.
- */
-const scriptSafeJson = (value: unknown) => JSON.stringify(value)
-  .replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 /** The complete `.html` text for these parts. Pure; safe for any JSON content (no `</script>` break-out). */
@@ -148,7 +140,7 @@ export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
     + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`
     + `<div id="${ARTIFACT_FILE_IDS.root}">${compiledStory}<p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
     + Object.entries(parts.templates ?? {}).map(([key, markup]) => `<template data-mx-island-template="${escapeHtml(key)}">${escapeHtml(markup)}</template>\n`).join('')
-    + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${scriptSafeJson({ format, source, ...rest })}</script>\n`
+    + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${scriptJson({ format, source, ...rest })}</script>\n`
     + `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.code}">${parts.code}</script>\n`
     + (parts.compiledCode ? `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.compiledCode}">${parts.compiledCode}</script>\n` : '')
     + (parts.wasm ? `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.wasm}">${parts.wasm}</script>\n` : '')

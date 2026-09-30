@@ -49,6 +49,7 @@ import { webFontObjectKey } from '@/lib/webfonts';
 import { offlineExtrasRef } from './bundle.server';
 import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-format';
 import { precomputeVariants, valueDomains, type VariantCaps } from './variants';
+import { withoutUnusedFaces } from './font-faces';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -431,12 +432,15 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);
   const snapshot = { at: new Date().toISOString(), state, held, variants, frozen };
   let inlined: { css: ArtifactFile['css']; island: StoryIslandData; compiled: NonNullable<ArtifactFile['compiled']>; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
+  // Everything the file can draw: the font subsets no character of it reaches are left out (lib/offline/font-faces).
+  const text = [source, row.title ?? '', JSON.stringify(snapshot), JSON.stringify(threads)].join('\n');
+  const css = (sheet: string) => inliner.css(withoutUnusedFaces(sheet, text));
   try {
     inlined = await timed(timings, 'inline', async () => ({
       css: {
-        base: await inliner.css(parts.runtime.baseCss),
-        compiled: compiledCss ? await inliner.css(compiledCss) : null,
-        author: parts.runtime.authorCss ? await inliner.css(parts.runtime.authorCss) : null,
+        base: await css(parts.runtime.baseCss),
+        compiled: compiledCss ? await css(compiledCss) : null,
+        author: parts.runtime.authorCss ? await css(parts.runtime.authorCss) : null,
       },
       island: JSON.parse(await inliner.json(JSON.stringify(island))) as StoryIslandData,
       compiled: JSON.parse(await inliner.json(JSON.stringify(renderedCompiled))) as NonNullable<ArtifactFile['compiled']>,
