@@ -119,6 +119,10 @@ function walk(
       const height=item.attributes.find(a=>a.name==='minHeight')?.value;
       if(height?.static && (typeof height.json!=='number'||!Number.isFinite(height.json)||height.json<0||height.json>10000)) errors.push({message:'Flow GridItem minHeight must be a number from 0 to 10000 pixels',start:item.start,end:item.end});
     }
+    if(!(mode?.static && mode.json==='flow')) {
+      const unplaced=node.children.filter(item=>item.type==='element'&&item.tag==='GridItem'&&!item.attributes.some(a=>a.name==='x'||a.name==='y'));
+      if(unplaced.length>1) for(const item of unplaced.slice(1)) errors.push({message:'Positioned GridItems without x/y all sit at 0,0 and overlap; give each x and y, or use <Grid mode="flow"> for columns that stack',start:item.start,end:item.end});
+    }
   }
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
     errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
