@@ -17,6 +17,7 @@ import Check from 'lucide-solid/icons/check';
 import LinkIcon from 'lucide-solid/icons/link';
 import PenLine from 'lucide-solid/icons/pen-line';
 import X from 'lucide-solid/icons/x';
+import { DialogShell } from '@/solid/components/DialogShell';
 import { copyText } from '../lib/copy-text';
 import { apiFetch } from '../lib/api';
 
@@ -113,14 +114,6 @@ export function DocumentSharing(props: {
     if (current) props.onSharingChange?.({ visibility: current.visibility, hasInvitedUsers: current.shares.length > 0 });
   });
   createEffect(() => { void props.version; setPreviewStatus('loading'); });
-  createEffect(() => {
-    if (!open()) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); close(); } };
-    window.addEventListener('keydown', escape);
-    onCleanup(() => { document.body.style.overflow = previous; window.removeEventListener('keydown', escape); });
-  });
   /** The card's address, built only from an id of the artifact id's own allowlisted shape. */
   const previewSrc = () => ARTIFACT_ID_PATTERN.test(props.id) ? `/a/${props.id}/export?format=jpg&mode=card&v=${Number(props.version ?? 0)}&r=${CARD_RENDER_GENERATION}` : undefined;
   const body = () => <>
@@ -213,13 +206,13 @@ export function DocumentSharing(props: {
         </button>
       </Show>
     </Show>
-    <Show when={open()}><Portal mount={trustedPortalOf(document) ?? document.body}><div class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
+    <Show when={open()}><Portal mount={trustedPortalOf(document) ?? document.body}><DialogShell onClose={close} lockScroll initialFocus="[autofocus]"><div class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
       <button type="button" aria-label="Close sharing by clicking outside" onClick={close} class="absolute inset-0 cursor-default border-0 bg-black/45 p-0 backdrop-blur-[2px]" />
       <section role="dialog" aria-modal="true" aria-label="Sharing" class="relative z-10 flex w-full max-w-2xl animate-[rise_.16s_ease-out] flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface font-mono text-xs shadow-2xl" style={{ 'max-height': 'calc(100svh - 24px)' }}>
         <header class="flex items-start gap-4 border-b border-edge px-4 py-4 sm:px-6"><div class="min-w-0 flex-1"><h2 class="break-words text-base font-semibold text-fg">{heading()}</h2><p class="mt-1 text-[11px] text-faint">Manage access, invite people, or copy the link.</p></div>
           <button type="button" aria-label="Close sharing" autofocus onClick={close} class="ml-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted hover:bg-raised hover:text-fg"><X size={16} /></button></header>
         <div class="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">{body()}</div>
       </section>
-    </div></Portal></Show>
+    </div></DialogShell></Portal></Show>
   </>;
 }

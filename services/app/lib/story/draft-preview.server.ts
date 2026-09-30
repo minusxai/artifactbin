@@ -25,7 +25,7 @@ export async function renderDraftPreview(input: PrepareStoryInput): Promise<stri
   const state = input.dataflow?.state;
   const results = state ? { tables: state.tables, errors: state.errors } : null;
   const story = compiled.ssr && state
-    ? (await loadSsrModule(compiled.ssr, undefined, undefined, compiled.sharedBuild?.ssr))
+    ? (await loadSsrModule(compiled.ssr))
       .render({ values: state.values, state, results, mermaidImages: {}, drawings: {} })
     : compiled.html;
   return assembleReaderPage({

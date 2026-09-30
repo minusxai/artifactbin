@@ -43,6 +43,7 @@ import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
 } from './contract';
+import { bindModuleRef } from './runtime-binding';
 import { speculationRulesOf } from './speculation';
 
 /** The first-paint outline has no event handlers; the app attaches navigation after adoption. */
@@ -60,7 +61,8 @@ function renderOutlineRail(entries: readonly OutlineEntry[]): string {
 export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): AssembledPage => {
   const { compiled, overlay, chrome, spa, build } = input;
   const help = input.head?.help ?? null;
-  const module = compiled.module;
+  // The stored module names the runtime by specifier; its URL and preload closure are this build's.
+  const module = compiled.module ? bindModuleRef(compiled.module, build) : null;
 
   const rendered = splitModuleData(input.story);
   // Request-specific SSR replaces visible HTML, while immutable browser carriers still belong

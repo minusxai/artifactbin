@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createContext, createEffect, createRenderEffect, createSignal, createUniqueId, onCleanup, onMount, untrack, Show, splitProps, useContext, type JSX } from 'solid-js';
+import { createContext, createEffect, createRenderEffect, createSignal, createUniqueId, onCleanup, onMount, Show, splitProps, useContext, type JSX } from 'solid-js';
 import { collapsibleStyle } from './collapsible-style';
 import { Portal, isServer } from 'solid-js/web';
 import { useIsland } from '../context';
@@ -7,6 +7,7 @@ import { deferEngine } from '../defer-engine';
 import type { Align, Placed, Side } from './popper';
 import { TrustedOverlay, overlayDestination, storyPortalHost } from './trusted-overlay';
 import { popupDismiss } from './popup-dismiss';
+import { ARROW_ORIGIN, ARROW_TRANSFORM, OPPOSITE, createTooltipTiming } from './tooltip-core';
 
 type State = { open: () => boolean; setOpen: (value: boolean) => void; contentId: string; panelId: () => string; setPanelId: (id: string) => void };
 const CollapsibleContext = createContext<State>(); const PopoverContext = createContext<PopupState>();
@@ -70,8 +71,6 @@ type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: 
  * (300ms; at once within 100ms of another closing), on focus at once; closes on leave, blur, press, Escape,
  * a scroll that moves the trigger, and another tooltip opening.
  */
-const TOOLTIP_OPEN = 'tooltip.open';
-const tooltipProvider = { closedAt: 0 };
 type TooltipState = {
   open: () => boolean; state: () => 'closed' | 'delayed-open' | 'instant-open'; contentId: () => string; setContentId: (id: string | undefined) => void;
   trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; placed: () => Placed | undefined; setPlaced: (placed: Placed | undefined) => void;
@@ -79,25 +78,13 @@ type TooltipState = {
 };
 const TooltipContext = createContext<TooltipState>();
 export function Tooltip(props: { open?: boolean; defaultOpen?: boolean; onOpenChange?: (value: boolean) => void; delayDuration?: number; children?: JSX.Element }) {
-  const [local, setLocal] = createSignal(!!props.defaultOpen); const [delayed, setDelayed] = createSignal(false);
+  const [local, setLocal] = createSignal(!!props.defaultOpen);
   const generated = createUniqueId(); const [authoredId, setContentId] = createSignal<string | undefined>();
   const [trigger, setTrigger] = createSignal<HTMLElement>(); const [placed, setPlaced] = createSignal<Placed>();
   const open = () => props.open ?? local();
-  let timer = 0;
-  const set = (value: boolean) => {
-    if (value === untrack(open)) return;
-    if (value) document.dispatchEvent(new CustomEvent(TOOLTIP_OPEN)); else tooltipProvider.closedAt = Date.now();
-    setLocal(value); props.onOpenChange?.(value);
-  };
-  const openNow = () => { clearTimeout(timer); timer = 0; setDelayed(false); set(true); };
-  const close = () => { clearTimeout(timer); timer = 0; set(false); };
-  const enter = () => {
-    if (Date.now() - tooltipProvider.closedAt < 100) { openNow(); return; }
-    clearTimeout(timer); timer = window.setTimeout(() => { setDelayed(true); set(true); timer = 0; }, props.delayDuration ?? 300);
-  };
-  onCleanup(() => clearTimeout(timer));
-  const ctx: TooltipState = { open, state: () => open() ? delayed() ? 'delayed-open' : 'instant-open' : 'closed', contentId: () => authoredId() ?? generated, setContentId,
-    trigger, setTrigger, placed, setPlaced, enter, leave: close, openNow, close };
+  const timing = createTooltipTiming({ open, setOpen: value => { setLocal(value); props.onOpenChange?.(value); }, delay: () => props.delayDuration });
+  const ctx: TooltipState = { open, state: timing.state, contentId: () => authoredId() ?? generated, setContentId,
+    trigger, setTrigger, placed, setPlaced, enter: timing.enter, leave: timing.close, openNow: timing.openNow, close: timing.close };
   return <TooltipContext.Provider value={ctx}>{props.children}</TooltipContext.Provider>;
 }
 export function TooltipProvider(props: { children?: JSX.Element }) { return props.children; }
@@ -130,19 +117,16 @@ export function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
     on:pointermove={e => { if (e.pointerType !== 'touch' && !movedOpen) { ctx.enter(); movedOpen = true; } }} on:pointerleave={() => { ctx.leave(); movedOpen = false; }}
     on:focus={() => ctx.openNow()} on:blur={() => ctx.close()} on:click={() => ctx.openNow()}>{props.children}</span>;
 }
-const ARROW_TRANSFORM: Record<Side, string> = { top: 'translateY(100%)', right: 'translateY(50%) rotate(90deg) translateX(-50%)', bottom: 'rotate(180deg)', left: 'translateY(50%) rotate(-90deg) translateX(50%)' };
-const ARROW_ORIGIN: Record<Side, string> = { top: '', right: '0 0', bottom: 'center 0', left: '100% 0' };
-const OPPOSITE: Record<Side, Side> = { top: 'bottom', right: 'left', bottom: 'top', left: 'right' };
 export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { side?: Side; align?: Align; sideOffset?: number; forceMount?: boolean }) {
   const ctx = useContext(TooltipContext)!; const island = useIsland();
   const [local, rest] = splitProps(props, ['id', 'children', 'side', 'align', 'sideOffset', 'forceMount']);
   // Radix: an authored id is the content's id, and so what the trigger names.
   createRenderEffect(() => ctx.setContentId(local.id));
   onMount(() => {
-    const onOtherOpen = () => ctx.close(); const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') ctx.close(); };
+    // Escape and another tooltip opening close it through the shared timing (./tooltip-core).
     const onScroll = (e: Event) => { const t = ctx.trigger(); if (t && e.target instanceof Node && e.target.contains(t)) ctx.close(); };
-    document.addEventListener(TOOLTIP_OPEN, onOtherOpen); document.addEventListener('keydown', onKey); window.addEventListener('scroll', onScroll, { capture: true });
-    onCleanup(() => { document.removeEventListener(TOOLTIP_OPEN, onOtherOpen); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll, { capture: true }); });
+    window.addEventListener('scroll', onScroll, { capture: true });
+    onCleanup(() => window.removeEventListener('scroll', onScroll, { capture: true }));
   });
   if (local.forceMount) {
     let holder!: HTMLDivElement;

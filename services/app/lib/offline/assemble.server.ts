@@ -21,6 +21,7 @@
  * made an absolute link to its live copy.
  */
 import { readFile } from 'node:fs/promises';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations';
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/archived-version';
@@ -287,7 +288,10 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
   const { page } = await preparedPageFor(artifact, at, origin);
-  const compiled = page.compiled && !isCompileFailure(page.compiled) ? page.compiled : null;
+  // A page compiled under the current contract pins no runtime: the file pins the build serving it now
+  // (its SSR half is read live and its chunk graph is the server's, so both are left out of the file).
+  const { ssr: _liveSsr, graph: _liveGraph, ...liveBuild } = loadCompilerBuild();
+  const compiled = page.compiled && !isCompileFailure(page.compiled) ? { ...page.compiled, sharedBuild: page.compiled.sharedBuild ?? liveBuild } : null;
   if (!compiled) throw new Error(`offline file: compiled page unavailable for ${artifact.id}`);
 
   const meta = row.meta as { theme?: string | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
@@ -344,7 +348,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const state = ran ? { ...ran.state, ...(Object.keys(named).length ? { people: { ...named, ...ran.state.people } } : {}) } : EMPTY_STATE;
   let renderedCompiled = compiled;
   if (compiled.ssr) {
-    const ssrHtml = (await loadSsrModule(compiled.ssr, undefined, undefined, compiled.sharedBuild?.ssr)).render({
+    const ssrHtml = (await loadSsrModule(compiled.ssr, undefined, undefined, page.compiled && !isCompileFailure(page.compiled) ? page.compiled.sharedBuild?.ssr : undefined)).render({
       values: state.values, state, results: state, mermaidImages: {}, drawings: {},
     });
     // A fresh per-request render never carries the compiled module's own island

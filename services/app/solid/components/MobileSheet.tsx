@@ -10,6 +10,7 @@
 import { createSignal, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
+import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 
 /** Tailwind's `sm` threshold, by innerWidth (jsdom implements no media queries). */
 export const isPhoneViewport = (): boolean => typeof window !== 'undefined' && window.innerWidth < 640;
@@ -51,10 +52,9 @@ export default function MobileSheet(props: {
     openSheets += 1;
     announceSheets();
     onCleanup(() => { openSheets -= 1; announceSheets(); });
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') props.onClose(); };
-    document.addEventListener('keydown', onKey);
-    onCleanup(() => document.removeEventListener('keydown', onKey));
   });
+  let panel: HTMLDivElement | undefined;
+  createDialogShell({ panel: () => panel, onClose: () => props.onClose() });
   let dragFrom: number | null = null;
   const [dragged, setDragged] = createSignal(0);
   const onTouchStart = (event: TouchEvent) => { if (props.swipeToClose) dragFrom = event.touches[0]?.clientY ?? null; };
@@ -76,7 +76,7 @@ export default function MobileSheet(props: {
         <button type="button" aria-label="Close sheet" onClick={() => props.onClose()}
           class="fixed inset-0 z-[2147483006] cursor-default border-0 bg-black/40 p-0" />
       </Show>
-      <div role="dialog" aria-modal="true" aria-label={props.label}
+      <div ref={panel} role="dialog" aria-modal="true" aria-label={props.label}
         style={dragged() ? { transform: `translateY(${dragged()}px)` } : undefined}
         class={`fixed inset-x-0 bottom-0 z-[2147483007] ${half() ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}>
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}

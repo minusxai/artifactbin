@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import Activity from 'lucide-solid/icons/activity';
 import Database from 'lucide-solid/icons/database';
@@ -12,6 +12,7 @@ import Maximize2 from 'lucide-solid/icons/maximize-2';
 import Users from 'lucide-solid/icons/users';
 import X from 'lucide-solid/icons/x';
 import type { WorkspaceStats } from '@/lib/workspace-inventory';
+import { DialogShell } from '@/solid/components/DialogShell';
 import { formatCount } from '../lib/format';
 
 interface DashboardRow { format: string; views?: number | null }
@@ -40,12 +41,6 @@ const compactMetric = (value: number): string => {
 export default function Dashboard(props: Props): JSX.Element {
   const [focus, setFocus] = createSignal<'views' | 'likes' | null>(null);
   const [expanded, setExpanded] = createSignal(false);
-  createEffect(() => {
-    if (!expanded()) return;
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setExpanded(false); };
-    window.addEventListener('keydown', escape);
-    onCleanup(() => window.removeEventListener('keydown', escape));
-  });
   const views = () => props.viewsOverTime ?? [];
   const likes = () => props.likesOverTime ?? [];
   const periodViews = createMemo(() => views().reduce((sum, value) => sum + value, 0));
@@ -88,5 +83,5 @@ export default function Dashboard(props: Props): JSX.Element {
       </Show>
     </div>
   </section></Show>
-  <Show when={expanded() && !props.expanded}><Portal mount={document.body}><div class="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-3 sm:p-8"><button type="button" aria-label="Close expanded dashboard by clicking outside" onClick={() => setExpanded(false)} class="absolute inset-0 cursor-default border-0 bg-black/50 p-0 backdrop-blur-[2px]" /><div role="dialog" aria-modal="true" aria-label="Expanded dashboard" class="relative z-10 flex min-w-0 max-w-6xl flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface shadow-2xl" style={{ width: 'calc(100vw - 1.5rem)', 'max-height': 'calc(100svh - 1.5rem)' }}><button type="button" aria-label="Close expanded dashboard" autofocus onClick={() => setExpanded(false)} class="absolute top-4 right-4 z-10 bg-surface text-muted hover:text-fg"><X size={16} /></button><div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-5 sm:px-8 sm:py-7"><Dashboard {...props} expanded /></div></div></div></Portal></Show></>;
+  <Show when={expanded() && !props.expanded}><Portal mount={document.body}><DialogShell onClose={() => setExpanded(false)}><div class="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-3 sm:p-8"><button type="button" aria-label="Close expanded dashboard by clicking outside" onClick={() => setExpanded(false)} class="absolute inset-0 cursor-default border-0 bg-black/50 p-0 backdrop-blur-[2px]" /><div role="dialog" aria-modal="true" aria-label="Expanded dashboard" class="relative z-10 flex min-w-0 max-w-6xl flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface shadow-2xl" style={{ width: 'calc(100vw - 1.5rem)', 'max-height': 'calc(100svh - 1.5rem)' }}><button type="button" aria-label="Close expanded dashboard" autofocus onClick={() => setExpanded(false)} class="absolute top-4 right-4 z-10 bg-surface text-muted hover:text-fg"><X size={16} /></button><div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-5 sm:px-8 sm:py-7"><Dashboard {...props} expanded /></div></div></div></DialogShell></Portal></Show></>;
 }

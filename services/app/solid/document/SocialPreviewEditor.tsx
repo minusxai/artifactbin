@@ -1,7 +1,8 @@
 /* @jsxImportSource solid-js */
-import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createSignal, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
+import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import X from 'lucide-solid/icons/x';
 import { writeBrowserArtifact } from '@/lib/browser-artifact-write';
@@ -98,19 +99,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
   const cameraX = () => camera().x - (cameraWidth() - camera().width) / 2;
   const cameraY = () => camera().y - (cameraHeight() - socialPreviewCropHeight(camera().width)) / 2;
 
-  onMount(() => {
-    closeButton.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { props.onClose(); return; }
-      if (event.key !== 'Tab' || !panel) return;
-      const stops = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"]')];
-      if (stops.length === 0) return;
-      const edge = event.shiftKey ? stops[0]! : stops[stops.length - 1]!;
-      if ((edge.getRootNode() as Document | ShadowRoot).activeElement === edge) { event.preventDefault(); (event.shiftKey ? stops[stops.length - 1]! : stops[0]!).focus(); }
-    };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => window.removeEventListener('keydown', onKey));
-  });
+  createDialogShell({ panel: () => panel, onClose: () => props.onClose(), initialFocus: () => closeButton, focusable: 'button:not([disabled]), [tabindex="0"]' });
 
   const update = (next: SocialPreviewCrop) => {
     setCropDirty(true); setReset(false);

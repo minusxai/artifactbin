@@ -18,7 +18,7 @@
  * React's server renderer and evaluates its class with the kit's merger at compile time (`attrs`, `cls`); only
  * the row's values, the scope and the state are applied here.
  */
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { isServer } from 'solid-js/web';
 import { refName, resolveBindings, rowBound, type BindingSource, type Row, type Scalar, type TableResult } from '@/lib/story/dataflow';
 import { substituteRow } from '@/lib/story/row-scope';
@@ -31,6 +31,7 @@ import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
 import { MutationHint } from './disclosure';
+import { popupDismiss } from './popup-dismiss';
 
 /** Where one cell sits: what the DataTable hands each column's content, per row. */
 export interface CellScope {
@@ -147,14 +148,11 @@ function usePopup(open: () => boolean, root: () => HTMLElement | undefined, view
     onCleanup(() => { stop(); popup.remove(); });
   });
 }
-const outsideDown = (open: () => boolean, inside: () => (Node | undefined)[], away: () => void) => createEffect(() => {
-  if (!open()) return;
-  const doc = inside()[0]?.ownerDocument;
-  if (!doc) return;
-  const down = (e: Event) => { if (!inside().some((n) => n?.contains(e.target as Node))) away(); };
-  doc.addEventListener('mousedown', down);
-  onCleanup(() => doc.removeEventListener('mousedown', down));
-});
+/** A cell popup joins the kit's one popup contract (outside press, Escape, one open at a time). */
+const cellPopup = (open: () => boolean, root: () => HTMLElement | undefined, popup: () => HTMLElement | undefined, away: () => void) => {
+  const announce = popupDismiss(open, away, root, popup);
+  createEffect(on(open, (isOpen) => { if (isOpen) announce(); }));
+};
 
 const CHEVRON = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
 const CHECK = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>;
@@ -340,7 +338,7 @@ function CellSelect(props: Shared & {
       setOpened(true); setQuery(e.key); setActive(matches(e.key.toLocaleLowerCase()) ? 0 : -1);
     }
   };
-  outsideDown(() => open(), () => [root, popup], () => (multiple() ? commitDraft(false) : finish(false)));
+  cellPopup(() => open(), () => root, () => popup, () => (multiple() ? commitDraft(false) : finish(false)));
   usePopup(() => open(), () => root, () => {
     const theme = popupTheme(root!);
     const node = <div ref={popup} {...{ 'data-theme': theme.dataTheme }} class={join(theme.className, POPUP)}
@@ -403,7 +401,7 @@ function CellDate(props: Shared & { busy: () => boolean; unavailable: () => stri
   const outOfRange = (iso: string) => { const lo = min(), hi = max(); return (lo !== undefined && iso < lo) || (hi !== undefined && iso > hi); };
   const step = (delta: number) => { const next = month().m + delta; setView({ y: month().y + Math.floor((next - 1) / 12), m: ((next - 1 + 12) % 12) + 1 }); };
   const choose = (iso: string | null) => { props.change(iso); props.commit(); setOpen(false); };
-  outsideDown(() => open(), () => [root, popup], () => setOpen(false));
+  cellPopup(() => open(), () => root, () => popup, () => setOpen(false));
   usePopup(() => open() && !props.disabled(), () => root, () => {
     const theme = popupTheme(root!);
     return <div ref={popup} role="dialog" aria-label={props.label() ? `${props.label()} calendar` : 'calendar'} {...{ 'data-theme': theme.dataTheme }} class={join(theme.className, POPUP.replace('bg-popover', 'bg-popover p-3'))}
