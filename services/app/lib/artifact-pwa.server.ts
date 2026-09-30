@@ -1,10 +1,25 @@
 import sharp from 'sharp';
-import { readPwaSettings } from './story/pwa-settings';
+import { graphNodes } from './story/document-graph';
+import { readPwaSettings, type PwaSettings } from './story/pwa-settings';
 import { loadImage } from './story/image-store';
 import { canReadArtifact, getArtifactById, referencedArtifactForRow, type ArtifactRow } from './artifacts';
 import { sessionActor } from './viewer';
 import { ID_RE } from './ids-shape';
 import { artifactAppPath, type ArtifactManifest } from './artifact-pwa';
+
+type PwaRow = Pick<ArtifactRow, 'source' | 'document'>;
+const graphSettings = new WeakMap<object, PwaSettings>();
+
+/** Published rows already carry the parsed graph. Reuse it for every PWA
+ * consumer; source-only legacy rows retain the editor's parsing fallback. */
+function settingsForRow(row: PwaRow): PwaSettings {
+  if (row.document?.kind !== 'graph') return readPwaSettings(row.source ?? '');
+  const cached = graphSettings.get(row.document);
+  if (cached) return cached;
+  const settings = readPwaSettings(graphNodes(row.document));
+  graphSettings.set(row.document, settings);
+  return settings;
+}
 
 /** Metadata uses the same ACL as content, without export-key admission. */
 export async function readableApp(request: Request, id: string) {
@@ -15,9 +30,9 @@ export async function readableApp(request: Request, id: string) {
   return await canReadArtifact(row, actor.viewer) ? row : null;
 }
 
-export function artifactManifest(row: { id: string; title: string | null; source?: string | null }): ArtifactManifest {
+export function artifactManifest(row: PwaRow & Pick<ArtifactRow, 'id' | 'title'>): ArtifactManifest {
   const base = artifactAppPath(row.id);
-  const settings = readPwaSettings(row.source ?? '');
+  const settings = settingsForRow(row);
   const name = settings.name ?? (row.title?.trim() || 'Untitled artifact');
   return {
     id: base, name, short_name: settings.shortName ?? name, start_url: base, scope: base,
@@ -29,7 +44,7 @@ export function artifactManifest(row: { id: string; title: string | null; source
 /** A deterministic per-artifact mark, with all detail inside the maskable safe zone.
  * No authored SVG, network fetch, font dependency, or persistent content cache. */
 export async function artifactAppIcon(row: ArtifactRow, size: 192 | 512): Promise<Buffer> {
-  const settings = readPwaSettings(row.source ?? '');
+  const settings = settingsForRow(row);
   if (settings.icon) {
     const image = await referencedArtifactForRow(row, settings.icon);
     if (image?.format === 'image') {
@@ -49,7 +64,7 @@ export async function artifactAppIcon(row: ArtifactRow, size: 192 | 512): Promis
   return sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="hsl(${hash % 360},50%,35%)"/>${tiles}</svg>`)).resize(size, size).png().toBuffer();
 }
 
-export const artifactPwaEnabled = (row: { source?: string | null }): boolean => readPwaSettings(row.source ?? '').enabled === true;
+export const artifactPwaEnabled = (row: PwaRow): boolean => settingsForRow(row).enabled === true;
 
 /** Discovery belongs to the actual app document, including the compiled reader. */
 export function withArtifactAppHead(html: string, row: ArtifactRow): string {

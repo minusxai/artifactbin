@@ -1,4 +1,4 @@
-import { readPwaSettings } from '@/lib/story/pwa-settings';
+import { artifactPwaEnabled } from '@/lib/artifact-pwa.server';
 import { membershipState } from '@/lib/membership';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
@@ -218,7 +218,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   const editAddress = /\/edit\/?$/.test(new URL(request.url).pathname);
 
   const membershipAvailable = !at && prepared?.page.declared?.flow.mutations.some(m => 'import' in m.target) === true;
-  const pwaEnabled = !at && readPwaSettings(row.source ?? '').enabled === true;
+  const pwaEnabled = !at && artifactPwaEnabled(row);
   const compiledMode = !!options.page && !!prepared && !(starterDoc && !editAddress && !exporting);
 
 
@@ -422,7 +422,7 @@ async function readerChromeFor(facts: {
     notifications: person ? {unread:0} : undefined,
     ground: facts.ground,
     share: owner,
-    install: readPwaSettings(row.source ?? '').enabled === true,
+    install: artifactPwaEnabled(row),
     archived: at ? { version: at.version, head: at.head } : null,
     visibility: artifact.visibility,
     ...(facts.hasInvitedUsers === undefined ? {} : { hasInvitedUsers: facts.hasInvitedUsers }),

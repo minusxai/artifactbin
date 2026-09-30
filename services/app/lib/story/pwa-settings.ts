@@ -1,4 +1,4 @@
-import { parseJsx, type JsxElement } from '@/lib/jsx';
+import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from './helmet';
 
 /** Source-backed install presentation. Identity and scope are not author-controlled. */
@@ -15,8 +15,8 @@ const metaName = (key: keyof typeof fields) => `artifactbin:pwa-${fields[key]}`;
 const keys = Object.keys(fields) as Array<keyof typeof fields>;
 const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export function readPwaSettings(source: string): PwaSettings {
-  const parsed = parseJsx(source);
+export function readPwaSettings(source: string | JsxNode[]): PwaSettings {
+  const parsed = typeof source === 'string' ? parseJsx(source) : { ok: true as const, nodes: source };
   if (!parsed.ok) return {};
   const { helmet } = splitHelmet(parsed.nodes);
   const result: PwaSettings = {};
