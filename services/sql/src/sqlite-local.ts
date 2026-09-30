@@ -20,6 +20,10 @@ export function createSqliteSql(opts: Partial<SqlCaps> = {}, extensions: SqlExte
       const { limit, timeoutMs } = queryBounds(input, caps);
       return (await loadSqlite()).run(input, { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit });
     },
+    runMany: async (input) => (await loadSqlite()).runMany(input, (run) => {
+      const { limit, timeoutMs } = queryBounds(run, caps);
+      return { limit, timeoutMs, pageLimit: limit };
+    }),
     mutate: async (input) => (await loadSqlite()).mutate(input, queryBounds(input, caps), extensions),
     dryRun: async (input) => (await loadSqlite()).dryRun(input),
     dryRunMutations: async (input) => (await loadSqlite()).dryRunMutations(input, extensions),

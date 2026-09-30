@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { DISPLAY_ROWS } from '@artifactbin/contracts';
-import { runDataflow } from '@/lib/sql/run-dataflow';
+import { runDataflow, runDataflowMany } from '@/lib/sql/run-dataflow';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 
@@ -100,5 +100,22 @@ describe('runDataflow', () => {
   it('runs nothing for an empty flow', async () => {
     const state = await runDataflow(EMPTY_COMPILED_DATAFLOW, {});
     expect(state).toEqual({ values: {}, tables: {}, errors: {} });
+  });
+});
+
+describe('runDataflowMany', () => {
+  // The offline file's variants: many value sets, ONE engine call, the same answers as one run each.
+  it('answers every value set exactly as a run of its own, a value-free stage computed once and read whole', async () => {
+    const flow = await compiledOf('<Value name="region" type="string" /><Import name="d" src="ref:abc123" /><Query name="all_rows">{`select * from d.rows`}</Query>'
+      + '<Query name="by_region">{`select region, count(*) as n, sum(revenue) as revenue from all_rows where $region is null or region = $region group by 1 order by 1`}</Query>', { abc123: SALES.columns });
+    const rows = Array.from({ length: DISPLAY_ROWS + 500 }, (_, n) => ({ region: n % 3 ? 'EU' : 'NA', revenue: n }));
+    const imports = { d: { rows: { rows, columns: SALES.columns } } };
+    const runs = [{ values: { region: 'EU' }, only: ['by_region'] }, { values: { region: 'NA' }, only: ['by_region'] }, { values: { region: null }, only: ['by_region'] }];
+    const many = await runDataflowMany(flow, imports, {}, runs);
+    const one = await Promise.all(runs.map((run) => runDataflow(flow, imports, run)));
+    expect(many.map((s) => s.tables.by_region)).toEqual(one.map((s) => s.tables.by_region));
+    expect(many.map((s) => s.errors)).toEqual(one.map((s) => s.errors));
+    // The stage behind the filter read every row, not the display window.
+    expect(many[2]!.tables.by_region!.rows.reduce((n, r) => n + Number(r.n), 0)).toBe(rows.length);
   });
 });

@@ -25,7 +25,7 @@ import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import path from 'node:path';
 import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations';
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/archived-version';
-import { acceptedMembers, canReadArtifact, dataflowForRow, importsFingerprint, getArtifactById, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ArtifactRow, type ImportCache, type RoleActor, type TokenActor } from '@/lib/artifacts';
+import { acceptedMembers, canReadArtifact, dataflowForRow, dataflowRunsForRow, importsFingerprint, getArtifactById, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ArtifactRow, type ImportCache, type RoleActor, type TokenActor } from '@/lib/artifacts';
 import type { ImportTables } from '@/lib/story/compiled-flow';
 import { placeDataflow } from '@/lib/story/placement';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -49,8 +49,10 @@ import { webFontObjectKey } from '@/lib/webfonts';
 import { offlineExtrasRef } from './bundle.server';
 import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-format';
 import { precomputeVariants, valueDomains, type VariantCaps } from './variants';
+import { withoutUnusedFaces } from './font-faces';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import { createHash } from 'node:crypto';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 /** The largest offline file the server will assemble. */
 export const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
@@ -66,7 +68,23 @@ export interface AssembleArtifactFileInput {
   caps?: VariantCaps;
   /** Overrides OFFLINE_FILE_MAX_BYTES (tests trip the cap without a 25 MB fixture). */
   maxFileBytes?: number;
+  /** Where each assembly phase's wall time goes (the download route's Server-Timing header). */
+  timings?: PhaseTimings;
 }
+
+/** Phase name → milliseconds, in the order the phases ran. */
+export type PhaseTimings = Map<string, number>;
+
+/** Run `work`, adding its wall time to `phase` in `timings` (when given). */
+export async function timed<T>(timings: PhaseTimings | undefined, phase: string, work: () => Promise<T>): Promise<T> {
+  if (!timings) return work();
+  const started = performance.now();
+  try { return await work(); } finally { timings.set(phase, (timings.get(phase) ?? 0) + performance.now() - started); }
+}
+
+/** A Server-Timing header value for these phases. */
+export const serverTiming = (timings: PhaseTimings): string =>
+  [...timings].map(([phase, ms]) => `${phase};dur=${ms.toFixed(1)}`).join(', ');
 
 export interface AssembleRefusal {
   refused: 'not_found' | 'forbidden' | 'too_large';
@@ -237,26 +255,51 @@ class Inliner {
 type Variants = Awaited<ReturnType<typeof precomputeVariants>>;
 const VARIANTS_KEPT = 64;
 const variantsMemo = new Map<string, Promise<Variants>>();
+/**
+ * How variants are computed and stored. Bump it when that changes, so every stored set is
+ * recomputed rather than served in an old shape.
+ */
+const VARIANTS_FORMAT = 2;
+/** Where computed variants persist, by key: an object-store prefix no route serves (they hold query results). */
+export const OFFLINE_VARIANTS_PREFIX = 'offline-variants';
 
 /**
  * What the variants are a function of: the document version served, the downloader's scope, the
  * accepted members, the data of every import (content-addressed, lib/artifacts importsFingerprint),
  * the caps and the queries that need the server. Null when any of it cannot be pinned (a connected
- * database), so those documents recompute, as before.
+ * database, a query that reads the clock), so those documents recompute every time.
  */
 async function variantsKey(artifact: ArtifactRow, version: number, row: ArtifactRow, flow: CompiledDataflow, actor: RoleActor, caps: VariantCaps | undefined, queries: ReadonlySet<string>): Promise<string | null> {
+  if (flow.queries.some((q) => q.params.includes('_now'))) return null;
   const data = await importsFingerprint(row, flow);
   if (data === null) return null;
   const members = JSON.stringify(await acceptedMembers(artifact.id));
-  return createHash('sha256').update(JSON.stringify([artifact.id, version, artifact.edit_id, actor.userId ?? null, actor.tokenId ? 1 : 0, members, data, caps ?? null, [...queries].sort()])).digest('hex');
+  return createHash('sha256').update(JSON.stringify([VARIANTS_FORMAT, artifact.id, version, artifact.edit_id, actor.userId ?? null, actor.tokenId ? 1 : 0, members, data, caps ?? null, [...queries].sort()])).digest('hex');
 }
 
-/** The variants for `key`, computed once per process (concurrent downloads share the run); an uncacheable key computes every time. */
+/** A stored set, or null when there is none (or it cannot be read: then it is computed again). */
+async function storedVariants(key: string): Promise<Variants | null> {
+  try { return JSON.parse(gunzipSync(await objectStore().get(`${OFFLINE_VARIANTS_PREFIX}/${key}`)).toString('utf8')) as Variants; }
+  catch { return null; }
+}
+
+/**
+ * The variants for `key`: this process's copy, else the object store's (it survives deploys and
+ * restarts and every instance shares it), else computed once — concurrent downloads share the run
+ * — and stored. An uncacheable key computes every time.
+ */
 function cachedVariants({ key, compute }: { key: string | null; compute: () => Promise<Variants> }): Promise<Variants> {
   if (!key) return compute();
   const known = variantsMemo.get(key);
   if (known) return known;
-  const made = compute();
+  const made = (async () => {
+    const stored = await storedVariants(key);
+    if (stored) return stored;
+    const computed = await compute();
+    // A store that will not take it costs the next process one computation, never this download.
+    await objectStore().put(`${OFFLINE_VARIANTS_PREFIX}/${key}`, gzipSync(JSON.stringify(computed)), 'application/gzip').catch(() => {});
+    return computed;
+  })();
   variantsMemo.set(key, made);
   if (variantsMemo.size > VARIANTS_KEPT) variantsMemo.delete(variantsMemo.keys().next().value!);
   // A failed run is not remembered: the next download tries again.
@@ -272,13 +315,13 @@ function cachedVariants({ key, compute }: { key: string | null; compute: () => P
  * apart here; the route decides whether to show them apart.
  */
 export async function assembleArtifactFile(input: AssembleArtifactFileInput): Promise<ArtifactFile | AssembleRefusal> {
-  const { actor } = input;
+  const { actor, timings } = input;
   const origin = input.origin.replace(/\/+$/, '');
   const maxFileBytes = input.maxFileBytes ?? OFFLINE_FILE_MAX_BYTES;
-  const artifact = await getArtifactById(input.id);
+  const artifact = await timed(timings, 'access', () => getArtifactById(input.id));
   if (!artifact) return refuse('not_found', 'This document does not exist.');
   const viewer = actor.userId ? { ...actor, userId: actor.userId, email: actor.email ?? null } : null;
-  const admitted = (!!actor.tokenId && actor.tokenId === artifact.token_id) || (await canReadArtifact(artifact, viewer));
+  const admitted = (!!actor.tokenId && actor.tokenId === artifact.token_id) || (await timed(timings, 'access', () => canReadArtifact(artifact, viewer)));
   if (!admitted) return refuse('forbidden', 'You do not have access to this document.');
   if (artifact.format !== 'markup') return refuse('not_found', 'Only documents can be downloaded for offline use.');
 
@@ -287,7 +330,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   if (at === 'not_found') return refuse('not_found', `Version ${input.version} of this document is not available to you.`);
   const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
-  const { page } = await preparedPageFor(artifact, at, origin);
+  const { page } = await timed(timings, 'page', () => preparedPageFor(artifact, at, origin));
   // A page compiled under the current contract pins no runtime: the file pins the build serving it now
   // (its SSR half is read live and its chunk graph is the server's, so both are left out of the file).
   const { ssr: _liveSsr, graph: _liveGraph, ...liveBuild } = loadCompilerBuild();
@@ -296,14 +339,14 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
 
   const meta = row.meta as { theme?: string | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
-  const [compiledCss, refData, ran, readerIdentity, mentionStatuses] = await Promise.all([
+  const [compiledCss, refData, ran, readerIdentity, mentionStatuses] = await timed(timings, 'run', () => Promise.all([
     currentStoryCss(meta, row.source),
     // The full copy of every image: the file carries one, inlined.
     refDataForRow(row, { capture: true }),
     dataflowForRow(row, { viewer: actor }),
     viewerIdentityFor(artifact, actor.userId),
     savedMentionStates(artifact),
-  ]);
+  ]));
   /*
    * WHAT THE FILE CAN RUN ITSELF: every import the downloader may hold travels
    * whole, decided by the same rule and the same door check as a reader's page
@@ -311,13 +354,15 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
    * every query over them live. Only the rest — a connected database, data
    * the downloader may not hold — is precomputed below.
    */
-  const hold = ran ? await holdableImports(row, ran.flow, actor) : [];
   const held: Record<string, ImportTables[string]> = {};
-  for (const name of hold) {
-    const tables = await holdImport(row, name, actor);
-    if (tables) held[name] = tables;
-  }
-  const parts = await prepareStoryParts({
+  await timed(timings, 'hold', async () => {
+    const hold = ran ? await holdableImports(row, ran.flow, actor) : [];
+    for (const name of hold) {
+      const tables = await holdImport(row, name, actor);
+      if (tables) held[name] = tables;
+    }
+  });
+  const parts = await timed(timings, 'island', async () => prepareStoryParts({
     source,
     compiledCss,
     theme: design.theme,
@@ -331,7 +376,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     title: row.title,
     mentionStatuses,
     ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
-  });
+  }));
   const island: StoryIslandData = { ...parts.runtime.data, nodes: withoutSrcSets(parts.runtime.data.nodes) };
   // Never a door back to the server: prepareStoryParts was given none, and these are dropped by name besides.
   delete island.queryUrl; delete island.mutateUrl; delete island.assetsUrl; delete island.managedAssets;
@@ -344,11 +389,12 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
    * ask its door for (lib/artifacts nameablePeople, for the downloader); the
    * run's own cards stand beside them.
    */
-  const named = Object.keys(held).length ? await nameablePeople(row, actor) : {};
+  const named = Object.keys(held).length ? await timed(timings, 'people', () => nameablePeople(row, actor)) : {};
   const state = ran ? { ...ran.state, ...(Object.keys(named).length ? { people: { ...named, ...ran.state.people } } : {}) } : EMPTY_STATE;
   let renderedCompiled = compiled;
   if (compiled.ssr) {
-    const ssrHtml = (await loadSsrModule(compiled.ssr, undefined, undefined, page.compiled && !isCompileFailure(page.compiled) ? page.compiled.sharedBuild?.ssr : undefined)).render({
+    const ssr = compiled.ssr;
+    const ssrHtml = (await timed(timings, 'ssr', () => loadSsrModule(ssr, undefined, undefined, page.compiled && !isCompileFailure(page.compiled) ? page.compiled.sharedBuild?.ssr : undefined))).render({
       values: state.values, state, results: state, mermaidImages: {}, drawings: {},
     });
     // A fresh per-request render never carries the compiled module's own island
@@ -366,7 +412,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const serverQueries = new Set(Object.entries(placement?.queries ?? {}).filter(([, where]) => where === 'server').map(([name]) => name));
   const importCache: ImportCache = new Map();
   const { variants, frozen } = ran
-    ? await cachedVariants({
+    ? await timed(timings, 'variants', async () => cachedVariants({
       key: await variantsKey(artifact, at?.version ?? artifact.version, row, ran.flow, actor, input.caps, serverQueries),
       compute: () => precomputeVariants({
         flow: ran.flow,
@@ -374,33 +420,33 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
         domains: valueDomains(island.nodes, ran.flow, state, serverQueries),
         queries: serverQueries,
         caps: input.caps,
-        run: async (values, only) => {
-          const result = await dataflowForRow(row, { viewer: actor, values, only, importCache });
-          return { tables: result?.state.tables ?? {}, errors: result?.state.errors ?? {} };
-        },
+        run: (runs) => dataflowRunsForRow(row, { viewer: actor, importCache }, runs),
       }),
-    })
+    }))
     : { variants: [], frozen: [] };
 
   // Comments anchor to the CURRENT document; an older version carries none (as its served render offers none).
-  const threads: AnnotationWire[] = !at && history ? (await listAnnotationsFor(history, artifact.id, { status: 'all' })) ?? [] : [];
+  const threads: AnnotationWire[] = !at && history ? (await timed(timings, 'threads', () => listAnnotationsFor(history, artifact.id, { status: 'all' }))) ?? [] : [];
 
   const imageRefs = new Set(Object.entries(refData).filter(([, r]) => r.kind === 'image').map(([id]) => id));
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);
   const snapshot = { at: new Date().toISOString(), state, held, variants, frozen };
   let inlined: { css: ArtifactFile['css']; island: StoryIslandData; compiled: NonNullable<ArtifactFile['compiled']>; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
+  // Everything the file can draw: the font subsets no character of it reaches are left out (lib/offline/font-faces).
+  const text = [source, row.title ?? '', JSON.stringify(snapshot), JSON.stringify(threads)].join('\n');
+  const css = (sheet: string) => inliner.css(withoutUnusedFaces(sheet, text));
   try {
-    inlined = {
+    inlined = await timed(timings, 'inline', async () => ({
       css: {
-        base: await inliner.css(parts.runtime.baseCss),
-        compiled: compiledCss ? await inliner.css(compiledCss) : null,
-        author: parts.runtime.authorCss ? await inliner.css(parts.runtime.authorCss) : null,
+        base: await css(parts.runtime.baseCss),
+        compiled: compiledCss ? await css(compiledCss) : null,
+        author: parts.runtime.authorCss ? await css(parts.runtime.authorCss) : null,
       },
       island: JSON.parse(await inliner.json(JSON.stringify(island))) as StoryIslandData,
       compiled: JSON.parse(await inliner.json(JSON.stringify(renderedCompiled))) as NonNullable<ArtifactFile['compiled']>,
       snapshot: JSON.parse(await inliner.json(JSON.stringify(snapshot))) as ArtifactFile['snapshot'],
       threads: JSON.parse(await inliner.json(JSON.stringify(threads))) as AnnotationWire[],
-    };
+    }));
   } catch (error) {
     if (error instanceof TooLarge) return tooLarge(error.bytes);
     throw error;

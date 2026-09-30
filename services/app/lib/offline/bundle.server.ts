@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
-import { packCompiledBrowserModule } from './compiled-bundle.server';
+import { loadOfflineHalf, packCompiledBrowserModule } from './compiled-bundle.server';
 import type { ArtifactFile } from './file-format';
 import type { ArtifactFileParts } from './file-html';
 import type { JsxNode } from '@/lib/jsx';
@@ -58,18 +58,37 @@ const packedMemo = new Map<string, Promise<{ compiledCode: string; templates: Re
 
 /**
  * A compiled module packed for file:// and gzipped, remembered per process: it is a pure function of
- * the stored module (content-addressed), the immutable shared build it names and the two engine flags,
- * so every later download of the same version skips the bundle and the level-9 compression.
+ * the stored module (content-addressed), the build's offline half, the pinned manifest an older module
+ * names its chunks by, and the two engine flags, so every later download of the same version skips the
+ * transform and the level-9 compression.
  */
-function packedModule(page: NonNullable<ArtifactFile['compiled']>, sqlite: boolean, chart: boolean) {
-  const key = JSON.stringify([page.module?.sha ?? null, page.module?.imports ?? null, page.sharedBuild?.manifest ?? null, sqlite, chart]);
+async function packedModule(page: NonNullable<ArtifactFile['compiled']>, sqlite: boolean, chart: boolean) {
+  const half = await loadOfflineHalf();
+  const key = JSON.stringify([page.module?.sha ?? null, page.sharedBuild?.manifest ?? null, half.entries, sqlite, chart]);
   let made = packedMemo.get(key);
   if (!made) {
-    made = packCompiledBrowserModule(page, { offline: { sqlite, chart } })
+    made = packCompiledBrowserModule(page, { half, offline: { sqlite, chart } })
       .then((packed) => packed && { compiledCode: gzipSync(packed.code, { level: 9 }).toString('base64'), templates: packed.templates });
     packedMemo.set(key, made);
     if (packedMemo.size > PACKED_KEPT) packedMemo.delete(packedMemo.keys().next().value!);
     made.catch(() => { if (packedMemo.get(key) === made) packedMemo.delete(key); });
+  }
+  return made;
+}
+
+const wasmMemo = new Map<string, Promise<string | undefined>>();
+
+/**
+ * The build's SQLite engine as a file carries it: gzip then base64 (less than half the bytes of the
+ * raw wasm), read and compressed once per process per content-addressed name.
+ */
+function packedWasm(name: string): Promise<string | undefined> {
+  let made = wasmMemo.get(name);
+  if (!made) {
+    made = readFile(path.join(process.cwd(), 'public', 'islands', name)).catch(() => retainedIslandFile(name))
+      .then((bytes) => (bytes ? gzipSync(bytes, { level: 9 }).toString('base64') : undefined));
+    wasmMemo.set(name, made);
+    made.catch(() => { if (wasmMemo.get(name) === made) wasmMemo.delete(name); });
   }
   return made;
 }
@@ -91,7 +110,7 @@ export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFile
   const wasmUrl = file.compiled.sharedBuild?.sqliteWasm;
   const wasmName = /^\/islands\/(sqlite3-[0-9a-f]{16}\.wasm)$/.exec(wasmUrl ?? '')?.[1];
   if (sqlite && !wasmName) throw new Error('offline: the compiled build has no SQLite engine');
-  const wasm = wasmName && sqlite ? (await readFile(path.join(process.cwd(), 'public', 'islands', wasmName)).catch(() => retainedIslandFile(wasmName)))?.toString('base64') : undefined;
+  const wasm = wasmName && sqlite ? await packedWasm(wasmName) : undefined;
   return { file, code, ...(packed ? { compiledCode: packed.compiledCode, templates: packed.templates } : {}),
     ...(wasm ? { wasm } : {}) };
 }

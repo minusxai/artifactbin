@@ -12,10 +12,10 @@ import { createSnapshotTransport } from './snapshot-transport';
 import { snapshotStateFor, unranQueriesOf } from './snapshot-current';
 import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, sourceDigest, type ArtifactFile } from './file-format';
 
-declare const __AFBIN_OFFLINE_SQLITE__: boolean;
-declare const __AFBIN_OFFLINE_CHART__: boolean;
 declare global {
   interface Window {
+    /** Which engines the download packed beside this boot (lib/offline/compiled-bundle.server); set before it runs. */
+    __mxOfflineFlags?: { sqlite?: boolean; chart?: boolean };
     __afbinOfflineFile?: ArtifactFile;
     __afbinOfflineStore?: ReturnType<typeof createDataflowStore> | null;
     __afbinOfflineDispose?: () => void;
@@ -140,7 +140,8 @@ export function boot(input: OfflineIslandModule | { TREE: Component; FLOW?: Comp
   const holds = file.island.dataflow?.hold ?? [];
   const staleFlow = (!!file.compiledFlowDigest && file.compiledFlowDigest !== sourceDigest(JSON.stringify(file.island.dataflow?.flow ?? null)))
     || unranQueriesOf(file).size > 0;
-  const page = __AFBIN_OFFLINE_SQLITE__ && flow && holds.length && transport
+  const flags = window.__mxOfflineFlags ?? {};
+  const page = flags.sqlite && flow && holds.length && transport
     ? { engine: lazyEngine(() => import('./compiled-sqlite').then(({ offlinePageEngine }) => offlinePageEngine(transport.hold))), userId: null }
     : null;
   const runtime = createIslandRuntime({
@@ -150,7 +151,7 @@ export function boot(input: OfflineIslandModule | { TREE: Component; FLOW?: Comp
     transport, page, writesUnavailable: OFFLINE_MUTATION_REASON,
     frozenValues: Object.fromEntries(file.snapshot.frozen.map((name) => [name, OFFLINE_FILTER_REASON])),
   }), {
-    ...(__AFBIN_OFFLINE_CHART__ ? { loadChart: () => import('@/lib/islands/chart').then(({ loadChart }) => loadChart()) } : {}),
+    ...(flags.chart ? { loadChart: () => import('@/lib/islands/chart').then(({ loadChart }) => loadChart()) } : {}),
   });
   const frozen = new Set(file.snapshot.frozen);
   const setValue = runtime.context.setValue;

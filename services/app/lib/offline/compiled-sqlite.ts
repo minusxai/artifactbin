@@ -9,5 +9,11 @@ export function offlinePageEngine(hold: (name: string) => Promise<ImportTables[s
   const raw = atob(encoded);
   const bytes = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return createPageEngine({ load: sqliteFrom(bytes), fetch: hold });
+  return createPageEngine({ load: () => wasmBytes(bytes).then((wasm) => sqliteFrom(wasm)()), fetch: hold });
+}
+
+/** A file carries its wasm gzipped (a file saved before that carries it raw): either way, the wasm. */
+async function wasmBytes(bytes: Uint8Array): Promise<Uint8Array> {
+  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
+  return new Uint8Array(await new Response(new Response(bytes as Uint8Array<ArrayBuffer>).body!.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
 }

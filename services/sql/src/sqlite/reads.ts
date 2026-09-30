@@ -7,7 +7,7 @@
  * query is a `QueryFailure` for that query alone; its dependents then fail on
  * the missing table, which is the honest report.
  */
-import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type Scalar } from '@artifactbin/contracts';
+import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type RunManyInput, type Scalar } from '@artifactbin/contracts';
 import { DEFAULT_CAPS } from '../caps';
 import { pagedQuery } from '../paging';
 import { Refused, SqliteDatabase, TimedOut, type Prepared, type TableData } from './database';
@@ -24,6 +24,28 @@ export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds
     return readAll(db, input, bounds, () => {
       for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, ...t });
     });
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * RunManyInput over ONE throwaway database: the imports loaded once, `shared` run once with every
+ * result kept whole, then each run in a scratch transaction — its own tables and results are gone
+ * when it returns, exactly as in a throwaway run. `bounds` are each run's own (index -1: `shared`),
+ * already clamped.
+ */
+export function runManyQueries(sqlite3: Sqlite3, input: RunManyInput, bounds: (run: RunManyInput['runs'][number], index: number) => ReadBounds): Array<Record<string, QueryOutcome>> {
+  const db = new SqliteDatabase(sqlite3);
+  try {
+    let shared: Record<string, QueryOutcome> = {};
+    try {
+      for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, ...t });
+    } catch (error) {
+      return input.runs.map((run) => failedAll({ ...run, queries: [...(input.shared?.queries ?? []), ...run.queries] }, error));
+    }
+    if (input.shared) shared = readAll(db, input.shared, bounds(input.shared, -1), () => {}, true);
+    return input.runs.map((run, i) => ({ ...shared, ...db.scratch(() => readAll(db, run, bounds(run, i), () => {})) }));
   } finally {
     db.close();
   }
@@ -74,8 +96,8 @@ export function heldDatabase(sqlite3: Sqlite3, schemas: readonly string[]): Held
 const failedAll = (input: RunInput, error: unknown): Record<string, QueryOutcome> =>
   Object.fromEntries(input.queries.map((q) => [q.name, { error: message(error) }]));
 
-/** Every query of `input`, in order, over `db`; `loadImports` puts the imports in place. */
-function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadImports: () => void): Record<string, QueryOutcome> {
+/** Every query of `input`, in order, over `db`; `loadImports` puts the imports in place. `keepAll` loads even the last result whole. */
+function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadImports: () => void, keepAll = false): Record<string, QueryOutcome> {
   const out: Record<string, QueryOutcome> = {};
   const types = input.paramTypes ?? input.catalog?.paramTypes ?? {};
   try {
@@ -88,7 +110,7 @@ function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadIm
       const page = input.page?.name === query.name ? input.page : null;
       // A query a later one may read is materialised WHOLE: the cap is what
       // travels, never what a downstream query sees. The last cannot be read.
-      const whole = !page && !input.catalog && i < input.queries.length - 1;
+      const whole = !page && !input.catalog && (keepAll || i < input.queries.length - 1);
       const read = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, bounds.timeoutMs, whole);
       if (isQueryFailure(read)) { out[query.name] = read; continue; }
       const { all, ...result } = read;

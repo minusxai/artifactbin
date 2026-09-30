@@ -32,6 +32,15 @@ export function sqlClient(url: string, opts: { deadlineMs?: number; serviceSecre
       try { return (await client.post<{ results: Record<string, QueryOutcome> }>(SQL_ROUTES.run, input)).results; }
       catch (e) { return Object.fromEntries(input.queries.map((q) => [q.name, failure(e)])); }
     },
+    async runMany(input) {
+      try { return (await client.post<{ results: Array<Record<string, QueryOutcome>> }>(SQL_ROUTES.runMany, input)).results; }
+      // A service without the route (an older one, mid-rollout) or a failed call: the same runs one at a
+      // time, each answering for itself (a down service fails every query, as `run` does).
+      catch {
+        return Promise.all(input.runs.map((run) => this.run({ ...run, ...(input.imports ? { imports: input.imports } : {}),
+          ...(input.shared ? { tables: { ...input.shared.tables, ...run.tables }, queries: [...input.shared.queries, ...run.queries], params: { ...input.shared.params, ...run.params }, paramTypes: { ...input.shared.paramTypes, ...run.paramTypes } } : {}) })));
+      }
+    },
     async mutate(input) {
       try { return (await client.post<{ result: MutationOutcome }>(SQL_ROUTES.mutate, input)).result; }
       catch (e) { return failure(e); }

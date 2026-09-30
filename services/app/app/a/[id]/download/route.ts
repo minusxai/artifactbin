@@ -7,7 +7,7 @@
 import { requestOrSessionActor } from '@/lib/viewer';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
-import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES } from '@/lib/offline/assemble.server';
+import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES, serverTiming, timed, type PhaseTimings } from '@/lib/offline/assemble.server';
 import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 
@@ -20,7 +20,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const actor = await requestOrSessionActor(request);
   const asked = new URL(request.url).searchParams.get('version');
   const version = asked && /^\d+$/.test(asked) ? Number(asked) : undefined;
+  const timings: PhaseTimings = new Map();
   const file = await assembleArtifactFile({
+    timings,
     id,
     actor: { ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId },
     origin: baseUrl(request),
@@ -30,7 +32,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (file.refused === 'too_large') return json({ error: 'too_large', message: file.message }, 413);
     return json({ error: 'not_found' }, 404);
   }
-  const html = renderArtifactFileHtml(await offlineFileParts(file));
+  const parts = await timed(timings, 'pack', () => offlineFileParts(file));
+  const html = await timed(timings, 'html', async () => renderArtifactFileHtml(parts));
   if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({
     error: 'too_large',
     message: 'This document is too large to download for offline use. Remove large images or open it online.',
@@ -42,6 +45,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       'Content-Disposition': `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
       'Cache-Control': 'private, no-store',
       'X-Content-Type-Options': 'nosniff',
+      // Where the assembly's time went, per phase (no document content, no identity).
+      'Server-Timing': serverTiming(timings),
     },
   });
 }
