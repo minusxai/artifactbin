@@ -235,7 +235,10 @@ function queueUpgrade(row: ArtifactRow, page: PreparedPage, at: ArchivedRender |
   const key = `${row.id}\u0000${at ? `v:${at.version}` : 'head'}\u0000${row.version}`;
   if (upgrades.has(key) || upgrading.has(key) || upgrades.size >= UPGRADES_QUEUED) return;
   upgrades.set(key, () => recompilePage(row, at, page));
-  while (upgradeRuns.length < UPGRADES_AT_ONCE) {
+  runUpgrades();
+}
+function runUpgrades(): void {
+  while (upgradeRuns.length < UPGRADES_AT_ONCE && upgrades.size) {
     const run: Promise<void> = (async () => {
       for (let next = upgrades.entries().next(); !next.done; next = upgrades.entries().next()) {
         const [id, job] = next.value;
@@ -244,7 +247,11 @@ function queueUpgrade(row: ArtifactRow, page: PreparedPage, at: ArchivedRender |
         try { await job(); } catch (error) { console.warn('[compiled-page] background recompile failed', id, error); }
         finally { upgrading.delete(id); }
       }
-    })().finally(() => { upgradeRuns = upgradeRuns.filter((r) => r !== run); });
+    })().finally(() => {
+      upgradeRuns = upgradeRuns.filter((r) => r !== run);
+      // A page queued between the loop's last look and here would otherwise wait for the next old read.
+      runUpgrades();
+    });
     upgradeRuns.push(run);
   }
 }
