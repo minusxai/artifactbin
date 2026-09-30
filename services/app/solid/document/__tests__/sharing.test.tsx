@@ -11,27 +11,27 @@ it('opens the owner sharing dialog and changes link visibility through the scope
   const state = { visibility: 'unlisted', linkRole: 'viewer', shares: [], canPrivate: true };
   const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => Response.json(init?.method === 'PUT' ? { ...state, visibility: 'public' } : state));
   vi.stubGlobal('fetch', fetcher);
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByRole('dialog', { name: 'Sharing' })).toHaveTextContent('anyone with the link'));
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
-  await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/my/artifacts/abc/sharing', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ visibility: 'public' }) })));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/my/artifacts/abc123/sharing', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ visibility: 'public' }) })));
 });
 
 it('copies a clean reader link without loading ACLs', async () => {
   const copy = vi.fn(async () => {});
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
   const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner={false} url="/a/abc?version=1#edit" />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner={false} url="/a/abc123?version=1#edit" />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  expect(copy).toHaveBeenCalledWith(`${location.origin}/a/abc`);
+  expect(copy).toHaveBeenCalledWith(`${location.origin}/a/abc123`);
   expect(fetcher).not.toHaveBeenCalled();
 });
 
 it('keeps the owner verdict current and closes with Escape', async () => {
   const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
   vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => Response.json(init?.method === 'PUT' ? { ...state, visibility: 'public' } : state)));
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   await waitFor(() => expect(view.getByRole('button', { name: 'Share' })).toHaveTextContent('private'));
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
@@ -49,7 +49,7 @@ it('invites an email, changes its role, and removes it under public visibility',
     }
     return Response.json(state);
   }));
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
   expect(screen.getByRole('button', { name: 'Make public' })).toHaveClass('bg-accent-soft');
@@ -79,7 +79,7 @@ it('offers view, comment and edit link roles and sends only the changed link rol
     }
     return Response.json(state);
   }));
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   const trigger = await waitFor(() => screen.getByRole('button', { name: 'Link role' }));
   expect(trigger.tagName).toBe('BUTTON');
@@ -96,7 +96,7 @@ it('hides the link role while private and restores the saved choice on return', 
     if (init?.method === 'PUT') Object.assign(state, JSON.parse(String(init.body)));
     return Response.json(state);
   }));
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Make unlisted' })).toBeTruthy());
   expect(screen.queryByRole('button', { name: 'Link role' })).toBeNull();
@@ -106,7 +106,7 @@ it('hides the link role while private and restores the saved choice on return', 
 
 it('does not offer private visibility to an anonymous owner', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ visibility: 'unlisted', linkRole: 'viewer', shares: [], canPrivate: false })));
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Make public' })).toBeTruthy());
   expect(screen.queryByRole('button', { name: 'Make private' })).toBeNull();
@@ -114,13 +114,13 @@ it('does not offer private visibility to an anonymous owner', async () => {
 
 it('offers social preview to an editor without sharing controls and keeps the editor reachable on image failure', () => {
   const edit = vi.fn(); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
-  const view = render(() => <DocumentSharing id="abc" title="Report" owner={false} onSocialPreview={edit} version={3} />);
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner={false} onSocialPreview={edit} version={3} />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Make public' })).toBeNull();
   expect(fetcher).not.toHaveBeenCalled();
   const image = screen.getByAltText('Current social preview');
-  expect(image.getAttribute('src')).toContain('/a/abc/export?format=jpg&mode=card&v=3&');
+  expect(image.getAttribute('src')).toContain('/a/abc123/export?format=jpg&mode=card&v=3&');
   fireEvent.error(image);
   expect(screen.getByText('Preview unavailable')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Edit social preview' }));
@@ -134,7 +134,7 @@ it('refreshes the social thumbnail and loading state when the saved document ver
   const view = render(() => {
     const [version, setVersion] = createSignal(3);
     changeVersion = setVersion;
-    return <DocumentSharing id="abc" title="Report" owner={false} onSocialPreview={() => {}} version={version()} />;
+    return <DocumentSharing id="abc123" title="Report" owner={false} onSocialPreview={() => {}} version={version()} />;
   });
   expect(view.queryByAltText('Current social preview')).toBeNull();
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
