@@ -227,19 +227,17 @@ if (compiledReader) {
 const popover = await publish({ markup: '<h1 className="text-3xl">Popover</h1><p>Some text above.</p><div className="flex justify-end pt-24"><Popover><PopoverTrigger>Open popover</PopoverTrigger><PopoverContent>Popover body</PopoverContent></Popover></div><p className="pt-24">Text below.</p>', title: 'Popover placement' });
 for (const viewport of [{ width: 1200, height: 800 }, { width: 390, height: 800 }]) {
   const popPage = await browser.newPage({ viewport });
-  const popLog = []; popPage.on('console', m => popLog.push(m.text().slice(0, 200))); popPage.on('pageerror', e => popLog.push(String(e).slice(0, 200)));
   await popPage.goto(readerUrl(`${BASE}/a/${popover.id}`));
   await popPage.waitForSelector('[data-mx-inline-story] h1', { timeout: 20000 });
   await popPage.waitForTimeout(1500);
   await popPage.getByRole('button', { name: 'Open popover' }).click();
-  await popPage.waitForFunction(() => /px/.test(document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''), null, { timeout: 10000 }).catch(() => {});
+  await popPage.waitForFunction(() => { const transform = document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''; return transform !== '' && !transform.includes('%'); }, null, { timeout: 10000 }).catch(() => {}); // an unplaced popover fails the position checks below
   const box = await popPage.evaluate(() => {
     const t = document.querySelector('[data-slot="popover-trigger"]')?.getBoundingClientRect();
     const c = document.querySelector('[data-slot="popover-content"]')?.getBoundingClientRect();
     return t && c ? { t: { l: t.left, r: t.right, b: t.bottom, w: t.width }, c: { l: c.left, r: c.right, t: c.top, w: c.width }, inStory: !!document.querySelector('[data-mx-inline-story] [data-slot="popover-content"]') } : null;
   });
   const tag = `${viewport.width}px`;
-  console.log(`   ${tag} popover debug: ${await popPage.evaluate(() => document.querySelector('[data-radix-popper-content-wrapper]')?.outerHTML.slice(0, 200))} | log: ${popLog.join(' ; ')}`);
   check(!!box, `${tag}: the popover opened`);
   if (box) {
     check(Math.abs(box.c.t - (box.t.b + 4)) <= 2, `${tag}: popover sits just under its trigger (content top ${box.c.t}, trigger bottom ${box.t.b})`);
