@@ -1,13 +1,13 @@
 /* @jsxImportSource solid-js */
 /** Solid owns the entire Trash route. Other destinations load their React document. */
-import { createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { useLocation } from '@solidjs/router';
 import { SessionProvider } from './web/session';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
 import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './web/notifications';
-import { initialDocumentStory } from '@/web/initial-story';
+import { clearInitialStoryOnRoute, initialDocumentStory } from '@/web/initial-story';
 
 const TrashPage = lazy(() => import('./pages/Trash').then((m) => ({ default: m.TrashPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFoundPage })));
@@ -34,8 +34,11 @@ function PendingPage(): JSX.Element {
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
   const servedDocument = !!initialDocumentStory();
-  const documentRoute = () => servedDocument && (/^\/a\/[^/]+\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+\/?$/.test(location.pathname));
+  const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/edit)?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
+  // Leaving the served document (a link, the onboarding redirect) takes its story and chrome off the page
+  // and shows the app's root, which the served page kept hidden.
+  createEffect(() => clearInitialStoryOnRoute(location.pathname));
   return (
     <SessionProvider>
     <InboxProvider>
@@ -56,6 +59,11 @@ function ArtifactRoute(): JSX.Element {
   return initialDocumentStory() ? <DocumentPage /> : <FolderRoute />;
 }
 
+/** `/a/<id>/edit`: a served document opens in edit mode; a dataset's address is its editor. */
+function ArtifactEditRoute(): JSX.Element {
+  return initialDocumentStory() ? <DocumentPage /> : <DatasetEditorPage />;
+}
+
 export function App(): JSX.Element {
   return (
     <Router root={Root}>
@@ -65,7 +73,7 @@ export function App(): JSX.Element {
       <Route path="/assets" component={AssetsPage} />
       <Route path="/datasets/new" component={DatasetEditorPage} />
       <Route path="/files/new" component={FileUploadPage} />
-      <Route path="/a/:id/edit" component={DatasetEditorPage} />
+      <Route path="/a/:id/edit" component={ArtifactEditRoute} />
       <Route path="/chat" component={ChatPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/start" component={StartPage} />

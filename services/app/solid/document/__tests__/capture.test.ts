@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createRoot } from 'solid-js';
+import { createRoot, createSignal } from 'solid-js';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createCommentCapture } from '../CommentCapture';
 
@@ -28,5 +28,19 @@ it('stages a captured image with the captured edit revision and reuses the stage
   expect(upload).toHaveBeenCalledTimes(1);
   const form = upload.mock.calls[0]?.[0] as FormData;
   expect(JSON.parse(String(form.get('metadata')))).toMatchObject({ capturedEditId: 'edit-1', rect: { x: 1, y: 2, width: 40, height: 30 } });
+  dispose();
+});
+
+it('fails a capture as moved geometry when the document revision changes while it is in flight', async () => {
+  const backend = { unavailable: vi.fn(() => null), uploadCommentImage: vi.fn() } as unknown as ArtifactBackend;
+  let dispose!: () => void;
+  const [editId, setEditId] = createSignal<string | undefined>('edit-1');
+  const capture = createRoot(rootDispose => { dispose = rootDispose; return createCommentCapture(backend, editId); });
+  await capture.start();
+  const pending = capture.capture({ x: 1, y: 2, width: 40, height: 30 });
+  setEditId('edit-2');
+  await pending;
+  expect(capture.draft()).toBeNull();
+  expect(capture.error()).toBe('The page moved during capture. Retake the screenshot.');
   dispose();
 });

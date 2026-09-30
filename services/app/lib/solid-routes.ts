@@ -1,8 +1,13 @@
 import type { ArtifactRole } from './share-roles';
 
-/** The document shell changes for view-only readers. Commenters still need the annotation layer. */
+/**
+ * Every admitted role reads a markup document from Solid (solid/pages/Document): the page adopts the
+ * compiled story and establishes its controller (solid/document/create-island-story), so comments,
+ * the selection bubble, `window.mx` edits and in-place editing all reach it. A capture keeps its own
+ * path.
+ */
 export function solidDocumentReader(role: ArtifactRole, format: string, capture: boolean): boolean {
-  return !capture && format === 'markup' && role === 'viewer';
+  return !capture && format === 'markup' && role !== 'none';
 }
 
 /**

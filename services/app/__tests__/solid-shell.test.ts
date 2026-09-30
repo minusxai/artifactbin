@@ -31,9 +31,10 @@ it('serves the Solid entry for ported routes, while React owns other URLs', asyn
   expect(isSolidPage('/@cee/doc01-my-doc', 200, 'markup')).toBe(false);
   expect(isSolidPage('/@cee/doc01-my-doc/edit', 200, 'markup')).toBe(false);
   expect(solidDocumentReader('viewer', 'markup', false)).toBe(true);
-  expect(solidDocumentReader('commenter', 'markup', false)).toBe(false);
-  expect(solidDocumentReader('editor', 'markup', false)).toBe(false);
-  expect(solidDocumentReader('owner', 'markup', false)).toBe(false);
+  expect(solidDocumentReader('commenter', 'markup', false)).toBe(true);
+  expect(solidDocumentReader('editor', 'markup', false)).toBe(true);
+  expect(solidDocumentReader('owner', 'markup', false)).toBe(true);
+  expect(solidDocumentReader('none', 'markup', false)).toBe(false);
   expect(solidDocumentReader('viewer', 'folder', false)).toBe(false);
   expect(solidDocumentReader('viewer', 'markup', true)).toBe(false);
   expect(isSolidPage('/missing', 404)).toBe(true);

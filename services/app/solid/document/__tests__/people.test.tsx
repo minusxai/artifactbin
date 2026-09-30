@@ -23,7 +23,9 @@ it('offers explicit access sharing and unrestricted invitation lookup', async ()
   vi.stubGlobal('fetch', fetcher);
   const view = render(() => <DocumentPeople id="abc123" />);
   fireEvent.click(view.getByRole('button', { name: 'People' }));
-  fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Invite @alex' })));
+  fireEvent.focus(await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' })));
+  fireEvent.click(await waitFor(() => screen.getByRole('option', { name: /@alex/ })));
+  expect(screen.getByRole('button', { name: 'Remove @alex' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('checkbox', { name: 'Include viewing access' }));
   fireEvent.click(screen.getByRole('button', { name: 'Invite 1 people' }));
   await waitFor(() => expect(fetcher.mock.calls.some(([, init]) => init?.body === JSON.stringify({ action: 'invite', usernames: ['@alex'], includeAccess: true }))).toBe(true));
@@ -45,7 +47,7 @@ it('opens a pending invitation and permits an accepted member to explicitly join
   });
   vi.stubGlobal('fetch', fetcher);
   render(() => <DocumentPeople id="abc123" initialOpen />);
-  fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Join artefact' })));
+  fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Join artifact' })));
   await waitFor(() => expect(screen.getByText('You’re a member')).toBeTruthy());
-  expect(screen.queryByRole('button', { name: 'Join artefact' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Join artifact' })).toBeNull();
 });

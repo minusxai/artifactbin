@@ -214,8 +214,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   // paths; document reader views use the prepared compiled page (§10).
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
 
-  const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc
-    && !new URL(request.url).pathname.endsWith('/edit');
+  // `/edit` is edit mode on the same compiled page (solid/pages/Document); the page door admitted an editor.
+  const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc;
 
 
   const meta = (row.meta ?? {}) as {
@@ -377,7 +377,16 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   };
 }
 
-/** The JSON door (app/api/page/artifact/[id]). */
+/**
+ * The JSON door (app/api/page/artifact/[id]).
+ *
+ * Every role reads a markup document from the compiled page the HTML door serves (solid/pages/Document
+ * adopts it); nothing renders a document from this answer any more. A client-side link to a document
+ * reads it only to learn that the address is a document (solid/pages/Folder `replaceDocument`), the
+ * writer's editor reads `?part=editor`, and a dataset reader re-reads its catalog. So this door keeps
+ * the non-compiled payload (`servedFor(true)`: the runtime and its first results), which those callers
+ * and served-results.test.ts / prepared-page.test.ts depend on, and never names an app entry.
+ */
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
   return answer.status === 200 ? json(answer.body, 200, { 'Cache-Control': 'no-store' }) : json(answer.body, answer.status);
