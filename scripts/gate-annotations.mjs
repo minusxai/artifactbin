@@ -831,11 +831,9 @@ async function pickLeg(browser) {
   check(wire?.annotations?.[0]?.snippet === 'An intro paragraph of ordinary prose.' && !wire?.annotations?.[0]?.quote,
     'the wire carries the whole block and no quote — a pick has no words');
 
-  // A second pick — explicit this time, the tool is still the way in — stood
-  // down by escape: the outline goes with it.
-  await tool.click();
+  // Saving restores Select for the next comment; Escape explicitly stands it down.
   await page.locator('[aria-label="Select tool active"]').waitFor();
-  check(await tool.getAttribute('aria-pressed') === 'true', 'the tool starts a pick again after the first ended');
+  check(await tool.getAttribute('aria-pressed') === 'true', 'saving restores Select for the next comment');
   await frame.locator('#figure').hover();
   await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
   await page.keyboard.press('Escape');

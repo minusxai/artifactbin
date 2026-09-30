@@ -57,11 +57,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let mutation = { signature: '', key: '' };
   const [folds, setFolds] = createSignal(readFolds(props.id));
   const [pick, setPick] = createSignal<'block' | 'area' | null>(props.pickRequested ? 'block' : null);
-  let resumeSelectOnCancel = false;
+  let resumeSelectAfterCompose = false;
   let lastRailOpen = false;
   let openedForThread = false;
   let sheetAwayForPick = false;
-  const endPick = () => { resumeSelectOnCancel = false; setPick(null); capture.reset(); sheetAwayForPick = false; };
+  const endPick = () => { resumeSelectAfterCompose = false; setPick(null); capture.reset(); sheetAwayForPick = false; };
   const beginPick = (mode: 'block' | 'area') => {
     if (mode === 'block') capture.reset();
     setPick(mode); setOpenId(null);
@@ -88,7 +88,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   createEffect(() => {
     const railOpen = props.railOpen;
     const canPick = props.pickOnOpen !== false;
-    if (!canPick) { resumeSelectOnCancel = false; setPick(null); capture.reset(); sheetAwayForPick = false; }
+    if (!canPick) { resumeSelectAfterCompose = false; setPick(null); capture.reset(); sheetAwayForPick = false; }
     else if (railOpen && !lastRailOpen && !selection() && !openId() && !openedForThread && !props.railSheet) {
       setPick('block');
     }
@@ -146,7 +146,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
   createEffect(() => {
     if (!props.initialSelection) return;
-    resumeSelectOnCancel = untrack(pick) === 'block';
+    resumeSelectAfterCompose = untrack(pick) === 'block';
     capture.reset();
     setPick(null);
     setSelection(props.initialSelection);
@@ -190,7 +190,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         if (event.data.type === STORY_SELECTION_ACTION_MESSAGE && event.data.action === 'select' && props.pickOnOpen !== false) beginPick('block');
         if (event.data.type === STORY_SELECTION_MESSAGE && pick()) {
           const screenshot = pick() === 'area';
-          resumeSelectOnCancel = Boolean(event.data.selection) && pick() === 'block';
+          resumeSelectAfterCompose = Boolean(event.data.selection) && pick() === 'block';
           setPick(null);
           if (event.data.selection) {
             setSelection(event.data.selection); setOpenId(null);
@@ -249,7 +249,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}), ...(attachmentId ? { attachment_id: attachmentId, edit_id: capture.draft()!.editId } : {}) }, mutation.key);
       setItems(previous => [...previous.filter(item => item.id !== row.id), row]);
       setDraft(''); setSelection(null); capture.reset(); props.onSelectionConsumed?.(); setOpenId(row.id); setJustOpenedId(row.id);
-      sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
+      if (resumeSelectAfterCompose) { resumeSelectAfterCompose = false; setPick('block'); }
+      else sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
     } catch (cause) {
       if (cause instanceof BackendRequestError && cause.signInRequired) location.assign(loginHref(location, 'comment'));
       else setError(cause instanceof Error ? cause.message : 'Could not save the comment. Your draft is still here.');
@@ -311,7 +312,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const composerPosition = createMemo(() => selection() ? positionedComposer(selection()!, frameArea(), innerWidth, innerHeight, capture.required()) : null);
   const cancelComposer = () => {
     setSelection(null); setDraft(''); capture.reset(); setError(''); props.onSelectionConsumed?.();
-    if (resumeSelectOnCancel) { resumeSelectOnCancel = false; beginPick('block'); }
+    if (resumeSelectAfterCompose) { resumeSelectAfterCompose = false; beginPick('block'); }
     else sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
   };
   const floatingRows = createMemo(() => [...items(), ...Object.values(recentResolved()).filter(value => value.remaining > 0 && !items().some(row => row.id === value.row.id)).map(value => value.row)]);

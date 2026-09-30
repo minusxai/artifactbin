@@ -35,7 +35,7 @@ function mount(options: { railOpen?: boolean; pickOnOpen?: boolean; railSheet?: 
 }
 afterEach(() => vi.restoreAllMocks());
 
-it('selects a node and posts without requesting sharing or requiring a screenshot', async () => {
+it.each(['button', 'keyboard'])('posts by %s and resumes Select without requesting sharing', async (submit) => {
   const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
   const service = backend();
   const { view, frame } = mount({ editId: 'edit-current', backend: service });
@@ -47,8 +47,15 @@ it('selects a node and posts without requesting sharing or requiring a screensho
   expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
   expect(view.queryByLabelText('Upload screenshot')).toBeNull();
   expect(beginCapture).not.toHaveBeenCalled();
-  fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
+  if (submit === 'keyboard') fireEvent.keyDown(view.getByRole('textbox', { name: 'New comment' }), { key: 'Enter', ctrlKey: true });
+  else fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
   await waitFor(() => expect(service.createAnnotation).toHaveBeenCalledWith({ path: '2.1', node_id: 'node-2-1', body: 'Node comment' }, expect.any(String)));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true'));
+  expect(frame.last()).toMatchObject({ pick: 'block', selectedPath: null });
+  expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+  frame.emit('mx:selection', { selection: { ...selected, path: '2.2', nodeId: 'node-2-2' } });
+  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('');
+  expect(beginCapture).not.toHaveBeenCalled();
 });
 
 it('requests sharing from Screenshot and captures an area', async () => {

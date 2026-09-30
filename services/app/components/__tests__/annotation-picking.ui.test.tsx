@@ -37,7 +37,7 @@ describe('picking a block from the rail', () => {
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
   const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
 
-  it('selects a node and posts without requesting screen sharing or requiring a screenshot', async () => {
+  it.each(['button', 'keyboard'])('posts by %s and resumes Select without requesting screen sharing', async (submit) => {
     const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
     const {frame,contentWindow}=makeFrame();
     render(layer(frame,{railOpen:true,editId:'edit-current'}));
@@ -50,9 +50,16 @@ describe('picking a block from the rail', () => {
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
     expect(screen.queryByLabelText('Upload screenshot')).toBeNull();
     expect(beginCapture).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
+    if (submit === 'keyboard') fireEvent.keyDown(screen.getByLabelText('Annotation comment'), { key: 'Enter', ctrlKey: true });
+    else fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
     const create = fetchCalls.find(call => call.url.endsWith('/annotations') && call.init?.method === 'POST');
     expect(JSON.parse(String(create!.init!.body))).not.toHaveProperty('attachment_id');
+    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+    await fromFrame(contentWindow,{type:STORY_SELECTION_MESSAGE,nonce:NONCE,selection:{...PICKED,path:'2.2',nodeId:'node-2-2'}});
+    expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
+    expect(beginCapture).not.toHaveBeenCalled();
   });
 
   it('requests sharing only from Screenshot, then captures the selected area', async () => {

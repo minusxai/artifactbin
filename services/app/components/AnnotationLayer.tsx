@@ -963,8 +963,8 @@ export default function AnnotationLayer({
    * right now, like a fold or the theme.
    */
   const [pick, setPick] = useState<'block' | 'area' | null>(null);
-  // Picking is suspended while its composer is open; cancelling the draft resumes it.
-  const resumeSelectOnCancel = useRef(false);
+  // Picking is suspended while its composer is open; finishing the draft resumes it.
+  const resumeSelectAfterCompose = useRef(false);
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
       is the whole document covered, with a strip too narrow to read. */
   const phoneRail = useIsPhoneViewport();
@@ -1147,14 +1147,14 @@ export default function AnnotationLayer({
     if (pickingRef.current || !composingRef.current) captureRef.current.reset();
     setPick(null);
   }, [railOpen, pickOnOpen, phoneRail]);
-  useEffect(() => { if (!pickOnOpen) {resumeSelectOnCancel.current = false;setPick(null);captureRef.current.reset();} }, [pickOnOpen]);
+  useEffect(() => { if (!pickOnOpen) {resumeSelectAfterCompose.current = false;setPick(null);captureRef.current.reset();} }, [pickOnOpen]);
 
   // A selection handed down by the page — the view-mode bubble's Comment, or
   // the editor toolbar's — opens the composer on those exact words, so nobody
   // has to click the same text twice.
   useEffect(() => {
     if (!initialSelection) return;
-    resumeSelectOnCancel.current = pickingRef.current === 'block';
+    resumeSelectAfterCompose.current = pickingRef.current === 'block';
     captureRef.current.reset();
     setSelection(initialSelection);
     setOpenId(null);
@@ -1245,7 +1245,7 @@ export default function AnnotationLayer({
          * through to the composing branch, which would read a null as "close".
          */
         const picked = event.data.selection;
-        resumeSelectOnCancel.current = Boolean(picked) && pickingRef.current === 'block';
+        resumeSelectAfterCompose.current = Boolean(picked) && pickingRef.current === 'block';
         setPick(null);
         if (picked) {
           setSelection(picked);
@@ -1369,7 +1369,10 @@ export default function AnnotationLayer({
       setPreviewing(false);
       setOpenId(wire.id);
       setJustOpenedId(wire.id);
-      postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
+      if (resumeSelectAfterCompose.current) {
+        resumeSelectAfterCompose.current = false;
+        setPick('block');
+      } else postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
     } catch(error){setFailure(error instanceof Error?error.message:'Could not save the comment. Your draft is still here.');} finally { setBusy(false); }
   }, [backend, selection, draft, postToFrame,capture]);
 
@@ -1379,8 +1382,8 @@ export default function AnnotationLayer({
     setDraft('');
     setPreviewing(false);
     setFailure(null);
-    if (resumeSelectOnCancel.current) {
-      resumeSelectOnCancel.current = false;
+    if (resumeSelectAfterCompose.current) {
+      resumeSelectAfterCompose.current = false;
       // The next annotation state clears the old target without a null-selection echo cancelling the new pick.
       startPickRef.current();
     } else postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
@@ -1461,7 +1464,7 @@ export default function AnnotationLayer({
   // A Select pressed while this code was downloading is started once, on arrival.
   const pickRequestedOnMount=useRef(pickRequested);
   useEffect(()=>{ if(pickRequestedOnMount.current&&pickOnOpen)startPickRef.current(); },[]); // eslint-disable-line react-hooks/exhaustive-deps
-  const endPick = () => {resumeSelectOnCancel.current = false;capture.reset();setPick(null);};
+  const endPick = () => {resumeSelectAfterCompose.current = false;capture.reset();setPick(null);};
   const toggleSelect = () => pick === 'block' ? endPick() : beginPick('block');
   const screenshotUnavailable = imagesUnavailable ?? (!editId ? 'Screenshots need a saved document.' : null);
 

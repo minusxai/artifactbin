@@ -51,6 +51,9 @@ try {
     await page.getByLabel('Annotation comment',{exact:true}).fill(body);
     await page.getByRole('button',{name:'Save annotation',exact:true}).click();
     await page.getByLabel('Annotation composer',{exact:true}).waitFor({state:'hidden'});
+    // Leave the resumed tool before testing ordinary document interactions.
+    const cancelPick=page.getByRole('button',{name:'Cancel picking',exact:true});
+    if(await cancelPick.isVisible())await cancelPick.click();
   };
   await select();
   await alice.hover();
