@@ -1,299 +1,455 @@
 /* @jsxImportSource solid-js */
-import { afterEach, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/dom';
-import type { AnnotationWire } from '@/lib/annotations';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import type { StoryController } from '@/lib/story-runtime/contract';
+/**
+ * THE RAIL AND THE PINS (components/__tests__/annotation-layer.ui.test.tsx, in Solid). Open threads
+ * float over the document at their anchor y; a pin or an annotated-node click opens that thread in
+ * the rail; resolved history sits below the open list. Replies, resolution, deletion, provenance
+ * marks and the phone's compact marker all live here. The composer is annotation-composer.test.tsx;
+ * picking a block or drawing an area is annotation-picking.test.tsx.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/dom';
+import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
+import { personHue } from '@/lib/person-face';
+import { Avatar } from '../../components/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
-import { AnnotationLayer } from '../AnnotationLayer';
-import { createSignal } from 'solid-js';
 import { positionedComments } from '../AnnotationPreview';
+import {
+  ADA_IMAGE, ANN, FACES, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot,
+} from './annotation-rig';
 
-const thread = { id: 'ann1', status: 'open', snippet: 'Selected passage', thread: [{ id: 'c1', body: 'First comment', author: { label: 'Ana' }, created_at: new Date().toISOString() }] } as AnnotationWire;
-const backend = (overrides: Partial<ArtifactBackend> = {}) => ({
-  listAnnotations: vi.fn(async () => [thread]), actOnAnnotation: vi.fn(async () => ({ ...thread, status: 'resolved' })),
-  createAnnotation: vi.fn(async () => thread), deleteAnnotation: vi.fn(async () => {}), unavailable: vi.fn(() => null),
-  remoteSessions: vi.fn(async () => ({ sessions: [] })), members: vi.fn(async () => ({ people: [] })), ...overrides,
-}) as unknown as ArtifactBackend;
+beforeEach(installAnnotationFetch);
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it('loads open comments and resolves a thread through the backend', async () => {
-  const service = backend(); const changed = vi.fn();
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} onAnnotationsChange={changed} />);
-  await waitFor(() => expect(view.getByText('First comment')).toBeTruthy());
-  fireEvent.click(view.getByRole('button', { name: 'Resolve annotation' }));
-  await waitFor(() => expect(service.actOnAnnotation).toHaveBeenCalledWith('ann1', { resolve: true }));
-  await waitFor(() => expect(changed).toHaveBeenLastCalledWith([]));
-});
-
-it('keeps a draft when the annotation write fails', async () => {
-  const service = backend({ createAnnotation: vi.fn(async () => { throw new Error('stale: retake'); }) });
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}}
-    initialSelection={{ kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [], quote: 'Selected passage' }} />);
-  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'My draft' } });
-  fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
-  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('stale: retake'));
-  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('My draft');
-});
-
-it('posts only pin locations to the document runtime and opens the rail on pin click', async () => {
-  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
-  const located = { ...thread, orphaned: false, anchor: { path: '0', key: 'anchor-key' } } as AnnotationWire;
-  const open = vi.fn();
-  render(() => <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async () => [located]) })} railOpen={false} onRailOpenChange={open}
-    runtimeRef={{ current: runtime }} sessionNonce="private" showViewComments />);
-  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations', pins: [expect.objectContaining({ id: 'ann1', path: '0', key: 'anchor-key' })] })));
-  const message = send.mock.calls.at(-1)![0] as { pins: unknown[] };
-  expect(JSON.stringify(message)).not.toContain('First comment');
-  receive?.({ type: 'mx:annotation-pin', nonce: 'private', id: 'ann1', rect: { x: 0, y: 0, width: 1, height: 1 } });
-  expect(open).toHaveBeenCalledWith(true);
-});
-
-it('opens the containing thread for a linked reply and scrolls within its own rail', async () => {
-  const linked = { ...thread, thread: [...thread.thread, { ...thread.thread[0], id: 'c2', body: 'Linked reply' }] } as AnnotationWire;
-  const scrolled: Element[] = [];
-  const original = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = function () { scrolled.push(this); };
-  try {
-    let link!: (target: string | null) => void;
-    const view = render(() => {
-      const [target, setTarget] = createSignal<string | null>(null);
-      const [railOpen, setRailOpen] = createSignal(false);
-      link = setTarget;
-      return <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async () => [linked]) })} railOpen={railOpen()} onRailOpenChange={setRailOpen} linkTarget={target()} />;
-    });
-    link('c2');
-    await waitFor(() => expect(view.getByText('Linked reply')).toBeTruthy());
-    await waitFor(() => expect(scrolled.some(node => (node as HTMLElement).dataset.commentId === 'c2')).toBe(true));
-    expect(view.getByLabelText('Annotation sidebar').querySelector('[data-thread-id="ann1"]')).toBeTruthy();
-  } finally { Element.prototype.scrollIntoView = original; }
-});
-
-it('opens a one-shot Select pick from the rail and composes on the frame selection', async () => {
-  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
-  const service = backend();
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}}
-    runtimeRef={{ current: runtime }} sessionNonce="private" />);
-  await waitFor(() => expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true'));
-  expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations', pick: 'block' }));
-  receive?.({ type: 'mx:selection', nonce: 'private', selection: { kind: 'text', path: '2.1', nodeId: 'node-2-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] } });
-  expect(view.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
-  expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'false');
-  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'picked note' } });
-  fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
-  await waitFor(() => expect(service.createAnnotation).toHaveBeenCalledWith(expect.objectContaining({ path: '2.1', node_id: 'node-2-1', body: 'picked note' }), expect.any(String)));
-});
-
-it('places floating annotation markers at their reported document geometry', async () => {
-  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 50, top: 40, width: 800, height: 600 }) } as unknown as StoryController;
-  const located = { ...thread, anchor: { path: '0', key: 'anchor-key' } } as AnnotationWire;
-  const view = render(() => <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async () => [located]) })} railOpen={false} onRailOpenChange={() => {}}
-    runtimeRef={{ current: runtime }} sessionNonce="private" showViewComments />);
-  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations', pins: [expect.objectContaining({ id: 'ann1' })] })));
-  receive?.({ type: 'mx:annotation-layout', nonce: 'private', positions: [{ id: 'ann1', rect: { x: 10, y: 20, width: 50, height: 20 }, status: 'exact' }] });
-  expect(view.getByRole('button', { name: 'Open annotation conversation by Ana, 1 message' }).closest('[data-annotation-id]')).toHaveStyle({ top: '60px' });
-});
-
-it('folds a conversation to its summary and remembers the fold across remounts', async () => {
-  const service = backend({ listAnnotations: vi.fn(async () => [{ ...thread, thread: [...thread.thread, { ...thread.thread[0], id: 'c2', body: 'Second reply' }] }]) });
-  const first = render(() => <AnnotationLayer id="abc-fold" backend={service} railOpen onRailOpenChange={() => {}}
-    pickOnOpen={false} />);
-  await waitFor(() => expect(first.getByText('First comment')).toBeTruthy());
-  fireEvent.click(first.getByRole('button', { name: 'Collapse thread' }));
-  expect(first.queryByText('Second reply')).toBeNull();
-  expect(first.getByText('1 reply')).toBeTruthy();
-  first.unmount();
-  const second = render(() => <AnnotationLayer id="abc-fold" backend={service} railOpen onRailOpenChange={() => {}}
-    pickOnOpen={false} />);
-  await waitFor(() => expect(second.getByRole('button', { name: 'Expand thread' })).toBeTruthy());
-  expect(second.queryByText('Second reply')).toBeNull();
-});
-
-it('opens a resolved conversation and sends its pin only while expanded', async () => {
-  const send = vi.fn();
-  const runtime = { send, subscribe: () => () => {} } as unknown as StoryController;
-  const resolved = { ...thread, status: 'resolved', anchor: { path: '0', key: 'k' } } as AnnotationWire;
-  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [resolved] : []) });
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}}
-    runtimeRef={{ current: runtime }} sessionNonce="private" />);
-  fireEvent.click(view.getByRole('button', { name: 'Show resolved comments' }));
-  await waitFor(() => expect(view.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
-  expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ pins: [] });
-  fireEvent.click(view.getByRole('button', { name: 'Show resolved conversation' }));
-  await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1' })] }));
-});
-
-it('keeps an expanded thread visible when another viewer resolves it', async () => {
-  const send = vi.fn();
-  const runtime = { send, subscribe: () => () => {} } as unknown as StoryController;
-  const located = { ...thread, anchor: { path: '0', key: 'k' } } as AnnotationWire;
-  const resolvedElsewhere = { ...located, status: 'resolved' } as AnnotationWire;
-  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [resolvedElsewhere] : [located]) });
-  let changeLive!: (rows: AnnotationWire[]) => void;
-  const view = render(() => {
-    const [live, setLive] = createSignal<AnnotationWire[]>([located]);
-    changeLive = setLive;
-    return <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false}
-      runtimeRef={{ current: runtime }} sessionNonce="private" liveAnnotations={live()} />;
+describe('AnnotationLayer', () => {
+  it('opens a mention notification on the thread containing its reply', async () => {
+    window.history.replaceState(null, '', '/a/example?thread=ann_2');
+    try {
+      const onRailOpenChange = vi.fn();
+      const view = layer({ onRailOpenChange });
+      await waitFor(() => expect(onRailOpenChange).toHaveBeenCalledWith(true));
+      view.set({ onRailOpenChange, railOpen: true });
+      await screen.findByText('one more thought');
+      expect(view.container.querySelector('[data-thread-id="ann_1"]')).not.toBeNull();
+    } finally { window.history.replaceState(null, '', '/'); }
   });
-  fireEvent.click(view.getByRole('button', { name: 'Open annotation thread' }));
-  changeLive([]);
-  await waitFor(() => expect(service.listAnnotations).toHaveBeenCalledWith('resolved'));
-  await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1', layoutOnly: true })] }));
-  await waitFor(() => expect(view.getByRole('button', { name: 'Reopen annotation' })).toBeTruthy());
-});
 
-it('keeps a resolved marker for ten visible seconds and pauses while hovered', async () => {
-  const located = { ...thread, anchor: { path: '0', key: 'k' }, revision: 1 } as AnnotationWire;
-  const resolvedElsewhere = { ...located, status: 'resolved', revision: 2 } as AnnotationWire;
-  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [resolvedElsewhere] : [located]) });
-  let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send: vi.fn(), subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; },
-    getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
-  let changeLive!: (rows: AnnotationWire[]) => void;
-  const view = render(() => {
-    const [live, setLive] = createSignal<AnnotationWire[]>([located]);
-    changeLive = setLive;
-    return <AnnotationLayer id="abc" backend={service} railOpen={false} onRailOpenChange={() => {}} runtimeRef={{ current: runtime }}
-      sessionNonce="private" showViewComments liveAnnotations={live()} />;
+  it('opens a notification target when navigation changes the query on the same artifact', async () => {
+    const open = vi.fn();
+    const view = layer({ onRailOpenChange: open });
+    await flush(); await flush();
+    try {
+      window.history.replaceState(null, '', `?thread=${ANN.id}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await flush();
+      expect(open).toHaveBeenCalledWith(true);
+      expect(view.runtime.posts().at(-1).openId).toBe(ANN.id);
+    } finally { window.history.replaceState(null, '', window.location.pathname); }
   });
-  receive?.({ type: 'mx:annotation-layout', nonce: 'private', positions: [{ id: 'ann1', rect: { x: 10, y: 220, width: 300, height: 40 } }] });
-  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'performance'] });
-  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-  changeLive([]);
-  await Promise.resolve(); await Promise.resolve();
-  expect(view.getByRole('status')).toHaveTextContent('10 seconds');
-  const marker = view.getByRole('button', { name: /Open annotation conversation by Ana/ });
-  vi.advanceTimersByTime(4000);
-  expect(view.getByRole('status')).toHaveTextContent('6 seconds');
-  fireEvent.mouseEnter(marker.closest('[data-annotation-id]')!);
-  vi.advanceTimersByTime(3000);
-  expect(view.getByRole('status')).toHaveTextContent('6 seconds');
-  fireEvent.mouseLeave(marker.closest('[data-annotation-id]')!);
-  vi.advanceTimersByTime(6100);
-  expect(view.queryByRole('button', { name: /Open annotation conversation by Ana/ })).toBeNull();
+
+  it('shows distinct local times for a comment and reply on the same day', async () => {
+    const view = layer({ railOpen: true });
+    await screen.findByText('is this right?');
+    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
+    await screen.findByText('one more thought');
+    const times = [...view.container.querySelectorAll('time')];
+    const first = times.find((time) => time.dateTime === ANN.thread[0]!.created_at);
+    const reply = times.find((time) => time.dateTime === ANN.thread[1]!.created_at);
+    expect(first).toBeDefined();
+    expect(reply).toBeDefined();
+    expect(first!.textContent).not.toBe(reply!.textContent);
+    expect(first!.textContent).toMatch(/27 Aug.*\d+:\d{2}/);
+    expect(first).toHaveAttribute('aria-label', expect.stringMatching(/2026/));
+  });
+
+  it('scrolls the newest reply in its own shadow-root rail', async () => {
+    const view = layer({ railOpen: true }, makeRuntime(), { trusted: true });
+    await waitFor(() => expect(trustedRoot().querySelector('[data-thread-id="ann_1"]')).not.toBeNull());
+    const thread = trustedRoot().querySelector('[data-thread-id="ann_1"]')!;
+    const scroll = vi.fn(); thread.scrollIntoView = scroll;
+    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+  });
+
+  it('subscribes when a lazy inline runtime becomes ready after the layer mounts', async () => {
+    const runtime = makeRuntime({ left: 0, top: 0, width: 1000, height: 800 });
+    const controller = runtime.ref.current;
+    runtime.ref.current = null;
+    const view = layer({ sessionNonce: null, showViewComments: true, liveAnnotations: [ANN] }, runtime);
+    runtime.ref.current = controller;
+    view.set({ sessionNonce: NONCE, showViewComments: true, liveAnnotations: [ANN] });
+    runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 20, y: 150, width: 100, height: 30 } }] });
+    expect(screen.getByLabelText(/^Open annotation conversation by vivek/)).toBeInTheDocument();
+  });
+
+  it('keeps a shadow-root thread menu open for pointer gestures inside that menu', async () => {
+    layer({ railOpen: true }, makeRuntime(), { trusted: true });
+    await waitFor(() => expect(trustedRoot().querySelector('[aria-label="Annotation actions"]')).not.toBeNull());
+    fireEvent.click(trustedRoot().querySelector('[aria-label="Annotation actions"]')!);
+    const button = trustedRoot().querySelector('[aria-label="Delete annotation"]')!;
+    expect(button).not.toBeNull();
+    fireEvent.pointerDown(button, { bubbles: true, composed: true });
+    expect(button.isConnected).toBe(true);
+    expect(trustedRoot().querySelector('[aria-label="Annotation action menu"]')).not.toBeNull();
+  });
+
+  it('posts the pin set into the document even in view mode (pins are owner view chrome)', async () => {
+    const view = layer();
+    await flush();
+    const posted = view.runtime.posts();
+    expect(posted.length).toBeGreaterThan(0);
+    expect(posted.at(-1)).toMatchObject({ mode: 'on', pins: [{ id: 'ann_1', path: '1' }], openId: null });
+    expect(JSON.stringify(posted.at(-1))).not.toContain('is this right?');
+  });
+
+  it('a pin click opens the rail on that thread and changes no hash', async () => {
+    const onRailOpenChange = vi.fn();
+    const view = layer({ onRailOpenChange });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    expect(onRailOpenChange).toHaveBeenCalledWith(true);
+    expect(window.location.hash).toBe('');
+    view.set({ onRailOpenChange, railOpen: true });
+    await flush();
+    const thread = await screen.findByLabelText('Annotation thread');
+    expect(thread.textContent).toContain('is this right?');
+    expect(screen.getByLabelText('Resolve annotation')).toBeTruthy();
+  });
+
+  it('overlays each open conversation at its anchor y; clicking one opens the rail focused', async () => {
+    const onRailOpenChange = vi.fn();
+    const view = layer({ showViewComments: true, onRailOpenChange });
+    await flush();
+    expect(screen.queryByLabelText(/Open annotation conversation/)).toBeNull();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    const preview = await screen.findByLabelText('Open annotation conversation by vivek, 2 messages');
+    const card = preview.closest<HTMLElement>('[data-annotation-id]')!;
+    expect(card).toBeTruthy();
+    expect(card).toHaveClass('bg-raised');
+    expect(card).not.toHaveClass('bg-comment');
+    expect(card.style.top).toBe('320px'); // viewport top (100) + anchor y (220)
+    expect(card.style.position).toBe('fixed');
+    expect(card.style.right).toBe('12px');
+    expect(card.style.maxWidth).toBe('calc(100vw - 24px)');
+    expect(card.style.width).toBe('44px');
+    expect(card.style.height).toBe('36px');
+    expect(card.style.borderRadius).toBe('50% 50% 50% 3px');
+    const count = card.querySelector<HTMLElement>('[data-thread-count]');
+    expect(count?.textContent).toBe('2');
+    expect(count).toHaveClass('top-1/2', 'text-fg');
+    expect(count?.parentElement).toHaveClass('justify-start', 'pl-[7px]');
+    expect(count).not.toHaveClass('rounded-full');
+    expect(screen.queryByText('Revenue grew 40%')).toBeNull();
+    expect(screen.queryByText('is this right?')).toBeNull();
+    expect(screen.queryByLabelText('Reply to annotation')).toBeNull();
+
+    fireEvent.mouseEnter(card);
+    expect(card.style.width).toBe('288px');
+    expect(card.style.height).toBe('108px');
+    expect(card.style.borderRadius).toBe('5px');
+    expect(card).toHaveClass('bg-comment-hover');
+    expect(screen.getByLabelText('vivek avatar').textContent).toBe('V');
+    expect(screen.getByRole('link', { name: 'View @vivek profile' }).getAttribute('href')).toBe('/@vivek');
+    expect(screen.getByText('is this right?')).toBeTruthy();
+    view.runtime.emit({ type: STORY_ANNOTATION_HOVER_MESSAGE, id: null });
+    expect(card.style.width).toBe('288px'); // a queued document leave cannot cancel a UI hover
+    expect(screen.queryByText('one more thought')).toBeNull();
+    expect(card.textContent).toContain('+1 more');
+    expect(screen.getByLabelText('Reply participants: vivek')).toBeTruthy();
+    expect(view.runtime.posts().at(-1)).toMatchObject({ hoverId: ANN.id });
+    fireEvent.mouseLeave(card);
+    expect(card.style.width).toBe('44px');
+    expect(view.runtime.posts().at(-1)).toMatchObject({ hoverId: null });
+
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 50, width: 300, height: 40 } }] });
+    expect(card.style.top).toBe('150px');
+    expect(card.isConnected).toBe(true); // a new layout moves the mark, never remounts it
+
+    fireEvent.click(preview);
+    expect(onRailOpenChange).toHaveBeenCalledTimes(1);
+    expect(onRailOpenChange).toHaveBeenCalledWith(true);
+    view.set({ railOpen: true, showViewComments: false, onRailOpenChange });
+    await flush();
+    expect(screen.getByLabelText('Reply to annotation')).toBeTruthy();
+  });
+
+  it('expands replies after sustained hover, cancels a brief hover, and resets on leaving the preview', async () => {
+    const onRailOpenChange = vi.fn();
+    const view = layer({ showViewComments: true, onRailOpenChange }, makeRuntime(), { trusted: true });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    const card = trustedRoot().querySelector('[data-annotation-id]')!;
+    fireEvent.mouseEnter(card);
+    const more = trustedRoot().querySelector<HTMLButtonElement>('[aria-label="Expand replies"]');
+    expect(more).not.toBeNull();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.mouseEnter(more!);
+    vi.advanceTimersByTime(400);
+    expect(card.textContent).not.toContain('one more thought');
+    fireEvent.mouseLeave(more!);
+    vi.advanceTimersByTime(600);
+    expect(card.textContent).not.toContain('one more thought');
+    fireEvent.mouseEnter(more!);
+    vi.advanceTimersByTime(600);
+    expect(card.textContent).toContain('one more thought');
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(onRailOpenChange).not.toHaveBeenCalled();
+    fireEvent.mouseLeave(card);
+    fireEvent.mouseEnter(card);
+    expect(card.textContent).not.toContain('one more thought');
+    fireEvent.click(trustedRoot().querySelector('[aria-label="Expand replies"]')!);
+    expect(card.textContent).toContain('one more thought');
+  });
+
+  it('the sidebar resolves and replies; resolving drops the pin', async () => {
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    await screen.findByLabelText('Annotation thread');
+    fireEvent.input(screen.getByLabelText('Reply to annotation'), { target: { value: 'never mind' } });
+    fireEvent.click(screen.getByLabelText('Send reply'));
+    await flush();
+    const reply = fetchCalls.find((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'POST');
+    expect(JSON.parse(String(reply!.init!.body))).toMatchObject({ reply: 'never mind' });
+
+    fireEvent.click(screen.getByLabelText('Resolve annotation'));
+    await flush();
+    const resolveCall = fetchCalls.filter((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'POST').at(-1);
+    expect(JSON.parse(String(resolveCall!.init!.body))).toMatchObject({ resolve: true });
+    expect(view.runtime.posts().at(-1)).toMatchObject({ pins: [] });
+  });
+
+  it('keeps unresolved threads compact until selected, then expands without flex clipping', async () => {
+    layer({ railOpen: true });
+    await flush();
+    const thread = await screen.findByLabelText('Annotation thread');
+    expect(thread.className).toContain('shrink-0');
+    expect(within(thread).getByLabelText('Resolve annotation').querySelector('.lucide-check')).toBeTruthy();
+    expect(within(thread).queryByLabelText('Delete annotation')).toBeNull();
+    fireEvent.click(within(thread).getByLabelText('Annotation actions'));
+    expect(within(thread).getByLabelText('Delete annotation').querySelector('.lucide-trash-2')).toBeTruthy();
+    expect(screen.getByText('is this right?').className).toContain('line-clamp-2');
+    expect(screen.queryByText('one more thought')).toBeNull();
+    expect(thread.textContent).toContain('+1 more');
+    expect(screen.queryByLabelText('Reply to annotation')).toBeNull();
+
+    fireEvent.click(screen.getByText('is this right?'));
+    expect(screen.getByText('is this right?')).toBeTruthy();
+    expect(screen.getByText('one more thought').className).not.toContain('line-clamp-2');
+    expect(screen.getByLabelText('Reply to annotation')).toBeTruthy();
+    expect(screen.getByLabelText('Cancel reply')).toHaveClass('bg-transparent');
+    expect(screen.getByLabelText('Send reply')).toHaveClass('bg-accent', 'text-bg');
+  });
+
+  it('keeps the reply draft when a live frame replaces the thread row', async () => {
+    const view = layer({ railOpen: true });
+    await flush();
+    fireEvent.click(await screen.findByLabelText('Open annotation thread'));
+    fireEvent.input(screen.getByLabelText('Reply to annotation'), { target: { value: 'half written' } });
+    const field = screen.getByLabelText('Reply to annotation');
+    view.set({ railOpen: true, liveAnnotations: [{ ...ANN, thread: [...ANN.thread] }] });
+    await flush();
+    expect(field.isConnected).toBe(true);
+    expect(screen.getByLabelText('Reply to annotation')).toHaveValue('half written');
+  });
+
+  it('lists resolved threads below a divider, collapsed until clicked; close shuts the rail', async () => {
+    const onRailOpenChange = vi.fn();
+    layer({ railOpen: true, onRailOpenChange });
+    await flush(); await flush();
+    expect(fetchCalls.some((c) => c.url.includes('status=resolved'))).toBe(true);
+    expect(screen.queryByLabelText('Show resolved annotations')).toBeNull();
+    expect(await screen.findByText('resolved')).toBeTruthy();
+    const divider = screen.getByRole('separator', { name: 'resolved' });
+    expect(divider.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+    expect(screen.queryByText(/an older figure/)).toBeNull();
+    expect(screen.getByText('please verify the older figure')).toBeTruthy();
+    expect(screen.queryByText('verified and corrected')).toBeNull();
+    expect(screen.getByLabelText('Reply participants: Codex')).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Show resolved conversation'));
+    expect(screen.getByText('please verify the older figure')).toBeTruthy();
+    expect(screen.getByText('verified and corrected')).toBeTruthy();
+    expect(screen.getByText('Codex')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Hide resolved conversation'));
+    expect(screen.getByText('please verify the older figure')).toBeTruthy();
+    expect(screen.queryByText('verified and corrected')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Close comments'));
+    expect(onRailOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('reopens an expanded resolved thread and moves it back to the open list', async () => {
+    layer({ railOpen: true });
+    await flush(); await flush();
+    fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
+    fireEvent.click(screen.getByLabelText('Reopen annotation'));
+    await flush();
+    const reopen = fetchCalls.find((c) => c.url.endsWith('/annotations/ann_old') && c.init?.method === 'POST');
+    expect(JSON.parse(String(reopen!.init!.body))).toEqual({ reopen: true });
+    await flush();
+    expect(screen.queryByLabelText('Resolved annotation thread')).toBeNull();
+    expect(screen.getAllByLabelText('Annotation thread')).toHaveLength(2);
+    expect(screen.getByText('please verify the older figure')).toBeTruthy();
+  });
+
+  it('mirrors document-node hover onto its card and gives agent replies their brand mark', async () => {
+    const view = layer({ railOpen: true });
+    await flush();
+    await screen.findByLabelText('Annotation thread');
+    view.runtime.emit({ type: STORY_ANNOTATION_HOVER_MESSAGE, id: ANN.id });
+    expect(screen.getByLabelText('Annotation thread').getAttribute('data-hovered')).toBe('true');
+    fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
+    expect(screen.getByLabelText('Codex agent')).toBeTruthy();
+    expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+  });
+
+  it('names the agent an MCP reply came from, with its own glyph and the MCP chip', async () => {
+    const view = layer({ showViewComments: true });
+    await flush();
+    view.set({ showViewComments: true, liveAnnotations: [MCP_AGENT] });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: MCP_AGENT.id, rect: { x: 10, y: 100, width: 300, height: 40 } }] });
+    const marker = await screen.findByLabelText('Open annotation conversation by Claude Code, 1 message');
+    fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
+    expect(screen.getByText('Claude Code')).toBeTruthy();
+    expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+    const mark = screen.getByLabelText('Claude Code agent');
+    expect(mark.querySelector('path')?.getAttribute('d')?.startsWith('M20.998')).toBe(true);
+  });
+
+  it('uses the generic agent icon and keeps HTTP provenance when no agent name is known', async () => {
+    const view = layer({ showViewComments: true });
+    await flush();
+    view.set({ showViewComments: true, liveAnnotations: [GENERIC_AGENT] });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: GENERIC_AGENT.id, rect: { x: 10, y: 100, width: 300, height: 40 } }] });
+    const marker = await screen.findByLabelText('Open annotation conversation by Agent, 1 message');
+    fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
+    expect(screen.getByLabelText('Agent agent')).toBeTruthy();
+    expect(screen.getByLabelText('Transport HTTP')).toBeTruthy();
+  });
+
+  it('delete asks first, then erases the thread and its pin', async () => {
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    const thread = await screen.findByLabelText('Annotation thread');
+    fireEvent.click(within(thread).getByLabelText('Annotation actions'));
+    fireEvent.click(within(thread).getByLabelText('Delete annotation'));
+    expect(fetchCalls.some((c) => c.init?.method === 'DELETE')).toBe(false);
+    expect(screen.getByRole('dialog', { name: 'Delete this comment?' })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Confirm delete comment'));
+    await flush();
+    expect(fetchCalls.find((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'DELETE')).toBeTruthy();
+    expect(screen.queryByLabelText('Annotation thread')).toBeNull();
+    expect(view.runtime.posts().at(-1)).toMatchObject({ pins: [] });
+  });
+
+  it('draws each person as their own face — picture over the initial, colour from the account id — and agents as their marks', async () => {
+    knobs.open = [FACES];
+    const view = layer({ showViewComments: true });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: FACES.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    const preview = await screen.findByLabelText('Open annotation conversation by ada, 4 messages');
+    const card = preview.closest<HTMLElement>('[data-annotation-id]')!;
+    const compact = card.querySelector<HTMLImageElement>(`img[src="${ADA_IMAGE}"]`);
+    expect(compact).not.toBeNull();
+    expect(compact!.getAttribute('alt')).toBe('');
+
+    fireEvent.mouseEnter(card);
+    const header = within(card).getByLabelText('ada avatar');
+    expect(header.querySelector('img')?.getAttribute('src')).toBe(ADA_IMAGE);
+    const stack = within(card).getByLabelText('Reply participants: ada, bob, Codex');
+    expect(stack.children).toHaveLength(3);
+    const [adaMark, bobMark, agentMark] = [...stack.children] as HTMLElement[];
+    expect(adaMark!.tagName === 'IMG' ? adaMark!.getAttribute('src') : adaMark!.querySelector('img')?.getAttribute('src')).toBe(ADA_IMAGE);
+    expect(bobMark!.querySelector('img')).toBeNull();
+    expect(bobMark!.textContent).toBe('B');
+    const faceOf = (el: HTMLElement) => ([el, ...el.querySelectorAll<HTMLElement>('*')].find((n) => n.style.backgroundColor)?.style.backgroundColor ?? '');
+    const standalone = render(() => <Avatar image={null} initial="bob" userId="usr_bob" size={18} />);
+    const expected = faceOf(standalone.container.firstElementChild as HTMLElement);
+    expect(expected).not.toBe('');
+    expect(faceOf(bobMark!)).toBe(expected);
+    const byLabel = render(() => <Avatar image={null} initial="bob" userId="label:bob" size={18} />);
+    expect(personHue('usr_bob')).not.toBe(personHue('label:bob'));
+    expect(faceOf(bobMark!)).not.toBe(faceOf(byLabel.container.firstElementChild as HTMLElement));
+    expect(agentMark!.querySelector('img')).toBeNull();
+    expect(agentMark!.querySelector('svg')).not.toBeNull();
+  });
+
+  it('on a phone keeps only the compact marker, whose click opens the comments sheet', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+    try {
+      const onRailOpenChange = vi.fn();
+      const view = layer({ showViewComments: true, onRailOpenChange });
+      await flush();
+      view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+      const marker = await screen.findByLabelText('Open annotation conversation by vivek, 2 messages');
+      expect(marker.closest<HTMLElement>('[data-annotation-id]')!.style.width).toBe('44px');
+      fireEvent.click(marker);
+      expect(onRailOpenChange).toHaveBeenCalledWith(true);
+      view.set({ showViewComments: true, onRailOpenChange, railOpen: true });
+      await flush();
+      const sheet = screen.getByRole('dialog', { name: 'Annotation sidebar' });
+      expect(within(sheet).getByLabelText('Close comments')).toBeTruthy();
+      expect(within(sheet).getByLabelText('Reply to annotation')).toBeTruthy();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+    }
+  });
+
+  it('keeps annotations ambient with no visibility-off state', async () => {
+    const view = layer({ showViewComments: true });
+    await flush();
+    view.runtime.emit({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    expect(await screen.findByLabelText(/Open annotation conversation/)).toBeTruthy();
+    view.set({ showViewComments: true });
+    await flush();
+    expect(screen.getByLabelText(/Open annotation conversation/)).toBeTruthy();
+    expect(view.runtime.posts().at(-1)).toMatchObject({ mode: 'on' });
+  });
+
+  it('the live stream replaces the list wholesale', async () => {
+    const view = layer();
+    await flush();
+    view.set({ liveAnnotations: [] });
+    await flush();
+    expect(view.runtime.posts().at(-1)).toMatchObject({ pins: [] });
+  });
+
+  it('draws the rail into the editor panel that hosts it, and nowhere while that tab is hidden', async () => {
+    const host = document.body.appendChild(document.createElement('div'));
+    try {
+      const view = layer({ railOpen: true, railHost: host });
+      await flush();
+      expect(within(host).getByLabelText('Annotation sidebar')).toBeTruthy();
+      view.set({ railOpen: true, railHost: null });
+      await flush();
+      expect(screen.queryByLabelText('Annotation sidebar')).toBeNull();
+    } finally { host.remove(); }
+  });
+
+  it('stacks adjacent floating markers without overlap', () => {
+    const second = { ...ANN, id: 'ann_2' };
+    const placed = positionedComments([ANN, second], { ann_1: { x: 0, y: 20, width: 10, height: 10 }, ann_2: { x: 0, y: 22, width: 10, height: 10 } }, { top: 40, height: 600 }, 800);
+    expect(placed.map((item) => item.top)).toEqual([60, 102]);
+  });
 });
 
-it('shows an orphaned passage only while its resolved conversation is expanded', async () => {
-  const gone = { ...thread, status: 'resolved', anchor: null, orphaned: true, quote: 'Original passage', quote_found: false } as AnnotationWire;
-  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [gone] : []) });
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
-  fireEvent.click(view.getByRole('button', { name: 'Show resolved comments' }));
-  await waitFor(() => expect(view.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
-  expect(view.queryByText('Original passage')).toBeNull();
-  fireEvent.click(view.getByRole('button', { name: 'Show resolved conversation' }));
-  expect(view.getByText('Original passage')).toBeTruthy();
-  expect(view.getByText('This passage was removed from the document.')).toBeTruthy();
-});
-
-it('shows edited-away words when opened but does not repeat a live passage', async () => {
-  const edited = { ...thread, status: 'resolved', anchor: { path: '0', key: 'k' }, quote: 'Older words', quote_found: false } as AnnotationWire;
-  const service = backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [edited] : []) });
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
-  fireEvent.click(view.getByRole('button', { name: 'Show resolved comments' }));
-  await waitFor(() => expect(view.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
-  fireEvent.click(view.getByRole('button', { name: 'Show resolved conversation' }));
-  expect(view.getByText('Older words')).toBeTruthy();
-  expect(view.getByText('These words have since been edited.')).toBeTruthy();
-  view.unmount();
-  const live = { ...edited, quote_found: true } as AnnotationWire;
-  const again = render(() => <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async (status?: string) => status === 'resolved' ? [live] : []) })} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
-  fireEvent.click(again.getByRole('button', { name: 'Show resolved comments' }));
-  await waitFor(() => expect(again.getByRole('button', { name: 'Show resolved conversation' })).toBeTruthy());
-  fireEvent.click(again.getByRole('button', { name: 'Show resolved conversation' }));
-  expect(again.queryByText('Older words')).toBeNull();
-});
-
-it('prefills the linked agent in a reply and preserves the draft after a failed send', async () => {
-  const linked = { ...thread, thread: [{ ...thread.thread[0], author: { ...thread.thread[0].author, kind: 'human' }, body: `Ask [@Codex](/chat?session=${'a'.repeat(64)}) to check` }] } as AnnotationWire;
-  const service = backend({ listAnnotations: vi.fn(async () => [linked]), actOnAnnotation: vi.fn(async () => { throw new Error('Could not send reply'); }) });
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}} pickOnOpen={false} />);
-  await waitFor(() => expect(view.getByRole('button', { name: 'Open annotation thread' })).toBeTruthy());
-  fireEvent.click(view.getByRole('button', { name: 'Open annotation thread' }));
-  const reply = view.getByRole('textbox', { name: 'Reply to annotation ann1' });
-  expect(reply).toHaveValue('@Codex ');
-  expect(view.getByRole('button', { name: 'Send reply' })).toBeDisabled();
-  fireEvent.input(reply, { target: { value: '@Codex Please check' } });
-  fireEvent.click(view.getByRole('button', { name: 'Send reply' }));
-  await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Could not send reply'));
-  expect(reply).toHaveValue('@Codex Please check');
-});
-
-it('requires a screenshot only after an explicit Screenshot pick on a versioned document and permits explicit text-only fallback', async () => {
-  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
-  const service = backend({ unavailable: vi.fn(() => null) });
-  const view = render(() => <AnnotationLayer id="abc" editId="edit-current" backend={service} railOpen onRailOpenChange={() => {}}
-    runtimeRef={{ current: runtime }} sessionNonce="private" />);
-  fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
-  await waitFor(() => expect(view.getByRole('status', { name: 'Screenshot tool active' })).toHaveTextContent('drag an area'));
-  receive?.({ type: 'mx:selection', nonce: 'private', selection: { kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 1, y: 2, width: 30, height: 20 }, className: '', style: '', ancestors: [] } });
-  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'Explicit fallback' } });
-  expect(view.getByRole('button', { name: 'Post comment' })).toBeDisabled();
-  await waitFor(() => expect(view.getByRole('button', { name: 'Continue without screenshot' })).toBeTruthy());
-  fireEvent.click(view.getByRole('button', { name: 'Continue without screenshot' }));
-  expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
-});
-
-it('subscribes when a lazy document runtime becomes ready after the layer mounts', async () => {
-  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
-  const runtimeRef = { current: null as StoryController | null };
-  let ready!: (nonce: string) => void;
-  const opened = vi.fn();
-  render(() => { const [nonce, setNonce] = createSignal<string | null>(null); ready = setNonce; return <AnnotationLayer id="abc" backend={backend()} railOpen={false} onRailOpenChange={opened} runtimeRef={runtimeRef} sessionNonce={nonce()} />; });
-  runtimeRef.current = runtime; ready('private');
-  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations' })));
-  receive?.({ type: 'mx:annotation-pin', nonce: 'private', id: 'ann1', rect: { x: 0, y: 0, width: 1, height: 1 } });
-  expect(opened).toHaveBeenCalledWith(true);
-});
-
-it('retries the same failed draft with the same idempotency key', async () => {
-  let fail = true;
-  const create = vi.fn(async (_body: Record<string, unknown>, _key: string) => { if (fail) throw new Error('temporary'); return thread; });
-  const service = backend({ createAnnotation: create });
-  const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen={false} onRailOpenChange={() => {}}
-    initialSelection={{ kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [] }} />);
-  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'Retry me' } });
-  fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-  fail = false;
-  fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
-  expect(create.mock.calls[1]?.[1]).toBe(create.mock.calls[0]?.[1]);
-});
-
-it('Escape cancels a draft and clears the document selection', () => {
-  const send = vi.fn();
-  const runtime = { send, subscribe: () => () => {} } as unknown as StoryController;
-  const view = render(() => <AnnotationLayer id="abc" backend={backend()} railOpen={false} onRailOpenChange={() => {}}
-    runtimeRef={{ current: runtime }} sessionNonce="private"
-    initialSelection={{ kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [] }} />);
-  expect(view.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
-  fireEvent.keyDown(window, { key: 'Escape' });
-  expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
-  expect(send).toHaveBeenCalledWith({ type: 'mx:select', path: null });
-});
-
-it('spaces adjacent floating markers and expands reply context on hover', async () => {
-  const second = { ...thread, id: 'ann2', thread: [{ ...thread.thread[0], id: 'c2', body: 'Second thread' }] } as AnnotationWire;
-  const placed = positionedComments([thread, second], {
-    ann1: { x: 0, y: 20, width: 10, height: 10 }, ann2: { x: 0, y: 22, width: 10, height: 10 },
-  }, { top: 40, height: 600 }, 800);
-  expect(placed.map(item => item.top)).toEqual([60, 102]);
-  const withReply = { ...thread, anchor: { path: '0', key: 'k' }, thread: [thread.thread[0], { ...thread.thread[0], id: 'reply', body: 'More context', author: { ...thread.thread[0].author, label: 'Bob' } }] } as AnnotationWire;
-  const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
-  const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 40, width: 800, height: 600 }) } as unknown as StoryController;
-  const view = render(() => <AnnotationLayer id="abc" backend={backend({ listAnnotations: vi.fn(async () => [withReply]) })} railOpen={false} onRailOpenChange={() => {}}
-    runtimeRef={{ current: runtime }} sessionNonce="private" showViewComments />);
-  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ pins: [expect.objectContaining({ id: 'ann1' })] })));
-  receive?.({ type: 'mx:annotation-layout', nonce: 'private', positions: [{ id: 'ann1', rect: { x: 0, y: 20, width: 10, height: 10 } }] });
-  const card = view.getByRole('button', { name: 'Open annotation conversation by Ana, 2 messages' }).closest('[data-annotation-id]')!;
-  fireEvent.mouseEnter(card);
-  expect(view.getByText('First comment')).toBeTruthy();
-  fireEvent.click(view.getByRole('button', { name: 'Expand replies' }));
-  expect(view.getByText('More context')).toBeTruthy();
+it('prefills the linked agent, permits removing it, and retains a failed reply', async () => {
+  const mention = `[@claude](/chat?session=${'a'.repeat(64)})`;
+  const tagged = { ...ANN, thread: [{ ...ANN.thread[0]!, body: `${mention} help` }] };
+  knobs.open = [tagged];
+  const view = layer({ railOpen: true, liveAnnotations: [tagged] });
+  await screen.findByText('help', { exact: false });
+  view.runtime.emit({ type: STORY_ANNOTATION_PIN_MESSAGE, id: ANN.id });
+  const field = await screen.findByPlaceholderText('reply…');
+  expect(field).toHaveValue('@claude ');
+  expect(screen.getByLabelText('Send reply')).toBeDisabled();
+  fireEvent.input(field, { target: { value: 'my draft' } });
+  expect(field).toHaveValue('my draft');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+  fireEvent.click(screen.getByLabelText('Send reply'));
+  await screen.findByRole('alert');
+  expect(field).toHaveValue('my draft');
 });

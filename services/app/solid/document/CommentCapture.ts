@@ -14,8 +14,14 @@ const messages: Record<string, string> = {
   timeout: 'Capture timed out. Please retry.',
 };
 
-/** Screenshot permission and staged image remain private to a single comment draft. */
-export function createCommentCapture(backend: ArtifactBackend, editId?: string) {
+/**
+ * lib/capture/use-comment-capture in SOLID. Screenshot permission and the staged image stay private
+ * to one comment draft; the document revision is read LIVE (`editId` as an accessor), so an edit
+ * that lands while the capture is in flight fails it as moved geometry rather than attaching a
+ * picture of a document that no longer exists.
+ */
+export function createCommentCapture(backend: ArtifactBackend, editId?: string | (() => string | undefined)) {
+  const revision = typeof editId === 'function' ? editId : () => editId;
   let session: CaptureSession | null = null;
   let generation = 0;
   let staged: { draft: Draft; preview: Blob; id: string } | null = null;
@@ -28,7 +34,7 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string) 
     setDraft(null); setBusy(false); setRequired(false); setError('');
   };
   onCleanup(reset);
-  const available = () => Boolean(editId && !backend.unavailable('commentImages'));
+  const available = () => Boolean(revision() && !backend.unavailable('commentImages'));
   const start = async (): Promise<CaptureStartResult> => {
     reset();
     if (!available()) return 'unavailable';
@@ -52,14 +58,20 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string) 
     const current = session;
     if (!current) { setError(value => value || messages.unsupported); return; }
     const mine = generation;
+    const capturedEditId = revision()!;
     setBusy(true);
+    const started = performance.now();
+    // Selection chrome is not part of the image; the class is removed on every exit path.
     document.documentElement.classList.add('mx-taking-screenshot');
     try {
       const image = await current.capture(rect);
-      if (mine === generation) { setDraft({ image, preview: image.blob, strokes: [], editId: editId! }); setError(''); }
+      if (mine !== generation) return;
+      if (revision() !== capturedEditId) throw new CaptureError('geometry');
+      setDraft({ image, preview: image.blob, strokes: [], editId: capturedEditId }); setError('');
     } catch (cause) {
       if (mine === generation) setError(messages[cause instanceof CaptureError ? cause.code : 'unsupported']);
     } finally {
+      try { performance.measure('comment-screenshot:capture', { start: started, end: performance.now() }); } catch { /* measurement is optional */ }
       if (session === current) session = null;
       current.dispose(); document.documentElement.classList.remove('mx-taking-screenshot');
       if (mine === generation) setBusy(false);
@@ -80,7 +92,7 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string) 
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
         if (!blob) throw new Error('Could not read this image.');
         const image: CapturedImage = { blob, width: canvas.width, height: canvas.height, rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, viewport: { width: canvas.width, height: canvas.height }, method: 'upload', capturedAt: new Date().toISOString() };
-        if (mine === generation) { setDraft({ image, preview: blob, strokes: [], editId: editId! }); setRequired(true); }
+        if (mine === generation) { setDraft({ image, preview: blob, strokes: [], editId: revision()! }); setRequired(true); }
       } finally { bitmap.close(); }
     } catch (cause) { if (mine === generation) setError(cause instanceof Error ? cause.message : 'Could not read this image.'); }
     finally { if (mine === generation) setBusy(false); }
