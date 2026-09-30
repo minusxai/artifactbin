@@ -2,7 +2,7 @@
 import { Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import { Settings } from 'lucide-solid';
-import { useSession } from '../web/session';
+import { useSession } from '../lib/session';
 import { PeopleInbox } from '../components/PeopleInbox';
 
 export function NotificationsPage(): JSX.Element {

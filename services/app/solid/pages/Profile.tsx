@@ -6,13 +6,14 @@ import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';
 import type { ProfileSocial } from '@/lib/profile-social';
 import { refusedForSignIn } from '@/lib/story/sign-in-required';
-import { loginHref } from '../shared/login-href';
+import { loginHref } from '@/lib/login-href';
 import { pageDataChanged } from '@/web/page-data-events';
 import { takeBootstrap } from '@/web/bootstrap';
 import { initialDocumentStory } from '@/web/initial-story';
 import { Avatar } from '../components/Avatar';
-import { usePageData } from '../web/use-page-data';
+import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';
+import { apiFetch } from '../lib/api';
 
 // Lazy, like every other route chunk (solid/App.tsx): a profile visit should not download the
 // folder listing, the (large) dataset editor, or the compiled-document reader until an alias
@@ -93,7 +94,7 @@ function Social(props: { ownerId: string; social: ProfileSocial; signedIn: boole
     if (inFlight) return;
     inFlight = true; setBusy(true);
     try {
-      const response = await fetch(`/api/users/${props.ownerId}/follow`, { method: following() ? 'DELETE' : 'POST', credentials: 'same-origin' });
+      const response = await apiFetch(`/api/users/${props.ownerId}/follow`, following() ? 'DELETE' : 'POST');
       if (await refusedForSignIn(response)) { window.location.assign(loginHref(window.location)); return; }
       if (response.ok) { const answer = await response.json() as { following: boolean; count: number }; setFollowing(answer.following); setFollowers(answer.count); pageDataChanged(); }
     } catch { /* Keep the server-confirmed state. */ }

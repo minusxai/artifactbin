@@ -25,6 +25,7 @@ import type { BoundEmbed, QueryCell } from '@/lib/story/query-notebook';
 import type { TableResult } from '@/lib/story/dataflow';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import { formatCount } from '../../lib/format';
 
 export interface QueryNotebookPanelProps {
   cells: QueryCell[];
@@ -246,7 +247,7 @@ function countOf(cell: QueryCell): string {
   if (cell.pending) return '…';
   if (!cell.result) return '—';
   const n = cell.result.totalRows ?? cell.result.rows.length;
-  return new Intl.NumberFormat().format(n);
+  return formatCount(n);
 }
 
 interface DatasetShape {
@@ -386,7 +387,7 @@ export default function QueryNotebookPanel(props: QueryNotebookPanelProps): JSX.
                             <Show when={titles()[group.key]}><p class="mt-1 text-[10px] text-faint">{group.key}</p></Show>
                           </th>
                           <td class="whitespace-nowrap px-3 py-3 tabular-nums text-muted">
-                            {shape()?.rows !== null && shape()?.rows !== undefined ? new Intl.NumberFormat().format(shape()!.rows!) : '—'}
+                            {shape()?.rows !== null && shape()?.rows !== undefined ? formatCount(shape()!.rows!) : '—'}
                           </td>
                           <td class="px-3 py-3 text-muted">{!shape() ? 'reading its shape…' : shape()!.error ? `shape unavailable — ${shape()!.error}` : shape()!.columns.join(', ')}</td>
                           <td class="px-3 py-3 text-muted">{group.cells.map((cell) => cell.name).join(', ')}</td>

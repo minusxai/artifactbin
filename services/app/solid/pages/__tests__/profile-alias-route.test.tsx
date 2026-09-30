@@ -11,10 +11,10 @@ import { cleanup, render, screen, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ProfileAliasRoute } from '@/solid/pages/Profile';
-import { replaceDocument } from '@/solid/shared/document-navigation';
-import { InboxProvider } from '@/solid/web/notifications';
+import { replaceDocument } from '@/solid/lib/document-navigation';
+import { InboxProvider } from '@/solid/lib/notifications';
 
-vi.mock('@/solid/shared/document-navigation', () => ({ replaceDocument: vi.fn() }));
+vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
 const at = (path: string) => {
   window.history.replaceState(null, '', path);

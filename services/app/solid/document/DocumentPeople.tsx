@@ -3,6 +3,7 @@ import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type 
 import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
 import { Button, Input } from '../components/ui';
+import { apiFetch } from '../lib/api';
 type Person = { user_id: string; username: string; name: string | null };
 
 /** The document controls' people panel (components/ArtifactPeople in Solid); membership and sharing remain separate grants. */
@@ -28,7 +29,7 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
     if (busy()) return;
     setBusy(true); setError('');
     try {
-      const response = await fetch(endpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+      const response = await apiFetch(endpoint(), 'POST', input);
       const body = await response.json() as MembershipState & { detail?: string };
       if (!response.ok || !Array.isArray(body.members) || !Array.isArray(body.pending)) throw new Error(body.detail ?? 'Could not update people');
       setState(body); props.onChange?.();

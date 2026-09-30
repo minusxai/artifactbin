@@ -3,6 +3,7 @@ import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Check, Copy, Loader2 } from 'lucide-solid';
 import { Tooltip } from './Tooltip';
 import { LINK } from './ui';
+import { copyText } from '../lib/copy-text';
 
 interface StartResponse { id: string; url: string; prompt?: string; error?: string }
 const COUNTDOWN_S = 3;
@@ -19,8 +20,7 @@ export function AgentLink(props: { docsLink?: boolean; frame?: boolean; size?: '
       const response = await fetch('/api/start', { method: 'POST' });
       const body = await response.json().catch(() => ({})) as StartResponse;
       if (!response.ok) { setState('error'); setMessage(body.error === 'rate_limited' ? 'too many new documents from here — try again shortly' : 'could not start a document'); return; }
-      try { if (typeof body.prompt !== 'string') throw new Error('start response did not include an agent paste'); await navigator.clipboard.writeText(body.prompt); setMessage('copied! paste it in the agent'); }
-      catch { setMessage('created! copy the prompt from the document page'); }
+      setMessage(typeof body.prompt === 'string' && await copyText(body.prompt) ? 'copied! paste it in the agent' : 'created! copy the prompt from the document page');
       setState('done'); setCountdown(COUNTDOWN_S);
       let left = COUNTDOWN_S;
       timer = setInterval(() => { left--; if (left > 0) { setCountdown(left); return; } if (timer) clearInterval(timer); timer = null; window.location.assign(`/a/${body.id}`); }, 1000);

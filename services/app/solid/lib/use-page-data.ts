@@ -1,24 +1,19 @@
 /**
- * The Solid twin of web/use-page-data.ts over the SAME store (web/page-data-store, unchanged).
- *
- * React → Solid mapping, and why each piece moved:
- * - `useSyncExternalStore(store.subscribe, store.revision)` → a signal fed by `store.subscribe`,
- *   and the resource is a memo of (key, revision). `store.resource(key)` answers the same object
- *   while the entry lives, so the memo only notifies when the entry was actually replaced.
- * - `useSyncExternalStore(resource.subscribe, resource.snapshot)` → an effect that subscribes to the
- *   CURRENT resource and re-subscribes when the memo moves; cleanup unsubscribes (the store aborts
- *   a pending load when its last subscriber leaves, exactly as a React unmount does).
- * - the mount effect that loads → an effect over (resource, sessionError). A Solid component runs
- *   once, so a key that depends on a route param must be passed as an accessor.
- * - `useRefreshable` → a window listener for the owner's lifetime.
- *
- * Not ported (probe gap): `NavigationPreloadContext` / `store.adoptPreload` — the React shell starts
- * a page's fetch before its chunk arrives; the Solid shell here has no preload layer yet.
+ * Page data as a Solid resource over the shared store (web/page-data-store): a signal fed by
+ * `store.subscribe`, a memo of (key, revision), and an effect that subscribes to the current resource
+ * and loads it. The store aborts a pending load when its last subscriber leaves. A key that depends
+ * on a route param is passed as an accessor.
  */
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from 'solid-js';
 import { createPageDataStore, type PageDataSnapshot } from '@/web/page-data-store';
-import { fetchPageData, REFRESH_EVENT } from '../shared/page-data';
+import { REFRESH_EVENT } from '@/web/page-data-events';
 import { useSession } from './session';
+
+async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(url, { credentials: 'same-origin', signal });
+  if (!response.ok) throw Object.assign(new Error('Could not load page'), { status: response.status });
+  return response.json() as Promise<T>;
+}
 
 export interface PageData<T> {
   data: Accessor<T | null>;

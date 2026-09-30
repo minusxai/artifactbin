@@ -13,11 +13,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
 import { existingPaste } from '@/lib/agent-copy';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
-import { replaceDocument } from '@/solid/shared/document-navigation';
+import { replaceDocument } from '@/solid/lib/document-navigation';
 import { StarterPage, type StarterAnswer } from '@/solid/pages/Starter';
 
 vi.mock('@/lib/islands/live-update', () => ({ reloadKeepingPlace: vi.fn() }));
-vi.mock('@/solid/shared/document-navigation', () => ({ replaceDocument: vi.fn() }));
+vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
 const streams: Array<{ url: string; onmessage: ((event: { data: string }) => void) | null }> = [];
 class FakeEventSource {

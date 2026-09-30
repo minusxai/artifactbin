@@ -3,6 +3,7 @@ import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { Copy } from 'lucide-solid';
 import { Badge, MicroLabel, PANEL } from './ui';
 import { Tooltip } from './Tooltip';
+import { copyText } from '../lib/copy-text';
 
 interface Domain { hostname: string; status: 'pending' | 'verified'; txtName: string; txtValue: string; target: string | null; verifiedAt: string | null; missingSince: string | null }
 interface DomainSettings { enabled: boolean; target: string | null; targetAddresses: string[]; domain: Domain | null }
@@ -20,7 +21,7 @@ export function verifyRefusal(error: string, domain: Domain, target: string | nu
 const bare = (hostname: string) => hostname.split('.').length === 2;
 function RecordRow(props: { type: string; name: string; value: string; what: string }): JSX.Element {
   const [copied, setCopied] = createSignal(false);
-  const copy = (value: string) => { void navigator.clipboard?.writeText(value).then(() => setCopied(true), () => {}); };
+  const copy = (value: string) => { void copyText(value).then((ok) => { if (ok) setCopied(true); }); };
   return <tr class="border-t border-edge align-top"><td class="py-2 pr-3 font-mono text-xs text-muted">{props.type}</td><td class="py-2 pr-3"><span class="flex items-center gap-1 break-all font-mono text-xs">{props.name}<Tooltip content={copied() ? 'Copied' : 'Copy'}><button type="button" aria-label={`Copy ${props.what} name`} onClick={() => copy(props.name)} class="shrink-0 rounded-md p-1.5 text-muted hover:bg-raised"><Copy size={13} /></button></Tooltip></span></td><td class="py-2"><span class="flex items-center gap-1 break-all font-mono text-xs">{props.value}<Tooltip content={copied() ? 'Copied' : 'Copy'}><button type="button" aria-label={`Copy ${props.what} value`} onClick={() => copy(props.value)} class="shrink-0 rounded-md p-1.5 text-muted hover:bg-raised"><Copy size={13} /></button></Tooltip></span></td></tr>;
 }
 

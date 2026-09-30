@@ -10,7 +10,7 @@
  * stored document still bound to the old table.
  *
  * Real handlers throughout: the editor's own HTTP backend and save queue
- * (solid/shared/live-edits-core), with `fetch` dispatched into the real /prepare and /edits
+ * (solid/lib/live-edits-core), with `fetch` dispatched into the real /prepare and /edits
  * routes over this file's PGLite. The only thing the test controls is TIMING —
  * when the refusal comes back relative to the next picks.
  */
@@ -24,7 +24,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { readQuestionChart, updateQuestionChartInJsx } from '@/lib/data/story/story-viz';
-import { createLiveEditsCore } from '@/solid/shared/live-edits-core';
+import { createLiveEditsCore } from '@/solid/lib/live-edits-core';
 import type { DocumentGraph } from '@/lib/story/document-graph';
 
 useAppHarness();

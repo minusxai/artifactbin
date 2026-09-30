@@ -4,8 +4,9 @@ import { Navigate } from '@solidjs/router';
 import { internalRedirectTarget } from '@/lib/safe-redirect';
 import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 import { AvatarCircle } from '../components/AvatarCircle';
-import { replaceDocument } from '../shared/document-navigation';
-import { useSession } from '../web/session';
+import { replaceDocument } from '../lib/document-navigation';
+import { useSession } from '../lib/session';
+import { apiFetch } from '../lib/api';
 
 const HANDLE_REFUSALS: Record<string, string> = {
   username_taken: 'that handle is taken — pick another',
@@ -30,7 +31,7 @@ export function WelcomePage(): JSX.Element {
   });
   const confirm = async () => {
     setBusy(true); setStatus(null);
-    const response = await fetch('/api/my/profile', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username(), welcome_pending: false }) }).catch(() => null);
+    const response = await apiFetch('/api/my/profile', 'PATCH', { username: username(), welcome_pending: false }).catch(() => null);
     setBusy(false);
     if (!response) { setStatus('could not reach the server'); return; }
     const body = await response.json().catch(() => ({})) as { error?: string };
