@@ -16,8 +16,10 @@ import { pageDataChanged } from '@/web/page-data-events';
 import RowMenu from '../components/RowMenu';
 import { Tooltip } from '../components/Tooltip';
 import { Badge, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo } from '../components/ui';
-import { usePageData } from '../web/use-page-data';
-import { useSession } from '../web/session';
+import { usePageData } from '../lib/use-page-data';
+import { useSession } from '../lib/session';
+import { apiFetch } from '../lib/api';
+import { dateTime } from '../lib/format';
 
 interface TrashFile { id: string; title: string | null; format: string; version: number; deleted_at: string }
 
@@ -56,7 +58,7 @@ export function TrashPage(): JSX.Element {
   const restore = async (id: string) => {
     setBusy(id);
     try {
-      const response = await fetch(`/api/my/artifacts/${id}/restore`, { method: 'POST', credentials: 'same-origin' });
+      const response = await apiFetch(`/api/my/artifacts/${id}/restore`, 'POST');
       if (response.ok) { const data = page.data(); if (data) page.seed({ files: data.files.filter((file) => file.id !== id) }); pageDataChanged(); }
     } finally {
       setBusy(null);
@@ -148,7 +150,7 @@ export function TrashPage(): JSX.Element {
                       </td>
                       <td class="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell"><FormatBadge format={file.format} /></td>
                       <td class="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell"><Badge tone="dim">v{file.version}</Badge></td>
-                      <Tooltip content={new Date(file.deleted_at).toLocaleString()}>
+                      <Tooltip content={dateTime(file.deleted_at)}>
                         <td class="hidden px-4 py-2.5 text-xs whitespace-nowrap text-muted sm:table-cell">
                           {timeAgo(file.deleted_at)}
                         </td>

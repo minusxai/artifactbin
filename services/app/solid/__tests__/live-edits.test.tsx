@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * services/app/lib/story/__tests__/use-live-edits.ui.test.tsx, PORTED to the Solid primitive over the
- * framework-free core (solid/shared/live-edits-core). Every case and assertion is the original's; the
+ * framework-free core (solid/lib/live-edits-core). Every case and assertion is the original's; the
  * translation is mechanical: `renderHook` runs the primitive in a Solid root, `hook.result.X` replaces
  * the React `current` indirection (the primitive returns live getters, there is no re-render to wait
  * for) and `act` is a pass-through kept so this file diffs line for line against the React suite.

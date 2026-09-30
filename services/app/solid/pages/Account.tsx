@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
-import { usePageData } from '../web/use-page-data';
-import { useSession } from '../web/session';
+import { usePageData } from '../lib/use-page-data';
+import { useSession } from '../lib/session';
 import { AvatarCircle } from '../components/AvatarCircle';
 import { UsernameCard } from '../components/UsernameCard';
 import { NotificationSettings } from '../components/NotificationSettings';

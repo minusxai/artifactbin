@@ -16,7 +16,7 @@ const CONE = [
   'solid/editor/create-versions.ts',
   'solid/editor/panels/QueryNotebookPanel.tsx',
   'solid/editor/StoryFormatToolbar.tsx',
-  'solid/shared/live-edits-core.ts',
+  'solid/lib/live-edits-core.ts',
   'solid/document/AnnotationLayer.tsx',
   'solid/document/AnnotationThread.tsx',
   'solid/document/PersonMention.tsx',

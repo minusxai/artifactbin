@@ -9,7 +9,7 @@
  * `let`, because an imported binding cannot be assigned to. `state` is reset
  * by `installDatasetFetch()`, which each file calls from its own `beforeEach`.
  *
- * The `@/web/session` mock stays in the test files: `vi.mock` is hoisted per
+ * The `@/solid/lib/session` mock stays in the test files: `vi.mock` is hoisted per
  * file, and the two cases that depend on a missing session are written where
  * they fail loudly if it were ever not installed.
  */

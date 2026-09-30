@@ -5,8 +5,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { MemoryRouter, Route, useLocation } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomePage } from '@/solid/pages/Home';
-import { SessionProvider, useSession } from '@/solid/web/session';
-import { REFRESH_EVENT } from '@/solid/shared/page-data';
+import { SessionProvider, useSession } from '@/solid/lib/session';
+import { REFRESH_EVENT } from '@/web/page-data-events';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com' }, onboarded: true };
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };

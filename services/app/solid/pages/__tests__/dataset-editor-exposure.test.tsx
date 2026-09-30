@@ -9,7 +9,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addCell, catalog, change, click, discover, editor, installDatasetFetch, savedDefinition, selectOrders, state, tables } from '@/solid/test/dataset-catalog';
 
-vi.mock('@/solid/web/session', () => ({ useSession: () => ({ session: () => state.viewerSession }) }));
+vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => state.viewerSession }) }));
 beforeEach(installDatasetFetch);
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 

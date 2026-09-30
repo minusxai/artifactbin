@@ -17,11 +17,11 @@ import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared-runtime';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
-import { loginHref } from '../shared/login-href';
+import { loginHref } from '@/lib/login-href';
 import { takeBootstrap } from '@/web/bootstrap';
 import { takeChromeIntent } from '@/web/idle-boot';
 import { adoptInitialStory, removeServedHeadStyles } from '@/web/initial-story';
-import { useSession } from '../web/session';
+import { useSession } from '../lib/session';
 import { NotFoundPage } from './NotFound';
 import type { AnnotationWire } from '@/lib/annotations';
 import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/share-roles';
@@ -46,6 +46,7 @@ import Sun from 'lucide-solid/icons/sun';
 import Moon from 'lucide-solid/icons/moon';
 import X from 'lucide-solid/icons/x';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
+import { apiFetch } from '../lib/api';
 
 /** The page panels wear the reader chrome's own sheet; inside the trusted root they need its tokens too. */
 const PANEL_CSS = `${STORY_CHROME_CSS}
@@ -376,7 +377,7 @@ export function DocumentPage(): JSX.Element {
         const on = control?.getAttribute(name === 'like' ? 'data-mx-liked' : 'data-mx-following') === 'true';
         const href = name === 'like' ? `/api/my/artifacts/${id}/like` : page.follow ? `/api/users/${page.follow.userId}/follow` : '';
         if (!href || href.includes('/undefined/')) return;
-        const response = await fetch(href, { method: on ? 'DELETE' : 'POST', credentials: 'same-origin' }).catch(() => null);
+        const response = await apiFetch(href, on ? 'DELETE' : 'POST').catch(() => null);
         if (!response?.ok) return;
         const answer = await response.json() as { liked?: boolean; following?: boolean; count: number };
         const next = name === 'like' ? answer.liked : answer.following;

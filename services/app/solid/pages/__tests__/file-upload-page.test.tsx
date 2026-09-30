@@ -14,7 +14,7 @@ import { MemoryRouter, Route } from '@solidjs/router';
 import { FileUploadPage } from '@/solid/pages/FileUpload';
 
 
-vi.mock('@/solid/web/session', () => ({ useSession: () => ({ session: () => ({ user: { id: 'usr_1', email: 'owner@example.com' } }) }) }));
+vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ user: { id: 'usr_1', email: 'owner@example.com' } }) }) }));
 // The 3D viewer needs WebGL and the served three bundle; here only the handoff is checked.
 vi.mock('@/solid/components/ModelPreview', () => ({ default: ({ title }: { title: string }) => <div aria-label={`3D preview of ${title}`} /> }));
 

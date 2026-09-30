@@ -77,6 +77,7 @@ import { VersionHistory } from '../document/VersionHistory';
 import { Tooltip } from '../components/Tooltip';
 import { FeatureGate } from '../components/FeatureGate';
 import MobileSheet, { createIsPhoneViewport } from '../components/MobileSheet';
+import { copyText } from '../lib/copy-text';
 
 const INSPECTOR_LABEL = { chart: 'Chart inspector', number: 'Number inspector', diagram: 'Diagram inspector' } as const;
 const INSPECT_LABEL = { chart: 'Edit chart', number: 'Edit number', diagram: 'Edit diagram' } as const;
@@ -735,7 +736,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           <p>{live.state.status}</p>
           <div class="mt-2 flex flex-wrap gap-3">
             <button type="button" onClick={() => void live.recover('retry')}>Retry save</button>
-            <button type="button" onClick={() => void navigator.clipboard.writeText(sourceRef.current).catch(() => setHistoryError('Could not copy. Open the source editor to select and copy your draft.'))}>Copy draft</button>
+            <button type="button" onClick={() => void copyText(sourceRef.current).then((ok) => { if (!ok) setHistoryError('Could not copy. Open the source editor to select and copy your draft.'); })}>Copy draft</button>
             <button type="button" onClick={() => setDiscardDraft(true)}>Use server version</button>
           </div>
           <Show when={discardDraft()}>
@@ -751,7 +752,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
         <div role="alertdialog" aria-label="Recover uncommitted text" class="fixed inset-x-4 top-28 z-50 mx-auto max-w-xl rounded border border-edge bg-surface p-4 shadow-xl">
           <p>This text could not be applied to the current document. Copy it before restoring the document.</p>
           <textarea aria-label="Uncommitted text" readOnly value={rejectedFragment() ?? ''} class="mt-2 h-32 w-full font-mono text-sm" />
-          <button type="button" onClick={() => void navigator.clipboard.writeText(rejectedFragment() ?? '').catch(() => setHistoryError('Select and copy the text from the field.'))}>Copy uncommitted text</button>
+          <button type="button" onClick={() => void copyText(rejectedFragment() ?? '').then((ok) => { if (!ok) setHistoryError('Select and copy the text from the field.'); })}>Copy uncommitted text</button>
           <button type="button" onClick={() => { inPlace.discardRejectedEdit(); setRejectedFragment(null); showInDocument(sourceRef.current); }}>Discard this text and restore document</button>
         </div>
       </Show>
