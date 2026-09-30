@@ -211,6 +211,28 @@ describe('trusted overlay portal', () => {
         expect((portal ?? host).querySelector('[data-slot="popover-content"]')).toBeNull();
       } finally { dispose(); }
     });
+    it(`anchors Popover content to its trigger ${portalEnabled ? 'in the trusted portal' : 'in place'}`, async () => {
+      const portal = portalEnabled ? document.createElement('div') : null;
+      const { host, dispose } = mount(() => <Popover><PopoverTrigger>Open</PopoverTrigger><PopoverContent>Popover body</PopoverContent></Popover>, portal);
+      const rect = (left: number, top: number, width: number, height: number) => ({ x: left, y: top, left, top, width, height, right: left + width, bottom: top + height, toJSON: () => ({}) }) as DOMRect;
+      const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        return this.getAttribute('data-slot') === 'popover-trigger' ? rect(500, 300, 100, 30) : this.hasAttribute('data-radix-popper-content-wrapper') || this.getAttribute('data-slot') === 'popover-content' ? rect(0, 0, 288, 100) : rect(0, 0, 0, 0);
+      });
+      // floating-ui measures an element by its offset size; jsdom has no layout, so give the popover one.
+      const size = (axis: 'offsetWidth' | 'offsetHeight', value: number) => vi.spyOn(HTMLElement.prototype, axis, 'get').mockImplementation(function (this: HTMLElement) { return this.hasAttribute('data-radix-popper-content-wrapper') || this.getAttribute('data-slot') === 'popover-content' ? value : this.getAttribute('data-slot') === 'popover-trigger' ? (axis === 'offsetWidth' ? 100 : 30) : 0; });
+      const viewport = (axis: 'clientWidth' | 'clientHeight', value: number) => vi.spyOn(document.documentElement, axis, 'get').mockReturnValue(value);
+      const sizes = [size('offsetWidth', 288), size('offsetHeight', 100), viewport('clientWidth', 1024), viewport('clientHeight', 768)];
+      try {
+        host.querySelector('button')!.click();
+        const wrapper = (portal ?? host).querySelector<HTMLElement>('[data-radix-popper-content-wrapper]')!;
+        expect(wrapper.querySelector('[data-slot="popover-content"]')?.textContent).toBe('Popover body');
+        await vi.waitFor(() => expect(wrapper.style.transform).toMatch(/px/));
+        // Centred under the trigger (500 + 50 - 288 / 2) and 4px below it (300 + 30 + 4), never the viewport's corner.
+        expect(wrapper.style.position).toBe('fixed');
+        expect(wrapper.style.transform).toBe('translate(406px, 334px)');
+        expect(wrapper.querySelector('[data-slot="popover-content"]')?.getAttribute('data-side')).toBe('bottom');
+      } finally { spy.mockRestore(); sizes.forEach(mock => mock.mockRestore()); dispose(); }
+    });
     // Today's story tooltip portals like Radix's Portal: to the trusted container when the page has one, else to the
     // BODY — never in place (the parity gate's probe of today's reader: the content's top element is a child of <body>).
     it(`places Tooltip content ${portalEnabled ? 'in the trusted portal' : 'in the body, as Radix does without one'}`, () => {

@@ -44,22 +44,47 @@ export function PopoverTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
   const ctx = useContext(PopoverContext)! as PopupState;
   return <button ref={ctx.setTrigger} type="button" aria-haspopup="dialog" aria-expanded={ctx.open()} aria-controls={undefined} data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-trigger" on:click={() => { if (!ctx.open()) ctx.announce(); ctx.setOpen(!ctx.open()); }} {...props} />;
 }
-export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { align?: string; sideOffset?: number; forceMount?: boolean }) {
-  const ctx = useContext(PopoverContext)! as PopupState; const island = useIsland(); const { align: _align, sideOffset: _sideOffset, forceMount, ...rest } = props;
-  let node!: HTMLDivElement;
-  if (forceMount) {
+export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { side?: Side; align?: Align; sideOffset?: number; forceMount?: boolean }) {
+  const ctx = useContext(PopoverContext)! as PopupState; const island = useIsland();
+  const [local, rest] = splitProps(props, ['side', 'align', 'sideOffset', 'forceMount', 'children']);
+  const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); ctx.trigger()?.focus(); } };
+  const popper = () => <PopoverPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset}>
+    <div ref={ctx.setPanel} id={props.id ?? ctx.contentId} role="dialog" data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-content" data-story-floating="" {...rest} on:keydown={onKeyDown}>{local.children}</div>
+  </PopoverPopper>;
+  if (local.forceMount) {
+    let holder!: HTMLDivElement;
     onMount(() => {
-      const home = document.createComment('popover-home'); node.before(home);
+      const home = document.createComment('popover-home'); holder.before(home);
       createEffect(() => {
         const destination = ctx.open() ? island.trustedPortal() : null;
-        if (destination) destination.append(node);
-        else home.parentNode?.insertBefore(node, home.nextSibling);
+        if (destination) destination.append(holder);
+        else home.parentNode?.insertBefore(holder, home.nextSibling);
       });
       onCleanup(() => home.remove());
     });
-    return <div ref={el => { node = el; ctx.setPanel(el); }} id={props.id ?? ctx.contentId} role="dialog" data-state={ctx.open() ? 'open' : 'closed'} data-slot="popover-content" data-story-floating="" hidden={!ctx.open()} {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); ctx.trigger()?.focus(); } }}>{props.children}</div>;
+    return <div ref={holder} hidden={!ctx.open()}>{popper()}</div>;
   }
-  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}><div ref={ctx.setPanel} id={props.id ?? ctx.contentId} role="dialog" data-state="open" data-slot="popover-content" data-story-floating="" {...rest} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); ctx.setOpen(false); ctx.trigger()?.focus(); } }}>{props.children}</div></TrustedOverlay></Show>;
+  return <Show when={ctx.open()}><TrustedOverlay open={ctx.open}>{popper()}</TrustedOverlay></Show>;
+}
+/**
+ * The popover's placement, as the tooltip's: a fixed wrapper Radix's popper positions against the trigger (bottom,
+ * centred, 4px off, 8px from the edges). Until placed it waits off-screen, so it never flashes at the viewport's corner.
+ */
+function PopoverPopper(p: { ctx: PopupState; side?: Side; align?: Align; sideOffset?: number; children?: JSX.Element }) {
+  const ctx = p.ctx; let wrapper!: HTMLDivElement; const [placed, setPlaced] = createSignal<Placed>();
+  onMount(() => createEffect(() => {
+    if (!ctx.open()) return;
+    const anchor = ctx.trigger(); if (!anchor) return;
+    let live = true; let stop = () => {};
+    // Opened by a press, so placed at once (no deferral): the lazy popper chunk is the only wait.
+    void import('./popper').then(({ placePopper }) => {
+      if (!live) return;
+      stop = placePopper(anchor, wrapper, null, { side: p.side ?? 'bottom', align: p.align ?? 'center', sideOffset: p.sideOffset ?? 4, collisionPadding: 8, arrowWidth: 0, arrowHeight: 0, onPlaced: setPlaced });
+    });
+    onCleanup(() => { live = false; stop(); setPlaced(undefined); });
+  }));
+  createEffect(() => { const side = placed()?.side; const align = placed()?.align; const content = wrapper.firstElementChild; if (!content) return; if (side) { content.setAttribute('data-side', side); content.setAttribute('data-align', align ?? 'center'); } else { content.removeAttribute('data-side'); content.removeAttribute('data-align'); } });
+  return <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>{p.children}</div>;
 }
 type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; panel: () => HTMLElement | undefined; setPanel: (el: HTMLElement) => void; announce: () => void };
 /**

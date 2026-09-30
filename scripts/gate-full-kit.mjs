@@ -222,5 +222,30 @@ if (compiledReader) {
   check(extra.length === 0, `a prose document never fetches the chart chunk (island files beyond its page behaviour: ${extra.join(', ') || 'none'})`);
 } else check(!proseRequests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a prose document never fetches the chart chunk');
 
+// 6. A Popover opens NEXT TO its trigger, not at the viewport's corner (the placement is measured, so only a
+//    browser proves it): mid-page trigger on the right of a row, at desktop and phone width.
+const popover = await publish({ markup: '<h1 className="text-3xl">Popover</h1><p>Some text above.</p><div className="flex justify-end pt-24"><Popover><PopoverTrigger>Open popover</PopoverTrigger><PopoverContent>Popover body</PopoverContent></Popover></div><p className="pt-24">Text below.</p>', title: 'Popover placement' });
+for (const viewport of [{ width: 1200, height: 800 }, { width: 390, height: 800 }]) {
+  const popPage = await browser.newPage({ viewport });
+  await popPage.goto(readerUrl(`${BASE}/a/${popover.id}`));
+  await popPage.waitForSelector('[data-mx-inline-story] h1', { timeout: 20000 });
+  await popPage.waitForTimeout(1500);
+  await popPage.getByRole('button', { name: 'Open popover' }).click();
+  await popPage.waitForFunction(() => /px/.test(document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''), null, { timeout: 5000 }).catch(() => {});
+  const box = await popPage.evaluate(() => {
+    const t = document.querySelector('[data-slot="popover-trigger"]')?.getBoundingClientRect();
+    const c = document.querySelector('[data-slot="popover-content"]')?.getBoundingClientRect();
+    return t && c ? { t: { l: t.left, r: t.right, b: t.bottom, w: t.width }, c: { l: c.left, r: c.right, t: c.top, w: c.width }, inStory: !!document.querySelector('[data-mx-inline-story] [data-slot="popover-content"]') } : null;
+  });
+  const tag = `${viewport.width}px`;
+  check(!!box, `${tag}: the popover opened`);
+  if (box) {
+    check(Math.abs(box.c.t - (box.t.b + 4)) <= 2, `${tag}: popover sits just under its trigger (content top ${box.c.t}, trigger bottom ${box.t.b})`);
+    check(box.c.r > box.t.l && box.c.l < box.t.r && box.c.l >= 0 && box.c.r <= viewport.width, `${tag}: popover overlaps its trigger's columns and stays on screen (${box.c.l}..${box.c.r})`);
+    check(box.inStory, `${tag}: popover mounts inside the story root`);
+  }
+  await popPage.close();
+}
+
 await browser.close();
 check.done();
