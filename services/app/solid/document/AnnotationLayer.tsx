@@ -19,6 +19,7 @@
  *
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
+import { useLocation } from '@solidjs/router';
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import Camera from 'lucide-solid/icons/camera';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
@@ -104,11 +105,13 @@ export interface AnnotationLayerProps {
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
 const CAPTURE_CHROME_CSS = ':host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}';
 const DELETE_CONFIRMATION = { title: 'Delete this comment?', description: 'This comment and its replies will be permanently deleted. This cannot be undone.', action: 'Delete comment', confirmLabel: 'Confirm delete comment' };
-const linkedFromLocation = () => {
-  if (typeof location === 'undefined') return null;
-  const query = new URLSearchParams(location.search);
+const linkedFrom = (search: string | undefined) => {
+  if (search === undefined) return null;
+  const query = new URLSearchParams(search);
   return query.get('comment') ?? query.get('thread');
 };
+/** The app router's location where the layer is inside one (the document page); none in isolation. */
+const optionalRouterLocation = () => { try { return useLocation(); } catch { return null; } };
 
 /** useNewCommentDraft: the sole online agent is prefilled once per composer opening; any edit wins over late discovery. */
 function createNewCommentDraft(backend: ArtifactBackend, open: () => boolean) {
@@ -233,10 +236,15 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   // Notification links identify a comment; resolve it through the authorised open/resolved indexes
   // so a reply opens its containing conversation.
-  const [linkedComment, setLinkedComment] = createSignal<string | null>(props.linkTarget ?? linkedFromLocation());
+  // A notification followed inside the app changes the query without reloading this page: follow
+  // the router's location when there is one, and history navigation either way.
+  const routerLocation = optionalRouterLocation();
+  const currentSearch = () => routerLocation ? routerLocation.search : typeof location === 'undefined' ? undefined : location.search;
+  const [linkedComment, setLinkedComment] = createSignal<string | null>(props.linkTarget ?? linkedFrom(untrack(currentSearch)));
   createEffect(() => { if (props.linkTarget !== undefined) setLinkedComment(props.linkTarget); });
+  createEffect(on(currentSearch, (search) => { if (props.linkTarget === undefined) setLinkedComment(linkedFrom(search)); }, { defer: true }));
   onMount(() => {
-    const navigate = () => { if (props.linkTarget === undefined) setLinkedComment(linkedFromLocation()); };
+    const navigate = () => { if (props.linkTarget === undefined) setLinkedComment(linkedFrom(location.search)); };
     window.addEventListener('popstate', navigate);
     onCleanup(() => window.removeEventListener('popstate', navigate));
   });

@@ -8,13 +8,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
+import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
+import { AnnotationLayer } from '../AnnotationLayer';
 import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
 import { personHue } from '@/lib/person-face';
 import { Avatar } from '../../components/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { positionedComments } from '../AnnotationPreview';
 import {
-  ADA_IMAGE, ANN, FACES, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot,
+  ADA_IMAGE, ANN, FACES, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot,
 } from './annotation-rig';
 
 beforeEach(installAnnotationFetch);
@@ -44,6 +46,22 @@ describe('AnnotationLayer', () => {
       expect(open).toHaveBeenCalledWith(true);
       expect(view.runtime.posts().at(-1).openId).toBe(ANN.id);
     } finally { window.history.replaceState(null, '', window.location.pathname); }
+  });
+
+  it('follows a notification link the app router navigates to without reloading the page', async () => {
+    const history = createMemoryHistory();
+    history.set({ value: '/a/doc1', replace: true });
+    const runtime = makeRuntime();
+    const open = vi.fn();
+    render(() => <MemoryRouter history={history}><Route path="*" component={() => (
+      <AnnotationLayer id="doc1" backend={httpBackend('doc1')} runtimeRef={runtime.ref} sessionNonce={NONCE} railOpen={false} onRailOpenChange={open} />
+    )} /></MemoryRouter>);
+    await flush(); await flush();
+    expect(open).not.toHaveBeenCalled();
+    history.set({ value: `/a/doc1?comment=${ANN.thread[1]!.id}` });
+    await flush();
+    expect(open).toHaveBeenCalledWith(true);
+    expect(runtime.posts().at(-1).openId).toBe(ANN.id);
   });
 
   it('shows distinct local times for a comment and reply on the same day', async () => {
