@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, untrack, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
@@ -50,15 +50,29 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [showResolved, setShowResolved] = createSignal(false);
   const [deleting, setDeleting] = createSignal<string | null>(null);
   const [openId, setOpenId] = createSignal<string | null>(null);
+  const [inspectedResolvedId, setInspectedResolvedId] = createSignal<string | null>(null);
   const [justOpenedId, setJustOpenedId] = createSignal<string | null>(null);
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   let menuRoot: HTMLDivElement | undefined;
   let mutation = { signature: '', key: '' };
   const [folds, setFolds] = createSignal(readFolds(props.id));
-  const [pick, setPick] = createSignal<'select' | null>(props.pickRequested ? 'select' : null);
+  const [pick, setPick] = createSignal<'block' | 'area' | null>(props.pickRequested ? 'block' : null);
+  let resumeSelectAfterCompose = false;
   let lastRailOpen = false;
   let openedForThread = false;
   let sheetAwayForPick = false;
+  const endPick = () => { resumeSelectAfterCompose = false; setPick(null); capture.reset(); sheetAwayForPick = false; };
+  const beginPick = (mode: 'block' | 'area') => {
+    if (mode === 'block') capture.reset();
+    setPick(mode); setOpenId(null);
+    if (props.railSheet && props.railOpen) { sheetAwayForPick = true; props.onRailOpenChange(false); }
+  };
+  const beginScreenshot = async () => {
+    if (!props.editId || backend.unavailable('commentImages')) return;
+    beginPick('area');
+    if (await capture.start() === 'cancelled') beginPick('block');
+  };
+  const screenshotUnavailable = () => backend.unavailable('commentImages') ?? (!props.editId ? 'Screenshots need a saved document.' : null);
   const [hoverId, setHoverId] = createSignal<string | null>(null);
   const [anchorRects, setAnchorRects] = createSignal<Record<string, StoryEditRect>>({});
   const [linkTarget, setLinkTarget] = createSignal<string | null>(props.linkTarget ?? (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('comment') ?? new URLSearchParams(location.search).get('thread')));
@@ -74,9 +88,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   createEffect(() => {
     const railOpen = props.railOpen;
     const canPick = props.pickOnOpen !== false;
-    if (!canPick) { setPick(null); sheetAwayForPick = false; }
-    else if (railOpen && !lastRailOpen && !selection() && !openId() && !openedForThread && !props.railSheet && !props.editId) setPick('select');
-    else if (!railOpen && lastRailOpen && !sheetAwayForPick) setPick(null);
+    if (!canPick) { resumeSelectAfterCompose = false; setPick(null); capture.reset(); sheetAwayForPick = false; }
+    else if (railOpen && !lastRailOpen && !selection() && !openId() && !openedForThread && !props.railSheet) {
+      setPick('block');
+    }
+    else if (!railOpen && lastRailOpen && !sheetAwayForPick) { if (pick() || !selection()) capture.reset(); setPick(null); }
     if (railOpen && !lastRailOpen) openedForThread = false;
     lastRailOpen = railOpen;
   });
@@ -102,6 +118,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
   createEffect(() => {
     const open = new Set(items().map(row => row.id));
+    if (open.has(inspectedResolvedId() ?? '')) setInspectedResolvedId(null);
     setRecentResolved(previous => {
       const next = Object.fromEntries(Object.entries(previous).filter(([id]) => !open.has(id)));
       return Object.keys(next).length === Object.keys(previous).length ? previous : next;
@@ -122,12 +139,15 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     const recent = Object.values(recentResolved()).filter(value => value.remaining > 0 && value.row.id !== expandedResolved?.id).map(value => value.row);
     const pins = [...items(), ...(expandedResolved ? [expandedResolved] : []), ...recent].filter(row => !row.orphaned && row.anchor).map(row => {
       const anchor = row.anchor! as typeof row.anchor & { nodeId?: string | null };
-      return { id: row.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: row.range };
+      return { id: row.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: row.range,
+        ...(row.status === 'resolved' && (row.id !== inspectedResolvedId() || row.id !== openId()) ? { layoutOnly: true } : {}) };
     });
-    sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_ANNOTATIONS_MESSAGE, mode: 'on', pins, openId: openId(), hoverId: hoverId(), selectedPath: selection()?.path ?? null, selected: selection(), canComment: true, pick: pick() } satisfies StoryAnnotationsMessage);
+    sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_ANNOTATIONS_MESSAGE, mode: capture.busy() ? 'off' : 'on', pins, openId: openId(), hoverId: hoverId(), selectedPath: selection()?.path ?? null, selected: selection(), canComment: true, pick: pick() } satisfies StoryAnnotationsMessage);
   });
   createEffect(() => {
     if (!props.initialSelection) return;
+    resumeSelectAfterCompose = untrack(pick) === 'block';
+    capture.reset();
     setPick(null);
     setSelection(props.initialSelection);
   });
@@ -148,7 +168,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       if (event.key !== 'Escape') return;
       event.stopPropagation();
       if (pick()) { setPick(null); capture.reset(); }
-      else { setSelection(null); capture.reset(); props.onSelectionConsumed?.(); sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null }); }
+      else cancelComposer();
     };
     window.addEventListener('keydown', escape);
     onCleanup(() => window.removeEventListener('keydown', escape));
@@ -167,16 +187,19 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         if (event.data.type === STORY_ANNOTATION_PIN_MESSAGE) { openThread(event.data.id); }
         if (event.data.type === STORY_ANNOTATION_HOVER_MESSAGE) setHoverId(event.data.id);
         if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) setAnchorRects(Object.fromEntries(event.data.positions.map(position => [position.id, position.rect])));
-        if (event.data.type === STORY_SELECTION_ACTION_MESSAGE && event.data.action === 'select' && props.pickOnOpen !== false) setPick('select');
+        if (event.data.type === STORY_SELECTION_ACTION_MESSAGE && event.data.action === 'select' && props.pickOnOpen !== false) beginPick('block');
         if (event.data.type === STORY_SELECTION_MESSAGE && pick()) {
+          const screenshot = pick() === 'area';
+          resumeSelectAfterCompose = Boolean(event.data.selection) && pick() === 'block';
           setPick(null);
           if (event.data.selection) {
             setSelection(event.data.selection); setOpenId(null);
             const rect = event.data.selection.captureRect ?? event.data.selection.rect;
             const viewport = documentRect({ runtimeRef });
-            void capture.capture({ ...rect, x: rect.x + (viewport?.left ?? 0), y: rect.y + (viewport?.top ?? 0) });
+            if (screenshot) void capture.capture({ ...rect, x: rect.x + (viewport?.left ?? 0), y: rect.y + (viewport?.top ?? 0) });
           } else capture.reset();
         } else if (event.data.type === STORY_SELECTION_MESSAGE && selection()) {
+          if (capture.busy() || capture.draft()) return;
           const reported = event.data.selection;
           setSelection(previous => {
             const next = reported && previous?.nodeId && reported.nodeId === previous.nodeId
@@ -226,7 +249,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       const row = await backend.createAnnotation({ path: target.path, node_id: target.nodeId, body: draft(), ...(target.quote ? { quote: target.quote } : {}), ...(target.range ? { range: target.range } : {}), ...(attachmentId ? { attachment_id: attachmentId, edit_id: capture.draft()!.editId } : {}) }, mutation.key);
       setItems(previous => [...previous.filter(item => item.id !== row.id), row]);
       setDraft(''); setSelection(null); capture.reset(); props.onSelectionConsumed?.(); setOpenId(row.id); setJustOpenedId(row.id);
-      sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
+      if (resumeSelectAfterCompose) { resumeSelectAfterCompose = false; setPick('block'); }
+      else sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
     } catch (cause) {
       if (cause instanceof BackendRequestError && cause.signInRequired) location.assign(loginHref(location, 'comment'));
       else setError(cause instanceof Error ? cause.message : 'Could not save the comment. Your draft is still here.');
@@ -239,10 +263,12 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   };
   const openThread = (id: string) => {
     openedForThread = true;
+    capture.reset();
     setPick(null);
     setOpenId(id);
     setJustOpenedId(id);
     const row = [...items(), ...resolved()].find(item => item.id === id);
+    setInspectedResolvedId(row?.status === 'resolved' ? id : null);
     if (row?.status === 'resolved') setShowResolved(true);
     if (row) setReply(previous => previous[id] !== undefined ? previous : { ...previous, [id]: replyMentionPrefix(row.thread) });
     setFolds(unfold(props.id, { threads: [id], comments: row?.thread.at(-1) ? [row.thread.at(-1)!.id] : [] }));
@@ -284,7 +310,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       : { left: 0, top: props.topOffset ?? 0, width: innerWidth - railWidth };
   });
   const composerPosition = createMemo(() => selection() ? positionedComposer(selection()!, frameArea(), innerWidth, innerHeight, capture.required()) : null);
-  const cancelComposer = () => { setSelection(null); setDraft(''); capture.reset(); setError(''); props.onSelectionConsumed?.(); sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null }); };
+  const cancelComposer = () => {
+    setSelection(null); setDraft(''); capture.reset(); setError(''); props.onSelectionConsumed?.();
+    if (resumeSelectAfterCompose) { resumeSelectAfterCompose = false; beginPick('block'); }
+    else sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: null });
+  };
   const floatingRows = createMemo(() => [...items(), ...Object.values(recentResolved()).filter(value => value.remaining > 0 && !items().some(row => row.id === value.row.id)).map(value => value.row)]);
   const floating = () => !props.railOpen && Boolean(props.showViewComments) && floatingRows().length > 0;
   const placed = createMemo(() => floating() ? positionedComments(floatingRows(), anchorRects(), props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) ?? { top: 0, height: innerHeight } : { top: 0, height: innerHeight }, innerHeight) : []);
@@ -348,17 +378,14 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     <Show when={row.status === 'open' && openId() === row.id}><form class="mt-2 border-t border-edge px-3 py-2" onSubmit={event => { event.preventDefault(); if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }}><CommentMarkdownField label={`Reply to annotation ${row.id}`} value={reply()[row.id] ?? ''} onChange={value => setReply(previous => ({ ...previous, [row.id]: value }))} onSubmit={() => { if (hasReplyText(reply()[row.id] ?? '')) void act(row.id, { reply: reply()[row.id] }); }} previewLabel="Reply preview" previewToggleLabel="Preview reply" backend={backend} artifactId={props.id} placeholder="reply…" rows={2} /><div class="flex justify-end gap-2"><button type="button" aria-label="Cancel reply" onClick={() => { setReply(previous => ({ ...previous, [row.id]: '' })); setOpenId(null); }} class="bg-transparent px-2 py-1">cancel</button><button type="submit" aria-label="Send reply" disabled={busy() || !hasReplyText(reply()[row.id] ?? '')} class="border border-accent bg-accent px-2 py-1 text-bg">reply</button></div></form></Show>
   </article>;
   return <>
-    <Show when={pick()}><div role="status" aria-label="Select tool active" class="fixed z-30 rounded border border-edge bg-surface px-3 py-2 text-xs shadow" style={{ top: `${Math.max(props.topOffset ?? 0, frameArea().top, props.railSheet ? APP_BAR_H : 0) + 12}px`, left: `${frameArea().left + frameArea().width / 2}px`, transform: 'translateX(-50%)' }}>tap a block or drag an area to comment<button type="button" aria-label="Cancel picking" onClick={() => setPick(null)} class="ml-2">×</button></div></Show>
-    <Show when={selection()}><aside role="dialog" aria-label="Annotation composer" class="fixed z-40 overflow-y-auto rounded border border-edge bg-surface p-3 shadow-lg" style={{ left: `${composerPosition()?.left ?? 12}px`, top: `${composerPosition()?.top ?? 12}px`, width: `${composerPosition()?.width ?? 384}px`, 'max-height': `calc(100vh - ${(composerPosition()?.top ?? 12) + 12}px)` }}><p class="mb-2 text-xs text-muted">{selection()?.quote ?? 'Comment on selection'}</p>
+    <Show when={pick()}><div role="status" aria-label={pick() === 'area' ? 'Screenshot tool active' : 'Select tool active'} class="fixed z-30 rounded border border-edge bg-surface px-3 py-2 text-xs shadow" style={{ top: `${Math.max(props.topOffset ?? 0, frameArea().top, props.railSheet ? APP_BAR_H : 0) + 12}px`, left: `${frameArea().left + frameArea().width / 2}px`, transform: 'translateX(-50%)' }}>{pick() === 'area' ? (capture.busy() ? 'Choose this tab in the sharing dialog' : 'drag an area to screenshot') : 'click a block or highlight text to comment'}<button type="button" aria-label="Cancel picking" onClick={endPick} class="ml-2">×</button></div></Show>
+    <Show when={selection() && !pick()}><aside role="dialog" aria-label="Annotation composer" class="fixed z-40 overflow-y-auto rounded border border-edge bg-surface p-3 shadow-lg" style={{ left: `${composerPosition()?.left ?? 12}px`, top: `${composerPosition()?.top ?? 12}px`, width: `${composerPosition()?.width ?? 384}px`, 'max-height': `calc(100vh - ${(composerPosition()?.top ?? 12) + 12}px)` }}><p class="mb-2 text-xs text-muted">{selection()?.quote ?? 'Comment on selection'}</p>
       <Show when={capture.busy()}><p role="status">Preparing screenshot…</p></Show>
-      <Show when={capture.draft()}>{current => <ScreenshotEditor image={current().image} initialStrokes={current().strokes} exportRef={screenshotExport} busy={busy()} onRetake={() => void capture.start()} />}</Show>
-      <Show when={capture.required() && !capture.draft() && !capture.busy()}><div class="mb-2 rounded border border-edge bg-raised p-2 text-xs"><p role="alert">{capture.error() || 'A screenshot is required for this selection.'}</p><button type="button" onClick={() => void capture.start()}>Retry screenshot</button><label>Upload screenshot<input aria-label="Upload screenshot" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void capture.upload(file); }} /></label><button type="button" onClick={capture.skip}>Continue without screenshot</button></div></Show>
-      <div class="mb-2 flex gap-1 text-xs"><For each={[...(selection()?.ancestors.slice(-2) ?? []), ...(selection() ? [{ path: selection()!.path, tag: selection()!.tag, hint: '' }] : [])]}>{crumb => <Show when={crumb.path !== selection()?.path} fallback={<span>{crumb.tag}</span>}><button type="button" aria-label={`Select ${crumb.tag}`} onClick={() => sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: crumb.path })}>{crumb.tag}</button></Show>}</For></div>
+      <Show when={capture.draft()}>{current => <ScreenshotEditor image={current().image} initialStrokes={current().strokes} exportRef={screenshotExport} busy={busy()} onRetake={() => void beginScreenshot()} />}</Show>
+      <Show when={capture.required() && !capture.draft() && !capture.busy()}><div class="mb-2 rounded border border-edge bg-raised p-2 text-xs"><p role="alert">{capture.error() || 'A screenshot is required for this selection.'}</p><button type="button" onClick={() => void beginScreenshot()}>Retry screenshot</button><label>Upload screenshot<input aria-label="Upload screenshot" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void capture.upload(file); }} /></label><button type="button" onClick={capture.skip}>Continue without screenshot</button></div></Show>
+      <div class="mb-2 flex gap-1 text-xs"><For each={[...(selection()?.ancestors.slice(-2) ?? []), ...(selection() ? [{ path: selection()!.path, tag: selection()!.tag, hint: '' }] : [])]}>{crumb => <Show when={crumb.path !== selection()?.path} fallback={<span>{crumb.tag}</span>}><button type="button" aria-label={`Select ${crumb.tag}`} disabled={capture.busy() || Boolean(capture.draft())} onClick={() => sendDocument({ runtimeRef: props.runtimeRef }, { type: STORY_SELECT_MESSAGE, path: crumb.path })}>{crumb.tag}</button></Show>}</For></div>
       <CommentMarkdownField label="New comment" value={draft()} onChange={editDraft} onSubmit={() => void post()} backend={backend} artifactId={props.id} placeholder="Add a comment for your agent…" rows={4} /><div class="flex justify-end gap-2"><button type="button" aria-label="Cancel comment" onClick={cancelComposer} class="bg-transparent px-2 py-1">Cancel</button><button type="button" aria-label="Post comment" disabled={busy() || capture.busy() || (capture.required() && !capture.draft()) || !hasReplyText(draft())} onClick={() => void post()} class="border border-accent bg-accent px-2 py-1 text-bg">Post</button></div></aside></Show>
-    <AnnotationRail open={props.railOpen} onClose={() => props.onRailOpenChange(false)} topOffset={props.topOffset} rightInset={props.rightInset} host={props.railHost} sheet={props.railSheet} picking={pick() !== null} onSelect={() => {
-      if (pick()) { setPick(null); capture.reset(); sheetAwayForPick = false; }
-      else { setPick('select'); void capture.start(); if (props.railSheet) { sheetAwayForPick = true; props.onRailOpenChange(false); } }
-    }}>
+    <AnnotationRail open={props.railOpen} onClose={() => props.onRailOpenChange(false)} topOffset={props.topOffset} rightInset={props.rightInset} host={props.railHost} sheet={props.railSheet} picking={pick() === 'block'} screenshot={capture.required()} screenshotUnavailable={screenshotUnavailable()} onScreenshot={() => void beginScreenshot()} onSelect={() => pick() === 'block' ? endPick() : beginPick('block')}>
       <div ref={threadsRoot}>
         <For each={items()}>{thread}</For>
         <Show when={items().length === 0}><p class="px-2 py-3 text-xs text-muted">no comments yet.</p></Show>

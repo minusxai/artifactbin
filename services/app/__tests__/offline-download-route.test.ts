@@ -4,6 +4,7 @@
  * HTML file carrying a valid ArtifactFile and the offline bundle.
  */
 import { describe, expect, it } from 'vitest';
+import { gunzipSync } from 'node:zlib';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
@@ -48,7 +49,8 @@ describe('GET /a/<id>/download', () => {
     const file = fileOf(html);
     expect(file.artifactId).toBe(id);
     expect(file.source).toContain('Trip plan');
-    expect(file.bundle).toBe('core');
+    expect(file.bundle).toBe('solid');
+    expect(html).not.toContain('id="afbin-wasm"');
   });
 
   it('lets anyone with the link download an unlisted document', async () => {
@@ -65,19 +67,19 @@ describe('GET /a/<id>/download', () => {
     expect((await download(request('/a/Zz99Zz/download'), params('Zz99Zz'))).status).toBe(404);
   });
 
-  it('carries the Mermaid bundle only for a document that draws a diagram', async () => {
+  it('carries the Mermaid engine only for a document that draws a diagram', async () => {
     const token = await owner('d');
     const id = await publish(token, 'private', '<h1>Flow</h1><Mermaid code="graph TD; A-->B" />');
     const html = await (await download(request(`/a/${id}/download`, { token }), params(id))).text();
-    expect(fileOf(html).bundle).toBe('mermaid');
+    expect(fileOf(html).bundle).toBe('solid');
     const plain = await publish(token, 'private');
     const plainHtml = await (await download(request(`/a/${plain}/download`, { token }), params(plain))).text();
     const code = (h: string) => h.match(/id="afbin-code">([^<]*)</)![1]!;
-    // Each file carries exactly the bundle it names: the diagram renderer where there is a diagram, never elsewhere.
-    // (A size ratio stopped saying this once the editor made the core bundle large too.)
-    expect(code(html)).toBe(await offlineBundle('mermaid'));
-    expect(code(plainHtml)).toBe(await offlineBundle('core'));
-    expect(code(html).length).toBeGreaterThan(code(plainHtml).length + 1024 * 1024);
+    const compiled = (h: string) => gunzipSync(Buffer.from(h.match(/id="afbin-compiled-code">([^<]*)</)![1]!, 'base64')).toString('utf8');
+    expect(code(html)).toBe(await offlineBundle('solid'));
+    expect(code(plainHtml)).toBe(code(html));
+    expect(compiled(html).includes('mermaidAPI')).toBe(true);
+    expect(plainHtml).not.toContain('id="afbin-compiled-code"');
   });
 
   it('names its code-view extras and the source its render was built from, and tells an agent how to edit it', async () => {
@@ -89,7 +91,8 @@ describe('GET /a/<id>/download', () => {
     expect(file.derivedFrom).toBe(sourceDigest(file.source));
     expect(html).toMatch(new RegExp(`^<!doctype html>\\n<!-- artifactbin offline file for "Trip plan" \\(${file.liveUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\.`));
     expect(html).toContain(`<link rel="help" href="${file.origin}/llms.txt"`);
-    expect(html).toContain(`script-src 'unsafe-inline' 'wasm-unsafe-eval' ${new URL(file.origin).origin};`);
+    expect(html).toContain(`script-src 'unsafe-inline' ${new URL(file.origin).origin};`);
+    expect(html).not.toContain("'wasm-unsafe-eval'");
     expect(html.indexOf('id="afbin-file"')).toBeLessThan(html.indexOf('id="afbin-code"'));
   });
 });

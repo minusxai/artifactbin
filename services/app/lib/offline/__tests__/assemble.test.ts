@@ -5,6 +5,7 @@
  * island names a server door.
  */
 import { describe, expect, it } from 'vitest';
+import { Script } from 'node:vm';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
@@ -19,6 +20,7 @@ import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 import type { TableResult } from '@/lib/story/dataflow';
 import { assembleArtifactFile } from '../assemble.server';
+import { packCompiledBrowserModule } from '../compiled-bundle.server';
 import { parseArtifactFile, type ArtifactFile } from '../file-format';
 
 useAppHarness();
@@ -134,6 +136,25 @@ describe('access', () => {
 });
 
 describe('the snapshot', () => {
+  it('packs the actual compiled dashboard module and its pinned shared chunks as a classic script', async () => {
+    const w = await world();
+    const file = await download(w.doc, w.owner.actor);
+    const packed = await packCompiledBrowserModule(file.compiled!, { offline: { sqlite: true, chart: false } });
+    expect(packed?.code.length).toBeGreaterThan(0);
+    expect(packed?.code).not.toMatch(/^\s*(?:import|export)\s/m);
+    expect(() => new Script(packed!.code)).not.toThrow();
+    // This fixture's Question is a table, not a Vega visualization.
+    expect(packed?.code.includes('Axes cannot be shared in concatenated')).toBe(false);
+  });
+  it('ships every island-literals carrier the packed module reads by DOM lookup, even though the file only carries a fresh SSR render', async () => {
+    const w = await world();
+    const file = await download(w.doc, w.owner.actor);
+    const packed = await packCompiledBrowserModule(file.compiled!, { offline: { sqlite: true, chart: false } });
+    const keys = [...packed!.code.matchAll(/data-mx-island-literals="([0-9a-f]{16})"/g)].map((m) => m[1]!);
+    // A document whose compiled module hoists no large literal proves nothing either way.
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) expect(file.compiled?.html).toContain(`data-mx-island-literals="${key}"`);
+  });
   it('carries the rows of every import the downloader may hold, so their queries run live and nothing is precomputed for them', async () => {
     const w = await world();
     const file = await download(w.doc, w.owner.actor);
@@ -147,9 +168,12 @@ describe('the snapshot', () => {
     expect(file.snapshot.variants).toEqual([]);
     expect(file.snapshot.frozen).toEqual([]);
     expect(file.metadata).toMatchObject({ title: 'Sales' });
-    expect(file).toMatchObject({ origin: ORIGIN, liveUrl: `${ORIGIN}/a/${w.doc}`, journal: [], localIds: [], bundle: 'core' });
+    expect(file).toMatchObject({ origin: ORIGIN, liveUrl: `${ORIGIN}/a/${w.doc}`, journal: [], localIds: [], bundle: 'solid' });
     expect(file.base.source).toBe(file.source);
     expect(file.downloadedBy).not.toContain('@');
+    expect(file.compiled?.html).toContain('Sales');
+    expect(file.compiled?.html).toContain('data-mx-ast');
+    expect(file.compiled?.html).toContain('>307</td>');
   });
 
   it('precomputes one variant per region only for the queries that stay on the server, and freezes their free-text filter', async () => {
@@ -239,7 +263,7 @@ describe('a self-contained file', () => {
   it('says a Mermaid document needs the mermaid bundle', async () => {
     const owner = await account('mermaid');
     const id = await create(owner.token.token, { markup: '<Mermaid title="Flow" code={"flowchart TD\\n A[Draft] --> B[Saved]"} />' });
-    expect((await download(id, owner.actor)).bundle).toBe('mermaid');
+    expect((await download(id, owner.actor)).bundle).toBe('solid');
   });
 
   it('refuses a file past the size cap with the size in the message', async () => {

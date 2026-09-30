@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {beginCapture,CaptureError} from './screen';
-import type {CaptureSession,CapturedImage,CaptureRect} from './contract';
+import type {CaptureSession,CapturedImage,CaptureRect,CaptureStartResult} from './contract';
 import type {BrushStroke,CommentImageMetadata} from '../../../contracts/src/comment-image';
 import type {ArtifactBackend} from '../artifact-backend/types';
 export interface ScreenshotDraft {image:CapturedImage;preview:Blob;strokes:BrushStroke[];editId:string}
@@ -13,20 +13,23 @@ export function useCommentCapture(backend:ArtifactBackend,id:string,editId:strin
  const [draft,setDraft]=useState<ScreenshotDraft|null>(null),[busy,setBusy]=useState(false),[required,setRequired]=useState(false),[error,setError]=useState('');
  const reset=useCallback(()=>{generation.current++;session.current?.dispose();session.current=null;setDraft(null);setBusy(false);setRequired(false);setError('');},[]);
  useEffect(()=>{reset();return ()=>{generation.current++;session.current?.dispose();};},[id,reset]);
- const start=async()=>{
-  // No screenshot is required where the backend cannot store one (the offline file).
-  reset();if(!editId||backend.unavailable('commentImages'))return true;
+ const start=async():Promise<CaptureStartResult>=>{
+  reset();if(!editId||backend.unavailable('commentImages'))return 'unavailable';
   const mine=generation.current;setRequired(true);setBusy(true);
-  // beginCapture enters the browser picker synchronously, before its first await.
-  const pending=beginCapture();
-  try{const next=await pending;if(mine!==generation.current){next.dispose();return false;}session.current=next;}
-  catch(e){if(mine===generation.current)setError(messages[e instanceof CaptureError?e.code:'unsupported']);}
-  finally{if(mine===generation.current)setBusy(false);}
-  return mine===generation.current;
+  // Permission is requested synchronously by the Screenshot button's gesture.
+  try{
+   const next=await beginCapture();
+   if(mine!==generation.current){next.dispose();return 'superseded';}
+   session.current=next;return 'ready';
+  }catch(e){
+   if(mine!==generation.current)return 'superseded';
+   if(e instanceof CaptureError&&e.code==='cancelled'){reset();return 'cancelled';}
+   setError(messages[e instanceof CaptureError?e.code:'unsupported']);return 'unavailable';
+  }finally{if(mine===generation.current)setBusy(false);}
  };
  const capture=async(rect:CaptureRect)=>{
   if(!editId||backend.unavailable('commentImages'))return;setRequired(true);
-  const current=session.current;session.current=null;
+  const current=session.current;
   if(!current){setError(value=>value||messages.unsupported);return;}
   const mine=generation.current,capturedEditId=revision.current!;setBusy(true);
   const started=performance.now();
@@ -34,7 +37,7 @@ export function useCommentCapture(backend:ArtifactBackend,id:string,editId:strin
   document.documentElement.classList.add('mx-taking-screenshot');
   try{const image=await current.capture(rect);if(mine!==generation.current)return;if(revision.current!==capturedEditId)throw new CaptureError('geometry');setDraft({image,preview:image.blob,strokes:[],editId:capturedEditId});setError('');}
   catch(e){if(mine===generation.current)setError(messages[e instanceof CaptureError?e.code:'unsupported']);}
-  finally{performance.measure('comment-screenshot:capture',{start:started,end:performance.now()});current.dispose();document.documentElement.classList.remove('mx-taking-screenshot');if(mine===generation.current)setBusy(false);}
+  finally{performance.measure('comment-screenshot:capture',{start:started,end:performance.now()});if(session.current===current)session.current=null;current.dispose();document.documentElement.classList.remove('mx-taking-screenshot');if(mine===generation.current)setBusy(false);}
  };
  const upload=async(file:File)=>{
   if(!editId||backend.unavailable('commentImages'))return;const mine=++generation.current;session.current?.dispose();session.current=null;setBusy(true);setError('');

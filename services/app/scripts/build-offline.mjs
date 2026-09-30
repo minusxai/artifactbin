@@ -1,49 +1,13 @@
 /**
- * Bundles the OFFLINE FILE's code (lib/offline/entry.tsx) — what a downloaded
- * `.html` carries in `#afbin-code` (lib/offline/file-html) — to
- * lib/build-assets/offline/, which ships with the server exactly like
- * the SSR bundle beside it. lib/offline/bundle.server.ts reads it back.
+ * Build one classic, inline-safe Solid editor script for a downloaded file.
+ * The compiled document browser module and its immutable shared chunks are
+ * packed separately at download time; SQLite wasm, Vega, and Mermaid travel
+ * only with documents that need them. CodeMirror and prettier stay behind the
+ * SRI-pinned extras script loaded when a reader opens source view.
  *
- * ONE entry, TWO bundles, because Mermaid alone is about as large as
- * everything else together and most documents draw no diagram:
- *  - `core`    everything but Mermaid, maps, the source editor and prettier;
- *  - `mermaid` core plus Mermaid.
- * Maps (deck.gl, MapLibre, h3-js) are stubbed in both: an offline file draws a
- * "Needs a connection" stand-in for them (components/offline/OfflineApp).
- *
- * And a THIRD artifact the file does not carry: `extras`
- * (lib/offline/extras-entry) — CodeMirror for code view and prettier for "View
- * formatted", which a reader who never opens code view should not download.
- * It is a classic IIFE with NO React that sets `globalThis.__afbinExtras`;
- * in core and mermaid lib/source-editor/codemirror and every prettier import
- * are stubbed to read that global back, and the modules that import them (SourceEditor,
- * format-jsx-preview) are only reached through a dynamic import, which this
- * non-splitting build evaluates lazily — after lib/offline/extras has loaded
- * the script. It is written as `extras-<hash>.js` beside the bundles, served
- * immutable at `/offline/extras-<hash>.js` (server/app.ts), and the manifest
- * records its SRI hash (sha384) for the file's `<script integrity>`. Only the
- * current build's extras are kept: an older hash is pruned here, and a file
- * that still names it falls back to the plain editor.
- * The build FAILS if CodeMirror or prettier reach core or mermaid, or React
- * reaches extras.
- *
- * The shape is forced by file://, probed in Chromium, Firefox and WebKit:
- * modules, chunk loading, Blob-URL scripts and workers are refused there, so
- * each bundle is ONE classic IIFE the file runs as inline script text. Two
- * consequences handled here:
- *  - `import.meta.url` is empty in an IIFE, so it is mapped to a global the
- *    entry sets from the file's own origin; any OTHER `import.meta` use fails
- *    the build rather than shipping an empty object;
- *  - the app's stylesheet cannot come from Vite (`?inline`), so it is compiled
- *    here from app/globals.css with the same Tailwind sources and handed to the
- *    entry as `__AFBIN_APP_CSS__`;
- *  - the SQLite wasm cannot be fetched, so its bytes are handed in as
- *    `__AFBIN_SQLITE_WASM__` (base64; gzip takes most of that back).
- *
- * Always minified production code: it is a download, never a dev asset.
- *
- * `--cache` skips the build when nothing that feeds it changed (the same
- * contract as build-server-reader.mjs, which invokes this before its own build.
+ * File URLs cannot reliably load module chunks, Blob scripts or workers in
+ * all three supported engines. This bundle is a single minified IIFE. The
+ * app stylesheet and authoring Tailwind inputs are embedded for local edits.
  */
 import esbuild from 'esbuild';
 import crypto from 'node:crypto';
@@ -55,13 +19,14 @@ import { precompressFile } from '../../../scripts/lib/precompress.mjs';
 import { createRequire } from 'node:module';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
+import { transformAsync } from '@babel/core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outdir = path.join(root, 'lib/build-assets/offline');
 const markerPath = path.join(outdir, '.build-cache.json');
 const manifestPath = path.join(outdir, 'manifest.json');
 const cache = process.argv.includes('--cache');
-const KINDS = /** @type {const} */ (['core', 'mermaid']);
+const KINDS = /** @type {const} */ (['solid']);
 /** The extras and their build-time brotli/gzip siblings (server/content-encoding serves them). */
 const EXTRAS_OR_SIBLING = /^extras-[0-9a-f]{16}\.js(?:\.br|\.gz)?$/;
 
@@ -146,14 +111,32 @@ async function build() {
   const extrasStubs = {
     name: 'offline-extras-stubs',
     setup(b) {
-      // The file:// editor retains its offline-capable React pane. The site loads the Solid pane;
-      // bundling that site-only adapter into a single-script offline file would pull in Solid JSX.
-      b.onResolve({ filter: /\/components\/SolidSourceEditorPane$/ }, () => ({ path: path.join(root, 'components/SourceEditorPane.tsx') }));
       // CodeMirror's packages compare their own instances, so the file never
       // imports them one by one: the engine module arrives whole from the extras.
       b.onResolve({ filter: /\/source-editor\/codemirror$/ }, () => ({ path: 'source-editor/codemirror', namespace: 'offline-extras' }));
       b.onResolve({ filter: /^prettier\// }, (args) => (args.path in EXTRAS_MODULES ? { path: args.path, namespace: 'offline-extras' } : undefined));
       b.onLoad({ filter: /.*/, namespace: 'offline-extras' }, (args) => ({ loader: 'js', contents: fromExtras(EXTRAS_MODULES[args.path]) }));
+    },
+  };
+  const solidTransform = {
+    name: 'offline-solid-transform',
+    setup(b) {
+      b.onLoad({ filter: /\.[jt]sx$/ }, async (args) => {
+        if (!args.path.startsWith(path.join(root, 'solid') + path.sep) && args.path !== path.join(root, 'lib/offline/solid-entry.tsx')) return undefined;
+        const source = fs.readFileSync(args.path, 'utf8');
+        const stripped = (await esbuild.transform(source, { loader: args.path.endsWith('.tsx') ? 'tsx' : 'jsx', jsx: 'preserve', sourcefile: args.path })).code;
+        const out = await transformAsync(stripped, { filename: args.path, babelrc: false, configFile: false, sourceType: 'module', compact: false,
+          presets: [['babel-preset-solid', { generate: 'dom', hydratable: false }]] });
+        return { contents: out.code, loader: 'js', resolveDir: path.dirname(args.path) };
+      });
+    },
+  };
+  const gridKernelStub = {
+    name: 'offline-grid-kernel-react-stub',
+    setup(b) {
+      b.onResolve({ filter: /^react$/ }, (args) => args.importer.includes('/react-grid-layout/build/')
+        ? { path: 'react', namespace: 'offline-grid-react' } : undefined);
+      b.onLoad({ filter: /.*/, namespace: 'offline-grid-react' }, () => ({ contents: 'module.exports = {};', loader: 'js' }));
     },
   };
   const stubs = (kind) => ({
@@ -163,15 +146,11 @@ async function build() {
       b.onLoad({ filter: /.*/, namespace: 'offline-node' }, (args) => ({ loader: 'js', contents: NODE_STUBS[args.path] }));
       b.onResolve({ filter: /\/deck-gl-engine$/ }, () => ({ path: 'deck-gl-engine', namespace: 'offline-stub' }));
       b.onResolve({ filter: MAP_PACKAGES }, (args) => ({ path: args.path, namespace: 'offline-stub' }));
-      if (kind === 'core') b.onResolve({ filter: /\/mermaid-render$/ }, () => ({ path: 'mermaid-render', namespace: 'offline-stub' }));
       b.onLoad({ filter: /.*/, namespace: 'offline-stub' }, (args) => ({
         loader: 'js',
         contents: args.path === 'deck-gl-engine'
           ? 'export function DeckEngine() { return null; }'
-          : args.path === 'mermaid-render'
-            // The server picks the mermaid bundle for any document with a diagram; this is unreachable in a core file.
-            ? 'export function renderMermaid() { return Promise.reject(new Error("This file was saved without diagram support.")); }'
-            : 'export default {};',
+          : 'export default {};',
       }));
     },
   });
@@ -189,8 +168,6 @@ async function build() {
       'import.meta.url': 'globalThis.__AFBIN_MODULE_URL__',
       'import.meta.hot': 'undefined',
       __AFBIN_APP_CSS__: JSON.stringify(css),
-      // The file's SQLite engine (lib/offline/sqlite-wasm): file:// fetches nothing, so the wasm rides inside.
-      __AFBIN_SQLITE_WASM__: JSON.stringify(fs.readFileSync(createRequire(path.join(root, '../sql/package.json')).resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm')).toString('base64')),
       ...tailwindDefine,
     },
     logOverride: { 'empty-import-meta': 'error' },
@@ -207,8 +184,8 @@ async function build() {
     }),
     ...KINDS.map((kind) => esbuild.build({
       ...common,
-      entryPoints: [path.join(root, 'lib/offline/entry.tsx')],
-      plugins: [extrasStubs, stubs(kind)],
+      entryPoints: [path.join(root, 'lib/offline/solid-entry.tsx')],
+      plugins: [extrasStubs, stubs(kind), gridKernelStub, solidTransform],
       outfile: path.join(outdir, `${kind}.js`),
     })),
   ]);
@@ -217,6 +194,12 @@ async function build() {
     const leaked = packagesIn(result, /node_modules\/(@codemirror|@lezer|prettier)\//);
     if (leaked.length) throw new Error(`build-offline: ${KINDS[i]} must not bundle CodeMirror or prettier (they load on demand from the extras): ${leaked.slice(0, 3).join(', ')}`);
   });
+  const reactInSolid = packagesIn(results[KINDS.indexOf('solid')], /node_modules\/(react|react-dom|scheduler)\//);
+  if (reactInSolid.length) {
+    const inputs = results[KINDS.indexOf('solid')].metafile.inputs;
+    const importers = Object.entries(inputs).flatMap(([name, meta]) => meta.imports.filter((item) => /node_modules\/(react|react-dom|scheduler)\//.test(item.path)).map(() => name));
+    throw new Error(`build-offline: Solid bundle reached React through ${importers.slice(0, 8).join(', ')}`);
+  }
   const reactInExtras = packagesIn(extrasResult, /node_modules\/(react|react-dom|scheduler)\//);
   if (reactInExtras.length) throw new Error(`build-offline: the extras must not bundle React: ${reactInExtras.slice(0, 3).join(', ')}`);
 

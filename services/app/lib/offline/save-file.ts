@@ -60,10 +60,12 @@ function download(html: string, name: string, doc: Document): void {
  * to pass next time.
  */
 export async function saveArtifactFile(
-  input: { file: ArtifactFile; code: string; name: string; handle?: SaveHandle | null },
+  input: { file: ArtifactFile; code: string; compiledCode?: string; wasm?: string; templates?: Record<string, string>; name: string; handle?: SaveHandle | null },
   env: { picker?: SavePicker | null; doc?: Document } = {},
 ): Promise<{ outcome: SaveOutcome; handle: SaveHandle | null }> {
-  const html = renderArtifactFileHtml({ file: input.file, code: input.code });
+  const html = renderArtifactFileHtml({ file: input.file, code: input.code,
+    ...(input.compiledCode ? { compiledCode: input.compiledCode } : {}), ...(input.wasm ? { wasm: input.wasm } : {}),
+    ...(input.templates ? { templates: input.templates } : {}) });
   const picker = env.picker !== undefined ? env.picker
     : typeof window !== 'undefined' && typeof (window as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function'
       ? ((options) => (window as unknown as { showSaveFilePicker: SavePicker }).showSaveFilePicker(options)) as SavePicker

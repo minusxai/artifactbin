@@ -4,6 +4,8 @@
  * and the composer opens on it. Includes where the rail sits under the bars.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as captureScreen from '@/lib/capture/screen';
+import type { CaptureSession } from '@/lib/capture/contract';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import {
   STORY_ANNOTATIONS_MESSAGE,
@@ -23,7 +25,7 @@ import {
 } from '@/test/helpers/annotation-layer';
 
 beforeEach(installAnnotationFetch);
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('picking a block from the rail', () => {
   const PICKED = {
@@ -35,19 +37,103 @@ describe('picking a block from the rail', () => {
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
   const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
 
-  it('requires a screenshot by default on a versioned document and makes text-only fallback explicit', async () => {
+  it.each(['button', 'keyboard'])('posts by %s and resumes Select without requesting screen sharing', async (submit) => {
+    const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
     const {frame,contentWindow}=makeFrame();
     render(layer(frame,{railOpen:true,editId:'edit-current'}));
     await flush();
-    expect(pill()).toBeNull();
-    fireEvent.click(screen.getByLabelText('Select'));await flush();
-    expect(pill()).not.toBeNull();
+    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Screenshot' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Screenshot' })).toHaveAttribute('aria-pressed', 'false');
     await fromFrame(contentWindow,{type:STORY_SELECTION_MESSAGE,nonce:NONCE,selection:PICKED});
-    fireEvent.change(screen.getByLabelText('Annotation comment'),{target:{value:'Explicit fallback'}});
-    expect(screen.getByLabelText('Save annotation')).toBeDisabled();
-    expect(screen.getByLabelText('Upload screenshot')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button',{name:'Continue without screenshot'}));
+    fireEvent.change(screen.getByLabelText('Annotation comment'),{target:{value:'Node comment'}});
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
+    expect(screen.queryByLabelText('Upload screenshot')).toBeNull();
+    expect(beginCapture).not.toHaveBeenCalled();
+    if (submit === 'keyboard') fireEvent.keyDown(screen.getByLabelText('Annotation comment'), { key: 'Enter', ctrlKey: true });
+    else fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find(call => call.url.endsWith('/annotations') && call.init?.method === 'POST');
+    expect(JSON.parse(String(create!.init!.body))).not.toHaveProperty('attachment_id');
+    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+    await fromFrame(contentWindow,{type:STORY_SELECTION_MESSAGE,nonce:NONCE,selection:{...PICKED,path:'2.2',nodeId:'node-2-2'}});
+    expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
+    expect(beginCapture).not.toHaveBeenCalled();
+  });
+
+  it('requests sharing only from Screenshot, then captures the selected area', async () => {
+    const capture = vi.fn().mockRejectedValue(new captureScreen.CaptureError('geometry'));
+    const beginCapture = vi.spyOn(captureScreen, 'beginCapture').mockResolvedValue({ capture, dispose: vi.fn() });
+    const { frame, contentWindow, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: true, editId: 'edit-current' })); await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+    expect(beginCapture).toHaveBeenCalledOnce(); await flush();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'area' });
+    expect(screen.getByRole('status', { name: 'Screenshot tool active' })).toHaveTextContent('drag an area');
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: { ...PICKED, range: { v: 1, kind: 'area', box: { x: 0, y: 0, w: 1, h: 1 } } } });
+    expect(capture).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText('Upload screenshot')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'Area comment' } });
+    expect(screen.getByLabelText('Save annotation')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without screenshot' }));
+    expect(screen.getByLabelText('Save annotation')).toBeEnabled();
+  });
+
+  it('switching from Screenshot to Select immediately stops an active capture session', async () => {
+    const dispose = vi.fn();
+    vi.spyOn(captureScreen, 'beginCapture').mockResolvedValue({ capture: vi.fn(), dispose });
+    const { frame, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: true, editId: 'edit-current' })); await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' })); await flush();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'area' });
+    fireEvent.click(screen.getByLabelText('Select'));
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'block' });
+  });
+
+  it('returns to Select when screen-sharing permission is cancelled', async () => {
+    vi.spyOn(captureScreen, 'beginCapture').mockRejectedValue(new captureScreen.CaptureError('cancelled'));
+    const { frame } = makeFrame();
+    render(layer(frame, { railOpen: true, editId: 'edit-current' })); await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' })); await flush();
+    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Screenshot' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText('Preparing screenshot…')).toBeNull();
+  });
+
+  it('switching to Select preserves the draft and disposes a late screen-sharing grant', async () => {
+    let grant!: (session: CaptureSession) => void;
+    vi.spyOn(captureScreen, 'beginCapture').mockImplementation(() => new Promise(resolve => { grant = resolve; }));
+    const { frame, contentWindow, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: true, editId: 'edit-current' })); await flush();
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
+    fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'Keep my draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+    fireEvent.click(screen.getByLabelText('Select'));
+    const session = { capture: vi.fn(async () => { throw new Error('Unused capture'); }), dispose: vi.fn() }; grant(session); await flush();
+    expect(session.dispose).toHaveBeenCalledOnce();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'block' });
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
+    expect(screen.getByLabelText('Annotation comment')).toHaveValue('Keep my draft');
+    expect(screen.getByLabelText('Save annotation')).toBeEnabled();
+  });
+
+  it.each(['Cancel annotation', 'Close annotation composer', 'Escape'])('keeps Select ready after dismissing a node comment with %s', async dismiss => {
+    const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
+    const { frame, contentWindow, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: true, editId: 'edit-current' })); await flush();
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
+    fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'Discard this draft' } });
+    if (dismiss === 'Escape') fireEvent.keyDown(window, { key: 'Escape' });
+    else fireEvent.click(screen.getByRole('button', { name: dismiss }));
+    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'true');
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'block', selectedPath: null });
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: { ...PICKED, path: '2.2', nodeId: 'next-node' } });
+    expect(screen.getByLabelText('Annotation comment')).toHaveValue('');
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ selectedPath: '2.2' });
+    expect(beginCapture).not.toHaveBeenCalled();
   });
 
   it('keeps the Select prompt below the app and editor bars when the document starts at zero', async () => {
@@ -65,7 +151,7 @@ describe('picking a block from the rail', () => {
     render(layer(frame, { railOpen: false }));
     await flush();
     await fromFrame(contentWindow, { type: STORY_SELECTION_ACTION_MESSAGE, nonce: NONCE, action: 'select', selection: PICKED });
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'select' });
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'block' });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   });
 
@@ -74,8 +160,8 @@ describe('picking a block from the rail', () => {
     render(layer(frame, { railOpen: true }));
     await flush();
     // Opening the rail is opening the pick: the next click in the document is a comment.
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'select' });
-    expect(pill()).toHaveTextContent(/tap a block/i);
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'block' });
+    expect(pill()).toHaveTextContent(/click a block/i);
     const tool = within(screen.getByLabelText('Annotation sidebar')).getByLabelText('Select');
     expect(tool).toHaveAttribute('aria-pressed', 'true');
 
@@ -86,7 +172,7 @@ describe('picking a block from the rail', () => {
     expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: null });
     fireEvent.click(tool);
     expect(tool).toHaveAttribute('aria-pressed', 'true');
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'select' });
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'block' });
 
     fireEvent.click(screen.getByLabelText('Cancel picking'));
     expect(pill()).toBeNull();
@@ -158,7 +244,7 @@ describe('picking a block from the rail', () => {
       fireEvent.click(screen.getByLabelText('Select'));
       expect(onRailOpenChange).toHaveBeenCalledWith(false);
       expect(pill()).not.toBeNull();
-      expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'select' });
+      expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'block' });
     } finally {
       Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
     }
@@ -180,7 +266,7 @@ describe('opening the rail opens a pick', () => {
     rerender(layer(frame, { railOpen: true }));
     await flush();
     expect(pill()).not.toBeNull();
-    expect(picks(postMessage).at(-1)).toBe('select');
+    expect(picks(postMessage).at(-1)).toBe('block');
 
     rerender(layer(frame, { railOpen: false }));
     await flush();
@@ -243,19 +329,19 @@ describe('drawing an area from the rail', () => {
     className: 'max-w-2xl', style: '', ancestors: [], range: AREA,
   };
 
-  it('one Select tool toggles block and area selection together', async () => {
+  it('Select toggles node and text selection', async () => {
     const { frame, postMessage } = makeFrame();
     render(layer(frame, { railOpen: true }));
     await flush();
     const tool = screen.getByLabelText('Select');
     expect(tool).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByLabelText('Draw an area to comment on')).toBeNull();
-    expect(last(postMessage)).toMatchObject({ pick: 'select' });
-    expect(pill()).toHaveTextContent(/tap a block or drag an area/i);
+    expect(last(postMessage)).toMatchObject({ pick: 'block' });
+    expect(pill()).toHaveTextContent(/click a block or highlight text/i);
     fireEvent.click(tool);
     expect(last(postMessage)).toMatchObject({ pick: null });
     fireEvent.click(tool);
-    expect(last(postMessage)).toMatchObject({ pick: 'select' });
+    expect(last(postMessage)).toMatchObject({ pick: 'block' });
   });
 
   it('an area pick opens the composer on its anchor and saves the area as the range, with no quote', async () => {

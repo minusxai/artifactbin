@@ -1,5 +1,7 @@
 /* @jsxImportSource solid-js */
 import { afterEach, expect, it, vi } from 'vitest';
+import * as captureScreen from '@/lib/capture/screen';
+import type { CaptureSession } from '@/lib/capture/contract';
 import { waitFor } from '@testing-library/dom';
 import { createSignal } from 'solid-js';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
@@ -33,16 +35,90 @@ function mount(options: { railOpen?: boolean; pickOnOpen?: boolean; railSheet?: 
 }
 afterEach(() => vi.restoreAllMocks());
 
-it('requires a screenshot by default on a versioned document and makes text-only fallback explicit', async () => {
-  const { view, frame } = mount({ editId: 'edit-current' });
-  expect(view.queryByRole('status', { name: 'Select tool active' })).toBeNull();
-  fireEvent.click(view.getByRole('button', { name: 'Select' }));
+it.each(['button', 'keyboard'])('posts by %s and resumes Select without requesting sharing', async (submit) => {
+  const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
+  const service = backend();
+  const { view, frame } = mount({ editId: 'edit-current', backend: service });
+  expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true');
+  expect(view.getByRole('button', { name: 'Screenshot' })).toBeVisible();
+  expect(view.getByRole('button', { name: 'Screenshot' })).toHaveAttribute('aria-pressed', 'false');
   frame.emit('mx:selection', { selection: selected });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Explicit fallback' } });
-  await waitFor(() => expect(view.getByRole('button', { name: 'Post comment' })).toBeDisabled());
-  expect(view.getByLabelText('Upload screenshot')).toBeTruthy();
-  fireEvent.click(view.getByRole('button', { name: 'Continue without screenshot' }));
+  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Node comment' } });
   expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
+  expect(view.queryByLabelText('Upload screenshot')).toBeNull();
+  expect(beginCapture).not.toHaveBeenCalled();
+  if (submit === 'keyboard') fireEvent.keyDown(view.getByRole('textbox', { name: 'New comment' }), { key: 'Enter', ctrlKey: true });
+  else fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
+  await waitFor(() => expect(service.createAnnotation).toHaveBeenCalledWith({ path: '2.1', node_id: 'node-2-1', body: 'Node comment' }, expect.any(String)));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true'));
+  expect(frame.last()).toMatchObject({ pick: 'block', selectedPath: null });
+  expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+  frame.emit('mx:selection', { selection: { ...selected, path: '2.2', nodeId: 'node-2-2' } });
+  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('');
+  expect(beginCapture).not.toHaveBeenCalled();
+});
+
+it('requests sharing from Screenshot and captures an area', async () => {
+  const capture = vi.fn().mockRejectedValue(new captureScreen.CaptureError('geometry'));
+  const beginCapture = vi.spyOn(captureScreen, 'beginCapture').mockResolvedValue({ capture, dispose: vi.fn() });
+  const { view, frame } = mount({ editId: 'edit-current' });
+  fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
+  expect(beginCapture).toHaveBeenCalledOnce();
+  await waitFor(() => expect(frame.last()).toMatchObject({ mode: 'on', pick: 'area' }));
+  frame.emit('mx:selection', { selection: { ...selected, range: area } });
+  expect(capture).toHaveBeenCalledOnce();
+  await waitFor(() => expect(view.getByLabelText('Upload screenshot')).toBeTruthy());
+});
+
+it('switching from Screenshot to Select immediately stops an active capture session', async () => {
+  const dispose = vi.fn();
+  vi.spyOn(captureScreen, 'beginCapture').mockResolvedValue({ capture: vi.fn(), dispose });
+  const { view, frame } = mount({ editId: 'edit-current' });
+  fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
+  await waitFor(() => expect(frame.last()).toMatchObject({ mode: 'on', pick: 'area' }));
+  fireEvent.click(view.getByRole('button', { name: 'Select' }));
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(frame.last()).toMatchObject({ pick: 'block' });
+});
+
+it('returns to Select after cancelled screen-sharing permission', async () => {
+  vi.spyOn(captureScreen, 'beginCapture').mockRejectedValue(new captureScreen.CaptureError('cancelled'));
+  const { view } = mount({ editId: 'edit-current' });
+  fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true'));
+  expect(view.getByRole('button', { name: 'Screenshot' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+it('switching back preserves the draft and disposes a late screen-sharing grant', async () => {
+  let grant!: (session: CaptureSession) => void;
+  vi.spyOn(captureScreen, 'beginCapture').mockImplementation(() => new Promise(resolve => { grant = resolve; }));
+  const { view, frame } = mount({ editId: 'edit-current' });
+  frame.emit('mx:selection', { selection: selected });
+  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Keep my draft' } });
+  fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
+  fireEvent.click(view.getByRole('button', { name: 'Select' }));
+  const session = { capture: vi.fn(async () => { throw new Error('Unused capture'); }), dispose: vi.fn() }; grant(session);
+  await waitFor(() => expect(session.dispose).toHaveBeenCalledOnce());
+  expect(frame.last()).toMatchObject({ pick: 'block' });
+  frame.emit('mx:selection', { selection: selected });
+  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('Keep my draft');
+  expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
+});
+
+it.each(['Cancel comment', 'Escape'])('keeps Select ready after dismissing a node comment with %s', dismiss => {
+  const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
+  const { view, frame } = mount({ editId: 'edit-current' });
+  frame.emit('mx:selection', { selection: selected });
+  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Discard this draft' } });
+  if (dismiss === 'Escape') fireEvent.keyDown(window, { key: 'Escape' });
+  else fireEvent.click(view.getByRole('button', { name: dismiss }));
+  expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+  expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true');
+  expect(frame.last()).toMatchObject({ pick: 'block', selectedPath: null });
+  frame.emit('mx:selection', { selection: { ...selected, path: '2.2', nodeId: 'next-node' } });
+  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('');
+  expect(frame.last()).toMatchObject({ selectedPath: '2.2' });
+  expect(beginCapture).not.toHaveBeenCalled();
 });
 
 it('keeps the Select prompt below the app and editor bars when the document starts at zero', () => {
@@ -53,15 +129,15 @@ it('keeps the Select prompt below the app and editor bars when the document star
 it('the context/selection action activates Select with the rail closed', () => {
   const { view, frame } = mount({ railOpen: false });
   frame.emit('mx:selection-action', { action: 'select', selection: selected });
-  expect(frame.last()).toMatchObject({ pick: 'select' });
+  expect(frame.last()).toMatchObject({ pick: 'block' });
   expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
 });
 
 it('the rail opens WITH a pick on; the tool still turns it off and on', () => {
   const { view, frame } = mount(); const tool = view.getByRole('button', { name: 'Select' });
-  expect(frame.last()).toMatchObject({ pick: 'select' });
+  expect(frame.last()).toMatchObject({ pick: 'block' });
   fireEvent.click(tool); expect(frame.last()).toMatchObject({ pick: null }); expect(tool).toHaveAttribute('aria-pressed', 'false');
-  fireEvent.click(tool); expect(frame.last()).toMatchObject({ pick: 'select' });
+  fireEvent.click(tool); expect(frame.last()).toMatchObject({ pick: 'block' });
   fireEvent.click(view.getByRole('button', { name: 'Cancel picking' })); expect(frame.last()).toMatchObject({ pick: null });
 });
 
@@ -95,12 +171,12 @@ it('on a phone, starting a pick puts the sheet away', () => {
   const { view, frame, change } = mount({ railSheet: true });
   expect(view.queryByRole('status', { name: 'Select tool active' })).toBeNull();
   fireEvent.click(view.getByRole('button', { name: 'Select' }));
-  expect(change).toHaveBeenCalledWith(false); expect(frame.last()).toMatchObject({ pick: 'select' });
+  expect(change).toHaveBeenCalledWith(false); expect(frame.last()).toMatchObject({ pick: 'block' });
 });
 
 it('starts when the rail opens and ends when it closes', () => {
   const { view, frame, setRail } = mount({ railOpen: false });
-  expect(frame.last()).toMatchObject({ pick: null }); setRail(true); expect(frame.last()).toMatchObject({ pick: 'select' });
+  expect(frame.last()).toMatchObject({ pick: null }); setRail(true); expect(frame.last()).toMatchObject({ pick: 'block' });
   setRail(false); expect(frame.last()).toMatchObject({ pick: null }); expect(view.queryByRole('status', { name: 'Select tool active' })).toBeNull();
 });
 
@@ -125,11 +201,11 @@ it('a composer arriving by another route ends the pick', () => {
   expect(view.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
 });
 
-it('one Select tool toggles block and area selection together', () => {
+it('Select toggles node and text selection', () => {
   const { view, frame } = mount(); const tool = view.getByRole('button', { name: 'Select' });
-  expect(view.getByRole('status', { name: 'Select tool active' })).toHaveTextContent('tap a block or drag an area');
+  expect(view.getByRole('status', { name: 'Select tool active' })).toHaveTextContent('click a block or highlight text');
   fireEvent.click(tool); expect(frame.last()).toMatchObject({ pick: null });
-  fireEvent.click(tool); expect(frame.last()).toMatchObject({ pick: 'select' });
+  fireEvent.click(tool); expect(frame.last()).toMatchObject({ pick: 'block' });
 });
 
 it('an area pick saves the area as the range without a quote after a geometry echo', async () => {

@@ -21,6 +21,7 @@
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
 import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/agent-discovery-tags';
+import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
 
 /** The file's origin as a CSP source (scheme://host[:port]), or null when it is not an http(s) origin. */
@@ -47,8 +48,8 @@ function cspOrigin(origin: string): string | null {
  * scripts/gate-offline-file.mjs, which counts `securitypolicyviolation`
  * events in Chromium, Firefox and WebKit (zero with this policy).
  */
-export function artifactFileCsp(origin: string): string {
-  const scripts = ["'unsafe-inline'", "'wasm-unsafe-eval'", cspOrigin(origin)].filter(Boolean).join(' ');
+export function artifactFileCsp(origin: string, sqlite = true): string {
+  const scripts = ["'unsafe-inline'", sqlite ? "'wasm-unsafe-eval'" : null, cspOrigin(origin)].filter(Boolean).join(' ');
   return `default-src 'none'; script-src ${scripts}; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:`;
 }
 
@@ -62,7 +63,7 @@ const commentSafe = (text: string) => text.replace(/-(?=-)/g, '- ');
  * The note an agent reads first: what the file is and how to edit it
  * correctly — change the top-level `source` and nothing else. Every claim is
  * what the file really does (lib/offline/file-backend's rebuildArtifactFile,
- * components/offline/OfflineApp's banner); pinned by file-html.ui.test.
+ * lib/offline/solid-entry's banner); pinned by file-html.ui.test.
  */
 export function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveUrl' | 'metadata'>): string {
   const help = agentDiscovery(file.origin);
@@ -81,10 +82,16 @@ export interface ArtifactFileParts {
   file: ArtifactFile;
   /** The offline bundle, gzip-compressed then base64-encoded. */
   code: string;
+  /** The document's packed Solid module, gzip-compressed then base64-encoded. */
+  compiledCode?: string;
+  /** Embedded SQLite wasm only when this reader may hold imports. */
+  wasm?: string;
+  /** Compiled DOM factories, inert text until the Solid runtime clones one. */
+  templates?: Record<string, string>;
 }
 
 /** Element ids the shell, the boot script and the offline entry agree on. */
-export const ARTIFACT_FILE_IDS = { code: 'afbin-code', file: 'afbin-file', root: 'afbin-root', boot: 'afbin-boot' } as const;
+export const ARTIFACT_FILE_IDS = { code: 'afbin-code', compiledCode: 'afbin-compiled-code', wasm: 'afbin-wasm', file: 'afbin-file', root: 'afbin-root', boot: 'afbin-boot' } as const;
 
 /** Shown in place of the document by a browser without DecompressionStream. */
 export const ARTIFACT_FILE_UNSUPPORTED = 'This file needs a current version of Chrome, Edge, Firefox or Safari.';
@@ -100,12 +107,10 @@ export const ARTIFACT_FILE_BOOT = `(function(){
 var d=document,status=d.getElementById(${JSON.stringify(ARTIFACT_FILE_IDS.boot)});
 function fail(m){if(status){status.textContent=m;status.setAttribute('role','alert');}}
 if(typeof DecompressionStream!=='function'||typeof Response!=='function'||typeof Uint8Array!=='function'){fail(${JSON.stringify(ARTIFACT_FILE_UNSUPPORTED)});return;}
+function unpack(id){var el=d.getElementById(id);if(!el)return Promise.resolve(null);var raw=atob((el.textContent||'').replace(/\\s+/g,''));var bytes=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'))).text();}
+function run(code){var s=d.createElement('script');s.textContent=code;d.body.appendChild(s);}
 try{
-var raw=atob((d.getElementById(${JSON.stringify(ARTIFACT_FILE_IDS.code)}).textContent||'').replace(/\\s+/g,''));
-var bytes=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-new Response(new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'))).text().then(function(code){
-var s=d.createElement('script');s.textContent=code;d.body.appendChild(s);
-},function(){fail(${JSON.stringify(ARTIFACT_FILE_BROKEN)});});
+unpack(${JSON.stringify(ARTIFACT_FILE_IDS.code)}).then(function(code){run(code);var compiled=d.getElementById(${JSON.stringify(ARTIFACT_FILE_IDS.compiledCode)});if(compiled){Promise.resolve(window.__afbinOfflineReady).then(function(){return unpack(${JSON.stringify(ARTIFACT_FILE_IDS.compiledCode)});}).then(function(next){if(next)run(next);},function(){fail(${JSON.stringify(ARTIFACT_FILE_BROKEN)});});}},function(){fail(${JSON.stringify(ARTIFACT_FILE_BROKEN)});});
 }catch(e){fail(${JSON.stringify(ARTIFACT_FILE_BROKEN)});}
 })();`;
 
@@ -126,17 +131,27 @@ const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 /** The complete `.html` text for these parts. Pure; safe for any JSON content (no `</script>` break-out). */
 export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
   if (!BASE64.test(parts.code)) throw new ArtifactFileError('The offline bundle is not base64.');
+  if (parts.compiledCode && !BASE64.test(parts.compiledCode)) throw new ArtifactFileError('The compiled bundle is not base64.');
+  if (parts.wasm && !BASE64.test(parts.wasm)) throw new ArtifactFileError('The SQLite engine is not base64.');
   const { file } = parts;
   const title = escapeHtml(file.metadata.title);
+  // A large document's module reads its dataflow literal by the reader page's
+  // fixed id. The normal reader shell adds that id; this file owns its shell.
+  const compiledHtml = file.compiled?.html.replace(/<script type="application\/json" data-mx-module-data(?:="")?>/,
+    '<script type="application/json" id="mx-story-data" data-mx-module-data>') ?? '';
+  const compiledStory = file.compiled ? inlineStoryElement(compiledHtml, file.metadata.colorMode ?? 'light', file.metadata.theme) : '';
   // `source` right after `format`: the first "source" in the text is the one to edit, not `base.source`.
   const { format, source, ...rest } = file;
   return `<!doctype html>\n<!-- ${commentSafe(artifactFileAgentNote(file))} -->\n<html lang="en">\n<head>\n<meta charset="utf-8">\n`
-    + `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(artifactFileCsp(file.origin))}">\n`
+    + `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(artifactFileCsp(file.origin, file.bundle !== 'solid' || !!parts.wasm))}">\n`
     + '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
     + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`
-    + `<div id="${ARTIFACT_FILE_IDS.root}"><p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
+    + `<div id="${ARTIFACT_FILE_IDS.root}">${compiledStory}<p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
+    + Object.entries(parts.templates ?? {}).map(([key, markup]) => `<template data-mx-island-template="${escapeHtml(key)}">${escapeHtml(markup)}</template>\n`).join('')
     + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${scriptSafeJson({ format, source, ...rest })}</script>\n`
     + `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.code}">${parts.code}</script>\n`
+    + (parts.compiledCode ? `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.compiledCode}">${parts.compiledCode}</script>\n` : '')
+    + (parts.wasm ? `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.wasm}">${parts.wasm}</script>\n` : '')
     + `<script>${ARTIFACT_FILE_BOOT}</script>\n</body>\n</html>\n`;
 }
 
@@ -147,5 +162,11 @@ export function readArtifactFileParts(doc: Document): ArtifactFileParts {
   if (!code || !json || !BASE64.test(code)) throw new ArtifactFileError(ARTIFACT_FILE_BROKEN);
   let value: unknown;
   try { value = JSON.parse(json); } catch { throw new ArtifactFileError(ARTIFACT_FILE_BROKEN); }
-  return { file: parseArtifactFile(value), code };
+  const compiledCode = doc.getElementById(ARTIFACT_FILE_IDS.compiledCode)?.textContent?.replace(/\s+/g, '') ?? '';
+  const wasm = doc.getElementById(ARTIFACT_FILE_IDS.wasm)?.textContent?.replace(/\s+/g, '') ?? '';
+  const templates = Object.fromEntries([...doc.querySelectorAll<HTMLTemplateElement>('template[data-mx-island-template]')]
+    .map((node) => [node.getAttribute('data-mx-island-template')!, node.content.textContent ?? '']));
+  if ((compiledCode && !BASE64.test(compiledCode)) || (wasm && !BASE64.test(wasm))) throw new ArtifactFileError(ARTIFACT_FILE_BROKEN);
+  return { file: parseArtifactFile(value), code, ...(compiledCode ? { compiledCode } : {}), ...(wasm ? { wasm } : {}),
+    ...(Object.keys(templates).length ? { templates } : {}) };
 }

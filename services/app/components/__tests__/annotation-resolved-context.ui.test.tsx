@@ -100,7 +100,7 @@ describe('selecting a resolved thread', () => {
     serveResolved({ ...ANN, status: 'resolved', resolved_at: '2026-08-28T00:00:00Z' });
     view.rerender(layer(frame, { railOpen: true, liveAnnotations: [] }));
     await flush(); await flush();
-    expect(posts(postMessage).at(-1)).toMatchObject({ openId: ANN.id, pins: [{id:ANN.id}] });
+    expect(posts(postMessage).at(-1)).toMatchObject({ openId: ANN.id, pins: [{id:ANN.id,layoutOnly:true}] });
   });
 });
 
@@ -115,7 +115,7 @@ it('counts only visible unpaused seconds and expires without acknowledging the n
  view.rerender(layer(frame,{showViewComments:true,liveAnnotations:[]}));await flush();await flush();
  const remaining=()=>screen.queryByRole('status')?.textContent;
  expect(remaining()).toContain('10 seconds');
- expect(posts(postMessage).at(-1).pins.map((p:{id:string})=>p.id)).toContain(ANN.id);
+ expect(posts(postMessage).at(-1).pins).toContainEqual(expect.objectContaining({id:ANN.id,layoutOnly:true}));
  visibility.mockReturnValue('hidden');act(()=>vi.advanceTimersByTime(12000));expect(remaining()).toContain('10 seconds');
  visibility.mockReturnValue('visible');position(900);act(()=>vi.advanceTimersByTime(12000));
  position(220);expect(remaining()).toContain('10 seconds');
