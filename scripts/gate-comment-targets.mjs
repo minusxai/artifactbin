@@ -269,7 +269,7 @@ try {
   await phone.getByLabel('Annotation sidebar',{exact:true}).waitFor({state:'hidden'});
   await heading.tap();
   await phone.getByLabel('Annotation comment',{exact:true}).fill('An iframe block selected by touch');
-  await phone.getByRole('button',{name:'Continue without screenshot',exact:true}).tap();
+  await expect(phone.getByRole('button',{name:'Continue without screenshot',exact:true})).toHaveCount(0);
   await phone.getByRole('button',{name:'Save annotation',exact:true}).tap();
   await phone.getByLabel('Annotation composer',{exact:true}).waitFor({state:'hidden'});
   const mobileComment=(await annotations()).find(item=>item.thread[0].body==='An iframe block selected by touch');
