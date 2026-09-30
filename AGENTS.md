@@ -56,7 +56,7 @@
   are distinct. Use `mxmx_test_*` accounts for disposable browser flows. Read local OTPs with
   `npm run dev:otp`, never a public app endpoint.
 - UI tests use accessible names; interactive controls need accessible labels. App tooltips use
-  `components/Tooltip.tsx`, not native `title` tooltips.
+  `solid/components/Tooltip.tsx`, not native `title` tooltips.
 - Tests should exercise real handlers against isolated state. Reset database and limiter state between
   cases. Merge gates use deterministic fixtures for third parties; live-provider checks are separate.
 - Do not hand-edit generated routes, schemas or CSS candidate lists. Run their generators and review the diff.
