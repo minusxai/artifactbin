@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-/** Solid owns the entire Trash route. Other destinations load their React document. */
+/** The Solid app: every route below, every artifact address included (lib/solid-routes isSolidPage). */
 import { createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { useLocation } from '@solidjs/router';
@@ -20,7 +20,7 @@ const DocsPage = lazy(() => import('./pages/Docs').then((m) => ({ default: m.Doc
 const ProfilePage = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfilePage })));
 const ProfileAliasRoute = lazy(() => import('./pages/Profile').then((m) => ({ default: m.ProfileAliasRoute })));
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
-const FolderRoute = lazy(() => import('./pages/Folder').then((m) => ({ default: m.FolderRoute })));
+const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((m) => ({ default: m.ArtifactAddressRoute })));
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
 const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
@@ -52,13 +52,17 @@ function Root(props: RouteSectionProps): JSX.Element {
   );
 }
 
+/**
+ * `/a/<id>`: every artifact is Solid's (lib/solid-routes). A compiled document is adopted by the document
+ * page; anything served without one — a folder, a data tier, the starter — is routed by its answer.
+ */
 function ArtifactRoute(): JSX.Element {
-  return initialDocumentStory() ? <DocumentPage /> : <FolderRoute />;
+  return initialDocumentStory() ? <DocumentPage /> : <ArtifactAddressRoute />;
 }
 
 /** `/a/<id>/edit`: a served document opens in edit mode; a dataset's address is its editor. */
 function ArtifactEditRoute(): JSX.Element {
-  return initialDocumentStory() ? <DocumentPage /> : <DatasetEditorPage />;
+  return initialDocumentStory() ? <DocumentPage /> : <ArtifactAddressRoute editing />;
 }
 
 export function App(): JSX.Element {

@@ -17,8 +17,7 @@ import { NotFoundPage } from './NotFound';
 // Lazy, like every other route chunk (solid/App.tsx): a profile visit should not download the
 // folder listing, the (large) dataset editor, or the compiled-document reader until an alias
 // actually resolves to one.
-const FolderRoute = lazy(() => import('./Folder').then((m) => ({ default: m.FolderRoute })));
-const DatasetEditorPage = lazy(() => import('./DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
+const ArtifactAddressRoute = lazy(() => import('./ArtifactAddress').then((m) => ({ default: m.ArtifactAddressRoute })));
 const DocumentPage = lazy(() => import('./Document').then((m) => ({ default: m.DocumentPage })));
 
 interface ProfileAnswer {
@@ -31,7 +30,7 @@ interface ProfileAnswer {
   files?: ShelfRow[];
 }
 
-/** The profile index is its own route. Artifact aliases still use the React reader. */
+/** The profile index is its own route; its artifact aliases are ProfileAliasRoute below. */
 export function ProfilePage(): JSX.Element {
   const params = useParams();
   const location = useLocation();
@@ -65,8 +64,9 @@ export function ProfilePage(): JSX.Element {
  * Resolution is id-anchored, same grammar as web/pages/Profile.tsx's React twin (lib/urls
  * parsePrettyPath) — the difference is what Solid does once it has the id: `initialDocumentStory()`
  * (the same discriminator `ArtifactRoute` uses for `/a/:id`) says whether THIS load served a compiled
- * document, so a folder renders here directly and a document defers to the compiled reader
- * (`DocumentPage`) instead of guessing from the URL shape alone. "Nesting is not in the address" (see
+ * document, so a compiled document is adopted by the reader (`DocumentPage`) and anything else — a
+ * folder, a data tier, the starter, a dataset editor — is routed by its answer (`ArtifactAddressRoute`)
+ * instead of guessing from the URL shape alone. "Nesting is not in the address" (see
  * the profile API's own doc comment): a rest path that fails to parse as an id is a uniform 404, never
  * a listing — there is no profile sub-page below the handle.
  */
@@ -79,9 +79,7 @@ export function ProfileAliasRoute(): JSX.Element {
   const id = createMemo(() => parsePrettyPath(artifactViewPath(params.rest ?? '').split('/').filter(Boolean))?.id ?? null);
   return <Show when={!bare()} fallback={<ProfilePage />}>
     <Show when={id()} fallback={<NotFoundPage />}>
-      {resolvedId => <Show when={editing() && !initialDocumentStory()} fallback={
-        <Show when={initialDocumentStory()} fallback={<FolderRoute id={resolvedId()} />}><DocumentPage /></Show>
-      }><DatasetEditorPage artifactId={resolvedId()} /></Show>}
+      {resolvedId => <Show when={initialDocumentStory()} fallback={<ArtifactAddressRoute id={resolvedId()} editing={editing()} />}><DocumentPage /></Show>}
     </Show>
   </Show>;
 }

@@ -3,7 +3,8 @@
  * `/:user/*` — a pretty artifact alias (solid/pages/Profile.tsx ProfileAliasRoute). Same id-anchored
  * grammar as the React twin (web/pages/Profile.tsx): the rest path resolves to an id or it is a
  * uniform 404 (there is no profile sub-page below the handle — see the profile API's own doc
- * comment). A resolved folder renders here; a non-folder crosses to the React reader.
+ * comment). A resolved folder or data tier renders here; a document a client navigation found crosses to
+ * the server, whose page for it is the compiled reader.
  */
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, waitFor } from '@solidjs/testing-library';
@@ -11,15 +12,16 @@ import { Route, Router } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ProfileAliasRoute } from '@/solid/pages/Profile';
 import { replaceDocument } from '@/solid/shared/document-navigation';
+import { InboxProvider } from '@/solid/web/notifications';
 
 vi.mock('@/solid/shared/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
 const at = (path: string) => {
   window.history.replaceState(null, '', path);
-  return render(() => <Router><Route path="/:user/*rest" component={ProfileAliasRoute} /></Router>);
+  return render(() => <InboxProvider><Router><Route path="/:user/*rest" component={ProfileAliasRoute} /></Router></InboxProvider>);
 };
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.mocked(replaceDocument).mockClear(); });
 
 it('renders the folder for an id-shaped rest path', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
@@ -33,7 +35,15 @@ it('is the uniform 404 when the rest path names no id — nesting is not in the 
   expect(screen.getByLabelText('Not found')).toBeInTheDocument();
 });
 
-it('crosses a non-folder answer to the React reader instead of rendering it here', async () => {
+it('renders a data tier here: an image alias is the data page, not a crossing', async () => {
+  vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ role: 'viewer', kind: 'none', surface: { id: 'img001', editId: 'e1', format: 'image', title: 'Sunset', version: 1, dataPreview: '', columns: [] } })));
+  at('/@bob/img001-sunset');
+  await waitFor(() => expect(screen.getByRole('img', { name: 'Sunset' })).toHaveAttribute('src', '/a/img001/raw'));
+  expect(replaceDocument).not.toHaveBeenCalled();
+});
+
+it('crosses a fetched document answer to the server, whose page for it is the compiled one', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ role: 'viewer', surface: { format: 'markup' } })));
   at('/@bob/doc001-hello');

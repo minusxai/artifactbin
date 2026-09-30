@@ -36,7 +36,6 @@ import { avatarUrl } from '@/lib/avatars';
 import { actorForArtifacts, browserSessionKind, roleFor, sessionActor } from '@/lib/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate, canEdit } from '@/lib/share-roles';
-import { solidDocumentReader } from '@/lib/solid-routes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
@@ -210,12 +209,14 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   void social.catch(() => {});
   const prepared = isDoc ? await preparedPageFor(artifact, at, baseUrl(request)) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
-  // Captures, the editor's address and starter instructions use their dedicated
-  // paths; document reader views use the prepared compiled page (§10).
+  // Every document the app page serves is the prepared compiled page (§10) — a capture's and the
+  // editor's address included — except the starter placeholder's READ view, whose agent instructions
+  // are app UI (solid/pages/Starter). Its `/edit` opens the editor on the compiled placeholder
+  // (solid/pages/Document), and a capture photographs the placeholder as the document it is.
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
+  const editAddress = /\/edit\/?$/.test(new URL(request.url).pathname);
 
-  // `/edit` is edit mode on the same compiled page (solid/pages/Document); the page door admitted an editor.
-  const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc;
+  const compiledMode = !!options.page && !!prepared && !(starterDoc && !editAddress && !exporting);
 
 
   const meta = (row.meta ?? {}) as {
@@ -243,7 +244,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     servedFor(!compiledMode),
     social,
   ]);
-  let served = firstServed;
+  const served = firstServed;
   const authorUsername = author?.username ?? null;
   const ownerScope = role === 'owner' ? actorForArtifacts(actor) : null;
   const hasInvitedUsers = ownerScope ? ((await getArtifactFor(ownerScope, id))?.shares?.length ?? 0) > 0 : false;
@@ -252,7 +253,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
   let compiled: CompiledStory | null = null;
-  let reader: ArtifactPageAnswer['reader'] = prepared ? { mode: 'legacy' } : undefined;
+  let reader: ArtifactPageAnswer['reader'];
   if (compiledMode && prepared) {
     const answer = await compiledPageFor(prepared.row, prepared.page, {
       at,
@@ -280,7 +281,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       behaviors: ['page'],
       chrome: await readerChromeFor({ hasDataMutations: prepared.page.declared?.flow.mutations.some(m => 'import' in m.target) === true, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
-      spa: solidDocumentReader(role, artifact.format, exporting) ? (options.page!.readerSpa ?? options.page!.spa) : options.page!.spa,
+      // Every role's page — a capture's too — idles into the Solid reader (solid/pages/Document).
+      spa: options.page!.readerSpa ?? options.page!.spa,
       head: {
         description: row.description,
         canonical: await canonicalDocumentUrl(artifact),
@@ -288,17 +290,13 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
         help: agentDiscovery(baseUrl(request)),
       },
     });
-    if (answer.mode === 'compiled') {
-      compiled = { html: answer.html, headers: answer.headers };
-      reader = { mode: 'compiled' };
-    } else if (answer.mode === 'failed') {
-      // No renderer is left to answer (compiled-only, lib/compiled-page/serve.server fallbackPolicy): the page is a 500.
-      throw new CompiledPageFailed(artifact.id, answer.reason);
-    } else {
-      // Today's page for this request, exactly as it would have been, and the reason it is.
-      served = await servedFor(true);
-      reader = { mode: 'legacy', fallback: answer.fallback };
+    if (answer.mode !== 'compiled') {
+      // No renderer is left to answer: the React reader that drew a `legacy` fallback is gone, so a page the
+      // compiled reader cannot make is a 500 whatever lib/compiled-page/serve.server's fallbackPolicy says.
+      throw new CompiledPageFailed(artifact.id, answer.mode === 'failed' ? answer.reason : answer.fallback);
     }
+    compiled = { html: answer.html, headers: answer.headers };
+    reader = { mode: 'compiled' };
   }
   const surface = {
     captureKey: exporting ? key : null,
