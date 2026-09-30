@@ -41,6 +41,7 @@ import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 import type { EditorArtifact } from '../editor/InPlaceEditor';
 import { TrustedUi } from '../components/TrustedUi';
+import { NotificationsPanel, PageMenuPanel } from '../components/PageChrome';
 import Sun from 'lucide-solid/icons/sun';
 import Moon from 'lucide-solid/icons/moon';
 import X from 'lucide-solid/icons/x';
@@ -145,7 +146,7 @@ export function DocumentPage(): JSX.Element {
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
   const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
   const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
-  const [panel, setPanel] = createSignal<'controls' | 'menu' | null>(null);
+  const [panel, setPanel] = createSignal<'controls' | 'menu' | 'notifications' | null>(null);
   const [fork, setFork] = createSignal(false);
   const [mode, setMode] = createSignal<'light' | 'dark'>('light');
   const [editing, setEditing] = createSignal(false);
@@ -379,7 +380,7 @@ export function DocumentPage(): JSX.Element {
         setRailOpen((open) => !open);
       } else if (name === 'fork') setFork(true);
       else if (name === 'share') { if (isOwner()) setSharingOpen(true); else void sharing.share(); }
-      else if (name === 'notifications') window.location.assign('/notifications');
+      else if (name === 'notifications') setPanel((open) => (open === 'notifications' ? null : 'notifications'));
       else if (name === 'membership' || name === 'join') {
         // The rail's Join/Joined/Pending pill: joining needs an account; the people panel is where it happens.
         if (!accountSession()) { window.location.assign(loginHref(window.location, 'join')); return; }
@@ -468,7 +469,8 @@ export function DocumentPage(): JSX.Element {
             onShare={() => { setPanel(null); setSharingOpen(true); }}
             onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />
         </section></Show>
-        <Show when={panel() === 'menu'}><nav aria-label="Menu" class="mx-reader-panel mx-reader-panel--menu" ref={placePanel}><a class="mx-reader-brand" href="/"><img src="/logo-128.png" alt="" />artifactbin</a><a href="/">Artifacts</a><a href="/account">Account</a><a href="/docs-human">Human Docs</a></nav></Show>
+        <Show when={panel() === 'menu'}><PageMenuPanel close={() => setPanel(null)} /></Show>
+        <Show when={panel() === 'notifications'}><NotificationsPanel close={() => setPanel(null)} /></Show>
       </Show>
       <Show when={fork() && id}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Show>
     </TrustedUi>
