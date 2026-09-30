@@ -124,7 +124,8 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
     <PageChrome title={title()} label="Artifact controls" actions={<ForkArtifact id={id} title={title()} variant="bar" />} controls={controls} />
     <main class="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">
       <Show when={format === 'image'}>
-        <Show when={rawKey()} keyed>{(_version) => <img src={`/a/${id}/raw`} alt={title()} class="mt-4 max-w-full rounded-[6px] border border-edge" />}</Show>
+        {/* A capture has no session: its image is read with the capture's own key, as its page was. */}
+        <Show when={rawKey()} keyed>{(_version) => <img src={`/a/${id}/raw${capture ? `?key=${encodeURIComponent(surface.captureKey!)}` : ''}`} alt={title()} class="mt-4 max-w-full rounded-[6px] border border-edge" />}</Show>
       </Show>
       <Show when={format === 'pdf' || format === 'file'}>
         {/* A file is not something the app renders: the browser does, at /raw. This is the two facts a

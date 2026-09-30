@@ -116,8 +116,10 @@ it('follows a dataset on its live stream: a new version re-reads the page and ad
   await waitFor(() => expect(within(screen.getByLabelText('Dataset table')).getByRole('option', { name: 'orders' })).toBeInTheDocument());
 });
 
-it('photographs a capture without opening a live stream', () => {
-  open(answer('image', { captureKey: 'k' }));
-  expect(screen.getByRole('main')).toContainElement(screen.getByRole('img', { name: 'Regional sales' }));
+it('photographs a capture without opening a live stream, its image read with the capture key', () => {
+  open(answer('image', { captureKey: '123.abc' }));
+  const image = screen.getByRole('img', { name: 'Regional sales' });
+  expect(screen.getByRole('main')).toContainElement(image);
+  expect(image).toHaveAttribute('src', '/a/art001/raw?key=123.abc');
   expect(streams).toHaveLength(0);
 });
