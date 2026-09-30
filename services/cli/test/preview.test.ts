@@ -225,11 +225,14 @@ test('preview serves the compiled reader: no React, a live Select re-runs its qu
   assert.match(html,/data-mx-ast/);
   assert.match(html,/Some prose/);
   assert.match(html,/"queryUrl":"\/query\?file=report\.jsx"/);
-  const module=/<script type="module" src="(\/islands\/d\/[0-9a-f]{16}\.js)"/.exec(html);
+  const module=/<script type="module" src="(\/islands\/d\/[0-9a-f]{16}\.js(?:\?b=[0-9a-f]{16})?)"/.exec(html);
   assert.ok(module,html);
   const bytes=await fetch(session.url+module![1]);
   assert.equal(bytes.status,200);
-  assert.match(await bytes.text(),/\$boot\(|_\$createComponent/);
+  const code=await bytes.text();
+  assert.match(code,/\$boot\(|_\$createComponent/);
+  // Bound to the local build's chunks: no bare runtime specifier reaches the browser.
+  assert.doesNotMatch(code,/from\s*["']@mx\//);
   const query=await (await fetch(session.url+'/query?file=report.jsx',{method:'POST',headers:{'content-type':'application/json',origin:session.url},body:JSON.stringify({values:{n:3}})})).json();
   assert.deepEqual(query.tables.doubled.rows,[{v:6}]);
   const draft=await fetch(session.url+'/draft',{method:'POST',headers:{'content-type':'application/json',origin:session.url},body:JSON.stringify({file:'report.jsx',source:source.replace('Some prose','Edited prose')})});
