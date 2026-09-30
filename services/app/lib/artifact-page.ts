@@ -216,6 +216,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
   const editAddress = /\/edit\/?$/.test(new URL(request.url).pathname);
 
+  const membershipAvailable = !at && prepared?.page.declared?.flow.mutations.some(m => 'import' in m.target) === true;
   const compiledMode = !!options.page && !!prepared && !(starterDoc && !editAddress && !exporting);
 
 
@@ -279,7 +280,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       // no islands (the app loads on intent, so until then the page holds it), the reader's place across
       // the reload a new version delivers, and their mode.
       behaviors: ['page'],
-      chrome: await readerChromeFor({ hasDataMutations: prepared.page.declared?.flow.mutations.some(m => 'import' in m.target) === true, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
+      chrome: await readerChromeFor({ hasDataMutations: membershipAvailable, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
       spa: options.page!.spa,
       head: {
@@ -298,6 +299,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     reader = { mode: 'compiled' };
   }
   const surface = {
+    membershipAvailable,
     captureKey: exporting ? key : null,
     id: artifact.id,
     editId: artifact.edit_id,

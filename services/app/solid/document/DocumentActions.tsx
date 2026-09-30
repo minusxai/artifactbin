@@ -16,6 +16,7 @@ const SocialPreviewEditor = lazy(() => import('./SocialPreviewEditor').then((m) 
 
 const ROW = 'flex w-full items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
 export interface DocumentActionsProps {
+  membershipAvailable?: boolean;
   id: string; title: string; version: number; archived?: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;
   like: { liked: boolean; count: number }; onCommentsChange: (open: boolean) => void;
@@ -41,7 +42,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
   const onSocialPreview = () => canPreview() ? () => setSocialPreviewOpen(true) : undefined;
   const toggleComments = () => { const open = !commentsOpen(); setCommentsOpen(open); props.onCommentsChange(open); };
   return <div class="space-y-4" aria-label="Document actions">
-    <DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} initialOpen={props.invitationLanding} hideJoin />
+    <Show when={props.membershipAvailable}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} initialOpen={props.invitationLanding} hideJoin /></Show>
     <section aria-label="Document actions" class="space-y-1">
       <h2 class="px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
