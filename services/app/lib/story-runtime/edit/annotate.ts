@@ -290,6 +290,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       if (!el) continue;
       if (isTargetRange(pin.range) && !el.hasAttribute(COMMENT_TARGET_ATTR)) continue;
       const rect = rectFromBox(el.getBoundingClientRect(), range.box);
+      paintedAreas.set(pin.id, rect);
+      if (pin.layoutOnly) continue;
       const overlay = doc.createElement('div');
       overlay.setAttribute(ANNOTATION_AREA_ATTR, pin.id);
       placeOverlay(overlay, rect);
@@ -298,7 +300,6 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       overlay.style.outline = AREA_FILL[emphasis].outline;
       overlay.style.outlineOffset = '1px';
       (root ?? doc.body).appendChild(overlay);
-      paintedAreas.set(pin.id, rect);
       el.setAttribute(ANNOTATION_RANGED_ATTR, '');
     }
   };
@@ -356,10 +357,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       // highlight over the surviving half would point at a fragment nobody
       // commented on.
       if (ranges.length !== range.parts.length) continue;
+      painted.set(pin.id, ranges);
+      if (pin.layoutOnly) continue;
       const name = highlightNameFor(pin.id);
       api.registry.set(name, new api.Highlight(...ranges));
       registeredHighlights.add(name);
-      painted.set(pin.id, ranges);
       el.setAttribute(ANNOTATION_RANGED_ATTR, '');
       const fill = state.openId === pin.id
         ? HIGHLIGHT_FILL.open
@@ -413,14 +415,14 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       return;
     }
     for (const pin of state.pins) {
-      if (paintsInChild(pin)) continue;
+      if (pin.layoutOnly || paintsInChild(pin)) continue;
       const el = elementForPin(pin);
       if (!el) continue;
       el.setAttribute(ANNOTATED_ATTR, '');
       if (state.openId === pin.id) el.setAttribute(ANNOTATION_OPEN_ATTR, '');
     }
     if (selectedPath) elementFor(selectedPath)?.setAttribute(ANNOTATE_SELECTED_ATTR, '');
-    const hovered = state.hoverId ? state.pins.find((pin) => pin.id === state!.hoverId) : null;
+    const hovered = state.hoverId ? state.pins.find((pin) => !pin.layoutOnly && pin.id === state!.hoverId) : null;
     if (hovered && !paintsInChild(hovered)) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
     // The words last, so their rules follow the state that was just stamped.
     ensureCss(true, paintRanges());
@@ -480,7 +482,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if (!start || typeof start.closest !== 'function' || start.closest('.mx-rail, .mx-present')) return null;
     let el: HTMLElement | null = start;
     while (el) {
-      const pin = state?.pins.find((candidate) => !paintsInChild(candidate) && elementForPin(candidate) === el);
+      const pin = state?.pins.find((candidate) => !candidate.layoutOnly && !paintsInChild(candidate) && elementForPin(candidate) === el);
       if (pin) return pin;
       el = el.parentElement;
     }
@@ -666,7 +668,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const owner = describeSelection(host, nodes);
       const ownerId = owner?.nodeId;
       return {enabled:!!state && state.mode !== 'off',canComment:!!state && state.mode !== 'off' && state.canComment !== false,picking:pick === 'select' || pick === 'area',blockPicking:pick === 'block',
-        pins: (state?.pins ?? []).flatMap((pin) => pin.nodeId === ownerId && isTargetRange(pin.range) && pin.range.target.kind === 'iframe' ? [{id:pin.id,target:pin.range.target.node,range:pin.range.range}]:[]),
+        pins: (state?.pins ?? []).flatMap((pin) => pin.nodeId === ownerId && isTargetRange(pin.range) && pin.range.target.kind === 'iframe' ? [{id:pin.id,target:pin.range.target.node,range:pin.range.range,...(pin.layoutOnly ? {layoutOnly:true} : {})}]:[]),
         openId:state?.openId ?? null,hoverId:state?.hoverId ?? null,
         selection:managedSelection?.host === host ? {...managedSelection.selection,rect:localManagedRect(host,managedSelection.selection.rect)} : null};
     },
@@ -752,7 +754,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
         const pin = message.pins.find((p) => p.id === message.openId);
         if (pin?.nodeId && isTargetRange(pin.range) && pin.range.target.kind === 'table') doc.dispatchEvent(new CustomEvent('mx:reveal-comment-target',{detail:{owner:pin.nodeId,target:pin.range.target}}));
         const el = pin ? elementForPin(pin) : null;
-        if (el) {
+        if (el && !pin?.layoutOnly) {
           const words = pin ? painted.get(pin.id) : undefined;
           const r = (words ? unionRect(words) : null) ?? el.getBoundingClientRect();
           win.scrollTo({ top: r.top + win.scrollY - (win.innerHeight - r.height) / 2, behavior: 'smooth' });

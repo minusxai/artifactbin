@@ -133,9 +133,10 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     for(const pin of state.pins) {
       const found=resolve(pin.target);let r:AnnotationRect={x:0,y:0,width:0,height:0};
       if(found.node){
+        const rs=rangeRects(found.node,pin.range??undefined);r=rs[0]??rect(found.node);
+        if(pin.layoutOnly){positions.push({id:pin.id,rect:r,status:found.status});continue;}
         mark(found.node,'data-mx-annotated');if(state.openId===pin.id)mark(found.node,'data-mx-annotation-open');if(state.hoverId===pin.id)mark(found.node,'data-mx-annotation-hover');
         if(state.openId===pin.id && (lastOpen!==pin.id || revealed!==found.node)) {found.node.scrollIntoView?.({block:'nearest',inline:'nearest'});revealed=found.node;}
-        const rs=rangeRects(found.node,pin.range??undefined);r=rs[0]??rect(found.node);
         const active=state.openId===pin.id?'open':state.hoverId===pin.id?'hover':'base';
         if(pin.range?.kind==='area') {
           for(const box of rs)draw(box,presentation.areaFill[active],'data-mx-annotation-area');
@@ -191,7 +192,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   };
   const selecting = () => !!(state?.enabled&&state.canComment&&(state.picking||state.blockPicking));
   const draggedWords = () => {const selection=win.getSelection();return !!selection&&!selection.isCollapsed&&!!selection.toString();};
-  const pinAt = (node:Element|null) => {for(let el=node;el;el=el.parentElement){const pin=state?.pins.find(pin=>resolve(pin.target).node===el);if(pin)return pin;}return null;};
+  const pinAt = (node:Element|null) => {for(let el=node;el;el=el.parentElement){const pin=state?.pins.find(pin=>!pin.layoutOnly&&resolve(pin.target).node===el);if(pin)return pin;}return null;};
   const leave=(e:Event)=>{if(!(e as MouseEvent).relatedTarget){hovered=null;if(state?.enabled)send({type:'comment-hover',generation:state.generation,id:null});schedule();}};
   listen('mouseout',leave);listen('pointerout',leave);
   listen('mouseover',e=>{if(selecting()){hovered=element(e);schedule();}else if(state?.enabled){send({type:'comment-hover',generation:state.generation,id:pinAt(element(e))?.id??null});}});

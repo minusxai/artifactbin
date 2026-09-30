@@ -855,7 +855,8 @@ export interface StorySpotlightMessage { type: typeof STORY_SPOTLIGHT_MESSAGE; p
  * It travels in the SAME message as that `openId` (the frame records the scroll
  * as done on arrival and would never repeat it for a pin arriving later), and
  * leaves again when the card is collapsed, another thread is opened or the rail
- * closes. Nothing resolved is in `pins` at rest.
+ * closes. Recently resolved previews may retain `layoutOnly` pins for their
+ * positions; those pins never paint or respond to document hover.
  *
  * `mode` is ON or OFF and nothing else. It used to carry a third value naming
  * which PAGE MODE was open ('pins' for view, 'annotate' for #annotate), which
@@ -878,6 +879,8 @@ export interface StoryAnnotationsMessage {
    */
   pins: Array<{
     id: string;
+    /** Position a resolved preview without painting or interacting with its former highlight. */
+    layoutOnly?: boolean;
     path: string;
     key: string | null;
     /** Persistent authored node id; absent on historical anchor-only threads. */

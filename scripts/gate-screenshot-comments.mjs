@@ -20,8 +20,10 @@ for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chrom
   await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});const reference=document.createElement('video');reference.muted=true;reference.srcObject=stream;window.__captureReference=reference;void reference.play();return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
   await becomeOwner(page,base,seed.token);await page.goto(`${base}/a/${seed.id}`);await page.locator('#capturebox').waitFor();
   await openArtifactControls(page);await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
-  await page.getByRole('button',{name:'Select',exact:true}).click();
-  await page.getByRole('status',{name:'Select tool active'}).waitFor({timeout:20000});
+  await expect(page.getByRole('button',{name:'Select',exact:true})).toHaveAttribute('aria-pressed','true');
+  assert.deepEqual(await page.evaluate(()=>window.__captureTrace),[], 'Select must not request screen sharing');
+  await page.getByRole('button',{name:'Screenshot',exact:true}).click();
+  await expect(page.getByRole('status',{name:'Screenshot tool active'})).toHaveText(/drag an area/,{timeout:20000});
   const box=await page.locator('#capturebox').boundingBox();assert(box);
   let referencePixel=[220,30,30];
   if(name==='chromium'){

@@ -17,7 +17,7 @@ export interface ManagedCommentState {
   /** Sidebar block picking preserves native text selection and scrolling. */
   blockPicking?: boolean;
   canComment: boolean;
-  pins: Array<{ id: string; target: IframeNodeTarget; range?: ManagedCommentRefinement | null }>;
+  pins: Array<{ id: string; layoutOnly?: boolean; target: IframeNodeTarget; range?: ManagedCommentRefinement | null }>;
   openId: string | null;
   hoverId: string | null;
   selection: ManagedCommentSelection | null;

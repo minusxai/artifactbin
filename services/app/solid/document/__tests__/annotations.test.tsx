@@ -77,7 +77,7 @@ it('opens a one-shot Select pick from the rail and composes on the frame selecti
   const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}}
     runtimeRef={{ current: runtime }} sessionNonce="private" />);
   await waitFor(() => expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true'));
-  expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations', pick: 'select' }));
+  expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'mx:annotations', pick: 'block' }));
   receive?.({ type: 'mx:selection', nonce: 'private', selection: { kind: 'text', path: '2.1', nodeId: 'node-2-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] } });
   expect(view.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
   expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'false');
@@ -142,7 +142,7 @@ it('keeps an expanded thread visible when another viewer resolves it', async () 
   fireEvent.click(view.getByRole('button', { name: 'Open annotation thread' }));
   changeLive([]);
   await waitFor(() => expect(service.listAnnotations).toHaveBeenCalledWith('resolved'));
-  await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1' })] }));
+  await waitFor(() => expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ openId: 'ann1', pins: [expect.objectContaining({ id: 'ann1', layoutOnly: true })] }));
   await waitFor(() => expect(view.getByRole('button', { name: 'Reopen annotation' })).toBeTruthy());
 });
 
@@ -222,13 +222,14 @@ it('prefills the linked agent in a reply and preserves the draft after a failed 
   expect(reply).toHaveValue('@Codex Please check');
 });
 
-it('requires a screenshot after an explicit Select pick on a versioned document and permits explicit text-only fallback', async () => {
+it('requires a screenshot only after an explicit Screenshot pick on a versioned document and permits explicit text-only fallback', async () => {
   const send = vi.fn(); let receive: ((data: unknown) => void) | undefined;
   const runtime = { send, subscribe: (callback: (data: unknown) => void) => { receive = callback; return () => {}; }, getViewportRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) } as unknown as StoryController;
   const service = backend({ unavailable: vi.fn(() => null) });
   const view = render(() => <AnnotationLayer id="abc" editId="edit-current" backend={service} railOpen onRailOpenChange={() => {}}
     runtimeRef={{ current: runtime }} sessionNonce="private" />);
-  fireEvent.click(view.getByRole('button', { name: 'Select' }));
+  fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
+  await waitFor(() => expect(view.getByRole('status', { name: 'Screenshot tool active' })).toHaveTextContent('drag an area'));
   receive?.({ type: 'mx:selection', nonce: 'private', selection: { kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 1, y: 2, width: 30, height: 20 }, className: '', style: '', ancestors: [] } });
   fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Explicit fallback' } });
   expect(view.getByRole('button', { name: 'Post comment' })).toBeDisabled();
