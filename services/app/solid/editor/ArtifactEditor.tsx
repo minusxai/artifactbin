@@ -22,12 +22,14 @@ export type ArtifactEditorProps = Omit<InPlaceEditorProps, 'art'> & {
 export default function ArtifactEditor(props: ArtifactEditorProps): JSX.Element {
   const [art, setArt] = createSignal<EditorArtifact | null>(props.seed ?? null);
   const [locked, setLocked] = createSignal(false);
+  // The locked card is this session's whole editor: the page's entry chrome and loading bar end with it.
+  const lock = () => { setLocked(true); props.onEditorMount?.(); props.onEditorReady?.(); };
   onMount(() => {
     void props.backend.load().then((head) => {
-      if (!head) { setLocked(true); return; }
+      if (!head) { lock(); return; }
       setLocked(false);
       if (!art()) setArt({ ...head, template: head.template ?? null, colorMode: head.colorMode ?? null, markup: head.markup ?? '', refs: head.refs ?? [], compiledCss: null, dataflow: null });
-    }).catch(() => setLocked(true));
+    }).catch(lock);
   });
   return (
     <Show when={!locked()} fallback={

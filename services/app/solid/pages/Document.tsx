@@ -10,9 +10,7 @@ import { applyReaderChoice } from '@/lib/story-runtime/reader-chrome-actions';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
-import { currentAnchor } from '@/lib/story-runtime/anchor';
-import { writeReloadAnchor } from '@/lib/story-runtime/reader-mode';
-import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
+import { keepReadingPlace } from '@/lib/story-runtime/anchor';
 import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared-runtime';
@@ -36,6 +34,7 @@ import { createIslandStory, type IslandStory } from '../document/create-island-s
 import { moveInto } from '@/lib/story-runtime/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
+import { EditEntryChrome } from '../editor/EditEntryChrome';
 import { createIsPhoneViewport } from '../components/MobileSheet';
 import { panelFitsInMargin } from '@/lib/story/edit-panel-fit';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
@@ -153,6 +152,9 @@ export function DocumentPage(): JSX.Element {
   const [fork, setFork] = createSignal(false);
   const [mode, setMode] = createSignal<'light' | 'dark'>('light');
   const [editing, setEditing] = createSignal(false);
+  /** The editor's bar is on screen (it replaces the entry skeleton), and the document is editable (the loading bar ends). */
+  const [editorMounted, setEditorMounted] = createSignal(false);
+  const [editorReady, setEditorReady] = createSignal(false);
   const [initialEditSelectionPath, setInitialEditSelectionPath] = createSignal<string | null>(null);
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
   const [titleHost, setTitleHost] = createSignal<HTMLElement | null>(null);
@@ -176,8 +178,6 @@ export function DocumentPage(): JSX.Element {
   let pushedEdit = false;
   let draining = false;
   let editedCompiledPage = false;
-  let exitAnchor: ScrollAnchor | null = null;
-  let exitScroll: number | null = null;
   const pendingData: string[] = [];
 
   const chooseMode = (next: 'light' | 'dark') => {
@@ -232,19 +232,22 @@ export function DocumentPage(): JSX.Element {
 
   // ── edit mode: a MODE of the one address, mirrored in `#edit` (and accepted as `/edit`) ──
   const editRoute = () => /\/edit\/?$/.test(window.location.pathname) || window.location.hash === '#edit';
+  /** Everything the switch into editing downloads, started on idle for a writer and again on the click (both deduplicate). */
+  const prefetchEditor = () => {
+    void loadEditorPart();
+    void import('../editor/ArtifactEditor').catch(() => {});
+    void import('@/lib/story-runtime/edit/session').catch(() => {});
+    void import('../editor/dom-mounter').catch(() => {});
+  };
   const beginEdit = (selectionPath: string | null) => {
     if (!editable() || window.location.hash === '#edit' || editing()) return;
+    prefetchEditor();
     setInitialEditSelectionPath(selectionPath);
     window.history.pushState(window.history.state, '', window.location.pathname + window.location.search + '#edit');
     pushedEdit = true;
     setEditing(true);
   };
   const enterEdit = () => beginEdit(null);
-  const rememberPlace = () => {
-    exitScroll = window.scrollY;
-    exitAnchor = currentAnchor(window);
-    if (exitAnchor) writeReloadAnchor(window, exitAnchor);
-  };
   const drainEditor = async () => {
     const flush = editorFlush.current;
     if (!flush || draining) return;
@@ -253,7 +256,6 @@ export function DocumentPage(): JSX.Element {
   };
   const exitEdit = () => {
     setInitialEditSelectionPath(null);
-    rememberPlace();
     if (pushedEdit) { pushedEdit = false; window.history.back(); return; }
     window.history.replaceState(window.history.state, '', window.location.pathname.replace(/\/edit\/?$/, '') + window.location.search);
     setEditing(false);
@@ -269,23 +271,21 @@ export function DocumentPage(): JSX.Element {
   const syncEditRoute = () => {
     if (editRoute()) { if (editable()) setEditing(true); return; }
     if (!editing()) return;
-    rememberPlace();
     setInitialEditSelectionPath(null);
     if (!editorFlush.current || draining) { setEditing(false); return; }
     void drainEditor().finally(() => setEditing(false));
   };
   createEffect(on(editing, (now, before) => {
     if (now) { editedCompiledPage = true; void loadEditorPart(); return; }
+    setEditorMounted(false);
+    setEditorReady(false);
     if (!before) return;
     island?.stopEditing();
     // The compiled islands were frozen for editing: return to the compiled page at the reader's place.
+    // The host already gave the bar's height back with the scroll compensated (keepReadingPlace), so the
+    // anchor is taken from the reading layout the reload will draw, once the editor's regions are gone.
     if (!editedCompiledPage) return;
-    const target = Math.max(0, (exitScroll ?? window.scrollY) - EDIT_BAR_H);
-    const anchor = exitAnchor;
-    const scrollFrame = requestAnimationFrame(() => {
-      window.scrollTo(0, target);
-      requestAnimationFrame(() => reloadKeepingPlace(window, anchor));
-    });
+    const scrollFrame = requestAnimationFrame(() => reloadKeepingPlace(window));
     onCleanup(() => cancelAnimationFrame(scrollFrame));
   }, { defer: true }));
   createEffect(() => { if (page?.surface) document.title = editing() ? `${page.surface.title ?? page.surface.runtime?.title ?? 'Untitled'} [edit mode]` : document.title.replace(/ \[edit mode\]$/, ''); });
@@ -316,13 +316,19 @@ export function DocumentPage(): JSX.Element {
     host.style.background = DOCUMENT_GROUND[mode()];
     // The served page reserved the bar on <body> (`body:has(> [data-mx-inline-story])`, compiled-page/assembler);
     // the story now lives in this host, so the host reserves it — and the editor toolbar under it.
-    host.style.paddingTop = `${(phone() ? 0 : APP_BAR_H) + (editing() ? EDIT_BAR_H : 0)}px`;
-    host.style.paddingRight = railInset() ? `${railInset()}px` : '';
-    host.style.paddingBottom = editing() && !wide() ? '50vh' : '';
+    const top = `${(phone() ? 0 : APP_BAR_H) + (editing() ? EDIT_BAR_H : 0)}px`;
+    const right = railInset() ? `${railInset()}px` : '';
+    const bottom = editing() && !wide() ? '50vh' : '';
+    if (host.style.paddingTop === top && host.style.paddingRight === right && host.style.paddingBottom === bottom) return;
+    // Entering or leaving edit (and the panel taking its width) must not move what the reader is looking at:
+    // the paragraph under them keeps its place on screen in the frame that paints the new chrome.
+    const apply = () => { host.style.paddingTop = top; host.style.paddingRight = right; host.style.paddingBottom = bottom; };
+    if (untrack(ready)) keepReadingPlace(window, apply); else apply();
   });
   createEffect(() => {
     if (!ready() || !chromeElement) return;
-    setTitleHost(markChromeEditing(chromeElement, editing(), !phone()));
+    // The breadcrumb keeps its text until the title editor is there to take its place (one swap, no blank title).
+    setTitleHost(markChromeEditing(chromeElement, editing(), !phone() && editorMounted()));
   });
   // The rail's comment count follows the layer's list (a thread opened or resolved here, or by the stream).
   createEffect(() => {
@@ -455,7 +461,7 @@ export function DocumentPage(): JSX.Element {
     const liveId = document.body.getAttribute('data-mx-live-id');
     const editId = document.body.getAttribute('data-mx-live-edit');
     const stopLive = !islands && liveId && editId && typeof EventSource === 'function' ? startIslandLive(window, liveId, editId) : null;
-    const stopIdle = editable() ? whenIdle(() => { void loadEditorPart(); void import('../editor/ArtifactEditor').catch(() => {}); }) : null;
+    const stopIdle = editable() ? whenIdle(prefetchEditor) : null;
     onCleanup(() => { chrome.removeEventListener('click', click); window.removeEventListener('keydown', escape); window.removeEventListener('hashchange', syncEditRoute); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null;
       // The route is leaving this (already-adopted) document: `clearInitialStory` never runs for it
       // (`adoptReaderDocument` nulled `initialStory` on the way in), so this is the one place its own
@@ -514,6 +520,10 @@ export function DocumentPage(): JSX.Element {
         railSheet={editing() && !wide()}
         panelWidth={editing() && wide() ? editorRightInset() : undefined} />
     </Show>
+    <Show when={ready() && editing()}>
+      <EditEntryChrome top={phone() ? 0 : APP_BAR_H} mode={mode()} panelWidth={wide() ? editorRightInset() : 0}
+        skeleton={!editorMounted()} loading={!editorReady() && !editorPartFailed()} />
+    </Show>
     <Show when={ready() && editing() && backend && (editorSeed() || editorPartFailed())}>
       <Suspense fallback={null}>
         <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} onExit={() => void finishEdit()} flushRef={editorFlush}
@@ -522,7 +532,8 @@ export function DocumentPage(): JSX.Element {
           onRightInsetChange={setEditorRightInset}
           commentsOpen={railOpen()} onCommentsOpenChange={annotatable() ? setRailOpen : undefined}
           onCommentsHost={setCommentsHost} titleHost={phone() ? null : titleHost()}
-          sharingContent={sharingContent} onPwaEnabledChange={setPwaEnabled} />
+          sharingContent={sharingContent} onPwaEnabledChange={setPwaEnabled}
+          onEditorMount={() => setEditorMounted(true)} onEditorReady={() => setEditorReady(true)} />
       </Suspense>
     </Show>
     <Show when={sharingOpen() && id}>
