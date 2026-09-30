@@ -850,7 +850,8 @@ async function pickLeg(browser) {
   // rectangle rides the comment as its range, painted back as an overlay.
   await page.getByRole('button',{name:'Screenshot',exact:true}).click();
   await page.getByRole('status',{name:'Screenshot tool active'}).waitFor();
-  check(await page.getByRole('status',{name:'Screenshot tool active'}).textContent().then((t) => /drag/i.test(t ?? '')), 'the screenshot pill says to drag');
+  const screenshotReady = await until(() => page.getByRole('status',{name:'Screenshot tool active'}).textContent(), text => /drag/i.test(text ?? ''), 5000);
+  check(/drag/i.test(screenshotReady ?? ''), 'the screenshot pill says to drag');
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
   await page.mouse.move(from.x + 8, from.y + 4);
