@@ -43,3 +43,12 @@ it('edits separate PWA metadata through the editor source callback', () => {
   expect(change.mock.lastCall![0]).toContain('<p id="one">Keep me</p>');
   expect(screen.getByLabelText('Upload app icon')).toBeTruthy();
 });
+
+it('waits for editor saves and stays put if saving fails', async () => {
+  const save = vi.fn().mockResolvedValue(false);
+  render(() => <InstallArtifactLink id="Abc123" beforeNavigate={save} />);
+  fireEvent.click(screen.getByRole('link', { name: 'Install app' }));
+  expect(save).toHaveBeenCalledTimes(1);
+  await Promise.resolve();
+  expect(window.location.pathname).toBe('/');
+});

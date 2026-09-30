@@ -880,7 +880,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       </Show>
       <Show when={mode() === 'design' && !preview() && contentView() === 'pwa'}>
         <aside aria-label="PWA" class="fixed bottom-0 z-20 overflow-y-auto bg-surface p-4 sm:p-6" style={{ top: `${barTop() + barH}px`, left: '0px', right: '0px' }}>
-          <PwaSettingsPanel id={art.id} title={title()} source={source()} onChange={commitStructural} onUpload={uploadImage} />
+          <PwaSettingsPanel id={art.id} title={title()} source={source()} onChange={commitStructural} onUpload={uploadImage} beforeInstall={() => live.flushForNavigation(() => inPlace.commitPending(true))} />
         </aside>
       </Show>
       <Show when={mode() === 'design' && !preview() && (contentView() === 'files' || contentView() === 'sharing')}>

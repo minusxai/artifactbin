@@ -41,7 +41,7 @@ function IntentPreload(): JSX.Element {
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
   const servedDocument = !!initialDocumentStory();
-  const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname));
+  const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
   // Leaving the served document (a link, the onboarding redirect) takes its story and chrome off the page
   // and shows the app's root, which the served page kept hidden.

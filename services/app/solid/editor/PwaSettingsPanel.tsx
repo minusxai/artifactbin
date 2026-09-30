@@ -5,7 +5,7 @@ import { artifactAppPath } from '@/lib/artifact-pwa';
 import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/story/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
 
-export interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice> }
+export interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice>; beforeInstall?: () => Promise<boolean> }
 const INPUT = 'mt-1 w-full rounded-md border border-edge bg-ground px-3 py-2 text-sm text-fg';
 
 /** Uses the editor's source queue: settings participate in autosave, conflicts and undo. */
@@ -42,11 +42,11 @@ export function PwaSettingsPanel(props: PwaSettingsPanelProps) {
       <Show when={uploading()}><p role="status" class="text-sm text-muted">Uploading icon…</p></Show>
     </div>
     <div class="grid gap-5 sm:grid-cols-2">
-      <label class="text-sm text-muted">Theme color<input type="color" aria-label="Theme color" class={INPUT} value={settings().themeColor ?? '#ffffff'} onChange={e => update({ themeColor: e.currentTarget.value })} /></label>
-      <label class="text-sm text-muted">Background color<input type="color" aria-label="Background color" class={INPUT} value={settings().backgroundColor ?? '#ffffff'} onChange={e => update({ backgroundColor: e.currentTarget.value })} /></label>
+      <label class="text-sm text-muted">Theme color<input type="color" aria-label="Theme color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().themeColor ?? '#ffffff'} onChange={e => update({ themeColor: e.currentTarget.value })} /></label>
+      <label class="text-sm text-muted">Background color<input type="color" aria-label="Background color" class="mt-1 h-10 w-full cursor-pointer rounded-md border border-edge bg-ground p-1" value={settings().backgroundColor ?? '#ffffff'} onChange={e => update({ backgroundColor: e.currentTarget.value })} /></label>
     </div>
     <Show when={error()}><p role="alert" class="text-sm text-danger">{error()}</p></Show>
-    <div class="space-y-3 border-t border-edge pt-5"><InstallArtifactLink id={props.id} class="inline-flex items-center gap-2 text-sm font-semibold text-accent" />
+    <div class="space-y-3 border-t border-edge pt-5"><InstallArtifactLink id={props.id} beforeNavigate={props.beforeInstall} class="inline-flex items-center gap-2 text-sm font-semibold text-accent" />
       <p class="text-sm text-muted">Opens the latest saved version in its own window. Internet access and the artifact’s existing sharing permissions still apply.</p>
       <p class="text-xs text-muted">Names and icons may take time to update in installed apps. Reinstall to see changes immediately.</p>
       <a href={artifactAppPath(props.id)} target="_self" class="block break-all text-xs text-muted underline">{window.location.origin}{artifactAppPath(props.id)}</a>

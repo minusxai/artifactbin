@@ -6,9 +6,14 @@ import { consumeInstall, currentInstall, subscribeInstall } from '@/lib/pwa-inst
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 /** Native discovery needs a full document navigation, not a client route transition. */
-export function InstallArtifactLink(props: { id: string; class?: string }) {
+export function InstallArtifactLink(props: { id: string; class?: string; beforeNavigate?: () => Promise<boolean> }) {
   const installed = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone;
-  return <Show when={!installed}><a href={`${artifactAppPath(props.id)}?install=1`} target="_self" aria-label="Install app" class={props.class}><Download size={14} />Install app</a></Show>;
+  return <Show when={!installed}><a href={`${artifactAppPath(props.id)}?install=1`} target="_self" aria-label="Install app" onClick={event => {
+    if (!props.beforeNavigate) return;
+    event.preventDefault();
+    const href = event.currentTarget.href;
+    void props.beforeNavigate().then(ok => { if (ok) window.location.assign(href); });
+  }} class={props.class}><Download size={14} />Install app</a></Show>;
 }
 
 export function InstallArtifact(props: { id: string; title: string }) {
