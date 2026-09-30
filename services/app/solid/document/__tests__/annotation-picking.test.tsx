@@ -43,18 +43,18 @@ it.each(['button', 'keyboard'])('posts by %s and resumes Select without requesti
   expect(view.getByRole('button', { name: 'Screenshot' })).toBeVisible();
   expect(view.getByRole('button', { name: 'Screenshot' })).toHaveAttribute('aria-pressed', 'false');
   frame.emit('mx:selection', { selection: selected });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Node comment' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'Node comment' } });
   expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
   expect(view.queryByLabelText('Upload screenshot')).toBeNull();
   expect(beginCapture).not.toHaveBeenCalled();
-  if (submit === 'keyboard') fireEvent.keyDown(view.getByRole('textbox', { name: 'New comment' }), { key: 'Enter', ctrlKey: true });
+  if (submit === 'keyboard') fireEvent.keyDown(view.getByRole('textbox', { name: 'Annotation comment' }), { key: 'Enter', ctrlKey: true });
   else fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
   await waitFor(() => expect(service.createAnnotation).toHaveBeenCalledWith({ path: '2.1', node_id: 'node-2-1', body: 'Node comment' }, expect.any(String)));
   await waitFor(() => expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true'));
   expect(frame.last()).toMatchObject({ pick: 'block', selectedPath: null });
   expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   frame.emit('mx:selection', { selection: { ...selected, path: '2.2', nodeId: 'node-2-2' } });
-  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('');
+  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('');
   expect(beginCapture).not.toHaveBeenCalled();
 });
 
@@ -94,14 +94,14 @@ it('switching back preserves the draft and disposes a late screen-sharing grant'
   vi.spyOn(captureScreen, 'beginCapture').mockImplementation(() => new Promise(resolve => { grant = resolve; }));
   const { view, frame } = mount({ editId: 'edit-current' });
   frame.emit('mx:selection', { selection: selected });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Keep my draft' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'Keep my draft' } });
   fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
   fireEvent.click(view.getByRole('button', { name: 'Select' }));
   const session = { capture: vi.fn(async () => { throw new Error('Unused capture'); }), dispose: vi.fn() }; grant(session);
   await waitFor(() => expect(session.dispose).toHaveBeenCalledOnce());
   expect(frame.last()).toMatchObject({ pick: 'block' });
   frame.emit('mx:selection', { selection: selected });
-  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('Keep my draft');
+  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('Keep my draft');
   expect(view.getByRole('button', { name: 'Post comment' })).toBeEnabled();
 });
 
@@ -109,14 +109,14 @@ it.each(['Cancel comment', 'Escape'])('keeps Select ready after dismissing a nod
   const beginCapture = vi.spyOn(captureScreen, 'beginCapture');
   const { view, frame } = mount({ editId: 'edit-current' });
   frame.emit('mx:selection', { selection: selected });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Discard this draft' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'Discard this draft' } });
   if (dismiss === 'Escape') fireEvent.keyDown(window, { key: 'Escape' });
   else fireEvent.click(view.getByRole('button', { name: dismiss }));
   expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true');
   expect(frame.last()).toMatchObject({ pick: 'block', selectedPath: null });
   frame.emit('mx:selection', { selection: { ...selected, path: '2.2', nodeId: 'next-node' } });
-  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('');
+  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('');
   expect(frame.last()).toMatchObject({ selectedPath: '2.2' });
   expect(beginCapture).not.toHaveBeenCalled();
 });
@@ -147,7 +147,7 @@ it('the frame pick opens the composer and save goes to the picked block', async 
   expect(view.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
   expect(view.getByRole('button', { name: 'Select section' })).toBeTruthy();
   expect(frame.last()).toMatchObject({ pick: null, selectedPath: '2.1' });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'picked note' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'picked note' } });
   fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
   await waitFor(() => expect(service.createAnnotation).toHaveBeenCalledWith({ path: '2.1', node_id: 'node-2-1', body: 'picked note' }, expect.any(String)));
 });
@@ -212,7 +212,7 @@ it('an area pick saves the area as the range without a quote after a geometry ec
   const service = backend(); const { view, frame } = mount({ backend: service });
   frame.emit('mx:selection', { selection: { ...selected, range: area } });
   frame.emit('mx:selection', { selection: { ...selected, rect: { ...selected.rect, y: 60 } } });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'this region' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'this region' } });
   fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
   await waitFor(() => expect(service.createAnnotation).toHaveBeenCalledWith({ path: '2.1', node_id: 'node-2-1', body: 'this region', range: area }, expect.any(String)));
 });

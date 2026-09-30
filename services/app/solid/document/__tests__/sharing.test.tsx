@@ -13,7 +13,7 @@ it('opens the owner sharing dialog and changes link visibility through the scope
   vi.stubGlobal('fetch', fetcher);
   const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Sharing' })).toHaveTextContent('Anyone with the link'));
+  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Sharing' })).toHaveTextContent('anyone with the link'));
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/my/artifacts/abc/sharing', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ visibility: 'public' }) })));
 });
@@ -51,7 +51,7 @@ it('invites an email, changes its role, and removes it under public visibility',
   }));
   const view = render(() => <DocumentSharing id="abc" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  await waitFor(() => expect(screen.getByRole('heading', { name: 'People' })).toBeTruthy());
+  await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
   expect(screen.getByRole('button', { name: 'Make public' })).toHaveClass('bg-accent-soft');
   expect(screen.getByRole('button', { name: 'Make private' })).not.toHaveClass('bg-accent-soft');
   expect(screen.getByRole('button', { name: 'Make public' })).toHaveClass('whitespace-nowrap');

@@ -32,6 +32,7 @@ import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DocumentPeople } from '../document/DocumentPeople';
 import { createIslandStory, type IslandStory } from '../document/create-island-story';
+import { moveInto } from '@/lib/story-runtime/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
 import { createIsPhoneViewport } from '../components/MobileSheet';
@@ -40,6 +41,8 @@ import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 import type { EditorArtifact } from '../editor/InPlaceEditor';
 import { TrustedUi } from '../components/TrustedUi';
+import Sun from 'lucide-solid/icons/sun';
+import Moon from 'lucide-solid/icons/moon';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 
 /** The page panels wear the reader chrome's own sheet; inside the trusted root they need its tokens too. */
@@ -78,11 +81,12 @@ export function readerProvenancePath(href: string | null | undefined): string | 
 /** Move the server's existing nodes; the island document and its listeners retain identity. */
 export function adoptReaderDocument(host: HTMLElement): { story: HTMLElement | null; chrome: HTMLElement | null } {
   const chrome = Array.from(document.body.children).find((child): child is HTMLElement => child instanceof HTMLElement && child.hasAttribute('data-mx-reader-chrome')) ?? null;
-  if (chrome) host.append(chrome);
+  // moveBefore where the browser has it: the story's iframes (a managed frame's realm) and focus survive the move.
+  if (chrome) moveInto(host, chrome);
   const story = adoptInitialStory() ?? Array.from(document.body.children).find((child): child is HTMLElement => child instanceof HTMLElement && child.hasAttribute('data-mx-inline-story')) ?? null;
   if (story) {
     if (story.parentElement === document.body) window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
-    host.append(story);
+    moveInto(host, story);
     document.getElementById('root')?.removeAttribute('hidden');
   }
   return { story, chrome };
@@ -170,6 +174,10 @@ export function DocumentPage(): JSX.Element {
   const pendingData: string[] = [];
 
   const chooseMode = (next: 'light' | 'dark') => {
+    // One reader choice, two surfaces: the app shell (its stored preference) and the document.
+    if (next === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+    try { localStorage.setItem('mx_theme', next); } catch { /* private mode */ }
     applyReaderChoice(window, document, next);
     adoptedStory?.classList.toggle('dark', next === 'dark');
     adoptedStory?.classList.toggle('light', next !== 'dark');
@@ -443,12 +451,13 @@ export function DocumentPage(): JSX.Element {
       <style>{PANEL_CSS}</style>
       <Show when={panel()}>
         <button type="button" aria-label="Close page controls" class="mx-reader-scrim" onClick={() => setPanel(null)} />
-        <Show when={panel() === 'controls'}><section aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls" ref={placePanel}><h2>artifact controls</h2><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}>light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}>dark</button></div>
+        <Show when={panel() === 'controls'}><section role="dialog" aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls" ref={placePanel}><h2>artifact controls</h2><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}><Sun size={14} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}><Moon size={14} />dark</button></div>
           <DocumentActions id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
             owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
             like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { setPanel(null); setRailOpen(open); }}
             openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork
             onEdit={() => { setPanel(null); enterEdit(); }}
+            onShare={() => { setPanel(null); setSharingOpen(true); }}
             onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />
         </section></Show>
         <Show when={panel() === 'menu'}><nav aria-label="Menu" class="mx-reader-panel mx-reader-panel--menu" ref={placePanel}><a class="mx-reader-brand" href="/"><img src="/logo-128.png" alt="" />artifactbin</a><a href="/">Artifacts</a><a href="/account">Account</a><a href="/docs-human">Human Docs</a></nav></Show>

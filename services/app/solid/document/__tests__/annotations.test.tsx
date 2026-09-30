@@ -30,10 +30,10 @@ it('keeps a draft when the annotation write fails', async () => {
   const service = backend({ createAnnotation: vi.fn(async () => { throw new Error('stale: retake'); }) });
   const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen onRailOpenChange={() => {}}
     initialSelection={{ kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [], quote: 'Selected passage' }} />);
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'My draft' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'My draft' } });
   fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('stale: retake'));
-  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('My draft');
+  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('My draft');
 });
 
 it('posts only pin locations to the document runtime and opens the rail on pin click', async () => {
@@ -81,7 +81,7 @@ it('opens a one-shot Select pick from the rail and composes on the frame selecti
   receive?.({ type: 'mx:selection', nonce: 'private', selection: { kind: 'text', path: '2.1', nodeId: 'node-2-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] } });
   expect(view.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
   expect(view.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'false');
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'picked note' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'picked note' } });
   fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
   await waitFor(() => expect(service.createAnnotation).toHaveBeenCalledWith(expect.objectContaining({ path: '2.1', node_id: 'node-2-1', body: 'picked note' }), expect.any(String)));
 });
@@ -231,7 +231,7 @@ it('requires a screenshot only after an explicit Screenshot pick on a versioned 
   fireEvent.click(view.getByRole('button', { name: 'Screenshot' }));
   await waitFor(() => expect(view.getByRole('status', { name: 'Screenshot tool active' })).toHaveTextContent('drag an area'));
   receive?.({ type: 'mx:selection', nonce: 'private', selection: { kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 1, y: 2, width: 30, height: 20 }, className: '', style: '', ancestors: [] } });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Explicit fallback' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'Explicit fallback' } });
   expect(view.getByRole('button', { name: 'Post comment' })).toBeDisabled();
   await waitFor(() => expect(view.getByRole('button', { name: 'Continue without screenshot' })).toBeTruthy());
   fireEvent.click(view.getByRole('button', { name: 'Continue without screenshot' }));
@@ -257,7 +257,7 @@ it('retries the same failed draft with the same idempotency key', async () => {
   const service = backend({ createAnnotation: create });
   const view = render(() => <AnnotationLayer id="abc" backend={service} railOpen={false} onRailOpenChange={() => {}}
     initialSelection={{ kind: 'text', path: '0', nodeId: 'node1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [] }} />);
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Retry me' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'Retry me' } });
   fireEvent.click(view.getByRole('button', { name: 'Post comment' }));
   await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
   fail = false;

@@ -44,7 +44,7 @@ it('keeps provenance navigation on an internal artifact path', () => {
 it('opens the reader settings and phone menu and applies document mode to the adopted story', () => {
   const { story } = mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  expect(trusted().getByRole('region', { name: 'Artifact controls' })).toHaveClass('mx-reader-panel--controls');
+  expect(trusted().getByRole('dialog', { name: 'Artifact controls' })).toHaveClass('mx-reader-panel--controls');
   expect(trusted().getByText(/forked from/)).toHaveAttribute('data-mx-forked-from');
   fireEvent.click(trusted().getByRole('button', { name: 'Dark mode' }));
   expect(story).toHaveClass('dark');

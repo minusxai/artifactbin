@@ -25,6 +25,8 @@ export interface DocumentActionsProps {
   format?: string; source?: string | null; editId?: string;
   /** The caller's own chrome already offers a direct fork action (e.g. the reader rail): skip this panel's own, so settings never duplicates it. */
   hideFork?: boolean;
+  /** Open the page's sharing dialog (the panel closes under it). */
+  onShare?: () => void;
 }
 /** Controls own only panel state; the document page owns editing and annotation lifetimes. */
 export function DocumentActions(props: DocumentActionsProps): JSX.Element {
@@ -49,10 +51,10 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
     </section>
     <Show when={activeOwner()}><section aria-label="Owner actions" class="space-y-1"><h2 class="px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
       <RefreshDocumentAssets id={props.id} />
-      <DocumentSharing id={props.id} title={props.title} owner onSocialPreview={onSocialPreview()} />
+      <DocumentSharing id={props.id} title={props.title} owner onSocialPreview={onSocialPreview()} variant="menu" onOpen={props.onShare} />
       <Show when={props.onDeleted}><DeleteAction id={props.id} title={props.title} onDeleted={props.onDeleted!} /></Show>
     </section></Show>
-    <Show when={!activeOwner() && activeEditor()}><DocumentSharing id={props.id} title={props.title} owner={false} editable onSocialPreview={onSocialPreview()} /></Show>
+    <Show when={!activeOwner() && activeEditor()}><DocumentSharing id={props.id} title={props.title} owner={false} editable onSocialPreview={onSocialPreview()} variant="menu" onOpen={props.onShare} /></Show>
     <Show when={props.history}>{history => <VersionHistory {...history()} />}</Show>
     <Show when={socialPreviewOpen() && props.source != null && props.editId}>
       <SocialPreviewEditor id={props.id} source={props.source!} editId={props.editId!} version={props.version} onClose={() => setSocialPreviewOpen(false)} />
