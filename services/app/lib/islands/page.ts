@@ -95,6 +95,9 @@ export function startPage(doc: Document = document, win: Window = window): () =>
       el?.classList.toggle('light', mode !== 'dark');
     }
   }
+  // Document affordances with no Solid-side replacement: they must outlive the SPA's takeover,
+  // never cleared by `takeover()` below (only by this function's own disposer, for tests/unmount).
+  const persistent: Array<() => void> = [];
   const stops: Array<() => void> = [];
   // The public page API is a separate lazy chunk: browser sessions need it even when the
   // React app waits for intent. Boot owns its lifetime through the root's private handle.
@@ -117,11 +120,12 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   doc.addEventListener(ISLANDS_READY_EVENT, installPublicMx);
   stops.push(() => doc.removeEventListener(ISLANDS_READY_EVENT, installPublicMx));
   if (html.hasAttribute('data-mx-ready')) installPublicMx();
-  // These document affordances also run inside a frame, like the legacy page entry.
-  stops.push(markScrollableTables(doc), wireOutline(doc));
+  // These document affordances also run inside a frame, like the legacy page entry. Nothing on the
+  // app side re-wires them, so they must survive the SPA's takeover (persistent, not stops).
+  persistent.push(markScrollableTables(doc), wireOutline(doc));
   if (framed) {
     stops.push(relayFrameScroll(win, doc));
-    return () => { for (const stop of stops.splice(0)) stop(); };
+    return () => { for (const stop of stops.splice(0)) stop(); for (const stop of persistent.splice(0)) stop(); };
   }
   const id = doc.body?.getAttribute('data-mx-live-id');
   const editId = doc.body?.getAttribute('data-mx-live-edit');
@@ -140,7 +144,7 @@ export function startPage(doc: Document = document, win: Window = window): () =>
     for (const release of stops.splice(0)) release();
   };
   win.addEventListener(PAGE_TAKEOVER_EVENT, takeover, { once: true });
-  return () => { takeover(); stopAnchor?.(); };
+  return () => { takeover(); stopAnchor?.(); for (const stop of persistent.splice(0)) stop(); };
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') startPage();

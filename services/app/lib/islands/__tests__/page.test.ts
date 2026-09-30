@@ -55,6 +55,23 @@ describe('startPage', () => {
     table.dispatchEvent(new Event('scroll'));
     expect(table.getAttribute('data-mx-scrollable')).toBe('end');
   });
+  it('keeps the outline and table wiring live once the SPA takes the page over — nothing there replaces it', () => {
+    page({ live: false });
+    document.querySelector('#mx-story-root')!.innerHTML = '<div class="mx-reading"><nav class="mx-outline"><button class="mx-outline-row" data-mx-target="0" type="button">One</button></nav><div class="mx-doc"><h2 data-mx-ast="0">One</h2><table><tr><td>Wide</td></tr></table></div></div>';
+    const heading = document.querySelector<HTMLElement>('h2')!;
+    const scroll = vi.fn();
+    heading.scrollIntoView = scroll;
+    heading.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+    const table = document.querySelector<HTMLTableElement>('table')!;
+    Object.defineProperties(table, { scrollWidth: { value: 300 }, clientWidth: { value: 100 }, scrollLeft: { value: 0, writable: true } });
+    stops.push(startPage());
+    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
+    document.querySelector<HTMLElement>('.mx-outline-row')!.click();
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    table.scrollLeft = 200;
+    table.dispatchEvent(new Event('scroll'));
+    expect(table.getAttribute('data-mx-scrollable')).toBe('end');
+  });
   it('applies the reader\'s per-visit colour override on <html> and the story root, and nothing without one', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page();
