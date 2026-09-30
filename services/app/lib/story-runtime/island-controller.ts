@@ -110,7 +110,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   let draftSequence = 0;
   let lastDraftSource: string | null = null;
   let quietDraftTimer: number | null = null;
-  let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string; stableIds: Set<string>; stablePaths: Set<string>; sequence: number } | null = null;
+  let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string; sequence: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
     const found = new Map<string, string>();
     const visit = (items: JsxNode[]) => { for (const item of items) {
@@ -145,19 +145,45 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const active = win.document.activeElement;
     return active instanceof HTMLElement && root.contains(active) && !!active.closest('[data-mx-edit-region]');
   };
-  const applyDraft = async (allowFocused = false) => {
+  /**
+   * One draft is drawn at a time. The draw spans awaits (the engine, the draft's island module), and a
+   * second draw inside that window would hydrate the root twice and remount the editor over a half-
+   * morphed DOM; a newer draft that lands meanwhile is drawn once the current one is done.
+   */
+  let drawing: Promise<void> | null = null;
+  let drawAgain: boolean | null = null;
+  const applyDraft = (allowFocused = false): Promise<void> => {
+    if (drawing) { drawAgain = (drawAgain ?? false) || allowFocused; return drawing; }
+    drawing = drawDraft(allowFocused).finally(() => {
+      drawing = null;
+      const again = drawAgain;
+      drawAgain = null;
+      if (again !== null && !disposed) void applyDraft(again);
+    });
+    return drawing;
+  };
+  const drawDraft = async (allowFocused: boolean) => {
     const pending = pendingDraft;
     if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !drafting() || pending.sequence !== draftSequence) return;
-    const { disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom } = await import('@/lib/islands/morph/engine');
+    const [{ disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom }, { storyUpdateParts }] = await Promise.all([
+      import('@/lib/islands/morph/engine'), import('@/lib/story/update-parts'),
+    ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
+    // What stays is decided against the draft the page shows NOW. The served AST may carry resolved
+    // assets or generated properties, so compare two parses of the authored source for component
+    // identity; both use the same body-relative paths as the compiled DOM.
+    const baseline = lastDraftSource ?? initialSource();
+    const before = baseline ? storyUpdateParts(baseline)?.nodes ?? nodes : nodes;
+    const after = storyUpdateParts(pending.source)?.nodes ?? pending.nodes;
+    const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
     if (pending.sheet && sheet) sheet.textContent = pending.sheet.textContent;
     edit?.unmountCompiledDom();
-    disposeChangedDraftIslands(root, pending.stableIds, pending.stablePaths);
-    morphDraftDom(root, pending.root, pending.stableIds, pending.stablePaths);
-    await hydrateDraftIslands(win, root, pending.document, pending.stableIds, pending.stablePaths);
+    disposeChangedDraftIslands(root, stableIds, stablePaths);
+    morphDraftDom(root, pending.root, stableIds, stablePaths);
+    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths);
     nodes = pending.nodes;
     lastDraftSource = pending.source;
     edit?.setNodes(nodes);
@@ -249,22 +275,15 @@ export function createIslandController({ win, root, islands, nodes: served, port
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode }),
         }).then(async (response) => {
-          if (response.status === 422) return;
+          // A failed or superseded compile leaves the last good preview in place.
+          if (response.status === 422 || disposed || sequence !== draftSequence) return;
           if (!response.ok) throw new Error(`draft preview answered ${response.status}`);
           const payload = await response.json() as { html: string };
           const next = new DOMParser().parseFromString(payload.html, 'text/html');
           if (disposed || sequence !== draftSequence || !drafting()) return;
           const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]');
           if (!nextRoot) throw new Error('draft preview carried no story');
-          // The served AST may carry resolved assets or generated properties.
-          // Compare two parses of the authored source for component identity;
-          // both use the same body-relative paths as the compiled DOM.
-          const baseline = lastDraftSource ?? initialSource();
-          const { storyUpdateParts } = await import('@/lib/story/update-parts');
-          const before = baseline ? storyUpdateParts(baseline)?.nodes ?? nodes : nodes;
-          const after = storyUpdateParts(source)?.nodes ?? command.nodes;
-          pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: command.nodes, source,
-            stableIds: stableIdsFor(after, before), stablePaths: stablePathsFor(after, before), sequence };
+          pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: command.nodes, source, sequence };
           await applyDraft();
           if (pendingDraft?.sequence === sequence && quietDraftTimer === null) {
             quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(true); }, 500);
