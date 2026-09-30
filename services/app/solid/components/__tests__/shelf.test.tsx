@@ -62,6 +62,14 @@ it('switches list and grid and keeps search accessible', () => {
   expect(screen.getByLabelText('Open Doc one').querySelector('img')).toHaveAttribute('src', expect.stringContaining('/a/one/export?'));
 });
 
+it('hands every keystroke in its search box to onQuery, for a caller filtering something else by it (Home\'s "Shared with you")', () => {
+  const heard: string[] = [];
+  render(() => <Shelf rows={[doc('one'), doc('two')]} actions="full" onQuery={query => heard.push(query)} />);
+  fireEvent.input(screen.getByLabelText('Search artifacts'), { target: { value: 'on' } });
+  fireEvent.input(screen.getByLabelText('Search artifacts'), { target: { value: 'one' } });
+  expect(heard).toEqual(['on', 'one']);
+});
+
 it('opens a folder action menu without recursive updates', () => {
   render(() => <Shelf rows={[folder]} scopeParentId={null} actions="full" />);
   fireEvent.click(screen.getByRole('button', { name: 'More actions for Reports' }));

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 let mockRole = 'commenter';
 vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, surface: { id: 'doc12345', title: 'A copy', format: 'markup', version: 3, author: { forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
-vi.mock('@/web/initial-story', () => ({ adoptInitialStory: () => null }));
+vi.mock('@/web/initial-story', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/web/initial-story')>()), adoptInitialStory: () => null }));
 
 import { DocumentPage, readerProvenancePath } from '../pages/Document';
 
@@ -20,7 +20,7 @@ beforeEach(() => {
     return Response.json({});
   }));
 });
-afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); document.body.replaceChildren(); for (const style of document.head.querySelectorAll('style')) style.remove(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function mount(path = '/a/doc', extraChrome = '') {
   window.history.replaceState(null, '', path);
@@ -28,8 +28,8 @@ function mount(path = '/a/doc', extraChrome = '') {
   const chrome = document.createElement('div'); chrome.setAttribute('data-mx-reader-chrome', '');
   chrome.innerHTML = '<button data-mx-reader-trigger="controls" aria-label="Open artifact controls"></button><button data-mx-reader-trigger="menu" aria-label="Open menu"></button><button data-mx-reader-action="comment" aria-label="Comment"></button>' + extraChrome;
   document.body.append(story, chrome);
-  render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
-  return { story, chrome };
+  const view = render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
+  return { story, chrome, unmount: view.unmount };
 }
 
 /** The page's own UI renders inside trusted shadow roots: 0 the navigation layer (panels, dialogs), 1 discussion (comments, editor). */
@@ -112,4 +112,22 @@ it('a viewer asking for #edit reads the document', () => {
   const { chrome } = mount('/a/doc#edit');
   expect(chrome).not.toHaveAttribute('data-mx-editing');
   expect(document.querySelectorAll('[data-trusted-ui]')[1]!.shadowRoot!.querySelector('[aria-label="Exit edit mode"]')).toBeNull();
+});
+
+it('leaving an already-adopted document (an SPA route change) removes its own head sheets', () => {
+  // The served document's head sheets (lib/compiled-page/assembler.ts), present whether or not
+  // `initial-story` ever adopts this page: `data-mx-story-css` in particular collides with the app
+  // shell's own Tailwind utility class names on every route rendered after it, duplicating the app
+  // bar's GitHub Star button (one visible desktop/mobile variant instead of the CSS picking one).
+  for (const attr of ['data-mx-chrome', 'data-mx-app-reserve', 'data-mx-story-css', 'data-mx-footer-css']) {
+    document.head.insertAdjacentHTML('beforeend', `<style ${attr}>.hidden{display:none}</style>`);
+  }
+  const { unmount } = mount();
+  for (const attr of ['data-mx-chrome', 'data-mx-app-reserve', 'data-mx-story-css', 'data-mx-footer-css']) {
+    expect(document.head.querySelector(`style[${attr}]`), attr).not.toBeNull();
+  }
+  unmount();
+  for (const attr of ['data-mx-chrome', 'data-mx-app-reserve', 'data-mx-story-css', 'data-mx-footer-css']) {
+    expect(document.head.querySelector(`style[${attr}]`), attr).toBeNull();
+  }
 });
