@@ -21,13 +21,14 @@ it('toggles comments without changing document mode', () => {
   expect(view.getByRole('button', { name: 'Toggle comments' })).toHaveAttribute('aria-pressed', 'true');
 });
 
-it('opens the social preview editor from an editable markup document, not from a non-editable or non-markup one', () => {
+it('opens the social preview editor from an editable markup document, not from a non-editable or non-markup one', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ visibility: 'private', linkRole: 'viewer', shares: [] }) })));
   const view = render(() => <DocumentActions id="abc" title="Report" version={3} owner canEdit canAnnotate format="markup" source="<p>x</p>" editId="e1"
     like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   fireEvent.click(screen.getByRole('button', { name: 'Edit social preview' }));
-  expect(screen.getByRole('dialog', { name: 'Social preview' })).toBeTruthy();
+  // The crop editor is its own chunk: it arrives a moment after the press.
+  expect(await screen.findByRole('dialog', { name: 'Social preview' })).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Cancel social preview' }));
   expect(screen.queryByRole('dialog', { name: 'Social preview' })).toBeNull();
   view.unmount();
