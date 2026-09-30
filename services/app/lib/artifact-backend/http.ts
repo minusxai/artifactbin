@@ -10,7 +10,6 @@
  *
  * `fetch` and `EventSource` are looked up at call time, never captured.
  */
-import { sharedRequest } from '@/lib/shared-request';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readAnnotationPages } from '@/lib/annotation-pages';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
@@ -216,15 +215,7 @@ export function createHttpBackend(id: string): ArtifactBackend {
       return (await response.json()) as { id: string };
     },
     async members(query, options = {}) {
-      // The whole roster is one resource per document, shared with the People panel (solid/document/DocumentPeople).
-      if (query === undefined) {
-        return sharedRequest(`members:${id}`, async () => {
-          const r = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members`);
-          if (!r.ok) throw new Error('members');
-          return (await r.json()) as MembersAnswer;
-        }, { ttl: 30000 }).catch(() => null);
-      }
-      const r = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members?query=${encodeURIComponent(query)}`, { signal: options.signal });
+      const r = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members${query === undefined ? '' : `?query=${encodeURIComponent(query)}`}`, { signal: options.signal });
       return r.ok ? ((await r.json()) as MembersAnswer) : null;
     },
     async remoteSessions(options = {}) {
