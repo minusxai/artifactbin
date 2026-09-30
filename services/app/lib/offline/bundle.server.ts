@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
+import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { packCompiledBrowserModule } from './compiled-bundle.server';
 import type { ArtifactFile } from './file-format';
 import type { ArtifactFileParts } from './file-html';
@@ -52,6 +53,27 @@ export function offlineBundle(kind: OfflineBundleKind): Promise<string> {
   return bundle;
 }
 
+const PACKED_KEPT = 32;
+const packedMemo = new Map<string, Promise<{ compiledCode: string; templates: Record<string, string> } | null>>();
+
+/**
+ * A compiled module packed for file:// and gzipped, remembered per process: it is a pure function of
+ * the stored module (content-addressed), the immutable shared build it names and the two engine flags,
+ * so every later download of the same version skips the bundle and the level-9 compression.
+ */
+function packedModule(page: NonNullable<ArtifactFile['compiled']>, sqlite: boolean, chart: boolean) {
+  const key = JSON.stringify([page.module?.sha ?? null, page.module?.imports ?? null, page.sharedBuild?.manifest ?? null, sqlite, chart]);
+  let made = packedMemo.get(key);
+  if (!made) {
+    made = packCompiledBrowserModule(page, { offline: { sqlite, chart } })
+      .then((packed) => packed && { compiledCode: gzipSync(packed.code, { level: 9 }).toString('base64'), templates: packed.templates });
+    packedMemo.set(key, made);
+    if (packedMemo.size > PACKED_KEPT) packedMemo.delete(packedMemo.keys().next().value!);
+    made.catch(() => { if (packedMemo.get(key) === made) packedMemo.delete(key); });
+  }
+  return made;
+}
+
 /** The exact inline resources a newly downloaded Solid file needs. */
 export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFileParts> {
   if (file.bundle !== 'solid') throw new Error('offline: a legacy file must be migrated before export');
@@ -65,12 +87,12 @@ export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFile
       && 'kind' in attribute.value.json && attribute.value.json.kind === 'vega-lite')) || hasChart(node.children)
   ));
   const chart = file.compiled.kit.islands.includes('Question') && hasChart(file.island.nodes);
-  const packed = await packCompiledBrowserModule(file.compiled, { offline: { sqlite, chart } });
+  const packed = await packedModule(file.compiled, sqlite, chart);
   const wasmUrl = file.compiled.sharedBuild?.sqliteWasm;
   const wasmName = /^\/islands\/(sqlite3-[0-9a-f]{16}\.wasm)$/.exec(wasmUrl ?? '')?.[1];
   if (sqlite && !wasmName) throw new Error('offline: the compiled build has no SQLite engine');
-  const wasm = wasmName && sqlite ? (await readFile(path.join(process.cwd(), 'public', 'islands', wasmName))).toString('base64') : undefined;
-  return { file, code, ...(packed ? { compiledCode: gzipSync(packed.code, { level: 9 }).toString('base64'), templates: packed.templates } : {}),
+  const wasm = wasmName && sqlite ? (await readFile(path.join(process.cwd(), 'public', 'islands', wasmName)).catch(() => retainedIslandFile(wasmName)))?.toString('base64') : undefined;
+  return { file, code, ...(packed ? { compiledCode: packed.compiledCode, templates: packed.templates } : {}),
     ...(wasm ? { wasm } : {}) };
 }
 

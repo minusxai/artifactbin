@@ -31,6 +31,9 @@ export interface VariantCaps {
 
 export const DEFAULT_VARIANT_CAPS: VariantCaps = { maxVariants: 200, maxBytes: 8 * 1024 * 1024 };
 
+/** Runs in flight at once: the SQL service answers them on its worker pool (services/sql pool.ts). */
+const VARIANT_CONCURRENCY = 8;
+
 /** What one bound control can set its Value to: a finite list, or anything (null). */
 type ControlDomain = { kind: 'options'; el: JsxElement } | { kind: 'boolean' } | { kind: 'open' };
 
@@ -184,20 +187,27 @@ export async function precomputeVariants(input: PrecomputeInput): Promise<{ vari
   const kept: Array<{ move: Record<string, Scalar>; variant: ArtifactFileVariant }> = [];
   let spent = 0;
   let stoppedAt = plan.length;
-  for (let i = 0; i < plan.length; i++) {
-    const move = plan[i];
+  // Runs go in windows and are judged IN PLAN ORDER: at most one window of runs is wasted past the byte budget.
+  const runMove = async (move: Record<string, Scalar>) => {
     const values = { ...input.base.values, ...baseValues, ...move };
     const only = queriesReadingValues(input.flow, Object.keys(move)).filter((q) => !input.queries || input.queries.has(q));
     const result = await input.run(values, only);
-    const variant: ArtifactFileVariant = {
+    return {
       values: { ...baseValues, ...move },
       tables: Object.fromEntries(only.filter((q) => result.tables[q]).map((q) => [q, result.tables[q]])),
       errors: Object.fromEntries(only.filter((q) => result.errors[q] !== undefined).map((q) => [q, result.errors[q]])),
-    };
-    const bytes = byteLength(variant);
-    if (spent + bytes > caps.maxBytes) { stoppedAt = i; break; }
-    spent += bytes;
-    kept.push({ move, variant });
+    } satisfies ArtifactFileVariant;
+  };
+  windows: for (let start = 0; start < plan.length; start += VARIANT_CONCURRENCY) {
+    const window = plan.slice(start, start + VARIANT_CONCURRENCY);
+    const variants = await Promise.all(window.map(runMove));
+    for (let j = 0; j < window.length; j++) {
+      const variant = variants[j]!;
+      const bytes = byteLength(variant);
+      if (spent + bytes > caps.maxBytes) { stoppedAt = start + j; break windows; }
+      spent += bytes;
+      kept.push({ move: window[j]!, variant });
+    }
   }
   /*
    * Past the byte budget: every Value some dropped combination moves is
