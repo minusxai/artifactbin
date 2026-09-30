@@ -2,7 +2,6 @@
 <div data-design="tw" className="@container px-4 py-8 @2xl:px-8" id="n8NO">
 <h1 className="text-4xl font-bold" id="bqJo">A plain prose document</h1>
 <p className="mt-3 text-muted-foreground" id="YAHt">Headings, paragraphs and lists only.</p>
-<p id="link"><a href="/a/{{link}}">A related document</a></p>
 <h2 id="to6n">Section 1: Why load time matters</h2>
 <p id="c5wu">Paragraph 1.0. Readers arrive from a link and decide within a second or two whether the page is worth their attention. The text should appear immediately, the layout should not shift, and nothing the reader did not ask for should compete for the network or the main thread while they read.</p>
 <p id="d3JI">Paragraph 1.1. Readers arrive from a link and decide within a second or two whether the page is worth their attention. The text should appear immediately, the layout should not shift, and nothing the reader did not ask for should compete for the network or the main thread while they read.</p>
