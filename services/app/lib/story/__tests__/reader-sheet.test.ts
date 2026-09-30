@@ -11,7 +11,6 @@ import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { readerRecipes, readerStorySheet } from '../reader-sheet.server';
 import { recipeReach } from '../../../scripts/generate-story-ui-classes';
 import { STORY_UI_RECIPE_BASE, STORY_UI_RECIPE_BY_TAG, STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
-import path from 'node:path';
 
 const PROSE = '<div className="p-4 text-lg"><h1>Notes</h1><p className="text-muted-foreground">Body</p></div>';
 const ACCORDION = '<div className="p-4"><Accordion type="single" collapsible><AccordionItem value="a"><AccordionTrigger>Open</AccordionTrigger><AccordionContent>inside</AccordionContent></AccordionItem></Accordion></div>';

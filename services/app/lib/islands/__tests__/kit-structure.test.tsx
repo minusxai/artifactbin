@@ -175,8 +175,6 @@ describe('tooltip, as today\'s story tooltip runs', () => {
 
 });
 
-describe('avatar image, as mounted Radix shows it', () => {
-});
 
 /**
  * Accordion and Collapsible content, MOUNTED on both sides: Radix measures the content once it runs and

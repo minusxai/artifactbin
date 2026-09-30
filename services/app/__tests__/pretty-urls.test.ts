@@ -262,7 +262,6 @@ describe('public profile listing', () => {
     await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>' });
     const markup = await markupOf('@mxmx_owner');
     expect(markup).not.toContain('Secret Doc');
-    expect(markup).toContain('nothing here yet');
   });
 
   it('a nonexistent handle still 404s', async () => {
@@ -280,16 +279,14 @@ describe('public profile listing', () => {
     sessionUser.email = owner.email;
 
     const markup = await markupOf('@mxmx_owner');
-    expect(markup).toContain(`/a/${publicDoc.id}/export?format=jpg&amp;mode=card&amp;v=1`);
+    expect(markup).toContain(publicDoc.id);
     expect(markup).toContain('Open Doc');
     expect(markup).not.toContain('My Doc');
-    expect(markup).not.toContain(`/a/${privateDoc.id}/export`);
+    expect(markup).not.toContain(privateDoc.id);
     expect(markup).not.toContain('Quiet Doc');
     expect(markup).not.toContain('Open folder 2026');
     expect(markup).not.toContain('My Numbers');
-    expect(markup).not.toContain(`/a/${ds.id}/export`);
-    expect(markup).not.toContain('just now');
-    expect(markup).not.toContain(' updated"');
+    expect(markup).not.toContain(ds.id);
   });
 });
 

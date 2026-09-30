@@ -44,7 +44,7 @@ useAppHarness();
 const APP = 'https://app.example.test';
 const HOST = 'https://blog.example.org';
 const TARGET_IP = '203.0.113.10';
-/** The SPA's shell, with the stylesheet the app page links (web/index.html). */
+/** The SPA's shell, with the stylesheet the app page links (web/solid-app.html). */
 const SHELL = '<!doctype html><html><head><title>artifactbin</title><link rel="stylesheet" href="/shell.css" /></head><body><div id="root"></div></body></html>';
 const app = () => createAppServer({ indexHtml: async () => SHELL });
 
@@ -148,10 +148,10 @@ describe('the home page on a verified host', () => {
     expect(csp).not.toMatch(/https?:/);
   });
 
-  it('follows the theme the way the app page does: web/index.html\'s own stamp, admitted by its hash and nothing else', async () => {
+  it('follows the theme the way the app page does: web/solid-app.html\'s own stamp, admitted by its hash and nothing else', async () => {
     await world();
     // Parsed, not pattern-matched: the browser's own reading of each document.
-    const shell = new JSDOM(readFileSync(join(__dirname, '..', '..', 'web', 'index.html'), 'utf8')).window.document;
+    const shell = new JSDOM(readFileSync(join(__dirname, '..', '..', 'web', 'solid-app.html'), 'utf8')).window.document;
     const stamps = [...shell.querySelectorAll('script:not([src])')].map((script) => script.textContent ?? '');
     expect(stamps).toHaveLength(1);
     const res = await app().request(`${HOST}/`, { headers: { accept: 'text/html' } });
@@ -173,7 +173,6 @@ describe('the home page on a verified host', () => {
     const dir = mkdtempSync(join(tmpdir(), 'domain-home-web-'));
     mkdirSync(join(dir, 'assets'));
     const shellHtml = '<!doctype html><html><head><link rel="stylesheet" crossorigin href="/assets/shell-Ab12cd.css"><script type="module" crossorigin src="/assets/main-Cd34ef.js"></script></head><body><div id="root"></div></body></html>';
-    writeFileSync(join(dir, 'index.html'), shellHtml);
     writeFileSync(join(dir, 'solid-app.html'), shellHtml);
     writeFileSync(join(dir, 'assets', 'shell-Ab12cd.css'), 'body{color:red}');
     writeFileSync(join(dir, 'assets', 'main-Cd34ef.js'), 'console.log(1)');
