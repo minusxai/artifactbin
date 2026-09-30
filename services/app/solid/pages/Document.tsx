@@ -296,7 +296,7 @@ export function DocumentPage(): JSX.Element {
     onCleanup(() => cancelAnimationFrame(frame));
   });
   const readingRail = () => (railOpen() && !phone() ? RIGHT_RAIL_W : 0);
-  const railInset = () => (!editing() ? 0 : !wide() ? 0 : panelFits() === null ? readingRail() : panelFits() ? 0 : editorRightInset());
+  const railInset = () => (!editing() ? readingRail() : !wide() ? 0 : panelFits() === null ? readingRail() : panelFits() ? 0 : editorRightInset());
   createEffect(() => {
     if (!host) return;
     host.style.position = 'relative';
@@ -311,6 +311,12 @@ export function DocumentPage(): JSX.Element {
   createEffect(() => {
     if (!ready() || !chromeElement) return;
     setTitleHost(markChromeEditing(chromeElement, editing(), !phone()));
+  });
+  // The rail's comment count follows the layer's list (a thread opened or resolved here, or by the stream).
+  createEffect(() => {
+    if (!ready() || !chromeElement) return;
+    const count = chromeElement.querySelector('[data-mx-reader-count="comment"]');
+    if (count) count.textContent = openAnnotationCount() > 0 ? String(openAnnotationCount()) : '';
   });
 
   const editorSeed = (): EditorArtifact | undefined => {
@@ -487,7 +493,7 @@ export function DocumentPage(): JSX.Element {
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickOnOpen={!editing()} onAnnotationsChange={setAnnotationItems}
         topOffset={(phone() ? 0 : APP_BAR_H) + (editing() ? EDIT_BAR_H : 0)}
-        railHost={editing() && wide() ? commentsHost() ?? undefined : undefined}
+        railHost={editing() && wide() ? commentsHost() : undefined}
         railSheet={editing() && !wide()}
         panelWidth={editing() && wide() ? editorRightInset() : undefined} />
     </Show>
