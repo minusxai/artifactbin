@@ -23,6 +23,7 @@ import { deferEngine } from '../defer-engine';
 import { TrustedOverlay } from './trusted-overlay';
 import { popupDismiss } from './popup-dismiss';
 import { refName, type TableResult } from '@/lib/story/dataflow';
+import { coerceScalarInput } from '@/lib/story/scalar-input';
 import { aggregateNumber, type NumberAgg } from '@/lib/story/number-aggregation';
 import { numberFormatter } from '@/lib/story/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story/data-table';
@@ -90,7 +91,17 @@ export function Select(p: SelectProps) {
   // authored options, so a document that adds its own "All" row doesn't get a second one.
   const entries = () => [...(valueName() && p.placeholder !== undefined ? [{ value: null, label: p.placeholder }] : []), ...options()];
   const filtered = () => entries().filter(o => o.label.toLowerCase().includes(query().toLowerCase()));
-  const choose = (value: string | null) => { if (valueName()) island.setValue(valueName(),value,undefined); setOpen(false); setQuery(''); };
+  // The popup speaks strings throughout (display and comparison); a write goes through the bound
+  // Value's declared type first — the same coercion today's NativeBoundControl applies — so a number
+  // or boolean Value never receives the option's string back verbatim (kit/controls.tsx BoundNative).
+  const choose = (value: string | null) => {
+   const name = valueName();
+   if (name) {
+    const type = island.store()?.flow.values.find(declared => declared.kind === 'scalar' && declared.name === name)?.type;
+    island.setValue(name, coerceScalarInput(type, value ?? ''), undefined);
+   }
+   setOpen(false); setQuery('');
+  };
   let root!: HTMLDivElement; let trigger!: HTMLButtonElement; let popup: HTMLDivElement | undefined;
   const announce = popupDismiss(open, () => setOpen(false), () => trigger, () => popup);
   // No `data-mx-bound` stamp: that marks today's STATIC render of a bound control; the live SelectAdapter never writes it.

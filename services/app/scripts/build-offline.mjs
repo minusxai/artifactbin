@@ -134,7 +134,9 @@ async function build() {
   const gridKernelStub = {
     name: 'offline-grid-kernel-react-stub',
     setup(b) {
-      b.onResolve({ filter: /^react$/ }, (args) => args.importer.includes('/react-grid-layout/build/')
+      // `importer` carries the OS's own separators on Windows (`\`): a forward-slash-only check let
+      // react-grid-layout's own `import react` through there, and the reachability check below failed the build.
+      b.onResolve({ filter: /^react$/ }, (args) => args.importer.replaceAll('\\', '/').includes('/react-grid-layout/build/')
         ? { path: 'react', namespace: 'offline-grid-react' } : undefined);
       b.onLoad({ filter: /.*/, namespace: 'offline-grid-react' }, () => ({ contents: 'module.exports = {};', loader: 'js' }));
     },
