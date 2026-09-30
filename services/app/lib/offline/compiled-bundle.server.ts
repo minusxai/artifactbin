@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import esbuild from 'esbuild';
 import type { CompiledPage } from '@/lib/compiled-page/contract';
+import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { createModuleStore, createTemplateResourceStore } from '@/lib/compiled-page/modules.server';
 
 const SHARED = /^\/islands\/([A-Za-z0-9_-]+\.js)$/;
@@ -108,7 +109,10 @@ export async function packCompiledBrowserModule(
         build.onLoad({ filter: /.*/, namespace: 'pinned-island' }, async (args) => {
           const name = SHARED.exec(args.path)?.[1];
           if (!name) throw new Error(`offline: invalid island path ${args.path}`);
-          return { contents: await readFile(path.join(sharedDir, name)), loader: 'js' };
+          // The build's own directory first, then the retained builds a redeploy replaced (the file the reader is served the same way).
+          const contents = await readFile(path.join(sharedDir, name)).catch(async () => await retainedIslandFile(name));
+          if (!contents) throw new Error(`offline: pinned island ${name} is unavailable`);
+          return { contents, loader: 'js' };
         });
       },
     }],
