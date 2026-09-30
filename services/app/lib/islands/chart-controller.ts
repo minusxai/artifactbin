@@ -11,7 +11,7 @@
  * the shared multi-series tooltip guide, interactive-map zoom and view persistence.
  */
 import { beginChartRender, trackChartRender } from '@/lib/viz/render-readiness';
-import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVegaView, injectNamedAssets, resizeVegaView, resolveEnvelopeSpec, setMainData, toVegaSpec } from '@/lib/viz/render-vega';
+import { computeFacetLayoutPlan, createVegaView, injectNamedAssets, legendPlanKey, planVega, resizeVegaView, resolveEnvelopeSpec, setMainData } from '@/lib/viz/render-vega';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { chartTokenRangeFromElement, resolveCssVarColors } from '@/lib/viz/chart-tokens';
 import { watchThemeMode } from './kit/theme-watch';
@@ -44,11 +44,6 @@ export function mountChart({ element: el, envelope, rows }: IslandChartInput): I
   // Legend wrap + x label angle are compile-time CONSTANTS baked into the parsed spec — when a resize
   // flips either decision the view is rebuilt; plain resizes stay signal-only (resizeVegaView).
   let legendFingerprint = 'null';
-  const legendFingerprintOf = (spec: Record<string, unknown> | null, width: number) => JSON.stringify({
-    legend: spec ? computeLegendPlan(spec, current, width) ?? null : null,
-    xAngle: spec ? computeXLabelAngle(spec, current, width) : null,
-  });
-
   const build = () => {
     const finish = beginChartRender(el);
     void (async () => {
@@ -58,13 +53,11 @@ export function mountChart({ element: el, envelope, rows }: IslandChartInput): I
         colorMode = colorModeOf(el);
         const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(current));
         if (!resolved.ok) throw new Error(resolved.error);
-        vl = resolved.engine === 'vega-lite' ? resolved.spec : null;
         const size = sizeOf(el);
-        const legendPlan = vl ? computeLegendPlan(vl, current, size.width) : null;
-        const xLabelAngle = vl ? computeXLabelAngle(vl, current, size.width) : null;
-        legendFingerprint = legendFingerprintOf(vl, size.width);
-        const facetLayout = vl ? computeFacetLayoutPlan(vl, current, size.width, size.height) : null;
-        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, facetLayout, categoryRange: chartTokenRangeFromElement(el) });
+        const plan = planVega(resolved, current, size, colorMode, chartTokenRangeFromElement(el));
+        const { vegaSpec, parserConfig, facetLayout } = plan;
+        vl = plan.vl;
+        legendFingerprint = plan.legendKey;
         const cs = getComputedStyle(el);
         resolveCssVarColors(vegaSpec, (name) => cs.getPropertyValue(name));
         if (disposed) return;
@@ -88,7 +81,7 @@ export function mountChart({ element: el, envelope, rows }: IslandChartInput): I
     if (!v) return;
     const size = sizeOf(el);
     if (vl) {
-      const next = legendFingerprintOf(vl, size.width);
+      const next = legendPlanKey(vl, current, size.width);
       if (next !== legendFingerprint) { build(); return; }
     }
     trackChartRender(el, () => resizeVegaView(v, { ...size, facetLayout: vl ? computeFacetLayoutPlan(vl, current, size.width, size.height) : null }).runAsync()).catch(() => {});

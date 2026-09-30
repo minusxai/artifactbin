@@ -29,7 +29,7 @@ import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { questionEnvelope } from '@/lib/viz/chart-envelope';
 import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
-import { computeFacetLayoutPlan, computeLegendPlan, computeXLabelAngle, createVegaView, resolveEnvelopeSpec, toVegaSpec } from '@/lib/viz/render-vega';
+import { createVegaView, planVega, resolveEnvelopeSpec } from '@/lib/viz/render-vega';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DrawnChart } from './contract';
 import { DRAWING_CLASS } from '@/lib/islands/chart';
@@ -171,11 +171,7 @@ export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
   const resolved = resolveEnvelopeSpec(envelope, inferVizColumnsFromRows(table.rows));
   if (!resolved.ok) throw new Error(resolved.error);
   if (resolved.assets && Object.keys(resolved.assets).length) throw new Error('geo boundaries load in the browser');
-  const vl = resolved.engine === 'vega-lite' ? resolved.spec : null;
-  const legendPlan = vl ? computeLegendPlan(vl, table.rows, width) : null;
-  const xLabelAngle = vl ? computeXLabelAngle(vl, table.rows, width) : null;
-  const facetLayout = vl ? computeFacetLayoutPlan(vl, table.rows, width, height) : null;
-  const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, facetLayout, categoryRange: input.palette ?? null });
+  const { vegaSpec, parserConfig, facetLayout } = planVega(resolved, table.rows, { width, height }, colorMode, input.palette ?? null);
   // Vega-Lite compiles `width: 'container'` into a signal whose `init` falls
   // back to 300 without a DOM container. Seed that signal before parse: a
   // post-run resize retains stale axis ticks in the SVG scenegraph.
