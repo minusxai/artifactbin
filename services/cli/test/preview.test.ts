@@ -266,7 +266,7 @@ test('a capture serves a row-sourced image at the compiled kit\'s own /a/<id>/ra
   await writeFile(join(root,'report.jsx'),'<Helmet><Import name="books_data" src="ref:data01" /><Query name="books">{`select * from books_data.rows`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy"/></For>');
   session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),assets:root,publicAssets:join(appDir,'public'),capture:true,
    dataset:async()=>({columns:[{name:'id',type:'string'},{name:'title',type:'string'},{name:'cover_ref',type:'string'}],rows:[{id:'a',title:'Book',cover_ref:'ref:red123'}]}),
-   asset:async id=>({bytes:Buffer.from('image bytes'),contentType:'image/png'})});
+   asset:async()=>({bytes:Buffer.from('image bytes'),contentType:'image/png'})});
   const page=await fetch(session.url+'/workspace/report.jsx?capture=1');
   assert.equal(page.status,200);
   const html=await page.text();
