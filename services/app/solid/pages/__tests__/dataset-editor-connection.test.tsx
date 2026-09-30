@@ -7,13 +7,13 @@ import '@testing-library/jest-dom/vitest';
  * that caused them, never in the page-level error slot.
  *
  * The two cases that turn `state.viewerSession` down are here on purpose: if
- * the `@/web/session` mock below ever stopped installing, they fail first.
+ * the `@/solid/lib/session` mock below ever stopped installing, they fail first.
  */
 import { cleanup, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { change, click, connection, discover, editor, installDatasetFetch, reply, state, tables } from '@/solid/test/dataset-catalog';
 
-vi.mock('@/solid/web/session', () => ({ useSession: () => ({ session: () => state.viewerSession }) }));
+vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => state.viewerSession }) }));
 beforeEach(installDatasetFetch);
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 

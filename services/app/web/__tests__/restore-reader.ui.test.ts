@@ -5,12 +5,12 @@ import { restoreReloadedReader } from '../restore-reader';
 
 vi.mock('@/lib/story-runtime/anchor-restore', () => ({ holdAnchor: vi.fn() }));
 
-it('restores the compiled /a reader position before the optional app boots', () => {
+it('restores the compiled /a reader position before the optional app boots', async () => {
   const win = { name: '' } as Window;
   const anchor = { path: 'section', fraction: 0.4 };
   writeReloadAnchor(win, anchor);
-  restoreReloadedReader(win);
+  await restoreReloadedReader(win);
   expect(holdAnchor).toHaveBeenCalledWith(win, anchor, expect.any(Function));
-  restoreReloadedReader(win);
+  await restoreReloadedReader(win);
   expect(holdAnchor).toHaveBeenCalledOnce();
 });

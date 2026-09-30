@@ -6,6 +6,8 @@ import { artifactEditPath } from '@/lib/urls';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import type { Row } from '@/lib/story/dataflow';
+import { apiFetch } from '../lib/api';
+import { dateTime } from '../lib/format';
 
 export interface CatalogPreview { rows: Row[]; columns: DatasetColumn[]; truncated?: boolean; refreshedAt: string }
 const PAGE_SIZE = 50;
@@ -26,7 +28,7 @@ export function CatalogRows(props: { result: CatalogPreview; label?: string }): 
 
 export function DatasetCatalogView(props: { id: string; catalog: DatasetCatalog; canEdit: boolean }): JSX.Element {
   const query: CatalogQuery = async (sql, options) => {
-    const response = await fetch(`/a/${encodeURIComponent(props.id)}/tables`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sql, ...options }) });
+    const response = await apiFetch(`/a/${encodeURIComponent(props.id)}/tables`, 'POST', { sql, ...options });
     const data = await response.json();
     if (!response.ok) throw new Error(data.details?.[0] ?? data.error ?? 'Could not load this query.');
     return data;
@@ -116,7 +118,7 @@ export function DatasetExplorer(props: { catalog: ExplorerCatalog; query: Catalo
     </div></Show>
     <div class="flex flex-wrap items-center gap-3">
       <Button aria-label="Refresh dataset" variant="ghost" disabled={busy() || !sql()} onClick={() => setRefresh((n) => n + 1)}>{busy() ? 'Loading…' : 'Refresh'}</Button>
-      <p aria-label="Refresh status" aria-live="polite" class="font-mono text-xs text-faint">{result() ? `Last refreshed ${new Date(result()!.data.refreshedAt).toLocaleString()}${stale() ? ' · stale' : ''}` : busy() ? 'Loading preview…' : 'No preview yet'} · {props.catalog.refreshSeconds ? `Refresh interval ${props.catalog.refreshSeconds}s` : 'Manual refresh'}</p>
+      <p aria-label="Refresh status" aria-live="polite" class="font-mono text-xs text-faint">{result() ? `Last refreshed ${dateTime(result()!.data.refreshedAt)}${stale() ? ' · stale' : ''}` : busy() ? 'Loading preview…' : 'No preview yet'} · {props.catalog.refreshSeconds ? `Refresh interval ${props.catalog.refreshSeconds}s` : 'Manual refresh'}</p>
     </div>
     <Show when={error()}><p role="alert" aria-label="Dataset preview error" class="text-sm text-danger">{error()}</p></Show>
     <Show when={result()}>{(answer) => <>

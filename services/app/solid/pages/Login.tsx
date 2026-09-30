@@ -1,7 +1,8 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { loginRedirectTarget, internalRedirectTarget } from '@/lib/safe-redirect';
-import { useSession } from '../web/session';
+import { useSession } from '../lib/session';
+import { apiFetch } from '../lib/api';
 
 const INPUT = 'w-full rounded-[4px] border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none';
 const BUTTON = 'cursor-pointer rounded-[4px] border border-accent bg-accent px-3 py-1.5 font-mono text-xs font-semibold text-bg transition-colors hover:brightness-110 disabled:opacity-50';
@@ -19,7 +20,7 @@ export function LoginPage(): JSX.Element {
   const requestCode = async () => {
     setBusy(true); setError(null);
     try {
-      const response = await fetch('/api/auth/email-otp/send-verification-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email(), type: 'sign-in' }) });
+      const response = await apiFetch('/api/auth/email-otp/send-verification-otp', 'POST', { email: email(), type: 'sign-in' });
       if (response.ok) { setSent(true); setCode(''); }
       else { const body = await response.json().catch(() => ({})); setError(body.error === 'rate_limited' ? 'Too many codes requested. Try again in a bit.' : 'That email address doesn’t look right.'); }
     } catch { setError('Couldn’t reach the server. Try again.'); }
@@ -27,7 +28,7 @@ export function LoginPage(): JSX.Element {
   };
   const verify = async () => {
     setBusy(true); setError(null);
-    const response = await fetch('/api/auth/sign-in/email-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email(), otp: code() }) }).catch(() => null);
+    const response = await apiFetch('/api/auth/sign-in/email-otp', 'POST', { email: email(), otp: code() }).catch(() => null);
     setBusy(false);
     if (!response?.ok) { setError('That code isn’t right, or it expired. Request a new one.'); return; }
     window.location.href = internalRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin);

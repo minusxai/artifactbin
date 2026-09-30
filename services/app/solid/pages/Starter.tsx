@@ -33,9 +33,9 @@ import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { initialViewWasReported } from '@/web/artifact-view-report';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
-import { loginHref } from '../shared/login-href';
-import { replaceDocument } from '../shared/document-navigation';
-import { useSession } from '../web/session';
+import { loginHref } from '@/lib/login-href';
+import { replaceDocument } from '../lib/document-navigation';
+import { useSession } from '../lib/session';
 import { TrustedUi } from '../components/TrustedUi';
 import { useChromeVisibility } from '../components/PageChrome';
 import { StarterInstructions } from '../components/StarterInstructions';
@@ -44,6 +44,7 @@ import { DocumentActions } from '../document/DocumentActions';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
+import { apiFetch } from '../lib/api';
 
 export interface StarterAnswer {
   role: ArtifactRole;
@@ -162,7 +163,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
         const on = control?.getAttribute(name === 'like' ? 'data-mx-liked' : 'data-mx-following') === 'true';
         const href = name === 'like' ? `/api/my/artifacts/${id}/like` : answer.follow ? `/api/users/${answer.follow.userId}/follow` : '';
         if (!href) return;
-        const response = await fetch(href, { method: on ? 'DELETE' : 'POST', credentials: 'same-origin' }).catch(() => null);
+        const response = await apiFetch(href, on ? 'DELETE' : 'POST').catch(() => null);
         if (!response?.ok) return;
         const next = await response.json() as { liked?: boolean; following?: boolean; count: number };
         const now = name === 'like' ? next.liked : next.following;

@@ -27,6 +27,8 @@ import { DatasetCatalogView } from '../components/DatasetCatalogView';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkArtifact } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
+import { copyText } from '../lib/copy-text';
+import { formatCount } from '../lib/format';
 
 export interface DataAnswer {
   role: ArtifactRole;
@@ -111,7 +113,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
         <h2 class={SECTION_HEADING}>owner</h2>
         <Show when={format === 'dataset'}>
           <button type="button" aria-label="Copy dataset reference" class={`${CONTROL_ROW} text-accent`}
-            onClick={() => { void navigator.clipboard?.writeText(catalog() ? datasetQuerySnippet(id, catalog()) : `ref:${id}`); setCopiedRef(true); }}>
+            onClick={() => { void copyText(catalog() ? datasetQuerySnippet(id, catalog()) : `ref:${id}`); setCopiedRef(true); }}>
             {copiedRef() ? 'copied dataset reference' : catalog() ? `copy query · source="${id}"` : `copy ref:${id}`}
           </button>
         </Show>
@@ -142,7 +144,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
       <Show when={format === 'dataset' && catalog()}>{(shown) => <DatasetCatalogView id={id} catalog={shown()} canEdit={canEdit()} />}</Show>
       <Show when={format === 'dataset' && !catalog()}>
         <p class="mt-4 font-sans text-xs text-muted" aria-label="Dataset summary">
-          {rows().length.toLocaleString()} rows · {surface.columns.length} columns
+          {formatCount(rows().length)} rows · {surface.columns.length} columns
           <Show when={rows().length > 50}><span class="text-faint"> · showing the first 50</span></Show>
         </p>
         <div class="mt-2 max-h-[70vh] overflow-auto rounded-[6px] border border-edge">

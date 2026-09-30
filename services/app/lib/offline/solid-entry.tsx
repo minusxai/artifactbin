@@ -4,7 +4,7 @@ import { createEffect, createSignal, For, onCleanup, Show, lazy } from 'solid-js
 import { render } from 'solid-js/web';
 import type { JsxNode } from '@/lib/jsx';
 import { mountCompiledEditRegions, type CompiledEditMount } from '@/solid/editor/dom-mounter';
-import { createLiveEditsCore, type LiveEditsCore } from '@/solid/shared/live-edits-core';
+import { createLiveEditsCore, type LiveEditsCore } from '@/solid/lib/live-edits-core';
 import { createFileBackend, rebuildArtifactFile, sourceChangedOutside } from './file-backend';
 import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from './extras';
 import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest } from './file-format';

@@ -17,7 +17,7 @@ import { REMOTE_COLOR_CSS, remoteColor } from '../../../contracts/src/remote';
 import { Avatar } from '../components/Avatar';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '../components/brand-icons';
 import { Tooltip } from '../components/Tooltip';
-import { useOptionalInbox } from '../web/notifications';
+import { useOptionalInbox } from '../lib/notifications';
 
 type Author = AnnotationCommentWire['author'];
 

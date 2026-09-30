@@ -2,6 +2,7 @@
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 import { PANEL, MicroLabel } from './ui';
+import { apiFetch } from '../lib/api';
 
 export const HANDLE_REFUSALS: Record<string, string> = { username_taken: 'that handle is taken — pick another', invalid_username: '3–32 characters: lowercase letters, numbers, underscore (no hyphens)' };
 
@@ -12,7 +13,7 @@ export function UsernameCard(props: { username: string | null }): JSX.Element {
   createEffect(() => setValue(props.username ?? ''));
   const save = async () => {
     setBusy(true); setStatus(null);
-    const response = await fetch('/api/my/profile', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: value() }) }).catch(() => null);
+    const response = await apiFetch('/api/my/profile', 'PATCH', { username: value() }).catch(() => null);
     setBusy(false);
     if (!response) { setStatus('could not reach the server'); return; }
     const body = await response.json().catch(() => ({})) as { username?: string; error?: string };

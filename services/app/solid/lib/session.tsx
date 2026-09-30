@@ -1,17 +1,14 @@
 /* @jsxImportSource solid-js */
 /**
- * The Solid twin of web/session.tsx: one fetch of /api/page/session per mount, exposed by context,
- * with the same page-data store (web/page-data-store, unchanged) and the same window events.
+ * The session context: one fetch of /api/page/session per mount, with the page-data store
+ * (web/page-data-store) and the window events that expire it.
  *
- * The difference a port must carry: React's context VALUE is re-read on every render, so a
- * `session` field there is always current. A Solid context value is read once by each consumer, so
- * the changing parts are ACCESSORS (`session()`, `sessionError()`); `pages` never changes per
- * provider and stays a plain value.
+ * A Solid context value is read once by each consumer, so the changing parts are ACCESSORS
+ * (`session()`, `sessionError()`); `pages` never changes per provider and stays a plain value.
  */
 import { createContext, createEffect, createSignal, on, onCleanup, useContext, type Accessor, type JSX } from 'solid-js';
 import { createPageDataStore, type PageDataStore } from '@/web/page-data-store';
-import { PAGE_DATA_CHANGED, PROFILE_CHANGED } from '@/web/page-data-events';
-import { REFRESH_EVENT } from '../shared/page-data';
+import { PAGE_DATA_CHANGED, PROFILE_CHANGED, REFRESH_EVENT } from '@/web/page-data-events';
 
 export interface SessionState {
   user: { id: string; email: string | null; username: string | null; image: string | null } | null;

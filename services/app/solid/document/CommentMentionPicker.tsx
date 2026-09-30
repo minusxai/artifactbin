@@ -15,6 +15,7 @@ import { personMention } from '@/lib/person-mentions';
 import { remoteMention } from '@/lib/remote-reply';
 import { REMOTE_COLOR_CSS, remoteColor, type RemoteSessionInfo } from '../../../contracts/src/remote';
 import { Tooltip } from '../components/Tooltip';
+import { copyText } from '../lib/copy-text';
 
 const REQUEST = 'Connect to afbin remote so I can @mention you in artifact comments.';
 const agentLabel = (name: string) => (({ claude: 'Claude Code', codex: 'Codex', pi: 'Pi', opencode: 'OpenCode' } as Record<string, string>)[name] ?? name);
@@ -82,8 +83,7 @@ export function CommentMentionPicker(props: {
     finally { setRemoving(null); }
   };
   const copyRequest = async () => {
-    try { await navigator.clipboard.writeText(REQUEST); setCopyState('copied'); }
-    catch { setCopyState('error'); }
+    setCopyState(await copyText(REQUEST) ? 'copied' : 'error');
   };
   const keep = (event: MouseEvent) => event.preventDefault();
   return <div aria-label="Agent sessions" class="mb-2 overflow-hidden rounded-lg border border-edge bg-surface p-1.5 text-sm shadow-lg">

@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
-import { useInbox } from '../web/notifications';
+import { useInbox } from '../lib/notifications';
+import { apiFetch } from '../lib/api';
 
 type EmailPreferences = { invitations: boolean; comments: boolean; activity: boolean };
 const KEYS = ['invitations', 'comments', 'activity'] as const;
@@ -14,7 +15,7 @@ export function NotificationSettings(): JSX.Element {
   onMount(() => { void fetch('/api/my/people/email').then(response => response.ok ? response.json() : null).then((data: { enabled?: boolean; preferences?: EmailPreferences } | null) => { if (data?.enabled && data.preferences) setEmail(data.preferences); }).catch(() => {}); });
   const saveEmail = async (preferences: EmailPreferences) => {
     setSaving(true); setNotice('');
-    try { const response = await fetch('/api/my/people/email', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preferences) }); if (!response.ok) throw new Error(); const data = await response.json() as { preferences: EmailPreferences }; setEmail(data.preferences); setNotice('Saved'); }
+    try { const response = await apiFetch('/api/my/people/email', 'PATCH', preferences); if (!response.ok) throw new Error(); const data = await response.json() as { preferences: EmailPreferences }; setEmail(data.preferences); setNotice('Saved'); }
     catch { setNotice('Could not save email preferences. Try again.'); }
     finally { setSaving(false); }
   };
