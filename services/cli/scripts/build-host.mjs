@@ -1,5 +1,5 @@
 /** CI build boundary: reuse the application build and ESM server bundler, then gather runtime files. */
-import {build} from 'esbuild';
+import {buildPreview} from './build-preview.mjs';
 import {execFileSync} from 'node:child_process';
 import {packageRoot} from './package-root.mjs';
 import {cp,mkdir,readFile,rm,writeFile,stat} from 'node:fs/promises';
@@ -14,7 +14,7 @@ execFileSync(process.execPath,[process.env.npm_execpath??join(dirname(process.ex
 await rm(runtime,{recursive:true,force:true});await mkdir(runtime,{recursive:true});
 execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
 execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
-await build({entryPoints:[join(cli,'src/preview/client.tsx')],bundle:true,format:'esm',splitting:true,outdir:join(runtime,'preview'),platform:'browser',target:'es2022',jsx:'automatic',alias:{'@':app},define:{'process.env.NODE_ENV':'"production"'},loader:{'.woff2':'dataurl','.css':'empty'}});
+await buildPreview(join(runtime,'preview'));
 for(const name of ['public','skills','orchestrator','lib/build-assets','dist/web','package.json']){
  await mkdir(dirname(join(runtime,name)),{recursive:true});await cp(join(app,name),join(runtime,name),{recursive:true});
 }

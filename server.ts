@@ -211,7 +211,11 @@ async function main(): Promise<void> {
       ? { actorSecret: readEnv(env, 'CONTRACT__ACTOR_SECRET') || readEnv(env, 'AUTH__SECRET') }
       : dev && sessionActorSecret ? { actorSecret: sessionActorSecret } : {}),
     ...(reader ? { onTokenRevoked: (id) => reader.invalidate(id) } : {}),
-    ...(vite ? { indexHtml: async (url: string, status?: 200 | 404, artifactFormat?: string) => vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve(isSolidPage(new URL(url).pathname, status, artifactFormat) ? 'web/solid-app.html' : 'web/index.html'), 'utf8')) } : {}),
+    ...(vite ? { indexHtml: async (url: string, status?: 200 | 404, artifactFormat?: string) => {
+      const pathname = new URL(url).pathname;
+      const legacyMarkup = artifactFormat === 'markup' && status !== 404 && (/^\/a\/[^/]+\/?$/.test(pathname) || /^\/@[^/]+\/[^/]+\/?$/.test(pathname));
+      return vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve(isSolidPage(pathname, status, artifactFormat) && !legacyMarkup ? 'web/solid-app.html' : 'web/index.html'), 'utf8'));
+    } } : {}),
   });
 
   /*

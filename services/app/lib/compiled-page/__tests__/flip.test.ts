@@ -29,7 +29,10 @@ describe('what the compiled reader replaced is deleted', () => {
     const pkg = JSON.parse(readFileSync(path.join(APP, 'package.json'), 'utf8'));
     expect(pkg.scripts['build:runtime']).toBeUndefined();
     expect(pkg.scripts['build:islands']).toBeTruthy();
-    expect(pkg.scripts.build).toContain('build-islands');
+    // `build` no longer names `build-islands.mjs` directly — it delegates the pre-vite steps
+    // (server-reader assets, the island build and the route table) to build-prep.mjs, which runs
+    // them concurrently. The island build must still be one of them.
+    expect(readFileSync(path.join(APP, 'scripts/build-prep.mjs'), 'utf8')).toContain('build-islands.mjs');
     expect(readFileSync(path.join(ROOT, '.gitignore'), 'utf8')).not.toContain('public/story/');
   });
   it('the reader\'s runtime class merging is gone: no reader chunk imports tailwind-merge or class-variance-authority', () => {

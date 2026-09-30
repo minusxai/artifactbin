@@ -41,7 +41,7 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createListingPreloader, createSpaEntry, listingPage } from './reader-preloads';
+import { createListingPreloader, createSpaEntry, listingPage, SOLID_SPA_IDLE_ENTRY } from './reader-preloads';
 import { isSolidPage } from '@/lib/solid-routes';
 import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory } from '@/lib/artifact-page';
 import type { ArtifactRow } from '@/lib/artifacts';
@@ -291,7 +291,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   let indexCache: string | null = null;
   const index = async (url: string, status?: 200 | 404, artifactFormat?: string): Promise<string> => {
     if (opts.indexHtml) return opts.indexHtml(url, status, artifactFormat);
-    if (isSolidPage(new URL(url).pathname, status, artifactFormat)) return readFileSync(path.join(webDir, 'solid-app.html'), 'utf8');
+    const pathname = new URL(url).pathname;
+    const documentRoute = /^\/a\/[^/]+\/?$/.test(pathname) || /^\/@[^/]+\/[^/]+\/?$/.test(pathname);
+    const legacyMarkup = documentRoute && artifactFormat === 'markup' && status !== 404;
+    if (isSolidPage(pathname, status, artifactFormat) && !legacyMarkup) return readFileSync(path.join(webDir, 'solid-app.html'), 'utf8');
     return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
   };
   // A verified custom domain is answered by its own boundary before any app
@@ -330,6 +333,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * development Vite serves the web root's sources as they are, the entry by its own path.
    */
   const spaEntry = opts.indexHtml ? () => ({ entry: '/spa-idle.ts', preload: [] as string[] }) : createSpaEntry(webDir);
+  const readerSpaEntry = opts.indexHtml ? () => ({ entry: '/solid-spa-idle.ts', preload: [] as string[] }) : createSpaEntry(webDir, SOLID_SPA_IDLE_ENTRY);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
@@ -423,7 +427,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const segments = url.pathname.split('/').filter(Boolean);
     // The row documentPreparation already fetched and admitted for this request rides along: one fetch, one check.
     const document = async (id: string) => {
-      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry() } }));
+      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry(), readerSpa: readerSpaEntry() } }));
       return answer.status === 200 ? answer : null;
     };
     if (segments.at(-1) === 'edit') segments.pop();

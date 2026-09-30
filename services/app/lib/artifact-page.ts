@@ -36,6 +36,7 @@ import { avatarUrl } from '@/lib/avatars';
 import { actorForArtifacts, browserSessionKind, roleFor, sessionActor } from '@/lib/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate, canEdit } from '@/lib/share-roles';
+import { solidDocumentReader } from '@/lib/solid-routes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
@@ -98,7 +99,7 @@ export interface ArtifactPageOptions {
    */
   admitted?: ArtifactRow;
   /** The app page: the reader mode is decided here, and a compiled page is assembled with the app's idle entry. */
-  page?: { spa: AssembleInput['spa'] };
+  page?: { spa: AssembleInput['spa']; readerSpa?: AssembleInput['spa'] };
 }
 
 const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_found' } });
@@ -279,7 +280,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       behaviors: ['page'],
       chrome: await readerChromeFor({ hasDataMutations: prepared.page.declared?.flow.mutations.some(m => 'import' in m.target) === true, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
-      spa: options.page!.spa,
+      spa: solidDocumentReader(role, artifact.format, exporting) ? (options.page!.readerSpa ?? options.page!.spa) : options.page!.spa,
       head: {
         description: row.description,
         canonical: await canonicalDocumentUrl(artifact),

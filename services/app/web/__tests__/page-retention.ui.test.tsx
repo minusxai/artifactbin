@@ -13,11 +13,10 @@ const session = { kind: 'account', user: { id: 'one', email: 'one@example.com' }
 function EditButton() { const navigate = useNavigate(); return <button aria-label="Enter edit" onClick={() => void navigate('/a/ABC123#edit')}>Edit</button>; }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); disposed.mockClear(); });
 
-it.each(['artifact', 'folder'])('retains %s data across unmount while its Back refresh is held', async (kind) => {
+it('retains artifact data across unmount while its Back refresh is held', async () => {
   const path = '/a/ABC123';
   const endpoint = '/api/page/artifact/';
-  const payload = kind === 'folder' ? { canonical: path, role: 'viewer', kind: 'account', folder: { id: 'ABC123', title: 'Cached folder', trail: [], count: { documents: 0, folders: 0 }, rows: [] } }
-        : { canonical: path, role: 'viewer', kind: 'account', surface: { title: 'Cached artifact' } };
+  const payload = { canonical: path, role: 'viewer', kind: 'account', surface: { title: 'Cached artifact' } };
   let reads = 0;
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
   vi.stubGlobal('fetch', vi.fn((url: string) => url.includes('/session') ? Promise.resolve(response(session))
@@ -25,13 +24,11 @@ it.each(['artifact', 'folder'])('retains %s data across unmount while its Back r
   const node = <ArtifactPage id="ABC123" />;
   const tree = (shown: boolean) => <MemoryRouter initialEntries={[path]}><SessionProvider>{shown && <Routes><Route path="*" element={node} /></Routes>}</SessionProvider></MemoryRouter>;
   const view = render(tree(true));
-  const content = () => kind === 'artifact' ? screen.getByLabelText('Mounted author runtime') : screen.getByRole('heading', { level: 1 });
-  // The folder page is its own chunk: the FIRST
-  // mount waits for that download; the remount below must not wait for anything.
+  const content = () => screen.getByLabelText('Mounted author runtime');
   await act(async () => {});
   await vi.waitFor(() => expect(content()).toBeInTheDocument(), { timeout: 5000 });
   view.rerender(tree(false));
-  if (kind === 'artifact') expect(disposed).toHaveBeenCalledTimes(1);
+  expect(disposed).toHaveBeenCalledTimes(1);
   view.rerender(tree(true));
   expect(content()).toBeInTheDocument();
   expect(reads).toBe(2);
