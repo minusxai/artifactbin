@@ -69,8 +69,9 @@ describe('the editor draft preview door', () => {
     const body = { editId: row.edit_id, source: '<div id="root"><p id="copy">Unsaved</p></div>' };
     const guest = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', json: body }), params(id));
     expect(guest.status).toBe(404);
+    // A save can land between the editor's draft and its preview: the draft still renders.
     const stale = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: { ...body, editId: 'stale' } }), params(id));
-    expect(stale.status).toBe(409);
+    expect(stale.status).toBe(200);
     const answer = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: body }), params(id));
     expect(answer.status).toBe(200);
     const document = new JSDOM(((await answer.json()) as { html: string }).html).window.document;

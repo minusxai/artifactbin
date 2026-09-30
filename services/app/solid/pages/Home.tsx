@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createMemo, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, onMount, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
 import type { HomeCore, HomeInsights } from '@/web/home-resource';
@@ -15,6 +15,9 @@ import { useSession } from '../web/session';
 
 export function HomePage(): JSX.Element {
   const { session, sessionError, reload } = useSession();
+  // "My artifacts"'s own search box (Shelf) also narrows "Shared with you" below it, the way one
+  // search box on a page reads as one search to whoever is typing into it.
+  const [sharedQuery, setSharedQuery] = createSignal('');
   const core = usePageData<HomeCore>('/api/page/home?part=core');
   const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: () => Boolean(core.data()?.signedIn) });
   createEffect(() => { if (sessionError()) { core.invalidate(); insights.invalidate(); } });
@@ -38,8 +41,8 @@ export function HomePage(): JSX.Element {
         <Show when={failed()}><div role="alert">Could not refresh your workspace. <button type="button" aria-label="Retry workspace" onClick={load}>Try again</button></div></Show>
         <Show when={empty()}><div class="mb-4 flex justify-end"><a href="/datasets/new" aria-label="Create dataset" class="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent"><DatabasePlus size={13} />Create dataset</a></div><p class="mt-8"><a href="/trash" aria-label="Trash" class="font-mono text-[10px] text-faint">trash</a></p></Show>
         <Show when={!empty()}><WorkspaceLayout workspace={workspace()} insights={detail()} insightsError={Boolean(insights.error())} onCreated={load}>
-          <Show when={workspace().artifacts.length}><Shelf rows={workspace().artifacts.map(row => ({ ...row, views: detail()?.views?.[row.id], sparkline: detail()?.sparklines[row.id] ?? undefined }))} actions="full" assets={false} scopeParentId={null} /></Show>
-          <SharedWithYou items={workspace().shared} />
+          <Show when={workspace().artifacts.length}><Shelf rows={workspace().artifacts.map(row => ({ ...row, views: detail()?.views?.[row.id], sparkline: detail()?.sparklines[row.id] ?? undefined }))} actions="full" assets={false} scopeParentId={null} onQuery={setSharedQuery} /></Show>
+          <SharedWithYou items={workspace().shared} query={sharedQuery()} />
         </WorkspaceLayout></Show>
       </main>}
     </Show>

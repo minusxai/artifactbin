@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { kitchenSinkMarkup } from '@/lib/story/kitchen-sink';
 import { morphDraftDom } from '../morph/engine';
+import { delegateEvents, hydrate } from 'solid-js/web';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const fixture = (source: string): { html: string; browserCode: string; flow: CompiledDataflow } => JSON.parse(execFileSync(
@@ -42,6 +43,54 @@ describe('one tree SSR to hydrate', () => {
     const disposeDraft = rt.hydrateIsland('d-', await treeOf(after.browserCode, 'test/draft-after.js'), runtime.context, host);
     expect(host.querySelector('#f6')?.textContent).toBe('EDITED IN PLACE');
     expect(host.querySelector('#live')?.textContent).toBe('Off');
+    disposeDraft?.(); runtime.dispose(); host.remove();
+  });
+
+  it('re-hydrates a draft after the reader has clicked and keys have moved, keeping static runs inside a kept Tabs', async () => {
+    const tabs = (heading: string) => `<p id="f6">${heading}</p><Tabs defaultValue="one" id="tabs"><TabsList id="list"><TabsTrigger value="one" id="t1">One</TabsTrigger><TabsTrigger value="two" id="t2">Two</TabsTrigger></TabsList><TabsContent value="one" id="p1"><p id="panel">Panel one</p></TabsContent><TabsContent value="two" id="p2"><p>Panel two</p></TabsContent></Tabs>`;
+    const before = fixture(tabs('Before'));
+    // The edit adds a block ahead of the unchanged Tabs, so every hydration key after it moves.
+    const after = fixture(tabs('EDITED IN PLACE').replace('<Tabs', '<p id="added">Added</p><Tabs'));
+    const host = document.createElement('div'); host.innerHTML = before.html; document.body.append(host);
+    const next = document.createElement('div'); next.innerHTML = after.html;
+    const manifest = loadCompilerBuild().manifest;
+    const shipped = async (specifier: string): Promise<Record<string, unknown>> => {
+      const file = path.resolve(ROOT, 'services/app/public', manifest[specifier]!.slice(1));
+      return import(/* @vite-ignore */ pathToFileURL(file).href) as Promise<Record<string, unknown>>;
+    };
+    const [shippedRt, kit] = await Promise.all([shipped('@mx/rt'), shipped('@mx/kit/tabs')]);
+    const treeOf = async (code: string, id: string): Promise<Component> => {
+      let tree: Component | null = null;
+      await evaluateModule(code, spec => spec.includes('/rt-') ? shippedRt
+        : spec.includes('/kit-tabs-') ? kit
+        : spec.includes('/boot-') ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
+        : (() => { throw new Error(`unexpected import ${spec}`); })(), id);
+      return tree!;
+    };
+    const hydrateIsland = shippedRt.hydrateIsland as typeof rt.hydrateIsland;
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: before.flow } }, shippedRt.createDataflowStore as typeof createDataflowStore);
+    const dispose = hydrateIsland('d-', await treeOf(before.browserCode, 'test/tabs-before.js'), runtime.context, host);
+    expect([...host.querySelectorAll('[role=tab]')].map((tab) => tab.textContent)).toEqual(['One', 'Two']);
+    // The page's own Solid (the app chrome) hydrated too; the reader's first click on anything it
+    // delegates ends hydration for EVERY Solid on the page (the shared `globalThis._$HY.done`).
+    const chrome = document.createElement('button');
+    document.body.append(chrome);
+    hydrate(() => null, chrome);
+    delegateEvents(['click']);
+    (chrome as unknown as { $$click: () => void }).$$click = () => {};
+    chrome.click();
+    expect((globalThis as { _$HY?: { done?: boolean } })._$HY?.done).toBe(true);
+    chrome.remove();
+    dispose?.();
+    const keptTabs = host.querySelector('#tabs');
+    morphDraftDom(host, next, new Set(['tabs']), new Set());
+    expect(host.querySelector('#tabs')).toBe(keptTabs);
+    const disposeDraft = hydrateIsland('d-', await treeOf(after.browserCode, 'test/tabs-after.js'), runtime.context, host);
+    expect(host.querySelector('#f6')?.textContent).toBe('EDITED IN PLACE');
+    expect(host.querySelector('#added')?.textContent).toBe('Added');
+    expect([...host.querySelectorAll('[role=tab]')].map((tab) => tab.textContent)).toEqual(['One', 'Two']);
+    expect(host.querySelector('#t1')?.hasAttribute('data-hk')).toBe(true);
+    expect(host.querySelector('#panel')?.textContent).toBe('Panel one');
     disposeDraft?.(); runtime.dispose(); host.remove();
   });
 

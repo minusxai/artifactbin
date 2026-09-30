@@ -212,7 +212,8 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
                 format: new Map(),
                 layout: new Map(event.data.rects.map((r) => [r.path, { x: r.x, y: r.y, w: r.w, h: r.h }])),
               });
-              if (next !== sourceRef.current) options.onSourceEdited(next);
+              // The grid overlay only stages rects; the compiled tiles move when the draft is redrawn.
+              if (next !== sourceRef.current) options.onSourceEdited(next, true);
               break;
             }
             case 'mx:slide-title':

@@ -204,6 +204,10 @@ describe('the saved theme applies without an inline script', () => {
 describe('leaving a compiled page before the app adopts it', () => {
   it('disposes the islands, removes the served story and chrome, and reveals the app root', () => {
     document.body.innerHTML = '<div id="root" hidden></div>' + servedChrome(false);
+    // The head sheets a served document arrives with (lib/compiled-page/assembler.ts): left behind,
+    // `data-mx-story-css` collides with the app shell's own Tailwind utility classes on every route
+    // rendered after it (the app bar's mobile/desktop Star toggle, concretely).
+    document.head.insertAdjacentHTML('beforeend', '<style data-mx-chrome>.mx-reader-chrome{}</style><style data-mx-app-reserve>body{}</style><style data-mx-story-css>.hidden{display:none}</style><style data-mx-footer-css>.footer{}</style>');
     const root = document.getElementById('mx-story-root') as HTMLElement;
     const doc = fakeDocument(root);
     installIslandDocument(root, doc);
@@ -213,5 +217,8 @@ describe('leaving a compiled page before the app adopts it', () => {
     expect(root.isConnected).toBe(false);
     expect(document.querySelector('[data-mx-reader-chrome]')).toBeNull();
     expect((document.getElementById('root') as HTMLElement).hidden).toBe(false);
+    for (const attr of ['data-mx-chrome', 'data-mx-app-reserve', 'data-mx-story-css', 'data-mx-footer-css']) {
+      expect(document.head.querySelector(`style[${attr}]`), attr).toBeNull();
+    }
   });
 });
