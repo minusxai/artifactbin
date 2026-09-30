@@ -54,6 +54,11 @@ export function InboxProvider(props: { children: JSX.Element }): JSX.Element {
   return <Context.Provider value={{ state, error, load, loadMore }}>{props.children}</Context.Provider>;
 }
 
+/** The inbox where the page has one (a document opened outside the app shell has none). */
+export function useOptionalInbox(): InboxContext | undefined {
+  return useContext(Context);
+}
+
 export function useInbox(): InboxContext {
   const value = useContext(Context);
   if (!value) throw new Error('InboxProvider missing');

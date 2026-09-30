@@ -1,121 +1,259 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+/**
+ * The comment layer's IDENTITIES and its AMBIENT surface, from components/AnnotationLayer in SOLID.
+ *
+ * Google-Docs-shaped attribution: a person is their face (picture, else their initial on the colour
+ * their ACCOUNT id picks), an agent is its product mark. The floating marks are one identity per
+ * open thread at its anchor's y over the document's right edge; one widens into a preview on hover
+ * or focus and opens the rail on click, so annotations stay ambient without becoming a second
+ * reading column.
+ */
+import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
 import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { remoteWorkLabel } from '@/lib/remote-reply';
+import { REMOTE_COLOR_CSS, remoteColor } from '../../../contracts/src/remote';
 import { Avatar } from '../components/Avatar';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '../components/brand-icons';
 import { Tooltip } from '../components/Tooltip';
+import { useOptionalInbox } from '../web/notifications';
 
 type Author = AnnotationCommentWire['author'];
-const labelOf = (author: Author) => author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
-const previewText = (text: string) => plainText(parseMarkdownLite(text));
-const participantKey = (author: Author) => `${author.kind}:${labelOf(author).toLowerCase()}`;
+
+export const VIEW_COMMENT_COLLAPSED_W = 36;
+export const VIEW_COMMENT_COUNTED_W = 44;
+export const VIEW_COMMENT_MANY_W = 48;
+export const VIEW_COMMENT_COLLAPSED_H = 36;
+export const VIEW_COMMENT_EXPANDED_H = 108;
+export const VIEW_COMMENT_GAP = 6;
+export const VIEW_COMMENT_INSET = 12;
+
+/** Offline, a name is a label someone typed, not a profile to visit. */
+export const CommentsOffline = createContext(false);
+
+/** What a clamped surface shows: the plain text, never two lines spent on a fence or a bullet. */
+export const previewText = (body: string) => plainText(parseMarkdownLite(body));
+/** What a folded comment or thread keeps: the sentence it opens with. */
+export const firstLine = (body: string) => previewText(body).split('\n', 1)[0] ?? '';
+
+export const authorLabel = (author: Author) => author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
+const authorKey = (author: Author) => `${author.kind}:${authorLabel(author).toLowerCase()}`;
+
+/** Distinct people/agents who replied, oldest first. The root author is already named above. */
 export function replyParticipants(thread: AnnotationCommentWire[]): Author[] {
   const seen = new Set<string>();
   return thread.slice(1).flatMap(({ author }) => {
-    const key = participantKey(author);
+    const key = authorKey(author);
     if (seen.has(key)) return [];
     seen.add(key);
     return [author];
   });
 }
 
-export function AuthorMark(props: { author: Author; compact?: boolean; decorative?: boolean }): JSX.Element {
-  const label = () => labelOf(props.author);
+/** A person's face: only a person with no account falls back to their label as the colour key. */
+function PersonFace(props: { author: Author; size: number }): JSX.Element {
+  const label = () => authorLabel(props.author);
+  return <Avatar image={props.author.image ?? null} initial={label()} userId={props.author.user_id ?? `label:${label()}`} size={props.size} />;
+}
+
+function AgentMark(props: { label: string; compact?: boolean; decorative?: boolean; borderless?: boolean }): JSX.Element {
   const icon = () => {
-    switch (label().toLowerCase()) {
+    switch (props.label.toLowerCase()) {
       case 'codex': return <CodexIcon size={props.compact ? 13 : 17} />;
       case 'chatgpt': return <ChatGPTIcon size={props.compact ? 12 : 16} />;
       case 'claude code': return <ClaudeCodeIcon size={props.compact ? 12 : 16} />;
       case 'claude': return <ClaudeAIIcon size={props.compact ? 12 : 16} />;
-      default: return <span aria-hidden="true">✦</span>;
+      default: return <span aria-hidden="true" class={`${props.compact ? 'text-[10px]' : 'text-[12px]'} leading-none text-accent`}>✦</span>;
     }
   };
-  return <Show when={props.author.kind === 'agent'} fallback={<Avatar image={props.author.image} initial={label()} userId={props.author.user_id ?? `label:${label()}`} size={props.compact ? 18 : 22} />}>
-    <span aria-label={props.decorative ? undefined : `${label()} agent`} aria-hidden={props.decorative || undefined} class="inline-flex size-[22px] items-center justify-center rounded-full border border-edge bg-surface">{icon()}</span>
-  </Show>;
-}
-
-export function AuthorIdentity(props: { author: Author }): JSX.Element {
-  const label = () => labelOf(props.author);
-  return <span class="flex min-w-0 items-center gap-2">
-    <span aria-label={`${label()} avatar`} class="inline-flex size-[22px] shrink-0"><AuthorMark author={props.author} /></span>
-    <Show when={props.author.sessionId} fallback={props.author.kind === 'human' && props.author.label
-      ? <a href={`/@${encodeURIComponent(props.author.label)}`} aria-label={`View @${props.author.label} profile`} class="text-xs font-semibold">{label()}</a>
-      : <span class="text-xs font-semibold">{label()}</span>}>
-      {sessionId => <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="text-xs font-semibold">@{label()}</a>}
-    </Show>
-    <Show when={props.author.kind === 'agent' && props.author.transport && props.author.transport !== 'unknown'}><span aria-label={`Transport ${props.author.transport?.toUpperCase()}`} class="font-mono text-[9px] uppercase text-faint">· {props.author.transport}</span></Show>
+  return <span aria-label={props.decorative ? undefined : `${props.label} agent`} aria-hidden={props.decorative || undefined}
+    class={`inline-flex shrink-0 items-center justify-center rounded-full bg-surface text-fg ${props.borderless ? '' : 'border border-edge'} ${props.compact ? 'h-[18px] w-[18px]' : 'h-[22px] w-[22px]'}`}>
+    {icon()}
   </span>;
 }
 
-export function CommentTime(props: { iso: string }): JSX.Element {
+/** Google-Docs-shaped attribution: a profile avatar for people, a product mark for agents. */
+export function AuthorIdentity(props: { author: Author }): JSX.Element {
+  const label = () => authorLabel(props.author);
+  const offline = useContext(CommentsOffline);
+  return <span class="flex min-w-0 items-center gap-2">
+    <Show when={props.author.kind === 'human'} fallback={<AgentMark label={label()} />}>
+      <span aria-label={`${label()} avatar`} class="inline-flex h-[22px] w-[22px] shrink-0 rounded-full"><PersonFace author={props.author} size={22} /></span>
+    </Show>
+    <Show when={props.author.sessionId} fallback={
+      <Show when={props.author.kind === 'human' && props.author.label && !offline} fallback={
+        <span class={`truncate text-[11px] font-semibold ${props.author.kind === 'agent' ? 'text-accent' : 'text-fg'}`}>{label()}</span>
+      }>
+        <a href={`/@${encodeURIComponent(props.author.label!)}`} aria-label={`View @${props.author.label} profile`}
+          class="pointer-events-auto truncate text-[11px] font-semibold text-fg underline-offset-2 hover:text-accent hover:underline">{label()}</a>
+      </Show>
+    }>{(sessionId) => (
+      <a href={`/chat?session=${sessionId()}`} target="_blank" rel="noopener noreferrer" class="truncate text-[11px] font-semibold"
+        style={{ color: REMOTE_COLOR_CSS[props.author.color ?? remoteColor(sessionId())] }}>@{label()}</a>
+    )}</Show>
+    <Show when={props.author.kind === 'agent' && props.author.transport !== 'unknown'}>
+      <span aria-label={`Transport ${props.author.transport.toUpperCase()}`} class="shrink-0 font-mono text-[9px] uppercase tracking-[0.08em] text-faint">· {props.author.transport}</span>
+    </Show>
+  </span>;
+}
+
+function ParticipantMark(props: { author: Author }): JSX.Element {
+  // Bare, not wrapped: the stack's ring lands on its direct children.
+  return <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={18} />}>
+    <AgentMark label={authorLabel(props.author)} compact decorative />
+  </Show>;
+}
+
+/** A thread's continuation cue: reply identities plus a count relative to the root comment. */
+export function ThreadContinuation(props: { thread: AnnotationCommentWire[] }): JSX.Element {
+  const replyCount = () => Math.max(0, props.thread.length - 1);
+  const participants = () => replyParticipants(props.thread);
+  return <span class="flex min-w-0 items-center gap-1.5">
+    <Show when={participants().length > 0}>
+      <span aria-label={`Reply participants: ${participants().map(authorLabel).join(', ')}`} class="flex shrink-0 -space-x-1 [&>*]:ring-1 [&>*]:ring-raised">
+        <For each={participants().slice(0, 3)}>{(author) => <ParticipantMark author={author} />}</For>
+      </span>
+    </Show>
+    <span class="truncate">{replyCount() > 0 ? `+${replyCount()} more` : '1 message'}</span>
+  </span>;
+}
+
+function CompactAuthorMark(props: { author: Author }): JSX.Element {
+  return <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={22} />}>
+    <AgentMark label={authorLabel(props.author)} compact decorative borderless />
+  </Show>;
+}
+
+/** Local time with an exact, keyboard-reachable timestamp in a tooltip — never a native title. */
+export function CommentTimestamp(props: { iso: string; class?: string }): JSX.Element {
   const date = () => new Date(props.iso);
   const valid = () => !Number.isNaN(date().getTime());
   const day = () => date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(date().getFullYear() !== new Date().getFullYear() ? { year: 'numeric' as const } : {}) });
   const time = () => date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const exact = () => date().toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'long' });
-  return <Show when={valid()}><Tooltip content={exact()}><time dateTime={props.iso} aria-label={exact()} tabIndex={0} class="font-mono text-[10px] text-faint">{day()} · {time()}</time></Tooltip></Show>;
+  return <Show when={valid()}><Tooltip content={exact()}><time dateTime={props.iso} aria-label={exact()} tabIndex={0} class={props.class}>{day()} · {time()}</time></Tooltip></Show>;
 }
 
+/** Stack the visible threads at their anchors, spaced, and keep a short cluster inside the viewport. */
 export function positionedComments(annotations: AnnotationWire[], rects: Record<string, StoryEditRect>,
   frame: Pick<DOMRect, 'top' | 'height'>, viewportHeight: number): Array<{ annotation: AnnotationWire; top: number }> {
-  const visible = annotations.flatMap(annotation => {
+  const visible = annotations.flatMap((annotation) => {
     const rect = rects[annotation.id];
     if (!rect || rect.y + rect.height < 0 || rect.y > frame.height) return [];
     return [{ annotation, target: frame.top + rect.y }];
   }).sort((a, b) => a.target - b.target);
   if (!visible.length) return [];
-  const minimum = frame.top + 12;
-  let cursor = minimum;
+  const minTop = frame.top + VIEW_COMMENT_INSET;
+  let cursor = minTop;
   const placed = visible.map(({ annotation, target }) => {
     const top = Math.max(target, cursor);
-    cursor = top + 42;
+    cursor = top + VIEW_COMMENT_COLLAPSED_H + VIEW_COMMENT_GAP;
     return { annotation, top };
   });
-  const overflow = placed.at(-1)!.top + 120 - viewportHeight;
-  const shift = Math.max(0, Math.min(overflow, placed[0]!.top - minimum));
-  return shift ? placed.map(item => ({ ...item, top: item.top - shift })) : placed;
+  // Leave room for the last marker to expand inside the viewport.
+  const overflow = placed.at(-1)!.top + VIEW_COMMENT_EXPANDED_H + VIEW_COMMENT_INSET - viewportHeight;
+  const shift = Math.max(0, Math.min(overflow, placed[0]!.top - minTop));
+  return shift > 0 ? placed.map((item) => ({ ...item, top: item.top - shift })) : placed;
 }
 
-/** A quiet author mark expands to a preview at its anchored document y. */
-export function AnnotationPreview(props: { row: AnnotationWire; top: number; remaining?: number; hovered: boolean; onHover: (id: string | null) => void; onOpen: () => void }): JSX.Element {
-  const [expanded, setExpanded] = createSignal(false);
-  const first = () => props.row.thread[0];
-  const name = () => first() ? labelOf(first()!.author) : 'Unknown';
-  const count = () => props.row.thread.length;
-  const preview = () => first() ? previewText(first()!.body) : '';
-  const [hoverReplies, setHoverReplies] = createSignal(false);
+const ACTIVE_PHASES = ['queued', 'dispatching', 'delivered', 'acknowledged'];
+
+/** A quiet identity mark until intent is shown; then enough context to choose. */
+export function AnnotationPreview(props: {
+  row: AnnotationWire; top: number; remaining?: number; hovered: boolean;
+  onOpen: () => void; onHover: (id: string | null) => void;
+}): JSX.Element {
+  const [repliesExpanded, setRepliesExpanded] = createSignal(false);
+  const [continuation, setContinuation] = createSignal<HTMLButtonElement>();
+  // The preview owns the delay; leaving or unmounting always cancels it.
   createEffect(() => {
-    if (!props.hovered || !hoverReplies()) { setExpanded(false); return; }
-    const timer = window.setTimeout(() => setExpanded(true), 600);
-    onCleanup(() => clearTimeout(timer));
+    if (!props.hovered) { setRepliesExpanded(false); return; }
+    const button = continuation();
+    if (!button) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cancel = () => { clearTimeout(timer); };
+    const enter = () => { cancel(); timer = setTimeout(() => setRepliesExpanded(true), 600); };
+    button.addEventListener('mouseenter', enter);
+    button.addEventListener('mouseleave', cancel);
+    onCleanup(() => { cancel(); button.removeEventListener('mouseenter', enter); button.removeEventListener('mouseleave', cancel); });
   });
-  const agents = () => (props.row.remote_work ?? []).filter((work, index, rows) => !rows.slice(index + 1).some(next => next.sessionId === work.sessionId));
-  const work = () => agents().filter(item => item.connection === 'online' && ['queued', 'dispatching', 'delivered', 'acknowledged'].includes(item.phase) && item.activity !== 'unknown').at(-1) ?? agents().at(-1);
-  const participants = () => replyParticipants(props.row.thread);
-  return <article data-annotation-id={props.row.id} data-hovered={props.hovered ? 'true' : undefined}
-    onMouseEnter={() => props.onHover(props.row.id)} onMouseLeave={() => { props.onHover(null); setHoverReplies(false); }}
-    onFocus={() => props.onHover(props.row.id)}
-    class={`pointer-events-auto fixed right-3 overflow-hidden border bg-raised shadow-md ${props.hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5' : 'border-transparent'}`}
-    style={{ top: `${props.top}px`, width: props.hovered ? '288px' : `${count() > 9 ? 48 : count() > 1 ? 44 : 36}px`, height: props.hovered ? expanded() ? 'auto' : '108px' : '36px', 'border-radius': props.hovered ? '5px' : '50% 50% 50% 3px', 'max-width': 'calc(100vw - 24px)' }}>
-    <button type="button" aria-label={`Open annotation conversation by ${name()}, ${count()} message${count() === 1 ? '' : 's'}`} onClick={props.onOpen} class="absolute inset-0 z-0 w-full" />
-    <Show when={props.remaining !== undefined}><span role="status" class="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil((props.remaining ?? 0) / 1000)} seconds</span></Show>
-    <Show when={props.row.status === 'resolved'}><span aria-label="Resolved" class="pointer-events-none absolute bottom-0 right-0 text-accent">✓</span></Show>
-    <Show when={work()}>{current => <span class="sr-only">{remoteWorkLabel(current())}</span>}</Show>
+  const first = () => props.row.thread[0];
+  const label = () => first() ? authorLabel(first()!.author) : 'Unknown';
+  const messages = () => props.row.thread.length;
+  const agents = () => (props.row.remote_work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
+  const activeAgents = () => agents().filter((work) => work.connection === 'online' && ACTIVE_PHASES.includes(work.phase) && work.activity !== 'unknown');
+  const work = () => activeAgents().at(-1) ?? agents().at(-1);
+  const inbox = useOptionalInbox();
+  const unread = () => inbox?.state()?.notifications.some((n) => !n.read_at && n.source === `comment:${props.row.id}`);
+  const working = () => activeAgents().length > 0;
+  const compactWidth = () => messages() > 9 ? VIEW_COMMENT_MANY_W : messages() > 1 ? VIEW_COMMENT_COUNTED_W : VIEW_COMMENT_COLLAPSED_W;
+  const radius = () => props.hovered ? '5px' : '50% 50% 50% 3px';
+  return <article
+    onMouseEnter={() => props.onHover(props.row.id)}
+    onMouseLeave={() => props.onHover(null)}
+    onFocusIn={() => props.onHover(props.row.id)}
+    onFocusOut={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) props.onHover(null); }}
+    data-annotation-id={props.row.id}
+    data-hovered={props.hovered ? 'true' : undefined}
+    class={`${working() ? 'motion-safe:animate-pulse' : ''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${props.hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
+    style={{
+      position: 'fixed',
+      outline: work() ? `2px solid ${REMOTE_COLOR_CSS[work()!.color]}` : undefined,
+      top: `${props.top}px`,
+      right: `${VIEW_COMMENT_INSET}px`,
+      width: `${props.hovered ? 288 : compactWidth()}px`,
+      'max-width': `calc(100vw - ${VIEW_COMMENT_INSET * 2}px)`,
+      height: props.hovered ? (repliesExpanded() ? 'auto' : `${VIEW_COMMENT_EXPANDED_H}px`) : `${VIEW_COMMENT_COLLAPSED_H}px`,
+      'max-height': props.hovered && repliesExpanded() ? `calc(100dvh - ${props.top + VIEW_COMMENT_INSET}px)` : undefined,
+      'overflow-y': props.hovered && repliesExpanded() ? 'auto' : undefined,
+      'border-radius': radius(),
+    }}>
+    <button type="button" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`} onClick={() => props.onOpen()}
+      class="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent" style={{ 'border-radius': radius() }} />
+    <Show when={unread()}><span aria-label="Unread reply" class="pointer-events-none absolute right-0 top-0 z-10 h-2 w-2 rounded-full bg-accent" /></Show>
+    <Show when={props.row.status === 'resolved'}><span aria-label="Resolved" class="pointer-events-none absolute bottom-0 right-0 z-10 text-xs text-accent">✓</span></Show>
+    <Show when={work()}>{(current) => <span class="sr-only">{remoteWorkLabel(current())}{agents().length > 1 ? ` · ${agents().length} agents` : null}</span>}</Show>
     <Show when={props.hovered && agents().length > 1}><span class="absolute right-2 top-1 text-[10px] text-muted">{agents().length} agents</span></Show>
-    <Show when={first()}>{comment => <Show when={props.hovered} fallback={<span class="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]"><span class="relative"><AuthorMark author={comment().author} compact decorative /><Show when={props.remaining !== undefined}><svg aria-hidden="true" class="pointer-events-none absolute -left-1 -top-1 h-[30px] w-[30px] motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="2" pathLength="100" stroke-dasharray={`${(props.remaining ?? 0) / 100} 100`} transform="rotate(-90 20 20)" /></svg></Show></span><Show when={count() > 1}><span data-thread-count aria-hidden="true" class="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-[9px] font-bold text-fg">{count() > 9 ? '9+' : count()}</span></Show></span>}>
-      <div class="pointer-events-none relative z-10 flex h-full flex-col">
-        <div class="flex items-center justify-between gap-2"><AuthorIdentity author={comment().author} /><CommentTime iso={comment().created_at} /></div>
-        <p class="mt-1.5 line-clamp-2 font-sans text-sm">{preview()}</p>
-        <div class="mt-auto flex items-center justify-between text-xs">
-          <Show when={count() > 1} fallback={<span>1 message</span>}><button type="button" aria-label="Expand replies" aria-expanded={expanded()} onMouseEnter={() => setHoverReplies(true)} onMouseLeave={() => setHoverReplies(false)} onClick={() => setExpanded(true)} class="pointer-events-auto"><Show when={participants().length}><span aria-label={`Reply participants: ${participants().map(labelOf).join(', ')}`} class="inline-flex -space-x-1"><For each={participants().slice(0, 3)}>{author => <AuthorMark author={author} compact decorative />}</For></span></Show>+{count() - 1} more</button></Show>
-          <span>open →</span>
-        </div>
-        <Show when={expanded()}><div role="list" aria-label="Thread replies" class="pointer-events-auto mt-2 border-t border-edge pt-2"><For each={props.row.thread.slice(1)}>{reply => <div role="listitem"><AuthorIdentity author={reply.author} /><p>{previewText(reply.body)}</p></div>}</For></div></Show>
-      </div>
-    </Show>}</Show>
+    <Show when={props.remaining !== undefined}><span role="status" class="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil((props.remaining ?? 0) / 1000)} seconds</span></Show>
+    <Show when={first() && !props.hovered}>
+      <span class="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
+        <span class="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+          <Show when={props.remaining !== undefined}>
+            <svg aria-hidden="true" class="pointer-events-none absolute -left-1 -top-1 h-[30px] w-[30px] motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="2" pathLength="100" stroke-dasharray={`${(props.remaining ?? 0) / 100} 100`} transform="rotate(-90 20 20)" /></svg>
+          </Show>
+          <CompactAuthorMark author={first()!.author} />
+        </span>
+        <Show when={messages() > 1}>
+          <span data-thread-count aria-hidden="true" class="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-[9px] font-bold leading-none text-fg">{messages() > 9 ? '9+' : messages()}</span>
+        </Show>
+      </span>
+    </Show>
+    <Show when={first() && props.hovered}>
+      <span class="pointer-events-none relative z-10 flex h-full animate-[rise_.12s_ease-out] flex-col">
+        <span class="flex items-center justify-between gap-2">
+          <AuthorIdentity author={first()!.author} />
+          <CommentTimestamp iso={first()!.created_at} class="font-mono text-[10px] text-faint" />
+        </span>
+        <span class="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
+        <span class="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
+          <Show when={messages() > 1} fallback={<ThreadContinuation thread={props.row.thread} />}>
+            <button ref={setContinuation} type="button" aria-label="Expand replies" aria-expanded={repliesExpanded()} onClick={() => setRepliesExpanded(true)}
+              class="pointer-events-auto cursor-pointer rounded-sm text-left hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"><ThreadContinuation thread={props.row.thread} /></button>
+          </Show>
+          <span class="transition-colors group-hover:text-accent">open →</span>
+        </span>
+        <Show when={repliesExpanded()}>
+          <span role="list" aria-label="Thread replies" class="pointer-events-auto mt-2 flex flex-col gap-3 border-t border-edge pt-2">
+            <For each={props.row.thread.slice(1)}>{(reply) => (
+              <span role="listitem" class="block">
+                <AuthorIdentity author={reply.author} />
+                <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
+              </span>
+            )}</For>
+          </span>
+        </Show>
+      </span>
+    </Show>
   </article>;
 }

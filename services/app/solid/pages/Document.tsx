@@ -296,7 +296,7 @@ export function DocumentPage(): JSX.Element {
     onCleanup(() => cancelAnimationFrame(frame));
   });
   const readingRail = () => (railOpen() && !phone() ? RIGHT_RAIL_W : 0);
-  const railInset = () => (!editing() ? 0 : !wide() ? 0 : panelFits() === null ? readingRail() : panelFits() ? 0 : editorRightInset());
+  const railInset = () => (!editing() ? readingRail() : !wide() ? 0 : panelFits() === null ? readingRail() : panelFits() ? 0 : editorRightInset());
   createEffect(() => {
     if (!host) return;
     host.style.position = 'relative';
@@ -311,6 +311,12 @@ export function DocumentPage(): JSX.Element {
   createEffect(() => {
     if (!ready() || !chromeElement) return;
     setTitleHost(markChromeEditing(chromeElement, editing(), !phone()));
+  });
+  // The rail's comment count follows the layer's list (a thread opened or resolved here, or by the stream).
+  createEffect(() => {
+    if (!ready() || !chromeElement) return;
+    const count = chromeElement.querySelector('[data-mx-reader-count="comment"]');
+    if (count) count.textContent = openAnnotationCount() > 0 ? String(openAnnotationCount()) : '';
   });
 
   const editorSeed = (): EditorArtifact | undefined => {
@@ -459,7 +465,9 @@ export function DocumentPage(): JSX.Element {
     <TrustedUi overlay layer="navigation">
       <style>{PANEL_CSS}</style>
       <Show when={panel()}>
-        <button type="button" aria-label="Close page controls" class="mx-reader-scrim" onClick={() => setPanel(null)} />
+        <Show when={panel() === 'controls'} fallback={<button type="button" aria-label="Close the menu" onClick={() => setPanel(null)} class={`fixed inset-0 z-40 cursor-default border-0 p-0 ${phone() ? 'bg-black/25' : 'bg-transparent'}`} />}>
+          <button type="button" aria-label="Close page controls" class="mx-reader-scrim" onClick={() => setPanel(null)} />
+        </Show>
         <Show when={panel() === 'controls'}><section role="dialog" aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls" ref={placePanel}><div style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between' }}><h2>artifact controls</h2><button type="button" aria-label="Dismiss artifact controls" onClick={() => setPanel(null)} class="-mt-3 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg"><X size={14} /></button></div><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}><Sun size={14} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}><Moon size={14} />dark</button></div>
           <DocumentActions id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
             owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
@@ -469,7 +477,7 @@ export function DocumentPage(): JSX.Element {
             onShare={() => { setPanel(null); setSharingOpen(true); }}
             onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />
         </section></Show>
-        <Show when={panel() === 'menu'}><PageMenuPanel close={() => setPanel(null)} /></Show>
+        <Show when={panel() === 'menu'}><PageMenuPanel dropdown phone={phone()} top={editing() ? APP_BAR_H + EDIT_BAR_H + 8 : undefined} close={() => setPanel(null)} /></Show>
         <Show when={panel() === 'notifications'}><NotificationsPanel close={() => setPanel(null)} /></Show>
       </Show>
       <Show when={fork() && id}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Show>
@@ -485,7 +493,7 @@ export function DocumentPage(): JSX.Element {
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickOnOpen={!editing()} onAnnotationsChange={setAnnotationItems}
         topOffset={(phone() ? 0 : APP_BAR_H) + (editing() ? EDIT_BAR_H : 0)}
-        railHost={editing() && wide() ? commentsHost() ?? undefined : undefined}
+        railHost={editing() && wide() ? commentsHost() : undefined}
         railSheet={editing() && !wide()}
         panelWidth={editing() && wide() ? editorRightInset() : undefined} />
     </Show>
