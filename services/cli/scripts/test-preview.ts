@@ -65,6 +65,7 @@ try{
  console.log('PASS offline CLI add, ID preview, image and JSX link resolve before publication');
  // The preview mounts the production editor immediately; the second page is a clean reader.
  await b.getByRole('button',{name:'Exit edit mode',exact:true}).click();
+ await a.waitForFunction(()=>document.getElementById('text')?.isContentEditable);
  await a.locator('#text').dblclick();
  await a.locator('#text').evaluate(element=>{(element as HTMLElement).focus();const range=document.createRange();range.selectNodeContents(element);const selection=getSelection()!;selection.removeAllRanges();selection.addRange(range);});
  const saved=a.waitForResponse(response=>response.url().endsWith('/editor')&&response.request().postDataJSON()?.operation==='commit');
@@ -101,8 +102,11 @@ try{
  console.log('PASS production comments survive process restart with the same node anchor');
  await a.goto(server.url+'/?file=published.jsx');await a.locator('#text').filter({hasText:'Published local draft'}).waitFor();
  await a.getByRole('tab',{name:'Edit the source',exact:true}).click();
+ const codeSaved=a.waitForResponse(response=>response.url().endsWith('/editor')&&response.request().postDataJSON()?.operation==='commit');
  await a.getByRole('textbox',{name:'Markup source',exact:true}).fill('<p id="text">Local v3 edit</p>');
  await a.getByRole('button',{name:'Exit edit mode',exact:true}).click();
+ assert.equal((await (await codeSaved).json()).ok,true);
+ await a.getByRole('button',{name:'Exit edit mode',exact:true}).waitFor({state:'hidden'});
  await a.locator('#text').filter({hasText:'Local v3 edit'}).waitFor();
  assert.match(await readFile(join(root,'published.jsx'),'utf8'),/Local v3 edit/);
  assert.match(await readFile(join(root,'published.jsx'),'utf8'),/head_version: 3/);
