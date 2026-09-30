@@ -61,7 +61,7 @@ export function PwaSharingSetting(props: { source: string; onChange: (source: st
       <span>Allow installation as a PWA</span>
       <span class="relative inline-flex shrink-0"><input type="checkbox" role="switch" aria-label="Allow installation as a PWA" checked={settings().enabled === true}
         onChange={event => props.onChange(writePwaSettings(props.source, { ...settings(), enabled: event.currentTarget.checked }))}
-        class="peer sr-only" />
+        class="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0" />
         <span aria-hidden="true" class="relative h-6 w-11 rounded-full bg-raised ring-1 ring-edge transition-colors peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
           <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform" style={{ transform: settings().enabled ? 'translateX(20px)' : 'translateX(0)' }} />
         </span>
