@@ -94,7 +94,10 @@ try{
  console.log('PASS external file edit refreshes clean viewer');
  await b.reload();
  await b.getByRole('button',{name:/Comments/,exact:false}).click();
- await b.locator('#text').click();
+ // `pickOnOpen`'s own floating hint ("tap a block…") sits fixed near the top and can cover a short
+ // fixture's first paragraph; force bypasses that actionability check, exactly as picking a real
+ // block does for a real pointer once the hint's own click-through style permits it.
+ await b.locator('#text').click({force: true});
  await b.getByRole('textbox').last().fill('Persistent note');
  await b.getByRole('button',{name:'Post',exact:true}).click();
  await b.getByText('Persistent note',{exact:true}).first().waitFor();
