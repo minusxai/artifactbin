@@ -606,13 +606,16 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     await history.refresh();
   };
 
+  /** The history's own flags, re-read whenever it records or moves (`historyTick`). */
+  const canUndo = () => { historyTick(); return sourceHistory.canUndo; };
+  const canRedo = () => { historyTick(); return sourceHistory.canRedo; };
   const historyControls = () => <>
     <Tooltip content="Undo (Ctrl/Cmd Z)">
-      <button type="button" aria-label="Undo" disabled={(historyTick(), !sourceHistory.canUndo)} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('undo')}
+      <button type="button" aria-label="Undo" disabled={!canUndo()} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('undo')}
         class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"><Undo2 size={14} /></button>
     </Tooltip>
     <Tooltip content="Redo (Ctrl/Cmd Shift Z)">
-      <button type="button" aria-label="Redo" disabled={(historyTick(), !sourceHistory.canRedo)} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('redo')}
+      <button type="button" aria-label="Redo" disabled={!canRedo()} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('redo')}
         class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"><Redo2 size={14} /></button>
     </Tooltip>
   </>;
