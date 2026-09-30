@@ -141,6 +141,19 @@ it('keeps shared work primary when the account owns no artifacts', async () => {
   expect(screen.queryByLabelText('Create your first artifact')).toBeNull();
 });
 
+it('filters "Shared with you" too, from "My artifacts"\' own search box', async () => {
+  homeFetch({ signedIn: true, accountId: 'one', artifacts: [{ ...doc('own'), title: 'QA shell own doc' }], shared: [{ ...doc('shared'), title: 'QA shell shared doc', role: 'viewer', owner_username: 'alice' }] });
+  open();
+  await screen.findByLabelText('Open QA shell own doc');
+  expect(await screen.findByLabelText('Open shared artifact shared')).toBeInTheDocument();
+  fireEvent.input(screen.getByLabelText('Search artifacts'), { target: { value: 'own' } });
+  expect(screen.getByLabelText('Open QA shell own doc')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Open shared artifact shared')).toBeNull();
+  fireEvent.input(screen.getByLabelText('Search artifacts'), { target: { value: 'shared' } });
+  expect(screen.queryByLabelText('Open QA shell own doc')).toBeNull();
+  expect(screen.getByLabelText('Open shared artifact shared')).toBeInTheDocument();
+});
+
 it('keeps the claim result while an empty library fills on refresh', async () => {
   let current = { signedIn: true, accountId: 'one', artifacts: [] as ReturnType<typeof doc>[], shared: [] };
   vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? current : url.includes('claimable') ? { claimable: [{ tokenId: 'tok_1', titles: ['Quarterly Review'], artifacts: 1 }] } : url.includes('/claim') ? { ok: true } : { ...richInsights, stats: { ...richInsights.stats, assets: 0 } }))));

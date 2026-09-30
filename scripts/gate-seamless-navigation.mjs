@@ -57,6 +57,18 @@ try {
   await loginViaEmail(page, base, sink, `mxmx_test_navigation_${Date.now()}@example.com`);
   assert.equal(await page.getByLabel('Add to my account', { exact: true }).count(), 0,
     'verified login adopts guest artifacts without a second claim step');
+
+  // A served document's own head sheets (data-mx-story-css chief among them) must leave with it: left
+  // behind on an SPA hop to a non-document route, they collide with the app bar's own Tailwind classes
+  // and its GitHub Star button stops picking one of its two (mobile/desktop) spans.
+  await page.goto(readerUrl(`${base}/a/${first.id}`));
+  await heading('Artifact A').waitFor();
+  await page.getByLabel('Open menu', { exact: true }).click();
+  await page.getByRole('link', { name: 'Account', exact: true }).click();
+  await page.getByRole('heading', { name: 'account' }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Star artifactbin on GitHub' }).count(), 1,
+    'exactly one GitHub Star button after leaving an adopted document for /account');
+
   await page.goto(base);
   await page.getByLabel('List view', { exact: true }).click();
   await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
