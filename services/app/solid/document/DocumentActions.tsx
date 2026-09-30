@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createSignal, Show, type JSX } from 'solid-js';
+import { createSignal, lazy, Show, Suspense, type JSX } from 'solid-js';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import Pencil from 'lucide-solid/icons/pencil';
 import { DeleteAction } from './DeleteAction';
@@ -10,7 +10,8 @@ import { LikeAction } from './LikeAction';
 import { VersionHistory, type VersionHistoryProps } from './VersionHistory';
 import { DocumentPeople } from './DocumentPeople';
 import { RefreshDocumentAssets } from './RefreshDocumentAssets';
-import { SocialPreviewEditor } from './SocialPreviewEditor';
+/** The crop editor parses the document's source: its own chunk, never the reader's (lib/__tests__/reader-bundle-hygiene). */
+const SocialPreviewEditor = lazy(() => import('./SocialPreviewEditor').then((m) => ({ default: m.SocialPreviewEditor })));
 
 const ROW = 'flex w-full items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg';
 export interface DocumentActionsProps {
@@ -57,7 +58,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
     <Show when={!activeOwner() && activeEditor()}><DocumentSharing id={props.id} title={props.title} owner={false} editable onSocialPreview={onSocialPreview()} variant="menu" onOpen={props.onShare} /></Show>
     <Show when={props.history}>{history => <VersionHistory {...history()} />}</Show>
     <Show when={socialPreviewOpen() && props.source != null && props.editId}>
-      <SocialPreviewEditor id={props.id} source={props.source!} editId={props.editId!} version={props.version} onClose={() => setSocialPreviewOpen(false)} />
+      <Suspense fallback={null}><SocialPreviewEditor id={props.id} source={props.source!} editId={props.editId!} version={props.version} onClose={() => setSocialPreviewOpen(false)} /></Suspense>
     </Show>
   </div>;
 }

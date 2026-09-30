@@ -300,6 +300,8 @@ export function DocumentPage(): JSX.Element {
   createEffect(() => {
     if (!host) return;
     host.style.position = 'relative';
+    // Full-width whatever the rail does: the rail's width is the host's padding, never its box.
+    host.style.right = '0px';
     host.style.minHeight = '100vh';
     host.style.background = DOCUMENT_GROUND[mode()];
     // The served page reserved the bar on <body> (`body:has(> [data-mx-inline-story])`, compiled-page/assembler);
