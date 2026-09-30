@@ -102,9 +102,14 @@ describe('the page around the story', () => {
   it('names exactly the rule file speculationRulesOf derives, and never a non-http hint', () => {
     const links = { prefetch: ['/a/One', 'javascript:alert(1)'], prerender: ['/a/One', 'javascript:alert(1)'] };
     const page = assembleReaderPage(input({ compiled: compiled({ links }) }));
-    expect(page.headers[SPECULATION_RULES_HEADER]).toBe(`"${speculationRulesOf(links.prerender)!.url}"`);
-    expect(JSON.parse(speculationRulesOf(links.prerender)!.text)).toEqual({ prerender: [{ source: 'list', urls: ['/a/One'], eagerness: 'moderate' }] });
+    expect(page.headers[SPECULATION_RULES_HEADER]).toBe(`"${speculationRulesOf(links)!.url}"`);
+    expect(JSON.parse(speculationRulesOf(links)!.text)).toEqual({
+      prefetch: [{ source: 'list', urls: ['/a/One'], eagerness: 'moderate' }],
+      prerender: [{ source: 'list', urls: ['/a/One'], eagerness: 'moderate' }],
+    });
     expect(page.html).not.toContain('javascript:');
+    // Never an eager <link rel="prefetch">: every hint waits for hover/press intent via the rules file.
+    expect(page.html).not.toContain('rel="prefetch"');
   });
 });
 

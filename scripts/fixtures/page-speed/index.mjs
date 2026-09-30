@@ -5,6 +5,14 @@
  * Markup is stored without frontmatter;
  * the dashboard's `ref:{{sales}}` is replaced with the id of the dataset
  * published from sales.csv.
+ *
+ * The published prose document also carries a same-deployment `<a href>` to a
+ * second, unrelated document — appended here rather than written into
+ * prose.jsx, whose exact bytes are also the parity key into
+ * lib/islands/__tests__/fixtures/react-oracle.json (a frozen recording from
+ * the retired React reader, so the file can never change again). Size target
+ * 3 must still measure a linked document's compiled page the way a real one
+ * names its own link hints, never zero of them.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -33,6 +41,10 @@ export const PAGE_SPEED_FIXTURES = [
  */
 export async function publishPageSpeedFixtures(publish, visibility = 'unlisted') {
   const sales = await publish({ title: 'Perf sales', dataset: read('sales.csv'), visibility });
+  // Published up front so the prose fixture can link to a real id: it otherwise never exercises
+  // link hints, so a regression that makes them fetch eagerly (rather than waiting for hover/press
+  // intent) has nothing to measure size target 3 against.
+  const linkTarget = await publish({ title: 'Perf link target', markup: '<p id="link-target-body">A second document the prose fixture links to.</p>', visibility });
   const published = [];
   for (const fixture of PAGE_SPEED_FIXTURES) {
     const markup = fixture.key === 'kitchen'
@@ -40,7 +52,10 @@ export async function publishPageSpeedFixtures(publish, visibility = 'unlisted')
       // from the source use the same bytes, so space their braces equivalently.
       ? (await kitchenSinkMarkup(publish)).replaceAll('={{', '={ {')
       : read(fixture.file).replaceAll('{{sales}}', sales.id);
-    const made = await publish({ title: fixture.title, markup, visibility, ...(fixture.template ? { template: fixture.template } : {}), ...(fixture.theme ? { theme: fixture.theme } : {}) });
+    // Appended after reading the file, never written into it: prose.jsx's exact bytes are the
+    // parity key into lib/islands/__tests__/fixtures/react-oracle.json.
+    const withLink = fixture.key === 'prose' ? `${markup}\n<p id="link"><a href="/a/${linkTarget.id}">A related document</a></p>` : markup;
+    const made = await publish({ title: fixture.title, markup: withLink, visibility, ...(fixture.template ? { template: fixture.template } : {}), ...(fixture.theme ? { theme: fixture.theme } : {}) });
     published.push({ ...fixture, id: made.id });
   }
   return published;

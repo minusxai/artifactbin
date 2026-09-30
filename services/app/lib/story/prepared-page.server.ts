@@ -198,7 +198,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
       ...(flow ? { access: await anonymousAccessFacts(row, flow) } : {}),
     }, build);
     if (compiled.unported.length) return { build: build.id, error: `unported: ${compiled.unported.join(', ')}`, reason: 'unported', unported: compiled.unported };
-    await createSpeculationRulesStore().put(compiled.links.prerender);
+    await createSpeculationRulesStore().put(compiled.links);
     return compiled;
   } catch (error) {
     console.warn('[prepared-page] compile failed', error);

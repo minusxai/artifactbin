@@ -17,13 +17,15 @@
  *   - the per-document module, its shared closure preloaded, and the idle SPA
  *     entry — every script a same-origin `src`, so the page runs under
  *     `script-src 'self'` with NO inline script at all;
- *   - link hints: `<link rel="prefetch">` in the head, and prerender rules as
- *     an external file named by the `Speculation-Rules` header it returns.
+ *   - link hints: never eager — every one (`prefetch`'s full list, `prerender`'s
+ *     first few) waits for hover or press intent inside ONE speculation-rules
+ *     file, named by the `Speculation-Rules` header the page returns (never an
+ *     inline `<link rel="prefetch">`, which the parser would fetch on load).
  *
  * Head order: fonts first (they block text), then the page's own module
- * closure, then the prefetches, then the styles. The SPA's preloads go last,
- * at the end of the body: the React app is the reader's second screen, and its
- * bytes must never race the ones the first screen paints with.
+ * closure, then the styles. The SPA's preloads go last, at the end of the
+ * body: the app is the reader's second screen, and its bytes must never race
+ * the ones the first screen paints with.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/agent-discovery';
 import type { IslandPageData } from '@/lib/islands/contract';
@@ -40,7 +42,7 @@ import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
 } from './contract';
-import { isNavigable, speculationRulesOf } from './speculation';
+import { speculationRulesOf } from './speculation';
 
 /** The first-paint outline has no event handlers; the app attaches navigation after adoption. */
 function renderOutlineRail(entries: readonly OutlineEntry[]): string {
@@ -74,8 +76,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
 
   const islandPreloads = module ? unique([module.url, ...module.imports]) : [];
   const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
-  const prefetch = unique(compiled.links.prefetch.filter(isNavigable));
-  const rules = speculationRulesOf(compiled.links.prerender);
+  const rules = speculationRulesOf(compiled.links);
   // The app shell normally defines this body face in shell.css. A compiled first paint
   // runs before that stylesheet, while Mermaid measures sequence labels against body.
   const appMonoFaces = spa ? APP_FONT_FACES.filter((face) => face.family === 'JetBrains Mono Variable' && face.style === 'normal')
@@ -93,7 +94,6 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + headMetadata(input.head)
     + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]), Boolean(spa))
     + islandPreloads.map(modulePreload).join('')
-    + prefetch.map((href) => `<link rel="prefetch" href="${escapeHtml(href)}" as="document">`).join('')
     + (input.sheets
       // Today's standalone document's sheets, exactly (lib/story/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')

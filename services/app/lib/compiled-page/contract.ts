@@ -403,7 +403,7 @@ export const SIGNED_IN_HINT_ATTR = 'data-mx-signed-in';
  * ──────────────────────────────────────────────────────────────────────────── */
 
 export interface LinkHints {
-  /** Same-deployment artifact URLs to prefetch (`<link rel="prefetch" as="document">`), in document order, deduplicated. */
+  /** Same-deployment artifact URLs to prefetch (a speculation-rules `prefetch` list, `eagerness: moderate` — hover/press intent, never on load), in document order, deduplicated. */
   prefetch: string[];
   /** The first few to prerender (speculation rules, `eagerness: moderate`); never a private document. */
   prerender: string[];
