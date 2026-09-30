@@ -23,6 +23,15 @@ it('keeps shared work absent when empty, and filters by role and search', () => 
   expect(screen.queryByLabelText('Open shared artifact two')).toBeNull();
 });
 
+it('ANDs an external query (Home\'s own search box) with its own search box', () => {
+  render(() => <SharedWithYou items={[shared('one'), shared('two')]} query="one" />);
+  expect(screen.getByLabelText('Open shared artifact one')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Open shared artifact two')).toBeNull();
+  // Its own box still narrows further within the external query's result, rather than replacing it.
+  fireEvent.input(screen.getByLabelText('Search shared artifacts'), { target: { value: 'two' } });
+  expect(screen.queryByLabelText('Open shared artifact one')).toBeNull();
+});
+
 it('names each recipient role and uses short artifact links even for untitled work', () => {
   render(() => <SharedWithYou items={[shared('one'), shared('two', 'editor'), { ...shared('three', 'commenter'), title: null, owner_username: null }]} />);
   expect(screen.getByLabelText('Your role on one')).toHaveTextContent('can view');

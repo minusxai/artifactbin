@@ -20,7 +20,7 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { loginHref } from '../shared/login-href';
 import { takeBootstrap } from '@/web/bootstrap';
 import { takeChromeIntent } from '@/web/idle-boot';
-import { adoptInitialStory } from '@/web/initial-story';
+import { adoptInitialStory, removeServedHeadStyles } from '@/web/initial-story';
 import { useSession } from '../web/session';
 import { NotFoundPage } from './NotFound';
 import type { AnnotationWire } from '@/lib/annotations';
@@ -446,7 +446,11 @@ export function DocumentPage(): JSX.Element {
     const editId = document.body.getAttribute('data-mx-live-edit');
     const stopLive = !islands && liveId && editId && typeof EventSource === 'function' ? startIslandLive(window, liveId, editId) : null;
     const stopIdle = editable() ? whenIdle(() => { void loadEditorPart(); void import('../editor/ArtifactEditor').catch(() => {}); }) : null;
-    onCleanup(() => { chrome.removeEventListener('click', click); window.removeEventListener('keydown', escape); window.removeEventListener('hashchange', syncEditRoute); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null; });
+    onCleanup(() => { chrome.removeEventListener('click', click); window.removeEventListener('keydown', escape); window.removeEventListener('hashchange', syncEditRoute); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null;
+      // The route is leaving this (already-adopted) document: `clearInitialStory` never runs for it
+      // (`adoptReaderDocument` nulled `initialStory` on the way in), so this is the one place its own
+      // served head sheets — data-mx-story-css chief among them — get removed with it.
+      removeServedHeadStyles(); });
   });
   const accountSession = () => page?.kind === 'account' || session()?.kind === 'account';
   const currentVersion = () => page?.archived?.version ?? live()?.version ?? page?.surface?.version ?? 0;
