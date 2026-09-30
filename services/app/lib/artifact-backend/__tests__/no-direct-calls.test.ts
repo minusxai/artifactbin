@@ -9,21 +9,22 @@ import { describe, expect, it } from 'vitest';
 
 const APP = path.resolve(import.meta.dirname, '../../..');
 const CONE = [
-  'components/ArtifactEditor.tsx',
-  'components/InPlaceEditor.tsx',
-  'components/AnnotationLayer.tsx',
-  'components/useNewCommentDraft.ts',
-  'components/PersonMention.tsx',
-  'components/views/story/QueryNotebookPanel.tsx',
-  'components/views/story/StoryFormatToolbar.tsx',
-  'lib/story/use-live-edits.ts',
-  'lib/story/use-live-artifact.ts',
-  'lib/story/use-versions.ts',
+  'solid/editor/ArtifactEditor.tsx',
+  'solid/editor/InPlaceEditor.tsx',
+  'solid/editor/create-in-place-edit.ts',
+  'solid/editor/create-live-artifact.ts',
+  'solid/editor/create-versions.ts',
+  'solid/editor/panels/QueryNotebookPanel.tsx',
+  'solid/editor/StoryFormatToolbar.tsx',
+  'solid/shared/live-edits-core.ts',
+  'solid/document/AnnotationLayer.tsx',
+  'solid/document/AnnotationThread.tsx',
+  'solid/document/PersonMention.tsx',
+  'solid/document/CommentCapture.ts',
+  'solid/document/CommentMentionPicker.tsx',
   'lib/story/document-authoring-client.ts',
   'lib/browser-artifact-write.ts',
-  'lib/capture/use-comment-capture.ts',
-  'components/RemoteMentionPicker.tsx',
-];
+]
 const SERVER_CALL = /\bfetch\s*\(|new\s+EventSource\s*\(|readAnnotationPages\s*\(/;
 
 describe('the editing and commenting cone', () => {

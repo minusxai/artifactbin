@@ -1,12 +1,12 @@
 /**
  * The reader of /a/<slug> must not pay for the charting engine.
  *
- * The route's client entry is ArtifactShell + ArtifactSurface; everything those
- * two reach through STATIC runtime imports lands in the page's first-load JS.
+ * The route's client entry is the Solid document page (solid/pages/Document); everything it
+ * reaches through STATIC runtime imports lands in the page's app chunk.
  * The vega stack (vega + vega-lite + vega-interpreter + vega-tooltip) is
  * ~500 KB gzipped — two thirds of the whole route — and a plain-text story
- * must never download it. It may only enter through a dynamic import
- * (lib/dynamic), the same boundary that already keeps the source editor out.
+ * must never download it. It may only enter through a dynamic import, the same
+ * boundary that already keeps the source editor out.
  *
  * This walks the import graph the way the bundler does: follow value imports,
  * skip `import type` (erased at compile time) and dynamic `import()` (its own
@@ -19,10 +19,9 @@ import path from 'path';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
-/** The client components web/pages/Artifact.tsx ships to every reader. */
+/** The client page every reader of a document is handed (solid/App's document route). */
 const READER_ENTRIES = [
-  'components/ArtifactShell.tsx',
-  'components/ArtifactSurface.tsx',
+  'solid/pages/Document.tsx',
 ];
 
 /**
@@ -35,7 +34,7 @@ const SQLITE = ['@artifactbin/sql', '@sqlite.org/sqlite-wasm'];
 /**
  * Heavy packages that must stay behind a dynamic-import boundary.
  *
- * The CodeMirror packages are the source editor (components/SourceEditor,
+ * The CodeMirror packages are the source editor (solid/editor/SourceEditor,
  * through lib/source-editor/codemirror): only an owner who presses `code` pays.
  */
 const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@codemirror/view', '@codemirror/state', '@codemirror/language', '@codemirror/lang-javascript', ...SQLITE];
@@ -54,14 +53,11 @@ const RUNTIME_ENTRY = ['lib/islands/page.ts', 'lib/islands/rt.tsx', 'lib/islands
  * because the `<Question>` sizing contract sat in a module that also imports the
  * editor's AST write-back. 250 KB raw of parser for a number.
  *
- * `lucide-react` is the ICON SET: `<Icon name>` resolves any of ~1600 glyphs by
- * name, so the kit imported the whole map — 517 KB raw, 148 KB gz, downloaded by
- * every document to serve the 2-in-155 that draw an icon. The glyphs a document
- * actually uses are resolved server-side and travel in the island beside
- * `refData` (lib/story/icon-glyphs.ts); the full map stays in the editor's
- * on-demand chunk, where an owner picking an arbitrary icon still needs it.
+ * An ICON SET (`lucide-solid`, `lucide-static`): `<Icon name>` resolves any of ~1600 glyphs by
+ * name, and the whole map is 517 KB raw, 148 KB gz. The glyphs a document actually uses are
+ * resolved server-side and travel in the island beside `refData` (lib/story/icon-glyphs.ts).
  */
-const RUNTIME_FORBIDDEN = ['acorn', 'acorn-jsx', 'lucide-react', ...SQLITE];
+const RUNTIME_FORBIDDEN = ['acorn', 'acorn-jsx', 'lucide-solid', 'lucide-static', ...SQLITE];
 
 const stripComments = (src: string): string =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
@@ -138,27 +134,21 @@ describe('reader bundle hygiene', () => {
 
   it('sanity: the walker actually descends through the reader graph', () => {
     // Guards the guard: if import parsing breaks, the forbidden check would
-    // pass vacuously. The story ENGINE is dynamically imported by the
-    // artifact surface and rendered inline in view mode; the standalone /raw
-    // route and authored child frames are separate runtime paths. The deepest
-    // static reader file is the live-sync hook.
+    // pass vacuously. The page follows the live document through this primitive.
     expect([...reach.files].map((f) => path.relative(ROOT, f))).toContain(
-      'lib/story/use-live-artifact.ts',
+      'solid/editor/create-live-artifact.ts',
     );
-    expect([...reach.packages.keys()]).toContain('react');
+    expect([...reach.packages.keys()]).toContain('solid-js');
   });
 
-  it('the story component layer stays out of the static reader graph through dynamic imports', () => {
-    // The interpreter module itself may ride along (snapshot.ts's CSS
-    // extraction lives beside it — no heavy deps); the COMPONENT layer —
-    // embeds, kit, charts — must not.
-    const engine = [...reach.files].map((f) => path.relative(ROOT, f))
-      .filter((f) => f.startsWith('components/views/') || f.startsWith('components/kit/'));
-    expect(engine).toEqual([]);
+  it('the editor and its panels stay out of the static reader graph through dynamic imports', () => {
+    const editor = [...reach.files].map((f) => path.relative(ROOT, f))
+      .filter((f) => f === 'solid/editor/InPlaceEditor.tsx' || f === 'solid/editor/ArtifactEditor.tsx' || f.startsWith('solid/editor/panels/'));
+    expect(editor).toEqual([]);
   });
 
   it('keeps the dataset viewer out of the static text-reader graph', () => {
-    const dataset = path.join(ROOT, 'components/DatasetCatalogView.tsx');
+    const dataset = path.join(ROOT, 'solid/components/DatasetCatalogView.tsx');
     expect(reach.files.has(dataset) ? chainTo(dataset, reach.parent) : null).toBeNull();
   });
 
@@ -197,27 +187,25 @@ describe('compiled document bundle hygiene', () => {
  * comment layer, the JSX parser that writing needs) load when first used, and
  * are prefetched on idle/hover so the first click does not wait.
  */
-const ROUTE_ENTRIES = ['web/main.tsx', 'web/pages/Artifact.tsx', 'web/pages/Profile.tsx'];
+const ROUTE_ENTRIES = ['web/solid-spa-idle.ts', 'solid/main.tsx', 'solid/pages/Document.tsx', 'solid/pages/Profile.tsx'];
 /*
  * css-tree (+ source-map-js) rewrote the document's CSS IN THE BROWSER — work the
  * server already did. The prepared page carries the rewritten sheet, so the
  * reader never parses CSS.
  */
 const ROUTE_FORBIDDEN_PACKAGES = ['acorn', 'acorn-jsx', 'typebox', 'css-tree', 'source-map-js', ...FORBIDDEN];
-const ROUTE_FORBIDDEN_FILES = ['components/ShareLink.tsx', 'components/AnnotationLayer.tsx', 'lib/jsx/parse.ts'];
+const ROUTE_FORBIDDEN_FILES = ['solid/editor/InPlaceEditor.tsx', 'solid/document/SocialPreviewEditor.tsx', 'lib/jsx/parse.ts'];
 
 describe('reader route bundle hygiene', () => {
   const reach = walk(ROUTE_ENTRIES);
 
   it('sanity: the walker descends through the SPA shell', () => {
     const files = [...reach.files].map((f) => path.relative(ROOT, f));
-    expect(files).toContain('components/ArtifactSurface.tsx');
-    expect([...reach.packages.keys()]).toContain('react');
+    expect(files).toContain('solid/App.tsx');
+    expect([...reach.packages.keys()]).toContain('solid-js');
   });
 
-  it('keeps the editor interpreter and runtime class merger out of the reader route', () => {
-    const editor = path.join(ROOT, 'lib/story-runtime/EditorStoryRuntime.tsx');
-    expect(reach.files.has(editor) ? chainTo(editor, reach.parent) : null).toBeNull();
+  it('keeps the runtime class merger out of the reader route', () => {
     const merger = reach.packages.get('tailwind-merge');
     expect(merger ? chainTo(merger, reach.parent) : null).toBeNull();
   });

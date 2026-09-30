@@ -27,15 +27,16 @@ function staticGraph(entry: string) {
   return [...seen].map(file => path.relative(root, file));
 }
 
-it('keeps app pages and the artifact runtime outside the initial static graph', () => {
-  const graph = staticGraph('web/App.tsx');
-  expect(graph).toContain('web/Shell.tsx');
-  expect(graph.filter(file => file.startsWith('web/pages/'))).toEqual([]);
-  expect(graph).not.toContain('components/ArtifactSurface.tsx');
+it('keeps app pages and the document runtime outside the initial static graph', () => {
+  const graph = staticGraph('solid/App.tsx');
+  expect(graph).toContain('solid/components/PageChrome.tsx');
+  expect(graph.filter(file => file.startsWith('solid/pages/'))).toEqual([]);
+  expect(graph).not.toContain('solid/pages/Document.tsx');
+  expect(graph).not.toContain('solid/editor/InPlaceEditor.tsx');
 });
 
-it('does not load the artifact renderer when loading only a profile listing', () => {
-  const graph = staticGraph('web/pages/Profile.tsx');
-  expect(graph).not.toContain('web/pages/Artifact.tsx');
-  expect(graph).not.toContain('components/ArtifactSurface.tsx');
+it('does not load the editor when loading only a profile listing', () => {
+  const graph = staticGraph('solid/pages/Profile.tsx');
+  expect(graph).not.toContain('solid/editor/InPlaceEditor.tsx');
+  expect(graph).not.toContain('solid/editor/ArtifactEditor.tsx');
 });
