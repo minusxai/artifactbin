@@ -168,6 +168,8 @@ try {
 
   // Real pointer drag, then ensure the composer remains above app content.
   await select();
+  await page.getByRole('button',{name:'Screenshot',exact:true}).click();
+  await expect(page.getByRole('status',{name:'Screenshot tool active'})).toHaveText(/drag an area/);
   await prose.scrollIntoViewIfNeeded();
   const bounds=await prose.boundingBox();assert(bounds);
   await page.mouse.move(bounds.x+4,bounds.y+4);await page.mouse.down();
@@ -242,7 +244,10 @@ try {
   await save('Unkeyed words retain only their list owner');
   ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed words retain only their list owner');
   assert.equal(ownerComment.anchor.nodeId,'index-cards');assert.equal(ownerComment.range,null);assert(ownerComment.quote);
-  await select();await unkeyedAlice.scrollIntoViewIfNeeded();
+  await select();
+  await page.getByRole('button',{name:'Screenshot',exact:true}).click();
+  await expect(page.getByRole('status',{name:'Screenshot tool active'})).toHaveText(/drag an area/);
+  await unkeyedAlice.scrollIntoViewIfNeeded();
   const unkeyedBox=await unkeyedAlice.boundingBox();assert(unkeyedBox);
   await page.mouse.move(unkeyedBox.x+3,unkeyedBox.y+3);await page.mouse.down();
   await page.mouse.move(unkeyedBox.x+80,unkeyedBox.y+25,{steps:8});await page.mouse.up();

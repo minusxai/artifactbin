@@ -205,12 +205,12 @@ const run = async () => {
     })).json();
     check(resolved.status === 'resolved' && resolved.thread?.length === 2, 'the agent replies and resolves in one POST');
 
-    // Resolution retains an actively read thread and its highlight; it moves into resolved history.
+    // Resolution retains the conversation in history while clearing its document highlight.
     const retained = await until(async () => ({
       thread: await page.getByLabel('Resolved annotation thread').filter({hasText:'Recomputed'}).count(),
       highlight: await frame.locator('[data-mx-annotated]').count(),
-    }), state => state.thread === 1 && state.highlight === 1, 10000);
-    check(retained.thread === 1 && retained.highlight === 1, 'the resolve reaches the open tab live: the conversation and highlight remain readable');
+    }), state => state.thread === 1 && state.highlight === 0, 10000);
+    check(retained.thread === 1 && retained.highlight === 0, 'the resolve reaches the open tab live: the conversation remains and the highlight clears');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     check(threadGone === 0, 'the open-thread list empties live too');
     const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
@@ -791,11 +791,11 @@ async function pickLeg(browser) {
   await page.locator('[aria-label="Toggle comments"]').click();
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
 
-  // Capture needs an explicit user gesture; opening the rail does not start it.
+  // Opening the rail starts Select; Screenshot remains a separate explicit action.
   const tool = page.locator('[aria-label="Select"]');
   check(await tool.count() === 1, 'the rail header offers the pick tool');
-  check(await tool.getAttribute('aria-pressed') === 'false', 'opening the rail leaves capture idle');
-  await tool.click();
+  check(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail activates Select');
+  check(await page.getByRole('button',{name:'Screenshot',exact:true}).getAttribute('aria-pressed') === 'false', 'opening the rail leaves Screenshot idle');
   await page.locator('[aria-label="Select tool active"]').waitFor();
   check(await tool.getAttribute('aria-pressed') === 'true', 'Select starts the pick');
   check(await page.locator('[aria-label="Select tool active"]').isVisible(), 'a pill over the document says what to do next');
@@ -820,7 +820,7 @@ async function pickLeg(browser) {
   check(await frame.locator('[data-mx-annotate-pick-hover]').count() === 0, 'and the hover outline went with the pick');
 
   await page.locator('[aria-label="Annotation comment"]').fill('picked, not selected');
-  await page.getByRole('button',{name:'Continue without screenshot',exact:true}).click();
+  check(await page.getByRole('button',{name:'Continue without screenshot',exact:true}).count() === 0, 'a block comment needs no screenshot fallback');
   await page.locator('[aria-label="Save annotation"]').click();
   const thread = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 1, 10000);
   check(thread === 1, 'the comment lands as a rail thread');
@@ -845,11 +845,12 @@ async function pickLeg(browser) {
   check(cleared === 0, '…and clears the outline');
 
   // ── a DRAWN AREA ──────────────────────────────────────────────────────
-  // The same Select tool: a real drag from inside the figure paragraph into the
+  // The Screenshot tool: a real drag from inside the figure paragraph into the
   // list below it. Neither is what was drawn — their SECTION is — and the
   // rectangle rides the comment as its range, painted back as an overlay.
-  await page.locator('[aria-label="Select"]').click();
-  check(await page.locator('[aria-label="Select tool active"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
+  await page.getByRole('button',{name:'Screenshot',exact:true}).click();
+  await page.getByRole('status',{name:'Screenshot tool active'}).waitFor();
+  check(await page.getByRole('status',{name:'Screenshot tool active'}).textContent().then((t) => /drag/i.test(t ?? '')), 'the screenshot pill says to drag');
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
   await page.mouse.move(from.x + 8, from.y + 4);
