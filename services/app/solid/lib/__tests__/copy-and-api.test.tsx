@@ -31,7 +31,7 @@ describe('apiRequest', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'nope', details: ['bad field'] }), { status: 422 })));
     await expect(apiRequest('/api/x', 'PUT', {})).rejects.toMatchObject({ message: 'bad field', status: 422 });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('boom', { status: 500 })));
-    const error = await apiRequest('/api/x').catch((e) => e);
+    const error = await apiRequest("/api/x").catch((e: unknown) => e) as ApiError;
     expect(error).toBeInstanceOf(ApiError);
     expect(error.message).toBe('The request failed.');
   });
