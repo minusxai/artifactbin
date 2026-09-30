@@ -43,6 +43,7 @@ import type { EditorArtifact } from '../editor/InPlaceEditor';
 import { TrustedUi } from '../components/TrustedUi';
 import Sun from 'lucide-solid/icons/sun';
 import Moon from 'lucide-solid/icons/moon';
+import X from 'lucide-solid/icons/x';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 
 /** The page panels wear the reader chrome's own sheet; inside the trusted root they need its tokens too. */
@@ -377,6 +378,11 @@ export function DocumentPage(): JSX.Element {
       } else if (name === 'fork') setFork(true);
       else if (name === 'share') { if (isOwner()) setSharingOpen(true); else void sharing.share(); }
       else if (name === 'notifications') window.location.assign('/notifications');
+      else if (name === 'membership' || name === 'join') {
+        // The rail's Join/Joined/Pending pill: joining needs an account; the people panel is where it happens.
+        if (!accountSession()) { window.location.assign(loginHref(window.location, 'join')); return; }
+        void action('controls');
+      }
       else if (name === 'edit' && editable()) { if (editing()) void finishEdit(); else enterEdit(); }
     };
     const click = (event: MouseEvent) => {
@@ -451,7 +457,7 @@ export function DocumentPage(): JSX.Element {
       <style>{PANEL_CSS}</style>
       <Show when={panel()}>
         <button type="button" aria-label="Close page controls" class="mx-reader-scrim" onClick={() => setPanel(null)} />
-        <Show when={panel() === 'controls'}><section role="dialog" aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls" ref={placePanel}><h2>artifact controls</h2><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}><Sun size={14} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}><Moon size={14} />dark</button></div>
+        <Show when={panel() === 'controls'}><section role="dialog" aria-label="Artifact controls" class="mx-reader-panel mx-reader-panel--controls" ref={placePanel}><div style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between' }}><h2>artifact controls</h2><button type="button" aria-label="Dismiss artifact controls" onClick={() => setPanel(null)} class="-mt-3 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg"><X size={14} /></button></div><h3>appearance</h3><div class="mx-reader-modes" role="group" aria-label="Color mode"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => chooseMode('light')}><Sun size={14} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => chooseMode('dark')}><Moon size={14} />dark</button></div>
           <DocumentActions id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
             owner={isOwner() && !editing()} canEdit={editable() && !editing()} canAnnotate={annotatable()} accountSession={accountSession()}
             like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { setPanel(null); setRailOpen(open); }}
