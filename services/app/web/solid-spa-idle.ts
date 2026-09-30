@@ -3,5 +3,5 @@ import stylesheet from './shell.css?url';
 import { startSpaIdle } from './idle-boot';
 import { restoreReloadedReader } from './restore-reader';
 
-restoreReloadedReader();
+void restoreReloadedReader();
 startSpaIdle({ load: () => import('@/solid/main'), stylesheet });

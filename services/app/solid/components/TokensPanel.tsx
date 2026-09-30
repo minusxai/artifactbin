@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Ban } from 'lucide-solid';
-import { usePageData } from '../web/use-page-data';
+import { usePageData } from '../lib/use-page-data';
 import { MicroLabel, PANEL, TABLE_ROW } from './ui';
 import { ConfirmDialog } from './ConfirmDialog';
 

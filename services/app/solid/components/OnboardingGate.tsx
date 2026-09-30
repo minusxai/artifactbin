@@ -2,7 +2,7 @@
 import { createMemo, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation } from '@solidjs/router';
 import { readIntent } from '@/lib/intent';
-import { useSession } from '../web/session';
+import { useSession } from '../lib/session';
 
 const EXEMPT = new Set(['/welcome', '/login', '/start']);
 

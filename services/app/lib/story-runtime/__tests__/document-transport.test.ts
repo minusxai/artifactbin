@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 const APP = 'https://artifactbin.dev';
+import { createRelayTransport } from '@/lib/story-runtime/relay-transport';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_ASSET_MESSAGE, STORY_QUERY_MESSAGE } from '@/lib/story-runtime/contract';
 
@@ -19,7 +20,7 @@ describe('createDocumentTransport', () => {
     const posted: unknown[] = [];
     const parent = { postMessage: (m: unknown) => posted.push(m) };
     const fetchFn = vi.fn();
-    const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, fetchFn);
+    const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, fetchFn, undefined, { relay: { eager: createRelayTransport } });
     expect(t).not.toBeNull();
     void t!.run({ region: 'EU' }, ['sales']).catch(() => {});
     expect(posted[0]).toMatchObject({ type: STORY_QUERY_MESSAGE, values: { region: 'EU' }, only: ['sales'] });
@@ -28,7 +29,7 @@ describe('createDocumentTransport', () => {
 
   it('top-level with a queryUrl: the fetch transport against that url', async () => {
     const fetchFn = vi.fn(async () => new Response(JSON.stringify({ tables: {}, errors: {} }), { status: 200 }));
-    const t = createDocumentTransport(win('self'), '/a/abc123/query', APP, fetchFn);
+    const t = createDocumentTransport(win('self'), '/a/abc123/query', APP, fetchFn, undefined, { relay: { eager: createRelayTransport } });
     expect(t).not.toBeNull();
     await t!.run({}, ['q']);
     expect(fetchFn).toHaveBeenCalledTimes(1);
@@ -36,13 +37,13 @@ describe('createDocumentTransport', () => {
   });
 
   it('top-level with no queryUrl (a canvas or capture render): no transport', () => {
-    expect(createDocumentTransport(win('self'), undefined, APP, vi.fn())).toBeNull();
+    expect(createDocumentTransport(win('self'), undefined, APP, vi.fn(), undefined, { relay: { eager: createRelayTransport } })).toBeNull();
   });
 
   it('a window with no parent at all (parent === null) counts as top-level', () => {
     const fetchFn = vi.fn(async () => new Response('{"tables":{},"errors":{}}', { status: 200 }));
-    expect(createDocumentTransport(win(null), '/a/x/query', APP, fetchFn)).not.toBeNull();
-    expect(createDocumentTransport(win(null), undefined, APP, fetchFn)).toBeNull();
+    expect(createDocumentTransport(win(null), '/a/x/query', APP, fetchFn, undefined, { relay: { eager: createRelayTransport } })).not.toBeNull();
+    expect(createDocumentTransport(win(null), undefined, APP, fetchFn, undefined, { relay: { eager: createRelayTransport } })).toBeNull();
   });
 });
 
@@ -56,7 +57,7 @@ describe('createDocumentTransport — importAsset', () => {
   it('inside a parent: importing posts mx:asset to that parent', () => {
     const posted: unknown[] = [];
     const parent = { postMessage: (m: unknown) => posted.push(m) };
-    const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, vi.fn());
+    const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, vi.fn(), undefined, { relay: { eager: createRelayTransport } });
     expect(t!.importAsset).toBeTypeOf('function');
     void t!.importAsset!('https://cdn.x.com/app.js','script',new AbortController().signal);
     expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/app.js', kind: 'script' });
@@ -64,7 +65,27 @@ describe('createDocumentTransport — importAsset', () => {
 
   it('top-level: no importAsset at all — the <img> src is already the endpoint', () => {
     const fetchFn = vi.fn(async () => new Response('{"tables":{},"errors":{}}', { status: 200 }));
-    const t = createDocumentTransport(win('self'), '/a/abc123/query', APP, fetchFn);
+    const t = createDocumentTransport(win('self'), '/a/abc123/query', APP, fetchFn, undefined, { relay: { eager: createRelayTransport } });
     expect(t!.importAsset).toBeUndefined();
+  });
+});
+
+describe('createDocumentTransport — lazy relay', () => {
+  it('framed: the relay module loads on the first request, and a held import stays on the fetch door', async () => {
+    const posted: unknown[] = [];
+    const parent = { postMessage: (m: unknown) => posted.push(m) };
+    const lazy = vi.fn(async () => createRelayTransport);
+    const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, undefined, undefined, { relay: { lazy } });
+    expect(t).not.toBeNull();
+    expect(t!.hold).toBeTypeOf('function');
+    void t!.run({ region: 'EU' }, ['sales']).catch(() => {});
+    await vi.waitFor(() => expect(posted[0]).toMatchObject({ type: STORY_QUERY_MESSAGE }));
+    expect(lazy).toHaveBeenCalledTimes(1);
+  });
+
+  it('top-level: the relay is never loaded', () => {
+    const lazy = vi.fn(async () => createRelayTransport);
+    createDocumentTransport(win('self'), '/a/abc123/query', APP, vi.fn(), undefined, { relay: { lazy } });
+    expect(lazy).not.toHaveBeenCalled();
   });
 });

@@ -34,7 +34,8 @@ import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
-import { escapeHtml, renderReaderChrome } from '@/lib/story/reader-chrome';
+import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
+import { renderReaderChrome } from '@/lib/story/reader-chrome';
 import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';
@@ -236,8 +237,7 @@ function islandData(input: AssembleInput): IslandPageData {
  * element, and U+2028/9 are escaped so the text stays valid if anything ever
  * evaluates it as script.
  */
-export const scriptJson = (value: unknown): string => JSON.stringify(value)
-  .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+export { scriptJson };
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Chart slots

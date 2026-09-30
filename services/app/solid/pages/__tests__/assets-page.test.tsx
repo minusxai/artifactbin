@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { AssetsPage } from '@/solid/pages/Assets';
 
-vi.mock('@/solid/web/session', () => ({ useSession: () => ({ session: () => ({ user: { id: 'usr_1', email: 'owner@example.com' } }) }) }));
+vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ user: { id: 'usr_1', email: 'owner@example.com' } }) }) }));
 const payload = {
   page: 0, perPage: 50, total: 2, formats: ['dataset', 'image'], visibilities: ['private'],
   assets: [

@@ -3,9 +3,9 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
-import { replaceDocument } from '@/solid/shared/document-navigation';
+import { replaceDocument } from '@/solid/lib/document-navigation';
 
-vi.mock('@/solid/shared/document-navigation', () => ({ replaceDocument: vi.fn() }));
+vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
 let session: unknown;
 let profileStatus = 200;

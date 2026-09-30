@@ -18,7 +18,7 @@ import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryT
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
-import { escapeHtml } from '@/lib/story/reader-chrome';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TrashPage } from '@/solid/pages/Trash';
 
 const auth = vi.hoisted(() => ({ user: { id: 'usr_1', email: 'owner@example.com' } as { id: string; email: string } | null }));
-vi.mock('@/solid/web/session', () => ({ useSession: () => ({ session: () => ({ user: auth.user, kind: auth.user ? 'account' : 'none', onboarded: true }) }) }));
+vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ user: auth.user, kind: auth.user ? 'account' : 'none', onboarded: true }) }) }));
 
 const many = Array.from({ length: 12 }, (_, i) => ({ id: `doc_${i + 1}`, title: `Doc ${String(i + 1).padStart(2, '0')}`, format: 'markup', version: 1, deleted_at: '2026-09-05T06:00:00.000Z' }));
 

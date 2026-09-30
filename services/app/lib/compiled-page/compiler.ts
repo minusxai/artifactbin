@@ -23,6 +23,7 @@
  *
  * Ported from the prototype (scripts/probe/solid/compile.mjs). Pure and deterministic for one input.
  */
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
@@ -163,7 +164,7 @@ const DECK_BEHAVIOR = '@mx/deck';
 
 // Keep literal DOM attributes in JSX so Solid can optimize static elements.
 // Entity encoding keeps author text inert in generated source.
-const jsxLiteral = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/\u2028/g, '&#8232;').replace(/\u2029/g, '&#8233;');
+const jsxLiteral = (value: string): string => escapeHtml(value).replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/\u2028/g, '&#8232;').replace(/\u2029/g, '&#8233;');
 /* ────────────────────────────────────────────────────────────────────────────
  * Which nodes need the browser
  * ──────────────────────────────────────────────────────────────────────────── */

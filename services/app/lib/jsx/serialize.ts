@@ -11,6 +11,7 @@
  * - text child → raw; static-string expression child → a template literal `{`…`}` (so
  *   SQL/CSS keep `<`, `>`, `{` raw); other static expression child → `{<json>}`.
  */
+import { escapeHtml } from '@artifactbin/utils/escape';
 import type { JsxNode, JsxElement, JsxAttribute } from './types';
 import { reactiveSource } from './reactive';
 
@@ -22,14 +23,10 @@ import { reactiveSource } from './reactive';
  * sequence \uXXXX") — locking the file out of every subsequent edit. Entities are what acorn-jsx
  * actually decodes in attribute values, so they round-trip exactly.
  */
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function attrToSource(a: JsxAttribute): string {
   if (!a.value.static) return a.value.source ? `${a.name}={${a.value.source}}` : a.name;
   const json = a.value.json;
-  if (typeof json === 'string') return `${a.name}="${escapeAttr(json)}"`;
+  if (typeof json === 'string') return `${a.name}="${escapeHtml(json)}"`;
   if (json === true) return a.name; // boolean shorthand
   return `${a.name}={${JSON.stringify(json)}}`;
 }
