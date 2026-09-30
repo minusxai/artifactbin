@@ -264,3 +264,17 @@ describe('validateJsx — denied tags say what to do instead', () => {
     expect(errs[0].message).toMatch(expected);
   });
 });
+
+describe('validateJsx - positioned Grid placement', () => {
+  const grid = (attrs: string, items: string) => errors(`<Grid${attrs}>${items}</Grid>`, { components: ['Grid', 'GridItem'] });
+  it('rejects several GridItems without x/y in a positioned grid (they stack at 0,0)', () => {
+    const r = grid('', '<GridItem w={6}><p>a</p></GridItem><GridItem w={6}><p>b</p></GridItem>');
+    expect(r).toHaveLength(1);
+    expect(r[0]?.message).toMatch(/overlap.*mode="flow"/);
+  });
+  it('accepts placed items, a single unplaced item, and flow grids', () => {
+    expect(grid('', '<GridItem x={0} y={0} w={6}><p>a</p></GridItem><GridItem x={6} y={0} w={6}><p>b</p></GridItem>')).toEqual([]);
+    expect(grid('', '<GridItem w={6}><p>a</p></GridItem>')).toEqual([]);
+    expect(grid(' mode="flow"', '<GridItem w={6}><p>a</p></GridItem><GridItem w={6}><p>b</p></GridItem>')).toEqual([]);
+  });
+});
