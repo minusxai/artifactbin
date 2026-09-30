@@ -5,12 +5,14 @@
  * area) the reader chose, and the composer opens on it. Includes where the rail sits under the bars.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/dom';
+import { screen, waitFor, within } from '@testing-library/dom';
+import { Suspense } from 'solid-js';
 import * as captureScreen from '@/lib/capture/screen';
 import { CaptureError, type CaptureSession } from '@/lib/capture/contract';
 import { STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
-import { fireEvent } from '../../__tests__/helpers';
-import { ANN, fetchCalls, flush, installAnnotationFetch, layer, makeRuntime } from './annotation-rig';
+import { fireEvent, render } from '../../__tests__/helpers';
+import { AnnotationLayer } from '../AnnotationLayer';
+import { ANN, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, layer, makeRuntime } from './annotation-rig';
 
 beforeEach(installAnnotationFetch);
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -62,6 +64,28 @@ describe('picking a block from the rail', () => {
     fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Area comment' } });
     expect(screen.getByLabelText('Save annotation')).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Continue without screenshot' }));
+    expect(screen.getByLabelText('Save annotation')).toBeEnabled();
+  });
+
+  it('opens the captured area in the on-demand brush editor without putting the page on hold', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const image = { blob: new Blob(['png']), width: 100, height: 50, rect: { x: 5, y: 6, width: 100, height: 50 }, viewport: { width: 800, height: 600 }, capturedAt: '2026-09-30T00:00:00.000Z', method: 'canvas' as const };
+    vi.spyOn(captureScreen, 'beginCapture').mockResolvedValue({ capture: vi.fn(async () => image), dispose: vi.fn() });
+    const runtime = makeRuntime();
+    render(() => <Suspense fallback={<p>page on hold</p>}>
+      <AnnotationLayer id="doc1" backend={httpBackend('doc1')} runtimeRef={runtime.ref} sessionNonce={NONCE} railOpen onRailOpenChange={() => {}} editId="edit-current" />
+    </Suspense>);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' })); await flush();
+    runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, range: { v: 1, kind: 'area', box: { x: 0, y: 0, w: 1, h: 1 } } } });
+    await flush();
+    expect(screen.queryByText('page on hold')).toBeNull();
+    expect(screen.getByLabelText('Annotation sidebar')).toBeTruthy();
+    await waitFor(() => expect(screen.getByLabelText('Screenshot editor')).toBeTruthy());
+    expect(screen.queryByText('page on hold')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue without screenshot' })).toBeNull();
+    fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Area with a drawing' } });
     expect(screen.getByLabelText('Save annotation')).toBeEnabled();
   });
 

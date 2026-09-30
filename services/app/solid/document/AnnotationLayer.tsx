@@ -20,7 +20,7 @@
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
 import { useLocation } from '@solidjs/router';
-import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import Camera from 'lucide-solid/icons/camera';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import MessageSquare from 'lucide-solid/icons/message-square';
@@ -55,10 +55,10 @@ import { PersonMentionProvider } from './PersonMention';
 import type { ScreenshotDrawing } from './ScreenshotEditor';
 
 // The brush is its own chunk, preloaded when Screenshot is pressed. Native permission stays in the
-// eager capture module so it keeps the user gesture.
-let screenshotEditorModule: Promise<typeof import('./ScreenshotEditor')> | undefined;
-const loadScreenshotEditor = () => screenshotEditorModule ??= import('./ScreenshotEditor').catch((error) => { screenshotEditorModule = undefined; throw error; });
-const ScreenshotEditor = lazy(() => loadScreenshotEditor().then((module) => ({ default: module.ScreenshotEditor })));
+// eager capture module so it keeps the user gesture. It renders under its OWN Suspense boundary:
+// the nearest one otherwise is the app's, and a first render would put the whole page on hold.
+const ScreenshotEditor = lazy(() => import('./ScreenshotEditor').then((module) => ({ default: module.ScreenshotEditor })));
+const loadScreenshotEditor = () => ScreenshotEditor.preload();
 
 export interface AnnotationLayerProps {
   id: string;
@@ -760,7 +760,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           <div class="p-3">
             <Show when={capture.busy()}><div role="status" class="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} class="animate-spin" />Preparing screenshot…</div></Show>
             <Show when={capture.draft()} keyed>{(shot) => (
-              <ScreenshotEditor image={shot.image} initialStrokes={shot.strokes} exportRef={screenshotExport} busy={busy()} onRetake={() => void beginScreenshot()} />
+              <Suspense fallback={<div role="status" class="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} class="animate-spin" />Loading screenshot…</div>}>
+                <ScreenshotEditor image={shot.image} initialStrokes={shot.strokes} exportRef={screenshotExport} busy={busy()} onRetake={() => void beginScreenshot()} />
+              </Suspense>
             )}</Show>
             <Show when={capture.required() && !capture.draft() && !capture.busy()}>
               <div class="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs">
