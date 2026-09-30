@@ -80,7 +80,8 @@ it('opens the current comments in the document rail', async () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
   expect(await trusted(1).findByText('Please add the source.')).toBeInTheDocument();
-  expect(trusted(1).getByRole('region', { name: 'Annotation sidebar' })).toHaveTextContent('A useful point');
+  // The desktop rail is the React <aside>; a closed thread shows its root comment, and its snippet only when folded.
+  expect(trusted(1).getByRole('complementary', { name: 'Annotation sidebar' })).toHaveTextContent('Please add the source.');
 });
 
 it('opens a carried fork intent after login and consumes the query parameter', () => {
