@@ -86,7 +86,21 @@ export interface IslandControllerInput {
  * for comments, selections, reader mode and data wakeups, over the island DOM.
  * The compiled editor mounts by AST path; a new reader version morphs in place.
  */
-export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource }: IslandControllerInput): StoryController & { selectionReady(): void } {
+/** How often, and how far apart, a saved version still compiling is asked for again after Done (about 10 s in all). */
+const RESTORE_RETRIES = 12;
+const RESTORE_DELAY_MS = 250;
+
+export interface IslandStoryController extends StoryController {
+  selectionReady(): void;
+  /**
+   * Settles once the page reads again IN PLACE after editing: the saved version drawn on the running islands
+   * and the islands back in read mode (lib/islands/boot). Resolves at once when editing never froze them;
+   * rejects when the version cannot be drawn here (the caller reloads, keeping the reader's place).
+   */
+  restored(): Promise<void>;
+}
+
+export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource }: IslandControllerInput): IslandStoryController {
   let nodes = served;
   /** The reader's own mode, as the app last set it: a new version never stomps it. */
   let mode: 'light' | 'dark' | null = null;
@@ -109,6 +123,21 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const drafting = () => editRequested || frozen;
   let editLoading = false;
   let draftSequence = 0;
+  /** The last draw that completed, by sequence: a restore waits for ITS draw, not an earlier one. */
+  let drawnSequence = -1;
+  /** The newest source the editor sent: after Done, what the saved version was written from. */
+  let latestSource: string | null = null;
+  /** The source the saved version is drawn against (every component the draft shows unchanged stays put). */
+  let restoreSource: string | null = null;
+  let restoreWait: { promise: Promise<void>; resolve: () => void; reject: (error: unknown) => void } | null = null;
+  const restoreSettled = () => {
+    if (!restoreWait) {
+      let resolve!: () => void, reject!: (error: unknown) => void;
+      const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
+      restoreWait = { promise, resolve, reject };
+    }
+    return restoreWait;
+  };
   /** The authored tree the page shows now: what the next draw decides stability against. */
   let lastDrawn: JsxNode[] | null = null;
   let quietDraftTimer: number | null = null;
@@ -195,6 +224,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module);
     nodes = pending.nodes;
     lastDrawn = after;
+    drawnSequence = pending.sequence;
     edit?.setNodes(nodes);
     await edit?.mountCompiledDom();
     annotate?.setNodes(nodes);
@@ -209,6 +239,58 @@ export function createIslandController({ win, root, islands, nodes: served, port
     pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes, source, sequence };
     await applyDraft();
   };
+  /**
+   * BACK TO READING IN PLACE (Done): the saved version's served story is drawn exactly as a draft is — on the
+   * running islands, every component the last draft shows unchanged keeping its DOM (a chart stays drawn) — and
+   * the islands then return to read mode. Until the version has compiled the last draft (the same content) stays
+   * on screen. A newer call (a version landing meanwhile) supersedes this one; the newest settles `restored`.
+   */
+  const restoreRead = (nextNodes?: JsxNode[]) => {
+    const sequence = ++draftSequence;
+    pendingDraft = null;
+    if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
+    const wait = restoreSettled();
+    const current = () => !disposed && !editRequested && frozen && sequence === draftSequence;
+    const run = async (): Promise<void> => {
+      let next: Document | null = null;
+      for (let attempt = 0; !next; attempt++) {
+        if (!current()) return;
+        const response = await win.fetch(storyFragmentUrl(id, win.location.search, 'app'), { credentials: 'same-origin', cache: 'no-store' });
+        if (!current()) return;
+        // Compiled off the write's path: a version this fresh may still be compiling.
+        if (response.status === 409 && attempt < RESTORE_RETRIES) {
+          await new Promise((resolve) => win.setTimeout(resolve, RESTORE_DELAY_MS * Math.min(attempt + 1, 4)));
+          continue;
+        }
+        if (!response.ok) throw new Error(`story fragment answered ${response.status}`);
+        next = new DOMParser().parseFromString(await response.text(), 'text/html');
+      }
+      const { adoptVersionRecord, readRestoreBlocker } = await import('@/lib/islands/morph/engine');
+      if (!current()) return;
+      const blocked = readRestoreBlocker(root, win.document, next);
+      if (blocked) throw new Error(blocked);
+      if (!current()) return;
+      const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]')!;
+      pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: nextNodes ?? nodes, source: restoreSource, sequence };
+      await applyDraft();
+      while (drawing) await drawing;
+      if (!current()) return;
+      if (drawnSequence !== sequence) throw new Error('the saved version was not drawn');
+      adoptVersionRecord(win.document, next);
+      // The version's compiled colour never replaces the reader's own choice (as the reader's morph keeps it).
+      if (mode) { root.classList.toggle('dark', mode === 'dark'); root.classList.toggle('light', mode !== 'dark'); }
+      frozen = false;
+      restoreSource = null;
+      islands?.setMode('read');
+      restoreWait = null;
+      wait.resolve();
+    };
+    void run().catch((error: unknown) => {
+      if (!current()) return;
+      restoreWait = null;
+      wait.reject(error);
+    });
+  };
   const onFocusOut = () => { queueMicrotask(() => { void applyDraft(); }); };
   win.document.addEventListener('focusout', onFocusOut, true);
   // The module, the grant and the protected portal may arrive in any order (as in the inline runtime).
@@ -222,6 +304,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const controller = {
     nonce,
     selectionReady: ensureSelection,
+    restored: () => (frozen && !editRequested ? restoreSettled().promise : Promise.resolve()),
     send(command: unknown) {
       if (disposed || !command || typeof command !== 'object') return;
       if (isStoryDocumentUpdate(command)) { controller.update(command); return; }
@@ -236,8 +319,15 @@ export function createIslandController({ win, root, islands, nodes: served, port
       }
       if (!isEditParentMessage(command)) return;
       if (command.type === STORY_EDIT_MODE_MESSAGE) {
+        const wasEditing = editRequested;
         editRequested = command.on;
-        if (!command.on) { draftSequence++; pendingDraft = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null; edit?.dispose(); edit = null; return; }
+        if (!command.on) {
+          // The editor and the page both say so on Done: the first ends the session and starts the return to reading.
+          if (!wasEditing) return;
+          draftSequence++; pendingDraft = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null; edit?.dispose(); edit = null;
+          if (frozen) { restoreSource = latestSource ?? initialSource(); restoreRead(); }
+          return;
+        }
         if (edit || editLoading) return;
         editLoading = true;
         if (!frozen) freezeIslandPaint(root, islands);
@@ -285,9 +375,10 @@ export function createIslandController({ win, root, islands, nodes: served, port
     },
     update(command: StoryDocumentUpdate) {
       if (disposed) return;
-      if (drafting() && command.source !== undefined) {
+      if (editRequested && command.source !== undefined) {
         const sequence = ++draftSequence;
         const source = command.source;
+        latestSource = source;
         void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
           headers: { 'Content-Type': 'application/json' },
@@ -305,22 +396,9 @@ export function createIslandController({ win, root, islands, nodes: served, port
         return;
       }
       if (frozen) {
-        // Editing froze the islands, and they stay in edit mode after Done (boot never returns to read):
-        // the reader's morph refuses such a page and reloads it. A version that lands now (Done's own save,
-        // another writer) is drawn like a draft, from the version's served story.
-        const sequence = ++draftSequence;
-        const load = async (attempt = 0): Promise<void> => {
-          const response = await win.fetch(storyFragmentUrl(id, win.location.search, 'app'), { credentials: 'same-origin', cache: 'no-store' });
-          if (disposed || sequence !== draftSequence) return;
-          // Compiled off the write's path: a version this fresh may still be compiling.
-          if (response.status === 409 && attempt < 6) {
-            await new Promise((resolve) => win.setTimeout(resolve, 250 * (attempt + 1)));
-            return load(attempt + 1);
-          }
-          if (!response.ok) throw new Error(`story fragment answered ${response.status}`);
-          await queueDraw(await response.text(), command.nodes, null, sequence);
-        };
-        void load().catch((error) => { if (!disposed) console.error('Failed to draw the saved version', error); });
+        // Editing froze the islands and the page has not finished returning to reading: a version that lands
+        // now (Done's own save, another writer) is what the page returns to.
+        restoreRead(command.nodes);
         return;
       }
       // The version's source nodes, for the comments and selections classified against them — re-stamped

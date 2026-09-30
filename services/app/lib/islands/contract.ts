@@ -156,7 +156,11 @@ export interface IslandDocument {
   readonly store: DataflowStore | null;
   readonly context: IslandContext;
   mode(): IslandDocumentMode;
-  /** `edit` unmounts the islands (their roots stay as static DOM until the editor replaces them); `read` is not re-entered in place. */
+  /**
+   * `edit` unmounts the islands (their roots stay as static DOM until the editor replaces them); `read` returns
+   * to reading in place once the page has drawn the saved version on this context: the live stream, the public
+   * API and the author script resume.
+   */
   setMode(mode: IslandDocumentMode): void;
   /** Every island hydrated, or the page has none. */
   ready(): boolean;

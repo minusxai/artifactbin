@@ -13,7 +13,11 @@ const engine = vi.hoisted(() => {
     // Resolves at once unless a test holds it (a slow production module fetch).
     loadDraftModule: () => new Promise<null>((resolve) => { if (state.loads.length === 0 && !hold.on) resolve(null); else state.loads.push(() => resolve(null)); }),
     disposeChangedDraftIslands: () => {},
-    morphDraftDom: (root: HTMLElement, next: HTMLElement) => { root.innerHTML = next.innerHTML; },
+    blocker: null as string | null,
+    readRestoreBlocker: () => engine.blocker,
+    adopted: 0,
+    adoptVersionRecord: () => { engine.adopted++; },
+    morphDraftDom: (root: HTMLElement, next: HTMLElement) => { root.className = next.className; root.innerHTML = next.innerHTML; },
     hydrateDraftIslands: (_win: Window, root: HTMLElement) => {
       state.active++;
       if (state.active > 1) state.overlapped = true;
@@ -38,10 +42,11 @@ vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () 
 vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
 import { createIslandController } from '../island-controller';
-import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE } from '../contract';
+import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-const settle = async (until: () => boolean) => { for (let i = 0; i < 200 && !until(); i++) await tick(); };
+// Time-bounded, not tick-bounded: the first dynamic import of a module is slow when other suites transform alongside.
+const settle = async (until: () => boolean) => { for (const end = Date.now() + 5000; Date.now() < end && !until();) await tick(); };
 
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks(); });
 
@@ -121,34 +126,76 @@ describe('island controller editor drafts', () => {
     window.history.replaceState(null, '', '/');
   });
 
-  it('draws a version that lands after Done through the draft path, never the reader morph that reloads', async () => {
+  it('returns to reading IN PLACE after Done: the saved version drawn through the draft path, the islands back in read mode, no reload', async () => {
     engine.state.applied.length = 0;
     const root = document.createElement('div');
     root.setAttribute('data-mx-inline-story', '');
     root.innerHTML = '<p>v0</p>';
     document.body.append(root);
+    let compiling = 2;
     const fetch = vi.fn(async (url: string) => {
-      if (url.startsWith('/a/doc/story')) return new Response('<html><body><div data-mx-inline-story><p>saved v3</p></div></body></html>', { status: 200 });
+      if (url.startsWith('/a/doc/story')) {
+        // The saved version is still compiling for a moment: the draft stays on screen meanwhile.
+        if (compiling-- > 0) return new Response('', { status: 409 });
+        return new Response('<html><body><div data-mx-inline-story class="light"><p>saved v3</p></div></body></html>', { status: 200 });
+      }
       return new Response('{}', { status: 500 });
     });
     vi.spyOn(window, 'fetch').mockImplementation(fetch as typeof window.fetch);
+    const islands = { setMode: vi.fn(), mode: () => 'edit', store: null } as unknown as import('@/lib/islands/contract').IslandDocument;
     const controller = createIslandController({
-      win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
+      win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null },
+    });
+    // The reader chose dark: the saved version's compiled colour must not replace it.
+    controller.send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' });
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > 0);
+    expect(islands.setMode).toHaveBeenLastCalledWith('edit');
+    let restored = false;
+    // Done: the page asks the islands back, and a version frame may land meanwhile (newest wins).
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    void controller.restored().then(() => { restored = true; });
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] });
+    await settle(() => fetch.mock.calls.length >= 2);
+    expect(root.textContent, 'the last draft stays while the version compiles').toBe('v0');
+    expect(restored).toBe(false);
+    await vi.waitFor(() => expect(engine.state.releases).toHaveLength(1), { timeout: 3000 });
+    engine.state.releases.shift()!();
+    await settle(() => restored);
+
+    expect(root.textContent).toBe('saved v3');
+    expect(root.classList.contains('dark')).toBe(true);
+    expect(islands.setMode).toHaveBeenLastCalledWith('read');
+    expect(engine.adopted, 'the page runs the saved version\'s records now').toBe(1);
+    expect(liveUpdate.updateCompiledStory).not.toHaveBeenCalled();
+    expect(String(fetch.mock.calls[0]?.[0])).toMatch(/^\/a\/doc\/story\?/);
+    // Reading again: the next version takes the reader's in-place morph.
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] });
+    expect(liveUpdate.updateCompiledStory).toHaveBeenCalledTimes(1);
+    await expect(controller.restored()).resolves.toBeUndefined();
+    controller.dispose();
+  });
+
+  it('rejects the return to reading when the version cannot be drawn in place (the page reloads)', async () => {
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    vi.spyOn(window, 'fetch').mockImplementation((async () => new Response('<html><body><div data-mx-inline-story><p>v4</p></div></body></html>', { status: 200 })) as typeof window.fetch);
+    const islands = { setMode: vi.fn(), mode: () => 'edit', store: null } as unknown as import('@/lib/islands/contract').IslandDocument;
+    const controller = createIslandController({
+      win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
       initialSource: () => '<p>v0</p>', portal: { current: null },
     });
     controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
     await settle(() => editSession.mounts > 0);
-    // Done: the islands stay frozen in edit mode, so the reader's in-place morph would refuse them
-    // ('the document is being edited') and fall back to reloading the whole page.
+    engine.blocker = 'the island build changed under the page';
     controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
-    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] });
-    await settle(() => engine.state.releases.length === 1);
-    engine.state.releases.shift()!();
-    await settle(() => root.textContent === 'saved v3');
-
-    expect(liveUpdate.updateCompiledStory).not.toHaveBeenCalled();
-    expect(String(fetch.mock.calls[0]?.[0])).toMatch(/^\/a\/doc\/story\?/);
-    expect(root.textContent).toBe('saved v3');
+    await expect(controller.restored()).rejects.toThrow('the island build changed under the page');
+    expect(islands.setMode).not.toHaveBeenCalledWith('read');
+    expect(root.textContent).toBe('v0');
+    engine.blocker = null;
     controller.dispose();
   });
 });

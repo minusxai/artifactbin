@@ -101,7 +101,7 @@ export function adoptReaderDocument(host: HTMLElement): { story: HTMLElement | n
 const READING_ONLY = '[data-mx-reader-install],[data-mx-reader-action="share"],[data-mx-reader-action="like"],[data-mx-reader-action="comment"],[data-mx-reader-action="fork"],[data-mx-reader-action="membership"],[data-mx-github-star]';
 
 /** Put the served chrome in (or out of) edit mode; answers the breadcrumb slot the title editor renders into. */
-export function markChromeEditing(chrome: HTMLElement, editing: boolean, titleSlot: boolean): HTMLElement | null {
+export function markChromeEditing(chrome: HTMLElement, editing: boolean, titleSlot: boolean, titleText?: string | null): HTMLElement | null {
   chrome.classList.toggle('mx-reader-chrome--pinned', editing);
   chrome.classList.toggle('mx-reader-chrome--editing', editing);
   chrome.toggleAttribute('data-mx-editing', editing);
@@ -115,10 +115,11 @@ export function markChromeEditing(chrome: HTMLElement, editing: boolean, titleSl
     title.setAttribute('data-mx-title-editor', '');
     return title;
   }
+  // Leaving edit mode names the document as the editor last did (a title typed, a heading rewritten).
   if (title.hasAttribute('data-mx-title-editor')) {
     title.removeAttribute('data-mx-title-editor');
-    title.textContent = title.getAttribute('data-mx-title-text') ?? '';
-  }
+    title.textContent = (!editing && titleText) || title.getAttribute('data-mx-title-text') || '';
+  } else if (!editing && titleText && title.textContent !== titleText) title.textContent = titleText;
   return null;
 }
 
@@ -155,6 +156,10 @@ export function DocumentPage(): JSX.Element {
   /** The editor's bar is on screen (it replaces the entry skeleton), and the document is editable (the loading bar ends). */
   const [editorMounted, setEditorMounted] = createSignal(false);
   const [editorReady, setEditorReady] = createSignal(false);
+  /** Done was pressed and the page is drawing the saved version to read in place (the slim bar runs). */
+  const [restoring, setRestoring] = createSignal(false);
+  /** The name the editor's title field last showed: the breadcrumb's when editing ends. */
+  let editorTitle: string | null = null;
   const [initialEditSelectionPath, setInitialEditSelectionPath] = createSignal<string | null>(null);
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
   const [titleHost, setTitleHost] = createSignal<HTMLElement | null>(null);
@@ -177,7 +182,7 @@ export function DocumentPage(): JSX.Element {
   let host!: HTMLDivElement;
   let pushedEdit = false;
   let draining = false;
-  let editedCompiledPage = false;
+  let readingRestoration: ScrollRestoration | null = null;
   const pendingData: string[] = [];
 
   const chooseMode = (next: 'light' | 'dark') => {
@@ -243,7 +248,13 @@ export function DocumentPage(): JSX.Element {
     if (!editable() || window.location.hash === '#edit' || editing()) return;
     prefetchEditor();
     setInitialEditSelectionPath(selectionPath);
+    // The reading entry would remember the scroll from BEFORE the edit bar was compensated, and going back to it
+    // (Done, the back button) would put that back for a frame: a bar's height of jump. The page keeps the reader's
+    // place itself, so the reading entry restores nothing (the mode is the entry's own; it returns on the way back).
+    readingRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
     window.history.pushState(window.history.state, '', window.location.pathname + window.location.search + '#edit');
+    window.history.scrollRestoration = readingRestoration;
     pushedEdit = true;
     setEditing(true);
   };
@@ -270,23 +281,36 @@ export function DocumentPage(): JSX.Element {
   };
   const syncEditRoute = () => {
     if (editRoute()) { if (editable()) setEditing(true); return; }
+    if (readingRestoration) { window.history.scrollRestoration = readingRestoration; readingRestoration = null; }
     if (!editing()) return;
     setInitialEditSelectionPath(null);
     if (!editorFlush.current || draining) { setEditing(false); return; }
     void drainEditor().finally(() => setEditing(false));
   };
   createEffect(on(editing, (now, before) => {
-    if (now) { editedCompiledPage = true; void loadEditorPart(); return; }
+    if (now) { setRestoring(false); void loadEditorPart(); return; }
     setEditorMounted(false);
     setEditorReady(false);
-    if (!before) return;
-    island?.stopEditing();
-    // The compiled islands were frozen for editing: return to the compiled page at the reader's place.
-    // The host already gave the bar's height back with the scroll compensated (keepReadingPlace), so the
-    // anchor is taken from the reading layout the reload will draw, once the editor's regions are gone.
-    if (!editedCompiledPage) return;
-    const scrollFrame = requestAnimationFrame(() => reloadKeepingPlace(window));
-    onCleanup(() => cancelAnimationFrame(scrollFrame));
+    if (!before || !island) return;
+    // Back to reading IN PLACE: the host already gave the bar's height back with the scroll compensated
+    // (keepReadingPlace), the last draft stays on screen, and the controller draws the saved version over it on
+    // the running islands, then returns them to read mode (lib/story-runtime/island-controller `restoreRead`).
+    let current = true;
+    onCleanup(() => { current = false; });
+    setRestoring(true);
+    void island.stopEditing().then(() => {
+      if (!current) return;
+      setRestoring(false);
+      // The next edit opens on the version just saved, not the part this session opened on.
+      editorPartRequest = null;
+      setEditorPart(null);
+      if (editable()) void loadEditorPart();
+    }, (error: unknown) => {
+      // A version this page cannot draw in place (another island build, islands where it runs none, a compile
+      // that never came): the compiled page again, at the reader's place.
+      console.warn('[document] could not return to reading in place; reloading', error);
+      reloadKeepingPlace(window);
+    });
   }, { defer: true }));
   createEffect(() => { if (page?.surface) document.title = editing() ? `${page.surface.title ?? page.surface.runtime?.title ?? 'Untitled'} [edit mode]` : document.title.replace(/ \[edit mode\]$/, ''); });
 
@@ -328,7 +352,7 @@ export function DocumentPage(): JSX.Element {
   createEffect(() => {
     if (!ready() || !chromeElement) return;
     // The breadcrumb keeps its text until the title editor is there to take its place (one swap, no blank title).
-    setTitleHost(markChromeEditing(chromeElement, editing(), !phone() && editorMounted()));
+    setTitleHost(markChromeEditing(chromeElement, editing(), !phone() && editorMounted(), editorTitle));
   });
   // The rail's comment count follows the layer's list (a thread opened or resolved here, or by the stream).
   createEffect(() => {
@@ -524,6 +548,9 @@ export function DocumentPage(): JSX.Element {
       <EditEntryChrome top={phone() ? 0 : APP_BAR_H} mode={mode()} panelWidth={wide() ? editorRightInset() : 0}
         skeleton={!editorMounted()} loading={!editorReady() && !editorPartFailed()} />
     </Show>
+    <Show when={ready() && !editing() && restoring()}>
+      <EditEntryChrome top={phone() ? 0 : APP_BAR_H} mode={mode()} panelWidth={0} skeleton={false} loading leaving />
+    </Show>
     <Show when={ready() && editing() && backend && (editorSeed() || editorPartFailed())}>
       <Suspense fallback={null}>
         <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} onExit={() => void finishEdit()} flushRef={editorFlush}
@@ -533,7 +560,8 @@ export function DocumentPage(): JSX.Element {
           commentsOpen={railOpen()} onCommentsOpenChange={annotatable() ? setRailOpen : undefined}
           onCommentsHost={setCommentsHost} titleHost={phone() ? null : titleHost()}
           sharingContent={sharingContent} onPwaEnabledChange={setPwaEnabled}
-          onEditorMount={() => setEditorMounted(true)} onEditorReady={() => setEditorReady(true)} />
+          onEditorMount={() => setEditorMounted(true)} onEditorReady={() => setEditorReady(true)}
+          onTitleChange={(title) => { editorTitle = title; }} />
       </Suspense>
     </Show>
     <Show when={sharingOpen() && id}>

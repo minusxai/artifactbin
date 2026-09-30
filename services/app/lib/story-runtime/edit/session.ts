@@ -979,8 +979,8 @@ export function createFrameEditSession({
     dispose() {
       compiledMount?.dispose();
       compiledMount = null;
-      const leavingScroll = { x: win.scrollX, y: win.scrollY };
-      win.requestAnimationFrame(() => restoreScroll(leavingScroll));
+      // No scroll is put back here: leaving edit mode, the page moves the document itself as its chrome changes
+      // (solid/pages/Document `keepReadingPlace`), and restoring this moment's scroll a frame later undid that.
       disposed = true;
       chrome.dispose();
       blockSelection.dispose();

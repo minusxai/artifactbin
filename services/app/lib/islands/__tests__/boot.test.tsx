@@ -158,6 +158,9 @@ describe('boot', () => {
     const installed = window.mx;
     booted.setMode('edit');
     expect(window.mx).not.toBe(installed);
+    booted.setMode('read');
+    await vi.waitFor(() => expect(window.mx).toBeDefined());
+    expect((await window.mx!.read(['region'])).signals.region.value, 'reading again in place: the public API is back').toBe('West');
     stopPage();
   });
 
@@ -214,7 +217,19 @@ describe('boot', () => {
 
     booted.setMode('edit');
     expect(sources[0]!.closed, 'the compiled stream cannot reload an active editor').toBe(true);
+
+    // Done: the page drew the saved version in place and hands the document back to reading. The stream
+    // reopens from the version the page now shows, and a dataset written afterwards re-runs its queries.
+    document.body.setAttribute('data-mx-live-edit', 'e2');
+    booted.setMode('read');
+    expect(booted.mode()).toBe('read');
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    expect(sources[1]!.closed).toBe(false);
+    fetchMock.mockClear();
+    sources[1]!.dispatchEvent(new MessageEvent('data', { data: JSON.stringify({ datasets: ['DS1'] }) }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     booted.dispose();
+    expect(sources[1]!.closed).toBe(true);
     booted = null;
   });
 

@@ -22,6 +22,8 @@ export interface EditEntryChromeProps {
   skeleton: boolean;
   /** The document is not editable yet. */
   loading: boolean;
+  /** Done: the edit bar is gone and the page is returning to reading (the saved version not drawn yet). */
+  leaving?: boolean;
 }
 
 export function EditEntryChrome(props: EditEntryChromeProps): JSX.Element {
@@ -37,9 +39,9 @@ export function EditEntryChrome(props: EditEntryChromeProps): JSX.Element {
       </Show>
       <Show when={props.loading}>
         <style>{LOADING_CSS}</style>
-        <div role="progressbar" aria-label="Opening the editor" data-mx-edit-loading
+        <div role="progressbar" aria-label={props.leaving ? 'Returning to reading' : 'Opening the editor'} data-mx-edit-loading
           class="pointer-events-none fixed left-0 right-0 z-[31] overflow-hidden"
-          style={{ top: `${props.top + EDIT_BAR_H - 2}px`, height: '2px' }}>
+          style={{ top: `${props.leaving ? Math.max(0, props.top - 2) : props.top + EDIT_BAR_H - 2}px`, height: '2px' }}>
           <span class="block h-full w-1/4 bg-accent" style={{ animation: 'mx-edit-loading 1s ease-in-out infinite' }} />
         </div>
       </Show>
