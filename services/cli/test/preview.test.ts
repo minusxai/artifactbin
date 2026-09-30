@@ -242,6 +242,29 @@ test('preview serves the compiled reader: no React, a live Select re-runs its qu
  }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
 });
 
+test('a page with an internal link serves a fetchable Speculation-Rules file, not just the header',async()=>{
+ // A real browser follows the `Speculation-Rules` header and fetches its URL; nothing mocks that
+ // fetch. This is the local counterpart of prepared-page.server.ts's `compiledFor`, which writes the
+ // rule file to the same store the route reads back from — reproduces a bug only a real Chromium
+ // load caught (the CLI compiled the page but never wrote the file the header named).
+ const appDir=join(import.meta.dirname,'../../app');
+ const cwd=process.cwd();process.chdir(appDir);
+ const root=await mkdtemp(join(tmpdir(),'preview-speculation-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'appendix.jsx'),'<p>Appendix</p>');
+  await writeFile(join(root,'report.jsx'),'<a href="/a/app001">Appendix</a><p id="prose">Some prose</p>');
+  session=await startPreview({root,files:['report.jsx'],localFiles:{app001:'appendix.jsx'},home:join(root,'home'),assets:root,publicAssets:join(appDir,'public')});
+  const page=await fetch(session.url+'/workspace/report.jsx');
+  assert.equal(page.status,200);
+  const rulesUrl=page.headers.get('speculation-rules');
+  assert.ok(rulesUrl,'assembleDocument must name a Speculation-Rules header for a page with an internal link');
+  const rules=await fetch(session.url+rulesUrl!.replace(/^"|"$/g,''));
+  assert.equal(rules.status,200);
+  assert.equal(rules.headers.get('content-type'),'application/speculationrules+json');
+  assert.match(await rules.text(),/"\/a\/app001"/);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
+});
+
 test('a capture bakes its rows server-side and marks itself export-ready with no client round trip',async()=>{
  const appDir=join(import.meta.dirname,'../../app');
  const cwd=process.cwd();process.chdir(appDir);

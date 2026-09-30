@@ -36,7 +36,7 @@ import {validateQueryValues} from '../../../app/lib/story/query-values';
 import {dataflowOf} from '../../../app/lib/story/helmet';
 import type {CompiledDataflow} from '../../../app/lib/story/compiled-dataflow';
 import {compileLocal,declaredRefs,runLocal} from '../local-dataflow';
-import {ISLANDS_PATH,assembleDocument,compileDocument,documentModuleSha,readDocumentModule,renderStoryHtml} from './compiled';
+import {ISLANDS_PATH,assembleDocument,compileDocument,documentModuleSha,readDocumentModule,readSpeculationRules,renderStoryHtml,speculationRulesSha} from './compiled';
 
 class Refusal extends Error {constructor(readonly status:number,message:string){super(message);}}
 export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<LocalDataset>}){
@@ -244,6 +244,8 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&target.pathname.startsWith(ISLANDS_PATH+'/')){
    const sha=documentModuleSha(target.pathname);
    if(sha){const bytes=await readDocumentModule(sha);if(!bytes)throw new Refusal(404,'Not found');res.setHeader('Content-Type','text/javascript');res.setHeader('Cache-Control','public, max-age=31536000, immutable');return res.end(Buffer.from(bytes));}
+   const rulesSha=speculationRulesSha(target.pathname);
+   if(rulesSha){const bytes=await readSpeculationRules(rulesSha);if(!bytes)throw new Refusal(404,'Not found');res.setHeader('Content-Type','application/speculationrules+json');res.setHeader('Cache-Control','public, max-age=31536000, immutable');return res.end(Buffer.from(bytes));}
    if(!options.publicAssets)throw new Refusal(404,'Not found');
    const path=await confinedPath(options.publicAssets,target.pathname.slice(1));
    // The shared build's own chunks: `fileContentType` knows document/dataset kinds, not `.js`/`.wasm`.

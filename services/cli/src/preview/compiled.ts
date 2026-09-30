@@ -12,7 +12,7 @@
 import {compilePage} from '../../../app/lib/compiled-page/compiler';
 import {loadCompilerBuild} from '../../../app/lib/compiled-page/build.server';
 import {assembleReaderPage} from '../../../app/lib/compiled-page/assembler';
-import {createModuleStore} from '../../../app/lib/compiled-page/modules.server';
+import {createModuleStore, createSpeculationRulesStore} from '../../../app/lib/compiled-page/modules.server';
 import {loadSsrModule} from '../../../app/lib/compiled-page/bundle.server';
 import {ISLANDS_PATH, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
 import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared-runtime';
@@ -30,6 +30,17 @@ export const documentModuleSha = (pathname: string): string | null => {
 /** The per-document module's bytes, from the same local store `compilePage` wrote them to. */
 export async function readDocumentModule(sha: string): Promise<Uint8Array | null> {
  return createModuleStore().get(sha);
+}
+
+/** `/islands/s/<sha>.json` — the prerender rule file `assembleDocument`'s `Speculation-Rules` header names. */
+export const speculationRulesSha = (pathname: string): string | null => {
+ const match = /^\/islands\/s\/([0-9a-f]{16})\.json$/.exec(pathname);
+ return match ? match[1]! : null;
+};
+
+/** The rule file's bytes, from the same local store `compileDocument` wrote them to. */
+export async function readSpeculationRules(sha: string): Promise<Uint8Array | null> {
+ return createSpeculationRulesStore().get(sha);
 }
 
 let buildCache: CompilerBuild | undefined;
@@ -67,6 +78,10 @@ export async function compileDocument(input: CompileDocumentInput): Promise<Comp
   authorScript: input.authorScript,
  }, build);
  if (compiled.unported.length) throw new Error(`This document uses a component local preview cannot render yet: ${compiled.unported.join(', ')}.`);
+ // The assembler names a prerender rule file by its sha in the `Speculation-Rules` header
+ // (assembleDocument, below); a real browser fetches that URL, so the file must already be
+ // on disk under the same local store `readSpeculationRules` reads back from.
+ await createSpeculationRulesStore().put(compiled.links.prerender);
  return compiled;
 }
 
