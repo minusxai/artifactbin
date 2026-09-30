@@ -42,7 +42,7 @@ const editSession = vi.hoisted(() => ({
 vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () => editSession.session }));
 vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
-import { createIslandController } from '../island-controller';
+import { createIslandController, holdChartDrawings } from '../island-controller';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -236,5 +236,33 @@ describe('island controller editor drafts', () => {
     expect(root.textContent).toBe('v0');
     engine.blocker = null;
     controller.dispose();
+  });
+
+  it('keeps each chart\'s last drawing on screen until the re-hydrated chart has drawn again', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'relative';
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<div aria-label="Question embed" data-mx-ast="1.2"><div><svg class="marks" width="300" height="200"></svg></div></div>';
+    host.append(root);
+    document.body.append(host);
+    const sized = { width: 300, height: 200, top: 40, left: 20, right: 320, bottom: 240, x: 20, y: 40, toJSON() {} } as DOMRect;
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      return this.matches('svg.marks, canvas') ? sized : ({ width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} } as DOMRect);
+    });
+    const hold = holdChartDrawings(window, root);
+    const copy = host.querySelector(':scope > [data-mx-chart-hold]') as SVGElement;
+    expect(copy, 'the drawing stands beside the story').not.toBeNull();
+    expect(copy.style.left).toBe('20px');
+    // The island hydrates again: its chart is empty until it draws.
+    root.querySelector('[aria-label="Question embed"] > div')!.innerHTML = '';
+    hold.release();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(host.querySelector(':scope > [data-mx-chart-hold]'), 'no blank chart meanwhile').not.toBeNull();
+    root.querySelector('[aria-label="Question embed"] > div')!.innerHTML = '<svg class="marks" width="300" height="200"></svg>';
+    await settle(() => !host.querySelector(':scope > [data-mx-chart-hold]'));
+    expect(host.querySelector(':scope > [data-mx-chart-hold]'), 'the redrawn chart takes over').toBeNull();
+    rect.mockRestore();
+    host.remove();
   });
 });

@@ -19,6 +19,7 @@ import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { updateCompiledStory } from '@/lib/islands/live-update';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
+import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
   STORY_ANNOTATIONS_MESSAGE, type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
   STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, isEditParentMessage,
@@ -68,6 +69,62 @@ export function freezeIslandPaint(root: HTMLElement, islands: IslandDocument | n
       if (element.innerHTML !== html) element.replaceChildren(...copy.childNodes);
     }
   }
+}
+
+const CHART = '[aria-label="Question embed"]';
+const CHART_DRAWING = 'svg.marks, canvas';
+/** How long a chart's last drawing may stand in for it while its island hydrates and draws again. */
+const CHART_HOLD_MS = 3000;
+
+/**
+ * Keep every chart's last drawing on screen while the islands under it hydrate again (a chart redraws a moment
+ * after its island mounts): a copy of each drawing sits over it, beside the story, until the chart at the same
+ * AST path has drawn again (or a few seconds pass). The copies are the drawings alone — explicit sizes and inline
+ * colours — and take no layout.
+ */
+export function holdChartDrawings(win: Window, root: HTMLElement): { release(): void } {
+  const host = root.parentElement;
+  if (!host || win.getComputedStyle(host).position === 'static') return { release() {} };
+  const hostRect = host.getBoundingClientRect();
+  const held: Array<{ path: string | null; copy: Element }> = [];
+  for (const chart of root.querySelectorAll<HTMLElement>(CHART)) {
+    const path = chart.getAttribute(AST_PATH_ATTR);
+    for (const drawing of chart.querySelectorAll<SVGElement | HTMLCanvasElement>(CHART_DRAWING)) {
+      const rect = drawing.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      const copy = drawing.cloneNode(true) as SVGElement | HTMLCanvasElement;
+      if (drawing instanceof HTMLCanvasElement && copy instanceof HTMLCanvasElement) {
+        copy.width = drawing.width; copy.height = drawing.height;
+        try { copy.getContext('2d')?.drawImage(drawing, 0, 0); } catch { /* a tainted canvas keeps its frame */ }
+      }
+      copy.setAttribute('aria-hidden', 'true');
+      copy.setAttribute('data-mx-chart-hold', '');
+      Object.assign(copy.style, {
+        position: 'absolute', left: `${rect.left - hostRect.left}px`, top: `${rect.top - hostRect.top}px`,
+        width: `${rect.width}px`, height: `${rect.height}px`, margin: '0', pointerEvents: 'none', zIndex: '1',
+      });
+      host.append(copy);
+      held.push({ path, copy });
+    }
+  }
+  const drawn = (path: string | null) => {
+    const chart = path ? [...root.querySelectorAll<HTMLElement>(CHART)].find((el) => el.getAttribute(AST_PATH_ATTR) === path) : null;
+    return !chart || [...chart.querySelectorAll<Element>(CHART_DRAWING)].some((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+  };
+  return {
+    release() {
+      if (!held.length) return;
+      const deadline = win.performance.now() + CHART_HOLD_MS;
+      const check = () => {
+        for (let i = held.length - 1; i >= 0; i--) {
+          const item = held[i]!;
+          if (win.performance.now() > deadline || drawn(item.path)) { item.copy.remove(); held.splice(i, 1); }
+        }
+        if (held.length) win.requestAnimationFrame(check);
+      };
+      check();
+    },
+  };
 }
 
 export interface IslandControllerInput {
@@ -286,8 +343,12 @@ export function createIslandController({ win, root, islands, nodes: served, port
       } else {
         const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]')!;
         pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: nextNodes ?? nodes, source: restoreSource, sequence };
-        await applyDraft();
-        while (drawing) await drawing;
+        // The islands hydrate again under the charts: their last drawings stay on screen until each has redrawn.
+        const hold = holdChartDrawings(win, root);
+        try {
+          await applyDraft();
+          while (drawing) await drawing;
+        } finally { hold.release(); }
         if (!current()) return;
         if (drawnSequence !== sequence) throw new Error('the saved version was not drawn');
       }
