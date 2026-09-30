@@ -8,7 +8,7 @@ import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, type Art
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 import { draftKey, readDraft, writeDraft } from '@/lib/offline/local-state';
 import { suggestedFileName } from '@/lib/offline/save-file';
-import { disposeSolidOfflineFile, mountSolidOfflineFile } from '@/lib/offline/solid-entry';
+import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from '@/lib/offline/solid-entry';
 
 const FIXTURE = path.resolve(process.cwd(), '../../scripts/fixtures/offline-file/artifact-file.json');
 const fixture = (): ArtifactFile => {
@@ -16,7 +16,9 @@ const fixture = (): ArtifactFile => {
   const heading = /<h1[^>]*id="([^"]+)"/.exec(file.source)?.[1];
   if (!heading) throw new Error('fixture has no heading');
   return { ...file, bundle: 'solid', compiled: {
-    html: `<div data-mx-ast="1"><h1 id="${heading}" data-mx-ast="1.1">Regional sales</h1><p data-mx-ast="1.3">Revenue by region and month</p></div>`,
+    // 1.7 is the real fixture's `<DataTable data="$sales">` (dashboard.jsx via
+    // artifact-file.json), one Solid tree's own island path never names (PR #202).
+    html: `<div data-mx-ast="1"><h1 id="${heading}" data-mx-ast="1.1">Regional sales</h1><p data-mx-ast="1.3">Revenue by region and month</p><div data-mx-ast="1.7">2026-07 rows</div></div>`,
     islands: [], kit: { islands: [], skeleton: [] },
   } as unknown as ArtifactFile['compiled'] };
 };
@@ -91,6 +93,26 @@ describe('Solid offline file', () => {
     expect(screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(true);
   });
 
+  it('locates $query consumers by their AST path, not the one-tree island list', () => {
+    const { nodes } = fixture().island;
+    expect(queryConsumersOf(nodes, new Set(['sales']))).toEqual(['1.7', '1.9']);
+    expect(queryConsumersOf(nodes, new Set(['matches']))).toEqual(['1.11.1']);
+    expect(queryConsumersOf(nodes, new Set())).toEqual([]);
+    expect(queryConsumersOf(nodes, new Set(['no-such-query']))).toEqual([]);
+  });
+
+  it('shows the changed-query banner at the query\'s own consumer, not a stale row', async () => {
+    const file = fixture();
+    shell({ ...file, source: file.source.replace(
+      'select region, month, revenue from sales_data.rows where',
+      'select region, month, revenue * 2 as revenue from sales_data.rows where',
+    ) });
+    await mountSolidOfflineFile();
+    const table = document.querySelector('[data-mx-ast="1.7"]')!;
+    expect(table.textContent).toBe(OFFLINE_QUERY_REASON);
+    expect(document.querySelector('[data-mx-inline-story]')!.textContent).not.toContain('2026-07 rows');
+  });
+
   it('recognizes drafts by download and suggests the existing file name', () => {
     const file = fixture();
     expect(readDraft(file)).toBeNull();
@@ -99,6 +121,28 @@ describe('Solid offline file', () => {
     writeDraft({ ...file, localIds: ['x'] }, new Date('2026-09-26T12:00:05.000Z'));
     expect(readDraft(file)?.file.localIds).toEqual(['x']);
     expect(suggestedFileName('Sales', { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).html');
+  });
+
+  it('saves the compiled story exactly as downloaded, never spliced with edited text', async () => {
+    // The compiled module boot() hydrates is unchanged by an edit (file-backend.ts `derive`
+    // never touches `compiled`): splicing edited text into a saved copy of it before Save
+    // (the old `revisedCompiled`) left a reopen hydrating a copy hydrate() no longer matches,
+    // blanking the region. Save must hand the ORIGINAL compiled pair back, unchanged.
+    const file = fixture();
+    const edited = { ...file, source: file.source.replace('Regional sales</h1>', 'Quarterly sales</h1>') };
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    shell(edited);
+    await mountSolidOfflineFile();
+    expect(screen.getByRole('heading', { name: 'Quarterly sales' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(written).toHaveLength(1));
+    const json = /<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)?.[1];
+    const savedCompiled = JSON.parse(json!).compiled;
+    expect(savedCompiled.html).toBe(file.compiled!.html);
+    expect(savedCompiled.html).not.toContain('Quarterly');
   });
 
   it('migrates an older saved payload in a Solid shell when its compiled view is available', async () => {

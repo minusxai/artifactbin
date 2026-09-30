@@ -7,7 +7,7 @@ import { mountCompiledEditRegions, type CompiledEditMount } from '@/solid/editor
 import { createLiveEditsCore, type LiveEditsCore } from '@/solid/shared/live-edits-core';
 import { createFileBackend, rebuildArtifactFile, sourceChangedOutside } from './file-backend';
 import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from './extras';
-import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest, type ArtifactFile } from './file-format';
+import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest } from './file-format';
 import { ARTIFACT_FILE_IDS, readArtifactFileParts, type ArtifactFileParts } from './file-html';
 import { clearDraft, readDraft, readName, writeDraft, writeName } from './local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-file';
@@ -28,7 +28,7 @@ function projectText(root: HTMLElement, nodes: JsxNode[]): void {
   const walk = (items: JsxNode[], parent = '') => items.forEach((node, index) => {
     if (node.type !== 'element') return;
     const path = parent ? `${parent}.${index}` : String(index);
-    if (node.children.every((child) => child.type === 'text')) {
+    if (node.children.length && node.children.every((child) => child.type === 'text')) {
       const element = root.querySelector<HTMLElement>(`[data-mx-ast="${path}"]`);
       if (element && !element.hasAttribute('data-hk')) element.textContent = textOf(node);
     }
@@ -37,13 +37,38 @@ function projectText(root: HTMLElement, nodes: JsxNode[]): void {
   walk(nodes);
 }
 
-function revisedCompiled(file: ArtifactFile, root: HTMLElement): ArtifactFile {
-  if (!file.compiled) return file;
-  const host = document.createElement('div');
-  host.innerHTML = file.compiled.html;
-  projectText(host, file.island.nodes);
-  projectText(root, file.island.nodes);
-  return { ...file, compiled: { ...file.compiled, html: host.innerHTML } };
+/**
+ * Run `work` once the compiled story has finished hydrating (`boot()`'s `mx:ready`, compiled-boot.ts),
+ * or immediately when this file has no compiled module to hydrate (a document with no browser
+ * component, or a test fixture with no `#afbin-compiled-code`). Nothing may touch the story DOM
+ * before hydration: `hydrate()` matches the SERVED markup against the compiled tree by its
+ * structure, and a change made ahead of it (a spliced heading, a blanked query result) desyncs
+ * Solid's hydration markers and blanks or corrupts the region (the save → reopen bug this guards).
+ */
+function afterReady(work: () => void): void {
+  if (!document.getElementById(ARTIFACT_FILE_IDS.compiledCode) || document.documentElement.hasAttribute('data-mx-ready')) { work(); return; }
+  document.addEventListener('mx:ready', work, { once: true });
+}
+
+/** Every element whose value is `$name` for one of `stale`'s names (a Select's `options`, a
+ * DataTable/Question/Number's `data`, …), by its `data-mx-ast` path — the query's consumers,
+ * found from the source AST rather than the compiled island list (one-tree compilation gives
+ * every document a single island whose `path` names no particular node, PR #202). */
+export function queryConsumersOf(nodes: JsxNode[], stale: ReadonlySet<string>): string[] {
+  if (!stale.size) return [];
+  const found: string[] = [];
+  const walk = (items: JsxNode[], parent = '') => items.forEach((node, index) => {
+    if (node.type !== 'element') return;
+    const path = parent ? `${parent}.${index}` : String(index);
+    const bound = node.attributes.some((attribute) => {
+      const value = attribute.value;
+      return value.static && typeof value.json === 'string' && value.json.startsWith('$') && stale.has(value.json.slice(1));
+    });
+    if (bound) found.push(path);
+    walk(node.children, path);
+  });
+  walk(nodes);
+  return found;
 }
 
 interface Opened { parts: ArtifactFileParts; invalid: string | null; restored: boolean }
@@ -136,7 +161,11 @@ function OfflineShell(props: Opened) {
     setSaving(true); setSaveError('');
     try {
       await live?.flushNow();
-      const current = revisedCompiled(file(), story);
+      // The compiled module and its served markup are never touched by an edit (only `source`
+      // and what derives from it change, file-backend.ts `derive`): save them exactly as
+      // downloaded, so a reopen hydrates a pristine, matching pair and projects the edited
+      // text onto it afterwards (afterReady), instead of re-hydrating an already-spliced copy.
+      const current = file();
       const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current.metadata.title), handle: saveHandle });
       if (result.outcome !== 'cancelled') {
         saveHandle = result.handle; window.clearTimeout(draftTimer); clearDraft(current); setDirty(false);
@@ -191,7 +220,9 @@ function OfflineShell(props: Opened) {
     'body{margin:0;padding-top:42px}#afbin-chrome{position:fixed;inset:0 0 auto;z-index:1000;background:var(--surface,#fff);border-bottom:1px solid #aaa} [data-mx-annotated]{outline:2px solid #e8a93a}'].filter(Boolean).join('\n');
   document.head.append(style);
   onCleanup(() => style.remove());
-  projectText(story, file().island.nodes);
+  // Only after the compiled tree hydrates (or immediately when there is none to hydrate): the
+  // story DOM served with this file is still the pristine compile hydrate() must match.
+  afterReady(() => projectText(story, file().island.nodes));
 
   return <div id="afbin-chrome">
     <header aria-label="Offline copy" class="flex flex-wrap items-center gap-2 px-4 py-2 text-xs">
@@ -262,14 +293,24 @@ export async function mountSolidOfflineFile(): Promise<void> {
     else clearDraft(parts.file);
   }
   window.__afbinOfflineFile = opened.file;
-  if ((opened.file.compiledFlowDigest && opened.file.compiledFlowDigest !== sourceDigest(JSON.stringify(opened.file.island.dataflow?.flow ?? null)))
-      || unranQueriesOf(opened.file).size > 0) {
-    const story = document.querySelector<HTMLElement>('[data-mx-inline-story]');
-    for (const island of opened.file.compiled?.islands ?? []) {
-      if (!island.readsData) continue;
-      const target = story?.querySelector<HTMLElement>(`[data-mx-ast="${island.path}"]`);
-      if (target) target.textContent = OFFLINE_QUERY_REASON;
-    }
+  const flow = opened.file.island.dataflow?.flow;
+  const staleFlow = !!opened.file.compiledFlowDigest && opened.file.compiledFlowDigest !== sourceDigest(JSON.stringify(flow ?? null));
+  const stale = new Set(unranQueriesOf(opened.file));
+  // A stale flow's shape may have changed altogether (a query added or removed): every query
+  // this document declares now reads OFFLINE_QUERY_REASON from the store already
+  // (snapshot-current.ts `snapshotStateFor`), so treat them all as changed rather than guess which one moved.
+  if (staleFlow) for (const query of flow?.queries ?? []) stale.add(query.name);
+  if (stale.size) {
+    // Once hydrated (not before: the served story is the pristine compile hydrate() must match),
+    // find every element bound to a changed query from the source AST — not `compiled.islands`,
+    // whose one-tree entry names no particular node (PR #202) — and show why it has no answer.
+    afterReady(() => {
+      const story = document.querySelector<HTMLElement>('[data-mx-inline-story]');
+      for (const path of queryConsumersOf(opened.file.island.nodes, stale)) {
+        const target = story?.querySelector<HTMLElement>(`[data-mx-ast="${path}"]`);
+        if (target) target.textContent = OFFLINE_QUERY_REASON;
+      }
+    });
   }
   mountedDispose = render(() => <OfflineShell parts={{ ...parts, file: opened.file }} invalid={opened.error} restored={opened.rebuilt} />, host);
   document.getElementById(ARTIFACT_FILE_IDS.boot)?.remove();
