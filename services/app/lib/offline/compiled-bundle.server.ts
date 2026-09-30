@@ -3,6 +3,7 @@
  * module and the immutable shared build named by that compiled page.
  */
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import esbuild from 'esbuild';
 import type { CompiledPage } from '@/lib/compiled-page/contract';
@@ -10,6 +11,28 @@ import { createModuleStore, createTemplateResourceStore } from '@/lib/compiled-p
 
 const SHARED = /^\/islands\/([A-Za-z0-9_-]+\.js)$/;
 const TEMPLATE = /["']\/islands\/t\/([0-9a-f]{16})\.json["']/g;
+
+/**
+ * `@artifactbin/<name>[/subpath]` → absolute file, read from each sibling workspace package's own
+ * package.json "exports" map — the same technique the production bundler's static build aliases
+ * with (artifactbin-server scripts/source-api.mjs sourceAliases). This build is a separate, LIVE
+ * esbuild invocation (below): a compiled document that reaches `@artifactbin/sql/core` or
+ * `@artifactbin/contracts` has nothing else to resolve those bare specifiers with, since production
+ * never installs `@artifactbin/*` as an npm package (it ships whole into application.mjs instead) —
+ * only `root`'s sibling package directories, copied there for this exact purpose.
+ */
+function siblingAliases(root: string): Record<string, string> {
+  const aliases: Record<string, string> = {};
+  for (const name of ['contracts', 'utils', 'sql']) {
+    const source = path.join(root, name);
+    let manifest: { exports?: Record<string, string> };
+    try { manifest = JSON.parse(readFileSync(path.join(source, 'package.json'), 'utf8')); } catch { continue; }
+    for (const [sub, file] of Object.entries(manifest.exports ?? {})) {
+      aliases[`@artifactbin/${name}${sub === '.' ? '' : sub.slice(1)}`] = path.join(source, file);
+    }
+  }
+  return aliases;
+}
 
 export interface PackedCompiledModule {
   /** A single inline, classic script. No import, worker, blob or fetch is needed to execute it. */
@@ -23,6 +46,8 @@ export async function packCompiledBrowserModule(
   options: {
     module?: Uint8Array;
     sharedDir?: string;
+    /** The directory holding the sibling `contracts`/`utils`/`sql` workspace packages (tests only; defaults to `..` of cwd). */
+    workspaceRoot?: string;
     template?: (sha: string) => Promise<Uint8Array | null>;
     /** Swap the network reader boot for the snapshot-only file boot. */
     offline?: { sqlite: boolean; chart: boolean };
@@ -49,7 +74,7 @@ export async function packCompiledBrowserModule(
   const result = await esbuild.build({
     stdin: { contents: inlineSource, resolveDir: sharedDir, sourcefile: 'offline-compiled-entry.js', loader: 'js' },
     bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2022', minify: true,
-    alias: { '@': process.cwd() },
+    alias: { '@': process.cwd(), ...siblingAliases(options.workspaceRoot ?? path.dirname(process.cwd())) },
     define: {
       __AFBIN_OFFLINE_SQLITE__: String(options.offline?.sqlite ?? false),
       __AFBIN_OFFLINE_CHART__: String(options.offline?.chart ?? false),

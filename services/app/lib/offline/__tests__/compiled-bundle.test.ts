@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { Script } from 'node:vm';
@@ -42,5 +42,29 @@ describe('packCompiledBrowserModule', () => {
     await expect(packCompiledBrowserModule(page({ sha: '3333333333333333', url: '/islands/d/3333333333333333.js', bytes: 0, imports: [] }), {
       module: new TextEncoder().encode('import "/islands/stranger-9999999999999999.js";'),
     })).rejects.toThrow(/unpinned asset/);
+  });
+
+  it('resolves a compiled module\'s bare @artifactbin/<name> imports from sibling workspace packages, not just node_modules', async () => {
+    // Production never installs @artifactbin/* as an npm package (it ships whole into
+    // application.mjs); it ships each sibling package's own source beside `services/app`
+    // instead (artifactbin-server scripts/build-source.mjs). workspaceRoot stands in for
+    // that "assets/" directory: a compiled module reaching @artifactbin/contracts here has
+    // ONLY the sibling package.json "exports" alias to resolve it with, no node_modules link.
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'afbin-offline-sibling-'));
+    try {
+      await mkdir(path.join(dir, 'contracts/src'), { recursive: true });
+      await writeFile(path.join(dir, 'contracts/package.json'), JSON.stringify({ name: '@artifactbin/contracts', exports: { '.': './src/index.ts' } }));
+      await writeFile(path.join(dir, 'contracts/src/index.ts'), 'export const marker = "contracts-ok";');
+      const packed = await packCompiledBrowserModule(page({ sha: '5555555555555555', url: '/islands/d/5555555555555555.js', bytes: 0, imports: [] }), {
+        module: new TextEncoder().encode('import { marker } from "@artifactbin/contracts"; globalThis.got = marker;'),
+        sharedDir: dir,
+        workspaceRoot: dir,
+      });
+      const context = { globalThis: { got: '' } };
+      new Script(packed!.code).runInNewContext(context);
+      expect(context.globalThis.got).toBe('contracts-ok');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
