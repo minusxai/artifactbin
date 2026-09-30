@@ -1,6 +1,5 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
-import { useParams } from '@solidjs/router';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { writeBrowserArtifact } from '@/lib/browser-artifact-write';
 import type { FolderPage as FolderData } from '@/lib/folders';
@@ -9,12 +8,9 @@ import { canEdit } from '@/lib/share-roles';
 import type { AccountWorkspace } from '@/lib/workspace';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { pageDataChanged } from '@/web/page-data-events';
-import { takeBootstrap } from '@/web/bootstrap';
-import { replaceDocument } from '../shared/document-navigation';
 import { PAGE_COLUMN } from '../components/ui';
 import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
-import { usePageData } from '../web/use-page-data';
 
 interface FolderProps { folder: FolderData; role: ArtifactRole; workspace?: AccountWorkspace; ownerUsername?: string | null }
 const NAME_TYPE = 'font-mono text-base leading-normal font-medium tracking-[-0.01em] text-fg';
@@ -63,19 +59,3 @@ function ForTrail(props: { folder: FolderData }): JSX.Element {
   return <>{props.folder.trail.map(crumb => <span class="flex min-w-0 items-baseline gap-x-3"><ChevronRight size={14} aria-hidden="true" class="shrink-0 self-center text-faint" /><a href={crumb.url} class={`${NAME_TYPE} text-muted no-underline hover:text-accent`}>{crumb.title ?? crumb.id}</a></span>)}</>;
 }
 
-interface ArtifactAnswer { folder?: FolderData; role: ArtifactRole; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: unknown }
-/**
- * The server chose this entry after admitting a folder. A client link to a document crosses entries.
- * `id` lets a pretty-path alias route (solid/pages/Profile.tsx) hand in the id it parsed from the
- * address, rather than every caller needing its own `/a/:id`-shaped route param.
- */
-export function FolderRoute(props: { id?: string } = {}): JSX.Element {
-  const params = useParams<{ id: string }>();
-  const id = () => props.id ?? params.id;
-  const url = () => `/api/page/artifact/${id()}`;
-  const page = usePageData<ArtifactAnswer>(url, { seed: () => takeBootstrap<ArtifactAnswer>(window.location.pathname, 'artifact') });
-  createEffect(() => { if (page.data()?.surface) replaceDocument(window.location.pathname + window.location.search + window.location.hash); });
-  return <Show when={page.data()?.folder} fallback={<main aria-label="Loading folder" class={`${PAGE_COLUMN} mt-8 pb-24`}><Show when={page.error()} fallback="Loading folder…"><button type="button" aria-label="Retry folder" onClick={() => void page.refresh(true)}>Could not load folder. Retry</button></Show></main>}>
-    {folder => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}
-  </Show>;
-}

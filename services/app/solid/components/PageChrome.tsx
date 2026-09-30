@@ -37,14 +37,29 @@ function Star(props: { mobile: boolean }): JSX.Element {
   return <span ref={root} data-mx-github-star="" class={`${props.mobile ? 'inline-flex sm:hidden' : 'hidden sm:inline-flex'} h-7 shrink-0 items-center text-fg print:hidden`} innerHTML={githubStarMarkup(!props.mobile)} />;
 }
 
-export function PageChrome(): JSX.Element {
+/**
+ * What an artifact page adds to the one bar (components/PageChrome's React props): its `title` as the
+ * crumb, the controls panel's `label` ("Artifact controls"), bar `actions` beside the star, and
+ * `controls` — the artifact's own rows under the appearance picker.
+ */
+export interface PageChromeProps {
+  title?: string | null;
+  label?: string;
+  actions?: JSX.Element;
+  controls?: (close: () => void) => JSX.Element;
+}
+
+export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const location = useLocation();
   const { session } = useSession();
   const inbox = useInbox();
   const [panel, setPanel] = createSignal<Panel>(null);
   const [mode, setMode] = createSignal<'light' | 'dark'>(typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
   const person = () => session()?.kind === 'account' ? session()?.user : null;
-  const crumbs = () => crumbsFor(location.pathname);
+  const crumbs = () => crumbsFor(location.pathname, props.title);
+  const label = () => props.label ?? 'Page controls';
+  const controlsName = () => label().toLowerCase();
+  const modeClass = (value: 'light' | 'dark') => `flex flex-1 cursor-pointer items-center justify-center gap-2 border-0 px-3 py-2 font-mono text-xs transition-colors ${mode() === value ? 'bg-accent-soft text-accent' : 'bg-transparent text-muted hover:bg-raised hover:text-fg'}`;
   const toggle = (next: Panel) => setPanel(current => current === next ? null : next);
   const close = () => setPanel(null);
   const pick = (next: 'light' | 'dark') => {
@@ -71,8 +86,9 @@ export function PageChrome(): JSX.Element {
       </nav>
       <div class="ml-auto flex shrink-0 items-center gap-1">
         <Star mobile={false} /><Star mobile={true} />
+        {props.actions}
         <Show when={person()}><Tooltip content="Notifications"><button type="button" aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={() => toggle('notifications')} class={`${BAR_BUTTON} relative`}><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" /></Show></button></Tooltip></Show>
-        <Tooltip content="page controls"><button type="button" aria-label={panel() === 'controls' ? 'Close page controls' : 'Open page controls'} aria-expanded={panel() === 'controls'} onClick={() => toggle('controls')} class={BAR_BUTTON}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</button></Tooltip>
+        <Tooltip content={controlsName()}><button type="button" aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={() => toggle('controls')} class={`${BAR_BUTTON} ${panel() === 'controls' ? 'text-accent' : ''}`}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</button></Tooltip>
         <Tooltip content="menu"><button type="button" aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={() => toggle('menu')} class={BAR_BUTTON}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></button></Tooltip>
       </div>
     </header>
@@ -81,7 +97,9 @@ export function PageChrome(): JSX.Element {
       <Show when={panel() === 'menu'}>
         <PageMenuPanel close={close} />
       </Show>
-      <Show when={panel() === 'controls'}><section aria-label="Page controls" class="fixed right-3 top-14 z-50 w-72 rounded-[7px] border border-edge bg-surface p-4 shadow-xl"><div class="mb-3 flex items-center justify-between"><h1 class="font-mono text-xs font-semibold">page controls</h1><button type="button" aria-label="Dismiss page controls" onClick={close}><X size={15} /></button></div><section aria-label="Appearance"><h2 class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">appearance</h2><div role="group" aria-label="Color mode" class="flex overflow-hidden rounded-[5px] border border-edge"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')} class="flex flex-1 items-center justify-center gap-2 px-3 py-2 font-mono text-xs"><Sun size={14} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')} class="flex flex-1 items-center justify-center gap-2 px-3 py-2 font-mono text-xs"><Moon size={14} />dark</button></div></section></section></Show>
+      <Show when={panel() === 'controls'}><section aria-label={label()} class="fixed right-3 top-14 z-50 max-h-[80vh] w-72 max-w-[calc(100vw-24px)] overflow-auto rounded-[7px] border border-edge bg-surface p-3 font-mono text-xs shadow-xl"><div class="mb-3 flex items-center justify-between"><h1 class="font-mono text-xs font-semibold">{controlsName()}</h1><button type="button" aria-label={`Dismiss ${controlsName()}`} onClick={close}><X size={15} /></button></div><section aria-label="Appearance"><h2 class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">appearance</h2><div role="group" aria-label="Color mode" class="flex overflow-hidden rounded-[5px] border border-edge"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')} class={modeClass('light')}><Sun size={14} strokeWidth={1.5} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')} class={modeClass('dark')}><Moon size={14} strokeWidth={1.5} />dark</button></div></section>
+        <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>
+      </section></Show>
       <Show when={panel() === 'notifications'}><NotificationsPanel close={close} /></Show>
     </Show>
   </>;
