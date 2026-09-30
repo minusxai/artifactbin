@@ -75,7 +75,6 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
     window.addEventListener('keydown', escape);
     onCleanup(() => window.removeEventListener('keydown', escape));
   });
-  const menuLink = (href: string, name: string) => <a href={href} rel={['/', '/assets', '/trash', '/login', '/start', '/welcome', '/notifications', '/account', '/docs-human'].includes(href) ? undefined : 'external'} aria-label={name} class={MENU_ITEM} onClick={close}>{name}</a>;
   return <>
     <header aria-label="Page bar" class="sticky top-0 z-40 flex h-11 items-center gap-2 border-b border-edge bg-surface/85 px-3 backdrop-blur-md sm:gap-3">
       <a href="/" aria-label="Home" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised"><img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} /></a>
@@ -96,7 +95,24 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
     <Show when={panel()}>
       <button type="button" aria-label="Close panel" class="fixed inset-0 z-40 cursor-default border-0 bg-black/25 p-0" onClick={close} />
       <Show when={panel() === 'menu'}>
-        <nav aria-label="Menu" class="fixed inset-y-0 left-0 z-50 flex w-full flex-col border-r border-edge bg-surface p-2 pt-16 shadow-xl sm:w-72">
+        <PageMenuPanel close={close} />
+      </Show>
+      <Show when={panel() === 'controls'}><section aria-label={label()} class="fixed right-3 top-14 z-50 max-h-[80vh] w-72 max-w-[calc(100vw-24px)] overflow-auto rounded-[7px] border border-edge bg-surface p-3 font-mono text-xs shadow-xl"><div class="mb-3 flex items-center justify-between"><h1 class="font-mono text-xs font-semibold">{controlsName()}</h1><button type="button" aria-label={`Dismiss ${controlsName()}`} onClick={close}><X size={15} /></button></div><section aria-label="Appearance"><h2 class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">appearance</h2><div role="group" aria-label="Color mode" class="flex overflow-hidden rounded-[5px] border border-edge"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')} class={modeClass('light')}><Sun size={14} strokeWidth={1.5} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')} class={modeClass('dark')}><Moon size={14} strokeWidth={1.5} />dark</button></div></section>
+        <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>
+      </section></Show>
+      <Show when={panel() === 'notifications'}><NotificationsPanel close={close} /></Show>
+    </Show>
+  </>;
+}
+
+/** The app menu drawer (links, then sign out / disconnect / login), shared by the app bar and the document page. */
+export function PageMenuPanel(props: { close: () => void }): JSX.Element {
+  const { session } = useSession();
+  const person = () => session()?.kind === 'account' ? session()?.user : null;
+  const close = () => props.close();
+  const menuLink = (href: string, name: string) => <a href={href} rel={['/', '/assets', '/trash', '/login', '/start', '/welcome', '/notifications', '/account', '/docs-human'].includes(href) ? undefined : 'external'} aria-label={name} class={MENU_ITEM} onClick={close}>{name}</a>;
+  return (
+    <nav aria-label="Menu" class="fixed inset-y-0 left-0 z-50 flex w-full flex-col border-r border-edge bg-surface p-2 pt-16 shadow-xl sm:w-72">
           <button type="button" aria-label="Dismiss menu" onClick={close} class="absolute right-3 top-3 rounded-full p-2 sm:hidden"><X size={17} /></button>
           <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline"><img src="/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
           {menuLink('/', 'Artifacts')}{menuLink('/chat', 'Remote sessions')}{menuLink('/notifications', 'Notifications')}{menuLink('/account', 'Account')}{menuLink('/docs-human', 'Human Docs')}
@@ -104,11 +120,11 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
           <div class="mt-auto" /><div class="my-1 h-px bg-edge" />
           <Show when={person()} fallback={<Show when={session()?.kind === 'anon'} fallback={<a href={loginHref(window.location)} class={MENU_ITEM}><LogIn size={15} />Login</a>}><button type="button" aria-label="Disconnect this browser" class={MENU_ITEM} onClick={() => void forgetTokens().then(() => { window.location.href = '/'; })}>Disconnect this browser</button></Show>}><button type="button" aria-label="Sign out" class={MENU_ITEM} onClick={() => void fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).finally(() => { window.location.href = '/'; })}><LogOut size={15} />Sign out</button></Show>
         </nav>
-      </Show>
-      <Show when={panel() === 'controls'}><section aria-label={label()} class="fixed right-3 top-14 z-50 max-h-[80vh] w-72 max-w-[calc(100vw-24px)] overflow-auto rounded-[7px] border border-edge bg-surface p-3 font-mono text-xs shadow-xl"><div class="mb-3 flex items-center justify-between"><h1 class="font-mono text-xs font-semibold">{controlsName()}</h1><button type="button" aria-label={`Dismiss ${controlsName()}`} onClick={close}><X size={15} /></button></div><section aria-label="Appearance"><h2 class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">appearance</h2><div role="group" aria-label="Color mode" class="flex overflow-hidden rounded-[5px] border border-edge"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')} class={modeClass('light')}><Sun size={14} strokeWidth={1.5} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')} class={modeClass('dark')}><Moon size={14} strokeWidth={1.5} />dark</button></div></section>
-        <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>
-      </section></Show>
-      <Show when={panel() === 'notifications'}><section aria-label="Notifications" class="fixed right-3 top-14 z-50 w-80 rounded-[7px] border border-edge bg-surface p-4 shadow-xl"><div class="mb-3 flex items-center justify-between"><h2 class="text-sm font-semibold">Notifications</h2><button type="button" aria-label="Close notifications" onClick={close}><X size={18} /></button></div><div class="max-h-[55vh] overflow-y-auto"><PeopleInbox compact close={close} /></div><nav aria-label="Notification links" class="mt-2 flex flex-col gap-2 border-t border-edge pt-3"><a href="/notifications" onClick={close}>All notifications</a><a href="/account#notifications" onClick={close}>Notification settings</a></nav></section></Show>
-    </Show>
-  </>;
+  );
+}
+
+/** The notifications panel, shared by the app bar and the document page. */
+export function NotificationsPanel(props: { close: () => void }): JSX.Element {
+  const close = () => props.close();
+  return <section aria-label="Notifications" class="fixed right-3 top-14 z-50 w-80 rounded-[7px] border border-edge bg-surface p-4 shadow-xl"><div class="mb-3 flex items-center justify-between"><h2 class="text-sm font-semibold">Notifications</h2><button type="button" aria-label="Close notifications" onClick={close}><X size={18} /></button></div><div class="max-h-[55vh] overflow-y-auto"><PeopleInbox compact close={close} /></div><nav aria-label="Notification links" class="mt-2 flex flex-col gap-2 border-t border-edge pt-3"><a href="/notifications" onClick={close}>All notifications</a><a href="/account#notifications" onClick={close}>Notification settings</a></nav></section>;
 }

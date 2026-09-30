@@ -26,13 +26,13 @@ const mount = (backend = service(), initial: StoryEditSelection = selection, opt
   const view = render(() => <AnnotationLayer id="doc1" backend={backend} railOpen={options.railOpen ?? true} onRailOpenChange={() => {}} initialSelection={initial} runtimeRef={frame.ref} sessionNonce="private" pickOnOpen={false} />);
   return { view, frame };
 };
-const write = (view: ReturnType<typeof render>, value: string) => { fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value } }); fireEvent.click(view.getByRole('button', { name: 'Post comment' })); };
+const write = (view: ReturnType<typeof render>, value: string) => { fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value } }); fireEvent.click(view.getByRole('button', { name: 'Post comment' })); };
 afterEach(() => vi.restoreAllMocks());
 
 it('prefills the sole online agent with its stable session target and requires comment text', async () => {
   const backend = service({ remoteSessions: vi.fn(async () => ({ sessions: [session, { ...session, id: 'offline', online: false }] })) as ArtifactBackend['remoteSessions'] });
   const { view } = mount(backend);
-  await waitFor(() => expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('@review '));
+  await waitFor(() => expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('@review '));
   expect(view.getByRole('button', { name: 'Post comment' })).toBeDisabled();
   write(view, '@review Please update this');
   await waitFor(() => expect(backend.createAnnotation).toHaveBeenCalledWith(expect.objectContaining({ body: `${remoteMention(session as Parameters<typeof remoteMention>[0])}Please update this` }), expect.any(String)));
@@ -42,13 +42,13 @@ it.each([
   [], [session, { ...session, id: 'second' }], [{ ...session, online: false }], [{ ...session, activity: 'stopped' }],
 ].map(sessions => ({ sessions })))('leaves new comments empty without a sole eligible online agent: %j', async ({ sessions }) => {
   const { view } = mount(service({ remoteSessions: vi.fn(async () => ({ sessions })) as ArtifactBackend['remoteSessions'] }));
-  await waitFor(() => expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue(''));
+  await waitFor(() => expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue(''));
 });
 
 it.each(['My draft', ''])('preserves an edited draft when sessions arrive late: %j', async value => {
   let resolve!: (answer: { sessions: typeof session[] }) => void;
   const { view } = mount(service({ remoteSessions: vi.fn(() => new Promise(done => { resolve = done; })) as ArtifactBackend['remoteSessions'] }));
-  const field = view.getByRole('textbox', { name: 'New comment' });
+  const field = view.getByRole('textbox', { name: 'Annotation comment' });
   fireEvent.input(field, { target: { value: 'My draft' } });
   fireEvent.input(field, { target: { value } });
   resolve({ sessions: [session] });
@@ -57,7 +57,7 @@ it.each(['My draft', ''])('preserves an edited draft when sessions arrive late: 
 
 it('keeps a removed default removed for the current composer', async () => {
   const { view } = mount(service({ remoteSessions: vi.fn(async () => ({ sessions: [session] })) as ArtifactBackend['remoteSessions'] }));
-  const field = view.getByRole('textbox', { name: 'New comment' });
+  const field = view.getByRole('textbox', { name: 'Annotation comment' });
   await waitFor(() => expect(field).toHaveValue('@review '));
   fireEvent.input(field, { target: { value: '' } });
   expect(field).toHaveValue('');
@@ -85,7 +85,7 @@ it('does not inherit a removed target identity into an id-less successor at the 
   write(view, 'draft survives replacement');
   expect(backend.createAnnotation).not.toHaveBeenCalled();
   expect(view.getByRole('alert')).toHaveTextContent('Wait for this change to save');
-  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('draft survives replacement');
+  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('draft survives replacement');
 });
 
 it('drops the old quote and range when the same path reports a different durable node', async () => {
@@ -123,7 +123,7 @@ it('submits the composer with command-enter and gives only Comment the filled tr
   const backend = service(); const { view } = mount(backend);
   expect(view.getByRole('button', { name: 'Cancel comment' })).toHaveClass('bg-transparent');
   expect(view.getByRole('button', { name: 'Post comment' })).toHaveClass('bg-accent');
-  const field = view.getByRole('textbox', { name: 'New comment' });
+  const field = view.getByRole('textbox', { name: 'Annotation comment' });
   fireEvent.input(field, { target: { value: 'from the keyboard' } });
   fireEvent.keyDown(field, { key: 'Enter', metaKey: true });
   await waitFor(() => expect(backend.createAnnotation).toHaveBeenCalledWith(expect.objectContaining({ body: 'from the keyboard' }), expect.any(String)));
@@ -139,12 +139,12 @@ it('shows the anchor edit refusal instead of silently swallowing it', async () =
   const backend = service({ createAnnotation: vi.fn(async () => { throw new Error('invalid_jsx: Inline style'); }) });
   const { view } = mount(backend); write(view, 'note');
   await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('invalid_jsx: Inline style'));
-  expect(view.getByRole('textbox', { name: 'New comment' })).toBeTruthy();
+  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toBeTruthy();
 });
 
 it('escape cancels the draft, like the cancel button', () => {
   const backend = service(); const frame = runtime(); const { view } = mount(backend, selection, { runtime: frame });
-  fireEvent.input(view.getByRole('textbox', { name: 'New comment' }), { target: { value: 'never mind' } });
+  fireEvent.input(view.getByRole('textbox', { name: 'Annotation comment' }), { target: { value: 'never mind' } });
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(view.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   expect(frame.send).toHaveBeenCalledWith({ type: 'mx:select', path: null });
@@ -163,5 +163,5 @@ it('keeps an unsaved-node draft and asks the user to wait for ordinary autosave'
   write(view, 'keep this draft');
   expect(backend.createAnnotation).not.toHaveBeenCalled();
   expect(view.getByRole('alert')).toHaveTextContent('Wait for this change to save');
-  expect(view.getByRole('textbox', { name: 'New comment' })).toHaveValue('keep this draft');
+  expect(view.getByRole('textbox', { name: 'Annotation comment' })).toHaveValue('keep this draft');
 });

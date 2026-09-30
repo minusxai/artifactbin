@@ -49,7 +49,8 @@ it('opens the reader settings and phone menu and applies document mode to the ad
   fireEvent.click(trusted().getByRole('button', { name: 'Dark mode' }));
   expect(story).toHaveClass('dark');
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-  expect(trusted().getByRole('navigation', { name: 'Menu' })).toHaveClass('mx-reader-panel--menu');
+  expect(trusted().getByRole('navigation', { name: 'Menu' })).toBeInTheDocument();
+  expect(trusted().getByRole('link', { name: 'Artifacts' })).toBeInTheDocument();
 });
 
 it('a commenter sees comments in the controls panel but no duplicate fork, edit or delete', () => {
