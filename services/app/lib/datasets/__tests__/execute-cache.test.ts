@@ -6,7 +6,7 @@ const fixture = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('../postgres', () => ({ queryPostgres: fixture.query }));
 vi.mock('../secrets', () => ({ resolveDatasetConnection: async () => ({ host: 'db.example.com',port:5432,database:'app',username:'reader',ssl:true,password: 'fixture' }) }));
 vi.mock('../catalog', () => ({ storedTables: vi.fn() }));
-vi.mock('@/lib/sql/engine', () => ({ runQueries: vi.fn(), isQueryFailure: () => false }));
+vi.mock('@/lib/sql/engine', () => ({ runQueries: vi.fn(), runManyQueries: vi.fn(), isQueryFailure: () => false }));
 import { executeCatalog } from '../execute';
 const catalog: DatasetCatalog = { kind: 'postgres', connection:{host:'db.example.com',port:5432,database:'app',username:'reader',ssl:true,passwordSecretId:'secret'}, refreshSeconds: 60, defaultSchema: 'public', tables: [{ schema: 'public', name: 'rows', source: { schema: 'public', table: 'rows' }, columns: [{ name: 'payload', type: 'string' }] }] };
 const run = (key: number, refresh = false) => executeCatalog(catalog, 'select payload from rows where $key > 0', { key }, { refresh,authorize:async()=>{} });

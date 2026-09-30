@@ -108,7 +108,7 @@ describe('the file, for a coding agent asked to edit it', () => {
   it('puts the JSON before the code, with the top-level source as its second key', () => {
     expect(html.indexOf('id="afbin-file"')).toBeLessThan(html.indexOf('id="afbin-code"'));
     const json = /id="afbin-file">([^<]*)<\/script>/.exec(html)![1]!;
-    expect(json.startsWith(`{"format":1,"source":${JSON.stringify(file.source).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')},`)).toBe(true);
+    expect(json.startsWith(`{"format":1,"source":${JSON.stringify(file.source).replace(/</g, '\\u003c')},`)).toBe(true);
     // The first "source" in the text is the one to edit — not base.source.
     expect(json.indexOf('"source"')).toBe(json.indexOf(',"source":') + 1);
   });

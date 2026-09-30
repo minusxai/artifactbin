@@ -20,7 +20,7 @@
  * request but one — code view's extras script from the file's own origin
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
-import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/agent-discovery-tags';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
@@ -118,6 +118,14 @@ unpack(${JSON.stringify(ARTIFACT_FILE_IDS.code)}).then(function(code){run(code);
 /** The boot placeholder's look: system fonts, centred, both colour schemes. */
 const BOOT_CSS = 'html{color-scheme:light dark}body{margin:0}#afbin-boot{font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#6b6b70;padding:48px 16px;text-align:center;margin:0}';
 
+/**
+ * The file's JSON, inert inside its `<script type="application/json">`: every `<` escaped (no
+ * `</script>` or `<!--` in a string can end or bend the block), U+2028/9 too. Deliberately NOT
+ * utils' scriptJson, which also escapes `>`: an agent edits this text by hand (artifactFileAgentNote),
+ * and `</h1>` stays readable as `\u003c/h1>` where scriptJson would write `\u003c/h1\u003e`.
+ */
+const fileJson = (value: unknown) => JSON.stringify(value)
+  .replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 /** The complete `.html` text for these parts. Pure; safe for any JSON content (no `</script>` break-out). */
@@ -140,7 +148,7 @@ export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
     + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`
     + `<div id="${ARTIFACT_FILE_IDS.root}">${compiledStory}<p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
     + Object.entries(parts.templates ?? {}).map(([key, markup]) => `<template data-mx-island-template="${escapeHtml(key)}">${escapeHtml(markup)}</template>\n`).join('')
-    + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${scriptJson({ format, source, ...rest })}</script>\n`
+    + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${fileJson({ format, source, ...rest })}</script>\n`
     + `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.code}">${parts.code}</script>\n`
     + (parts.compiledCode ? `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.compiledCode}">${parts.compiledCode}</script>\n` : '')
     + (parts.wasm ? `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.wasm}">${parts.wasm}</script>\n` : '')
