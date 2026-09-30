@@ -24,8 +24,8 @@ const BUILD_ID_RE = /^[0-9a-f]{16}$/;
 let cached: { text: string; build: CompilerBuild } | null = null;
 
 /** Validate the manifest the build wrote; a malformed one is an error, never a build a compile could key on. */
-function parse(text: string, file: string): CompilerBuild {
-  const raw = JSON.parse(text) as { build?: unknown; manifest?: unknown; sqliteWasm?: unknown; ssr?: { url?: unknown; exports?: unknown } };
+export function parseCompilerBuild(text: string, file: string): CompilerBuild {
+  const raw = JSON.parse(text) as { files?: Record<string, { imports?: string[] }>; build?: unknown; manifest?: unknown; sqliteWasm?: unknown; ssr?: { url?: unknown; exports?: unknown } };
   if (typeof raw.build !== 'string' || !BUILD_ID_RE.test(raw.build)) throw new Error(`island build: ${file} has no 16-hex build id`);
   if (!raw.manifest || typeof raw.manifest !== 'object' || Array.isArray(raw.manifest)) throw new Error(`island build: ${file} has no manifest`);
   const manifest: Record<string, string> = {};
@@ -35,7 +35,8 @@ function parse(text: string, file: string): CompilerBuild {
     manifest[specifier] = url;
   }
   if (raw.sqliteWasm !== undefined && (typeof raw.sqliteWasm !== 'string' || !/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/.test(raw.sqliteWasm))) throw new Error(`island build: ${file} has an invalid SQLite wasm URL`);
-  return Object.freeze({ id: raw.build, manifest: Object.freeze(manifest), ...(raw.sqliteWasm ? { sqliteWasm: raw.sqliteWasm } : {}),
+  const graph = Object.fromEntries(Object.entries(raw.files ?? {}).map(([url, file]) => [url, file.imports ?? []]));
+  return Object.freeze({ id: raw.build, manifest: Object.freeze(manifest), graph: Object.freeze(graph), ...(raw.sqliteWasm ? { sqliteWasm: raw.sqliteWasm } : {}),
     ...(raw.ssr && typeof raw.ssr.url === 'string' && raw.ssr.url.startsWith('/islands/') && raw.ssr.exports && typeof raw.ssr.exports === 'object'
       ? { ssr: { url: raw.ssr.url, exports: raw.ssr.exports as Record<string, string> } } : {}) });
 }
@@ -46,6 +47,6 @@ export function loadCompilerBuild(): CompilerBuild {
   const file = path.resolve(process.cwd(), ISLANDS_MANIFEST_PATH);
   const text = readFileSync(file, 'utf8');
   if (cached?.text === text) return cached.build;
-  cached = { text, build: parse(text, ISLANDS_MANIFEST_PATH) };
+  cached = { text, build: parseCompilerBuild(text, ISLANDS_MANIFEST_PATH) };
   return cached.build;
 }

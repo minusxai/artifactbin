@@ -17,6 +17,7 @@ import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
 import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/compile-dataflow';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';
 
 const source = process.argv[2]!;
 const parsed = parseJsx(source) as { nodes: JsxNode[] };
@@ -41,5 +42,6 @@ const built = await buildDocumentModules(generated, {
 const ssr = await loadSsrModule(built.ssr!, store);
 const carriers = [...built.html.matchAll(/<script type="application\/json"[^>]*>[\s\S]*?<\/script>/g)].map((match) => match[0]).join('');
 const html = ssr.render({ values: declaredValues(flow), results: JSON.parse(process.argv[4]!), mermaidImages: {}, drawings: {} }) + carriers;
-const browserCode = new TextDecoder().decode(stored.get(built.module!.sha));
+// The bytes as the browser receives them: bound to the build's chunk URLs when served (runtime-binding).
+const browserCode = bindModuleCode(new TextDecoder().decode(stored.get(built.module!.sha)), loadCompilerBuild());
 process.stdout.write(JSON.stringify({ html, islands: generated.islands, browserCode, islandRefs: generated.islandRefs, flow }));

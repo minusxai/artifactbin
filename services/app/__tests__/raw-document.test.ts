@@ -36,7 +36,7 @@ describe('/a/:id/raw compiled markup', () => {
     expect(html).toContain('<title>Scripted doc</title>');
     expect(html).toContain('Hello');
     expect(html).toContain(`id="${ISLAND_DATA_ID}"`);
-    expect(html).toMatch(/<script type="module" src="\/islands\/d\/[0-9a-f]{16}\.js" crossorigin><\/script>/);
+    expect(html).toMatch(/<script type="module" src="\/islands\/d\/[0-9a-f]{16}\.js\?b=[0-9a-f]{16}" crossorigin><\/script>/);
     expect(island(html)?.authorScript).toContain('document.body.dataset.ran');
     expect(html).not.toContain('type="text/mx-author"');
   });

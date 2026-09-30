@@ -58,7 +58,9 @@ import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
-import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { bindModule } from '@/lib/compiled-page/runtime-binding';
+import { archiveSharedBuild, retainedBuild, retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
 
 /**
@@ -277,12 +279,25 @@ const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record
 /** The agent pointer's tail as the assembler ends a page with it (lib/agent-discovery). */
 const agentDiscoveryTailOf = (origin: string): string => agentDiscoveryTail(agentDiscovery(origin));
 
+let liveBuildArchived = false;
+function archiveLiveBuild(): void {
+  if (liveBuildArchived) return;
+  liveBuildArchived = true;
+  try {
+    const build = loadCompilerBuild();
+    void archiveSharedBuild(build).catch((error: unknown) => { liveBuildArchived = false; console.warn('[islands] archiving the live build failed', error); });
+  } catch { liveBuildArchived = false; /* no island build yet (a test or a fresh checkout) */ }
+}
+
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
   // A serving process prepares each new head for its readers after the write commits (lib/story/prepared-page.server).
   enablePreparedPageWarmups();
   // …and revalidates the guest snapshots a write made stale (lib/compiled-page/snapshots.server).
   enableSnapshotRevalidations();
+  // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
+  // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
+  archiveLiveBuild();
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
@@ -506,6 +521,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    */
   const ISLAND_ENCODINGS_KEPT = 512;
   const islandEncodings = new Map<string, Promise<EncodedVariants>>();
+  const boundModules = new Map<string, Buffer>();
   const encodedIsland = (key: string, bytes: Buffer): Promise<EncodedVariants> => {
     let encoded = islandEncodings.get(key);
     if (!encoded) {
@@ -526,8 +542,31 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Only a path the store could have written is looked up: 16 lowercase hex and the one extension.
   app.on(['GET', 'HEAD'], `${DOCUMENT_MODULE_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.js$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await islandModules.get(sha) : null;
-    return bytes ? islandFile(c, `d/${sha}`, bytes, 'text/javascript; charset=utf-8') : c.notFound();
+    const stored = sha ? await islandModules.get(sha) : null;
+    if (!stored) return c.notFound();
+    // The stored bytes name the shared runtime by specifier; `?b=` is the build the page was assembled
+    // for, and the bytes are bound to exactly that build's chunks (runtime-binding): the live build, or an
+    // older one's retained manifest (a tab open across a deploy, a prefetched page, a pinned page).
+    const live = loadCompilerBuild();
+    const asked = c.req.query('b');
+    const build = asked === undefined || asked === live.id ? live : await retainedBuild(asked);
+    if (!build) return c.notFound();
+    const key = `d/${sha}/${build.id}`;
+    let bound = boundModules.get(key);
+    if (!bound) {
+      const text = Buffer.from(stored).toString('utf8');
+      const binding = bindModule(text, build);
+      // A module naming a chunk this build lacks never runs against it.
+      if (binding.missing.length) return c.notFound();
+      bound = binding.code === text ? Buffer.from(stored) : Buffer.from(binding.code);
+      boundModules.set(key, bound);
+      while (boundModules.size > ISLAND_ENCODINGS_KEPT) boundModules.delete(boundModules.keys().next().value!);
+    }
+    // Unversioned, a module that names the runtime by specifier would be cached immutable against one
+    // build; every page names it with `?b=` (assembler bindModuleRef). A module whose bytes name chunk
+    // URLs themselves (compiled before specifiers were kept) is immutable as it is.
+    if (asked === undefined && !bound.equals(stored)) return c.notFound();
+    return islandFile(c, key, bound, 'text/javascript; charset=utf-8');
   });
   app.on(['GET', 'HEAD'], `${TEMPLATE_RESOURCE_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];

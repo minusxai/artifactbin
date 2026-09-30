@@ -104,7 +104,7 @@ try {
     assert(readerModules.some(url=>/\/islands\/d\//.test(url)) && readerModules.some(url=>/\/islands\/boot-/.test(url)),
       'compiled document and boot are discoverable in HTML');
     for(const url of readerModules) {
-      const loaded=()=>requested.has(url);
+      const loaded=()=>requested.has(new URL(url,base).pathname);
       for(let attempt=0;attempt<100&&!loaded();attempt++)await new Promise(resolve=>setTimeout(resolve,20));
       assert(loaded(),url+' requested before the first entry executes');
     }
