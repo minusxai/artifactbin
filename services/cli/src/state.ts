@@ -39,6 +39,8 @@ export type StateKind =
   | 'retired-create'     // key: path         value: {id, path, server, key}
   | 'background-update' // key: server origin; value: local check/backoff timestamps
   | 'server-identity'   // key: selected origin; value: {canonical, aliases, checkedAt} (server-identity.ts)
+  | 'preview-thread'    // key: thread id; value: local production annotation wire
+  | 'preview-thread-request' // key: file and idempotency key; value: thread id
   | 'preview-comment'   // key: comment id; value: selected-file/node attribution and text
   | 'archive';           // key: <kind>/<id>  value: anything kept for forensics, never read by commands
 

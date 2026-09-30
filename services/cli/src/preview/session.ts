@@ -1,5 +1,10 @@
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
+import {authorFrameResponse} from '../../../app/server/author-frame';
+import {createPreviewEditor} from './editor';
+import {previewAnnotations} from './annotations';
+import {BackendRequestError} from '../../../app/lib/artifact-backend/errors';
+import type {DocumentMetadata} from '../document';
 import type {RefDataMap} from '../../../app/lib/story/ref-data';
 import {imageReferenceId} from '../../../app/lib/story/image-source';
 import {fileContentType} from '../../../app/lib/story/file-types';
@@ -21,7 +26,9 @@ import {confinedPath,stageFiles,recoverFiles} from '../journal';
 import {digest,atomicWrite} from '../files';
 import {parseJsx} from '../../../app/lib/jsx';
 import {splitHelmet} from '../../../app/lib/story/helmet';
-import {stampNodeIds} from '../../../app/lib/story/node-ids';
+import {stampNodeIds,nodeIndex} from '../../../app/lib/story/node-ids';
+import {parseAnnotationRange} from '../../../app/lib/story/annotation-range';
+import type {PreviewComment} from './comments';
 import {localInputPath,readLocalDataset,type LocalDataset} from './local-inputs';
 import {CliError} from '../errors';
 import type {Scalar} from '../../../contracts/src/index';
@@ -37,7 +44,6 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  const allowed=new Set(options.files),resources=new Set<string>();
  for(const file of options.files)for(const path of await previewGraph(root,file,options.localFiles)){if(path.toLowerCase().endsWith('.jsx'))allowed.add(path);else resources.add(path);}
  await mkdir(home,{recursive:true});
- type Comment={id:string;file:string;node:string;name:string;text:string};
  let queue:Promise<unknown>=Promise.resolve();
  const serial=<T,>(run:()=>Promise<T>):Promise<T>=>{const next=queue.then(run);queue=next.catch(()=>{});return next;};
  const pathFor=async(file:string)=>{if(!allowed.has(file))throw new Refusal(403,'File is not selected');return confinedPath(root,join(root,file));};
@@ -88,6 +94,21 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(!options.dataset)throw new Refusal(422,`Remote dataset ${id} requires its host connection`);
   return options.dataset(id);
  };
+ const save=async(file:string,revision:string,source:string,metadata?:DocumentMetadata)=>withLock(home,root,async()=>{
+    const current=await read(file);
+    if(revision!==current.revision)throw new Refusal(409,'File changed; draft retained');
+    if(typeof source!=='string'||!parseJsx(source).ok)throw new Refusal(400,'Invalid JSX');
+    // Preserve durable node anchors and the remote baseline; never accept metadata from browser saves.
+    const body=stampNodeIds(source,{previousSource:current.body}).source;
+    const bytes=Buffer.from(writeDocument({metadata:metadata??current.metadata,body}));
+    await read(file,bytes.toString()); // Validate the proposed tree and dependency scope before writing.
+    await mkdir(join(configDir(home),'backups','preview'),{recursive:true});
+    await atomicWrite(join(configDir(home),'backups','preview',randomUUID()),current.source);
+    await stageFiles(home,root,[{path:file,before:current.revision,data:bytes}]);
+    await recoverFiles(home,root);
+    return read(file);
+ });
+ const editor=createPreviewEditor({read,write:save});
  const comments=await State.open(home);
  let url='';
  const server=createServer((req,res)=>{void (async()=>{
@@ -103,7 +124,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const file=workspaceFile??target.searchParams.get('file')??options.files[0]!;
   if(req.method==='GET'&&target.pathname==='/'){res.writeHead(302,{Location:'/workspace/'+file.split('/').map(encodeURIComponent).join('/')+(options.capture?'?capture=1':'')});return res.end();}
   if(req.method==='GET'&&target.pathname==='/document'){const {flow:_flow,declared:_declared,...document}=await read(file);return json(document);}
-  if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<Comment>(root,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
+  if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<PreviewComment>(root,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
   if(req.method==='GET'&&(target.pathname==='/resource'||workspaceFile&&resources.has(file))){if(!resources.has(file))throw new Refusal(403,'Resource not selected');res.setHeader('Content-Type',fileContentType(file)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,file))));}
   if(req.method==='GET'&&/^\/a\/[A-Za-z0-9]{6,12}$/.test(target.pathname)){
    const local=options.localFiles?.[target.pathname.slice(3)];
@@ -112,6 +133,8 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&/^\/a\/[A-Za-z0-9]{6,12}$/.test(target.pathname)&&options.origin){res.writeHead(302,{Location:options.origin+target.pathname});return res.end();}
   if(req.method==='GET'&&target.pathname.startsWith('/remote/')){const id=target.pathname.slice(8);const mapped=options.localFiles?.[id];const local=remoteIds.has(id)&&mapped&&resources.has(mapped)?await localInputPath(root,mapped):undefined;if(local){res.setHeader('Content-Type',fileContentType(local)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,local))));}if(!remoteIds.has(id)||!options.asset)throw new Refusal(403,'Remote reference is not selected');const asset=await options.asset(id);res.setHeader('Content-Type',asset.contentType);return res.end(asset.bytes);}
   if(req.method==='GET'&&target.pathname.startsWith('/fonts/')&&options.publicAssets){const path=await confinedPath(options.publicAssets,target.pathname.slice(1));res.setHeader('Content-Type',fileContentType(path)??'font/woff2');return res.end(await readFile(path));}
+  if(req.method==='GET'&&target.pathname==='/logo-128.png'&&options.publicAssets){res.setHeader('Content-Type','image/png');return res.end(await readFile(await confinedPath(options.publicAssets,'logo-128.png')));}
+  if((req.method==='GET'||req.method==='HEAD')&&target.pathname==='/author-frame'){const response=authorFrameResponse(new Request(target,{method:req.method}),null,url);res.statusCode=response.status;response.headers.forEach((value,key)=>res.setHeader(key,value));return res.end(Buffer.from(await response.arrayBuffer()));}
   if(req.method==='GET'&&target.pathname==='/files')return json([...allowed]);
   if(req.method==='GET'&&target.pathname==='/image'){
    const current=await read(file),id=imageReferenceId(target.searchParams.get('u')??'');
@@ -126,20 +149,28 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='POST'){
    let bytes='';for await(const chunk of req){bytes+=chunk;if(bytes.length>1_000_000)throw new Refusal(413,'Body too large');}
    const input=JSON.parse(bytes);await pathFor(input.file);
-   if(target.pathname==='/save')return json(await serial(()=>withLock(home,root,async()=>{
+   if(target.pathname==='/save')return json(await serial(()=>save(input.file,input.revision,input.body)));
+   if(target.pathname==='/editor')return json(await serial(async()=>{
+    if(input.operation==='load')return editor.load(input.file);
+    if(input.operation==='commit')return editor.commit(input.file,input);
     const current=await read(input.file);
-    if(input.revision!==current.revision)throw new Refusal(409,'File changed; draft retained');
-    if(typeof input.body!=='string'||!parseJsx(input.body).ok)throw new Refusal(400,'Invalid JSX');
-    // Preserve durable node anchors and the remote baseline; never accept metadata from browser saves.
-    const body=stampNodeIds(input.body,{previousSource:current.body}).source;
-    const bytes=Buffer.from(writeDocument({metadata:current.metadata,body}));
-    await read(input.file,bytes.toString()); // Validate the proposed tree and dependency scope before writing.
-    await mkdir(join(configDir(home),'backups','preview'),{recursive:true});
-    await atomicWrite(join(configDir(home),'backups','preview',randomUUID()),current.source);
-    await stageFiles(home,root,[{path:input.file,before:current.revision,data:bytes}]);
-    await recoverFiles(home,root);
-    return read(input.file);
-   })));
+    if(input.operation==='prepare'){
+     if(typeof input.markup!=='string')throw new Refusal(400,'Invalid markup');
+     if((collectRefUses(input.markup)??[]).some(ref=>!remoteIds.has(ref.id)))throw new Refusal(403,'Restart preview to include this reference.');
+     return {};
+    }
+    if(input.operation==='css')return {css:await compileStoryCss(String(input.markup),{force:true})};
+    if(input.operation==='queries'){
+     const draft=await read(input.file,writeDocument({metadata:current.metadata,body:String(input.markup)}));
+     return {...await runLocal(draft.flow,tableFor,{values:{}}),flow:draft.flow};
+    }
+    const annotations=previewAnnotations(comments,root,input.file,current.body);
+    if(input.operation==='annotations.list')return annotations.list(input.status);
+    if(input.operation==='annotations.create')return annotations.create(input.input??{},input.key);
+    if(input.operation==='annotations.act')return annotations.act(input.id,input.input??{});
+    if(input.operation==='annotations.delete'){annotations.delete(input.id);return null;}
+    throw new Refusal(400,'Unknown editor operation');
+   }));
    if(target.pathname==='/query'){
     // A document that does not compile fails the capture as a query error would: the export names it.
     const current=await read(input.file).catch((error:unknown)=>{if(options.capture&&error instanceof Refusal)failure=error.message;throw error;}),datasets:Record<string,LocalDataset>={};
@@ -153,19 +184,21 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    if(target.pathname==='/comments'){
     const current=await read(input.file);
     // Comments refer to durable authored node IDs, never a transient DOM position.
-    if(typeof input.node!=='string'||!current.body.includes(`id="${input.node}"`)||typeof input.name!=='string'||!input.name.trim()||input.name.length>100||typeof input.text!=='string'||!input.text.trim()||input.text.length>10000)throw new Refusal(400,'Invalid comment');
-    const comment={id:randomUUID(),file:input.file,node:input.node,name:input.name,text:input.text};
+    const range=input.range==null?null:parseAnnotationRange(input.range);
+    if(typeof input.node!=='string'||!nodeIndex(current.body).has(input.node)||typeof input.name!=='string'||!input.name.trim()||input.name.length>100||typeof input.text!=='string'||!input.text.trim()||input.text.length>10000||input.range!=null&&!range||input.quote!==undefined&&(typeof input.quote!=='string'||input.quote.length>10000))throw new Refusal(400,'Invalid comment');
+    const comment:PreviewComment={id:randomUUID(),file:input.file,node:input.node,name:input.name.trim(),text:input.text.trim(),...(input.quote!==undefined?{quote:input.quote}:{}),range};
     comments.put(root,'preview-comment',comment.id,comment);return json(comment);
    }
   }
-  if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){await pathFor(file);const directory=dirname(file);const base='/workspace/'+(directory==='.'?'':directory.split('/').map(encodeURIComponent).join('/')+'/');res.setHeader('Content-Type','text/html');return res.end(`<!doctype html><html><head><meta charset="utf-8"><base href="${base}"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifactbin preview</title><style>.afbin-tools{font:14px system-ui,sans-serif;padding:20px;background:#f8fafc;color:#0f172a;border-bottom:1px solid #cbd5e1}.afbin-tools nav{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}.afbin-tools label{display:block;margin:12px 0}.afbin-tools input,.afbin-tools textarea,.afbin-tools select{display:block;box-sizing:border-box;max-width:100%;padding:8px;border:1px solid #94a3b8;border-radius:4px;background:white;color:#0f172a}.afbin-tools textarea{width:100%;font:13px ui-monospace,monospace}.afbin-tools button{padding:8px 12px;margin-right:8px;cursor:pointer}</style></head><body><div id="root"></div><script type="module" src="/bundle/client.js"></script></body></html>`);}
+  if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){await pathFor(file);const directory=dirname(file);const base='/workspace/'+(directory==='.'?'':directory.split('/').map(encodeURIComponent).join('/')+'/');res.setHeader('Content-Type','text/html');return res.end(`<!doctype html><html><head><meta charset="utf-8"><base href="${base}"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifactbin preview</title><link rel="stylesheet" href="/bundle/chrome.css"></head><body><div id="root"></div><script type="module" src="/bundle/client.js"></script></body></html>`);}
   if(req.method==='GET'&&target.pathname.startsWith('/bundle/')&&options.assets){
    const path=await confinedPath(options.assets,target.pathname.slice('/bundle/'.length));
-   if(!relative(options.assets,path).endsWith('.js'))throw new Refusal(403,'Not a script');
-   res.setHeader('Content-Type','text/javascript');return res.end(await readFile(path));
+   const extension=relative(options.assets,path).endsWith('.css')?'css':relative(options.assets,path).endsWith('.js')?'js':null;
+   if(!extension)throw new Refusal(403,'Not a preview asset');
+   res.setHeader('Content-Type',extension==='css'?'text/css':'text/javascript');return res.end(await readFile(path));
   }
   throw new Refusal(404,'Not found');
- })().catch(error=>{if(options.capture&&req.url!=='/favicon.ico')failure=String(error.message);res.statusCode=error instanceof Refusal?error.status:500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message)}));});});
+ })().catch(error=>{if(options.capture&&req.url!=='/favicon.ico')failure=String(error.message);res.statusCode=error instanceof Refusal||error instanceof BackendRequestError?error.status:500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message)}));});});
  try{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(options.port??0,options.share?'0.0.0.0':'127.0.0.1',resolve);});}catch(error){comments.close();throw error;}
  const address=server.address();if(!address||typeof address==='string')throw Error('No port');url=`http://127.0.0.1:${address.port}`;
  return {url,document:read,failure:()=>failure,close:async()=>{await queue;server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));comments.close();}};
