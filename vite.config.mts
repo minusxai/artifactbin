@@ -55,7 +55,7 @@ const appFontFaces = (): Plugin => ({
 
 export default defineConfig({
   root: webRoot,
-  plugins: [appFontFaces(), react({ exclude: /\/solid\/.*\.tsx$/ }), solid({ include: [/\/services\/app\/solid\/.*\.(?:tsx|jsx)$/, /\/services\/app\/web\/solid-entry\.tsx$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
+  plugins: [appFontFaces(), react({ exclude: [/\/solid\/.*\.tsx$/, /\/node_modules\//] }), solid({ include: [/\/services\/app\/solid\/.*\.(?:tsx|jsx)$/, /\/services\/app\/web\/solid-entry\.tsx$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },

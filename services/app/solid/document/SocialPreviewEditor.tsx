@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import X from 'lucide-solid/icons/x';
 import { writeBrowserArtifact } from '@/lib/browser-artifact-write';
@@ -105,7 +106,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
       const stops = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"]')];
       if (stops.length === 0) return;
       const edge = event.shiftKey ? stops[0]! : stops[stops.length - 1]!;
-      if (document.activeElement === edge) { event.preventDefault(); (event.shiftKey ? stops[stops.length - 1]! : stops[0]!).focus(); }
+      if ((edge.getRootNode() as Document | ShadowRoot).activeElement === edge) { event.preventDefault(); (event.shiftKey ? stops[stops.length - 1]! : stops[0]!).focus(); }
     };
     window.addEventListener('keydown', onKey);
     onCleanup(() => window.removeEventListener('keydown', onKey));
@@ -216,7 +217,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     setCrop(documentDraft.crop); setCamera(documentDraft.crop); setReset(documentDraft.reset); setCropDirty(documentDraft.dirty);
   };
 
-  return <Portal><div class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
+  return <Portal mount={trustedPortalOf(document) ?? document.body}><div class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
     <button type="button" aria-label="Close social preview" onClick={props.onClose} class="absolute inset-0 cursor-default border-0 bg-black/50 p-0 backdrop-blur-[2px]" />
     <div ref={panel} role="dialog" aria-modal="true" aria-label="Social preview" class="relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface shadow-2xl">
       <header class="flex shrink-0 items-start justify-between border-b border-edge px-4 py-3">

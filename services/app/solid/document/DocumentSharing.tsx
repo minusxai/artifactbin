@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { SHARE_ROLES, SHARE_ROLE_LABEL, type ShareEntry, type ShareRole } from '@/lib/share-roles';
 import type { SharingPatch, Visibility } from '@/lib/artifacts';
 import type { SharingVerdict } from '@/lib/visibility-icons';
@@ -24,7 +25,7 @@ function RolePicker(props: { label: string; value: ShareRole; onChange: (role: S
 /** The document sharing door owns dialog state and sends one field per PATCH-shaped PUT. */
 export function DocumentSharing(props: {
   id: string; title: string; owner: boolean; editable?: boolean; url?: string;
-  variant?: 'chip' | 'menu' | 'dialog'; onClose?: () => void;
+  variant?: 'chip' | 'menu' | 'dialog' | 'embedded'; onClose?: () => void;
   onSharingChange?: (verdict: SharingVerdict) => void;
   onSocialPreview?: () => void; version?: number;
 }): JSX.Element {
@@ -77,17 +78,7 @@ export function DocumentSharing(props: {
     window.addEventListener('keydown', escape);
     onCleanup(() => { document.body.style.overflow = previous; window.removeEventListener('keydown', escape); });
   });
-  return <>
-    <Show when={props.variant !== 'dialog'}>
-      <button type="button" aria-label="Share" onClick={() => canManage() || props.onSocialPreview ? setOpen(true) : copy()} class={props.variant === 'menu' ? 'flex w-full px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised' : 'rounded border border-edge px-2 py-1 text-xs'}>
-        {copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}
-      </button>
-    </Show>
-    <Show when={open()}><Portal><div class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
-      <button type="button" aria-label="Close sharing by clicking outside" onClick={close} class="absolute inset-0 bg-black/45 backdrop-blur-[2px]" />
-      <section role="dialog" aria-modal="true" aria-label="Sharing" class="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface font-mono text-xs shadow-2xl" style={{ 'max-height': 'calc(100svh - 24px)' }}>
-        <header class="flex items-start gap-4 border-b border-edge px-4 py-4 sm:px-6"><div class="min-w-0 flex-1"><h2 class="break-words text-base font-semibold">Share “{props.title}”</h2><p class="mt-1 text-faint">Manage access, invite people, or copy the link.</p></div><button type="button" aria-label="Close sharing" onClick={close}>×</button></header>
-        <div class="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+  const body = () => <>
           <button type="button" aria-label="Copy link" onClick={copy} class="mb-4 w-full rounded border border-edge bg-raised px-3 py-2.5">{copied() ? 'copied' : 'copy link'}</button>
           <Show when={props.onSocialPreview}><figure class="mx-auto mb-5 w-full max-w-xs"><figcaption class="mb-2 text-center text-muted">Social preview</figcaption>
             <div class="relative aspect-[40/21] w-full overflow-hidden rounded border border-edge bg-raised">
@@ -115,7 +106,19 @@ export function DocumentSharing(props: {
             </section>
           </>}</Show>
           </Show>
-        </div>
+  </>;
+  if (props.variant === 'embedded') return <section aria-label="Sharing" class="font-mono text-xs">{body()}</section>;
+  return <>
+    <Show when={props.variant !== 'dialog'}>
+      <button type="button" aria-label="Share" onClick={() => canManage() || props.onSocialPreview ? setOpen(true) : copy()} class={props.variant === 'menu' ? 'flex w-full px-2 py-2 text-left font-mono text-xs text-muted hover:bg-raised' : 'rounded border border-edge px-2 py-1 text-xs'}>
+        {copied() ? 'copied' : state() ? `share: ${state()!.visibility}` : 'Share'}
+      </button>
+    </Show>
+    <Show when={open()}><Portal mount={trustedPortalOf(document) ?? document.body}><div class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
+      <button type="button" aria-label="Close sharing by clicking outside" onClick={close} class="absolute inset-0 bg-black/45 backdrop-blur-[2px]" />
+      <section role="dialog" aria-modal="true" aria-label="Sharing" class="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface font-mono text-xs shadow-2xl" style={{ 'max-height': 'calc(100svh - 24px)' }}>
+        <header class="flex items-start gap-4 border-b border-edge px-4 py-4 sm:px-6"><div class="min-w-0 flex-1"><h2 class="break-words text-base font-semibold">Share “{props.title}”</h2><p class="mt-1 text-faint">Manage access, invite people, or copy the link.</p></div><button type="button" aria-label="Close sharing" onClick={close}>×</button></header>
+        <div class="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">{body()}</div>
       </section>
     </div></Portal></Show>
   </>;

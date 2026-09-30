@@ -79,7 +79,7 @@ export function ProfileAliasRoute(): JSX.Element {
   const id = createMemo(() => parsePrettyPath(artifactViewPath(params.rest ?? '').split('/').filter(Boolean))?.id ?? null);
   return <Show when={!bare()} fallback={<ProfilePage />}>
     <Show when={id()} fallback={<NotFoundPage />}>
-      {resolvedId => <Show when={editing()} fallback={
+      {resolvedId => <Show when={editing() && !initialDocumentStory()} fallback={
         <Show when={initialDocumentStory()} fallback={<FolderRoute id={resolvedId()} />}><DocumentPage /></Show>
       }><DatasetEditorPage artifactId={resolvedId()} /></Show>}
     </Show>

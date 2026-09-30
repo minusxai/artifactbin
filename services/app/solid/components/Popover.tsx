@@ -91,8 +91,9 @@ function PopoverPanel(p: {
   });
   createEffect(() => {
     const onDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (wrapper.contains(target) || p.anchor()?.contains(target)) return;
+      // Composed: inside a trusted shadow root a document listener sees only the host as its target.
+      const path = event.composedPath();
+      if (path.includes(wrapper) || (p.anchor() && path.includes(p.anchor()))) return;
       p.onClose();
     };
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); p.onClose(); } };

@@ -34,7 +34,7 @@ function PendingPage(): JSX.Element {
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
   const servedDocument = !!initialDocumentStory();
-  const documentRoute = () => servedDocument && (/^\/a\/[^/]+\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+\/?$/.test(location.pathname));
+  const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/edit)?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
   return (
     <SessionProvider>
@@ -56,6 +56,11 @@ function ArtifactRoute(): JSX.Element {
   return initialDocumentStory() ? <DocumentPage /> : <FolderRoute />;
 }
 
+/** `/a/<id>/edit`: a served document opens in edit mode; a dataset's address is its editor. */
+function ArtifactEditRoute(): JSX.Element {
+  return initialDocumentStory() ? <DocumentPage /> : <DatasetEditorPage />;
+}
+
 export function App(): JSX.Element {
   return (
     <Router root={Root}>
@@ -65,7 +70,7 @@ export function App(): JSX.Element {
       <Route path="/assets" component={AssetsPage} />
       <Route path="/datasets/new" component={DatasetEditorPage} />
       <Route path="/files/new" component={FileUploadPage} />
-      <Route path="/a/:id/edit" component={DatasetEditorPage} />
+      <Route path="/a/:id/edit" component={ArtifactEditRoute} />
       <Route path="/chat" component={ChatPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/start" component={StartPage} />

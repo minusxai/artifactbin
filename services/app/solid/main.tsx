@@ -5,7 +5,10 @@ import '../web/heal-address';
 import { render } from 'solid-js/web';
 import '@/web/heal-address';
 import { captureInitialStory } from '@/web/initial-story';
+import { configureTrustedUiFromShell } from '@/lib/trusted-ui-styles';
 import { App } from './App';
 
 captureInitialStory();
+// The app's own sheet, re-scoped into every trusted shadow root (solid/components/TrustedUi).
+configureTrustedUiFromShell(document);
 render(() => <App />, document.getElementById('root')!);

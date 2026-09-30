@@ -214,8 +214,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   // paths; document reader views use the prepared compiled page (§10).
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
 
-  const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc
-    && !new URL(request.url).pathname.endsWith('/edit');
+  // `/edit` is edit mode on the same compiled page (solid/pages/Document); the page door admitted an editor.
+  const compiledMode = !!options.page && !!prepared && (!exporting || engineRequested(request.url)) && !starterDoc;
 
 
   const meta = (row.meta ?? {}) as {
