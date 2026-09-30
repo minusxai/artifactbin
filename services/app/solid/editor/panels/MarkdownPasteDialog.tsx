@@ -3,8 +3,8 @@
  * components/views/story/MarkdownPasteDialog.tsx in SOLID — the paste dialog owns its
  * keyboard boundary; insertion still belongs to the live editor.
  */
-import { onMount, type JSX } from 'solid-js';
-import { useDialogKeyboard } from './dialog-keyboard';
+import type { JSX } from 'solid-js';
+import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 
 export default function MarkdownPasteDialog(props: {
   value: string;
@@ -14,10 +14,9 @@ export default function MarkdownPasteDialog(props: {
 }): JSX.Element {
   let panel: HTMLDivElement | undefined;
   let textarea: HTMLTextAreaElement | undefined;
-  useDialogKeyboard(() => panel, () => props.onClose(), 'textarea,button:not([disabled])');
   // Solid sets `autofocus` as a plain attribute; jsdom (and some browsers) never act on it, so
   // the initial focus is set explicitly, the same outcome React's autoFocus prop gives at mount.
-  onMount(() => textarea?.focus());
+  createDialogShell({ panel: () => panel, onClose: () => props.onClose(), initialFocus: () => textarea, lockScroll: true, focusable: 'textarea,button:not([disabled])' });
   return (
     <div
       ref={panel}

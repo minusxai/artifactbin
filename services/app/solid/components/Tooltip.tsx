@@ -10,7 +10,8 @@
  * wraps), as with Radix.
  *
  * Behaviour kept from Radix: opens on hover after 300ms (at once within 100ms of another closing),
- * at once on keyboard focus; closes on leave, blur, pointerdown, Escape and another tooltip opening.
+ * at once on keyboard focus; closes on leave, blur, pointerdown, Escape and another tooltip opening —
+ * the timing shared with the reader kit's tooltip (lib/islands/kit/tooltip-core).
  * Placement is the framework-free Radix popper model the islands already use (lib/islands/kit/popper).
  * The destination is resolved when it opens: the trusted UI portal if the page has one
  * (lib/islands/trusted-portal), else the body, inside its own theme host.
@@ -19,31 +20,14 @@ import { children as resolveChildren, createEffect, createSignal, createUniqueId
 import { Portal } from 'solid-js/web';
 import { placePopper, type Placed, type Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-
-const TOOLTIP_OPEN = 'app-tooltip.open';
-const provider = { closedAt: 0 };
-const ARROW_TRANSFORM: Record<Side, string> = { top: 'translateY(100%)', right: 'translateY(50%) rotate(90deg) translateX(-50%)', bottom: 'rotate(180deg)', left: 'translateY(50%) rotate(-90deg) translateX(50%)' };
-const ARROW_ORIGIN: Record<Side, string> = { top: 'center', right: '0 0', bottom: 'center 0', left: '100% 0' };
+import { ARROW_ORIGIN, ARROW_TRANSFORM, createTooltipTiming } from '@/lib/islands/kit/tooltip-core';
 
 export function Tooltip(props: { content: JSX.Element; children: JSX.Element; side?: Side; disabled?: boolean }): JSX.Element {
   const child = resolveChildren(() => props.children);
   const [open, setOpen] = createSignal(false);
-  const [delayed, setDelayed] = createSignal(false);
   const [placed, setPlaced] = createSignal<Placed>();
   const id = createUniqueId();
-  let timer = 0;
-  const set = (value: boolean) => {
-    if (value === open()) return;
-    if (value) document.dispatchEvent(new CustomEvent(TOOLTIP_OPEN, { detail: id })); else provider.closedAt = Date.now();
-    setOpen(value);
-  };
-  const openNow = () => { clearTimeout(timer); timer = 0; setDelayed(false); set(true); };
-  const close = () => { clearTimeout(timer); timer = 0; set(false); };
-  const enter = () => {
-    if (Date.now() - provider.closedAt < 100) { openNow(); return; }
-    clearTimeout(timer); timer = window.setTimeout(() => { setDelayed(true); set(true); timer = 0; }, 300);
-  };
-  onCleanup(() => clearTimeout(timer));
+  const { state, enter, openNow, close } = createTooltipTiming({ open, setOpen });
 
   const trigger = (): HTMLElement | undefined => child.toArray().find((node): node is HTMLElement => node instanceof HTMLElement);
   createEffect(() => {
@@ -63,16 +47,8 @@ export function Tooltip(props: { content: JSX.Element; children: JSX.Element; si
   });
   createEffect(() => {
     const el = trigger(); if (!el) return;
-    const state = open() ? (delayed() ? 'delayed-open' : 'instant-open') : 'closed';
-    el.setAttribute('data-state', state);
+    el.setAttribute('data-state', state());
     if (open()) el.setAttribute('aria-describedby', id); else el.removeAttribute('aria-describedby');
-  });
-  createEffect(() => {
-    if (!open()) return;
-    const other = (e: Event) => { if ((e as CustomEvent).detail !== id) close(); };
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    document.addEventListener(TOOLTIP_OPEN, other); document.addEventListener('keydown', esc);
-    onCleanup(() => { document.removeEventListener(TOOLTIP_OPEN, other); document.removeEventListener('keydown', esc); });
   });
 
   return <>
@@ -98,7 +74,7 @@ function TooltipPopper(p: { anchor: HTMLElement | undefined; id: string; side: S
       <div role="tooltip" id={p.id} data-side={p.placed()?.side} data-slot="tooltip-content" data-story-floating=""
         class="pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md border border-edge-bright bg-surface px-2.5 py-1.5 text-left text-xs leading-normal text-fg shadow-md">
         {p.children}
-        <span ref={arrow} style={{ position: 'absolute', left: side() === 'right' ? '0px' : p.placed()?.arrowX !== undefined ? `${p.placed()!.arrowX}px` : undefined, top: side() === 'bottom' ? '0px' : p.placed()?.arrowY !== undefined ? `${p.placed()!.arrowY}px` : undefined, right: side() === 'left' ? '0px' : undefined, bottom: side() === 'top' ? '0px' : undefined, 'transform-origin': ARROW_ORIGIN[side()], transform: ARROW_TRANSFORM[side()], visibility: p.placed()?.hideArrow ? 'hidden' : undefined }}>
+        <span ref={arrow} style={{ position: 'absolute', left: side() === 'right' ? '0px' : p.placed()?.arrowX !== undefined ? `${p.placed()!.arrowX}px` : undefined, top: side() === 'bottom' ? '0px' : p.placed()?.arrowY !== undefined ? `${p.placed()!.arrowY}px` : undefined, right: side() === 'left' ? '0px' : undefined, bottom: side() === 'top' ? '0px' : undefined, 'transform-origin': ARROW_ORIGIN[side()] || undefined, transform: ARROW_TRANSFORM[side()], visibility: p.placed()?.hideArrow ? 'hidden' : undefined }}>
           <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="z-[100] fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style={{ display: 'block' }}><polygon points="0,0 30,0 15,10" /></svg>
         </span>
       </div>

@@ -28,7 +28,7 @@ it('closes on an outside click', () => {
   render(() => <Harness />);
   fireEvent.click(screen.getByLabelText('Alignment'));
   expect(screen.getByLabelText('Alignment options')).toBeTruthy();
-  fireEvent.mouseDown(document.body);
+  fireEvent.pointerDown(document.body);
   expect(screen.queryByLabelText('Alignment options')).toBeNull();
 });
 
