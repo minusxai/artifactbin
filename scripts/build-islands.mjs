@@ -4,11 +4,12 @@
  * (`@mx/kit/<family>`, lib/islands/contract `KIT_FAMILIES`) become ONE module graph, split into
  * content-addressed browser chunks under services/app/public/islands/, with
  *
- *   manifest.json  { build, manifest, files, ssr }
+ *   manifest.json  { build, manifest, files, ssr, offline }
  *     manifest     import specifier → URL (what a compiled page's module imports; `CompilerBuild.manifest`)
  *     files[url]   { raw, gz, br, imports } — byte counts and the STATIC imports, for preloads and budgets
  *     ssr          { url, exports } — the SERVER half: one file, `generate: 'ssr'`, for the compiled
  *                  page's SSR module (see buildServerHalf); never loaded by a browser
+ *     offline      URL of the OFFLINE half: every chunk as a factory for a downloaded file (see buildOfflineHalf)
  *     build        sha256(manifest text + server half + the island sources)[0..16] — the compiler build id's input
  *
  * One graph, so there is exactly one Solid: every chunk that needs it imports the same shared chunk.
@@ -200,8 +201,9 @@ export function closureOf(files, urls) {
  */
 export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const entryPoints = ENTRIES.map((e) => ({ in: e.file(), out: e.name }));
-  // The browser graph and the server half are independent builds of the same sources: run them together.
+  // The browser graph, the server half and the offline half are independent builds of the same sources: run them together.
   const serverHalf = buildServerHalf();
+  const offlineHalfBuild = buildOfflineHalf();
   const standalone = await buildStandaloneLazy();
   const result = await esbuild.build({
     absWorkingDir: ROOT,
@@ -224,8 +226,9 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   });
 
   const ssrHalf = await serverHalf;
+  const offlineHalf = await offlineHalfBuild;
   // Exactly one framework: an island that reached a React file would carry a second runtime.
-  const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs, ...standalone.flatMap((b) => b.inputs)])].sort();
+  const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs, ...offlineHalf.inputs, ...standalone.flatMap((b) => b.inputs)])].sort();
   const react = inputs.filter((i) => /node_modules\/(react|react-dom)\//.test(i));
   if (react.length) throw new Error(`build-islands: React reached the island graph (${react.slice(0, 3).join(', ')})`);
 
@@ -291,12 +294,16 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const ssrName = `ssr-${sha256(ssrHalf.bytes).slice(0, 16)}.js`;
   writeImmutable(ssrName, ssrHalf.bytes);
   const ssr = { url: url(ssrName), exports: SSR_EXPORTS };
+  // Stored gzipped, and under a suffix precompressTree leaves alone: only the server reads it, never a browser.
+  const offlineName = `offline-${sha256(offlineHalf.bytes).slice(0, 16)}.json.gzip`;
+  writeImmutable(offlineName, zlib.gzipSync(offlineHalf.bytes, { level: 9 }));
+  const offline = url(offlineName);
 
   const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs'].map((s) => [s, manifest[s]]));
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
-  const build = buildId(sortedManifest, ssr, inputs);
-  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr, sqliteWasm }, null, 1) + '\n');
-  return { build, manifest: sortedManifest, files: sortedFiles, ssr, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
+  const build = buildId(sortedManifest, { ssr, offline }, inputs);
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr, offline, sqliteWasm }, null, 1) + '\n');
+  return { build, manifest: sortedManifest, files: sortedFiles, ssr, offline, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
 }
 
 /**
@@ -338,6 +345,73 @@ async function buildServerHalf() {
 }
 
 /**
+ * THE OFFLINE HALF (lib/offline/compiled-bundle.server): the same entries as the browser graph, with
+ * `@mx/boot` swapped for the snapshot-only file boot (lib/offline/compiled-boot.ts, whose `@/lib/islands/rt`
+ * is the same module as `@mx/rt`, so one runtime), built once here so a download never bundles. A
+ * downloaded file cannot load module chunks from file://, so every chunk is turned into a CommonJS
+ * factory (`require` for its static imports and, with dynamic import lowered, for its lazy ones) that
+ * the file's tiny loader evaluates on demand. ONE JSON file:
+ *
+ *   { entries: specifier → module id, modules: id → { code, imports, dynamic }, lazy: { sqlite, chart } }
+ *
+ * Written gzipped (`offline-<sha>.json.gzip`, no precompressed siblings). A download concatenates the static and lazy closure of the specifiers its compiled module imports.
+ * The two engines only the file's boot reaches — SQLite for held imports, Vega for charts — are entries
+ * of their own (`lazy`), included only when the file needs them.
+ */
+export const OFFLINE_LAZY = Object.freeze({
+  sqlite: { specifier: '@mx/offline/sqlite', name: 'offline-sqlite', file: () => path.join(APP, 'lib/offline/compiled-sqlite.ts') },
+  chart: { specifier: '@mx/offline/chart', name: 'offline-chart', file: () => islandModule('chart-controller') },
+});
+
+async function buildOfflineHalf() {
+  const entries = [
+    ...ENTRIES.map((e) => ({ specifier: e.specifier, in: e.specifier === '@mx/boot' ? path.join(APP, 'lib/offline/compiled-boot.ts') : e.file(), out: e.name })),
+    ...Object.values(OFFLINE_LAZY).map((e) => ({ specifier: e.specifier, in: e.file(), out: e.name })),
+  ];
+  const result = await esbuild.build({
+    absWorkingDir: ROOT,
+    entryPoints: entries.map((e) => ({ in: e.in, out: e.out })),
+    outdir: 'offline-out',
+    write: false,
+    bundle: true,
+    splitting: true,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+    minify: true,
+    metafile: true,
+    entryNames: '[name]-[hash]',
+    chunkNames: 'chunk-[hash]',
+    alias: { '@': APP },
+    define: { 'process.env.NODE_ENV': '"production"' },
+    logLevel: 'error',
+    plugins: [solidPlugin({ generate: 'dom', hydratable: true })],
+  });
+  const outputs = Object.entries(result.metafile.outputs);
+  const modules = {};
+  const ids = {};
+  for (const file of result.outputFiles) {
+    const id = path.basename(file.path);
+    const meta = outputs.find(([key]) => path.basename(key) === id)?.[1];
+    if (!meta) throw new Error(`build-islands: no offline metafile entry for ${id}`);
+    const { code } = await esbuild.transform(file.text, { format: 'cjs', loader: 'js', target: 'es2022', minify: true, supported: { 'dynamic-import': false }, logLevel: 'error' });
+    const edges = (kind) => meta.imports.filter((i) => i.kind === kind && !i.external).map((i) => path.basename(i.path));
+    modules[id] = { code, imports: edges('import-statement'), dynamic: edges('dynamic-import') };
+    const entry = meta.entryPoint && entries.find((e) => meta.entryPoint === toPosix(path.relative(ROOT, e.in)));
+    if (entry) ids[entry.specifier] = id;
+  }
+  const missing = entries.filter((e) => !ids[e.specifier]).map((e) => e.specifier);
+  if (missing.length) throw new Error(`build-islands: no offline chunk for ${missing.join(', ')}`);
+  const sorted = Object.fromEntries(Object.keys(modules).sort().map((id) => [id, modules[id]]));
+  const half = {
+    entries: Object.fromEntries(ENTRIES.map((e) => [e.specifier, ids[e.specifier]])),
+    lazy: { sqlite: ids[OFFLINE_LAZY.sqlite.specifier], chart: ids[OFFLINE_LAZY.chart.specifier] },
+    modules: sorted,
+  };
+  return { bytes: Buffer.from(JSON.stringify(half)), inputs: Object.keys(result.metafile.inputs) };
+}
+
+/**
  * What an island loads LAZILY is browser-only by construction (the chart controller and Vega, the
  * Mermaid engine): it runs on interaction, never while the server renders. In the server half every
  * dynamic import resolves to a stub that refuses when called, so neither engine is bundled (nor React,
@@ -356,10 +430,10 @@ const browserOnlyLazy = {
  * under lib/islands outside tests, which covers the recipes the compiler evaluates at compile time and
  * are never in the browser graph, plus any repository module the graph reached.
  */
-function buildId(manifest, ssr, graphInputs) {
+function buildId(manifest, halves, graphInputs) {
   const sources = new Set(listFiles(ISLANDS_SRC).filter((f) => !f.split(path.sep).includes('__tests__')).map((f) => toPosix(path.relative(ROOT, f))));
   for (const input of graphInputs) if (!/^[\w-]+:/.test(input) && !input.includes('node_modules/')) sources.add(input);
-  const hash = crypto.createHash('sha256').update(JSON.stringify(manifest)).update(JSON.stringify(ssr));
+  const hash = crypto.createHash('sha256').update(JSON.stringify(manifest)).update(JSON.stringify(halves));
   for (const rel of [...sources].sort()) hash.update(`\0${rel}\0`).update(fs.readFileSync(path.join(ROOT, rel)));
   return hash.digest('hex').slice(0, 16);
 }
@@ -380,7 +454,8 @@ function cacheHit(outDir) {
     const now = sourceHashes(trackedSources(Object.keys(marker.sources)));
     if (JSON.stringify(now) !== JSON.stringify(marker.sources)) return false;
     const { manifest, files, ssr } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
-    return [...Object.keys(files), ssr?.url ?? '/missing-server-half'].every((u) => fs.existsSync(path.join(outDir, u.slice(ISLANDS_PATH.length + 1)))) && ISLAND_SPECIFIERS.every((s) => manifest[s]);
+    const { offline } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
+    return [...Object.keys(files), ssr?.url ?? '/missing-server-half', offline ?? '/missing-offline-half'].every((u) => fs.existsSync(path.join(outDir, u.slice(ISLANDS_PATH.length + 1)))) && ISLAND_SPECIFIERS.every((s) => manifest[s]);
   } catch {
     return false;
   }
