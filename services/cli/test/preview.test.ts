@@ -258,6 +258,26 @@ test('a capture bakes its rows server-side and marks itself export-ready with no
  }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
 });
 
+test('a capture serves a row-sourced image at the compiled kit\'s own /a/<id>/raw URL, with no /query first',async()=>{
+ const appDir=join(import.meta.dirname,'../../app');
+ const cwd=process.cwd();process.chdir(appDir);
+ const root=await mkdtemp(join(tmpdir(),'preview-capture-rowimage-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<Helmet><Import name="books_data" src="ref:data01" /><Query name="books">{`select * from books_data.rows`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy"/></For>');
+  session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),assets:root,publicAssets:join(appDir,'public'),capture:true,
+   dataset:async()=>({columns:[{name:'id',type:'string'},{name:'title',type:'string'},{name:'cover_ref',type:'string'}],rows:[{id:'a',title:'Book',cover_ref:'ref:red123'}]}),
+   asset:async id=>({bytes:Buffer.from('image bytes'),contentType:'image/png'})});
+  const page=await fetch(session.url+'/workspace/report.jsx?capture=1');
+  assert.equal(page.status,200);
+  const html=await page.text();
+  const src=html.match(/<img[^>]*src="([^"]*)"/)?.[1];
+  assert.equal(src,'/a/red123/raw');
+  const image=await fetch(session.url+src);
+  assert.equal(image.status,200);assert.equal(image.headers.get('content-type'),'image/png');
+  assert.equal(session.failure(),undefined);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
+});
+
 test('the preview browser bundle carries no react or react-dom',async()=>{
  const outdir=await mkdtemp(join(tmpdir(),'preview-bundle-'));
  try{

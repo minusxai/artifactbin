@@ -153,8 +153,12 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    let parsed:unknown;try{parsed=JSON.parse(raw);}catch{throw new Refusal(400,'Invalid query request');}
    return json(await runQuery(file,parsed as Record<string,unknown>));
   }
-  if(req.method==='GET'&&target.pathname==='/image'){
-   const current=await read(file),id=imageReferenceId(target.searchParams.get('u')??'');
+  if(req.method==='GET'&&(target.pathname==='/image'||/^\/a\/[A-Za-z0-9]{6,12}\/raw$/.test(target.pathname))){
+   // The compiled Select/image kit hardcodes a row-sourced ref's own URL as `/a/<id>/raw`, production's
+   // artifact-bytes route (lib/islands/kit/image.tsx) — never `/image?u=`, which only a document's own
+   // authored `ref:` attributes resolve through (refData, in read() below).
+   const id=target.pathname==='/image'?imageReferenceId(target.searchParams.get('u')??''):target.pathname.slice(3,-4);
+   const current=await read(file);
    const sources=declaredRefs(current.declared);
    if(!id||!sources.some(source=>datasetImages.get(source)?.has(id)))throw new Refusal(403,'Image reference is not selected');
    const mapped=options.localFiles?.[id],local=mapped?await localInputPath(root,mapped):undefined;
@@ -222,6 +226,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    if(options.capture){
     const datasets:Record<string,LocalDataset>={};
     for(const id of declaredRefs(current.declared))datasets[id]??=await tableFor(id);
+    // The same bookkeeping the /query POST does: an image ref inside a row is only servable once its
+    // dataset has actually been read, capture included (a capture never calls /query itself).
+    for(const [id,table] of Object.entries(datasets))datasetImages.set(id,new Set(table.rows.flatMap(row=>Object.values(row).flatMap(value=>{const ref=typeof value==='string'?imageReferenceId(value):null;return ref?[ref]:[];}))));
     const ran=await runLocal(current.flow,async id=>datasets[id],{values:{}});
     if(Object.keys(ran.errors).length)failure=Object.values(ran.errors).join('; ');
     values=ran.values;story=await renderStoryHtml(compiled,{values:ran.values,results:{tables:ran.tables,errors:ran.errors}});
