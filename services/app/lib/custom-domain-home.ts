@@ -50,7 +50,7 @@ export interface DomainHomeInput {
   profile: ProfileListingData | null;
   /** Where the footer's "artifactbin" points: the owner's profile on the app. */
   footerHref: string;
-  /** The stylesheets the app page links, in its order (web/index.html, as served). */
+  /** The stylesheets the app page links, in its order (web/solid-app.html, as served). */
   stylesheets: string[];
 }
 
