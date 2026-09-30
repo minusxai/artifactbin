@@ -83,11 +83,18 @@ const browser = await chromium.launch();
   await openArtifactControls(page);
   // Revealing hidden reader controls intentionally scrolls. Baseline the Edit
   // action itself, after that gesture, rather than attributing it to editing.
-  const readingAt = await frame().evaluate(() => window.scrollY);
+  // Where the reader is: the first paragraph under the bars (the one typed into next), its place ON SCREEN. Entering edit reserves the bar's height and
+  // scrolls by exactly that much, so scrollY moves while what the reader sees does not.
+  const readerPlace = await frame().evaluate(() => {
+    const el = [...document.querySelectorAll('p[id]')].find((p) => p.getBoundingClientRect().top > 130);
+    return { id: el.id };
+  });
+  const placeOf = () => frame().evaluate((id) => Math.round(document.getElementById(id).getBoundingClientRect().top), readerPlace.id);
+  const readingAt = await placeOf();
   await page.click('[aria-label="Edit artifact"]');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
-  const afterEntering = await frame().evaluate(() => window.scrollY);
+  const afterEntering = await placeOf();
   check(Math.abs(afterEntering - readingAt) < 5,
     `and did not move the reader (${readingAt} → ${afterEntering})`);
   check(await frame().evaluate(() => !!document.querySelector('#lede')?.isContentEditable),
@@ -122,7 +129,7 @@ const browser = await chromium.launch();
   const after = await (await api(start.id, start.token, '', {})).json();
   check(after.version > before.version, `typing persists with no save (v${before.version} → v${after.version})`);
   check(after.markup.includes('EDITED IN PLACE'), 'the typed text reached the stored source');
-  const afterTyping = await frame().evaluate(() => window.scrollY);
+  const afterTyping = await placeOf();
   check(Math.abs(afterTyping - readingAt) < 5, `and typing did not move the reader (${readingAt} → ${afterTyping})`);
 
   // AN AGENT WRITES, into the paragraph the cursor is parked in
