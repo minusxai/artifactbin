@@ -668,8 +668,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const titleEditor = () => (
     <input aria-label="Title" value={title()} placeholder="untitled"
       onInput={(e) => { setTitle(e.currentTarget.value); queue({ title: e.currentTarget.value }); }}
-      style={{ width: `${Math.max(8, Math.min(title().length + 2, 48))}ch`, 'max-width': '100%' }}
-      class="min-w-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none" />
+      style={{ width: `calc(${Math.max(9, Math.min(title().length + 2, 64))}ch + 14px)`, 'max-width': '100%' }}
+      class="min-w-0 text-ellipsis rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none" />
   );
   const selectionBody = () => <>
     <section aria-label="Document appearance" class="flex flex-col items-start gap-2 px-1 py-2">

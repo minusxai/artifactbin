@@ -115,3 +115,28 @@ it('refreshes source paths when whitespace normalizes or the prose region moves'
   expect(paragraph).toHaveAttribute('data-mx-ast', '0.5');
   expect(onChange).not.toHaveBeenCalled();
 });
+
+describe('line-boundary keys', () => {
+  const press = (editor: HTMLElement, init: KeyboardEventInit) => {
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    editor.dispatchEvent(event);
+    return event;
+  };
+  it('moves the caret to the visual line edge with Home/End, extending with Shift', () => {
+    const modify = vi.fn();
+    const native = Object.assign(window.getSelection()!, { modify });
+    const spy = vi.spyOn(window, 'getSelection').mockReturnValue(native);
+    const view = render(() => <FlowEditor nodes={nodes('<p id="a">alpha bravo</p>')} path="0" onChange={() => {}} />);
+    const editor = view.getByRole('textbox');
+    expect(press(editor, { key: 'End' }).defaultPrevented).toBe(true);
+    expect(modify).toHaveBeenLastCalledWith('move', 'forward', 'lineboundary');
+    expect(press(editor, { key: 'Home', shiftKey: true }).defaultPrevented).toBe(true);
+    expect(modify).toHaveBeenLastCalledWith('extend', 'backward', 'lineboundary');
+    modify.mockClear();
+    for (const init of [{ key: 'End', metaKey: true }, { key: 'Home', ctrlKey: true }, { key: 'ArrowRight' }, { key: 'PageDown' }, { key: 'ArrowDown' }]) {
+      expect(press(editor, init).defaultPrevented).toBe(false);
+    }
+    expect(modify).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
