@@ -1,3 +1,4 @@
+import { escapeHtml } from '@artifactbin/utils/escape';
 import type { JsxElement, JsxNode } from '@/lib/jsx/types';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { URL_ATTRS, URL_LIST_ATTRS } from '@/lib/jsx/url-attrs';
@@ -12,7 +13,6 @@ const owned = new Set(['sandbox', 'srcdoc', 'src', 'api', 'store', 'compiled', '
 const deniedAttrs = new Set(['dangerouslysetinnerhtml', 'srcdoc', 'ref', 'key', 'is', '...']);
 const voidTags = new Set(['area', 'br', 'col', 'hr', 'img', 'input', 'source', 'track', 'wbr']);
 function fail(message: string): never { throw new Error(`Iframe: ${message}`); }
-const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 function safeUrl(value: string, script = false): boolean {
   if (/[\u0000-\u0020\u007f\\]/.test(value)) return false;
   if (/^https?:\/\//i.test(value)) {
@@ -53,17 +53,17 @@ export function compileManagedIframe(node: JsxElement): ManagedIframeContent {
       }
       if (value === null || value === false) return '';
       const mapped = attr.name === 'className' ? 'class' : attr.name === 'htmlFor' ? 'for' : attr.name;
-      return bounded(value === true ? ` ${mapped}` : ` ${mapped}="${escape(String(value))}"`);
+      return bounded(value === true ? ` ${mapped}` : ` ${mapped}="${escapeHtml(String(value))}"`);
     }).join('');
   };
   attrs(node, true);
   const scripts: ManagedIframeScript[] = [];
   const render = (child: JsxNode, depth = 0): string => {
     if (depth > 100) fail('nesting limit exceeded');
-    if (child.type === 'text') return bounded(escape(child.value));
+    if (child.type === 'text') return bounded(escapeHtml(child.value));
     if (child.type === 'expression') {
       if (!child.value.static || (typeof child.value.json === 'object' && child.value.json !== null)) fail('children must be static scalar values');
-      return bounded(escape(child.value.json === null || typeof child.value.json === 'boolean' ? '' : String(child.value.json)));
+      return bounded(escapeHtml(child.value.json === null || typeof child.value.json === 'boolean' ? '' : String(child.value.json)));
     }
     const tag = child.tag.toLowerCase();
     if (child.isComponent || deniedTags.has(tag) || (!htmlTags.has(tag) && !['script', 'style', 'title', 'canvas'].includes(tag))) fail(`disallowed inner tag <${child.tag}>`);

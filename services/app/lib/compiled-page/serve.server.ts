@@ -61,7 +61,7 @@ import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { recompilePage, type PreparedPage } from '@/lib/story/prepared-page.server';
 import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/served-results.server';
 import { readUrlValues } from '@/lib/story/url-values';
-import { escapeHtml } from '@/lib/story/reader-chrome';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styles';
 import { assembleReaderPage } from './assembler';
 import { loadCompilerBuild } from './build.server';
