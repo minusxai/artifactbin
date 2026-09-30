@@ -1,5 +1,5 @@
 /**
- * Solid twin of lib/story/use-versions's `useArtifactVersions`: version
+ * Version
  * history as one capability — list, read one, restore.
  *
  * One endpoint family (`/api/my/...`) for every browser caller: an account

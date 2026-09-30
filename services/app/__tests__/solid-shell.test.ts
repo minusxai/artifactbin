@@ -34,7 +34,7 @@ it('serves the one Solid entry for every address the app answers, whatever the f
   expect(missing.status).toBe(404);
   expect(await missing.text()).toContain('/solid-entry.tsx');
   // A served address of every non-compiled kind the React SPA used to answer: the data tiers and the
-  // starter placeholder's read view. Each is the Solid entry now (index() never returns web/index.html).
+  // starter placeholder's read view. Each is the Solid entry now.
   const { token } = await mintToken('shell');
   const publish = async (body: Record<string, unknown>) => {
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));

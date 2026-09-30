@@ -1,5 +1,5 @@
 /**
- * Solid twin of lib/story/use-live-artifact: subscribe a mounted page to its
+ * Subscribe a mounted page to its
  * artifact's live document (`GET /a/<id>/events`).
  *
  * The server's stream carries a current head ping; the complete document is
