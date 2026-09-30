@@ -2,6 +2,7 @@
  * The compiler remains the sole owner of document code. This reads only the
  * module and the immutable shared build named by that compiled page.
  */
+import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -56,7 +57,9 @@ export async function packCompiledBrowserModule(
   if (!page.module) return null;
   const module = options.module ?? await createModuleStore().get(page.module.sha);
   if (!module) throw new Error(`offline: compiled module ${page.module.sha} is unavailable`);
-  const source = new TextDecoder().decode(module);
+  const decoded = new TextDecoder().decode(module);
+  // A module of the current contract names the runtime by specifier; the file pins the build it was exported with.
+  const source = page.sharedBuild ? bindModuleCode(decoded, page.sharedBuild) : decoded;
   const templateIds = [...source.matchAll(TEMPLATE)].map((match) => match[1]!);
   const templates: Record<string, string> = {};
   for (const sha of new Set(templateIds)) {

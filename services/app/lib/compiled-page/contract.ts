@@ -103,6 +103,12 @@ export interface ModuleRef {
   bytes: number;
   /** Shared chunk URLs the module imports (its static closure), for `<link rel="modulepreload">` and byte accounting. */
   imports: string[];
+  /**
+   * The shared import specifiers the stored bytes name (`@mx/rt`, `@mx/kit/tabs`), UNRESOLVED: the bytes
+   * carry no chunk URL. The runtime's URLs are bound at serve time from the live manifest
+   * (runtime-binding.ts), so a deploy that changes a shared chunk reaches stored pages without a recompile.
+   */
+  specifiers?: readonly string[];
 }
 
 /** The exact shared assets a stored compile uses (spec §3, §6). */
@@ -115,11 +121,23 @@ export interface CompilerBuild {
   sqliteWasm?: string;
   /** Content-addressed server half and its exported namespaces, retained with this build. */
   ssr?: { url: string; exports: Readonly<Record<string, string>> };
+  /** Chunk URL → the chunk URLs it statically imports (manifest.json `files`), for a module's preload closure. */
+  graph?: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Manually raise these only when an older stored page cannot be read or handed over safely. */
 export const MIN_PAGE_FORMAT = 3;
-export const MIN_HANDOVER_CONTRACT = 1;
+/**
+ * THE RUNTIME <-> STORED-MODULE CONTRACT. A stored page pins its own compiled output (module bytes with
+ * unresolved `@mx/*` specifiers, the SSR module, the story HTML); the shared runtime chunks are resolved
+ * from the live manifest on every serve. Any deploy that keeps this contract reaches every stored page
+ * with no recompile. Raise it (a stored page is then recompiled lazily on its next read, or selected by
+ * `compiled-backfill --where handover_contract<N`) only when the runtime can no longer run modules or
+ * story markup compiled under the older number: a changed boot/rt call signature, a removed or renamed
+ * specifier, a kit component whose server-rendered markup the browser tree no longer hydrates, or a
+ * compiler change whose output an old page cannot take. 2: unresolved specifiers.
+ */
+export const MIN_HANDOVER_CONTRACT = 2;
 
 /**
  * Everything the compiler produces for one version. Stored beside the prepared
@@ -127,7 +145,7 @@ export const MIN_HANDOVER_CONTRACT = 1;
  */
 export interface CompiledPage {
   build: string;
-  /** The exact shared URLs this version's browser and server modules use. */
+  /** Only an offline file pins the build it was exported with (lib/offline); the reader binds the live one. */
   sharedBuild?: CompilerBuild;
   /** App adoption contract; an app that does not know this version leaves navigation as full loads. */
   handoverContract?: number;
@@ -236,7 +254,7 @@ export const DOCUMENT_MODULE_RE = /^[0-9a-f]{16}$/;
 /** Content-addressed module bytes (modules.server.ts, w1-assembler), backed by lib/object-store. */
 export interface ModuleStore {
   /** Store the bytes; idempotent (the same bytes are the same key). Returns the ref the page imports. */
-  put(bytes: Uint8Array, imports: string[]): Promise<ModuleRef>;
+  put(bytes: Uint8Array, imports: string[], specifiers?: readonly string[]): Promise<ModuleRef>;
   /** The bytes for a sha the store wrote, or null. */
   get(sha: string): Promise<Uint8Array | null>;
 }

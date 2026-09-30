@@ -19,7 +19,7 @@ import { artifactPageAnswer } from '@/lib/artifact-page';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
+import { MIN_HANDOVER_CONTRACT, READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export-key';
@@ -133,34 +133,66 @@ describe('the reader mode on /raw', () => {
     expect((await db.query<{ page_format: number }>('SELECT page_format FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.page_format).toBe(3);
     await db.query(`UPDATE prepared_pages SET handover_contract = 0 WHERE artifact_id = $1`, [id]);
     expect((await raw(id)).status).toBe(200);
-    expect((await db.query<{ handover_contract: number }>('SELECT handover_contract FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.handover_contract).toBe(1);
+    expect((await db.query<{ handover_contract: number }>('SELECT handover_contract FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.handover_contract).toBe(MIN_HANDOVER_CONTRACT);
   });
 
-  it('serves an older recorded island build and its retained chunks after a newer deploy', async () => {
+  it('binds the live shared runtime to a stored page: a deploy with the same contract recompiles nothing', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Older build', markup: fixture('kit.jsx') });
     const db = await harness.db();
-    const moduleUrl = (await db.query<{ page: { compiled: { module: { url: string } } } }>(
-      'SELECT page FROM prepared_pages WHERE artifact_id = $1', [id],
-    )).rows[0]!.page.compiled.module.url;
-    const sharedUrl = loadCompilerBuild().manifest['@mx/boot']!;
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(jsonb_set(page, '{compiled,build}', '"older-build"'), '{compiled,sharedBuild,id}', '"older-build"'), island_build = 'older-build' WHERE artifact_id = $1`, [id]);
+    const snapshot = async () => (await db.query<{ page: unknown; page_key: string; handover_contract: number; updated_at: string }>(
+      'SELECT page, page_key, handover_contract, updated_at::text AS updated_at FROM prepared_pages WHERE artifact_id = $1', [id],
+    )).rows[0]!;
+    const live = loadCompilerBuild();
+    // The row was compiled on "another deploy": a different island build, unresolved specifiers in the module.
+    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"older-build"'), island_build = 'older-build' WHERE artifact_id = $1`, [id]);
+    const before = await snapshot();
+    const stored = before.page as { compiled: { module: { url: string; specifiers: string[] } } };
+    expect(stored.compiled.module.specifiers).toContain('@mx/boot');
     const response = await raw(id);
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain(moduleUrl);
-    expect((await db.query<{ island_build: string }>('SELECT island_build FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.island_build).toBe('older-build');
+    const html = await response.text();
+    // The page names the live chunks and a module URL bound to the live build.
+    const doc = new JSDOM(html).window.document;
+    const scripts = [...doc.querySelectorAll('script[type="module"]')].map((script) => script.getAttribute('src'));
+    expect(scripts).toContain(`${stored.compiled.module.url}?b=${live.id}`);
+    expect(html).toContain(live.manifest['@mx/boot']!);
+    const moduleResponse = await app.request(`${stored.compiled.module.url}?b=${live.id}`);
+    expect(moduleResponse.status).toBe(200);
+    const code = await moduleResponse.text();
+    expect(code).toContain(live.manifest['@mx/boot']!);
+    expect(code).not.toContain('"@mx/boot"');
+    // A module bound to a different build is refused, never served against this runtime.
+    expect((await app.request(`${stored.compiled.module.url}?b=0000000000000000`)).status).toBe(404);
+    // Nothing was recompiled or rewritten.
+    expect(await snapshot()).toEqual(before);
     const adopting = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
     expect(await adopting.text()).toContain(SPA_IDLE_ATTR);
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,handoverContract}', '2'::jsonb) WHERE artifact_id = $1`, [id]);
+    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,handoverContract}', '1'::jsonb) WHERE artifact_id = $1`, [id]);
     const fullNavigation = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
     expect(await fullNavigation.text()).not.toContain(SPA_IDLE_ATTR);
     const emptyPublic = mkdtempSync(path.join(os.tmpdir(), 'island-deploy-'));
     try {
       const nextServer = createAppServer({ publicDir: emptyPublic, indexHtml: async () => '<!doctype html><div id="root"></div>' });
-      const asset = await nextServer.request(sharedUrl);
+      const asset = await nextServer.request(live.manifest['@mx/boot']!);
       expect(asset.status).toBe(200);
       expect((await asset.arrayBuffer()).byteLength).toBeGreaterThan(0);
     } finally { rmSync(emptyPublic, { recursive: true, force: true }); }
+  });
+
+  it('a raised contract, or a specifier the live runtime lacks, recompiles the page on its next read', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Contract', markup: fixture('kit.jsx') });
+    const db = await harness.db();
+    const contract = async () => (await db.query<{ handover_contract: number }>('SELECT handover_contract FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.handover_contract;
+    expect(await contract()).toBe(MIN_HANDOVER_CONTRACT);
+    await db.query(`UPDATE prepared_pages SET handover_contract = MIN_HANDOVER_CONTRACT - 1 WHERE artifact_id = $1`.replace('MIN_HANDOVER_CONTRACT', String(MIN_HANDOVER_CONTRACT)), [id]);
+    expect((await raw(id)).status).toBe(200);
+    expect(await contract()).toBe(MIN_HANDOVER_CONTRACT);
+    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,module,specifiers}', '["@mx/boot","@mx/removed"]'::jsonb) WHERE artifact_id = $1`, [id]);
+    expect((await raw(id)).status).toBe(200);
+    const healed = (await db.query<{ specifiers: string[] }>(`SELECT page->'compiled'->'module'->'specifiers' AS specifiers FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
+    expect(healed.specifiers).not.toContain('@mx/removed');
   });
 
   it('a recorded compile failure reports an unavailable page', async () => {
@@ -466,7 +498,7 @@ describe('a version with an author script', () => {
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const { data, doc } = authorOnly(await res.text());
     expect(data?.authorScript).toBe('mx.set({n: 1});');
-    expect([...doc.querySelectorAll('script[type="module"]')].some((s) => /^\/islands\/d\/[0-9a-f]{16}\.js$/.test(s.getAttribute('src') ?? '')), 'the per-document module that boots').toBe(true);
+    expect([...doc.querySelectorAll('script[type="module"]')].some((s) => /^\/islands\/d\/[0-9a-f]{16}\.js(?:\?b=[0-9a-f]{16})?$/.test(s.getAttribute('src') ?? '')), 'the per-document module that boots').toBe(true);
   });
 
   it('a compile that does not carry the script (made before the field existed) never serves the page without it', async () => {

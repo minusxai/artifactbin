@@ -440,17 +440,17 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const store = options.store ?? createModuleStore();
   const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
   const html = rendered + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
-  if (!sources.islandRefs.length) return { html, module: await store.put(new TextEncoder().encode(browser.code), browser.imports), ssr: null, templateBrBytes: null };
+  if (!sources.islandRefs.length) return { html, module: await store.put(new TextEncoder().encode(browser.code), browser.imports, browser.specifiers), ssr: null, templateBrBytes: null };
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const [module, ssr] = await Promise.all([
-    store.put(new TextEncoder().encode(browser.code), browser.imports),
+    store.put(new TextEncoder().encode(browser.code), browser.imports, browser.specifiers),
     ssrStore.put(new TextEncoder().encode(ssrCode), await importsOf(ssrCode)),
   ]);
   return { html, module, ssr, templateBrBytes: null };
 }
 
 /** The per-document browser module: DOM-compiled, imports bound to the shared chunks, compacted. `imports` is its static closure. */
-export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number): Promise<{ code: string; imports: string[]; literals: string[]; literalKey: string }> {
+export async function browserModuleCode(islands: string, build: CompilerBuild, flow: CompiledDataflow | null = null, flowIndex?: number): Promise<{ code: string; imports: string[]; specifiers: string[]; literals: string[]; literalKey: string }> {
   const direct = new Set<string>();
   // `moduleName: '@mx/rt'`: Solid's DOM helpers come from the runtime's one import surface, never
   // from the whole `solid-js/web` chunk.
@@ -459,12 +459,14 @@ export async function browserModuleCode(islands: string, build: CompilerBuild, f
     rewrite: (specifier) => {
       const url = build.manifest[specifier];
       if (!url) throw new Error(`compile: the island build has no ${specifier}`);
-      direct.add(url);
-      return url;
+      // The bytes keep the specifier: the URL is bound at serve time (runtime-binding.ts).
+      direct.add(specifier);
+      return specifier;
     },
   });
   const extracted = await externalizeLiterals(compiled);
-  return { code: extracted.code, literals: extracted.literals, literalKey: extracted.key, imports: closureOf(build, [...direct].sort()) };
+  const specifiers = [...direct].sort();
+  return { code: extracted.code, literals: extracted.literals, literalKey: extracted.key, specifiers, imports: closureOf(build, specifiers.map((s) => build.manifest[s]!)) };
 }
 
 /** Keep author literals in the page's inert JSON carrier, outside executable browser bytes. */

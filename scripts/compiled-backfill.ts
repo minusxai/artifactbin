@@ -3,7 +3,7 @@
  * selected document versions on the running server. A deploy alone never changes stored compiles.
  *
  *   AUTH__SECRET=<the server's> npx tsx scripts/compiled-backfill.ts --db <database url> --base <server origin>
- *     [--all] [--where compiler_version!=<fingerprint>] [--island-build <id>]
+ *     [--all] [--stale] [--where compiler_version!=<fingerprint>] [--island-build <id>]
  *     [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]
  *
  * From the repository root, against a RUNNING server of the deploy being backfilled. The script only
@@ -21,6 +21,9 @@
  *
  * On the production host, after a deploy has rolled out (the new server is the one answering):
  *
+ *   0. A deploy that keeps MIN_HANDOVER_CONTRACT needs NO backfill: stored pages bind the live shared
+ *      runtime at serve time, and a page whose contract is old recompiles itself on its first read.
+ *      `--stale` warms the old-contract ones ahead of readers.
  *   1. Pick a recorded version: `--where compiler_version!=<current>` selects old compilers;
  *      `--island-build <old>` selects one island build; `--format-below N` selects old formats.
  *      Filters combine with AND. Without filters, only versions lacking a compile are selected.
@@ -34,14 +37,15 @@
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { BackfillFilter, BackfillColumn } from '@/lib/compiled-page/backfill.server';
+import { MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 
 async function main() {
   const { values } = parseArgs({ options: {
     db: { type: 'string' }, base: { type: 'string' }, all: { type: 'boolean' }, concurrency: { type: 'string' },
     limit: { type: 'string' }, timeout: { type: 'string' }, 'dry-run': { type: 'boolean' },
-    where: { type: 'string' }, 'island-build': { type: 'string' }, 'format-below': { type: 'string' },
+    where: { type: 'string' }, stale: { type: 'boolean' }, 'island-build': { type: 'string' }, 'format-below': { type: 'string' },
   } });
-  const usage = 'usage: AUTH__SECRET=<the server\'s> compiled-backfill.ts --db <url> --base <server origin> [--all] [--where compiler_version!=<x>] [--island-build <id>] [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]';
+  const usage = 'usage: AUTH__SECRET=<the server\'s> compiled-backfill.ts --db <url> --base <server origin> [--all] [--stale] [--where compiler_version!=<x>] [--island-build <id>] [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]';
   const db = values.db ?? process.env.DATABASE_URL;
   const base = values.base ?? process.env.APP__PUBLIC_BASE_URL;
   if (!db || !base) throw new Error(usage);
@@ -53,6 +57,8 @@ async function main() {
     const column = match[1] as BackfillColumn;
     filters.push({ column, op: match[2] as BackfillFilter['op'], value: column === 'page_format' || column === 'handover_contract' ? Number(match[3]) : match[3]! });
   }
+  // The runtime binds live at serve time, so only a raised contract or format makes a stored page stale.
+  if (values.stale) filters.push({ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT });
   if (values['island-build']) filters.push({ column: 'island_build', op: '=', value: values['island-build'] });
   if (values['format-below']) filters.push({ column: 'page_format', op: '<', value: Number(values['format-below']) });
   process.env.DATABASE_URL = db;

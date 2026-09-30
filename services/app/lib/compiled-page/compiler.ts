@@ -703,7 +703,7 @@ export async function compilePage(input: CompileInput, build: CompilerBuild): Pr
   const outline = input.chrome && (input.template === 'editorial' || outlinePlan) && hasOutline(input.nodes)
     ? discoverOutline(input.nodes) : [];
   const base = {
-    build: build.id, sharedBuild: build, handoverContract: MIN_HANDOVER_CONTRACT, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
+    build: build.id, handoverContract: MIN_HANDOVER_CONTRACT, islands: generated.islandRefs, behaviors: generated.behaviors, plan, links, outline, outlinePlan,
     kit: generated.kit, reactStatic: generated.reactStatic, unported: generated.unported, partial: generated.partial,
     // Data for the page's JSON island, never module code (contract CompiledPage.authorScript).
     authorScript: input.authorScript || null,

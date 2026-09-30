@@ -65,6 +65,7 @@ import { escapeHtml } from '@/lib/story/reader-chrome';
 import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styles';
 import { assembleReaderPage } from './assembler';
 import { loadCompilerBuild } from './build.server';
+import { unresolvedSpecifiers } from './runtime-binding';
 import {
   COMPILE_INLINE_BUDGET_MS, isCompileFailure, SNAPSHOT_MAX_AGE_MS,
   MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT,
@@ -217,7 +218,10 @@ async function compileAndWait(row: ArtifactRow, page: PreparedPage, at: Archived
 /** Step 1: one compile per document version; only a hand-raised minimum can invalidate it. */
 async function compiledOf(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild, policy: FallbackPolicy): Promise<Usable> {
   const stored = page.compiled;
-  if (stored && page.pageFormat >= MIN_PAGE_FORMAT && page.handoverContract >= MIN_HANDOVER_CONTRACT && (isCompileFailure(stored) || stored.sharedBuild)) {
+  // The runtime is bound live at serve time; a stored page is recompiled (lazily, here, on its first read)
+  // only when the contract moved or the live build no longer carries a specifier its module names.
+  if (stored && page.pageFormat >= MIN_PAGE_FORMAT && page.handoverContract >= MIN_HANDOVER_CONTRACT
+    && (isCompileFailure(stored) || !unresolvedSpecifiers(stored.module, build).length)) {
     if (isCompileFailure(stored)) logOnce(row, stored.reason, stored.error);
     return usableOf(stored);
   }
@@ -302,11 +306,14 @@ interface StoryInput {
   resultsId: string | null;
 }
 
+/** The live server half the SSR module renders on: part of what a cached render depends on. */
+const liveSsrUrl = (): string => { try { return loadCompilerBuild().ssr?.url ?? ''; } catch { return ''; } };
+
 export async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
   const plain = !input.state && !input.assetsUrl && !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
   if (!compiled.ssr || plain) return compiled.html;
   const cacheKey = input.resultsId === null && input.results ? null
-    : `${compiled.build}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}`;
+    : `${compiled.build}:${liveSsrUrl()}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}`;
   const cached = cacheKey ? renders.get(cacheKey) : undefined;
   if (cached !== undefined) {
     renders.delete(cacheKey!);
@@ -317,7 +324,7 @@ export async function storyOf(compiled: CompiledPage, input: StoryInput): Promis
   // server build, which a process without a usable compiled page never needs
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
-  const module = await loadSsrModule(compiled.ssr, undefined, undefined, compiled.sharedBuild?.ssr);
+  const module = await loadSsrModule(compiled.ssr);
   const rendered = module.render({ values: input.values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
   // The SSR module renders only the document tree. Its browser literals and large module data
   // are version-owned inert siblings stored with the first render; keep them for snapshot renders.
@@ -376,7 +383,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
         logOnce(row, stored.reason, stored.error);
         return refuse(stored.reason, stored.error);
       }
-      build = compatible && stored && !isCompileFailure(stored) && stored.sharedBuild ? stored.sharedBuild : loadCompilerBuild();
+      build = loadCompilerBuild();
     } catch (error) {
       logOnce(row, 'build-mismatch', error instanceof Error ? error.message : String(error));
       return refuse('build-mismatch', error instanceof Error ? error.message : String(error));
@@ -408,7 +415,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     ]);
     // Local tables need the page engine even without a holdable import.
     const sqliteWasm = flow && reader.doors && (hold.length || flow.values.some((value) => value.kind === 'table'))
-      ? compiled.sharedBuild?.sqliteWasm ?? null : null;
+      ? build.sqliteWasm ?? null : null;
     // The live stream picks up from the snapshot's marks (served-results.server `since`): a write between
     // the snapshot and the page's stream reaches the page as the ordinary `data` frame.
     const served: DataSnapshot | null = snapshot
@@ -440,7 +447,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
       spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT ? reader.spa : null,
-      build: compiled.sharedBuild ?? build,
+      build,
       head: reader.head,
       live: reader.live,
       footer: reader.footer ?? null,

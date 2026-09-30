@@ -58,6 +58,8 @@ import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';
 import { retainedIslandFile } from '@/lib/compiled-page/shared-builds.server';
 import { SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH } from '@/lib/compiled-page/speculation';
 
@@ -506,6 +508,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    */
   const ISLAND_ENCODINGS_KEPT = 512;
   const islandEncodings = new Map<string, Promise<EncodedVariants>>();
+  const boundModules = new Map<string, Buffer>();
   const encodedIsland = (key: string, bytes: Buffer): Promise<EncodedVariants> => {
     let encoded = islandEncodings.get(key);
     if (!encoded) {
@@ -526,8 +529,21 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Only a path the store could have written is looked up: 16 lowercase hex and the one extension.
   app.on(['GET', 'HEAD'], `${DOCUMENT_MODULE_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.js$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await islandModules.get(sha) : null;
-    return bytes ? islandFile(c, `d/${sha}`, bytes, 'text/javascript; charset=utf-8') : c.notFound();
+    const stored = sha ? await islandModules.get(sha) : null;
+    if (!stored) return c.notFound();
+    // The stored bytes name the shared runtime by specifier; bind them to the live manifest (runtime-binding).
+    // `?b=` is the build the page was assembled for: bytes bound to any other build would mix two runtimes.
+    const build = loadCompilerBuild();
+    const asked = c.req.query('b');
+    if (asked !== undefined && asked !== build.id) return c.notFound();
+    const key = `d/${sha}/${build.id}`;
+    let bound = boundModules.get(key);
+    if (!bound) {
+      bound = Buffer.from(bindModuleCode(Buffer.from(stored).toString('utf8'), build));
+      boundModules.set(key, bound);
+      while (boundModules.size > ISLAND_ENCODINGS_KEPT) boundModules.delete(boundModules.keys().next().value!);
+    }
+    return islandFile(c, key, bound, 'text/javascript; charset=utf-8');
   });
   app.on(['GET', 'HEAD'], `${TEMPLATE_RESOURCE_PATH}/:file`, async (c) => {
     const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
