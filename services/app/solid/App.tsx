@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /** The Solid app: every route below, every artifact address included. */
 import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
-import { Route, Router, type RouteSectionProps } from '@solidjs/router';
+import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { useLocation } from '@solidjs/router';
 import { SessionProvider } from './web/session';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
@@ -74,6 +74,8 @@ export function App(): JSX.Element {
       <Route path="/" component={HomePage} />
       <Route path="/a/:id" component={ArtifactRoute} />
       <Route path="/trash" component={TrashPage} />
+      {/* The old tokens page lives in account settings now. */}
+      <Route path="/tokens" component={() => <Navigate href="/account" />} />
       <Route path="/assets" component={AssetsPage} />
       <Route path="/datasets/new" component={DatasetEditorPage} />
       <Route path="/files/new" component={FileUploadPage} />
