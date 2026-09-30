@@ -8,7 +8,8 @@ import ModelPreview from '../components/ModelPreview';
 import { LINK } from '../components/ui';
 import { formatFileSize } from '@/lib/file-display';
 import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@/lib/story/file-types';
-import { useSession } from '../web/session';
+import { useSession } from '../lib/session';
+import { copyText } from '../lib/copy-text';
 
 type Kind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'font' | 'model' | 'other';
 const KIND_BY_EXTENSION: Record<string, Kind> = {
@@ -119,7 +120,7 @@ export function FileUploadPage(): JSX.Element {
                 <p class="flex items-center gap-2 text-sm text-fg"><Check aria-hidden="true" size={15} class="text-accent" />Uploaded as <span class="font-medium">{title().trim() || selected().file.name}</span></p>
                 <div class="mt-3 flex flex-wrap gap-2">
                   <a href={`/a/${uploaded().id}`} aria-label="Open artifact" class={`${ACTION} border-accent bg-accent font-semibold text-bg hover:brightness-110`}>Open artifact →</a>
-                  <button type="button" aria-label="Copy file reference" onClick={() => { void navigator.clipboard?.writeText(`ref:${uploaded().id}`); setCopied(true); }} class={`${ACTION} border-edge-bright bg-surface text-accent hover:border-accent`}>
+                  <button type="button" aria-label="Copy file reference" onClick={() => { void copyText(`ref:${uploaded().id}`); setCopied(true); }} class={`${ACTION} border-edge-bright bg-surface text-accent hover:border-accent`}>
                     ref:{uploaded().id}{copied() ? <Check aria-hidden="true" size={12} /> : <Copy aria-hidden="true" size={12} />}
                   </button>
                   <button type="button" onClick={reset} class={`${ACTION} border-edge-bright bg-surface text-fg`}>Upload another</button>

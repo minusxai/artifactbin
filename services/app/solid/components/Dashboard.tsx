@@ -13,6 +13,7 @@ import Users from 'lucide-solid/icons/users';
 import X from 'lucide-solid/icons/x';
 import type { WorkspaceStats } from '@/lib/workspace-inventory';
 import { DialogShell } from '@/solid/components/DialogShell';
+import { formatCount } from '../lib/format';
 
 interface DashboardRow { format: string; views?: number | null }
 interface Props {
@@ -33,7 +34,7 @@ const compactMetric = (value: number): string => {
   };
   if (value >= 1_000_000) return compact(value / 1_000_000, 'm');
   if (value >= 1_000) return compact(value / 1_000, 'k');
-  return value.toLocaleString('en-US');
+  return formatCount(value);
 };
 
 /** The account readout travels unchanged between Home and owned folders. */
@@ -65,7 +66,7 @@ export default function Dashboard(props: Props): JSX.Element {
     <dl aria-label={props.expanded ? 'Expanded dashboard metrics' : 'Dashboard metrics'} class={`grid grid-cols-2 border-b border-edge ${props.expanded ? 'sm:grid-cols-3 lg:grid-cols-6' : ''}`}>
       <For each={metrics()}>{({ label, value, Icon }, index) => <div class={`group py-2.5 ${index() % 2 ? 'border-l border-edge pl-3' : 'pr-3'} ${index() > 1 ? 'border-t border-edge' : ''}`}>
         <dt class="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.11em] text-faint"><Icon size={10} class="transition-colors group-hover:text-accent" /><span>{label}</span></dt>
-        <dd title={`${value.toLocaleString('en-US')} ${label}`} class="mt-1.5 font-mono text-lg leading-none font-medium tabular-nums text-fg">{compactMetric(value)}</dd>
+        <dd title={`${formatCount(value)} ${label}`} class="mt-1.5 font-mono text-lg leading-none font-medium tabular-nums text-fg">{compactMetric(value)}</dd>
       </div>}</For>
     </dl>
     <div class="mt-5"><div class="mb-2.5"><h2 class="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg"><Activity size={12} class="text-accent" />Engagement over time</h2>

@@ -22,6 +22,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import RowMenu from './RowMenu';
 import ShareLink from './ShareLink';
 import { DialogShell } from '@/solid/components/DialogShell';
+import { apiFetch } from '../lib/api';
 
 type Actions = 'none' | 'share' | 'full';
 interface Props {
@@ -133,7 +134,7 @@ export default function Shelf(props: Props): JSX.Element {
     const title = name().trim();
     if (!title || creating()) return;
     setCreating(true);
-    const response = await fetch('/api/my/artifacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ format: 'folder', title, parent_id: props.parentId ?? null }) }).catch(() => null);
+    const response = await apiFetch('/api/my/artifacts', 'POST', { format: 'folder', title, parent_id: props.parentId ?? null }).catch(() => null);
     setCreating(false);
     if (!response?.ok) return;
     const body = await response.json() as Partial<ShelfRow> & { id: string };

@@ -24,6 +24,7 @@
  * Author text is only ever in string literals of the sources handed in (codegen-safety.ts); nothing
  * here adds any.
  */
+import { escapeText } from '@artifactbin/utils/escape';
 import { transformAsync, type PluginObj, type types as BabelTypes } from '@babel/core';
 // @ts-expect-error babel-preset-solid ships no types; it is a Babel preset function.
 import solidPreset from 'babel-preset-solid';
@@ -508,7 +509,6 @@ export const ssrModuleCode = async (document: string, flow: CompiledDataflow | n
   return restoreStaticText(code, staticTexts, true);
 };
 
-const htmlText = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const jsStringText = (value: string): string => value
   .replace(/\\/g, '\\\\')
   .replace(/</g, '\\u003c')
@@ -525,7 +525,7 @@ function restoreStaticText(value: string, texts: Readonly<Record<string, string>
   return value.replace(/MXSTATIC(?:TEXT)?[0-9a-f]{16}\d+END/g, (marker) => {
     const raw = texts[marker];
     if (raw === undefined) return marker;
-    const html = marker.startsWith('MXSTATICTEXT') ? raw : htmlText(raw);
+    const html = marker.startsWith('MXSTATICTEXT') ? raw : escapeText(raw);
     return code ? jsStringText(html) : html;
   });
 }

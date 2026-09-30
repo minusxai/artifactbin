@@ -14,7 +14,8 @@ import { parseDatasetDefinition, serializeDatasetDefinition } from "@/lib/datase
 import type { CatalogInput, DatasetCatalog, DatasetConnection, DiscoveredTable, NotebookCell } from "@/lib/datasets/types";
 import type { DatasetColumn } from "@/lib/story/dataset-shape";
 import type { Row } from "@/lib/story/dataflow";
-import { useSession } from "../web/session";
+import { useSession } from '../lib/session';
+import { apiRequest } from '../lib/api';
 type ModelDraft = {
   cell: NotebookCell;
   schema: string;
@@ -61,22 +62,6 @@ function Field({
       {children}
     </label>;
 }
-async function request<T>(url: string, body?: unknown, method = "POST"): Promise<T> {
-  const response = await fetch(url, body === undefined ? {
-    credentials: "same-origin"
-  } : {
-    method,
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.details?.[0] ?? data.error ?? "The request failed.");
-  return data as T;
-}
-
 /** Visual authoring and source share one definition boundary. Passwords never enter the definition. */
 export function DatasetEditorPage({
   artifactId,
@@ -195,7 +180,7 @@ export function DatasetEditorPage({
   createEffect(() => {
     if (!id) return;
     let alive = true;
-    void request<{
+    void apiRequest<{
       title: string;
       version: number;
       state: string;
@@ -300,11 +285,11 @@ export function DatasetEditorPage({
       passwordSecretId: _,
       ...destination
     } = connection();
-    const data = await request<{
+    const data = await apiRequest<{
       secret: {
         id: string;
       };
-    }>("/api/my/secrets", {
+    }>("/api/my/secrets", 'POST', {
       value: password(),
       connection: destination,
       ...(id ? {
@@ -391,13 +376,13 @@ export function DatasetEditorPage({
       const allCells = notebook().cells;
       const cells = allCells.slice(0, allCells.findIndex(cell => cell.id === model.cell.id) + 1);
       if (new Set(cells.map(c => c.name)).size !== cells.length || cells.some(c => !c.name.trim())) throw new Error("Give every notebook cell a unique name.");
-      const preview = model.legacy ? await request<CatalogPreview>("/api/my/datasets/preview", {
+      const preview = model.legacy ? await apiRequest<CatalogPreview>("/api/my/datasets/preview", 'POST', {
         dataset: buildCatalog(connection(), false),
         sql: model.cell.sql,
         ...(id ? {
           datasetId: id
         } : {})
-      }) : await request<CatalogPreview>("/api/my/datasets/notebook/preview", {
+      }) : await apiRequest<CatalogPreview>("/api/my/datasets/notebook/preview", 'POST', {
         connection: await ensureConnection(),
         notebook: {
           cells
@@ -418,9 +403,9 @@ export function DatasetEditorPage({
   };
   const discover = () => void run("discover", async () => {
     const configured = await ensureConnection();
-    const data = await request<{
+    const data = await apiRequest<{
       tables: DiscoveredTable[];
-    }>("/api/my/datasets/discover", {
+    }>("/api/my/datasets/discover", 'POST', {
       connection: configured,
       ...(id ? {
         datasetId: id
@@ -505,7 +490,7 @@ export function DatasetEditorPage({
   const queryDraft = {
     current: null! as (sql: string) => Promise<CatalogPreview>
   };
-  queryDraft.current = async sql => request<CatalogPreview>("/api/my/datasets/preview", {
+  queryDraft.current = async sql => apiRequest<CatalogPreview>("/api/my/datasets/preview", 'POST', {
     dataset: buildCatalog(),
     sql,
     ...(id ? {
@@ -864,9 +849,9 @@ export function DatasetEditorPage({
               const configured = kind() === "postgres" ? await ensureConnection() : connection();
               const dataset = serializeDatasetDefinition(buildCatalog(configured));
               const metadataOnly = Boolean(id && dataset === originalDefinition.current);
-              const data = await request<{
+              const data = await apiRequest<{
                 id: string;
-              }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : "/api/my/artifacts", metadataOnly ? {
+              }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : "/api/my/artifacts", metadataOnly ? "PATCH" : id ? "PUT" : "POST", metadataOnly ? {
                 title: title(),
                 expectedState: state()
               } : {
@@ -878,7 +863,7 @@ export function DatasetEditorPage({
                 } : {
                   visibility: session()?.user ? "private" : "unlisted"
                 })
-              }, metadataOnly ? "PATCH" : id ? "PUT" : "POST");
+              });
               await onSaved?.();
               // Cross the Solid/React entry after consumers have read the save response.
               // A same-task document navigation can discard its body in Chromium.

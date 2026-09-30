@@ -17,8 +17,10 @@ ${ROOT}[popover]:popover-open { display: block !important; }
 ${ROOT}[popover] > div { pointer-events: auto; }
 `;
 let trustedCss = BOUNDARY_CSS;
-/** The trusted sheet as last configured. */
-export const currentTrustedCss = (): string => trustedCss;
+// Starts the exact-bytes read of the shell sheet, once, the first time a trusted root asks for the sheet.
+let wantExact: (() => void) | null = null;
+/** The trusted sheet as last configured. The first ask also starts the exact-text read (see configureTrustedUiFromShell). */
+export const currentTrustedCss = (): string => { const start = wantExact; wantExact = null; start?.(); return trustedCss; };
 export const installedStyles = new Set<HTMLStyleElement>();
 // Top-layer paint order ignores z-index. Keep selection beneath discussions,
 // and navigation above both, even when a lazy runtime mounts its portal later.
@@ -65,7 +67,11 @@ export function configureTrustedUiStyles(cssText: string): void {
  * taken for the app's.
  *
  * The TEXT is the file's own bytes, re-read from the HTTP cache the link just
- * filled (a same-origin fetch of an immutable, content-addressed asset). Not
+ * filled (a same-origin fetch of an immutable, content-addressed asset). It is read
+ * only when a trusted root is first created (currentTrustedCss), so a page that never
+ * mounts trusted UI (/login, most listings) makes ONE request for the sheet, not two;
+ * shipping the text inside the JS instead would put the sheet on the wire twice
+ * (lib/__tests__/reader-bundle-hygiene). Not
  * the parsed rules: CSSOM serialization is lossy — a shorthand carrying a
  * `var()` beside a longhand that overrides part of it (`border: 1px solid
  * var(--edge); border-bottom: 0`) serializes with EMPTY longhands, and parsing
@@ -88,12 +94,14 @@ export function configureTrustedUiFromShell(doc: Document = document): void {
   for (const link of links) {
     // A sheet the parser has not finished yet stands in once it has loaded.
     if (!link.sheet) link.addEventListener('load', () => { if (!exact.has(link)) apply(); }, { once: true });
+  }
+  wantExact = () => { for (const link of links) {
     // Asked for AS CSS, and only CSS accepted: the dev server answers a bare
     // request for a .css path with its JS module wrapper instead.
     void fetch(link.href, { credentials: 'same-origin', headers: { accept: 'text/css' } })
       .then(response => response.ok && /\btext\/css\b/.test(response.headers.get('content-type') ?? '') ? response.text() : Promise.reject(new Error(String(response.status))))
       .then(text => { exact.set(link, text); apply(); })
       .catch(() => { /* the parsed rules keep standing in */ });
-  }
+  } };
 }
 

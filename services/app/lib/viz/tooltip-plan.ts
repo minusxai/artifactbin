@@ -16,6 +16,7 @@
  * `null` from `buildTooltipPlan` means "not a shared-tooltip chart" (pie, maps, row) → the
  * caller keeps the default per-mark tooltip.
  */
+import { escapeHtml } from '@artifactbin/utils/escape';
 import * as vegaExports from 'vega';
 import { unitOf } from './encoding-edit';
 
@@ -454,9 +455,6 @@ export function buildTooltipData(rows: Array<Record<string, unknown>>, plan: Too
   for (const [key, entry] of index) entry.rows = [...acc.get(key)!.values()];
   return index;
 }
-
-const escapeHtml = (s: string): string =>
-  s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 
 interface RenderTooltipOptions {
   xTitle: string;

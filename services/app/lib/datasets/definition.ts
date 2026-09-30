@@ -1,3 +1,4 @@
+import { escapeHtml } from '@artifactbin/utils/escape';
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import type { CatalogInput } from './types';
 import {parseJsx,type JsxElement,type JsonValue} from '@/lib/jsx';
@@ -18,7 +19,7 @@ const string=(value:JsonValue|undefined,name:string)=>{if(typeof value!=='string
 const number=(value:JsonValue|undefined,name:string)=>{if(typeof value!=='number'||!Number.isFinite(value))throw new Error(`Dataset definition: ${name} must be a number`);return value;};
 const boolean=(value:JsonValue|undefined,name:string)=>{if(typeof value!=='boolean')throw new Error(`Dataset definition: ${name} must be boolean`);return value;};
 const columns=(value:JsonValue|undefined)=>{if(!Array.isArray(value))throw new Error('Dataset definition: columns must be an array');return value.map(v=>typeof v==='string'?v:parseDatasetColumn(v));};
-const quote=(value:string)=>`"${value.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}"`;
+const quote=(value:string)=>`"${escapeHtml(value)}"`;
 const prop=(name:string,value:unknown)=>typeof value==='string'?`${name}=${quote(value)}`:`${name}={${JSON.stringify(value)}}`;
 
 /** Static markup, never evaluated. The visual editor and API share this codec. */

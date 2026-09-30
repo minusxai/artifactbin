@@ -3,7 +3,8 @@ import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
 import type { InboxItem, LegacyInboxItem } from '@/lib/notification-inbox';
 import { timeAgo } from './ui';
-import { useInbox } from '../web/notifications';
+import { useInbox } from '../lib/notifications';
+import { apiFetch } from '../lib/api';
 
 const ACTION: Record<string, string> = { request: 'asked to join', invitation: 'invited you to', joined: 'added you to', follow: 'followed you', like: 'liked', reply_resolved: 'replied and resolved your comment in', reply: 'replied in', resolved: 'resolved a comment in', reopened: 'reopened a comment in' };
 function destination(item: LegacyInboxItem): string {
@@ -22,7 +23,7 @@ export function PeopleInbox(props: { compact?: boolean; close?: () => void }): J
     if (!item.artifact_id || 'actor' in item) return;
     setBusy(true); setActionError('');
     try {
-      const response = await fetch(`/api/my/artifacts/${encodeURIComponent(item.artifact_id)}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(item.direction === 'request' ? { userId: item.user_id } : {}) }) });
+      const response = await apiFetch(`/api/my/artifacts/${encodeURIComponent(item.artifact_id)}/members`, 'POST', { action, ...(item.direction === 'request' ? { userId: item.user_id } : {}) });
       if (!response.ok) { const body = await response.json(); throw new Error(body.detail ?? 'Could not update invitation'); }
       await inbox.load({ read: item.id, revision: item.revision });
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Could not update invitation'); }

@@ -13,6 +13,7 @@ import { pageDataChanged } from '@/web/page-data-events';
 import GetStarted from './GetStarted';
 import { DialogShell } from '@/solid/components/DialogShell';
 import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
+import { apiFetch } from '../lib/api';
 
 const ITEM = 'group flex w-full cursor-pointer items-center gap-2.5 rounded-[4px] px-2.5 py-2 text-left font-mono text-[11.5px] text-fg no-underline hover:bg-accent-soft hover:text-accent';
 type Kind = 'artifact' | 'folder';
@@ -30,7 +31,7 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
     event.preventDefault();
     const title = name().trim(); if (!title || busy()) return;
     setBusy(true); setError('');
-    const response = await fetch('/api/my/artifacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ format: 'folder', title, parent_id: props.parentId ?? null }) }).catch(() => null);
+    const response = await apiFetch('/api/my/artifacts', 'POST', { format: 'folder', title, parent_id: props.parentId ?? null }).catch(() => null);
     setBusy(false);
     if (!response?.ok) { setError('Could not create the folder. Try again.'); return; }
     pageDataChanged(); props.onCreated(); setDialog(null); setName('');

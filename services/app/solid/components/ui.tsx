@@ -1,9 +1,22 @@
 /* @jsxImportSource solid-js */
-/** The kit pieces the ported pages use (components/ui.tsx in Solid); tokens and labels are shared. */
+/** The kit pieces the ported pages use (components/ui.tsx in Solid) and its tokens and labels. */
 import type { JSX } from 'solid-js';
-import { FORMAT_COLORS, FORMAT_FALLBACK_COLOR, formatLabel } from '../shared/ui-tokens';
+export { dateStamp, timeAgo } from '../lib/format';
+/** Display name for a normalized format — the designed tier is BRANDED "mx-markup". */
+export function formatLabel(format: string): string {
+  return format === 'markup' ? 'mx-markup' : format;
+}
 
-export { formatLabel, timeAgo, dateStamp, PANEL, TABLE_ROW, LINK, PAGE_COLUMN } from '../shared/ui-tokens';
+/** Content-tier badge hues (flatuicolors defo palette); the fallback is the neutral grey. */
+export const FORMAT_COLORS: Record<string, string> = {
+  markup: '#c0392b',
+};
+export const FORMAT_FALLBACK_COLOR = '#95a5a6';
+
+export const PAGE_COLUMN = 'mx-auto max-w-4xl px-4 sm:px-6';
+export const PANEL = 'rounded-[6px] border border-edge bg-surface';
+export const TABLE_ROW = 'border-t border-edge hover:bg-raised transition-colors';
+export const LINK = 'text-accent no-underline hover:underline underline-offset-4';
 
 const TONES = {
   default: 'border-edge-bright text-muted',

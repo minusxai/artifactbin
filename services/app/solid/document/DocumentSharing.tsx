@@ -18,6 +18,8 @@ import LinkIcon from 'lucide-solid/icons/link';
 import PenLine from 'lucide-solid/icons/pen-line';
 import X from 'lucide-solid/icons/x';
 import { DialogShell } from '@/solid/components/DialogShell';
+import { copyText } from '../lib/copy-text';
+import { apiFetch } from '../lib/api';
 
 const ROLE_OPTIONS = SHARE_ROLES.map((role) => ({ value: role, label: SHARE_ROLE_LABEL[role] }));
 const VISIBILITY_TIPS = { public: 'anyone with the link · listed on your profile', unlisted: 'anyone with the link · not listed anywhere', private: 'only you and invited emails' } as const;
@@ -67,13 +69,13 @@ export function DocumentSharing(props: {
   const close = () => { setOpen(false); props.onClose?.(); };
   const copy = () => {
     const target = new URL(props.url ?? `/a/${encodeURIComponent(props.id)}`, location.origin);
-    void navigator.clipboard?.writeText(target.origin + target.pathname);
+    void copyText(target.origin + target.pathname);
     setCopied(true);
   };
   const put = async (patch: SharingPatch): Promise<boolean> => {
     setError('');
     try {
-      const response = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+      const response = await apiFetch(endpoint, 'PUT', patch);
       if (!response.ok) throw new Error('could not update sharing');
       setState(await response.json() as SharingState);
       return true;

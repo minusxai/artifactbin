@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * The page half of annotations, rigged — the Solid twin of test/helpers/annotation-layer. One rig for
+ * The page half of annotations, rigged. One rig for
  * the layer, composer, picking, fold and resolved-context tests (not itself a test file).
  *
  * The layer holds the data and the session; the document runtime only ever gets ids + BODY paths

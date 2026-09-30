@@ -156,8 +156,3 @@ export function reactAttrs(tag: string, props: Props): Attr[] {
   if (tag === 'option' && selected) out.push(['selected', '']);
   return out;
 }
-
-/** React's text and attribute escaping (react-dom-server `escapeTextForBrowser`): `" & ' < >`. */
-export function escapeReact(text: string): string {
-  return text.replace(/["&'<>]/g, (c) => (c === '"' ? '&quot;' : c === '&' ? '&amp;' : c === "'" ? '&#x27;' : c === '<' ? '&lt;' : '&gt;'));
-}

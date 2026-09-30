@@ -4,6 +4,8 @@ import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetAccess, SharingPatch, Visibility } from '@/lib/artifacts';
 import type { ShareEntry, ShareRole } from '@/lib/share-roles';
 import { DialogShell } from '@/solid/components/DialogShell';
+import { copyText } from '../lib/copy-text';
+import { apiFetch } from '../lib/api';
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; access?: DatasetAccess;
   datasetKind?: DatasetCatalog['kind']; policyVersion?: number; canPrivate?: boolean;
@@ -29,12 +31,12 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
     if (!canManage()) return false;
     setError('');
     try {
-      const response = await fetch(endpoint(), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+      const response = await apiFetch(endpoint(), 'PUT', patch);
       if (!response.ok) throw new Error('Could not update sharing.');
       setState(await response.json() as SharingState); return true;
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update sharing.'); return false; }
   };
-  const copyLink = () => { void navigator.clipboard?.writeText(new URL(props.url ?? location.pathname, location.origin).href); setCopied(true); };
+  const copyLink = () => { void copyText(new URL(props.url ?? location.pathname, location.origin).href); setCopied(true); };
   const postgres = () => props.format === 'dataset' && (props.datasetKind === 'postgres' || state()?.datasetKind === 'postgres');
   const showWrites = () => props.format === 'dataset' && state() && !postgres() && state()?.policyVersion !== 2;
   return <>

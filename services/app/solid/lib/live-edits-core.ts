@@ -2,9 +2,7 @@
  * Save-less persistence for the editor, FRAMEWORK-FREE: buffer local changes briefly, then flush
  * them through the concurrent-edit protocol, and absorb remote changes while idle.
  *
- * This owns the behavior formerly held by lib/story/use-live-edits. The Solid primitive
- * (solid/editor/create-live-edits) and React hook (solid/shared/use-live-edits-react)
- * each provide a subscription and a lifetime around it.
+ * The Solid primitive (solid/editor/create-live-edits) provides a subscription and a lifetime around it.
  *
  * Successful typing is briefly batched without a Save button. Failed writes retain a recoverable
  * draft and block navigation until retried or explicitly discarded. The normal buffer drains after a
