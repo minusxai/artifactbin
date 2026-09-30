@@ -66,6 +66,8 @@ import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styl
 import { assembleReaderPage } from './assembler';
 import { loadCompilerBuild } from './build.server';
 import { unresolvedSpecifiers } from './runtime-binding';
+import { retainedBuild } from './shared-builds.server';
+
 import {
   COMPILE_INLINE_BUDGET_MS, isCompileFailure, SNAPSHOT_MAX_AGE_MS,
   MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT,
@@ -175,8 +177,11 @@ function failed(row: ArtifactRow, reason: ReaderFallbackReason, detail: string):
   return { mode: 'failed', reason, status: 500 };
 }
 
-/** A stored compile this deployment can serve, or the reason it cannot. */
-type Usable = { page: CompiledPage } | { reason: ReaderFallbackReason };
+/**
+ * A stored compile this deployment can serve, or the reason it cannot. `pinned`: the build the page must
+ * run against instead of the live one (its own, retained) while its background recompile runs.
+ */
+type Usable = { page: CompiledPage; pinned?: CompilerBuild } | { reason: ReaderFallbackReason };
 
 const logged = new Set<string>();
 /** A recorded failure is logged once per version and reason, not once per read (spec §6). */
@@ -215,15 +220,63 @@ async function compileAndWait(row: ArtifactRow, page: PreparedPage, at: Archived
   return usableOf(compiled);
 }
 
-/** Step 1: one compile per document version; only a hand-raised minimum can invalidate it. */
+/**
+ * Background recompiles of stored pages the live runtime cannot take (below the contract, or naming a
+ * specifier the live build lacks) that are served pinned meanwhile. One at a time per process: a deploy
+ * that raises the contract upgrades pages as they are read, never as a stampede of waited compiles.
+ */
+const UPGRADES_AT_ONCE = 1;
+const upgrades = new Map<string, () => Promise<unknown>>();
+const upgrading = new Set<string>();
+let upgradeRuns: Promise<void>[] = [];
+function queueUpgrade(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null): void {
+  const key = `${row.id}\u0000${at ? `v:${at.version}` : 'head'}\u0000${row.version}`;
+  if (upgrades.has(key) || upgrading.has(key)) return;
+  upgrades.set(key, () => recompilePage(row, at, page));
+  while (upgradeRuns.length < UPGRADES_AT_ONCE) {
+    const run: Promise<void> = (async () => {
+      for (let next = upgrades.entries().next(); !next.done; next = upgrades.entries().next()) {
+        const [id, job] = next.value;
+        upgrades.delete(id);
+        upgrading.add(id);
+        try { await job(); } catch (error) { console.warn('[compiled-page] background recompile failed', id, error); }
+        finally { upgrading.delete(id); }
+      }
+    })().finally(() => { upgradeRuns = upgradeRuns.filter((r) => r !== run); });
+    upgradeRuns.push(run);
+  }
+}
+/** Wait for every queued background recompile (tests; a graceful shutdown). */
+export async function drainCompiledUpgrades(): Promise<void> {
+  while (upgradeRuns.length) await Promise.all(upgradeRuns);
+}
+
+/** The build a stored page was compiled against, while its chunks are retained: its own record, or the archived manifest. */
+async function pinnedBuildOf(stored: CompiledPage): Promise<CompilerBuild | null> {
+  const build = stored.sharedBuild ?? await retainedBuild(stored.build).catch(() => null);
+  return build && !unresolvedSpecifiers(stored.module, build).length ? build : null;
+}
+
+/**
+ * Step 1: one compile per document version. The shared runtime is bound live at serve time; a stored
+ * page the live runtime cannot take (a raised contract, a specifier the live build lacks) keeps running
+ * on the build it was compiled with while it recompiles in the background. Only a page with no such
+ * build (or a raised page format) compiles inline and waits.
+ */
 async function compiledOf(row: ArtifactRow, page: PreparedPage, at: ArchivedRender | null, build: CompilerBuild, policy: FallbackPolicy): Promise<Usable> {
   const stored = page.compiled;
-  // The runtime is bound live at serve time; a stored page is recompiled (lazily, here, on its first read)
-  // only when the contract moved or the live build no longer carries a specifier its module names.
-  if (stored && page.pageFormat >= MIN_PAGE_FORMAT && page.handoverContract >= MIN_HANDOVER_CONTRACT
-    && (isCompileFailure(stored) || !unresolvedSpecifiers(stored.module, build).length)) {
-    if (isCompileFailure(stored)) logOnce(row, stored.reason, stored.error);
-    return usableOf(stored);
+  if (stored && page.pageFormat >= MIN_PAGE_FORMAT) {
+    if (isCompileFailure(stored)) {
+      if (page.handoverContract >= MIN_HANDOVER_CONTRACT) { logOnce(row, stored.reason, stored.error); return usableOf(stored); }
+    } else if (page.handoverContract >= MIN_HANDOVER_CONTRACT && !unresolvedSpecifiers(stored.module, build).length) {
+      return { page: stored };
+    } else {
+      const pinned = await pinnedBuildOf(stored);
+      if (pinned) {
+        queueUpgrade(row, page, at);
+        return { page: stored, pinned };
+      }
+    }
   }
   if (policy === 'compiled-only' || stored) return compileAndWait(row, page, at, build);
   return { reason: 'not-compiled' };
@@ -304,16 +357,32 @@ interface StoryInput {
   drawings: DataSnapshot['drawings'];
   /** What identifies the results without hashing them: the snapshot's key and time; null for a capture's run (not cached). */
   resultsId: string | null;
+  /**
+   * The build whose SSR half renders the story: the one the page's browser module is bound to (the live
+   * build, or a pinned page's own). Absent: this process's current half.
+   */
+  build?: CompilerBuild;
+  /** The version's declared dataflow: a stored story re-rendered for a newer half starts, as its compile did, from the declared values. */
+  flow?: NonNullable<PreparedPage['declared']>['flow'] | null;
 }
 
-/** The live server half the SSR module renders on: part of what a cached render depends on. */
-const liveSsrUrl = (): string => { try { return loadCompilerBuild().ssr?.url ?? ''; } catch { return ''; } };
+/** The declared state: every scalar at its default — what the compile rendered `html` with (compiler declaredValues). */
+const declaredValuesOf = (flow: StoryInput['flow']): Record<string, Scalar> =>
+  Object.fromEntries((flow?.values ?? []).filter((v) => v.kind === 'scalar').map((v) => [v.name, (v as { default: Scalar }).default]));
 
 export async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
   const plain = !input.state && !input.assetsUrl && !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
-  if (!compiled.ssr || plain) return compiled.html;
+  if (!compiled.ssr) return compiled.html;
+  const half = input.build?.ssr;
+  // The stored story is what the half that compiled it rendered. It is served as it is only while that is
+  // the half the browser hydrates with: after a deploy that changed the kit it is rendered again, or the
+  // server DOM and the client tree would disagree (a hydration mismatch, or a fix that never shows).
+  const current = !half || compiled.build === input.build!.id || compiled.ssrHalf === half.url
+    || (!!compiled.sharedBuild && compiled.sharedBuild.ssr?.url === half.url);
+  if (plain && current) return compiled.html;
+  const values = plain ? declaredValuesOf(input.flow) : input.values;
   const cacheKey = input.resultsId === null && input.results ? null
-    : `${compiled.build}:${liveSsrUrl()}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(input.values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}`;
+    : `${compiled.build}:${half?.url ?? '-'}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}`;
   const cached = cacheKey ? renders.get(cacheKey) : undefined;
   if (cached !== undefined) {
     renders.delete(cacheKey!);
@@ -324,8 +393,9 @@ export async function storyOf(compiled: CompiledPage, input: StoryInput): Promis
   // server build, which a process without a usable compiled page never needs
   // (the same boundary prepared-page.server keeps for the compiler).
   const { loadSsrModule } = await import('./bundle.server');
-  const module = await loadSsrModule(compiled.ssr);
-  const rendered = module.render({ values: input.values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
+  const live = (() => { try { return loadCompilerBuild().ssr?.url; } catch { return undefined; } })();
+  const module = await loadSsrModule(compiled.ssr, undefined, undefined, half && half.url !== live ? half : undefined);
+  const rendered = module.render({ values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
   // The SSR module renders only the document tree. Its browser literals and large module data
   // are version-owned inert siblings stored with the first render; keep them for snapshot renders.
   const literalOpen = '<script type="application/json" data-mx-island-literals=';
@@ -394,6 +464,8 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     // does not carry this version's script would serve the page without it: a page must be whole.
     const carriesScript = (compiled: CompiledPage) => (page.authorScript || null) === (compiled.authorScript || null);
     const compiled = usable.page;
+    // The runtime this page runs on: the live build, or — while it recompiles in the background — its own.
+    if (usable.pinned) build = usable.pinned;
     if (!carriesScript(compiled)) {
       logOnce(row, 'unported', 'the stored compile does not carry the version\'s author script');
       return refuse('unported', 'the stored compile does not carry the version\'s author script');
@@ -425,6 +497,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     const story = await storyOf(compiled, {
       values, state: failedState, results, assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl, mermaidImages, drawings: served?.drawings ?? {},
       resultsId: served ? `${keyString(served.key)}:${served.computedAt}` : null,
+      build, flow,
     });
 
     const colorMode = reader.colorMode ?? page.data.colorMode;
@@ -446,7 +519,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
       overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       chrome: reader.chrome,
-      spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT ? reader.spa : null,
+      spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT && !usable.pinned ? reader.spa : null,
       build,
       head: reader.head,
       live: reader.live,

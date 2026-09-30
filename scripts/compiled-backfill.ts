@@ -21,9 +21,9 @@
  *
  * On the production host, after a deploy has rolled out (the new server is the one answering):
  *
- *   0. A deploy that keeps MIN_HANDOVER_CONTRACT needs NO backfill: stored pages bind the live shared
- *      runtime at serve time, and a page whose contract is old recompiles itself on its first read.
- *      `--stale` warms the old-contract ones ahead of readers.
+ *   0. A deploy needs NO backfill: stored pages bind the live shared runtime at serve time, and a page
+ *      below a raised MIN_HANDOVER_CONTRACT is served on its own retained build while it recompiles in
+ *      the background on its first read. `--stale` upgrades the old-contract ones ahead of readers.
  *   1. Pick a recorded version: `--where compiler_version!=<current>` selects old compilers;
  *      `--island-build <old>` selects one island build; `--format-below N` selects old formats.
  *      Filters combine with AND. Without filters, only versions lacking a compile are selected.

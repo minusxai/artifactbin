@@ -135,7 +135,10 @@ export const MIN_PAGE_FORMAT = 3;
  * `compiled-backfill --where handover_contract<N`) only when the runtime can no longer run modules or
  * story markup compiled under the older number: a changed boot/rt call signature, a removed or renamed
  * specifier, a kit component whose server-rendered markup the browser tree no longer hydrates, or a
- * compiler change whose output an old page cannot take. 2: unresolved specifiers.
+ * compiler change whose output an old page cannot take (a Solid or babel-preset-solid upgrade that changes
+ * the hydration protocol included). A page below it keeps being served against the build it was compiled
+ * with (its retained chunks) while it recompiles in the background; only a page with no such build waits
+ * for its compile. 2: unresolved specifiers.
  */
 export const MIN_HANDOVER_CONTRACT = 2;
 
@@ -145,8 +148,16 @@ export const MIN_HANDOVER_CONTRACT = 2;
  */
 export interface CompiledPage {
   build: string;
-  /** Only an offline file pins the build it was exported with (lib/offline); the reader binds the live one. */
+  /**
+   * The build this page's runtime is pinned to: a page compiled before MIN_HANDOVER_CONTRACT 2 (its module
+   * names chunk URLs of this build), and an offline file (lib/offline). A current page binds the live build.
+   */
   sharedBuild?: CompilerBuild;
+  /**
+   * The SSR half (`CompilerBuild.ssr.url`) that rendered `html`. The stored story is served as it is only
+   * while this is the half the page hydrates with; otherwise it is rendered again (serve.server storyOf).
+   */
+  ssrHalf?: string;
   /** App adoption contract; an app that does not know this version leaves navigation as full loads. */
   handoverContract?: number;
   /** Version-owned navigation, decided from the same nodes and template as the legacy reader. */

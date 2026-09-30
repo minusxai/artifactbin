@@ -24,7 +24,7 @@ const BUILD_ID_RE = /^[0-9a-f]{16}$/;
 let cached: { text: string; build: CompilerBuild } | null = null;
 
 /** Validate the manifest the build wrote; a malformed one is an error, never a build a compile could key on. */
-function parse(text: string, file: string): CompilerBuild {
+export function parseCompilerBuild(text: string, file: string): CompilerBuild {
   const raw = JSON.parse(text) as { files?: Record<string, { imports?: string[] }>; build?: unknown; manifest?: unknown; sqliteWasm?: unknown; ssr?: { url?: unknown; exports?: unknown } };
   if (typeof raw.build !== 'string' || !BUILD_ID_RE.test(raw.build)) throw new Error(`island build: ${file} has no 16-hex build id`);
   if (!raw.manifest || typeof raw.manifest !== 'object' || Array.isArray(raw.manifest)) throw new Error(`island build: ${file} has no manifest`);
@@ -47,6 +47,6 @@ export function loadCompilerBuild(): CompilerBuild {
   const file = path.resolve(process.cwd(), ISLANDS_MANIFEST_PATH);
   const text = readFileSync(file, 'utf8');
   if (cached?.text === text) return cached.build;
-  cached = { text, build: parse(text, ISLANDS_MANIFEST_PATH) };
+  cached = { text, build: parseCompilerBuild(text, ISLANDS_MANIFEST_PATH) };
   return cached.build;
 }

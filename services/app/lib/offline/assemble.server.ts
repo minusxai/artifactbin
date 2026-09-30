@@ -255,8 +255,8 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const source = row.source ?? '';
   const { page } = await preparedPageFor(artifact, at, origin);
   // A page compiled under the current contract pins no runtime: the file pins the build serving it now
-  // (its SSR half is read live, so it is left out of the pin).
-  const { ssr: _liveSsr, ...liveBuild } = loadCompilerBuild();
+  // (its SSR half is read live and its chunk graph is the server's, so both are left out of the file).
+  const { ssr: _liveSsr, graph: _liveGraph, ...liveBuild } = loadCompilerBuild();
   const compiled = page.compiled && !isCompileFailure(page.compiled) ? { ...page.compiled, sharedBuild: page.compiled.sharedBuild ?? liveBuild } : null;
   if (!compiled) throw new Error(`offline file: compiled page unavailable for ${artifact.id}`);
 

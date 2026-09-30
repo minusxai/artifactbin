@@ -24,6 +24,9 @@ import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export-key';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { drainCompiledUpgrades, storyOf } from '@/lib/compiled-page/serve.server';
+import type { CompiledPage } from '@/lib/compiled-page/contract';
+import { objectStore } from '@/lib/object-store';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
@@ -133,6 +136,8 @@ describe('the reader mode on /raw', () => {
     expect((await db.query<{ page_format: number }>('SELECT page_format FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.page_format).toBe(3);
     await db.query(`UPDATE prepared_pages SET handover_contract = 0 WHERE artifact_id = $1`, [id]);
     expect((await raw(id)).status).toBe(200);
+    // Served at once on its own retained build; the recompile runs behind it.
+    await drainCompiledUpgrades();
     expect((await db.query<{ handover_contract: number }>('SELECT handover_contract FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.handover_contract).toBe(MIN_HANDOVER_CONTRACT);
   });
 
@@ -162,8 +167,21 @@ describe('the reader mode on /raw', () => {
     const code = await moduleResponse.text();
     expect(code).toContain(live.manifest['@mx/boot']!);
     expect(code).not.toContain('"@mx/boot"');
-    // A module bound to a different build is refused, never served against this runtime.
+    // A module bound to a build this deployment never archived is refused, never served against this runtime;
+    // unversioned, a specifier module is never served (it would be cached immutable against one build).
     expect((await app.request(`${stored.compiled.module.url}?b=0000000000000000`)).status).toBe(404);
+    expect((await app.request(stored.compiled.module.url)).status).toBe(404);
+    // A page assembled for an older, archived build (a tab open across a deploy) gets that build's chunks.
+    const older = 'aaaaaaaaaaaaaaaa';
+    const olderBoot = '/islands/boot-aaaaaaaaaaaaaaaa.js';
+    const manifest = JSON.parse(readFileSync(path.resolve(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { build: string; manifest: Record<string, string> };
+    await objectStore().put(`island-builds/manifest-${older}.json`, JSON.stringify({ ...manifest, build: older, manifest: { ...manifest.manifest, '@mx/boot': olderBoot } }), 'application/json');
+    const olderModule = await app.request(`${stored.compiled.module.url}?b=${older}`);
+    expect(olderModule.status).toBe(200);
+    expect(olderModule.headers.get('cache-control')).toMatch(/immutable/);
+    const olderCode = await olderModule.text();
+    expect(olderCode).toContain(olderBoot);
+    expect(olderCode).not.toContain(live.manifest['@mx/boot']!);
     // Nothing was recompiled or rewritten.
     expect(await snapshot()).toEqual(before);
     const adopting = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
@@ -180,19 +198,56 @@ describe('the reader mode on /raw', () => {
     } finally { rmSync(emptyPublic, { recursive: true, force: true }); }
   });
 
-  it('a raised contract, or a specifier the live runtime lacks, recompiles the page on its next read', async () => {
+  it('a page below the contract keeps its own retained build while it recompiles in the background; one naming a missing specifier recompiles inline', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Contract', markup: fixture('kit.jsx') });
     const db = await harness.db();
-    const contract = async () => (await db.query<{ handover_contract: number }>('SELECT handover_contract FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.handover_contract;
-    expect(await contract()).toBe(MIN_HANDOVER_CONTRACT);
-    await db.query(`UPDATE prepared_pages SET handover_contract = MIN_HANDOVER_CONTRACT - 1 WHERE artifact_id = $1`.replace('MIN_HANDOVER_CONTRACT', String(MIN_HANDOVER_CONTRACT)), [id]);
-    expect((await raw(id)).status).toBe(200);
-    expect(await contract()).toBe(MIN_HANDOVER_CONTRACT);
+    const live = loadCompilerBuild();
+    const row = async () => (await db.query<{ handover_contract: number; island_build: string; build: string }>(
+      `SELECT handover_contract, island_build, page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
+    expect((await row()).handover_contract).toBe(MIN_HANDOVER_CONTRACT);
+    // A page compiled on an older deploy under an older contract: its build's manifest was archived there.
+    const older = 'bbbbbbbbbbbbbbbb';
+    const olderBoot = '/islands/boot-bbbbbbbbbbbbbbbb.js';
+    const manifest = JSON.parse(readFileSync(path.resolve(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { manifest: Record<string, string> };
+    await objectStore().put(`island-builds/manifest-${older}.json`, JSON.stringify({ ...manifest, build: older, manifest: { ...manifest.manifest, '@mx/boot': olderBoot } }), 'application/json');
+    await db.query(`UPDATE prepared_pages SET handover_contract = $2, island_build = $3, page = jsonb_set(page, '{compiled,build}', to_jsonb($3::text)) WHERE artifact_id = $1`, [id, MIN_HANDOVER_CONTRACT - 1, older]);
+    const pinned = await raw(id);
+    expect(pinned.status).toBe(200);
+    const html = await pinned.text();
+    // Served at once on its own runtime, never waited on a compile and never mixed with the live chunks.
+    expect(html).toContain(`?b=${older}`);
+    expect(html).toContain(olderBoot);
+    expect(html).not.toContain(live.manifest['@mx/boot']!);
+    await drainCompiledUpgrades();
+    expect(await row()).toMatchObject({ handover_contract: MIN_HANDOVER_CONTRACT, island_build: live.id, build: live.id });
+    const upgraded = await (await raw(id)).text();
+    expect(upgraded).toContain(`?b=${live.id}`);
+    expect(upgraded).toContain(live.manifest['@mx/boot']!);
+    // A module naming a specifier neither the live build nor its own carries cannot run anywhere: recompiled inline.
     await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,module,specifiers}', '["@mx/boot","@mx/removed"]'::jsonb) WHERE artifact_id = $1`, [id]);
     expect((await raw(id)).status).toBe(200);
     const healed = (await db.query<{ specifiers: string[] }>(`SELECT page->'compiled'->'module'->'specifiers' AS specifiers FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
     expect(healed.specifiers).not.toContain('@mx/removed');
+  });
+
+  it('a stored story rendered by an older server half is rendered again by the live one, so the page hydrates what the browser runs', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Half', markup: fixture('kit.jsx') });
+    const db = await harness.db();
+    const live = loadCompilerBuild();
+    const compiled = (await db.query<{ page: { compiled: CompiledPage } }>('SELECT page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!.page.compiled;
+    expect(compiled.ssrHalf).toBe(live.ssr!.url);
+    const stale = { ...compiled, html: `<p data-stale-story>rendered by an older kit</p>${compiled.html}` };
+    const plain = { values: {}, results: null, mermaidImages: {}, drawings: {}, resultsId: null, build: live, flow: null };
+    // Rendered by the half that is live: the stored story is served as it is.
+    expect(await storyOf(stale, plain)).toContain('data-stale-story');
+    // Compiled on another deploy whose kit rendered differently: the live half renders the story again.
+    const again = await storyOf({ ...stale, build: 'cccccccccccccccc', ssrHalf: '/islands/ssr-cccccccccccccccc.js' }, plain);
+    expect(again).not.toContain('data-stale-story');
+    expect(new JSDOM(again).window.document.querySelector('[role="tablist"]')).toBeTruthy();
+    // The module's inert carriers (its literals) stay with the re-rendered story.
+    expect(again).toContain('data-mx-island-literals');
   });
 
   it('a recorded compile failure reports an unavailable page', async () => {
