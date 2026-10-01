@@ -43,6 +43,7 @@ import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
 } from './contract';
+import { splitCarriers, withStoredCarriers } from './carriers';
 import { bindModuleRef } from './runtime-binding';
 import { speculationRulesOf } from './speculation';
 
@@ -64,13 +65,9 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   // The stored module names the runtime by specifier; its URL and preload closure are this build's.
   const module = compiled.module ? bindModuleRef(compiled.module, build) : null;
 
-  const rendered = splitModuleData(input.story);
   // Request-specific SSR replaces visible HTML, while immutable browser carriers still belong
   // to the compiled module and may exist only in its stored first render.
-  const compiledData = input.story === compiled.html ? rendered : splitModuleData(compiled.html);
-  const { story: storySource } = rendered;
-  const moduleData = rendered.moduleData ?? compiledData.moduleData;
-  const literals = rendered.literals || compiledData.literals;
+  const { story: storySource, moduleData, literals } = splitCarriers(withStoredCarriers(input.story, compiled.html));
   const storyHtml = fillChartSlots(storySource, input.snapshot?.drawings ?? {});
   const withOutline = input.documentChrome !== false && compiled.outline?.length
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderOutlineRail(compiled.outline)}${storyHtml}</div>`
@@ -144,26 +141,6 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
  * ────────────────────────────────────────────────────────────────────────── */
 
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
-
-/** The version's large constants travel with either stored HTML or snapshot SSR, then into the page's one JSON island. */
-function splitModuleData(story: string): { story: string; moduleData: unknown[] | null; literals: string } {
-  const open = '<script type="application/json" data-mx-module-data>';
-  const start = story.lastIndexOf(open);
-  let moduleData: unknown[] | null = null;
-  if (start >= 0) {
-    const tail = story.slice(start + open.length);
-    if (tail.endsWith('</script>')) {
-      const parsed: unknown = JSON.parse(tail.slice(0, -'</script>'.length));
-      if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('assembler: invalid module data');
-      moduleData = parsed.moduleData;
-      story = story.slice(0, start);
-    }
-  }
-  // Browser literals are immutable module data, never visible story text.
-  const carrier = /<script type="application\/json" data-mx-island-literals="[0-9a-f]{16}">[\s\S]*?<\/script>/g;
-  const literals = [...story.matchAll(carrier)].map((match) => match[0]).join('');
-  return { story: story.replace(carrier, ''), moduleData, literals };
-}
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
 const liveAttrs = (live: AssembleInput['live']): string =>
