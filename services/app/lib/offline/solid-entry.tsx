@@ -21,7 +21,7 @@ declare global { interface Window { __afbinOfflineReady?: Promise<void>; } }
 
 const SourceEditor = lazy(() => import('@/solid/editor/SourceEditor'));
 const NOTHING_TO_SAVE = 'No changes to save';
-const EDIT_REFUSED = 'That change could not be applied to the source.';
+const EDIT_REFUSED = 'This text could not be applied to the current document.';
 const INVALID_SOURCE_EDIT = 'Editing needs a valid source. Fix the markup in the file, then open it again.';
 const BUTTON = 'inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-edge px-2 font-sans text-xs text-fg disabled:cursor-default disabled:opacity-50';
 

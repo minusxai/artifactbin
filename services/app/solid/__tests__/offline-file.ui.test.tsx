@@ -138,7 +138,7 @@ describe('Solid offline file', () => {
     const file = withTwice(fixture());
     const callbacks = await openAndEdit(file);
     callbacks.onFlow('1.7', TWICE, '<Button run="$add">Add a row</Button>');
-    expect(screen.getAllByRole('status').map((status) => status.textContent)).toContain('That change could not be applied to the source.');
+    expect(screen.getAllByRole('status').map((status) => status.textContent)).toContain('This text could not be applied to the current document.');
     const source = shownSource();
     expect(source.split(TWICE)).toHaveLength(3);
     expect(source).not.toContain('<Button run="$add">Add a row</Button>');
