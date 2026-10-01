@@ -28,7 +28,7 @@
  * writes.ts, kit/status.tsx): this file calls them and their owners replace those files.
  */
 import type { Component } from 'solid-js';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';

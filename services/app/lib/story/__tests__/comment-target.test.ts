@@ -1,6 +1,6 @@
-import { parseAnnotationRange } from '../annotation-range';
+import { parseAnnotationRange } from '../annotations/annotation-range';
 import { describe, expect, it } from 'vitest';
-import { parseCommentTarget } from '../comment-target';
+import { parseCommentTarget } from '../annotations/comment-target';
 
 describe('durable comment refinements', () => {
   it('preserves typed table keys and scoped iframe keys', () => {

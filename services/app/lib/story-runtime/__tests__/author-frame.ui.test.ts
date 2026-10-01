@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
-import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/data/compiled-dataflow';
 import {AUTHOR_FRAME_DOCUMENT,AUTHOR_FRAME_PATH} from '../author-frame';
 import {startAuthorScript} from '../author-script';
 import {createDataflowStore} from '../store';

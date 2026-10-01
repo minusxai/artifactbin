@@ -18,7 +18,7 @@ const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md',
 const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
-import { publishJsx } from '../story/jsx-tier';
+import { publishJsx } from '../story/document/jsx-tier';
 
 const BASE = 'https://example.test';
 
@@ -277,7 +277,7 @@ describe('the markup skill', () => {
    *
    * "Social preview: upload and crop" pointed at publishing-versions.md, which
    * says nothing about either — while the real path is three `<meta>` tags in
-   * `<Helmet>` (lib/story/social-preview reads them out of the document
+   * `<Helmet>` (lib/story/assets/social-preview reads them out of the document
    * source), documented nowhere. A pointer to a doc that does not answer costs
    * the turns of reading it and still leaves the agent without the mechanism.
    *

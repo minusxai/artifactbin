@@ -20,9 +20,9 @@ import { agentContract } from '@/lib/agent-contract';
 import { llmsText } from '@/lib/agent-discovery';
 import { MARKUP_FIELD_GUIDANCE } from '@/lib/agent-guidance';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
-import { JSX_TIER_COMPONENTS } from '@/lib/story/jsx-tier';
-import { HELMET_TAG } from '@/lib/story/helmet';
-import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG } from '@/lib/story/dataflow';
+import { JSX_TIER_COMPONENTS } from '@/lib/story/document/jsx-tier';
+import { HELMET_TAG } from '@/lib/story/document/helmet';
+import { IMPORT_TAG, MUTATION_TAG, NOTIFY_TAG, QUERY_TAG, VALUE_TAG } from '@/lib/story/data/dataflow';
 import teaching from '../../../cli/src/generated/teaching.json';
 
 const BASE = 'https://example.test';

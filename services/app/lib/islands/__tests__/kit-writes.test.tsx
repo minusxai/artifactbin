@@ -27,13 +27,13 @@ import { fakeIsland } from './context.test';
 import { Button, stableRowKey } from '../kit/basic';
 import { ACCESS_PENDING } from '../kit/store-read';
 import { ACCESS_PENDING as STORE_ACCESS_PENDING } from '@/lib/story-runtime/store';
-import { validRowKey } from '@/lib/story/repeat-identity';
+import { validRowKey } from '@/lib/story/data/repeat-identity';
 import { Segmented } from '../kit/controls';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../kit/dialog';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
-import type { Scalar } from '@/lib/story/dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { Scalar } from '@/lib/story/data/dataflow';
 
 const flow = (values: Array<{ name: string; default: Scalar }> = []): CompiledDataflow => ({
   imports: [], queries: [], mutations: [],

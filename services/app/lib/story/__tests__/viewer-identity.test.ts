@@ -7,13 +7,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
-import { collectRefNameUses, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/story/dataflow';
+import { collectRefNameUses, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/story/data/dataflow';
 import { PERSON_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { validateMarkupStructure } from '@/lib/story/local-validation';
+import { validateMarkupStructure } from '@/lib/story/document/local-validation';
 
 const nodes = (source: string): JsxNode[] => parseJsxOrThrow(source).nodes;
 const EMPTY: Dataflow = { imports: [], values: [], queries: [], mutations: [] };
@@ -57,7 +57,7 @@ describe('the kit can show a person and ask a guest to sign in', () => {
 
 /**
  * THE PUBLISH DOOR, not just the unit. `validateDataflow` above is the rule;
- * this is the door every write goes through (lib/story/local-validation, which
+ * this is the door every write goes through (lib/story/document/local-validation, which
  * /api/preview and publish share), so a refusal proved in one is the refusal an
  * author actually gets.
  */

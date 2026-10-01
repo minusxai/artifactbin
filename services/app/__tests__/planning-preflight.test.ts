@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
-import { prepareJsx } from '@/lib/story/jsx-tier';
+import { prepareJsx } from '@/lib/story/document/jsx-tier';
 import { objectStore } from '@/lib/object-store';
-import { inferColumns } from '@/lib/story/dataset-shape';
+import { inferColumns } from '@/lib/story/datasets/dataset-shape';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

@@ -13,8 +13,8 @@ import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';
 import type { ModuleRef, ModuleStore } from '@/lib/compiled-page/contract';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
-import { compileDataflow, prepareCompile } from '@/lib/story/compile-dataflow';
+import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import { compileDataflow, prepareCompile } from '@/lib/story/data/compile-dataflow';
 
 const source = process.argv[2]!;
 const parsed = parseJsx(source) as { nodes: JsxNode[] };

@@ -110,7 +110,7 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'the
 // rows on screen the whole time, never a flash to "loading".
 /*
  * The reader may hold this public dataset, so after the first paint (whose
- * rows arrived in the HTML — lib/story/served-results.server) the page fetches
+ * rows arrived in the HTML — lib/story/prepared/served-results.server) the page fetches
  * it once and runs every later change itself: the select below must make NO
  * request at all.
  */
@@ -269,7 +269,7 @@ await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"
 check((await uf.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', `the link's selection is what the control shows at first paint (${await uf.$eval('select[aria-label="Region"]', (el) => el.value)})`);
 check((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the numbers are the SELECTED ones, not the defaults corrected a moment later');
 const upRuns = upQueries.filter((q) => q.body?.hold === undefined);
-// The selected numbers arrived in the HTML (lib/story/served-results.server): the page asks for nothing to show them.
+// The selected numbers arrived in the HTML (lib/story/prepared/served-results.server): the page asks for nothing to show them.
 check(upRuns.length === 0, `the document's first rows came with the page, for the selection: no run request (${upRuns.length} run request(s))`);
 // Key order is the store's: a compiled page's guest snapshot comes back from JSONB, which puts `errors` first.
 check(/"results":\{(?:"errors":\{\},)?"tables":\{"/.test(await (await fetch(`${B}/a/${udoc.id}?$region=west`, { headers: { accept: 'text/html' } })).text()), 'and the served page carries those results for the linked selection');

@@ -8,9 +8,9 @@
  * a fallback.
  */
 import { describe, expect, it } from 'vitest';
-import { checkDocumentData } from '../data-checks';
-import type {DatasetColumn} from '../dataset-shape';
-import type { RefLoader } from '../refs';
+import { checkDocumentData } from '../data/data-checks';
+import type {DatasetColumn} from '../datasets/dataset-shape';
+import type { RefLoader } from '../data/refs';
 
 const DS = 'abc123';
 const columns:DatasetColumn[]=[

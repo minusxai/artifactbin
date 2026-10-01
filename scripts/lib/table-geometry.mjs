@@ -39,7 +39,7 @@ export async function checkTableGeometry(BASE, browser, check) {
   // boxes are measured on the main frame — no iframe to reach through.
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
   await page.waitForSelector('#long [data-slot="data-table"]', { timeout: 20000 });
-  // The rows arrive with the page (lib/story/served-results.server) in the static regime; what is
+  // The rows arrive with the page (lib/story/prepared/served-results.server) in the static regime; what is
   // measured below is the VIRTUAL one, which the runtime switches the long table to once it owns it.
   await page.waitForFunction(
     (last) => (document.querySelector('#short tbody')?.textContent ?? '').includes('row-2')

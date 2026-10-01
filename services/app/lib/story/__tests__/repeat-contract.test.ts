@@ -1,10 +1,10 @@
 import { expect,it } from 'vitest';
 import { parseJsx,validateJsx } from '@/lib/jsx';
-import { collectRefNameUses } from '../dataflow';
-import { keyedRowsError, validRowKey } from '../repeat-identity';
-import { publishJsx } from '../jsx-tier';
+import { collectRefNameUses } from '../data/dataflow';
+import { keyedRowsError, validRowKey } from '../data/repeat-identity';
+import { publishJsx } from '../document/jsx-tier';
 import { renderDoc } from '@/lib/skills';
-import { stampNodeIds } from '../node-ids';
+import { stampNodeIds } from '../document/node-ids';
 const source='<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>';
 function nodes(source:string){const p=parseJsx(source);if(!p.ok)throw new Error(p.error);return p.nodes;}
 it('validates For as inert table dependency and preserves source identity through save/load',()=>{

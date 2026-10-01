@@ -1,5 +1,5 @@
-import type { AnnotationAreaRange, AnnotationTextRange, AnnotationRect } from '@/lib/story/annotation-range';
-import type { IframeNodeTarget } from '@/lib/story/comment-target';
+import type { AnnotationAreaRange, AnnotationTextRange, AnnotationRect } from '@/lib/story/annotations/annotation-range';
+import type { IframeNodeTarget } from '@/lib/story/annotations/comment-target';
 
 type ManagedCommentRefinement = AnnotationAreaRange | AnnotationTextRange;
 export interface ManagedCommentSelection {

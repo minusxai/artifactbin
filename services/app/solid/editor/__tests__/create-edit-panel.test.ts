@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import { EDIT_PANEL_BREAKPOINT } from '@/lib/story/edit-bar';
+import { EDIT_PANEL_BREAKPOINT } from '@/lib/story/reader/edit-bar';
 import { createWideEditViewport } from '../create-edit-panel';
 import { renderHook } from '@/solid/__tests__/helpers';
 

@@ -3,7 +3,7 @@
  * Gates are plain Node entry points; tsImport loads the shared TypeScript client
  * here without duplicating its compiler or changing the browser under test. */
 import {tsImport} from 'tsx/esm/api';
-const {prepareClientDocumentPublication}=await tsImport('../../services/app/lib/story/document-update-client.ts',import.meta.url);
+const {prepareClientDocumentPublication}=await tsImport('../../services/app/lib/story/graph/document-update-client.ts',import.meta.url);
 const snapshots=new WeakMap();
 export async function observeFixtureWrite(raw,input,init={}){
  let seen=snapshots.get(raw);if(!seen){seen=new Map();snapshots.set(raw,seen);}

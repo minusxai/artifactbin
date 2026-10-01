@@ -10,7 +10,7 @@
  *
  * So this is the one place an image is made fit to read: capped, converted,
  * measured, and given a stand-in to show while it travels. It runs at PUBLISH,
- * behind lib/story/data-tiers storeImageContent — the single door the picker,
+ * behind lib/story/data/data-tiers storeImageContent — the single door the picker,
  * the paste/drop and the URL import all already share — because the first
  * reader of a document is the person its author just handed the link to, and
  * they must not be the one paying for an encode.

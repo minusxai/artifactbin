@@ -16,8 +16,8 @@
 import { assembleReaderPage } from '@/lib/compiled-page/assembler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { compilePage } from '@/lib/compiled-page/compiler';
-import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
-import { documentStyleSheets } from '@/lib/story/document-styles';
+import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { documentStyleSheets } from '@/lib/story/styles';
 import { compileStoryCss } from './story-css.server';
 import type { StoryThemeName } from './story-themes';
 

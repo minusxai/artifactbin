@@ -4,7 +4,7 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/story/dataset-store';
+import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {APP_CSP,createAppServer} from '@/server/app';
 import {mintToken} from '@/lib/tokens';
 import {claimToken,createUser} from '@/lib/users';

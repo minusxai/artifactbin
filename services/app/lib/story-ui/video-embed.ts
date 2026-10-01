@@ -95,7 +95,7 @@ function parseVideoSrc(src: unknown): ParsedVideo | null {
 /**
  * The canonical embed-player URL, or null for an unsupported source. Nothing
  * renders it in a frame (see the module comment): it is the publish door's
- * supported-source check (lib/story/refs) and the one spelling of the
+ * supported-source check (lib/story/data/refs) and the one spelling of the
  * allowlist.
  */
 export function videoEmbedUrl(src: unknown): string | null {

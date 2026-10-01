@@ -6,7 +6,7 @@
  * so this is the one pure coordinate seam left to hold.
  */
 import { describe, expect, it } from 'vitest';
-import { sourcePathToBodyPath } from '@/lib/story/edit-compose';
+import { sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
 
 const PLAIN = '<div>hello</div><p>world</p>';
 const WITH_HELMET = '<Helmet><title>t</title></Helmet><div>hello</div><p>world</p>';

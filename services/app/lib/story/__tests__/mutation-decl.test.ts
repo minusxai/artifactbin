@@ -8,9 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
   EMPTY_DATAFLOW, MUTATION_TAG, collectRefNameUses, isEmptyDataflow, parseMutationDecl, validateDataflow, type Dataflow,
-} from '@/lib/story/dataflow';
-import { dataflowOf, declaresLiveData, declaresMutations, splitHelmet, validateHelmet } from '@/lib/story/helmet';
-import { storyUpdateParts } from '@/lib/story/update-parts';
+} from '@/lib/story/data/dataflow';
+import { dataflowOf, declaresLiveData, declaresMutations, splitHelmet, validateHelmet } from '@/lib/story/document/helmet';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
 
 const parse = (src: string): JsxNode[] => {
   const p = parseJsx(src);

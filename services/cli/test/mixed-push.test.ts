@@ -1,5 +1,5 @@
 import {documentHead,applyDocumentUpdate,acceptedDocumentUpdate} from './document-server';
-import {prepareClientDocumentUpdate} from '../../app/lib/story/document-update-client';
+import {prepareClientDocumentUpdate} from '../../app/lib/story/graph/document-update-client';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';

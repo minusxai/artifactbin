@@ -1,8 +1,8 @@
 import {expect,it} from 'vitest';
 import type {DocumentOperation} from '@artifactbin/contracts';
-import {applyOperationsToNodes} from '../document-operation';
-import {createDocumentGraph,graphNodes,graphSource,graphIntegrity,type DocumentGraph} from '../document-graph';
-import {prepareGraphPatch,applyGraphPatch} from '../document-graph-patch';
+import {applyOperationsToNodes} from '../graph/document-operation';
+import {createDocumentGraph,graphNodes,graphSource,graphIntegrity,type DocumentGraph} from '../graph/document-graph';
+import {prepareGraphPatch,applyGraphPatch} from '../graph/document-graph-patch';
 const source='<main id="root"><section id="left"><p id="a">Alpha</p></section><section id="right"><p id="b">Beta</p></section></main>';
 const setup=()=>createDocumentGraph(source,1);
 const plan=(base:DocumentGraph,operations:DocumentOperation[])=>prepareGraphPatch(base,createDocumentGraph(applyOperationsToNodes(graphNodes(base),operations),2),1);

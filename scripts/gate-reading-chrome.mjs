@@ -51,7 +51,7 @@ async function until(read, want, budgetMs = 10000) {
   return last;
 }
 
-const WIDE_ROW = '<tr><td>Storage</td><td><code>lib/story/dataset-store.ts</code></td><td>One content-addressed JSON blob; the row keeps meta.objectKey, columns, rowCount. Capped at ten thousand rows, which is plenty for a poll.</td></tr>';
+const WIDE_ROW = '<tr><td>Storage</td><td><code>lib/story/datasets/dataset-store.ts</code></td><td>One content-addressed JSON blob; the row keeps meta.objectKey, columns, rowCount. Capped at ten thousand rows, which is plenty for a poll.</td></tr>';
 const section = (i, title) =>
   `<section className="mt-24"><h2 className="text-2xl font-semibold tracking-tight">${i}. ${title}</h2>`
   + Array.from({ length: 6 }, (_, k) => `<p className="mt-4 leading-relaxed">Paragraph ${k + 1} of section ${i}. Long enough to give the reader something to scroll through before the next heading arrives.</p>`).join('')

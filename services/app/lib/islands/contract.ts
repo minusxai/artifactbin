@@ -9,8 +9,8 @@
  *
  * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
  */
-import type { Scalar, TableResult } from '@/lib/story/dataflow';
-import type { MutationRequest } from '@/lib/story/mutation-request';
+import type { Scalar, TableResult } from '@/lib/story/data/dataflow';
+import type { MutationRequest } from '@/lib/story/datasets/mutation-request';
 import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { ColumnType, PersonCard } from '@artifactbin/contracts';
@@ -235,7 +235,7 @@ export interface IslandPageData {
   /** Brotli bytes of the pinned DOM factory resource; absent for older compiles. */
   templateBrBytes?: number | null;
   /** A prepared version that cannot run carries its query errors into the reader. */
-  state?: import('@/lib/story/dataflow').DataflowState;
+  state?: import('@/lib/story/data/dataflow').DataflowState;
   results: ServedResults | null;
   /** The compiled app page uses its same-origin scoped POST query door, including for guests. */
   appPage: boolean;
@@ -257,7 +257,7 @@ export interface IslandPageData {
   signedIn: boolean;
   /**
    * The imports this page may hold in full (lib/artifacts holdableImports, for the door the page queries
-   * through), by name: what its own SQLite engine answers once loaded (lib/story/placement). Empty: the
+   * through), by name: what its own SQLite engine answers once loaded (lib/story/data/placement). Empty: the
    * page runs nothing itself.
    */
   hold: string[];

@@ -3,7 +3,7 @@
  *
  * `--mx-vh` is the document's own height custom property, declared in the
  * served document's base CSS (`:root { --mx-vh: 100vh; }`,
- * lib/story/prepare-runtime.server.ts) and authored against by the slide kit
+ * lib/story/prepared/prepare-runtime.server.ts) and authored against by the slide kit
  * and the deck templates (`min-h-[var(--mx-vh,760px)]`). Rewriting a `vh`
  * length to it puts authored CSS on that same property instead of on the raw
  * unit, so one declaration governs the height a document sizes against.

@@ -11,7 +11,7 @@
  *     SVG must be self-contained).
  *
  * Scope: format:'jsx' stories' AUTHORED CSS. Legacy stories are frozen and keep their `@import`
- * fonts live — the sanitizer is wired only into the jsx-story save path (lib/story/jsx-tier.ts).
+ * fonts live — the sanitizer is wired only into the jsx-story save path (lib/story/document/jsx-tier.ts).
  *
  * Enforcement is declaration-level: a banned declaration is stripped, its siblings survive — a
  * save never fails on style content. Detection runs on a DECODED copy (comments removed, CSS
@@ -84,7 +84,7 @@ function maskEntities(s: string): { masked: string; restore: (seg: string) => st
  * `@font-face { src: url(https://…) }` survives the strip. Stripping it would
  * let a publish answer 201 while the document quietly lost its typeface. Such a
  * URL is IMPORTED at publish (lib/web-assets) and the SERVED stylesheet is
- * rewritten to our own origin (lib/story/asset-url mapExternalCssUrls), so
+ * rewritten to our own origin (lib/story/assets/asset-url mapExternalCssUrls), so
  * nothing a reader loads ever names the upstream host — which is the whole
  * reason the ban exists.
  *
@@ -188,7 +188,7 @@ const STYLE_ATTR_RE = /(\bstyle\s*=\s*)("([^"]*)"|'([^']*)')/gi;
 
 /**
  * Sanitize every `<style>` block and inline `style` attribute in story markup. This is the save-path
- * enforcement point: it runs where markup becomes source (lib/story/jsx-tier.ts), so banned CSS never
+ * enforcement point: it runs where markup becomes source (lib/story/document/jsx-tier.ts), so banned CSS never
  * reaches `content.story`, whichever door the write came through.
  */
 export function sanitizeStoryMarkupCss(markup: string): string {

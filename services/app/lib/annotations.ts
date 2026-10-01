@@ -7,7 +7,7 @@ import type {CommentImageWire} from '../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from './remote/agents';
 import type {RemoteWork,RemoteColor} from '../../contracts/src/remote';
 import {completeMutationReceipt,type MutationReceipt} from './mutation-receipt';
-import type { CommentTarget } from '@/lib/story/comment-target';
+import type { CommentTarget } from '@/lib/story/annotations';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
@@ -36,9 +36,9 @@ import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
   canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
   type AnnotationRange,
- isAreaRange, isTargetRange } from '@/lib/story/annotation-range';
-import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
-import { channelForAnnotations } from '@/lib/story/live';
+ isAreaRange, isTargetRange } from '@/lib/story/annotations';
+import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/document';
+import { channelForAnnotations } from '@/lib/story/realtime/live';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /**

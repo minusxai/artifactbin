@@ -94,7 +94,7 @@ function familyFiles(dir: string, family: string): string[] {
 }
 
 /**
- * WHICH RECIPES A DOCUMENT CAN RENDER. The reader's sheet (lib/story/reader-sheet.server) keeps only
+ * WHICH RECIPES A DOCUMENT CAN RENDER. The reader's sheet (lib/story/prepared/reader-sheet.server) keeps only
  * the utilities of the components a document uses, so each kit tag is mapped to the class sources of
  * its family (the compiler's `KIT` table, and lib/islands/kit/recipes `FAMILIES`). `base` is what every document can render whatever
  * it names: the kit's shared modules (every source no family owns) and the sources named beside it.

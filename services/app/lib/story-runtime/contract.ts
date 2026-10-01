@@ -9,20 +9,20 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
  * (story-ssr.cjs) loaded outside the module graph — see
  * scripts/build-server-reader.mjs.
  */
-import type { AnnotationRange } from '@/lib/story/annotation-range';
+import type { AnnotationRange } from '@/lib/story/annotations/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { ImageRefData, RefDataMap } from '@/lib/story/ref-data';
-import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import type { ImageRefData, RefDataMap } from '@/lib/story/data/ref-data';
+import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { PersonCard } from '@artifactbin/contracts';
-import type { LocalMutationResult } from '@/lib/story/local-state';
+import type { LocalMutationResult } from '@/lib/story/datasets/local-state';
 import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
-  /** The compiled declarations (lib/story/compiled-dataflow): what every query reads, every mutation's signature. */
-  flow: import('@/lib/story/compiled-dataflow').CompiledDataflow;
+  /** The compiled declarations (lib/story/data/compiled-dataflow): what every query reads, every mutation's signature. */
+  flow: import('@/lib/story/data/compiled-dataflow').CompiledDataflow;
   /**
    * The rows, when somebody has already run them. ABSENT is the reader's
    * normal case — paint first: the document arrives with its declarations and
@@ -43,7 +43,7 @@ export interface StoryIslandDataflow {
   values?: Record<string, Scalar>;
   /**
    * THE FIRST RESULTS, run by the server for THIS request
-   * (lib/story/served-results.server): the answers the query route would give
+   * (lib/story/prepared/served-results.server): the answers the query route would give
    * this reader for the values the page starts from — defaults and the URL's
    * `values` — for the queries it could answer inside its budget. A query
    * named here (in `tables` or `errors`) starts current, so the page paints
@@ -57,7 +57,7 @@ export interface StoryIslandDataflow {
    * own rows, stored rather than connected, under the hold cap — decided for
    * the door this render's page queries through (lib/artifacts
    * holdableImports). The runtime places every query over them in the page
-   * (lib/story/placement); absent, everything runs on the server. A hint: the
+   * (lib/story/data/placement); absent, everything runs on the server. A hint: the
    * door that answers the rows decides again.
    */
   hold?: string[];
@@ -90,7 +90,7 @@ export interface RanDataflow extends StoryIslandDataflow {
 /**
  * WHO IS READING — the one fact about the reader a document is told.
  *
- * `id` is `$_me.id` (lib/story/builtins), and `card` is the person the
+ * `id` is `$_me.id` (lib/story/data/builtins), and `card` is the person the
  * SAME visibility rules already let a DataTable cell show
  * (lib/datasets/user-fields people): a display name, the public handle they
  * chose, and the address of their picture — never an email, never any other
@@ -126,7 +126,7 @@ export interface StoryIslandData {
   template?: string | null;
   /**
    * The `<Icon>` glyphs this document uses, resolved server-side
-   * (lib/story/icon-glyphs). A separate channel from the AST on purpose: the
+   * (lib/story/assets/icon-glyphs). A separate channel from the AST on purpose: the
    * glyph is injected as raw markup, so a map an author could write into would
    * be an injection hole. Absent for a document that draws no icons.
    */
@@ -140,7 +140,7 @@ export interface StoryIslandData {
   mermaidImages?: Record<string, StoredMermaidImage>;
   /**
    * The `<Value>`/`<Query>`/`<Mutation>` declarations and their render-time state
-   * (lib/story/dataflow.ts). Absent for a document that declares nothing.
+   * (lib/story/data/dataflow.ts). Absent for a document that declares nothing.
    */
   dataflow?: StoryIslandDataflow;
   colorMode: 'light' | 'dark';
@@ -205,9 +205,9 @@ export interface StoryIslandData {
   readOnly?: string;
 }
 
-/** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */
+/** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/data/query-request). */
 export const QUERY_REQUEST_PARAM = 'q';
-/** The most ids one `{people}` request may name (lib/story/query-request); a page asks in batches of this. */
+/** The most ids one `{people}` request may name (lib/story/data/query-request); a page asks in batches of this. */
 export const MAX_PEOPLE_IDS = 1000;
 
 /** DOM contract between the builder and the entry. */
@@ -406,7 +406,7 @@ export type StoryAssetResult =
  * THE WRITE RELAY — the same shape as the query relay, for the same reason: a
  * document inside a parent page cannot present a session, and a PRIVATE
  * document's writes must. The frame posts the mutation request
- * (lib/story/mutation-request), the page POSTs /a/<id>/mutate and posts the
+ * (lib/story/datasets/mutation-request), the page POSTs /a/<id>/mutate and posts the
  * answer back.
  */
 export const STORY_MUTATE_MESSAGE = 'mx:mutate';
@@ -415,7 +415,7 @@ export const STORY_MUTATE_RESULT_MESSAGE = 'mx:mutate-result';
 export interface StoryMutateRequest {
   type: typeof STORY_MUTATE_MESSAGE;
   id: number;
-  request: import('@/lib/story/mutation-request').MutationRequest;
+  request: import('@/lib/story/datasets/mutation-request').MutationRequest;
 }
 
 export type StoryMutateResult =
@@ -529,7 +529,7 @@ export interface StoryEditSelection {
    * The words actually selected, canonical — present only when there IS a text
    * selection, which is why both of these are optional: the same struct rides
    * every caret move in an edit session, where nothing is selected at all.
-   * A comment stores them beside its anchor (lib/story/annotation-range).
+   * A comment stores them beside its anchor (lib/story/annotations/annotation-range).
    */
   quote?: string;
   /** Where those words are, addressed RELATIVE to `path` — never an absolute body path. */
@@ -754,7 +754,7 @@ export interface StoryAnnotationsMessage {
    * `block` — the selectable node under the pointer carries an outline and a
    * click takes it; `area` — a dragged rectangle, whose anchor is the lowest
    * common ancestor of the blocks it touched and whose box rides the
-   * selection as an area range (lib/story/annotation-range). Either answers
+   * selection as an area range (lib/story/annotations/annotation-range). Either answers
    * with `mx:selection` — the same report the breadcrumb widening uses — or a
    * null selection on escape. Null/absent is off. One-shot: the page clears
    * it the moment a selection arrives.

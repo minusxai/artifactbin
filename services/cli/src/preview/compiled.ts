@@ -16,7 +16,7 @@ import {createModuleStore, createSpeculationRulesStore} from '../../../app/lib/c
 import {loadSsrModule} from '../../../app/lib/compiled-page/bundle.server';
 import {bindModuleCode} from '../../../app/lib/compiled-page/runtime-binding';
 import {ISLANDS_PATH, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
-import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared-runtime';
+import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
 import type {StoryIslandData, ServedResults} from '../../../app/lib/story-runtime/contract';
 import type {Scalar} from '../../../contracts/src/index';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveEditBatch, rebaseEditBatch, MAX_BATCH_BYTES, MAX_BATCH_EDITS } from '../edit-batch';
-import { applySplice, deriveSpliceFromStrings, touchedSpanFor } from '../splice';
+import { resolveEditBatch, rebaseEditBatch, MAX_BATCH_BYTES, MAX_BATCH_EDITS } from '../document/edit-batch';
+import { applySplice, deriveSpliceFromStrings, touchedSpanFor } from '../document/splice';
 import { parseJsx } from '@/lib/jsx';
 
 const base = '<main><Card id="card">Hello</Card><p id="other">Old</p><section id="dest"></section></main>';

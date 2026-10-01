@@ -16,8 +16,8 @@ import { renderHook } from './helpers';
 /** Solid applies updates synchronously: nothing to flush. */
 const act = <T,>(fn: () => T): T => fn();
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {createDocumentGraph,graphSource,type DocumentGraph} from '@/lib/story/document-graph';
-import {applyGraphPatch} from '@/lib/story/document-graph-patch';
+import {createDocumentGraph,graphSource,type DocumentGraph} from '@/lib/story/graph/document-graph';
+import {applyGraphPatch} from '@/lib/story/graph/document-graph-patch';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import { createLiveEdits } from '@/solid/editor/create-live-edits';
 import { httpBackend } from '@/test/helpers/artifact-backend';

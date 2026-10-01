@@ -16,7 +16,7 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { liveFrameFor } from '@/lib/story/frame';
+import { liveFrameFor } from '@/lib/story/data/frame';
 import { queryResourceForRequest } from '@/lib/resource-query';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';

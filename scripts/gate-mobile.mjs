@@ -106,7 +106,7 @@ check(!(await overflows(view)), 'viewer: the page does not scroll sideways');
 /*
  * THE OWNER'S PAGE DRAWS NO DOCK OF ITS OWN ANY MORE. The framed document
  * carries the same chrome a reader gets — logo, rail, byline — and asks the
- * page for its panels (lib/story/reader-chrome; gate-reader-chrome measures
+ * page for its panels (lib/story/reader/reader-chrome; gate-reader-chrome measures
  * that chrome's geometry). What this leg keeps is the SCROLL RULE, exercised
  * in whichever document actually scrolls: hidden on load, a scroll down keeps
  * it away, a scroll up brings it back.
@@ -485,7 +485,7 @@ check(ready.ran, `slow reader: the SPA mounted its inline document and protected
 
 /*
  * THE ANSWER MEASURED IS THE REVEAL, not the hide. The chrome is now
- * server-rendered HIDDEN (lib/story/reader-chrome) and a scroll UP is what
+ * server-rendered HIDDEN (lib/story/reader/reader-chrome) and a scroll UP is what
  * brings it back, so "it is hidden after a downward scroll" is the state the
  * bytes arrived in and would pass with no JavaScript at all. Leaving that
  * state is something only the reader's own module can do.

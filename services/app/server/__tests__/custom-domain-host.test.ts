@@ -33,9 +33,9 @@ import { setServices } from '@/lib/services';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { objectKey, objectStore } from '@/lib/object-store';
-import { urlHash } from '@/lib/story/asset-url';
+import { urlHash } from '@/lib/story/assets/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/users';
 import { createAppServer } from '../app';
 

@@ -1,6 +1,6 @@
 /**
  * RESTORING HISTORY AND READING TO EDIT, before the migration reaches a
- * document (lib/story/data-syntax): a version written for the previous engine
+ * document (lib/story/data/data-syntax): a version written for the previous engine
  * is read back converted (lib/migrate/sqlite/stored inCurrentSyntax), so a
  * restore lands the converted, marked document; one that needs a person says
  * it cannot be restored as it stands. An editor's read-back of an unmarked
@@ -16,7 +16,7 @@ import { GET as mineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as myVersionRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { documentEditBody } from './prepared-document';
 import { getArtifactById } from '@/lib/artifacts';
-import { graphSource, type DocumentGraph } from '@/lib/story/document-graph';
+import { graphSource, type DocumentGraph } from '@/lib/story/graph/document-graph';
 import { mintToken } from '@/lib/tokens';
 
 const harness = useAppHarness();

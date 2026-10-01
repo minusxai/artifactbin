@@ -9,7 +9,7 @@
  */
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/ids';
-import { channelFor, channelForAnnotations } from '@/lib/story/live';
+import { channelFor, channelForAnnotations } from '@/lib/story/realtime/live';
 import { sessionActor } from '@/lib/viewer';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {

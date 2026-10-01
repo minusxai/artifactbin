@@ -1,6 +1,6 @@
 /**
  * THE LINK FOLLOWS THE READER on a compiled page: when a `<Value>` the link carries moves, the
- * top-level page rewrites its own address — its `$` params only (lib/story/url-values), every other
+ * top-level page rewrites its own address — its `$` params only (lib/story/data/url-values), every other
  * param and the hash kept, replaced rather than pushed — so the address bar says what the reader
  * narrowed the document to, and a copy of it opens the same document.
  *
@@ -15,7 +15,7 @@
  * shared runtime's closure; a value moved before it loaded is written at once. A sandboxed copy whose
  * opaque origin refuses the rewrite keeps its address.
  */
-import { readUrlValues, urlValueParams, writeUrlValues } from '@/lib/story/url-values';
+import { readUrlValues, urlValueParams, writeUrlValues } from '@/lib/story/data/url-values';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 
 /** ~150ms: long enough to swallow a drag, short enough that a click feels answered. */

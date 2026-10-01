@@ -13,7 +13,7 @@
  * Framework-free on purpose: this ships in anchor-entry (~1.5 KB, loaded by every
  * document, hydrating or not) and is also imported by the runtime entry.
  */
-import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
+import type { ScrollAnchor } from '@/lib/story/reader/scroll-anchor';
 
 const DOC_STATE_PREFIX = 'mx:doc:';
 /** What pre-envelope documents wrote — still consumed so a reload from old code restores. */

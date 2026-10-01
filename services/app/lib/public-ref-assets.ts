@@ -1,7 +1,7 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/ids';
 import type { WebAssetKind } from '@/lib/web-assets';
-import { serveStoredFile } from '@/lib/story/file-store';
+import { serveStoredFile } from '@/lib/story/assets/file-store';
 
 /** A read grant, login, token, or export key never widens a referenced file. */
 export async function publicRefAsset(id: string, kind: WebAssetKind | 'binary' = 'binary') {

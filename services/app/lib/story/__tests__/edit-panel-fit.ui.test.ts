@@ -6,7 +6,7 @@
  * elements the boxes a 1440px window would.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { documentInkRight, panelFitsInMargin } from '@/lib/story/edit-panel-fit';
+import { documentInkRight, panelFitsInMargin } from '@/lib/story/reader/edit-panel-fit';
 
 const box = (el: Element, left: number, width: number, top = 0, height = 40) =>
   vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(new DOMRect(left, top, width, height));

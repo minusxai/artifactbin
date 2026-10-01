@@ -5,7 +5,7 @@
  * notebook reads.
  *
  * A lens like VizEditorPanel: the cells come from the source and the editor's
- * dataflow state (lib/story/query-notebook), and the only thing a cell emits
+ * dataflow state (lib/story/data/query-notebook), and the only thing a cell emits
  * is its edited SQL — committed on blur or ⌘⏎, named by query. The editor
  * writes it into the declaration and its own refresh re-runs the document, so
  * the result under the cell is always the document's, never a private run.
@@ -21,8 +21,8 @@
  * a live page passes the artifact's backend.
  */
 import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from 'solid-js';
-import type { BoundEmbed, QueryCell } from '@/lib/story/query-notebook';
-import type { TableResult } from '@/lib/story/dataflow';
+import type { BoundEmbed, QueryCell } from '@/lib/story/data/query-notebook';
+import type { TableResult } from '@/lib/story/data/dataflow';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { formatCount } from '../../lib/format';

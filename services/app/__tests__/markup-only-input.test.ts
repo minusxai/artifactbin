@@ -11,7 +11,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { mintToken } from '@/lib/tokens';
-import { displayTitle } from '@/lib/story/title';
+import { displayTitle } from '@/lib/story/document/title';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

@@ -20,7 +20,7 @@
  */
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { parseJsx, serializeJsx, type JsonValue, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { splitHelmet } from '@/lib/story/helmet';
+import { splitHelmet } from '@/lib/story/document/helmet';
 import { removedSqlReferenceTokens } from '@/lib/migrate/sqlite/legacy-tokens';
 import { significant, tokenizeSql, word, type SqlToken } from './tokens';
 import { translateSql, type ManualItem } from './translate';

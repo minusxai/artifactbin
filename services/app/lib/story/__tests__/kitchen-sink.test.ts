@@ -6,10 +6,10 @@
  * appearance, this fails — same enforcement pattern as registry-names.test.ts.
  */
 import { describe, expect, it } from 'vitest';
-import { kitchenSinkMarkup } from '../kitchen-sink';
+import { kitchenSinkMarkup } from '../fixtures/kitchen-sink';
 import { parseJsx, validateJsx } from '@/lib/jsx';
-import { dataflowOf, splitHelmet, validateHelmet } from '@/lib/story/helmet';
-import { collectRefNameUses, validateDataflow } from '@/lib/story/dataflow';
+import { dataflowOf, splitHelmet, validateHelmet } from '@/lib/story/document/helmet';
+import { collectRefNameUses, validateDataflow } from '@/lib/story/data/dataflow';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';

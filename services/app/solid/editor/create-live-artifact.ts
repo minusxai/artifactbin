@@ -26,7 +26,7 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/live';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/realtime/live';
 import { liveBackoffDelay } from '@/lib/live-stream';
 
 export interface LiveArtifactOptions {

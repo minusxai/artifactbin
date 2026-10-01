@@ -1,16 +1,16 @@
 import {createUser} from '@/lib/users';
-import {prepareDocumentAuthoringContext} from '@/lib/story/document-authoring-context';
-import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/story/document-update-history';
+import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
+import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/story/graph/document-update-history';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
 import {getArtifactById,editorScope} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
-import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/story/document-update-client';
-import {commitDocumentUpdate} from '@/lib/story/document-update-write';
-import {graphIntegrity,graphSource,type DocumentGraph} from '@/lib/story/document-graph';
-import {applyGraphPatch} from '@/lib/story/document-graph-patch';
+import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/story/graph/document-update-client';
+import {commitDocumentUpdate} from '@/lib/story/graph/document-update-write';
+import {graphIntegrity,graphSource,type DocumentGraph} from '@/lib/story/graph/document-graph';
+import {applyGraphPatch} from '@/lib/story/graph/document-graph-patch';
 useAppHarness();
 async function setup(){
  const token=await mintToken('mxmx_test_trusted_ops'),actor={tokenId:token.id,userId:null};

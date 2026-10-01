@@ -30,7 +30,7 @@ import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setDocAssetImportCapForTests } from '@/lib/auth';
-import { assetUrlFor, urlHash } from '@/lib/story/asset-url';
+import { assetUrlFor, urlHash } from '@/lib/story/assets/asset-url';
 import { getDb } from '@/lib/db';
 import { mintExportKey } from '@/lib/export-key';
 

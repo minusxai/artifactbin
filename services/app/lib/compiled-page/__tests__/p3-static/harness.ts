@@ -6,10 +6,10 @@
 import { createHash } from 'node:crypto';
 import { loadCompilerBuild } from '../../build.server';
 import type { CompileInput } from '../../contract';
-import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
-import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/compile-dataflow';
-import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
-import type { Dataflow } from '@/lib/story/dataflow';
+import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/data/compile-dataflow';
+import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import type { Dataflow } from '@/lib/story/data/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
 import { shapeOf, diffShapes } from '@/lib/islands/__tests__/kit-parity';

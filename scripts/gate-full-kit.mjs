@@ -112,7 +112,7 @@ check((await frame.evaluate('document.body.innerText')).includes('Collapsed unti
 /*
  * <Icon> is the one kit component with NO text of its own, so the marker sweep
  * above cannot see it: it draws a glyph the SERVER resolved into the island
- * (lib/story/icon-glyphs), and if that resolution ever misses, the icon renders
+ * (lib/story/assets/icon-glyphs), and if that resolution ever misses, the icon renders
  * as nothing at all while every other check here still passes. So look at the
  * glyph itself — present, carrying its paths, and actually laid out.
  */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { compiledDocument } from '@/lib/compiled-page/__tests__/document-helper';
-import { renderDraftPreview } from '../draft-preview.server';
+import { renderDraftPreview } from '../prepared/draft-preview.server';
 
 describe('compiled editor draft preview', () => {
   it('refuses incomplete source instead of replacing the visible draft with an empty page', async () => {

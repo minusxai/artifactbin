@@ -2,7 +2,7 @@
  * Gate: THE READER'S CHROME on the served document.
  *
  * A reader is served the sandboxed document TOP-LEVEL, so everything around it
- * is rendered INSIDE that document (lib/story/reader-chrome) and driven by the
+ * is rendered INSIDE that document (lib/story/reader/reader-chrome) and driven by the
  * ~8 KB every-document entry (lib/story-runtime/reader-chrome-actions). None of
  * that is reachable from a unit test in the way that matters: the rule is
  * "reveal on a scroll UP", the geometry is a phone's rail against a real

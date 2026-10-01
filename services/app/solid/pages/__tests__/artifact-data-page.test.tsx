@@ -12,7 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { InboxProvider } from '@/solid/lib/notifications';
 import { ArtifactDataPage, type DataAnswer } from '@/solid/pages/ArtifactData';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
+import { datasetQuerySnippet } from '@/lib/story/datasets/dataset-usage';
 
 const streams: Array<{ url: string; onmessage: ((event: { data: string }) => void) | null; closed: boolean }> = [];
 class FakeEventSource {

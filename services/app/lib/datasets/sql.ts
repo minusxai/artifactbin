@@ -1,8 +1,8 @@
 import {normalizeTimestamp} from '@artifactbin/utils/shape';
 import { parse, toSql, type SelectStatement } from 'pgsql-ast-parser';
 import type { DatasetCatalog, DatasetNotebook } from './types';
-import type { Scalar } from '@/lib/story/dataflow';
-import type { DatasetColumn } from '@/lib/story/dataset-shape';
+import type { Scalar } from '@/lib/story/data/dataflow';
+import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
 
 const FUNCTIONS = new Set(`exists count sum avg min max bool_and bool_or every array_agg string_agg json_agg jsonb_agg json_object_agg jsonb_object_agg
   abs ceil ceiling floor round trunc mod power sqrt exp ln log sign greatest least coalesce nullif

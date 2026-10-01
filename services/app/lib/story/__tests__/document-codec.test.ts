@@ -1,8 +1,8 @@
 import {describe,expect,it} from 'vitest';
-import {encodeDocument,decodeDocument,type StoredDocument} from '../document-codec';
+import {encodeDocument,decodeDocument,type StoredDocument} from '../document/document-codec';
 import {parseJsx} from '../../jsx/parse';
 import {serializeJsx} from '../../jsx/serialize';
-import {createDocumentGraph} from '../document-graph';
+import {createDocumentGraph} from '../graph/document-graph';
 const databaseOrder=(v:unknown):unknown=>Array.isArray(v)?v.map(databaseOrder):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,databaseOrder(x)])):v;
 const canonical=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return serializeJsx(parsed.nodes);};
 describe('persisted JSX codec',()=>{

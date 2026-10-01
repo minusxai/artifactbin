@@ -22,9 +22,9 @@
  */
 import { createHash } from 'node:crypto';
 import type { JsxAttribute, JsxNode } from '@/lib/jsx';
-import { refName, type TableResult } from '@/lib/story/dataflow';
-import { CHART_VIZ_KINDS } from '@/lib/story/lazy-code';
-import type { RefDataMap } from '@/lib/story/ref-data';
+import { refName, type TableResult } from '@/lib/story/data/dataflow';
+import { CHART_VIZ_KINDS } from '@/lib/story/document/lazy-code';
+import type { RefDataMap } from '@/lib/story/data';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { questionEnvelope } from '@/lib/viz/chart-envelope';

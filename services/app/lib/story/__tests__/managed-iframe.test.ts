@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import { type JsxElement } from '@/lib/jsx';
-import {compileManagedIframe} from '../managed-iframe';
+import {compileManagedIframe} from '../reader/managed-iframe';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 const compile=(source:string)=>{const parsed=parseJsxOrThrow(source);return compileManagedIframe(parsed.nodes[0] as JsxElement);};
 describe('managed Iframe inert compiler',()=>{

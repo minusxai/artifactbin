@@ -39,7 +39,7 @@ export interface SpaBoot {
   cancel(): void;
 }
 
-/** The served chrome's controls (lib/story/reader-chrome): actions on the rail and the two panel triggers. */
+/** The served chrome's controls (lib/story/reader/reader-chrome): actions on the rail and the two panel triggers. */
 const CHROME_CONTROL = '[data-mx-reader-action],[data-mx-reader-trigger]';
 /** The controls whose reach alone is intent: what they open is the app's. */
 const INTENT_CONTROL = '[data-mx-reader-action="edit"],[data-mx-reader-action="comment"],[data-mx-reader-action="share"]';
@@ -139,7 +139,7 @@ export function stampSavedTheme(win: Window = window): void {
 const wantsAppNow = (location: Location): boolean =>
   location.hash === '#edit' || /[?&](?:comment|intent|install)=/.test(location.search);
 
-/** Owner or editor: the served chrome offers Edit (lib/story/reader-chrome renders it only for a writer). */
+/** Owner or editor: the served chrome offers Edit (lib/story/reader/reader-chrome renders it only for a writer). */
 export const capabilityOf = (doc: Document): SpaCapability =>
   doc.querySelector('[data-mx-reader-chrome] [data-mx-reader-action="edit"]') ? 'writer' : 'reader';
 

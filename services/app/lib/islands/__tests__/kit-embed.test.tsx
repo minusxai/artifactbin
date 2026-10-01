@@ -14,7 +14,7 @@ import * as dataFamily from '../kit/data';
 import { KIT_FAMILIES } from '../contract';
 import type { IslandContext } from '../contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
-import type { TableResult } from '@/lib/story/dataflow';
+import type { TableResult } from '@/lib/story/data/dataflow';
 import { installFrameAssetRelay, pageAssetDoor } from '../kit/embed/frame-engine';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { STORY_ASSET_MESSAGE } from '@/lib/story-runtime/contract';

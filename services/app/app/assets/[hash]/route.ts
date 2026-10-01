@@ -6,7 +6,7 @@
  * address never moves, and `refresh_asset` repointing the row is the one way
  * the bytes behind it change. A reader who already cached the old picture is
  * still reached, because the mapping puts a content-derived `?v=` on the url it
- * emits (lib/story/asset-url): a refreshed asset is asked for at an address no
+ * emits (lib/story/assets/asset-url): a refreshed asset is asked for at an address no
  * browser has seen before, while the bytes are still served here, from the
  * hash alone, whatever query anyone arrives with.
  *
@@ -30,7 +30,7 @@
 import { objectStore } from '@/lib/object-store';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import { fileNameFromUrl } from '@/lib/file-display';
-import { pdfFilename } from '@/lib/story/pdf-store';
+import { pdfFilename } from '@/lib/story/assets/pdf-store';
 import { webAssetByHash } from '@/lib/web-assets';
 
 /** Every asset response carries these, whatever the asset turns out to be. */

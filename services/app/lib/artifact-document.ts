@@ -1,14 +1,14 @@
-import {stampNodeIds,hasAmbiguousLegacyAliases} from './story/node-ids';
+import { stampNodeIds, hasAmbiguousLegacyAliases } from './story/document/node-ids';
 /** The artifact persistence boundary. SQL remains explicit at its owning write path;
  * only stored JSONB↔public JSX conversion and lazy migration live here. Never issue
  * an out-of-transaction query: callers always supply their own Queryable.
  */
-import {createDocumentGraph} from './story/document-graph';
+import { createDocumentGraph } from './story/graph/document-graph';
 import {parseJsx} from './jsx/parse';
 import {currentStoryCss,storyCssCompileVersion} from './data/story/story-css.server';
-import {finalizeArtifactMetadata} from './story/parsed-artifact-metadata';
+import {finalizeArtifactMetadata} from './story/data/parsed-artifact-metadata';
 import type {Queryable} from '@artifactbin/contracts';
-import {encodeDocument,decodeDocument,type StoredDocument} from './story/document-codec';
+import { encodeDocument, decodeDocument, type StoredDocument } from './story/document/document-codec';
 interface SourceRow {source?:string|null;document?:StoredDocument|null}
 export function sourceStorage(format:string,source:string|null,certified=false,version=1):{source:string|null;document:string|null} {
  if(format!=='markup'||source===null)return {source,document:null};

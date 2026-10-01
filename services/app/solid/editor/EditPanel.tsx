@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * One right panel for the whole edit session, on a window wide
- * enough to hold it beside the document (lib/story/edit-bar's EDIT_PANEL_BREAKPOINT; narrower windows
+ * enough to hold it beside the document (lib/story/reader/edit-bar's EDIT_PANEL_BREAKPOINT; narrower windows
  * get bottom sheets instead).
  *
  * Same frame as the React panel: tabs, the dot, collapse. What each tab shows is the caller's.
@@ -18,7 +18,7 @@ import PanelRightClose from 'lucide-solid/icons/panel-right-close';
 import PanelRightOpen from 'lucide-solid/icons/panel-right-open';
 import SlidersHorizontal from 'lucide-solid/icons/sliders-horizontal';
 import { Tooltip } from '@/solid/components/Tooltip';
-import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { EDIT_PANEL_STRIP_W, RIGHT_RAIL_W } from '@/lib/story/reader/edit-bar';
 
 export type EditPanelTab = 'selection' | 'history' | 'comments';
 

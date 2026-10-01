@@ -4,7 +4,7 @@
  *
  * That version is not compiled for reading (lib/artifact-page `compiledMode`): what a person staring at
  * a brand-new document needs is not the placeholder but the paste for their agent, which is app UI
- * (solid/components/StarterInstructions). Its chrome is the reader's own (lib/story/reader-chrome), drawn
+ * (solid/components/StarterInstructions). Its chrome is the reader's own (lib/story/reader/reader-chrome), drawn
  * here as components/ArtifactSurface drew it through InlineReaderChrome, with the same panels
  * solid/pages/Document opens from it.
  *
@@ -21,16 +21,16 @@ import Moon from 'lucide-solid/icons/moon';
 import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/share-roles';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
-import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput, type ReaderForkedFrom } from '@/lib/story/reader-chrome';
+import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput, type ReaderForkedFrom } from '@/lib/story/reader/reader-chrome';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
 import { wireFaceFallback } from '@/lib/story-runtime/reader-actions';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { wireGithubStar } from '@/lib/github-star';
-import { displayTitle } from '@/lib/story/title';
+import { displayTitle } from '@/lib/story/document/title';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
-import { APP_BAR_H } from '@/lib/story/edit-bar';
+import { APP_BAR_H } from '@/lib/story/reader/edit-bar';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { initialViewWasReported } from '@/web/artifact-view-report';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';

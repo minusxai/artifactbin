@@ -35,11 +35,11 @@ is typed against the framework-free store (`lib/story-runtime/store`), never aga
 | Runtime binding | `lib/compiled-page/runtime-binding.ts` | Binds a stored module's `@mx/*` specifiers to a build's chunk URLs at serve time; `preloadClosure` computes the `modulepreload` set (§3). |
 | Carriers | `lib/compiled-page/carriers.ts` | The wire format of the inert data blocks at the tail of a stored compiled page (§3). |
 | Module store | `lib/compiled-page/modules.server.ts` + `GET /islands/d/:sha.js` | The per-document module's bytes, content-addressed in the object store (`lib/object-store`), served immutable under `script-src 'self'`. |
-| Compiled page store | `lib/story/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored with the prepared page, keyed by document version. |
+| Compiled page store | `lib/story/prepared/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored with the prepared page, keyed by document version. |
 | Serve | `lib/compiled-page/serve.server.ts` | `compiledPageFor`: stored compile → data (snapshot or cold path) → story → assembler. Returns `CompiledReaderAnswer` (`compiled` or `failed`), never a `Response`. |
 | Data plan | `lib/compiled-page/plan.ts` | `planOf(flow, access) → DataPlan`: every query classified `shared` / `viewer` / `page` from the compiled dataflow's reads and the datasets' access facts; the datasets a snapshot depends on; the values that key a snapshot. Pure. |
 | Snapshot store | `lib/compiled-page/snapshots.server.ts` + `app.data_snapshots` | Guest snapshots keyed by version + plan + inputs; marks of every dataset read; freshness decided on read by comparing marks (the correctness rule) and eagerly by the dataset write hook (the optimisation); background revalidation; server-drawn charts stored with the snapshot. |
-| Served results | `lib/story/served-results.server.ts` | `SERVED_RESULTS_BUDGET_MS` and `marksOf`, shared by snapshots, the cold path and the plan. |
+| Served results | `lib/story/prepared/served-results.server.ts` | `SERVED_RESULTS_BUDGET_MS` and `marksOf`, shared by snapshots, the cold path and the plan. |
 | Server chart drawing | `lib/compiled-page/charts.server.ts` | A `<Question>` drawn to SVG from a snapshot with vega on the server; Vega loads in the browser only on interaction. |
 | Reader page assembler | `lib/compiled-page/assembler.ts` | `assembleReaderPage(input) → string`: ONE function for `/a/:id` (server-rendered chrome, app loaded on idle or on intent) and `/raw` (no chrome, no app loader), custom domains, exports, the offline file and the CLI preview. |
 | Island runtime | `lib/islands/rt.tsx`, `lib/islands/boot.ts` | What every island receives (`IslandContext`): data accessors, values, `mutate`, viewer overlay, write status feed, revalidation patching. Bridges the framework-free store into Solid's store. |
@@ -97,7 +97,7 @@ is a 0.6 KB framework-free behaviour chunk from the shared build).
 ### 2.2 Serve
 
 The assembler takes `AssembleInput` (contract) and returns the whole HTML document. Chrome is an
-input (`ReaderChromeInput` rendered by `renderReaderChrome` (`lib/story/reader-chrome.ts`), or null for `/raw`, exports and
+input (`ReaderChromeInput` rendered by `renderReaderChrome` (`lib/story/reader/reader-chrome.ts`), or null for `/raw`, exports and
 the offline file). The story HTML (`AssembleInput.story`) is produced by the serve path, never by the assembler: when the
 request has a snapshot, the compiled page's SSR module (`CompiledPage.ssr`, the `generate: 'ssr'` build of
 the same islands, imported once per build) renders the islands WITH the snapshot's rows and drawings —

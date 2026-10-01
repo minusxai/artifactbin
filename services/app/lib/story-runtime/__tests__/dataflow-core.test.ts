@@ -11,8 +11,8 @@
  * checker must find the documents it strands.
  */
 import { describe, expect, it } from 'vitest';
-import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
-import { queriesReadingValues } from '@/lib/story/compiled-flow';
+import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
+import { queriesReadingValues } from '@/lib/story/data/compiled-flow';
 import { compiledOf } from '@/test/helpers/compiled';
 import {
   accessSettled, createCore, pendingOf, step,
@@ -253,7 +253,7 @@ describe('graphOfCompiled', () => {
     ['choice', ['mine']],
   ])('setting %s makes stale the queries that read it, transitively', (name, stale) => {
     expect(staleAfter({ type: 'set', values: { [name]: 'x' } })).toEqual(stale);
-    // …which is the offline file's own answer for the same value (lib/story/compiled-flow).
+    // …which is the offline file's own answer for the same value (lib/story/data/compiled-flow).
     expect(queriesReadingValues(GRAPH_FLOW, [name]).sort()).toEqual(stale);
   });
 

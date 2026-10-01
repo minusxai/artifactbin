@@ -19,7 +19,7 @@ import { managedAuthorDocument } from '@/lib/story-runtime/managed-author-docume
 import { createRelayTransport } from '@/lib/story-runtime/relay-transport';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { createDataflowStore, type DataflowStore } from '@/lib/story-runtime/store';
-import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
+import type { ManagedIframeContent } from '@/lib/story/reader/managed-iframe';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '../../contract';
 import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest } from '@/lib/story-runtime/contract';

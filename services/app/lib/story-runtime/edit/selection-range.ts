@@ -1,4 +1,4 @@
-import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
+import { COMMENT_TARGET_ATTR } from '@/lib/story/annotations/comment-target';
 /**
  * THE SELECTION, DESCRIBED FROM ITS ANCHOR — the frame half of a comment's quote.
  *
@@ -13,7 +13,7 @@ import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
  *                     selection crosses several).
  *   `describeRange` — the quote plus one part per text run, each addressed
  *                     relative to that anchor and indexed into its node's
- *                     CANONICAL text (`lib/story/annotation-range`).
+ *                     CANONICAL text (`lib/story/annotations/annotation-range`).
  *   `resolveParts`  — the reverse on a later DOM: re-find each part's text,
  *                     nearest the stored index, and build a live Range for it.
  *
@@ -24,7 +24,7 @@ import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
   canonicalQuote, findNearest, formatRel, parseRel, type AnnotationRangePart, type RelAddress, type AnnotationTextRange
-} from '@/lib/story/annotation-range';
+} from '@/lib/story/annotations/annotation-range';
 
 /**
  * The text-holding elements. A selection anchors on one of these and never on

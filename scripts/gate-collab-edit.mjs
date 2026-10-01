@@ -22,7 +22,7 @@
 import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {tsImport} from 'tsx/esm/api';
-const {prepareClientDocumentUpdate}=await tsImport('../services/app/lib/story/document-update-client.ts',import.meta.url);
+const {prepareClientDocumentUpdate}=await tsImport('../services/app/lib/story/graph/document-update-client.ts',import.meta.url);
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';

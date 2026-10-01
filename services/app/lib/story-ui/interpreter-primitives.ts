@@ -5,8 +5,8 @@ import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATTRS, paintHasExternalUrl } from '@/lib/jsx/url-attrs';
-import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/story/dataflow';
-import { substituteRow } from '@/lib/story/row-scope';
+import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/story/data/dataflow';
+import { substituteRow } from '@/lib/story/data/row-scope';
 import { AST_PATH_ATTR } from './ast-path';
 
 /** JSX attr names → React prop names for HTML tags (agents author HTML spellings). */

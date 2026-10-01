@@ -2,7 +2,7 @@
 import { createMemo, createSignal, Show } from 'solid-js';
 import type { ImageChoice } from '@/lib/artifact-backend/types';
 import { artifactAppPath } from '@/lib/artifact-pwa';
-import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/story/pwa-settings';
+import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/story/reader/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
 
 export interface PwaSettingsPanelProps { id: string; title: string; source: string; onChange: (source: string) => void; onUpload: (file: File) => Promise<ImageChoice>; beforeInstall?: () => Promise<boolean> }

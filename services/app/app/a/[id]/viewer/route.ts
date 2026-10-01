@@ -6,8 +6,8 @@ import { planOf } from '@/lib/compiled-page/plan';
 import { anonymousAccessFacts } from '@/lib/compiled-page/snapshots.server';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
 import type { ServedResults } from '@/lib/story-runtime/contract';
-import { readUrlValues } from '@/lib/story/url-values';
-import { LocalStateInputError } from '@/lib/story/local-tables';
+import { readUrlValues } from '@/lib/story/data';
+import { LocalStateInputError } from '@/lib/story/datasets';
 import { DatasetError } from '@/lib/datasets/errors';
 import { REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts';
 

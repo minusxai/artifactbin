@@ -32,13 +32,13 @@ import type { IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
-import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
+import { fontPreloadTags } from '@/lib/story/styles';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
-import { renderReaderChrome } from '@/lib/story/reader-chrome';
-import { APP_BAR_H } from '@/lib/story/edit-bar';
+import { renderReaderChrome } from '@/lib/story/reader';
+import { APP_BAR_H } from '@/lib/story/reader';
 import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
-import { DOCUMENT_ROOT_CSS } from '@/lib/story/document-styles';
+import { DOCUMENT_ROOT_CSS } from '@/lib/story/styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
@@ -95,7 +95,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]), Boolean(spa))
     + islandPreloads.map(modulePreload).join('')
     + (input.sheets
-      // Today's standalone document's sheets, exactly (lib/story/document-styles).
+      // Today's standalone document's sheets, exactly (lib/story/styles/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
       : `<style>${appMonoFaces}:root{--mx-vh:100vh${spa ? ';--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace' : ''}}body{margin:0${spa ? ';font-size:14px;font-family:var(--font-mono)' : ''}}</style>`)
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')

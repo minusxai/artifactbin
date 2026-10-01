@@ -2,13 +2,13 @@
  * Where a document's data comes from, as the GRAMMAR sees it: an `<Import>`
  * names an artifact its SQL reads under that name, and `source=` survives
  * only on a `<Query>` (a connected Postgres database runs it). What the SQL
- * itself reads is the compiler's (lib/story/compile-dataflow), not the parser's.
+ * itself reads is the compiler's (lib/story/data/compile-dataflow), not the parser's.
  */
 import {expect,it} from 'vitest';
 import {parseJsx} from '@/lib/jsx';
-import {splitHelmet} from '../helmet';
-import { parseQueryDecl, parseMutationDecl } from '../dataflow';
-import {collectRefUses} from '../refs';
+import {splitHelmet} from '../document/helmet';
+import { parseQueryDecl, parseMutationDecl } from '../data/dataflow';
+import {collectRefUses} from '../data/refs';
 const read=(source:string)=>{const p=parseJsx(source);if(!p.ok)throw Error('parse failed');return splitHelmet(p.nodes);};
 const element=(source:string)=>{const p=parseJsx(source);if(!p.ok||p.nodes[0]?.type!=='element')throw Error('parse failed');return p.nodes[0];};
 

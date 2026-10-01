@@ -1,9 +1,9 @@
 /** The production editor protocol over validated local files. No published head is advanced. */
 import {parseDocumentUpdate,type DocumentGraph} from '@artifactbin/contracts';
 import type {LoadedArtifact,EditAnswer} from '../../../app/lib/artifact-backend/types';
-import {createDocumentGraph,graphSource} from '../../../app/lib/story/document-graph';
-import {applyGraphPatch} from '../../../app/lib/story/document-graph-patch';
-import {documentAfterOperation} from '../../../app/lib/story/document-update-history';
+import {createDocumentGraph,graphSource} from '../../../app/lib/story/graph/document-graph';
+import {applyGraphPatch} from '../../../app/lib/story/graph/document-graph-patch';
+import {documentAfterOperation} from '../../../app/lib/story/graph/document-update-history';
 import type {DocumentMetadata} from '../document';
 
 export interface PreviewEditorDocument {body:string;revision:string;metadata:DocumentMetadata}

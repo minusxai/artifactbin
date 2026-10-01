@@ -18,8 +18,8 @@
 import type { AnnotationWire } from '@/lib/annotations';
 import type { CompiledPage } from '@/lib/compiled-page/contract';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import type { DataflowState, Scalar, TableResult } from '@/lib/story/dataflow';
-import type { ImportTables } from '@/lib/story/compiled-flow';
+import type { DataflowState, Scalar, TableResult } from '@/lib/story/data/dataflow';
+import type { ImportTables } from '@/lib/story/data/compiled-flow';
 
 export const ARTIFACT_FILE_FORMAT = 1 as const;
 
@@ -36,7 +36,7 @@ export interface ArtifactFileSnapshot {
   /** The results at the document's values when downloaded. */
   state: DataflowState;
   /**
-   * Every row of each import the downloader may hold (lib/story/placement), by
+   * Every row of each import the downloader may hold (lib/story/data/placement), by
    * import name: the file's own SQLite engine runs every query over them live,
    * so nothing is precomputed for those. Absent in a file saved before it existed.
    */

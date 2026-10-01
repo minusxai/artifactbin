@@ -131,7 +131,7 @@ check(startRows === 1, `the dashboard starts at rows=1 (got ${startRows})`);
  * Measured by a SENTINEL on the window rather than by counting navigation
  * events. A reload is what wipes it, and only a reload — where `framenavigated`
  * also fires for a SAME-DOCUMENT history write, which a reader's `<Value>` pick
- * now makes (their choice travels in the address bar: lib/story/url-values).
+ * now makes (their choice travels in the address bar: lib/story/data/url-values).
  * That counted the feature as a reload and failed this line for a document that
  * had not been re-fetched at all. The sentinel is also the stricter test: it
  * catches a reload however it happened.

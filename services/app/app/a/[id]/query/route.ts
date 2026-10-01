@@ -2,9 +2,9 @@ import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, nameableP
 import { ID_RE } from '@/lib/ids';
 import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/viewer';
-import { parseQueryRequest, type QueryRequest } from '@/lib/story/query-request';
+import { parseQueryRequest, type QueryRequest } from '@/lib/story/data/query-request';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
-import { LocalStateInputError } from '@/lib/story/local-tables';
+import { LocalStateInputError } from '@/lib/story/datasets';
 import {DatasetError} from '@/lib/datasets/errors';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
@@ -19,7 +19,7 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
  *
  * GET is the DOCUMENT's own path: the sandboxed standalone document served at
  * ./raw fetches its re-runs itself — its CSP admits exactly this URL
- * (lib/story/markup-csp). It is answered with the ANONYMOUS read ACL, BY
+ * (lib/story/styles/markup-csp). It is answered with the ANONYMOUS read ACL, BY
  * CONSTRUCTION: no cookie is read, so it can only ever return what an
  * unauthenticated fetch gets (public/unlisted; a private document is the
  * uniform 404). That, not browser behaviour, is what makes the CORS `*` safe —
@@ -117,7 +117,7 @@ async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleA
 
 /**
  * `{hold}` — every row of one import the document declares, for a reader's
- * page that runs its queries itself (lib/story/placement). Decided for THIS
+ * page that runs its queries itself (lib/story/data/placement). Decided for THIS
  * door's viewer on every request (lib/artifacts holdImport): the island's
  * `hold` is only a hint. Anything else — an undeclared name, a ref, a dataset
  * the viewer may not read, a connected database, past the cap — is one answer,

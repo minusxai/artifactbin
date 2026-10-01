@@ -68,7 +68,7 @@ may exceed that window; there is no new scene-readiness protocol in this version
 URL, plus filename, contentType, bytes and rawUrl. Files can be replaced through
 the existing JSON PUT flow, forked and shared like other artifacts.
 
-Accepted extensions and MIME types live in `lib/story/file-types.ts`.
+Accepted extensions and MIME types live in `lib/story/assets/file-types.ts`.
 Files preserve bytes in content-addressed object storage. The raw upload is
 bounded while reading (default 50 MB, `FILES__MAX_BYTES`), uses existing count
 and byte quotas, and defaults to unlisted for account-owned uploads. Direct

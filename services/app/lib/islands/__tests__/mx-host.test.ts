@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { installPublicMx } from '../mx-host';
 import { PUBLIC_MX_KEY, type PublicMxHost } from '../contract';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const flow: CompiledDataflow = { imports: [], mutations: [], queries: [], values: [{ name: 'region', kind: 'scalar', type: 'string', default: 'West' }] };
 const root = () => document.createElement('div') as PublicMxHost;

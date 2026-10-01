@@ -23,7 +23,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { GET as serveRaw, HEAD as headRaw } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
-import { pdfFilename } from '@/lib/story/pdf-store';
+import { pdfFilename } from '@/lib/story/assets/pdf-store';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';

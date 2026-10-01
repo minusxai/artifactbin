@@ -45,7 +45,7 @@ const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/s
 const escapeAttribute = (value) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /**
  * The Icon port fetches this only when query rows name a glyph absent from the page's small inline map.
- * Every lucide glyph (aliases included, lucide-static's data) as lib/story/icon-glyphs resolves one: the
+ * Every lucide glyph (aliases included, lucide-static's data) as lib/story/assets/icon-glyphs resolves one: the
  * glyph's classes and its inner markup, as lucide's own component draws them.
  */
 function glyphCatalog() {

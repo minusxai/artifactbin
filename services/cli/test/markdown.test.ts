@@ -1,6 +1,6 @@
 import {seedIdentityPool} from './connection';
 import {runCli} from '../src/dispatch';
-import {validateMarkupStructure} from '../../app/lib/story/local-validation';
+import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readdir,realpath,writeFile,readFile,rm,stat} from 'node:fs/promises';

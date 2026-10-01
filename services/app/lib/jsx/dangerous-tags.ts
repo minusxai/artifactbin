@@ -12,7 +12,7 @@
  *
  *  - a `<script>` in the BODY is not the frightening case it is elsewhere. The
  *    served document already runs an author script on purpose, through the one
- *    sanctioned door (`<Helmet><script>`, lib/story/helmet.ts), inside an
+ *    sanctioned door (`<Helmet><script>`, lib/story/document/helmet.ts), inside an
  *    opaque origin under `default-src 'none'`. Rejecting body scripts keeps ONE
  *    door instead of two; it is not what makes author JS safe.
  *  - `<base href>`, `<meta http-equiv>`, `<iframe>` are the ones that would act
@@ -27,7 +27,7 @@
  *
  * Denied at SAVE, like every tag in the list, so no stored document carries one
  * whatever renders it later. The served document's CSP independently sets
- * `form-action 'none'` (lib/story/markup-csp.ts), so the tag would be inert
+ * `form-action 'none'` (lib/story/styles/markup-csp.ts), so the tag would be inert
  * there too; the controls a form would group (`button`, `input`, `select` …)
  * are each allowed on their own and are driven from the `<Helmet>` script,
  * which is what the rejection tells the author (lib/jsx/validate.ts).

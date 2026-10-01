@@ -1,5 +1,5 @@
 /** Source snapshots lower to the existing ordered StringEdit protocol. */
-import { resolveEditBatch, type StringEdit } from '@/lib/story/edit-batch';
+import { resolveEditBatch, type StringEdit } from '@/lib/story/document/edit-batch';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { sourceChanges } from './history';
 export function sourceEdits(before: string, after: string): StringEdit[] {
