@@ -289,7 +289,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
   let editSheetWritten = false;
   let editSheetLoading = false;
   const loadEditSheet = () => {
-    if (editSheetWritten || editSheetLoading || !id) return;
+    // A page without a story sheet has nothing a reply could swap.
+    if (editSheetWritten || editSheetLoading || !id || !docSheet(win.document)) return;
     editSheetLoading = true;
     void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, { credentials: 'same-origin', cache: 'no-store' })
       .then((response) => response.ok ? response.json() as Promise<{ css?: unknown }> : null)
