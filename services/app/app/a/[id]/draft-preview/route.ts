@@ -6,7 +6,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
 import { canEdit } from '@/lib/share-roles';
-import { renderDraftPreview } from '@/lib/story/draft-preview.server';
+import { compileDraft, draftCompileGate } from '@/lib/story/draft-compile.server';
 import { requestOrSessionActor, roleFor } from '@/lib/viewer';
 import { refusesCrossSite } from '@/lib/auth';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -47,14 +47,16 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const search = typeof body.search === 'string' && body.search.length <= 8192 ? body.search : '';
   const declared = search ? await declarationsForRow(draft) : null;
   const values = declared?.flow ? readUrlValues(search, declared.flow) : undefined;
-  try {
+  // One running and one waiting compile per editor session; a newer draft answers older ones at once.
+  const session = `${artifact.id}:${actor.viewer?.userId ?? actor.tokenId ?? ''}`;
+  const compile = async (): Promise<string> => {
     const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
       compileStoryCss(body.source, { force: true }),
       dataflowForRow(draft, { ...(values ? { values } : {}), viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null } }),
       refDataForRow(draft),
       lookupWebAssets(collectExternalAssetUrls(body.source).all),
     ]);
-    const html = await renderDraftPreview({
+    return compileDraft({
       source: body.source,
       title: artifact.title,
       theme: design.theme,
@@ -65,7 +67,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       refData,
       assetUrls,
     });
-    return json({ html }, 200, { ...NO_STORE, 'X-Content-Type-Options': 'nosniff' });
+  };
+  try {
+    const result = await draftCompileGate().run(session, compile);
+    if (!result.ok) {
+      return result.reason === 'superseded'
+        ? json({ error: 'superseded' }, 409, NO_STORE)
+        : json({ error: 'draft_compile_busy' }, 429, { ...NO_STORE, 'Retry-After': '2' });
+    }
+    return json({ html: result.value }, 200, { ...NO_STORE, 'X-Content-Type-Options': 'nosniff' });
   } catch (error) {
     if (error instanceof Error && error.message === 'draft source is incomplete') return json({ error: 'invalid_draft' }, 422, NO_STORE);
     throw error;
