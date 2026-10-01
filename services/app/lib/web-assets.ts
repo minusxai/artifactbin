@@ -29,9 +29,9 @@ import { MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/config';
 import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
-import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/story/assets';
+import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/story/assets/asset-url';
 import { docAssetImportRateLimited } from '@/lib/auth';
-import { collectExternalAssetUrls } from '@/lib/story/assets';
+import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
 import { assetByteQuotaExceeded } from '@/lib/asset-quota';
 import { webIngestRateLimited } from '@/lib/auth';
 

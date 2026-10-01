@@ -34,7 +34,7 @@ import * as solidStore from 'solid-js/store';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { readerDataflow, type CompiledDataflow } from '@/lib/story/data';
+import { readerDataflow, type CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import type { Scalar } from '@/lib/story/data';
 import { islandFile, loadCompilerBuild } from './build.server';
 import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type ModuleRef, type ModuleStore } from './contract';

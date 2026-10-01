@@ -34,7 +34,7 @@ import { sourceChanges } from './story/document/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
 import {artifactState} from './artifact-state';
 import {channelFor} from './story/realtime/live';
-import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from './story/annotations';
+import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from './story/annotations/annotation-edits';
 import type { AnnotationOperation } from './editor-v2/annotation-map';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';

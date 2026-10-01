@@ -26,7 +26,7 @@ import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { isWoff2 } from '@/lib/web-ingest/sniff';
 import { parseGoogleFontCss } from './google';
-import { FAMILY_RE } from '@/lib/story/styles';
+import { FAMILY_RE } from '@/lib/story/styles/document-fonts';
 
 /** The two pinned upstreams. Overridable ONLY by tests (never reaches the network). */
 let sources = { cssBase: 'https://fonts.googleapis.com', fileHost: 'fonts.gstatic.com' };
