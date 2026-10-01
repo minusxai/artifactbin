@@ -248,6 +248,11 @@ export interface EditDraft {
    * edit mode off; Done afterwards returns the page to the saved head.
    */
   preview?: true;
+  /**
+   * Everything since the previous draft was typed into prose the editor already shows: its compile
+   * may only reconcile the editor, never redraw it (lib/story-runtime/island-controller).
+   */
+  typing?: true;
 }
 
 /**

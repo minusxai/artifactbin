@@ -16,6 +16,7 @@
  */
 import type { JsxNode } from '@/lib/jsx';
 import { captureBookmark, restoreBookmark, type EditorBookmark } from '@/lib/editor-v2/bookmark';
+import { flushFlowView } from '@/lib/editor-v2/flow-view';
 import { toggleInline, pasteFragment } from '@/lib/editor-v2/model';
 import { clipboardAst } from '@/lib/editor-v2/clipboard';
 import { SELECTION_PRESENTATION } from '../selection-presentation';
@@ -93,6 +94,11 @@ export interface FrameEditSession {
   unmountCompiledDom(): void;
   /** A compiled draft may replace the DOM when no host text or composition is pending. */
   canApplyDraft(): boolean;
+  /**
+   * Adopt a draft that changes only the prose the editors already show, keeping every live editor
+   * (solid/editor/dom-mounter `reconcile`); false when it must be drawn.
+   */
+  reconcileDraft(before: JsxNode[], after: JsxNode[], next: JsxNode[], draft: HTMLElement | null): boolean;
   /** The nodes currently rendered — selection is classified against the SOURCE, not the DOM. */
   setNodes(nodes: JsxNode[]): void;
   /** A parent → frame edit message (already checked for direction and trust by the caller). */
@@ -297,7 +303,9 @@ export function createFrameEditSession({
 
   return {
     canApplyDraft() { return !typingReported && !active?.userEdited; },
+    reconcileDraft(before, after, next, draft) { return !disposed && !!compiledMount?.reconcile(before, after, next, draft); },
     unmountCompiledDom() {
+      for (const view of views.all) flushFlowView(view);
       const toolbarFocus = doc.activeElement instanceof HTMLElement
         && !!doc.activeElement.closest('[aria-label="Typography toolbar"]');
       const focused = [...views.all].find((view) => view.hasFocus()) ?? (toolbarFocus ? views.last : null);
@@ -391,6 +399,7 @@ export function createFrameEditSession({
             break;
           }
           // Whatever is half-typed, hand it over — the page is leaving.
+          for (const entry of views.all) flushFlowView(entry);
           commitHost(active);
           post({ type: STORY_COMMITTED_MESSAGE });
           break;

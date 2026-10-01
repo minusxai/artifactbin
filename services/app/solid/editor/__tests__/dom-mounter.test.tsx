@@ -4,6 +4,8 @@ import { mountCompiledEditRegions } from '../dom-mounter';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
+import { flushFlowView } from '@/lib/editor-v2/flow-view';
+import { storyUpdateParts } from '@/lib/story/update-parts';
 
 describe('compiled DOM edit mounter', () => {
   it('renames a compiled deck slide through the rail edit control', () => {
@@ -106,6 +108,7 @@ describe('compiled DOM edit mounter', () => {
     const paragraphs: number[] = [];
     editor.state.doc.descendants((node, pos) => { if (node.type.name === 'paragraph') paragraphs.push(pos); });
     editor.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, paragraphs[0]! + 3, paragraphs[1]! + 4)).insertText('X'));
+    flushFlowView(editor);
     expect(saved).toContain('alXvo second paragraph');
     expect(saved).not.toContain('id="second"');
     mounted.dispose();
@@ -127,6 +130,7 @@ describe('compiled DOM edit mounter', () => {
     const paragraphs: number[] = [];
     editor.state.doc.descendants((node, pos) => { if (node.type.name === 'paragraph') paragraphs.push(pos); });
     editor.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, paragraphs[1]! + 3, paragraphs[2]! + 4)).insertText('X'));
+    flushFlowView(editor);
     expect(saved).toContain('alXvo second paragraph');
     mounted.dispose();
     root.remove();
@@ -159,6 +163,48 @@ describe('compiled DOM edit mounter', () => {
     mounted.dispose();
     expect(root.querySelector('#first')).toBe(first);
     width.mockRestore();
+    root.remove();
+  });
+
+  it('adopts a draft of typed prose into the LIVE editor: same view, same DOM, same caret; anything else is refused', () => {
+    const source = '<div><p id="first">alpha</p><p id="second">bravo</p><Chart id="c" type="bar" /></div>';
+    const tree = (text: string) => storyUpdateParts(text)!.nodes;
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0"><p id="first" data-mx-ast="0.0">alpha</p><p id="second" data-mx-ast="0.1">bravo</p><div id="c" data-mx-ast="0.2" aria-label="Question embed"><svg class="marks"></svg></div></div>';
+    document.body.append(root);
+    let view: EditorView | null = null;
+    let saved = source;
+    const mounted = mountCompiledEditRegions(root, tree(source), {
+      onView(next) { if (next) view = next; },
+      onFlow(path, expected, replacement) { saved = replaceProseRegion(saved, path, expected, replacement); },
+    });
+    const editor = view! as EditorView;
+    const dom = editor.dom, chart = root.querySelector('#c')!;
+    editor.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, 6)).insertText('X'));
+    flushFlowView(editor);
+    expect(saved).toContain('alphaX');
+    const caret = editor.state.selection.anchor;
+    const draft = document.createElement('div');
+    draft.innerHTML = '<div data-mx-ast="0"><p id="first" data-mx-ast="0.0">alphaX</p><p id="second" data-mx-ast="0.1">bravo</p><div id="c" data-mx-ast="0.2"></div></div>';
+    // A chart whose spec changed is not prose: it must be drawn.
+    const changed = saved.replace('type="bar"', 'type="line"');
+    expect(mounted.reconcile(tree(source), tree(changed), tree(changed), draft)).toBe(false);
+    // Typed prose only: adopted where it stands.
+    expect(mounted.reconcile(tree(source), tree(saved), tree(saved), draft)).toBe(true);
+    expect(view).toBe(editor);
+    expect(editor.dom).toBe(dom);
+    expect(editor.dom.isConnected).toBe(true);
+    expect(editor.state.selection.anchor).toBe(caret);
+    expect(root.querySelector('#c')).toBe(chart);
+    // A draft older than what the editor shows (typed meanwhile) is never adopted over it.
+    editor.dispatch(editor.state.tr.insertText('Y'));
+    expect(mounted.reconcile(tree(saved), tree(saved), tree(saved), null)).toBe(false);
+    expect(editor.dom.textContent).toContain('alphaXY');
+    // Leaving puts the last adopted blocks back, so the page reads what was typed.
+    flushFlowView(editor);
+    expect(mounted.reconcile(tree(source), tree(saved), tree(saved), null)).toBe(true);
+    mounted.dispose();
+    expect(root.querySelector('#first')?.textContent).toBe('alphaXY');
     root.remove();
   });
 });

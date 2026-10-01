@@ -50,8 +50,11 @@ export interface EditorSourceOptions {
   initial: string;
   /** Persistence: the save-less protocol's queue (solid/editor/create-live-edits). */
   live: { queue(change: PendingChange): void };
-  /** Show a source in the document; `editId` names the head a remote document arrived at. */
-  draw: (source: string, editId?: string) => void;
+  /**
+   * Show a source in the document; `editId` names the head a remote document arrived at. `typing`: the
+   * change was typed into prose that has drawn itself already (its draft may wait for a pause).
+   */
+  draw: (source: string, editId?: string, how?: { typing: true }) => void;
   /** Collect anything typed but not yet committed (create-in-place-edit `commitPending`). */
   commitPending: () => Promise<void>;
 }
@@ -73,7 +76,7 @@ export function createEditorSource(o: EditorSourceOptions): EditorSource {
     syncHistory();
     set(next);
     o.live.queue(annotationOps ? { source: next, annotationOps } : { source: next });
-    if (how.redraw) o.draw(next);
+    if (how.redraw) o.draw(next, undefined, how.origin === 'local' && how.group?.startsWith('typing:') ? { typing: true } : undefined);
   };
 
   const replaceFromRemote: EditorSource['replaceFromRemote'] = (next, editId) => {

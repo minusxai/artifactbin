@@ -206,10 +206,22 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const editorSource = createEditorSource({
     initial: art.markup ?? '',
     live: { queue: (change) => live.queue(change) },
-    draw: (next, editId) => { if (editId !== undefined) previewEditId = editId; showInDocument(next); },
+    draw: (next, editId, how) => { if (editId !== undefined) previewEditId = editId; showInDocument(next, how); },
     commitPending: async () => { await edit?.commitPending(); },
   });
   const source = editorSource.source;
+  // Held typing goes out when the caret leaves its text or a paragraph breaks; leaving drops it.
+  onMount(() => {
+    const flushSoon = () => { queueMicrotask(() => showInDocument.flush()); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Enter') setTimeout(() => showInDocument.flush(), 0); };
+    window.addEventListener('focusout', flushSoon, true);
+    window.addEventListener('keydown', onKey, true);
+    onCleanup(() => {
+      window.removeEventListener('focusout', flushSoon, true);
+      window.removeEventListener('keydown', onKey, true);
+      showInDocument.cancel();
+    });
+  });
   const commitStructural = (next: string) => editorSource.apply(next, { origin: 'structural', redraw: true });
 
   const live = createLiveEdits({

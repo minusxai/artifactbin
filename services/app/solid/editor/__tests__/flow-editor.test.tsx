@@ -11,6 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@/solid/__tests__/helpers';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { FlowEditor } from '../FlowEditor';
+import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-v2/flow-view';
 
 function nodes(source: string) {
   const p = parseJsx(source);
@@ -82,7 +83,55 @@ it('refuses destructive replacement across table cells while allowing a cell edi
   expect(onError).toHaveBeenCalled();
   v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, positions[0]! + 1)));
   v.dispatch(v.state.tr.insertText('X'));
+  flushFlowView(v);
   expect(serializeJsx(onChange.mock.calls[0]![0])).toContain('lXeft');
+});
+
+describe('typing is handed to the page once it pauses', () => {
+  it('holds keystrokes ProseMirror has drawn, then hands them over as ONE typing edit with the first and last caret', () => {
+    vi.useFakeTimers();
+    try {
+      let engine: import('prosemirror-view').EditorView | null = null;
+      const onChange = vi.fn(), onBusy = vi.fn();
+      render(() => <FlowEditor nodes={nodes('<p id="a">alpha</p>')} path="0" onChange={onChange} onBusy={onBusy} onView={(v) => { engine = v; }} />);
+      const v = engine!;
+      v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, 6)));
+      for (const key of ['!', '?', '.']) v.dispatch(v.state.tr.insertText(key));
+      // Drawn at once, handed over not yet: the page's whole-document work is off the keystroke's path.
+      expect(v.dom.textContent).toBe('alpha!?.');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onBusy).toHaveBeenLastCalledWith(true);
+      vi.advanceTimersByTime(FLOW_IDLE_MS - 1);
+      expect(onChange).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const [replacement, group, selection] = onChange.mock.calls[0]!;
+      expect(serializeJsx(replacement)).toContain('alpha!?.');
+      expect(group).toBe('typing:0');
+      expect(selection.before.anchor).toEqual({ id: 'a', offset: 5 });
+      expect(selection.after.anchor).toEqual({ id: 'a', offset: 8 });
+      expect(onBusy).toHaveBeenLastCalledWith(false);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('hands held typing over before a paste, and at once when asked (commit, undo, blur)', () => {
+    let engine: import('prosemirror-view').EditorView | null = null;
+    const onChange = vi.fn();
+    const view = render(() => <FlowEditor nodes={nodes('<p id="a">alpha</p>')} path="0" onChange={onChange} onView={(v) => { engine = v; }} />);
+    const v = engine!;
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, 6)).insertText('1'));
+    fireEvent.paste(view.getByRole('textbox'), { clipboardData: { getData: (type: string) => (type === 'text/plain' ? '2' : ''), files: [] } });
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange.mock.calls[0]![1]).toBe('typing:0');
+    expect(serializeJsx(onChange.mock.calls[0]![0])).toContain('alpha1<');
+    expect(onChange.mock.calls[1]![1]).toBeUndefined();
+    v.dispatch(v.state.tr.insertText('3'));
+    flushFlowView(v);
+    expect(onChange).toHaveBeenCalledTimes(3);
+    expect(serializeJsx(onChange.mock.calls[2]![0])).toContain('alpha123');
+    flushFlowView(v);
+    expect(onChange).toHaveBeenCalledTimes(3);
+  });
 });
 
 it('pairs view disposal with its registration when callback props change', () => {

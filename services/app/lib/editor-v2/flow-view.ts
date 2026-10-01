@@ -29,6 +29,8 @@ export interface FlowEditorProps {
 
 export interface FlowView {
   readonly view: EditorView;
+  /** Hand typed text to the page now (it is otherwise handed over once typing pauses: FLOW_IDLE_MS). */
+  flush(): void;
   /** An IME composition is in flight: incoming source must wait (it would break the composition). */
   composing(): boolean;
   /** Adopt the source the page now holds — a no-op (bar AST paths) when it is our own echo. */
@@ -57,8 +59,42 @@ function moveToLineBoundary(view: EditorView, event: KeyboardEvent): boolean {
   return true;
 }
 
+/**
+ * Typing is handed to the page once it pauses this long. The page's part of an edit (the region serialized,
+ * composed into the whole source, recorded, queued) grows with the document; ProseMirror has already drawn the
+ * keystroke, so none of it belongs on the keystroke's path.
+ */
+export const FLOW_IDLE_MS = 200;
+
+const flushers = new WeakMap<EditorView, () => void>();
+/** Hand a view's held typing to the page now: anything that reads or replaces the source first (commit, undo, a redraw). */
+export function flushFlowView(view: EditorView): void { flushers.get(view)?.(); }
+
 export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, onCompositionSettled: () => void): FlowView {
   const state = { composing: false };
+  /** Typing ProseMirror has drawn but the page has not been handed yet: one undo step, one source edit. */
+  let held: { group: string; before: ReturnType<typeof captureBookmark>; maps: ReturnType<typeof mergeIdentityMaps> } | null = null;
+  let heldTimer: ReturnType<typeof setTimeout> | undefined;
+  let busy = false;
+  const syncBusy = () => {
+    const next = state.composing || !!held;
+    if (next !== busy) { busy = next; props().onBusy?.(next); }
+  };
+  const emit = (group: string | undefined, before: ReturnType<typeof captureBookmark>, maps: ReturnType<typeof mergeIdentityMaps>) => {
+    props().onChange(sourceNodes(view.state.doc), group, {
+      before,
+      after: captureBookmark(view.state),
+      ...(maps.length ? { annotationOperation: { id: crypto.randomUUID(), kind: 'map', maps } as const } : {}),
+    });
+  };
+  const flush = () => {
+    clearTimeout(heldTimer);
+    const pending = held;
+    if (!pending) return;
+    held = null;
+    emit(pending.group, pending.before, pending.maps);
+    syncBusy();
+  };
   let plainPaste = false;
   let compositionTimer: ReturnType<typeof setTimeout> | undefined;
   const view = new EditorView(mount, {
@@ -161,29 +197,25 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         props().onError?.('Edit one table cell at a time. Select text inside a cell to replace it.');
         return;
       }
+      const group = transaction.getMeta('uiEvent') === 'paste' || transaction.getMeta('mx-command') ? undefined : `typing:${props().path}`;
+      // A paste or a command is its own step: typing held before it is handed over first, as it stood.
+      if (transaction.docChanged && group === undefined) flush();
       const before = captureBookmark(view.state);
       const tr = normalizeIdentities(transaction, true);
       const maps = tr.docChanged ? mergeIdentityMaps(view.state.doc, tr) : [];
       view.updateState(view.state.apply(tr));
       props().onView?.(view);
-      if (tr.docChanged)
-        props().onChange(
-          sourceNodes(view.state.doc),
-          tr.getMeta('uiEvent') === 'paste' || tr.getMeta('mx-command') ? undefined : `typing:${props().path}`,
-          {
-            before,
-            after: captureBookmark(view.state),
-            ...(maps.length
-              ? {
-                  annotationOperation: {
-                    id: crypto.randomUUID(),
-                    kind: 'map',
-                    maps,
-                  } as const,
-                }
-              : {}),
-          },
-        );
+      if (!tr.docChanged) return;
+      if (group === undefined) {
+        emit(undefined, before, maps);
+        return;
+      }
+      // Typing is held: drawn already, handed over once it pauses, as ONE edit.
+      if (held) held.maps.push(...maps);
+      else held = { group, before, maps };
+      clearTimeout(heldTimer);
+      heldTimer = setTimeout(flush, FLOW_IDLE_MS);
+      syncBusy();
     },
     handleDOMEvents: {
       dragstart(_view, event) {
@@ -194,15 +226,19 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
       },
       compositionstart() {
         state.composing = true;
-        props().onBusy?.(true);
+        syncBusy();
         return false;
       },
       compositionend() {
         compositionTimer = setTimeout(() => {
           state.composing = false;
-          props().onBusy?.(false);
+          syncBusy();
           onCompositionSettled();
         }, 30);
+        return false;
+      },
+      blur() {
+        flush();
         return false;
       },
     },
@@ -257,11 +293,15 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
   });
   const mountedCallback = props().onView;
   mountedCallback?.(view);
+  flushers.set(view, flush);
   return {
     view,
+    flush,
     composing: () => state.composing,
     sync(nodes) {
       if (state.composing) return;
+      // The page's source never replaces typing it has not been handed: hand it over first.
+      flush();
       // Compare engine to engine: parsing collapses source whitespace, so the incoming source is
       // compared in its parsed form — an echo of our own edit, or a reindent, rebuilds nothing.
       const doc = editorDocument(nodes);
@@ -276,7 +316,9 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
     },
     destroy() {
       clearTimeout(compositionTimer);
-      if (state.composing) props().onBusy?.(false);
+      flush();
+      flushers.delete(view);
+      if (busy) props().onBusy?.(false);
       // Pair cleanup with the registration callback, even if the adapter replaced props.
       mountedCallback?.(null);
       view.destroy();
