@@ -30,9 +30,17 @@ export interface StoryBaseCssRecipe {
   fonts: DocumentFonts;
 }
 
+const STORY_ROOT_RULE = ':root { --mx-vh: 100vh; color: var(--foreground, CanvasText); background-color: var(--background, Canvas); } body { margin: 0; }';
+
+/**
+ * The fixed sheets a base sheet is made of: what a prepared page's stored stylesheet version hashes
+ * (lib/story/prepared/css-version.server), so changing any of them re-prepares the stored pages that carry it.
+ */
+export const STORY_BASE_SHEETS: readonly string[] = [STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_CHROME_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS];
+
 export function storyBaseCss(recipe: StoryBaseCssRecipe): string {
   return [
-    ':root { --mx-vh: 100vh; color: var(--foreground, CanvasText); background-color: var(--background, Canvas); } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
+    STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
     recipe.chrome ? STORY_CHROME_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
     getStoryFontCss(recipe.theme ?? undefined), storyFontFaceCss(recipe.faces), documentFontCss(recipe.fonts),
   ].join('\n');

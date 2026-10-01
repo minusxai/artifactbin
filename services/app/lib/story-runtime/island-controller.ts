@@ -284,7 +284,9 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const drawDraft = async () => {
     const pending = pendingDraft;
     if (!pending || disposed || !drafting() || pending.sequence !== draftSequence) return;
-    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdateParts }] = await Promise.all([
+    // The page's SHARED parse (update-parts storyUpdatePartsShared): the draft's source was parsed at the hand-over
+    // that sent it, and the source on screen at the one before, so neither is parsed whole again when the reply lands.
+    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
       import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;

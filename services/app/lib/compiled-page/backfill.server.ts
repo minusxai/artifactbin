@@ -4,6 +4,8 @@ import { READER_MODE_HEADER } from './contract';
 export interface BackfillDb { query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> }
 export type BackfillColumn = 'compiler_version' | 'island_build' | 'css_version' | 'ssr_bundle' | 'page_format' | 'handover_contract';
 export interface BackfillFilter { column: BackfillColumn; op: '!=' | '=' | '<'; value: string | number }
+/** A filter, or a group of which any one may match (`--stale`: an old contract OR an old stylesheet). */
+export type BackfillSelector = BackfillFilter | { any: readonly BackfillFilter[] };
 export interface BackfillOptions {
   db: BackfillDb;
   base: string;
@@ -14,7 +16,7 @@ export interface BackfillOptions {
   limit?: number;
   dryRun?: boolean;
   timeoutMs?: number;
-  filters?: readonly BackfillFilter[];
+  filters?: readonly BackfillSelector[];
   log?: (line: string) => void;
 }
 export interface BackfillTarget { id: string; version: number; head: boolean }
@@ -61,14 +63,15 @@ async function storedState(db: BackfillDb): Promise<Map<string, StoredState>> {
   )).rows;
   return new Map(rows.map((row) => [keyOf(row.artifact_id, row.slot), row]));
 }
-export function matchesBackfillFilters(row: StoredState | undefined, filters: readonly BackfillFilter[]): boolean {
+function matchesFilter(row: StoredState | undefined, { column, op, value }: BackfillFilter): boolean {
+  const actual = row?.[column] ?? null;
+  if (op === '!=') return actual !== value;
+  if (op === '=') return actual === value;
+  return actual === null || Number(actual) < Number(value);
+}
+export function matchesBackfillFilters(row: StoredState | undefined, filters: readonly BackfillSelector[]): boolean {
   if (!filters.length) return !row?.compiled;
-  return filters.every(({ column, op, value }) => {
-    const actual = row?.[column] ?? null;
-    if (op === '!=') return actual !== value;
-    if (op === '=') return actual === value;
-    return actual === null || Number(actual) < Number(value);
-  });
+  return filters.every((filter) => ('any' in filter ? filter.any.some((one) => matchesFilter(row, one)) : matchesFilter(row, filter)));
 }
 type Outcome = { kind: 'compiled' } | { kind: 'error'; error: string };
 async function warm(options: BackfillOptions, target: BackfillTarget, recompile: boolean): Promise<Outcome> {

@@ -21,6 +21,14 @@ import {applyGraphPatch} from '@/lib/story/graph/document-graph-patch';
 import type {DocumentUpdate} from '@artifactbin/contracts';
 import { createLiveEdits } from '@/solid/editor/create-live-edits';
 import { httpBackend } from '@/test/helpers/artifact-backend';
+import * as updateClient from '@/lib/story/graph/document-update-client';
+
+/** Every save preparation (no worker under test: the authoring client prepares in place), with the source it prepared. */
+const preparations = vi.hoisted(() => [] as Array<string | undefined>);
+vi.mock('@/lib/story/graph/document-update-client', async (original) => {
+  const actual = await original<typeof updateClient>();
+  return { ...actual, prepareClientDocument: (...args: Parameters<typeof actual.prepareClientDocument>) => { preparations.push(args[1].source); return actual.prepareClientDocument(...args); } };
+});
 
 const ID = 'live01';
 const snapshots=new Map<string,{document:DocumentGraph;version:number;ids:boolean}>();
@@ -59,6 +67,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.useFakeTimers();
   snapshots.clear();
+  preparations.length = 0;
   fetchMock = vi.fn().mockResolvedValue(okResponse({ edit_id: 'edit-2', version: 2, markup: '<p>x</p>' }));
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -158,6 +167,57 @@ describe('buffering is batching, never a draft', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(sourceOf(JSON.parse(fetchMock.mock.calls[1][1].body as string))).toBe('<p>a</p>');
+  });
+});
+
+describe('the save is prepared while the debounce runs', () => {
+  it('prepares a queued change at once, and the flush sends that preparation without preparing again', async () => {
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>early</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    // Prepared before the debounce has passed, and nothing sent yet.
+    expect(preparations).toEqual(['<p>early</p>']);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(preparations).toEqual(['<p>early</p>']);
+    expect(sourceOf(JSON.parse(fetchMock.mock.calls[0][1].body as string))).toBe('<p>early</p>');
+  });
+
+  it('a change queued after the early preparation is prepared again and the newest is what is sent', async () => {
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    act(() => { hook.result.queue({ source: '<p>ab</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sourceOf(JSON.parse(fetchMock.mock.calls[0][1].body as string))).toBe('<p>ab</p>');
+    // The older preparation is not sent; the newer one is prepared once, ahead of the flush.
+    expect(preparations).toEqual(['<p>a</p>', '<p>ab</p>']);
+  });
+
+  it('a preparation made against a snapshot a save has since replaced is never sent', async () => {
+    const first = '<div id="d"><p id="a">Initial</p></div>';
+    const { hook } = setup({ initialSource: first });
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => { release = resolve; });
+    fetchMock.mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      await answered;
+      return ({ ok: true, status: 200, json: async () => ({ edit_id: 'edit-2', version: 2, patch: JSON.parse(init.body as string).document_update.patch }) }) as Response;
+    });
+    fetchMock.mockImplementationOnce(async (_url: string, init: RequestInit) => ({ ok: true, status: 200, json: async () => ({ edit_id: 'edit-3', version: 3, patch: JSON.parse(init.body as string).document_update.patch }) }) as Response);
+    act(() => { hook.result.queue({ source: first.replace('Initial', 'one') }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    // Queued while the first save is on the wire: prepared after it lands, on the graph it advanced to.
+    act(() => { hook.result.queue({ source: first.replace('Initial', 'two') }); });
+    release();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [one, two] = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body as string).document_update.patch);
+    expect(two.baseVersion).toBe(2);
+    const server = applyGraphPatch(snapshots.get('edit-1')!.document, 1, one)!;
+    expect(graphSource(applyGraphPatch(server, 2, two)!)).toBe(first.replace('Initial', 'two'));
   });
 });
 

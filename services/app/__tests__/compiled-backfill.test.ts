@@ -16,7 +16,12 @@ import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { mintExportKey } from '@/lib/serving';
-import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions } from '@/lib/compiled-page/backfill.server';
+import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions, type BackfillSelector } from '@/lib/compiled-page/backfill.server';
+import { MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
+import { preparedCssVersion, stylesheetVersion } from '@/lib/story/prepared/css-version.server';
+import { STORY_BASE_SHEETS } from '@/lib/story/styles/story-base-css';
+import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
+import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
@@ -52,6 +57,46 @@ describe('backfillCompiledPages', () => {
     expect(matchesBackfillFilters(row, [{ column: 'compiler_version', op: '!=', value: 'new' }, { column: 'page_format', op: '<', value: 3 }])).toBe(true);
     expect(matchesBackfillFilters(row, [{ column: 'island_build', op: '=', value: 'island-b' }])).toBe(false);
     expect(matchesBackfillFilters({ ...row, compiler_version: 'new' }, [{ column: 'compiler_version', op: '!=', value: 'new' }])).toBe(false);
+    // `--stale`: an old contract OR an old stylesheet.
+    const stale: BackfillSelector = { any: [{ column: 'handover_contract', op: '<', value: 1 }, { column: 'css_version', op: '!=', value: 'css-a' }] };
+    expect(matchesBackfillFilters(row, [stale])).toBe(false);
+    expect(matchesBackfillFilters({ ...row, css_version: 'css-old' }, [stale])).toBe(true);
+    expect(matchesBackfillFilters({ ...row, handover_contract: 0 }, [stale])).toBe(true);
+  });
+
+  it('the stored stylesheet version moves with the base sheet (bare typography among it), not only the Tailwind environment', () => {
+    const version = stylesheetVersion('vtw', STORY_BASE_SHEETS);
+    expect(STORY_BASE_SHEETS).toContain(STORY_BARE_TYPOGRAPHY_CSS);
+    const changedBare = STORY_BASE_SHEETS.map((sheet) => (sheet === STORY_BARE_TYPOGRAPHY_CSS ? sheet.replace('max-width:68ch', 'max-width:70ch') : sheet));
+    expect(changedBare).not.toEqual(STORY_BASE_SHEETS);
+    expect(stylesheetVersion('vtw', changedBare)).not.toBe(version);
+    expect(stylesheetVersion('vtw2', STORY_BASE_SHEETS)).not.toBe(version);
+    expect(preparedCssVersion()).toBe(stylesheetVersion(storyCssCompileVersion(), STORY_BASE_SHEETS));
+  });
+
+  it('a page prepared under an older stylesheet is re-prepared: behind its next read, and by the stale backfill through the server', async () => {
+    const token = await owner();
+    const read = await publish(token, { title: 'read', markup: '<h1>Read</h1><p>Bare</p>', visibility: 'private' });
+    const filled = await publish(token, { title: 'filled', markup: '<h1>Filled</h1><p>Bare</p>', visibility: 'private' });
+    const db = await harness.db();
+    const stored = async (id: string) => (await db.query<{ css_version: string | null; css: string }>(`SELECT css_version, page->>'css' AS css FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!;
+    expect((await stored(read)).css_version).toBe(preparedCssVersion());
+    await db.query(`UPDATE prepared_pages SET css_version = 'vold', page = jsonb_set(page, '{css}', to_jsonb('/* old sheet */'::text)) WHERE artifact_id = ANY($1::text[])`, [[read, filled]]);
+    // A reader is served the stored page at once; it is prepared again behind the read.
+    const served = await app.request(`${BASE}/a/${read}/raw?key=${encodeURIComponent(mintExportKey(read))}`, { headers: { accept: 'text/html' } });
+    expect(served.status).toBe(200);
+    await drainPreparedPageWarmups();
+    expect(await stored(read)).toMatchObject({ css_version: preparedCssVersion() });
+    expect((await stored(read)).css).not.toContain('/* old sheet */');
+    // `--stale` selects the other one and the server prepares it again whole.
+    const stale: BackfillSelector = { any: [{ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT }, { column: 'css_version', op: '!=', value: preparedCssVersion() }] };
+    const run = server();
+    const report = await backfillCompiledPages({ db, base: BASE, fetch: run.fetch, mintKey: (id) => mintExportKey(id), filters: [stale] });
+    expect(report.errors).toEqual([]);
+    expect(run.asked.map((url) => new URL(url).pathname.split('/')[2])).toEqual([filled]);
+    expect(await stored(filled)).toMatchObject({ css_version: preparedCssVersion() });
+    expect((await stored(filled)).css).not.toContain('/* old sheet */');
+    await drainPreparedPageWarmups();
   });
   it('warms what this deployment has not stored, through the server, and a second run warms nothing', async () => {
     const token = await owner();

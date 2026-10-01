@@ -37,7 +37,8 @@ import { LIVE_ARTIFACT_SQL, type RoleActor } from '@/lib/artifacts/access';
 import { artifactQuery } from '@/lib/artifacts/document';
 import { savedMentionStates } from '@/lib/accounts/membership';
 import { archivedReadOnly, servedRow, type ArchivedRender } from '@/lib/serving/archived-version';
-import { currentStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
+import { currentStoryCss } from '@/lib/data/story/story-css.server';
+import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { lookupWebAssets } from '@/lib/serving/web-assets';
 import { webFontAssets } from '@/lib/webfonts';
@@ -89,6 +90,8 @@ export interface PreparedPage {
   ssr?: { overlay: string; html: string } | null;
   /** The compiled page (lib/compiled-page), or its recorded failure. */
   compiled?: StoredCompile;
+  /** The stylesheet version (css-version.server) `css` was prepared under: the row's `css_version`, set when read. */
+  cssVersion?: string | null;
 }
 interface PreparedDeps { datasets: string[]; assets: string[]; fonts: string[] }
 
@@ -261,31 +264,89 @@ const renderStory = (page: PreparedPage, input: ReaderOverlay): string => {
   return inlineStoryElement(`<style>${page.css}</style>${compiled.html}`, input.colorMode ?? page.data.colorMode, page.theme);
 };
 
-interface StoredRow { page_key: string; deps: string; page: PreparedPage; page_format: number | null; handover_contract: number | null }
+interface StoredRow { page_key: string; deps: string; page: PreparedPage; page_format: number | null; handover_contract: number | null; css_version: string | null }
 
-/** The stored entry for this version when it is current, else a fresh one, written back. */
-export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<{ row: ArtifactRow; page: PreparedPage }> {
-  const row = await servedRow(stored, at);
-  const compiler = compilerBuild();
-  const key = keyOf(row);
-  const slot = slotOf(at);
-  const db = await getDb();
-  const found = (await db.query<StoredRow>('SELECT page_key, deps, page, page_format, handover_contract FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [row.id, slot])).rows[0];
-  if (found && found.page_key === key && found.page.compiled) return { row, page: { ...found.page, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0 } };
-  const page = await build(row, at, origin, compiler);
+/** Write a fresh preparation back. `onlyKey`: only over the entry it replaces (a background re-preparation), never a newer one. */
+async function store(row: ArtifactRow, slot: string, page: PreparedPage, onlyKey?: string): Promise<void> {
   try {
+    const db = await getDb();
+    const params = [row.id, slot, keyOf(row), await fingerprint(page.deps), JSON.stringify(page), compilerFingerprint(), page.compiled?.build ?? 'none', page.cssVersion ?? null, null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT];
+    if (onlyKey) {
+      await db.query(
+        `UPDATE prepared_pages SET deps = $4, page = $5::jsonb, compiler_version = $6, island_build = $7, css_version = $8, ssr_bundle = $9,
+         page_format = $10, handover_contract = $11, updated_at = now() WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
+        params,
+      );
+      return;
+    }
     await db.query(
       `INSERT INTO prepared_pages (artifact_id, slot, page_key, deps, page, compiler_version, island_build, css_version, ssr_bundle, page_format, handover_contract, updated_at)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, now())
        ON CONFLICT (artifact_id, slot) DO UPDATE SET page_key = EXCLUDED.page_key, deps = EXCLUDED.deps, page = EXCLUDED.page,
        compiler_version = EXCLUDED.compiler_version, island_build = EXCLUDED.island_build, css_version = EXCLUDED.css_version,
        ssr_bundle = EXCLUDED.ssr_bundle, page_format = EXCLUDED.page_format, handover_contract = EXCLUDED.handover_contract, updated_at = now()`,
-      [row.id, slot, key, await fingerprint(page.deps), JSON.stringify(page), compilerFingerprint(), page.compiled?.build ?? 'none', storyCssCompileVersion(), null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
+      params,
     );
   } catch (error) {
     // A cache that cannot be written is a slower next read, never a failed one.
     console.warn('[prepared-page] write-back failed', row.id, slot, error);
   }
+}
+
+/** Prepare and compile one version now, under this deployment's stylesheet version. */
+async function prepareNow(row: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<PreparedPage> {
+  const page = await build(row, at, origin, compilerBuild());
+  page.cssVersion = preparedCssVersion();
+  return page;
+}
+
+/**
+ * Re-prepare a stored page whose stylesheet is older than this deployment's (css-version.server) and write it
+ * over that same entry. The reader that found it was served the stored page; the backfill waits for this.
+ */
+export async function reprepareStoredPage(stored: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<{ row: ArtifactRow; page: PreparedPage }> {
+  const row = await servedRow(stored, at);
+  const page = await prepareNow(row, at, origin);
+  await store(row, slotOf(at), page, keyOf(row));
+  return { row, page };
+}
+
+/** Background re-preparations of stale stylesheets: one at a time, at most RESTYLES_QUEUED waiting (a dropped one queues again on its next read). */
+const RESTYLES_QUEUED = 256;
+const restyles = new Map<string, () => Promise<unknown>>();
+let restyling: Promise<void> | null = null;
+function queueRestyle(stored: ArtifactRow, at: ArchivedRender | null, origin: string): void {
+  if (!warming) return;
+  const key = `${stored.id}\u0000${slotOf(at)}`;
+  if (restyles.has(key) || restyles.size >= RESTYLES_QUEUED) return;
+  restyles.set(key, () => reprepareStoredPage(stored, at, origin));
+  restyling ??= Promise.resolve().then(async () => {
+    for (let next = restyles.entries().next(); !next.done; next = restyles.entries().next()) {
+      const [id, job] = next.value;
+      try { await job(); } catch (error) { console.warn('[prepared-page] background re-preparation failed', id, error); }
+      finally { restyles.delete(id); }
+    }
+  }).finally(() => { restyling = null; });
+}
+
+/**
+ * The stored entry for this version when it is current, else a fresh one, written back. A current entry
+ * prepared under an older stylesheet (`stale`) is served as stored while it is re-prepared in the background.
+ */
+export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<{ row: ArtifactRow; page: PreparedPage; stale?: true }> {
+  const row = await servedRow(stored, at);
+  const key = keyOf(row);
+  const slot = slotOf(at);
+  const db = await getDb();
+  const found = (await db.query<StoredRow>('SELECT page_key, deps, page, page_format, handover_contract, css_version FROM prepared_pages WHERE artifact_id = $1 AND slot = $2', [row.id, slot])).rows[0];
+  if (found && found.page_key === key && found.page.compiled) {
+    const page = { ...found.page, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version };
+    if (found.css_version === preparedCssVersion()) return { row, page };
+    queueRestyle(stored, at, origin);
+    return { row, page, stale: true };
+  }
+  const page = await prepareNow(row, at, origin);
+  await store(row, slot, page);
   return { row, page };
 }
 
@@ -304,11 +365,13 @@ export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null,
   page.compiled = compiled;
   try {
     const db = await getDb();
+    // Only over the entry this page was read from, stylesheet included: a background re-preparation that landed
+    // meanwhile (a newer sheet) is never overwritten with this page's older one. The stylesheet version stays the page's own.
     await db.query(
       `UPDATE prepared_pages SET page = $4::jsonb, compiler_version = $5, island_build = $6,
-       css_version = $7, ssr_bundle = $8, page_format = $9, handover_contract = $10, updated_at = now()
-       WHERE artifact_id = $1 AND slot = $2 AND page_key = $3`,
-      [row.id, slotOf(at), keyOf(row), JSON.stringify(page), compilerFingerprint(), compiled.build, storyCssCompileVersion(), null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
+       ssr_bundle = $8, page_format = $9, handover_contract = $10, updated_at = now()
+       WHERE artifact_id = $1 AND slot = $2 AND page_key = $3 AND css_version IS NOT DISTINCT FROM $7`,
+      [row.id, slotOf(at), keyOf(row), JSON.stringify(page), compilerFingerprint(), compiled.build, page.cssVersion ?? null, null, PAGE_FORMAT, MIN_HANDOVER_CONTRACT],
     );
   } catch (error) {
     console.warn('[prepared-page] compile write-back failed', row.id, error);
@@ -378,7 +441,7 @@ export function warmPreparedPage(id: string, origin: string = PUBLIC_BASE_URL): 
   }).finally(() => { worker = null; });
 }
 
-/** Wait for every queued warm-up (tests; a graceful shutdown). */
+/** Wait for every queued warm-up and background re-preparation (tests; a graceful shutdown). */
 export async function drainPreparedPageWarmups(): Promise<void> {
-  while (worker) await worker;
+  while (worker || restyling) await (worker ?? restyling);
 }

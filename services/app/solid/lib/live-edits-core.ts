@@ -121,6 +121,43 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
   let retryOwed = false;
 
   const isUserEditing = () => options().isUserEditing?.() ?? false;
+  type Snapshot = typeof snapshot;
+  type Prepared = { update: Awaited<ReturnType<typeof prepareBrowserDocumentUpdate>>; warnings: DocumentAssetWarning[] };
+  const prepareChange = (backend: ArtifactBackend, current: Snapshot & { document: DocumentGraph }, change: PendingChange): Promise<Prepared> => {
+    const { source, annotationOps, ...metadata } = change;
+    let warnings: DocumentAssetWarning[] = [];
+    return prepareBrowserDocumentUpdate(
+      backend,
+      { ...current, document: current.document, title: current.meta.title as string | null, description: current.meta.description as string | null },
+      { source, annotationOps, metadata },
+      (received) => { warnings = received; },
+    ).then((update) => ({ update, warnings }));
+  };
+  /**
+   * THE SAVE IS PREPARED WHILE THE DEBOUNCE RUNS. A queued change starts its preparation (in the worker, with its
+   * authoring context) at once; the flush that follows the debounce sends that preparation when the change and the
+   * snapshot it was prepared against are still the ones it is flushing, and prepares again otherwise. One runs at a
+   * time: a change queued meanwhile is prepared when it finishes, the ones between are skipped.
+   */
+  let early: { change: PendingChange; snapshot: Snapshot; backend: ArtifactBackend; result: Promise<Prepared> } | null = null;
+  let earlyRunning = false;
+  let earlyAgain = false;
+  const prepareEarly = () => {
+    const change = pending;
+    const current = snapshot;
+    const backend = options().backend;
+    if (!alive || !change || !current.document || inFlight || failed) return;
+    if (early && early.change === change && early.snapshot === current && early.backend === backend) return;
+    if (change.source !== undefined && baseSource !== undefined && change.source === baseSource && change.title === undefined && change.theme === undefined && change.colorMode === undefined && !change.annotationOps?.length) return;
+    if (earlyRunning) { earlyAgain = true; return; }
+    earlyRunning = true;
+    const result = prepareChange(backend, { ...current, document: current.document }, change);
+    early = { change, snapshot: current, backend, result };
+    void result.catch(() => {}).finally(() => {
+      earlyRunning = false;
+      if (earlyAgain) { earlyAgain = false; prepareEarly(); }
+    });
+  };
   const onRemoteDocument = (source: string) => options().onRemoteDocument(source, editId);
 
   const flush = async (): Promise<void> => {
@@ -143,14 +180,9 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
       try {
         const current = snapshot;
         if (!current.document) throw new Error('Refresh the document before saving.');
-        const { source, annotationOps, ...metadata } = change;
-        let warnings: DocumentAssetWarning[] = [];
-        const documentUpdate = await prepareBrowserDocumentUpdate(
-          backend,
-          { ...current, document: current.document, title: current.meta.title as string | null, description: current.meta.description as string | null },
-          { source, annotationOps, metadata },
-          (received) => { warnings = received; },
-        );
+        const ready = early && early.change === change && early.snapshot === current && early.backend === backend ? early.result : null;
+        early = null;
+        const { update: documentUpdate, warnings } = await (ready ?? prepareChange(backend, { ...current, document: current.document }, change));
         prepared = true;
         const res = await backend.commitEdit({ edit_id: editId, document_update: documentUpdate });
         const body = res.body;
@@ -230,6 +262,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
         if (alive && pending && !navigationFlush) {
           window.clearTimeout(timer);
           timer = window.setTimeout(() => void flush(), FLUSH_DEBOUNCE_MS);
+          prepareEarly();
         }
       }
     })();
@@ -246,6 +279,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
     setState((s) => ({ ...s, pending: true }));
     window.clearTimeout(timer);
     timer = window.setTimeout(() => void flush(), change.annotationOps?.some((op) => op.kind === 'map') ? 0 : FLUSH_DEBOUNCE_MS);
+    prepareEarly();
   };
 
   const flushNow = async () => {

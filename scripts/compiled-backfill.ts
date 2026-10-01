@@ -23,7 +23,8 @@
  *
  *   0. A deploy needs NO backfill: stored pages bind the live shared runtime at serve time, and a page
  *      below a raised MIN_HANDOVER_CONTRACT is served on its own retained build while it recompiles in
- *      the background on its first read. `--stale` upgrades the old-contract ones ahead of readers.
+ *      the background on its first read; a page prepared under an older stylesheet (css_version) is
+ *      re-prepared in the background the same way. `--stale` upgrades both ahead of readers.
  *   1. Pick a recorded version: `--where compiler_version!=<current>` selects old compilers;
  *      `--island-build <old>` selects one island build; `--format-below N` selects old formats.
  *      Filters combine with AND. Without filters, only versions lacking a compile are selected.
@@ -36,7 +37,7 @@
  */
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import type { BackfillFilter, BackfillColumn } from '@/lib/compiled-page/backfill.server';
+import type { BackfillFilter, BackfillColumn, BackfillSelector } from '@/lib/compiled-page/backfill.server';
 import { MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
 
 async function main() {
@@ -50,15 +51,18 @@ async function main() {
   const base = values.base ?? process.env.APP__PUBLIC_BASE_URL;
   if (!db || !base) throw new Error(usage);
   if (!process.env.AUTH__SECRET) throw new Error(`AUTH__SECRET is not set: the export keys must be minted under the server's own secret.\n${usage}`);
-  const filters: BackfillFilter[] = [];
+  const filters: BackfillSelector[] = [];
   if (values.where) {
     const match = /^(compiler_version|island_build|css_version|ssr_bundle|page_format|handover_contract)(!=|=|<)([\w.-]+)$/.exec(values.where);
     if (!match) throw new Error(`invalid --where: ${values.where}\n${usage}`);
     const column = match[1] as BackfillColumn;
     filters.push({ column, op: match[2] as BackfillFilter['op'], value: column === 'page_format' || column === 'handover_contract' ? Number(match[3]) : match[3]! });
   }
-  // The runtime binds live at serve time, so only a raised contract or format makes a stored page stale.
-  if (values.stale) filters.push({ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT });
+  // The runtime binds live at serve time, so only a raised contract or format, or an older stored stylesheet, makes a stored page stale.
+  if (values.stale) {
+    const { preparedCssVersion } = await import('@/lib/story/prepared/css-version.server');
+    filters.push({ any: [{ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT }, { column: 'css_version', op: '!=', value: preparedCssVersion() }] });
+  }
   if (values['island-build']) filters.push({ column: 'island_build', op: '=', value: values['island-build'] });
   if (values['format-below']) filters.push({ column: 'page_format', op: '<', value: Number(values['format-below']) });
   process.env.DATABASE_URL = db;

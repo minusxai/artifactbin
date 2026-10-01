@@ -9,7 +9,7 @@ import type {WorkerRequest,PrepareResponse} from './document-prepare-protocol';
 
 type Prepared={update:DocumentUpdate;context?:string};
 /** Graph nodes per message when a large graph crosses to the worker (one page-thread task each). */
-export const GRAPH_PART=400;
+export const GRAPH_PART=200;
 /** The slice of a dedicated worker the preparer uses, so tests can hand it an in-process one. */
 export interface PrepareWorker {
  postMessage(message:WorkerRequest):void;
@@ -56,11 +56,8 @@ export function createDocumentPreparer(start:()=>PrepareWorker|null){
   const {nodes,claimedIds,...graph}=document;
   const nodeKeys=Object.keys(nodes),claimedKeys=Object.keys(claimedIds);
   const parts=Math.max(1,Math.ceil(nodeKeys.length/GRAPH_PART),Math.ceil(claimedKeys.length/GRAPH_PART));
-  const slice=<T,>(from:Record<string,T>,keys:string[],part:number)=>{
-   const out:Record<string,T>={};
-   for(const key of keys.slice(part*GRAPH_PART,(part+1)*GRAPH_PART))Object.defineProperty(out,key,{value:from[key],enumerable:true,writable:true,configurable:true});
-   return out;
-  };
+  // Object.fromEntries defines own data properties (a `__proto__` key stays a key), without a descriptor per key.
+  const slice=<T,>(from:Record<string,T>,keys:string[],part:number):Record<string,T>=>Object.fromEntries(keys.slice(part*GRAPH_PART,(part+1)*GRAPH_PART).map(key=>[key,from[key] as T]));
   for(let part=0;part<parts;part++){
    if(part)await new Promise(resolve=>setTimeout(resolve,0));
    target.postMessage({id:++sequence,kind:'graph-part',...(part===0?{graph}:{}),nodes:slice(nodes,nodeKeys,part),claimedIds:slice(claimedIds,claimedKeys,part)});
