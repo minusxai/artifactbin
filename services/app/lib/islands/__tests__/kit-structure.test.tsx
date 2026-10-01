@@ -109,12 +109,22 @@ describe('accordion', () => {
       expect([button.getAttribute('aria-expanded'), button.textContent]).toEqual(['false', label]);
       const region = host.querySelector(`#${content}`)!;
       expect([region.getAttribute('role'), region.hasAttribute('hidden')]).toEqual(['region', true]);
-      expect(region.hasAttribute('aria-labelledby')).toBe(true);
+      expect(region.getAttribute('aria-labelledby')).toBe(trigger);
       if (button.hasAttribute('aria-controls')) expect(button.getAttribute('aria-controls')).toBe(content);
     }
     (host.querySelector('#tr1 button, button#tr1') as HTMLButtonElement).click();
     expect(host.querySelector('#i1')?.getAttribute('data-state')).toBe('open');
     expect(host.querySelector('[role="region"]')?.hasAttribute('hidden')).toBe(false);
+  });
+});
+
+describe('accordion without authored ids', () => {
+  it('labels each region by the trigger that is really in the document', () => {
+    const { host } = mount(() => <Accordion type="single"><AccordionItem value="a"><AccordionTrigger>One</AccordionTrigger><AccordionContent id="co">Answer.</AccordionContent></AccordionItem><AccordionItem value="b"><AccordionTrigger>Two</AccordionTrigger><AccordionContent>Answer.</AccordionContent></AccordionItem></Accordion>);
+    for (const region of host.querySelectorAll('[role="region"]')) {
+      const labelled = region.getAttribute('aria-labelledby')!;
+      expect(host.querySelector(`button[id="${labelled}"]`)?.closest('[data-slot="accordion-item"]')).toBe(region.closest('[data-slot="accordion-item"]'));
+    }
   });
 });
 

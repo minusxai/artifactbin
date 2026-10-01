@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { RECIPES as controlsRecipes } from '../kit/recipes/controls';
-import { RECIPES as peopleRecipes } from '../kit/recipes/people';
+import { RECIPES as peopleRecipes, peopleClasses } from '../kit/recipes/people';
 import { RECIPES as filesRecipes } from '../kit/recipes/files';
 import { RECIPES as mermaidRecipes } from '../kit/recipes/mermaid';
 import { IslandProvider } from '../context';
@@ -156,9 +156,9 @@ describe('class recipes', () => {
   // The compiler writes RECIPES[tag](props) onto the served root before hydration; the live component then
   // draws its own root class. They must agree, or the root's class flips on hydration.
   const flat = (value: string | null | undefined) => (value ?? '').split(/\s+/).filter(Boolean).sort().join(' ');
-  // `authored`: the live root also merges an author class the way the recipe does. UserHandle and SignIn resolve
-  // a conflicting colour differently, and Files draws no author class, so only their default class is compared.
-  type Case = [string, Record<string, (p: Record<string, unknown>) => string>, (p: Record<string, unknown>) => import('solid-js').JSX.Element, Record<string, unknown>, authored?: false];
+  // `compiled`: the props the compiler really hands the component — its recipe `class` and, for a person, the
+  // evaluated `classes` map (a conflicting author colour is resolved there, since readers ship no tailwind-merge).
+  type Case = [string, Record<string, (p: Record<string, unknown>) => string>, (p: Record<string, unknown>) => import('solid-js').JSX.Element, Record<string, unknown>, compiled?: true];
   const island = () => { const i = fakeIsland(); i.people = () => ({ u1: { id: 'u1', name: 'Ada', handle: 'ada', image: null } as never }); return i; };
   const cases: Case[] = [
     ['Input', controlsRecipes, (p) => <Input {...p} />, {}],
@@ -168,19 +168,21 @@ describe('class recipes', () => {
     ['DatePicker', controlsRecipes, (p) => <DatePicker {...p} />, {}],
     ['Segmented', controlsRecipes, (p) => <Segmented {...p as { options: string[] }} />, { options: ['S', 'M'] }],
     ['Input number', controlsRecipes, (p) => <Input {...p} />, { type: 'number' }],
-    ['User', peopleRecipes, (p) => <User {...p as { userId: string }} />, { userId: 'u1' }],
-    ['UserHandle', peopleRecipes, (p) => <UserHandle {...p as { userId: string }} />, { userId: 'u1' }, false],
-    ['SignIn', peopleRecipes, (p) => <SignIn {...p} />, {}, false],
-    ['Files', filesRecipes, (p) => <Files {...p} />, {}, false],
-    ['Files tiles', filesRecipes, (p) => <Files {...p} />, { variant: 'tiles' }, false],
+    ['User', peopleRecipes, (p) => <User {...p as { userId: string }} />, { userId: 'u1' }, true],
+    ['UserHandle', peopleRecipes, (p) => <UserHandle {...p as { userId: string }} />, { userId: 'u1' }, true],
+    ['SignIn', peopleRecipes, (p) => <SignIn {...p} />, {}, true],
+    ['Files', filesRecipes, (p) => <Files {...p} />, {}, true],
+    ['Files tiles', filesRecipes, (p) => <Files {...p} />, { variant: 'tiles' }, true],
     ['Mermaid', mermaidRecipes, (p) => <Mermaid {...p as { code: string }} />, { code: 'graph TD; A-->B' }],
   ];
-  for (const [label, recipes, view, props, authored] of cases) {
+  for (const [label, recipes, view, props, compiled] of cases) {
     const tag = label.split(' ')[0]!;
     it(`${label}: the compile-time root class is the class the live component renders`, () => {
-      for (const extra of authored === false ? [{}] : [{}, { className: 'text-red-500' }]) {
-        const { host, dispose } = mount(island(), () => view({ ...props, ...extra }));
-        try { expect(flat(recipes[tag]?.({ ...props, ...extra }))).toBe(flat(host.firstElementChild?.getAttribute('class'))); } finally { dispose(); }
+      for (const extra of [{}, { className: 'text-red-500' }]) {
+        const given = { ...props, ...extra };
+        const served = recipes[tag]!(given);
+        const { host, dispose } = mount(island(), () => view(compiled ? { ...given, class: served, classes: peopleClasses(tag, given) ?? undefined } : given));
+        try { expect(flat(served)).toBe(flat(host.firstElementChild?.getAttribute('class'))); } finally { dispose(); }
       }
     });
   }

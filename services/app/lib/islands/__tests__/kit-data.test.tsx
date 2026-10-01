@@ -610,13 +610,15 @@ describe('data class recipes', () => {
   const flat = (value: string | null | undefined) => (value ?? '').split(/\s+/).filter(Boolean).sort().join(' ');
   const views = {
     Select: (className: string) => <Select label="Region" className={className} />,
+    DataTable: (className: string) => <DataTable data="$monthly" className={className} />,
   };
-  // DataTable is left out: its recipe classes the inner grid, not the author wrapper the live component draws.
-  for (const tag of ['Select'] as const) {
+  for (const tag of ['Select', 'DataTable'] as const) {
     it(`${tag}: the compile-time root class is the class the live component renders, with and without an author class`, () => {
       for (const author of ['', 'ring-2 px-4']) {
         const { host, dispose } = mount(undefined, () => views[tag](author));
-        try { expect(flat(RECIPES[tag]?.({ className: author }))).toBe(flat(host.firstElementChild?.getAttribute('class'))); } finally { dispose(); }
+        // DataTable's recipe styles the grid inside the adapter wrapper; the wrapper carries no class.
+        const root = tag === 'DataTable' ? host.querySelector('[data-slot="data-table"]') : host.firstElementChild;
+        try { expect(flat(RECIPES[tag]?.({ className: author }))).toBe(flat(root?.getAttribute('class'))); } finally { dispose(); }
       }
     });
   }

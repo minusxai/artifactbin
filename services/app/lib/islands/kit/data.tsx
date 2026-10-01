@@ -290,7 +290,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
   const rowMeta = (row: Row, columnKey?: string) => props.rowKey && owner ? commentMetadata(owner, { kind: 'table', rowKey: row[props.rowKey] as string | number, ...(columnKey ? { columnKey } : {}) }) : {};
   const count = new Intl.NumberFormat(undefined);
   const identityError = () => props.rowKey ? keyedRowsError(shown(), props.rowKey) : null;
-  return <Show when={!identityError()} fallback={<div role="alert">{identityError()}</div>}><div data-slot="data-table" aria-label="Data grid" class="flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm">
+  return <Show when={!identityError()} fallback={<div role="alert">{identityError()}</div>}><div data-slot="data-table" aria-label="Data grid" class={['flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm', props.className].filter(Boolean).join(' ')}>
     <div ref={scroll} onScroll={onScroll} class="relative min-h-0 w-full flex-1 overflow-auto" style={css({ 'max-height': `${parseTableHeight(props.height)}px` })}>
       <table data-mx-kit-table="" class="w-full border-collapse text-sm" {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}>
         <thead class={`bg-card text-left text-muted-foreground${props.sticky === false ? '' : ' sticky top-0 z-10'}`} {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><tr class="border-b border-border" {...attr('style', virtual() ? css(rowGrid()) : undefined)}>
