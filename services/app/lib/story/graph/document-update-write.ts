@@ -18,7 +18,9 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  /** Refuse (as not applied) a markup head not yet in the current data syntax (./data-syntax): the edit door converts it first. */
  currentSyntax?:boolean}={}):Promise<DocumentCommitResult|null>{
  const initial=[id,scope.val,newEditId(),actor?.userId??null,actor?.tokenId||null];
- const sql=update.replacement?documentReplacementSql(update.replacement,update.patch.baseVersion,initial):graphPatchSql('l.document','l.version',update.patch,initial);
+ // `d.document` is the locked head's document read ONCE: every `l.document->…` in the patch and its guards decompressed
+ // the whole stored document again (a table-heavy document is megabytes: most of the commit).
+ const sql=update.replacement?documentReplacementSql(update.replacement,update.patch.baseVersion,initial):graphPatchSql('d.document','l.version',update.patch,initial);
  const param=(value:unknown)=>{sql.params.push(value);return `$${sql.params.length}`;};
  const settings=update.settings??{},sharing=param(update.expectedSharingRevision??null),oldParent=param(update.expectedParentIds??null);
  const visibility=param(settings.visibility??null),linkRole=param(settings.linkRole??null),parent=param(settings.parentId??null),hasParent=param(settings.parentId!==undefined);
@@ -51,8 +53,8 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
    AND (CASE WHEN l.user_id IS NOT NULL THEN p.user_id=l.user_id ELSE p.token_id=l.token_id END)
    AND p.id<>l.id AND NOT l.id=ANY(p.ancestor_ids) AND cardinality(p.ancestor_ids)+1<6 ${options.dryRun?'':'FOR SHARE OF p'}
  ), ${mention.before} ${resources.before} transformed AS MATERIALIZED (
-  SELECT l.*,${sql.expression} AS next_document FROM locked l
-  WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR l.document->>'policy'=${policy}) AND ${sql.guard} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
+  SELECT l.*,${sql.expression} AS next_document FROM locked l CROSS JOIN LATERAL (SELECT l.document||'{}'::jsonb AS document OFFSET 0) d
+  WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR d.document->>'policy'=${policy}) AND ${sql.guard} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
    AND (NOT ${currentSyntax}::boolean OR l.format<>'markup' OR l.meta @> '${JSON.stringify(DATA_SYNTAX_META)}'::jsonb)
    AND (${visibility}::text IS DISTINCT FROM 'private' OR l.user_id IS NOT NULL)
    AND (${sharing}::int IS NULL OR l.sharing_revision=${sharing}::int)
