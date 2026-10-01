@@ -6,7 +6,7 @@ import { startIslandLive } from '@/lib/islands/live';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
-import { applyReaderChoice } from '@/lib/story-runtime/reader-chrome-actions';
+import { applyReaderChoice } from '@/lib/story-runtime/reader-actions';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
@@ -78,10 +78,6 @@ interface DocumentAnswer {
 
 /** THE EDITOR'S DOOR (lib/artifact-page `?part=editor`): what only writing needs. */
 interface EditorPart { editId: string; version: number; source: string; document?: DocumentGraph; compiledCss: string | null; authorCss: string | null }
-
-export function readerProvenancePath(href: string | null | undefined): string | null {
-  return href && /^\/(?:a\/[^/?#]+|@[^/?#]+\/[^/?#]+)$/.test(href) ? href : null;
-}
 
 /** Move the server's existing nodes; the island document and its listeners retain identity. */
 export function adoptReaderDocument(host: HTMLElement): { story: HTMLElement | null; chrome: HTMLElement | null } {

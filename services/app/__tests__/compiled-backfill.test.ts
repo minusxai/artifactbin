@@ -79,7 +79,6 @@ describe('backfillCompiledPages', () => {
     const report = await backfillCompiledPages({ db, base: BASE, fetch: first.fetch, mintKey: (id) => mintExportKey(id), concurrency: 2 });
     const build = loadCompilerBuild().id;
     expect(report.errors).toEqual([]);
-    expect(report.fallbacks).toEqual({});
     // Every request is the reader's door with a key: never the capture (`chrome=0`), never a session.
     for (const url of first.asked) expect(new URL(url).searchParams.has('reader')).toBe(false);
     for (const url of first.asked) expect(new URL(url).searchParams.has('chrome')).toBe(false);

@@ -22,7 +22,7 @@
  *    (./sqlite-engine, bundled alone and loaded behind the first paint — the store asks for it once the
  *    first run is on its way), so what the reader holds is answered in the page, as today's reader does.
  * 9. top-level only: the link follows the reader — a moved `<Value>` rewrites the page's own `$` params
- *    (./url-sync, today's url-values-sync), loaded after hydration.
+ *    (./url-sync), loaded after hydration.
  *
  * The viewer overlay, the write status feed and its indicator are wave-3 seams (viewer.ts,
  * writes.ts, kit/status.tsx): this file calls them and their owners replace those files.

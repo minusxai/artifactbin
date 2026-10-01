@@ -38,15 +38,21 @@ export function unresolvedSpecifiers(ref: ModuleRef | null, build: CompilerBuild
   return (ref?.specifiers ?? []).filter((specifier) => !build.manifest[specifier]);
 }
 
-/** The module ref as this build serves it: versioned URL, and the preload closure of the live chunks. */
-export function bindModuleRef(ref: ModuleRef, build: CompilerBuild): ModuleRef {
-  if (!ref.specifiers) return ref;
+/** The static import closure of `urls` over the build's chunk graph (the URLs themselves first), for `modulepreload`. */
+export function preloadClosure(build: CompilerBuild, urls: readonly string[]): string[] {
   const seen = new Set<string>();
   const visit = (url: string): void => {
     if (seen.has(url)) return;
     seen.add(url);
     for (const next of build.graph?.[url] ?? []) visit(next);
   };
-  for (const specifier of ref.specifiers) { const url = build.manifest[specifier]; if (url) visit(url); }
-  return { ...ref, url: `${ref.url}?b=${build.id}`, imports: [...seen] };
+  urls.forEach(visit);
+  return [...seen];
+}
+
+/** The module ref as this build serves it: versioned URL, and the preload closure of the live chunks. */
+export function bindModuleRef(ref: ModuleRef, build: CompilerBuild): ModuleRef {
+  if (!ref.specifiers) return ref;
+  const urls = ref.specifiers.flatMap((specifier) => build.manifest[specifier] ?? []);
+  return { ...ref, url: `${ref.url}?b=${build.id}`, imports: preloadClosure(build, urls) };
 }

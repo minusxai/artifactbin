@@ -81,8 +81,7 @@ async function main() {
       return;
     }
     if (!report.considered) { console.log('no live document versions: nothing to warm'); return; }
-    const fallbacks = Object.entries(report.fallbacks).map(([reason, n]) => `${reason} ${n}`).join(', ') || 'none';
-    console.log(`warmed ${report.warmed} of ${report.considered} version(s) (${report.done} already stored): ${report.compiled} compiled, fallbacks ${fallbacks}, ${report.errors.length} error(s)`);
+    console.log(`warmed ${report.warmed} of ${report.considered} version(s) (${report.done} already stored): ${report.compiled} compiled, ${report.errors.length} error(s)`);
     for (const e of report.errors.slice(0, 20)) console.log(`  error ${e.id}${e.head ? '' : ` v${e.version}`}: ${e.error}`);
     const census = report.census!;
     const failures = Object.entries(census.failures).map(([reason, n]) => `${reason} ${n}`).join(', ') || 'none';

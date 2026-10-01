@@ -6,7 +6,7 @@
  *
  * Server-rendered SHOWN (`data-mx-reader-state="shown"`, no hidden class): the
  * visibility policy is the reader's own, so it belongs to the every-document
- * entry (lib/story-runtime/reader-chrome-actions), which hides it on a scroll
+ * entry (lib/islands/page and the Solid reader pages), which hides it on a scroll
  * DOWN and reveals it again on a scroll UP, the way a phone's own bars behave.
  * A document that cannot scroll, and the end of one that can, keep it outright:
  * there is no gesture left that could.
@@ -168,9 +168,6 @@ export const archivedBanner = (version: number, head: number): string => `Versio
 
 /** The class the visibility policy toggles; the root is rendered with it. */
 export const READER_CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
-
-/** `data-mx-reader-state` values: what the policy last decided. */
-export type ReaderChromeState = 'hidden' | 'shown';
 
 /*
  * The glyphs, inline. Lucide's shapes at lucide's stroke, drawn here rather

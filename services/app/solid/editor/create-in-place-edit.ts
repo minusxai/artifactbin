@@ -66,9 +66,8 @@ function dropGap(at: unknown): ImageDropPlacement['at'] {
 export interface InPlaceEditOptions {
   onError?: (message: string) => void;
   onRejectedEdit?: (fragment: string) => void;
-  /** The live document's iframe. Never remounted — that is the whole point. */
-  frameRef?: { current: HTMLIFrameElement | null };
-  runtimeRef?: DocumentRuntimeRef;
+  /** The live document's runtime. Never remounted — that is the whole point. */
+  runtimeRef: DocumentRuntimeRef;
   /** True while the owner is in edit mode. */
   editing: boolean;
   /**
@@ -144,14 +143,14 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
   let commitRequest: Promise<boolean> | null = null;
 
   const postToFrame = (message: Record<string, unknown>) => {
-    sendDocument({ frameRef: options.frameRef, runtimeRef: options.runtimeRef }, message);
+    sendDocument({ runtimeRef: options.runtimeRef }, message);
   };
 
   // ── listening ─────────────────────────────────────────────────────────────
   createEffect(
     on(
-      [() => options.frameRef, () => options.runtimeRef, () => options.sourceRef, () => options.sessionNonce],
-      ([frameRef, runtimeRef, sourceRef]) => {
+      [() => options.runtimeRef, () => options.sourceRef, () => options.sessionNonce],
+      ([runtimeRef, sourceRef]) => {
         const onMessage = (event: { data: unknown }) => {
           const nonce = options.sessionNonce;
           if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
@@ -246,7 +245,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
               break;
           }
         };
-        onCleanup(subscribeDocument({ frameRef, runtimeRef }, onMessage));
+        onCleanup(subscribeDocument({ runtimeRef }, onMessage));
       },
     ),
   );
@@ -319,7 +318,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
 
   const commitPending = async (requireAcknowledgement = false): Promise<void> => {
     if (rejected) throw new Error('Recover the uncommitted text before leaving the editor.');
-    if (!documentReady({ frameRef: options.frameRef, runtimeRef: options.runtimeRef })) {
+    if (!documentReady({ runtimeRef: options.runtimeRef })) {
       if (requireAcknowledgement) throw new Error('editor is unavailable');
       return;
     }

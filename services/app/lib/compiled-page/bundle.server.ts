@@ -36,10 +36,11 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { readerDataflow, type CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { Scalar } from '@/lib/story/dataflow';
-import { ISLANDS_MANIFEST_PATH } from './build.server';
+import { islandFile, loadCompilerBuild } from './build.server';
 import { DOCUMENT_MODULE_RE, type CompilerBuild, type IslandRenderData, type ModuleRef, type ModuleStore } from './contract';
 import type { GeneratedSources } from './codegen-safety';
 import { syncRailPreview } from './rail-preview.server';
+import { preloadClosure } from './runtime-binding';
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
 import { createModuleStore } from './modules.server';
 import { contentSha } from './speculation';
@@ -230,23 +231,20 @@ export function ssrImportTable(extra: Readonly<Record<string, Record<string, unk
  * nothing but `solid-js*` — so its one module graph shares one island context, and the Solid it runs
  * on is the one injected here.
  */
-interface SsrHalf { url: string; exports: Record<string, string> }
+type SsrHalf = NonNullable<CompilerBuild['ssr']>;
 const islandSsrHalves = new Map<string, Promise<Record<string, unknown>>>();
 
-function readSsrHalf(root: string): SsrHalf | null {
-  let manifest: { ssr?: unknown };
-  try { manifest = JSON.parse(readFileSync(path.resolve(root, ISLANDS_MANIFEST_PATH), 'utf8')) as { ssr?: unknown }; } catch { return null; }
-  const half = manifest.ssr as Partial<SsrHalf> | undefined;
-  if (!half || typeof half.url !== 'string' || !/^\/islands\/[\w-]+\.js$/.test(half.url) || !half.exports || typeof half.exports !== 'object') return null;
-  return { url: half.url, exports: half.exports };
+/** The live build's server half (validated by loadCompilerBuild); none when the build is missing or has no half. */
+function liveSsrHalf(): SsrHalf | undefined {
+  try { return loadCompilerBuild().ssr; } catch { return undefined; }
 }
 
-async function islandSsrNamespace(specifier: string, root: string, retained?: SsrHalf): Promise<Record<string, unknown>> {
-  const half = retained ?? readSsrHalf(root);
+async function islandSsrNamespace(specifier: string, retained?: SsrHalf): Promise<Record<string, unknown>> {
+  const half = retained ?? liveSsrHalf();
   if (!half) throw new IslandSsrUnavailable(specifier, 'the island build has no server half');
   const name = half.exports[specifier];
   if (!name) throw new IslandSsrUnavailable(specifier, 'the server half does not export it');
-  const file = path.resolve(root, path.dirname(ISLANDS_MANIFEST_PATH), half.url.slice('/islands/'.length));
+  const file = islandFile(half.url.slice('/islands/'.length));
   let loaded = islandSsrHalves.get(file);
   if (!loaded) {
     const bytes = retained ? await (await import('./shared-builds.server')).retainedIslandFile(path.basename(file)) : null;
@@ -272,14 +270,14 @@ async function importsOf(code: string): Promise<string[]> {
 
 /**
  * The default import table for a server module: this process's Solid, and the shared build's
- * server half for `@mx/*` (read relative to `root`, the app's cwd by default).
+ * server half for `@mx/*` (the live build's, or the retained `half` of an older build).
  */
-export async function defaultSsrImports(code: string, root = process.cwd(), half?: SsrHalf): Promise<SsrImports> {
+export async function defaultSsrImports(code: string, half?: SsrHalf): Promise<SsrImports> {
   const islands: Record<string, Record<string, unknown>> = {};
   for (const spec of await importsOf(code)) {
     if (SOLID[spec]) continue;
     if (!spec.startsWith('@mx/')) throw new IslandSsrUnavailable(spec, 'not a shared-build specifier');
-    islands[spec] = await islandSsrNamespace(spec, root, half);
+    islands[spec] = await islandSsrNamespace(spec, half);
   }
   return ssrImportTable(islands);
 }
@@ -338,7 +336,7 @@ export function loadSsrModule(ref: ModuleRef, store: ModuleStore = createSsrModu
       const bytes = await store.get(ref.sha);
       if (!bytes) throw new Error(`island SSR: module ${ref.sha} is not in the store`);
       const code = Buffer.from(bytes).toString('utf8');
-      return ssrModuleOf(code, ref.sha, imports ?? await defaultSsrImports(code, process.cwd(), half));
+      return ssrModuleOf(code, ref.sha, imports ?? await defaultSsrImports(code, half));
     })();
     loaded.catch(() => ssrModules.delete(key));
     ssrModules.set(key, loaded);
@@ -372,28 +370,6 @@ export function render(data) {
 const browserSource = (document: string, flow: CompiledDataflow | null, flowIndex?: number): string => flow
   ? `${document}import { boot as $boot } from '@mx/boot';\nexport const TREE = Document;\nconst FLOW = ${flowIndex === undefined ? `JSON.parse(${lit(JSON.stringify(readerDataflow(flow)))})` : `$moduleData[${flowIndex}]`};\n$boot({ TREE, FLOW });\n`
   : `${document}import { boot as $boot } from '@mx/boot';\nexport const TREE = Document;\n$boot({ TREE });\n`;
-
-interface ManifestFiles { files?: Record<string, { imports?: string[] }> }
-let filesCache: { build: string; files: Record<string, { imports?: string[] }> } | null = null;
-/** The shared chunks' static import graph (manifest.json `files`), for a module's preload closure. */
-function sharedFiles(build: CompilerBuild): Record<string, { imports?: string[] }> {
-  if (filesCache?.build === build.id) return filesCache.files;
-  let files: Record<string, { imports?: string[] }> = {};
-  try { files = (JSON.parse(readFileSync(path.resolve(process.cwd(), ISLANDS_MANIFEST_PATH), 'utf8')) as ManifestFiles).files ?? {}; } catch { /* no closure beyond the direct imports */ }
-  filesCache = { build: build.id, files };
-  return files;
-}
-function closureOf(build: CompilerBuild, urls: string[]): string[] {
-  const files = sharedFiles(build);
-  const seen = new Set<string>();
-  const visit = (url: string): void => {
-    if (seen.has(url)) return;
-    seen.add(url);
-    for (const next of files[url]?.imports ?? []) visit(next);
-  };
-  urls.forEach(visit);
-  return [...seen];
-}
 
 export interface DocumentModules {
   html: string;
@@ -471,7 +447,7 @@ export async function browserModuleCode(islands: string, build: CompilerBuild, f
   });
   const extracted = await externalizeLiterals(compiled);
   const specifiers = [...direct].sort();
-  return { code: extracted.code, literals: extracted.literals, literalKey: extracted.key, specifiers, imports: closureOf(build, specifiers.map((s) => build.manifest[s]!)) };
+  return { code: extracted.code, literals: extracted.literals, literalKey: extracted.key, specifiers, imports: preloadClosure(build, specifiers.map((s) => build.manifest[s]!)) };
 }
 
 /** Keep author literals in the page's inert JSON carrier, outside executable browser bytes. */

@@ -9,7 +9,7 @@
 import { vi } from 'vitest';
 import { createFrameAnnotateSession } from '@/lib/story-runtime/edit/annotate';
 import { STORY_ANNOTATION_LAYOUT_MESSAGE, type StoryAnnotationsMessage } from '@/lib/story-runtime/contract';
-import type { PristineChannel } from '@/lib/story-runtime/pristine';
+import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
 
 export const NONCE = 'l'.repeat(32);
 export const PIN = { id: 'ann_1', path: '0', key: 'anchor_1' };
@@ -26,12 +26,10 @@ export const env = {
   editing: false,
 };
 
-export const channel = (): PristineChannel => ({
+export const channel = (): RuntimeChannel => ({
   nonce: NONCE,
   post: (message) => { env.posted.push(message as Record<string, unknown>); },
   innerHtmlOf: (el) => el.innerHTML,
-  isParent: () => true,
-  isFromParent: () => true,
 });
 
 export const state = (mode: StoryAnnotationsMessage['mode']): StoryAnnotationsMessage => ({
