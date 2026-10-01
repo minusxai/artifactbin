@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { fakeBackend } from '@/test/helpers/artifact-backend';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createLiveArtifact } from '../create-live-artifact';
@@ -14,8 +14,14 @@ function liveBackend(liveFrame: ArtifactBackend['liveFrame']) {
   const unsubscribe = vi.fn();
   const live = vi.fn((h: Handlers) => { handlers = h; return unsubscribe; }) as unknown as ArtifactBackend['live'];
   const backend = fakeBackend({}, { live, liveFrame });
-  return { backend, unsubscribe, ping: (p: { version: number; editId: string; by?: string | null }) => handlers!.onPing({ by: null, ...p }) };
+  return {
+    backend, unsubscribe,
+    ping: (p: { version: number; editId: string; by?: string | null }) => handlers!.onPing({ by: null, ...p }),
+    wake: () => handlers!.onWake?.(),
+  };
 }
+
+afterEach(() => { vi.useRealTimers(); });
 
 it('fetches and surfaces a genuinely newer frame', async () => {
   const { backend, ping } = liveBackend(vi.fn(async () => frame(3)));
@@ -75,4 +81,69 @@ it('unsubscribes when the connection identity changes', async () => {
   expect(unsubscribe).not.toHaveBeenCalled();
   setId('a2');
   await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalled());
+});
+
+it('retries a failed frame fetch with backoff and marks the version seen only once it lands', async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  const liveFrame = vi.fn(async () => {
+    calls++;
+    if (calls === 1) throw new TypeError('Failed to fetch'); // offline
+    if (calls === 2) return null; // a 502 from the proxy: refused, not a frame
+    return frame(3);
+  });
+  const { backend, ping } = liveBackend(liveFrame);
+  const { result: live } = renderHook(() => createLiveArtifact({ backend, id: 'a1', initialEditId: 'e0', initialVersion: 1 }));
+  ping({ version: 3, editId: 'e-remote' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(liveFrame).toHaveBeenCalledTimes(1);
+  expect(live()).toBeNull();
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(liveFrame, 'retried after the first backoff step').toHaveBeenCalledTimes(2);
+  expect(live()).toBeNull();
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(liveFrame).toHaveBeenCalledTimes(3);
+  expect(live()?.version).toBe(3);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(liveFrame, 'nothing more once it landed').toHaveBeenCalledTimes(3);
+});
+
+it('a reconnect\'s catch-up ping for a version whose fetch failed fetches it again at once', async () => {
+  vi.useFakeTimers();
+  let fail = true;
+  const liveFrame = vi.fn(async () => { if (fail) throw new TypeError('Failed to fetch'); return frame(4); });
+  const { backend, ping } = liveBackend(liveFrame);
+  const { result: live } = renderHook(() => createLiveArtifact({ backend, id: 'a1', initialEditId: 'e0', initialVersion: 1 }));
+  ping({ version: 4, editId: 'e4' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(liveFrame).toHaveBeenCalledTimes(1);
+  fail = false;
+  ping({ version: 4, editId: 'e4' }); // the stream reopened: its first frame is the head
+  await vi.advanceTimersByTimeAsync(0);
+  expect(liveFrame).toHaveBeenCalledTimes(2);
+  expect(live()?.version).toBe(4);
+});
+
+it('a head older than the one announced (a lagging read) is retried, not taken as the news', async () => {
+  vi.useFakeTimers();
+  const liveFrame = vi.fn().mockResolvedValueOnce(frame(2)).mockResolvedValue(frame(3));
+  const { backend, ping } = liveBackend(liveFrame);
+  const { result: live } = renderHook(() => createLiveArtifact({ backend, id: 'a1', initialEditId: 'e0', initialVersion: 1 }));
+  ping({ version: 3, editId: 'e3' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(live()).toBeNull();
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(live()?.version).toBe(3);
+});
+
+it('on wake (visible, online) reads the head once and surfaces only a strictly newer version', async () => {
+  const liveFrame = vi.fn(async () => frame(1, 'e0'));
+  const { backend, wake } = liveBackend(liveFrame);
+  const { result: live } = renderHook(() => createLiveArtifact({ backend, id: 'a1', initialEditId: 'e0', initialVersion: 1 }));
+  wake();
+  await vi.waitFor(() => expect(liveFrame).toHaveBeenCalledTimes(1));
+  expect(live(), 'nothing new: nothing changes').toBeNull();
+  liveFrame.mockResolvedValue(frame(6));
+  wake();
+  await vi.waitFor(() => expect(live()?.version).toBe(6));
 });

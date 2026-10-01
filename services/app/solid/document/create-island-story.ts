@@ -20,6 +20,7 @@ import type { IslandDocument } from '@/lib/islands/contract';
 import type { JsxNode } from '@/lib/jsx/types';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, type StoryController } from '@/lib/story-runtime/contract';
+import { stopIslandLive } from '@/lib/islands/live';
 import { createIslandController, moveInto } from '@/lib/story-runtime/island-controller';
 import { createTrustedOverlayHost } from '@/lib/story-runtime/trusted-overlay-host';
 
@@ -53,6 +54,8 @@ export function createIslandStory(options: IslandStoryOptions): IslandStory {
   const adoptedByPage = () => {};
   const ownsAdopt = hooks[STORY_ADOPT_HOOK] === undefined;
   if (ownsAdopt) hooks[STORY_ADOPT_HOOK] = adoptedByPage;
+  // The app holds the document's stream now (solid/pages/Document): one stream per tab, not two.
+  stopIslandLive(window);
   const overlay = createTrustedOverlayHost({ overlay: true, layer: 'selection' });
   const portal = { current: overlay.portal as HTMLElement | null };
   const controller = createIslandController({

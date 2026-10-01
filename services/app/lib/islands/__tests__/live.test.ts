@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boot } from '../boot';
-import { islandLiveUrl, startIslandLive } from '../live';
+import { islandLiveUrl, startIslandLive, stopIslandLive } from '../live';
 import { updateCompiledStory } from '../live-update';
 
 vi.mock('../live-update', async (original) => ({ ...(await original<typeof import('../live-update')>()), updateCompiledStory: vi.fn(async () => 'morphed') }));
@@ -16,6 +16,7 @@ import type { IslandDocument } from '../contract';
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
   onmessage: ((e: MessageEvent) => void) | null = null;
+  onerror: ((e: Event) => void) | null = null;
   closed = false;
   constructor(public url: string) { super(); FakeEventSource.made.push(this); }
   close() { this.closed = true; }
@@ -76,18 +77,49 @@ describe('the island live stream', () => {
     expect(source!.closed).toBe(true);
   });
 
-  it('leaves a new version to the app once it has adopted the page (no reload under it)', () => {
+  it('leaves a new version to the app once it has adopted the page, and closes so the tab holds one document stream', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     const reload = vi.fn();
     const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { reload } : Reflect.get(target, key, target)) });
     const stop = startIslandLive(win, 'abc', 'e1');
     const [source] = FakeEventSource.made;
-    // components/IslandStory installs the adopt hook when the app takes the page: it holds the stream now.
+    // solid/document/create-island-story installs the adopt hook when the app takes the page: it holds the stream now.
     (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = () => {};
     source!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
     expect(reload).not.toHaveBeenCalled();
-    expect(updateCompiledStory, 'the app calls the update path itself (components/IslandStory)').not.toHaveBeenCalled();
+    expect(updateCompiledStory, 'the app calls the update path itself').not.toHaveBeenCalled();
+    expect(source!.closed, 'an adopted page\'s own stream closes on its next frame').toBe(true);
     stop();
+  });
+
+  it('the app closes the stream when it adopts the page, and a later start (boot\'s lazy import) opens none', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    startIslandLive(window, 'abc', 'e1');
+    const [source] = FakeEventSource.made;
+    (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = () => {};
+    stopIslandLive(window);
+    expect(source!.closed).toBe(true);
+    startIslandLive(window, 'abc', 'e1', 'DS1.aaaaaaaaaaaa');
+    expect(FakeEventSource.made, 'adopted: the app\'s stream is the only one').toHaveLength(1);
+  });
+
+  it('reopens after an error (a 502 while the server restarts) and draws the version it missed', () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('EventSource', FakeEventSource);
+      const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { reload: vi.fn() } : Reflect.get(target, key, target)) });
+      const stop = startIslandLive(win, 'abc', 'e1');
+      FakeEventSource.made[0]!.onerror!(new Event('error'));
+      expect(FakeEventSource.made[0]!.closed).toBe(true);
+      vi.advanceTimersByTime(1_000);
+      expect(FakeEventSource.made).toHaveLength(2);
+      expect(FakeEventSource.made[1]!.url).toBe('/a/abc/events');
+      FakeEventSource.made[1]!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
+      expect(updateCompiledStory).toHaveBeenCalledTimes(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps one stream per page: a second starter (boot, once a version brings islands) reuses the open one', () => {
