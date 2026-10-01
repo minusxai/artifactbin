@@ -94,7 +94,7 @@ it('opens a carried fork intent after login and consumes the query parameter', (
   expect(window.location.search).toBe('');
 });
 
-it('an owner opens edit mode on #edit: the editor toolbar, the pinned rail and the title in the breadcrumb', async () => {
+it('an owner opens edit mode on #edit: the editor toolbar, the pinned rail and the title in the breadcrumb', { timeout: 20000 }, async () => {
   mockRole = 'owner';
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
@@ -104,7 +104,8 @@ it('an owner opens edit mode on #edit: the editor toolbar, the pinned rail and t
     return Response.json({});
   }));
   const { chrome } = mount('/a/doc#edit', '<button data-mx-reader-action="edit" aria-label="Edit"></button><button data-mx-reader-action="like" aria-label="Like"></button><span class="mx-reader-title">A copy</span>');
-  expect(await trusted(1).findByRole('button', { name: 'Exit edit mode' }, { timeout: 4000 })).toBeInTheDocument();
+  // The file's first edit mode loads (and, on a cold CI shard, transforms) the whole editor, which took about 4 s there.
+  expect(await trusted(1).findByRole('button', { name: 'Exit edit mode' }, { timeout: 15000 })).toBeInTheDocument();
   expect(chrome).toHaveAttribute('data-mx-editing');
   expect(chrome.querySelector<HTMLElement>('[data-mx-reader-action="like"]')!.hidden).toBe(true);
   expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('A copy');

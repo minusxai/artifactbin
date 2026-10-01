@@ -9,7 +9,7 @@ import type {WorkerRequest,PrepareResponse} from './document-prepare-protocol';
 
 type Prepared={update:DocumentUpdate;context?:string};
 /** Graph nodes per message when a large graph crosses to the worker (one page-thread task each). */
-export const GRAPH_PART=400;
+export const GRAPH_PART=200;
 /** The slice of a dedicated worker the preparer uses, so tests can hand it an in-process one. */
 export interface PrepareWorker {
  postMessage(message:WorkerRequest):void;
@@ -56,11 +56,8 @@ export function createDocumentPreparer(start:()=>PrepareWorker|null){
   const {nodes,claimedIds,...graph}=document;
   const nodeKeys=Object.keys(nodes),claimedKeys=Object.keys(claimedIds);
   const parts=Math.max(1,Math.ceil(nodeKeys.length/GRAPH_PART),Math.ceil(claimedKeys.length/GRAPH_PART));
-  const slice=<T,>(from:Record<string,T>,keys:string[],part:number)=>{
-   const out:Record<string,T>={};
-   for(const key of keys.slice(part*GRAPH_PART,(part+1)*GRAPH_PART))Object.defineProperty(out,key,{value:from[key],enumerable:true,writable:true,configurable:true});
-   return out;
-  };
+  // Object.fromEntries defines own data properties (a `__proto__` key stays a key), without a descriptor per key.
+  const slice=<T,>(from:Record<string,T>,keys:string[],part:number):Record<string,T>=>Object.fromEntries(keys.slice(part*GRAPH_PART,(part+1)*GRAPH_PART).map(key=>[key,from[key] as T]));
   for(let part=0;part<parts;part++){
    if(part)await new Promise(resolve=>setTimeout(resolve,0));
    target.postMessage({id:++sequence,kind:'graph-part',...(part===0?{graph}:{}),nodes:slice(nodes,nodeKeys,part),claimedIds:slice(claimedIds,claimedKeys,part)});
@@ -101,13 +98,30 @@ export function createDocumentPreparer(start:()=>PrepareWorker|null){
   }
   return {document:next,source:graphSource(next)};
  };
- return Object.assign(prepare,{advance});
+ /**
+  * WARM THE PREPARER while nothing is owed: the graph crosses (in its parts) and one preparation of the unchanged
+  * document runs, so the first save of a session neither waits for a report's graph to cross nor runs the
+  * preparation's code cold (together seconds at slow CPUs). Only with a worker: in the page it would be the very
+  * main-thread work the worker exists to keep off it.
+  */
+ const warm=(base:ClientDocumentSnapshot):Promise<void>=>ready()?prepare(base,{}).then(()=>{},()=>{}):Promise.resolve();
+ /** True when preparations run in a worker (never on the page thread). */
+ const offThread=():boolean=>!!ready();
+ return Object.assign(prepare,{advance,warm,offThread});
 }
 const startWorker=():PrepareWorker|null=>typeof Worker==='undefined'?null:new Worker(new URL('./document-prepare.worker.ts',import.meta.url),{type:'module',name:'document-prepare'}) as unknown as PrepareWorker;
 const prepareInWorker=createDocumentPreparer(startWorker);
 /** Advance the editor's graph by an accepted save's patch (see `advance` above). */
 export function advanceBrowserDocument(document:DocumentGraph,version:number,patch:GraphPatch){
  return prepareInWorker.advance(document,version,patch);
+}
+/** True when this page prepares saves in a worker: only then is a save prepared ahead of its flush (live-edits-core). */
+export function preparesOffThread():boolean{
+ return prepareInWorker.offThread();
+}
+/** Post the editor's graph to the save worker and run one preparation there, ahead of the first save (see `warm`). */
+export function warmBrowserPreparer(base:ClientDocumentSnapshot):Promise<void>{
+ return prepareInWorker.warm(base);
 }
 export async function prepareBrowserDocumentUpdate(backend:Pick<ArtifactBackend,'prepare'>,base:ClientDocumentSnapshot,change:ClientDocumentChange,onWarnings?:(warnings:DocumentAssetWarning[])=>void){
  return attachAuthoringContext(await prepareInWorker(base,change),source=>backend.prepare(source),onWarnings);
