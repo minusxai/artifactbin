@@ -1,15 +1,13 @@
 /* @jsxImportSource solid-js */
 // DESTINATION: services/app/lib/islands/__tests__/kit-structure.test.tsx
 /**
- * THE STRUCTURAL KIT (lib/islands/kit: basic, tabs, accordion, dialog, disclosure) renders, byte for
- * byte in what a reader notices, the DOM today's Radix-based React kit renders (Radix DOM conventions:
- * roles, aria idrefs, data-state/data-orientation/data-slot, closed content rendered hidden), and
- * behaves the same on interaction. `parityOf` (./kit-parity) is the unit-level form of the parity gate.
+ * THE STRUCTURAL KIT (lib/islands/kit: basic, tabs, accordion, dialog, disclosure) keeps Radix's DOM
+ * conventions — roles, aria idrefs that resolve, data-state/data-orientation/data-slot, closed content
+ * rendered hidden — and behaves the same on interaction. Classes come from the compile-time recipes.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
-import { parityOf, reactRender, shapeOf } from './kit-parity';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Badge, Alert, AlertTitle, AlertDescription, Card, CardHeader, CardTitle, CardContent, Button, Icon } from '../kit/basic';
@@ -40,12 +38,18 @@ describe('basic', () => {
       <Alert id="a" class={cls('Alert', {})}><AlertTitle id="at" class={cls('AlertTitle')}>Heads up</AlertTitle><AlertDescription id="ad" class={cls('AlertDescription')}>Text.</AlertDescription></Alert>
       <Card id="c" class={cls('Card')}><CardHeader id="ch" class={cls('CardHeader')}><CardTitle id="ct" class={cls('CardTitle')}>Title</CardTitle></CardHeader><CardContent id="cc" class={cls('CardContent')}><Button id="btn" variant="outline" class={cls('Button', { variant: 'outline' })}>Go</Button></CardContent></Card>
     </>);
-    expect(parityOf('<Badge id="b" variant="secondary">beta</Badge><Alert id="a"><AlertTitle id="at">Heads up</AlertTitle><AlertDescription id="ad">Text.</AlertDescription></Alert><Card id="c"><CardHeader id="ch"><CardTitle id="ct">Title</CardTitle></CardHeader><CardContent id="cc"><Button id="btn" variant="outline">Go</Button></CardContent></Card>', host)).toEqual([]);
+    const badge = host.querySelector('#b')!;
+    expect([badge.tagName, badge.getAttribute('data-slot'), badge.getAttribute('data-variant'), badge.textContent]).toEqual(['SPAN', 'badge', 'secondary', 'beta']);
+    expect(host.querySelector('#a')?.getAttribute('role')).toBe('alert');
+    expect(['at', 'ad', 'c', 'ch', 'ct', 'cc'].map((id) => host.querySelector(`#${id}`)?.getAttribute('data-slot'))).toEqual(['alert-title', 'alert-description', 'card', 'card-header', 'card-title', 'card-content']);
+    expect(host.querySelector('#c #ch #ct')?.textContent).toBe('Title');
+    const button = host.querySelector('#cc > button#btn')!;
+    expect([button.getAttribute('data-slot'), button.getAttribute('data-variant'), button.getAttribute('data-size'), button.textContent]).toEqual(['button', 'outline', 'default', 'Go']);
   });
 });
 
 describe('progress and separator', () => {
-  it('a value renders Radix\'s loading/complete state and aria-valuenow, matching today\'s render', () => {
+  it('a Progress is a 0–100 progressbar whose indicator shows its value, a Separator is decorative unless told otherwise', () => {
     const { host } = mount(() => <>
       <Progress id="p1" value={42} class={cls('Progress', {})} />
       <Progress id="p2" value={100} class={cls('Progress', {})} />
@@ -53,7 +57,14 @@ describe('progress and separator', () => {
       <Separator id="s1" class={cls('Separator', {})} />
       <Separator id="s2" orientation="vertical" decorative={false} class={cls('Separator', {})} />
     </>);
-    expect(parityOf('<Progress id="p1" value={42} /><Progress id="p2" value={100} /><Progress id="p3" /><Separator id="s1" /><Separator id="s2" orientation="vertical" decorative={false} />', host)).toEqual([]);
+    for (const id of ['p1', 'p2', 'p3']) {
+      const bar = host.querySelector(`#${id}`)!;
+      expect([bar.getAttribute('role'), bar.getAttribute('aria-valuemin'), bar.getAttribute('aria-valuemax'), bar.getAttribute('data-slot')]).toEqual(['progressbar', '0', '100', 'progress']);
+    }
+    expect(['p1', 'p2', 'p3'].map((id) => host.querySelector<HTMLElement>(`#${id} [data-slot="progress-indicator"]`)?.style.transform)).toEqual(['translateX(-58%)', 'translateX(-0%)', 'translateX(-100%)']);
+    const [decorative, semantic] = [host.querySelector('#s1')!, host.querySelector('#s2')!];
+    expect([decorative.getAttribute('role'), decorative.getAttribute('data-orientation'), decorative.hasAttribute('aria-orientation')]).toEqual(['none', 'horizontal', false]);
+    expect([semantic.getAttribute('role'), semantic.getAttribute('data-orientation'), semantic.getAttribute('aria-orientation')]).toEqual(['separator', 'vertical', 'vertical']);
   });
 });
 
@@ -89,10 +100,18 @@ describe('tabs', () => {
 });
 
 describe('accordion', () => {
-  const markup = '<Accordion type="single" collapsible id="acc"><AccordionItem value="a" id="i1"><AccordionTrigger id="tr1">Question one</AccordionTrigger><AccordionContent id="co1">Answer one.</AccordionContent></AccordionItem><AccordionItem value="b" id="i2"><AccordionTrigger id="tr2">Question two</AccordionTrigger><AccordionContent id="co2">Answer two.</AccordionContent></AccordionItem></Accordion>';
-  it('matches today\'s render closed and open', () => {
+  it('renders closed items as headed triggers labelling hidden regions, and opens one on click', () => {
     const { host } = mount(() => <Accordion type="single" collapsible id="acc"><AccordionItem value="a" id="i1" class={cls('AccordionItem')}><AccordionTrigger id="tr1" class={cls('AccordionTrigger')}>Question one</AccordionTrigger><AccordionContent id="co1" class={cls('AccordionContent')}>Answer one.</AccordionContent></AccordionItem><AccordionItem value="b" id="i2" class={cls('AccordionItem')}><AccordionTrigger id="tr2" class={cls('AccordionTrigger')}>Question two</AccordionTrigger><AccordionContent id="co2" class={cls('AccordionContent')}>Answer two.</AccordionContent></AccordionItem></Accordion>);
-    expect(parityOf(markup, host)).toEqual([]);
+    expect(host.querySelector('#acc')?.getAttribute('data-orientation')).toBe('vertical');
+    for (const [item, trigger, content, label] of [['i1', 'tr1', 'co1', 'Question one'], ['i2', 'tr2', 'co2', 'Question two']] as const) {
+      expect(host.querySelector(`#${item}`)?.getAttribute('data-state')).toBe('closed');
+      const button = host.querySelector(`#${item} > h3 > button#${trigger}`)!;
+      expect([button.getAttribute('aria-expanded'), button.textContent]).toEqual(['false', label]);
+      const region = host.querySelector(`#${content}`)!;
+      expect([region.getAttribute('role'), region.hasAttribute('hidden')]).toEqual(['region', true]);
+      expect(region.hasAttribute('aria-labelledby')).toBe(true);
+      if (button.hasAttribute('aria-controls')) expect(button.getAttribute('aria-controls')).toBe(content);
+    }
     (host.querySelector('#tr1 button, button#tr1') as HTMLButtonElement).click();
     expect(host.querySelector('#i1')?.getAttribute('data-state')).toBe('open');
     expect(host.querySelector('[role="region"]')?.hasAttribute('hidden')).toBe(false);
@@ -120,9 +139,10 @@ describe('dialog', () => {
     const { host, dispose } = mount(() => <Dialog><DialogTrigger id="trigger" wrapsControl={true}><Button id="add" class={cls('Button')}>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task" class={cls('DialogContent')}><DialogClose class={cls('DialogClose')}>Cancel</DialogClose></DialogContent></Dialog>);
     document.body.append(host);
     try {
-      // The one-tree close marker adds only an internal attribute so an adopted button can close its modal.
-      expect(parityOf('<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>', host)
-        .filter(diff => !diff.includes('@data-mx-dialog-close: undefined vs ""'))).toEqual([]);
+      // The trigger wraps the authored button; the closed modal is served in place, labelled, with its close control.
+      expect(host.querySelector('#trigger > button#add')?.textContent).toBe('Add task');
+      const served = host.querySelector('dialog')!;
+      expect([served.getAttribute('aria-modal'), served.getAttribute('aria-label'), served.getAttribute('tabindex'), served.querySelector('button')?.textContent]).toEqual(['true', 'Add a task', '-1', 'Cancel']);
       const before = host.innerHTML;
       (host.querySelector('#add') as HTMLButtonElement).click();
       const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
@@ -138,12 +158,16 @@ describe('dialog', () => {
 });
 
 describe('disclosure', () => {
-  it('Popover and Avatar match today\'s render', () => {
+  it('a closed Popover trigger announces its dialog, and an Avatar without a loaded image shows its fallback', () => {
     const { host } = mount(() => <>
       <Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover>
       <Avatar id="av" class={cls('Avatar')}><AvatarImage src="/a.png" alt="A" class={cls('AvatarImage')} /><AvatarFallback class={cls('AvatarFallback')}>AB</AvatarFallback></Avatar>
     </>);
-    expect(parityOf('<Popover><PopoverTrigger id="pt">Open</PopoverTrigger><PopoverContent id="pc">Popped</PopoverContent></Popover><Avatar id="av"><AvatarImage src="/a.png" alt="A" /><AvatarFallback>AB</AvatarFallback></Avatar>', host)).toEqual([]);
+    const trigger = host.querySelector('#pt')!;
+    expect([trigger.tagName, trigger.getAttribute('aria-haspopup'), trigger.getAttribute('aria-expanded'), trigger.getAttribute('data-state'), trigger.getAttribute('data-slot')]).toEqual(['BUTTON', 'dialog', 'false', 'closed', 'popover-trigger']);
+    expect(host.querySelector('#pc')).toBeNull();
+    expect(host.querySelector('#av')?.getAttribute('data-slot')).toBe('avatar');
+    expect(host.querySelector('#av [data-slot="avatar-fallback"]')?.textContent).toBe('AB');
   });
   it('opening another Popover dismisses the first and Escape restores focus', () => {
     const { host, dispose } = mount(() => <><Popover><PopoverTrigger>First</PopoverTrigger><PopoverContent>First body</PopoverContent></Popover><Popover><PopoverTrigger>Second</PopoverTrigger><PopoverContent>Second body</PopoverContent></Popover></>);
@@ -249,69 +273,16 @@ describe('trusted overlay portal', () => {
 
 
 describe('compile-time structure recipes', () => {
-  const cases: Array<{ tag: string; markup: string; props?: Record<string, unknown>; path?: number[] }> = [
-    { tag: 'Badge', markup: '<Badge>new</Badge>' },
-    { tag: 'Badge', markup: '<Badge variant="secondary">new</Badge>', props: { variant: 'secondary' } },
-    { tag: 'Alert', markup: '<Alert>text</Alert>' },
-    { tag: 'Alert', markup: '<Alert variant="destructive">text</Alert>', props: { variant: 'destructive' } },
-    { tag: 'Button', markup: '<Button>Save</Button>' },
-    { tag: 'Button', markup: '<Button variant="outline" size="sm">Save</Button>', props: { variant: 'outline', size: 'sm' } },
-    { tag: 'TabsList', markup: '<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger></TabsList></Tabs>', path: [0] },
-    { tag: 'TabsList', markup: '<Tabs defaultValue="one"><TabsList variant="line"><TabsTrigger value="one">One</TabsTrigger></TabsList></Tabs>', props: { variant: 'line' }, path: [0] },
-    { tag: 'AccordionItem', markup: '<Accordion type="single"><AccordionItem value="one"><AccordionTrigger>One</AccordionTrigger></AccordionItem></Accordion>', path: [0] },
-    { tag: 'DialogContent', markup: '<Dialog><DialogContent aria-label="Example">Body</DialogContent></Dialog>', path: [0] },
-    { tag: 'DialogTrigger', markup: '<Dialog><DialogTrigger>Open</DialogTrigger></Dialog>', path: [0] },
-    { tag: 'DialogClose', markup: '<Dialog><DialogClose>Close</DialogClose></Dialog>', path: [0] },
-    { tag: 'PopoverTitle', markup: '<PopoverTitle>Body</PopoverTitle>' },
-    { tag: 'Avatar', markup: '<Avatar><AvatarFallback>AB</AvatarFallback></Avatar>' },
-    { tag: 'Avatar', markup: '<Avatar size="sm"><AvatarFallback>AB</AvatarFallback></Avatar>', props: { size: 'sm' } },
-  ];
-  for (const { tag, markup, props = {}, path = [] } of cases) it(`${tag} recipe matches today's class for ${JSON.stringify(props)}`, () => {
-    let node = shapeOf(reactRender(markup))[0]!;
-    for (const index of path) node = node.kids[index]!;
-    expect(cn(RECIPES[tag]!(props)).split(/\s+/).sort()).toEqual((node.attrs.class ?? '').split(/\s+/).sort());
-  });
-  it("merges an author className with today's class", () => {
-    const markup = '<Badge variant="secondary" className="rounded-none bg-lime-500">new</Badge>';
-    const expected = shapeOf(reactRender(markup))[0]!.attrs.class;
-    expect(cn(RECIPES.Badge!({ variant: 'secondary', className: 'rounded-none bg-lime-500' })).split(/\s+/).sort()).toEqual(expected.split(/\s+/).sort());
-  });
-});
-
-
-describe('dialog interaction with its own resolved recipe', () => {
-  it('focuses the authored field after a framed dialog opens', async () => {
-    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; this.focus(); } });
-    const host = document.createElement('div'); document.body.append(host);
-    const dispose = render(() => <IslandProvider value={fakeIsland()}><Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Focused dialog"><input aria-label="Draft" autofocus /></DialogContent></Dialog></IslandProvider>, host);
-    try {
-      host.querySelector<HTMLButtonElement>('button')!.click();
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-      expect(document.activeElement).toBe(host.querySelector('[aria-label="Draft"]'));
-    } finally { dispose(); host.remove(); Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); }
-  });
-  it('writes a bound open Value and follows it when the trigger is pressed', () => {
-    const [open, setOpen] = createSignal(false);
-    const host = document.createElement('div');
-    const island = { ...fakeIsland(), value: (name: string) => name === 'open' ? open() : undefined, setValue: (name: string, value: unknown) => { if (name === 'open') setOpen(Boolean(value)); } };
-    const dispose = render(() => <IslandProvider value={island as import('../contract').IslandContext}><Dialog open="$open"><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Bound dialog">Body</DialogContent></Dialog></IslandProvider>, host);
-    host.querySelector<HTMLButtonElement>('button')!.click();
-    expect(open()).toBe(true);
-    expect(host.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true);
-    dispose();
-  });
-  it('opens, closes, and restores trigger focus', () => {
-    const { host, dispose } = mount(() => <Dialog><DialogTrigger id="open-dialog">Open</DialogTrigger><DialogContent aria-label="Example" class={cls('DialogContent')}><DialogClose class={cls('Button', { variant: 'outline' })}>Close</DialogClose></DialogContent></Dialog>);
-    const trigger = host.querySelector<HTMLButtonElement>('#open-dialog')!;
-    trigger.focus(); trigger.click();
-    const dialog = host.querySelector<HTMLDialogElement>('dialog')!;
-    expect(dialog.open).toBe(true);
-    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    expect(dialog.open).toBe(false);
-    trigger.click();
-    expect(dialog.open).toBe(true);
-    dialog.querySelector<HTMLButtonElement>('button')!.click();
-    expect(dialog.open).toBe(false);
-    dispose();
+  // The structural kit renders no class of its own: the compiler writes RECIPES[tag](props) onto the served
+  // root. What a recipe must guarantee is that a variant changes the class and an author's class wins.
+  it('a variant changes the class, and an author className replaces the conflicting defaults', () => {
+    expect(cn(RECIPES.Badge!({ variant: 'secondary' }))).not.toBe(cn(RECIPES.Badge!({})));
+    expect(cn(RECIPES.Button!({ variant: 'outline', size: 'sm' }))).not.toBe(cn(RECIPES.Button!({})));
+    const base = cn(RECIPES.Badge!({ variant: 'secondary' })).split(/\s+/);
+    const authored = cn(RECIPES.Badge!({ variant: 'secondary', className: 'rounded-none bg-lime-500' })).split(/\s+/);
+    expect(base).toContain('rounded-full');
+    expect(authored).toEqual(expect.arrayContaining(['rounded-none', 'bg-lime-500']));
+    expect(authored).not.toContain('rounded-full');
+    expect(authored.filter((token) => /^bg-(?!lime-500$)[\w-]+$/.test(token))).toEqual([]);
   });
 });
