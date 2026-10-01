@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /** Attach prose editing to the compiler's `data-mx-ast` DOM without interpreting the document again. */
-import { batch, createSignal, type Setter } from 'solid-js';
+import { createSignal, type Setter } from 'solid-js';
 import { render } from 'solid-js/web';
 import { serializeJsx, type JsxNode } from '@/lib/jsx';
 import { editorDocument, isProseTree, sourceNodes } from '@/lib/editor-v2/model';
@@ -68,8 +68,8 @@ interface RegionEditor {
   restore: HTMLElement[];
   handedOver(text: string): boolean;
   adopt(region: JsxNode[], elements: () => HTMLElement[]): void;
-  /** The same editor at a new path (blocks added or removed ahead of it), with its region's new nodes. */
-  repath(path: string, region: JsxNode[]): void;
+  /** The same editor at a new path (blocks added or removed ahead of it); its prose is the region's already. */
+  repath(path: string): void;
   dispose(): void;
 }
 
@@ -196,6 +196,11 @@ const PLACEMENT = ['grid-column-start', 'grid-column-end', 'grid-row-start', 'gr
 
 /** The attribute on a region's editor root, and on a held editor's stand-in in a draft. */
 export const EDIT_REGION_ATTR = 'data-mx-edit-region';
+/**
+ * Inside a component island (not the whole-document tree): its DOM is the island's, which the morph keeps or replaces
+ * whole and hydration renders, so an editor there is never held — its stand-in would be all the island showed.
+ */
+const inIsland = (el: Element): boolean => !!el.parentElement?.closest('[data-hk]:not([data-hk^="d-"])');
 /** Compiled blocks compared across a redraw: their AST paths are positional (a block added above moves them). */
 const compiledKey = (blocks: readonly Element[]): string => blocks.map((block) => block.outerHTML.replace(/ data-mx-ast="[^"]*"/g, '')).join('');
 
@@ -419,11 +424,13 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         const blocks = compiled();
         if (blocks.length) editor.restore = blocks;
       },
-      repath(nextPath, next) {
-        previous = next;
-        if (nextPath !== path) { path = nextPath; mount.dataset.mxEditRegion = nextPath; }
-        // One update: the editor's AST-path decorations follow the path; its prose (the same) is not rebuilt.
-        batch(() => { setCurrentPath(nextPath); setCurrent(() => next); });
+      repath(nextPath) {
+        // Held for showing exactly this prose: its nodes stand as they are (the same source), only its path moves —
+        // and with it the AST-path decorations, redrawn without rebuilding or re-comparing the prose.
+        if (nextPath === path) return;
+        path = nextPath;
+        mount.dataset.mxEditRegion = nextPath;
+        setCurrentPath(nextPath);
       },
       dispose() {
         if (mount.isConnected && mount.parentNode) {
@@ -447,8 +454,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   visit(nodes, '');
   for (const host of hosts) host();
   // Held editors stay as they are: only their path (and the nodes carrying it) moves to this draft's.
-  for (const [path, region, editor] of adopted) {
-    editor.repath(path, region);
+  for (const [path, , editor] of adopted) {
+    editor.repath(path);
     mounted.set(path, editor);
     const live = editor.view();
     if (live) callbacks.onView?.(live);
@@ -503,7 +510,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
           return el ? [el] : [];
         });
         // The draft must draw exactly what the editor stands in for: the same blocks, in one parent, compiled alike.
-        if (!blocks.length || !blocks.every((el) => el.parentNode === blocks[0]!.parentNode) || compiledKey(blocks) !== compiledKey(editor.restore)) continue;
+        if (!blocks.length || !blocks.every((el) => el.parentNode === blocks[0]!.parentNode) || inIsland(blocks[0]!) || inIsland(editor.mount)
+          || compiledKey(blocks) !== compiledKey(editor.restore)) continue;
         from = found + 1;
         const stand = draft.ownerDocument.createElement('div');
         stand.setAttribute(EDIT_REGION_ATTR, region.path);

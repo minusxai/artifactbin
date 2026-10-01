@@ -99,6 +99,22 @@ describe('compiled DOM edit mounter', () => {
     expect(root.querySelector('[data-mx-edit-region]')).toBeNull();
     root.remove();
   });
+  it('never holds an editor inside a component island: the island is redrawn whole', () => {
+    const nodes = parseJsxOrThrow('<Card id="c"><p id="a">A</p></Card>').nodes;
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-hk="s0-0" data-mx-ast="0" id="c"><p data-mx-ast="0.0" id="a">A</p></div>';
+    document.body.append(root);
+    const draft = document.createElement('div');
+    draft.innerHTML = root.innerHTML;
+    const mount = mountCompiledEditRegions(root, nodes, { onFlow: vi.fn() });
+    expect(root.querySelector('[data-mx-edit-region="0.0"]')).not.toBeNull();
+    const held = mount.hold(nodes, draft);
+    expect(held.stands.size).toBe(0);
+    expect(draft.querySelector('#a')).not.toBeNull();
+    held.dispose();
+    mount.dispose();
+    root.remove();
+  });
   it('renames a compiled deck slide through the rail edit control', () => {
     const root = document.createElement('div');
     root.innerHTML = '<nav class="mx-rail"><button class="mx-rail-row"><span class="mx-rail-label"><span class="mx-rail-title">One</span></span></button><button class="mx-rail-row"><span class="mx-rail-label"><span class="mx-rail-title">Two</span></span></button></nav>';
