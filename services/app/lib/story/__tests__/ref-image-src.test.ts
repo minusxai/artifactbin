@@ -3,7 +3,7 @@
  * helper both render paths use (the WYSIWYG canvas and the served document's
  * runtime). It exists because the runtime shipped without it once: the ref:
  * string reached the DOM verbatim, which is a broken image AND a CSP
- * violation (scripts/gate-full-kit.mjs caught it).
+ * violation (scripts/gates/gate-full-kit.mjs caught it).
  */
 import { describe, expect, it } from 'vitest';
 import { resolveRefImageSrc, resolveRefProps, type RefDataMap } from '@/lib/story/data/ref-data';

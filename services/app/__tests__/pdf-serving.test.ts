@@ -16,7 +16,7 @@
  *
  * Headless Chromium ships no PDF viewer and downloads every shape identically,
  * so the fact that it RENDERS is a headful, by-hand check — stated as such in
- * scripts/gate-pdf.mjs and in the report. What a test can hold is everything
+ * scripts/gates/gate-pdf.mjs and in the report. What a test can hold is everything
  * else, and that is this file.
  */
 import { beforeEach, describe, expect, it } from 'vitest';

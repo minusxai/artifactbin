@@ -95,7 +95,7 @@ function sourceFiles() {
 }
 
 async function host({ cpus, memory, servers, gates }) {
-  const known = gateNamesOnDisk(readdirSync(HERE));
+  const known = gateNamesOnDisk(readdirSync(path.join(HERE, 'gates')));
   let engine;
   let tag;
   let volume;

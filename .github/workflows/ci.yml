@@ -71,7 +71,7 @@ jobs:
           CI__BEFORE_SHA: ${{ github.event.before }}
           CI__HEAD_SHA: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/ci.mjs plan
+        run: node scripts/ci/ci.mjs plan
 
   # THE TYPE CHECK ANSWERS ON ITS OWN, because it is the fastest signal on the
   # commonest mistake and it was sharing a job with something 5x its length.
@@ -104,7 +104,7 @@ jobs:
       # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
       # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
       # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -121,7 +121,7 @@ jobs:
       # and its wording live in scripts/lib/ci-plan.mjs, where they are tested.
       - name: The CLI ships with a version
         if: needs.plan.outputs.cli-bump == 'true'
-        run: node scripts/ci.mjs cli-bump
+        run: node scripts/ci/ci.mjs cli-bump
       # A WORKFLOW TYPO IS ONLY EXPENSIVE WHEN THE RUNNER FINDS IT. actionlint parses every workflow
       # here (and shellcheck reads every `run:` block) in about a second, in a pinned image anyone can
       # run locally: `docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color`.
@@ -160,7 +160,7 @@ jobs:
           cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -200,7 +200,7 @@ jobs:
           restore-keys: test-builds-v1-${{ runner.os }}-
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
-        run: node scripts/ci.mjs node ${{ matrix.shard }}/7
+        run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/7
       # The heavy tests that `npm test` leaves out — a disposable Dockerised
       # Postgres and real Chromium — live in the `integration` project and
       # would otherwise run nowhere in CI. This job already provisions both
@@ -220,7 +220,7 @@ jobs:
       - name: CLI source suite on the release runtime
         if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
         run: |
-          (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build-islands.mjs --cache)
+          (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build/build-islands.mjs --cache)
           node services/cli/scripts/fetch-runtime.mjs
           PATH="$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node:$PATH" npm test -w services/cli
 
@@ -246,7 +246,7 @@ jobs:
           cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -292,7 +292,7 @@ jobs:
           cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -309,7 +309,7 @@ jobs:
       # changed only those restores the last build of these sources and skips the ~75s below. No
       # restore-keys: a near miss would serve an older server and SPA, which is worse than building.
       - id: build-key
-        run: node scripts/ci.mjs build-key
+        run: node scripts/ci/ci.mjs build-key
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: build-cache
         with:
@@ -335,12 +335,12 @@ jobs:
           key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: test-builds-v1-${{ runner.os }}-
       # The CLI host build already builds the app SPA and document runtime. NO GATE WAITS FOR THIS JOB:
-      # each gate shard builds the subset it runs (scripts/build-gate-inputs.mjs) while it provisions
+      # each gate shard builds the subset it runs (scripts/build/build-gate-inputs.mjs) while it provisions
       # browsers. This job proves the whole CLI build and caches it for a rerun of the same sources.
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: npm run build -w services/cli
       - if: steps.build-cache.outputs.cache-hit != 'true'
-        run: node scripts/build-server.mjs dist/server.mjs
+        run: node scripts/build/build-server.mjs dist/server.mjs
       # The host runtime `afbin serve` ships (154 MB plus a 39 MB archive) is no gate's input; keep it
       # out of the cache entry: the gates restore that entry, and `afbin serve`'s release jobs build their own.
       - if: steps.build-cache.outputs.cache-hit != 'true'
@@ -370,7 +370,7 @@ jobs:
           cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -425,7 +425,7 @@ jobs:
   # EACH SHARD BUILDS WHAT IT RUNS, while it provisions browsers. The shards used to download the `build`
   # job's artifact and poll that job until it finished: on runs 36875673784 and 36876517464 they sat
   # 35-58s in that wait after ~25s of their own setup, because `build` also assembles the CLI's host
-  # runtime (~16s) and type declarations no gate reads. scripts/build-gate-inputs.mjs builds only the
+  # runtime (~16s) and type declarations no gate reads. scripts/build/build-gate-inputs.mjs builds only the
   # app, dist/server.mjs and the CLI bundle (~20s with the restored islands and reader), started in the
   # background right after the install restore, so it overlaps the browser, Postgres and sandbox steps.
   # Nothing here depends on `build`, which still runs the whole CLI build beside this job.
@@ -447,7 +447,7 @@ jobs:
           cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -463,7 +463,7 @@ jobs:
       # build: the shard restores it and starts its gates at once. Restore only — the entry is written by
       # `build`, never by a shard.
       - id: build-key
-        run: node scripts/ci.mjs build-key
+        run: node scripts/ci/ci.mjs build-key
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: build-cache
         with:
@@ -492,7 +492,7 @@ jobs:
       - name: Build the app, server and CLI bundle in the background
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: |
-          ( node scripts/build-gate-inputs.mjs > "$RUNNER_TEMP/gate-build.log" 2>&1; echo $? > "$RUNNER_TEMP/gate-build.status" ) < /dev/null > /dev/null 2>&1 &
+          ( node scripts/build/build-gate-inputs.mjs > "$RUNNER_TEMP/gate-build.log" 2>&1; echo $? > "$RUNNER_TEMP/gate-build.status" ) < /dev/null > /dev/null 2>&1 &
       # KEYED ON WHAT PINS THE BROWSER, not on the lockfile: browsers.json is where playwright-core
       # records the Chromium revision it will download, so the entry survives every lockfile change
       # that is not a Playwright upgrade — including the version line a release rewrites.
@@ -598,7 +598,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -627,7 +627,7 @@ jobs:
           mkdir -p "$HOME/browser-debs"
           cp /var/cache/apt/archives/*.deb "$HOME/browser-debs/" 2>/dev/null || true
       - id: build-key
-        run: node scripts/ci.mjs build-key
+        run: node scripts/ci/ci.mjs build-key
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: build-cache
         with:
@@ -643,11 +643,11 @@ jobs:
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: npm run build -w services/cli
       - if: steps.build-cache.outputs.cache-hit != 'true'
-        run: node scripts/build-server.mjs dist/server.mjs
+        run: node scripts/build/build-server.mjs dist/server.mjs
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: rm -rf services/cli/dist/runtime services/cli/dist/afbin-runtime-*.gz
       # What the test shards restore (see the api job): the server reader and islands with their markers.
-      - run: (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build-islands.mjs --cache)
+      - run: (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build/build-islands.mjs --cache)
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
@@ -662,7 +662,7 @@ jobs:
   # that merges it used to do, eight minutes of full matrix on bytes PR CI had just proved — buys
   # nothing and delays production by those eight minutes. So this job writes down the tree it
   # passed, under a name any later run can look up: `tested-tree-<git tree hash>`. The push then
-  # finds it (scripts/ci.mjs `plan`) and selects nothing at all.
+  # finds it (scripts/ci/ci.mjs `plan`) and selects nothing at all.
   #
   # The artifact IS the pass: it is written after `check`, so it only exists for a green run.
   test:
@@ -695,24 +695,24 @@ jobs:
       - name: All selected jobs green
         env:
           CI__NEEDS: ${{ toJSON(needs) }}
-        run: node scripts/ci.mjs check
+        run: node scripts/ci/ci.mjs check
       # On a pull request the checkout is refs/pull/N/merge — the tree a squash merge produces, which
       # is the tree the push to main will carry, PROVIDED no other PR moves the base in between. When
       # one does, the tree no longer matches, but the PATCH (recorded here too, when this is a pull
-      # request) still can: scripts/ci.mjs `plan`, `patchGapIsSafe`.
+      # request) still can: scripts/ci/ci.mjs `plan`, `patchGapIsSafe`.
       - name: Record the tested tree
         id: tree
         env:
           CI__SOURCE_RUN: ${{ needs.plan.outputs.source-run }}
           CI__EVENT: ${{ github.event_name }}
           CI__BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: node scripts/ci.mjs record-tree
+        run: node scripts/ci/ci.mjs record-tree
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tested-tree-${{ steps.tree.outputs.tree }}
           path: tested-tree/tested-tree.json
           # Longer than any merge window: the lookup that reads this runs when the PR merges, and an
-          # expired artifact is no evidence (scripts/ci.mjs filters them out) — it is a full matrix.
+          # expired artifact is no evidence (scripts/ci/ci.mjs filters them out) — it is a full matrix.
           retention-days: 14
           overwrite: true
       # THE PATCH THIS PULL REQUEST TESTED, keyed by its base and content — not its tree, which a
@@ -759,7 +759,7 @@ jobs:
           node-version: 22.22.3
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -849,7 +849,7 @@ jobs:
           node-version: 22.22.3
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:

@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { evaluateSizeTargets, SIZE_TARGETS, sizeTargetsMarkdown, sizeTargetsText } from '../size-targets.mjs';
+import { evaluateSizeTargets, SIZE_TARGETS, sizeTargetsMarkdown, sizeTargetsText } from '../build/size-targets.mjs';
 import { summarizeDocumentViews } from '../lib/document-views.mjs';
 
 const KB = 1024;
@@ -66,7 +66,7 @@ describe('the report', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'size-targets-'));
     const file = path.join(dir, 'lab.json');
     writeFileSync(file, JSON.stringify({ documents: { summary: { prose: cell(5 * KB, 150 * KB), deck: cell(12 * KB, 1), kit: cell(1, 1) } } }));
-    const script = path.resolve(import.meta.dirname, '../size-targets.mjs');
+    const script = path.resolve(import.meta.dirname, '../build/size-targets.mjs');
     const out = execFileSync(process.execPath, [script, file], { encoding: 'utf8' });
     expect(out).toContain('target 1 fail');
     let status = 0;

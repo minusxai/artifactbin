@@ -15,7 +15,7 @@ import { shardOf } from '../gates.shard.mjs';
 const RELEASE_JOBS = ['cli', 'cli-preview', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const script = path.join(root, 'scripts/ci.mjs');
+const script = path.join(root, 'scripts/ci/ci.mjs');
 
 describe('CI change selection', () => {
   it('covers all declared workspace dependency edges', () => {
@@ -656,7 +656,7 @@ describe('GitHub CI adapter', () => {
     }
     expect(jobs.test.needs).toContain('plan');
     expect(jobs.test.if).toBe('always()');
-    expect(jobs.node.steps.some((step) => step.run?.includes('scripts/ci.mjs node'))).toBe(true);
+    expect(jobs.node.steps.some((step) => step.run?.includes('scripts/ci/ci.mjs node'))).toBe(true);
   });
 });
 
@@ -694,7 +694,7 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
     expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/7)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/7');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci/ci.mjs node')).run).toBe('node scripts/ci/ci.mjs node ${{ matrix.shard }}/7');
   });
   it('runs the CLI source suite on the reader and island builds, never the full CLI build', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -751,7 +751,7 @@ describe('CI job shape', () => {
         if (cache.with.key.includes('.ci-cache-key')) {
           const job = Object.values(workflow.jobs).find((entry) => (entry.steps ?? []).includes(cache));
           expect(job.steps.indexOf(cache), 'the fingerprint is written first').toBeGreaterThan(
-            job.steps.findIndex((step) => step.run === 'node scripts/ci.mjs lock-fingerprint'));
+            job.steps.findIndex((step) => step.run === 'node scripts/ci/ci.mjs lock-fingerprint'));
         }
       }
       for (const step of steps(workflow.jobs)) expect(step.run ?? '').not.toContain('copy-assets.mjs');
@@ -893,7 +893,7 @@ describe('CI job shape', () => {
   });
 
   it('refuses a CLI change with no version bump, in checks, with the fix in the message', () => {
-    const refuse = ci().jobs.checks.steps.find((step) => (step.run ?? '').includes('scripts/ci.mjs cli-bump'));
+    const refuse = ci().jobs.checks.steps.find((step) => (step.run ?? '').includes('scripts/ci/ci.mjs cli-bump'));
     expect(refuse.if).toBe("needs.plan.outputs.cli-bump == 'true'");
     expect(ci().jobs.plan.outputs['cli-bump']).toBe('${{ steps.select.outputs.cli-bump }}');
   });
@@ -903,15 +903,15 @@ describe('CI job shape', () => {
     // Reading the artifact list of another run is a scope; a job-level block REPLACES the workflow's.
     expect(jobs.plan.permissions.actions).toBe('read');
     expect(jobs.plan.outputs['source-run']).toBe('${{ steps.select.outputs.source-run }}');
-    const record = jobs.test.steps.find((step) => (step.run ?? '').includes('scripts/ci.mjs record-tree'));
+    const record = jobs.test.steps.find((step) => (step.run ?? '').includes('scripts/ci/ci.mjs record-tree'));
     expect(record.id).toBe('tree');
     // Only after the roll-up said every selected job was green.
-    expect(jobs.test.steps.indexOf(record)).toBeGreaterThan(jobs.test.steps.findIndex((step) => (step.run ?? '').includes('scripts/ci.mjs check')));
+    expect(jobs.test.steps.indexOf(record)).toBeGreaterThan(jobs.test.steps.findIndex((step) => (step.run ?? '').includes('scripts/ci/ci.mjs check')));
     const tree = jobs.test.steps.find((step) => (step.with?.name ?? '').startsWith('tested-tree-'));
     expect(tree.with.name).toBe('tested-tree-${{ steps.tree.outputs.tree }}');
     const run = jobs.test.steps.find((step) => step.with?.name === 'tested-run');
     expect(run.if).toContain("github.event_name == 'push'");
-    // The patch a moved-base push can still recognise (scripts/ci.mjs `patchGapIsSafe`) needs the
+    // The patch a moved-base push can still recognise (scripts/ci/ci.mjs `patchGapIsSafe`) needs the
     // PR's own base and full history to diff against it — a shallow, single-commit checkout has neither.
     expect(record.env.CI__EVENT).toBe('${{ github.event_name }}');
     expect(record.env.CI__BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
@@ -935,18 +935,18 @@ it('never accepts an unproved Intel release binary',()=>{
 
 describe('the build cache key covers every build input and nothing a build cannot read', () => {
   it('leaves out tests, gates, workflows and prose, and keeps sources, skills and the lockfile', () => {
-    for (const path of ['services/app/lib/story-ui/parse.ts', 'services/cli/skills/artifactbin/SKILL.md', 'scripts/build-islands.mjs',
-      'scripts/build-server.mjs', 'package-lock.json', 'vite.config.mts', 'services/app/public/chat/install.sh']) {
+    for (const path of ['services/app/lib/story-ui/parse.ts', 'services/cli/skills/artifactbin/SKILL.md', 'scripts/build/build-islands.mjs',
+      'scripts/build/build-server.mjs', 'package-lock.json', 'vite.config.mts', 'services/app/public/chat/install.sh']) {
       expect(isBuildInput(path), path).toBe(true);
     }
     for (const path of ['services/app/__tests__/boot-env.test.ts', 'services/app/lib/islands/__tests__/one-tree.ui.test.ts',
-      'scripts/gate-editor-v2.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md',
-      'scripts/test-timings.json', 'scripts/test-timings.mjs', 'scripts/lib/timed-sequencer.mjs']) {
+      'scripts/gates/gate-editor-v2.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md',
+      'scripts/ci/test-timings.json', 'scripts/ci/test-timings.mjs', 'scripts/lib/timed-sequencer.mjs']) {
       expect(isBuildInput(path), path).toBe(false);
     }
   });
   it('prints a key that only a build input moves', () => {
-    const key = () => /build key ([0-9a-f]{32})/.exec(execFileSync(process.execPath, [path.join(root, 'scripts/ci.mjs'), 'build-key'], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: '' } }))?.[1];
+    const key = () => /build key ([0-9a-f]{32})/.exec(execFileSync(process.execPath, [path.join(root, 'scripts/ci/ci.mjs'), 'build-key'], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: '' } }))?.[1];
     expect(key()).toMatch(/^[0-9a-f]{32}$/);
     expect(key()).toBe(key());
   });

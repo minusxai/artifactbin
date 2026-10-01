@@ -16,10 +16,11 @@ import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CROSS_BROWSER_SETUP_SECONDS, GATE_RU
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
+const GATE_DIR = path.join(SCRIPTS, 'gates');
 // The runners named gate-*.mjs (scripts/gate-container.mjs) run gates; they are not one.
-const onDisk = readdirSync(SCRIPTS).filter((f) => f.startsWith('gate-') && f.endsWith('.mjs')).map((f) => f.slice(5, -4))
+const onDisk = readdirSync(GATE_DIR).filter((f) => f.startsWith('gate-') && f.endsWith('.mjs')).map((f) => f.slice(5, -4))
   .filter((name) => !GATE_RUNNERS.includes(name)).sort();
-const source = (name) => readFileSync(path.join(SCRIPTS, `gate-${name}.mjs`), 'utf8');
+const source = (name) => readFileSync(path.join(GATE_DIR, `gate-${name}.mjs`), 'utf8');
 const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode|becomeAccountOwner/;
 const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'serialGroup', 'timeoutMs', 'browsers']);
 
@@ -65,7 +66,7 @@ describe('the rows tell the truth about their sources', () => {
     expect(GATE_RUNNERS).toEqual(['container']);
     expect(GATE_SPECS.map((spec) => spec.name)).not.toContain('container');
     expect(gateNamesOnDisk(['gate-container.mjs', 'gate-fonts.mjs', 'gates.mjs', 'gate-a.mjs', 'gate-b.txt'])).toEqual(['a', 'fonts']);
-    expect(gateNamesOnDisk(readdirSync(SCRIPTS))).toEqual(onDisk);
+    expect(gateNamesOnDisk(readdirSync(GATE_DIR))).toEqual(onDisk);
   });
 
   it('6. checkManifest names every missing row and every orphan row in one error, and is silent when they match', () => {

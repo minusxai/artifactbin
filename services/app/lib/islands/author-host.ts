@@ -10,7 +10,7 @@
  * only the bridge's data operations over the store (describe, read, set, declared mutations,
  * subscriptions), restarts when the store's declarations change, and is revoked on dispose.
  *
- * Bundled ALONE (scripts/build-islands.mjs STANDALONE_LAZY): no Solid, its shared code copied in, so a
+ * Bundled ALONE (scripts/build/build-islands.mjs STANDALONE_LAZY): no Solid, its shared code copied in, so a
  * page without an author script never pays for it and the rt+boot closure never grows. A document that
  * declares no data has no island store; the realm then gets an empty one, as today's runtime always
  * hands it one.

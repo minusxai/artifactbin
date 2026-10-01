@@ -11,9 +11,9 @@ on:
       - 'package-lock.json'
       - 'vite.config.mts'
       - 'server.ts'
-      - 'scripts/performance-loads.mjs'
-      - 'scripts/performance-report.mjs'
-      - 'scripts/size-targets.mjs'
+      - 'scripts/ci/performance-loads.mjs'
+      - 'scripts/ci/performance-report.mjs'
+      - 'scripts/build/size-targets.mjs'
       - 'scripts/lib/document-views.mjs'
       - 'scripts/fixtures/page-speed/**'
       - '.github/workflows/page-speed.yml'
@@ -26,9 +26,9 @@ on:
       - 'package-lock.json'
       - 'vite.config.mts'
       - 'server.ts'
-      - 'scripts/performance-loads.mjs'
-      - 'scripts/performance-report.mjs'
-      - 'scripts/size-targets.mjs'
+      - 'scripts/ci/performance-loads.mjs'
+      - 'scripts/ci/performance-report.mjs'
+      - 'scripts/build/size-targets.mjs'
       - 'scripts/lib/document-views.mjs'
       - 'scripts/fixtures/page-speed/**'
       - '.github/workflows/page-speed.yml'
@@ -58,7 +58,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: node scripts/ci.mjs lock-fingerprint
+      - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -93,7 +93,7 @@ jobs:
           esac
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then base="$(git rev-parse HEAD~1)"; fi
           git worktree add --detach .perf-base "$base"
-          (cd .perf-base && node scripts/ci.mjs lock-fingerprint)
+          (cd .perf-base && node ../scripts/ci/ci.mjs lock-fingerprint)
           same=true
           for f in .ci-cache-key/install.json services/app/scripts/copy-assets.mjs services/cli/scripts/prepare-pty.mjs; do
             cmp -s "$f" ".perf-base/$f" || same=false
@@ -118,9 +118,9 @@ jobs:
         run: |
           if [ "$REVISION" = base ]; then target=.perf-base; else target=.; fi
           if [ "$EVENT" = workflow_dispatch ]; then
-            node scripts/performance-loads.mjs "$target" "page-speed/$REVISION.json"
+            node scripts/ci/performance-loads.mjs "$target" "page-speed/$REVISION.json"
           else
-            node scripts/performance-loads.mjs "$target" "page-speed/$REVISION.json" --size-only
+            node scripts/ci/performance-loads.mjs "$target" "page-speed/$REVISION.json" --size-only
           fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
@@ -145,9 +145,9 @@ jobs:
           path: page-speed
           merge-multiple: true
       - name: Report
-        run: node scripts/performance-report.mjs page-speed/base.json page-speed/head.json page-speed/combined.json >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/ci/performance-report.mjs page-speed/base.json page-speed/head.json page-speed/combined.json >> "$GITHUB_STEP_SUMMARY"
       - name: Size targets
-        run: node scripts/size-targets.mjs page-speed/head.json --markdown --strict >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: page-speed

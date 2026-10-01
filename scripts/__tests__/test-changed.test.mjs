@@ -10,12 +10,12 @@
  * every case below drives it through the real command line instead.
  */
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CAP } from '../test-changed.mjs';
+import { DEFAULT_CAP } from '../ci/test-changed.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-const script = new URL('../test-changed.mjs', import.meta.url).pathname;
+const script = new URL('../ci/test-changed.mjs', import.meta.url).pathname;
 function fixture({ count = 1, cli = 0, discoveryExit = 0, malformed = false, runExit = 0, stray = [], unrelated = 0, triggers = [], runs = 1 } = {}, args = []) {
   const cwd = mkdtempSync(path.join(tmpdir(), 'local-test-budget-'));
   try {

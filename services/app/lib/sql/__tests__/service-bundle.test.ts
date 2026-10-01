@@ -8,7 +8,7 @@
  * `.ts` only under a loader — is a green suite and a server that exits at line
  * one.
  *
- * So this builds the bundle that ships (`scripts/build-server.mjs` →
+ * So this builds the bundle that ships (`scripts/build/build-server.mjs` →
  * `dist/sql-server.mjs`) and runs THAT.
  */
 import { spawn, execFileSync } from 'node:child_process';
@@ -30,7 +30,7 @@ beforeAll(async () => {
   // The same builder the image uses, with the service as its entry point. The
   // entry is TypeScript — esbuild is the bundler either way, and the image has
   // no loader, which is exactly what this test exists to prove.
-  execFileSync('node', ['scripts/build-server.mjs', bundle, 'services/sql/src/server.ts'], { cwd: ROOT, stdio: 'pipe' });
+  execFileSync('node', ['scripts/build/build-server.mjs', bundle, 'services/sql/src/server.ts'], { cwd: ROOT, stdio: 'pipe' });
   child = spawn('node', [bundle], { env: { ...process.env, APP__PORT: String(PORT) }, stdio: 'inherit' });
   for (let i = 0; i < 60; i++) {
     const ok = await fetch(`${serviceUrl}/health`).then((response) => response.ok).catch(() => false);

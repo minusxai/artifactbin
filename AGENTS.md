@@ -119,5 +119,5 @@ The orchestrator defines and seeds contracts, core tests and a bounded brief; th
 completes that brief without further delegation. Use isolated worktrees, data directories and port
 blocks; never two implementers in one checkout. Browser gates run in containers via
 `scripts/gate-container.mjs`, up to N at once (engine CPUs ÷ container CPUs, 3 on a 14-CPU Colima;
-`GATES__CONTAINER_SLOTS` overrides); host `node scripts/gate-*.mjs` runs are discouraged.
+`GATES__CONTAINER_SLOTS` overrides); host `node scripts/gates/gate-*.mjs` runs are discouraged.
 Keep PRs scoped per repository. Handoff: [docs/agent-workflows.md](docs/agent-workflows.md).

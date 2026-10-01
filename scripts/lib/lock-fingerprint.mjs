@@ -8,7 +8,7 @@
  * Node, the Chromium archive) all restored on that same runner — they key on files a bump does not
  * touch. The version of a workspace resolves no dependency, so it has no business in the key.
  *
- * CI hashes this (`node scripts/ci.mjs lock-fingerprint`), and so does the gate container's
+ * CI hashes this (`node scripts/ci/ci.mjs lock-fingerprint`), and so does the gate container's
  * dependency volume (scripts/gate-container.mjs), so both caches turn over on the same changes.
  *
  * @param {string} lockText  package-lock.json's contents

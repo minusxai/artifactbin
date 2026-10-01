@@ -1,5 +1,5 @@
 /**
- * The island build's Solid toolchain (scripts/build-islands.mjs `solidPlugin`): babel-preset-solid emits
+ * The island build's Solid toolchain (scripts/build/build-islands.mjs `solidPlugin`): babel-preset-solid emits
  * code the PINNED runtime renders and updates (a transform out of step with the runtime renders but
  * drops event handlers), the output is hydratable, and the graph holds exactly one Solid.
  */
@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import esbuild from 'esbuild';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { solidPlugin } from '../build-islands.mjs';
+import { solidPlugin } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const FIXTURE = path.join(ROOT, 'services/app/lib/islands/__tests__/fixtures/counter.tsx');

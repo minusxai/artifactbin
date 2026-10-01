@@ -5,15 +5,15 @@ import {packageRoot} from './package-root.mjs';
 import {cp,mkdir,readFile,rm,writeFile,stat} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {EXTERNALS} from '../../../scripts/runtime-externals.mjs';
+import {EXTERNALS} from '../../../scripts/build/runtime-externals.mjs';
 import {runtimePackageFile} from './runtime-package-files.mjs';
 import {archiveDirectory} from './runtime-archive.mjs';
 const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..'),repo=resolve(cli,'../..');
 const runtime=join(cli,'dist/runtime'),app=join(repo,'services/app');
 execFileSync(process.execPath,[process.env.npm_execpath??join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),'run','build','-w','services/app'],{cwd:repo,stdio:'inherit'});
 await rm(runtime,{recursive:true,force:true});await mkdir(runtime,{recursive:true});
-execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
-execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
+execFileSync(process.execPath,[join(repo,'scripts/build/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
+execFileSync(process.execPath,[join(repo,'scripts/build/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp'],{cwd:repo,stdio:'inherit'});
 await buildPreview(join(runtime,'preview'));
 for(const name of ['public','skills','orchestrator','lib/build-assets','dist/web','package.json']){
  await mkdir(dirname(join(runtime,name)),{recursive:true});await cp(join(app,name),join(runtime,name),{recursive:true});

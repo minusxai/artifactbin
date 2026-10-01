@@ -11,7 +11,7 @@
  * agent's write replaces the declarations under an open document (`store.replaceFlow`), and a Value
  * that version no longer declares must stop appearing in the link.
  *
- * Bundled alone (scripts/build-islands.mjs STANDALONE_LAZY) and loaded by boot after hydration, off the
+ * Bundled alone (scripts/build/build-islands.mjs STANDALONE_LAZY) and loaded by boot after hydration, off the
  * shared runtime's closure; a value moved before it loaded is written at once. A sandboxed copy whose
  * opaque origin refuses the rewrite keeps its address.
  */

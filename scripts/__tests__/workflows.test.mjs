@@ -85,7 +85,7 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
     const start = steps.find((step) => step.name === 'Build the app, server and CLI bundle in the background');
     const wait = steps.find((step) => step.name === "Wait for this shard's build");
     // Every stream redirected and the group backgrounded, or the runner holds the step open until it ends.
-    expect(start?.run).toContain('node scripts/build-gate-inputs.mjs');
+    expect(start?.run).toContain('node scripts/build/build-gate-inputs.mjs');
     expect(start?.run).toMatch(/< \/dev\/null > \/dev\/null 2>&1 &\s*$/);
     expect(wait?.run).toContain('gate-build.status');
     const at = (name) => steps.findIndex((step) => step.name === name);
@@ -109,12 +109,12 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
     expect(save.with['restore-keys']).toBeUndefined();
     expect(save.with.key).toContain('steps.build-key.outputs.key');
     for (const job of [ci.jobs.build, ci.jobs.gates]) {
-      expect(job.steps.find((step) => step.id === 'build-key')?.run).toBe('node scripts/ci.mjs build-key');
+      expect(job.steps.find((step) => step.id === 'build-key')?.run).toBe('node scripts/ci/ci.mjs build-key');
     }
     const miss = "steps.build-cache.outputs.cache-hit != 'true'";
     expect(start.if).toBe(miss);
     expect(wait.if).toBe(miss);
-    for (const command of ['npm run build -w services/cli', 'node scripts/build-server.mjs dist/server.mjs']) {
+    for (const command of ['npm run build -w services/cli', 'node scripts/build/build-server.mjs dist/server.mjs']) {
       expect(ci.jobs.build.steps.find((step) => step.run === command)?.if, command).toBe(miss);
     }
     // Every Chromium cache keys on what pins the browser, never on the whole lockfile.
@@ -125,14 +125,14 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
     }
   });
   it('builds the gate inputs with the CLI bundle options, not a second bundle definition', () => {
-    const source = readFileSync(path.join(root, 'scripts/build-gate-inputs.mjs'), 'utf8');
-    expect(source).toContain("from '../services/cli/scripts/bundle-options.mjs'");
+    const source = readFileSync(path.join(root, 'scripts/build/build-gate-inputs.mjs'), 'utf8');
+    expect(source).toContain("from '../../services/cli/scripts/bundle-options.mjs'");
     expect(source).toContain("execFileSync('npm', ['run', 'build']");
   });
   it('builds the app once through the CLI host and still bundles the gate server', () => {
     const commands = ci.jobs.build.steps.map((step) => step.run);
     const cli = commands.indexOf('npm run build -w services/cli');
-    const server = commands.indexOf('node scripts/build-server.mjs dist/server.mjs');
+    const server = commands.indexOf('node scripts/build/build-server.mjs dist/server.mjs');
     expect(readFileSync(path.join(root, 'services/cli/scripts/build-host.mjs'), 'utf8'))
       .toContain("'build','-w','services/app'");
     expect(commands).not.toContain('npm run build');

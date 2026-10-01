@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {observeFixtureWrite} from '../lib/fixture-http.mjs';
+import {observeFixtureWrite} from '../gates/lib/fixture-http.mjs';
 it('reads the fixture head for conditional replacement without replacing an explicit stale guard',async()=>{
  const raw=vi.fn(async(_url,init)=>init?.method==='GET'?Response.json({version:7,state:'fresh'}):Response.json({ok:true}));
  await observeFixtureWrite(raw,'https://example.test/api/artifacts/abc123',{method:'PUT',headers:{Authorization:'Bearer test'},body:JSON.stringify({markup:'<h1>next</h1>',expectedVersion:2})});

@@ -20,19 +20,19 @@ const put = (file, value, mode) => {
   writeFileSync(path.join(root, file), value, mode ? { mode } : undefined);
 };
 for (const file of ['AGENTS.md', 'CONTRIBUTING.md', 'docs/agent-workflows.md',
-  'scripts/check-local.mjs', 'scripts/test-changed.mjs', 'scripts/lib/check-evidence.mjs']) {
+  'scripts/ci/check-local.mjs', 'scripts/ci/test-changed.mjs', 'scripts/lib/check-evidence.mjs']) {
   put(file, readFileSync(path.join(source, file)));
 }
 put('.gitignore', 'node_modules/\n.artifactbin/\n.agent/\n');
 put('package.json', JSON.stringify({ private: true, type: 'module', scripts: {
-  validate: 'node scripts/check-local.mjs validate', test: 'node scripts/check-local.mjs test',
+  validate: 'node scripts/ci/check-local.mjs validate', test: 'node scripts/ci/check-local.mjs test',
   'test:all': 'node .agent/forbidden.mjs', build: 'node .agent/forbidden.mjs',
 } }, null, 2));
 put('package-lock.json', '{}');
 put('node_modules/.package-lock.json', '{}');
 put('source.mjs', 'export const answer = 1;\n');
 const log = "import fs from 'node:fs'; fs.appendFileSync('.agent/commands.jsonl', JSON.stringify({tool: process.argv[1], args: process.argv.slice(2)})+'\\n');\n";
-put('scripts/check-residual-names.mjs', log + "console.log('Fixture validation passed (simulated; not production validation).');\n");
+put('scripts/ci/check-residual-names.mjs', log + "console.log('Fixture validation passed (simulated; not production validation).');\n");
 put('node_modules/typescript/bin/tsc', log + "console.log('Fixture TypeScript check (simulated).');\n");
 put('.agent/forbidden.mjs', log + "console.error('Forbidden broad local command'); process.exit(91);\n");
 for (let i = 0; i < 51; i++) put(`scripts/__tests__/fixture-${i}.test.mjs`, '// Disposable affected-test identity. Never executed.\n');

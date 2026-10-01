@@ -1,5 +1,5 @@
 /**
- * DOCUMENT VIEWS for the page-speed lab (scripts/performance-loads.mjs).
+ * DOCUMENT VIEWS for the page-speed lab (scripts/ci/performance-loads.mjs).
  *
  * One sample = one fresh tab in a cookie-less context, a cold browser cache,
  * the lab's network/CPU throttling, and one navigation to either the reader
@@ -73,7 +73,7 @@ export function documentViewProbe() {
   new MutationObserver(check).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-mx-chart-state', 'data-mx-mermaid-state', 'data-mx-ready'] });
 }
 
-/** The lab's throttling (scripts/performance-loads.mjs `conditions`). */
+/** The lab's throttling (scripts/ci/performance-loads.mjs `conditions`). */
 export const LAB_THROTTLE = { latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4 };
 
 /** The size lab keeps the same network byte accounting with one unthrottled view. */
