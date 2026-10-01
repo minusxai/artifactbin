@@ -16,7 +16,7 @@ import { startPage } from '../page';
 import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
 import { DataTable, Question } from '../kit/data';
-import type { IslandDocument, IslandEvent } from '../contract';
+import { PUBLIC_MX_KEY, type IslandDocument, type IslandEvent, type PublicMxHost } from '../contract';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 
 const reads = (imports: string[]) => ({ imports, queries: [], values: [], builtins: [] });
@@ -161,6 +161,21 @@ describe('boot', () => {
     booted.setMode('read');
     await vi.waitFor(() => expect(window.mx).toBeDefined());
     expect((await window.mx!.read(['region'])).signals.region.value, 'reading again in place: the public API is back').toBe('West');
+    stopPage();
+  });
+
+  it('installs no public mx API when the document is disposed before the API chunk loads', async () => {
+    delete window.mx;
+    page(snapshot);
+    const stopPage = startPage();
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    const root = booted.root as PublicMxHost;
+    booted.dispose();
+    booted = null;
+    await import('../mx-host');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(window.mx).toBeUndefined();
+    expect(root[PUBLIC_MX_KEY]).toBeUndefined();
     stopPage();
   });
 

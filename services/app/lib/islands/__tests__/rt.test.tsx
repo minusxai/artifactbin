@@ -6,7 +6,7 @@
  * conditionals as `Repeat`/`When`, row attributes filtered per row, and in-place hydration that
  * leaves static siblings untouched.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createStore } from 'solid-js/store';
 import { createIslandRuntime, Repeat, When, hydrateIsland } from '../rt';
@@ -80,5 +80,75 @@ describe('createIslandRuntime', () => {
     expect(host.querySelector('#before')).toBe(before);
     expect(host.querySelector('#after')).toBe(after);
     expect(host.querySelector('#island')?.textContent).toBe('hydrated');
+  });
+});
+
+describe('IslandContext declarations', () => {
+  const declared: CompiledDataflow = {
+    imports: [], mutations: [],
+    values: [
+      { name: 'region', kind: 'scalar', type: 'string', default: 'All' },
+      { name: 'limit', kind: 'scalar', type: 'number', default: null },
+      { name: 'rows', kind: 'table', type: 'table', default: null, rows: [], columns: [] },
+    ],
+    queries: [],
+  };
+  const withQuery: CompiledDataflow = { ...declared, queries: [{ name: 'orders', engine: 'postgres', source: 'DS1', sql: 'select 1 as n', params: [], reads: { imports: [], queries: [], values: [], builtins: [] }, columns: [{ name: 'n', type: 'number' }], start: 0, end: 0 }] };
+
+  it('answers a declared scalar\'s type, whether it may be null, and whether the document runs queries', () => {
+    const rt = createIslandRuntime({ dataflow: { flow: declared }, mermaidImages: {}, viewer: null }, (df) => createDataflowStore(df));
+    expect([rt.context.valueType('region'), rt.context.valueType('limit'), rt.context.valueType('rows'), rt.context.valueType('missing')]).toEqual(['string', 'number', undefined, undefined]);
+    expect([rt.context.nullable('region'), rt.context.nullable('limit'), rt.context.nullable('missing')]).toEqual([false, true, true]);
+    expect(rt.context.declaresQueries()).toBe(false);
+    const queried = createIslandRuntime({ dataflow: { flow: withQuery }, mermaidImages: {}, viewer: null }, (df) => createDataflowStore(df));
+    expect(queried.context.declaresQueries()).toBe(true);
+    rt.dispose(); queried.dispose();
+  });
+
+  it('without declarations, no value is typed, every bound value may be null and nothing runs', () => {
+    const rt = createIslandRuntime({ dataflow: null, mermaidImages: {}, viewer: null }, (df) => createDataflowStore(df));
+    expect(rt.context.valueType('region')).toBeUndefined();
+    expect(rt.context.nullable('region')).toBe(true);
+    expect(rt.context.declaresQueries()).toBe(false);
+  });
+});
+
+describe('a refreshed table', () => {
+  const columns = [{ name: 'k', type: 'string' as const }, { name: 'label', type: 'string' as const }];
+  const served = { rows: [{ k: 'a', label: 'One' }, { k: 'b', label: 'Two' }], columns };
+  const queried: CompiledDataflow = {
+    imports: [], mutations: [],
+    values: [{ name: 'region', kind: 'scalar', type: 'string', default: 'west' }],
+    queries: [{ name: 'items', engine: 'postgres', source: 'DS1', sql: 'select k, label from items where region=$region', params: ['region'], reads: { imports: [], queries: [], values: ['region'], builtins: [] }, columns, start: 0, end: 0 }],
+  };
+
+  it('keeps the same rows mounted when a refresh answers with identical rows, and redraws a changed cell', async () => {
+    let answer: typeof served = served;
+    const run = vi.fn(async () => ({ tables: { items: answer }, errors: {} }));
+    const rt = createIslandRuntime({ dataflow: { flow: queried, values: { region: 'west' }, results: { tables: { items: served }, errors: {} } }, mermaidImages: {}, viewer: null },
+      (df) => createDataflowStore(df, { transport: { run, page: vi.fn() }, debounceMs: 0 }));
+    const host = document.createElement('div');
+    const dispose = render(() => <IslandProvider value={rt.context}>
+      <Repeat name="items" keyBy="k" owner="list" ids={[]}>{(row) => <li>{String(row.label)}</li>}</Repeat>
+    </IslandProvider>, host);
+    rt.store!.start();
+    const before = [...host.querySelectorAll('li')];
+    const table = rt.context.table('items');
+    expect(before.map((li) => li.textContent)).toEqual(['One', 'Two']);
+
+    answer = { rows: [{ k: 'a', label: 'One' }, { k: 'b', label: 'Two' }], columns };
+    rt.context.setValue('region', 'east');
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(rt.store!.pending().size).toBe(0));
+    expect(rt.context.table('items'), 'an identical answer keeps the same table').toBe(table);
+    expect([...host.querySelectorAll('li')], 'and the same row nodes, so their controls stay mounted').toEqual(before);
+    expect([...host.querySelectorAll('li')].every((li, i) => li === before[i])).toBe(true);
+
+    answer = { rows: [{ k: 'a', label: 'One' }, { k: 'b', label: 'Two, edited' }], columns };
+    rt.context.setValue('region', 'north');
+    await vi.waitFor(() => expect(host.querySelectorAll('li')[1]?.textContent).toBe('Two, edited'));
+    expect(host.querySelectorAll('li')[0], 'an unchanged row keeps its node').toBe(before[0]);
+    dispose();
+    rt.dispose();
   });
 });

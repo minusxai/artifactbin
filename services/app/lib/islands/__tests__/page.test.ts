@@ -8,6 +8,7 @@ import { startPage, CHROME_HIDDEN_CLASS } from '../page';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
+import { LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
@@ -185,5 +186,11 @@ describe('the served reader chrome on the compiled app page', () => {
 
   it('names today\'s hidden class', () => {
     expect(CHROME_HIDDEN_CLASS).toBe(READER_CHROME_HIDDEN_CLASS);
+  });
+
+  it('keeps the page protocol\'s wire names, which stored pages and the served HTML carry', () => {
+    expect([STORY_ROOT_SELECTOR, LIVE_ID_ATTR, LIVE_EDIT_ATTR, PUBLIC_MX_KEY]).toEqual(['[data-mx-inline-story]', 'data-mx-live-id', 'data-mx-live-edit', '__mxPublicApi']);
+    expect(['s0-', 'd-', 's-abc_1'].every((id) => RENDER_ID_PATTERN.test(id))).toBe(true);
+    expect(['', 's0 ', '"]', 's0-,x'].some((id) => RENDER_ID_PATTERN.test(id))).toBe(false);
   });
 });

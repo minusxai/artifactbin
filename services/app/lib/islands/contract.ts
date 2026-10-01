@@ -13,7 +13,7 @@ import type { Scalar, TableResult } from '@/lib/story/dataflow';
 import type { MutationRequest } from '@/lib/story/mutation-request';
 import type { DataflowStore, MutationAnswer } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
-import type { PersonCard } from '@artifactbin/contracts';
+import type { ColumnType, PersonCard } from '@artifactbin/contracts';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -39,8 +39,8 @@ export interface IslandData {
 }
 
 export interface IslandWrites {
-  /** Set a declared scalar; a continuous control passes `debounce`. */
-  setValue(name: string, value: Scalar, options?: { debounce?: number }): void;
+  /** Set a declared scalar; a continuous control (typing, a slider) passes `debounce` and waits for the store's pause. */
+  setValue(name: string, value: Scalar, options?: { debounce?: boolean }): void;
   /** Run a declared `<Mutation>`. Optimistic when the plan allows; the status feed reports saving/saved/failed. */
   mutate(request: MutationRequest): Promise<MutationAnswer>;
   /** Why writes are refused on this render (an archived version, a capture), or null. */
@@ -69,10 +69,19 @@ export interface IslandContext extends IslandData, IslandWrites {
   viewer(): IslandViewer;
   /** The version's stored Mermaid drawings, keyed by `mermaidImageKey(code, mode)`. */
   drawings(): Readonly<Record<string, StoredMermaidImage>>;
-  /** The requested first-paint colour mode during server rendering. */
-  colorMode?(): 'light' | 'dark';
+  /** A declared scalar's type (what a control coerces its string to), or undefined when `name` declares none. */
+  valueType(name: string): ColumnType | undefined;
+  /** Whether a bound control may offer "All": the Value's declared default is null, or the page declares nothing. */
+  nullable(name: string): boolean;
+  /** Whether the document declares any query (a document without one never re-renders on its results). */
+  declaresQueries(): boolean;
   writes: WriteStatusFeed;
-  /** The underlying store — for the SPA and the author script; islands read through the accessors above. */
+  /**
+   * The underlying store — for the SPA, the public `mx` API and the author script, and for kit islands
+   * that need mutation-level handles (paging, cell writes). Islands read declarations through the
+   * accessors above.
+   * @internal
+   */
   store(): DataflowStore | null;
   /**
    * Where an island's overlay (Dialog, Popover, Tooltip content) portals: the first-party trusted
@@ -182,6 +191,22 @@ export type IslandEvent =
  */
 export const ISLAND_DOCUMENT_KEY = '__mxIslands';
 export type IslandHost = HTMLElement & { [ISLAND_DOCUMENT_KEY]?: IslandDocument };
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The page protocol: names the served HTML, stored pages and every reader chunk agree on
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** The story element the islands live in (the assembler's `inlineStoryElement`). */
+export const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
+/** The document's live identity on `<body>` (lib/story/document's convention, read as anchor-entry reads it). */
+export const LIVE_ID_ATTR = 'data-mx-live-id';
+/** The version the page shows, on `<body>` beside `LIVE_ID_ATTR`. */
+export const LIVE_EDIT_ATTR = 'data-mx-live-edit';
+/** A compiler-generated hydration key prefix (`s<i>-`, `d-`); anything else never reaches a selector. Stateless: no `g`/`y` flag. */
+export const RENDER_ID_PATTERN = /^[\w-]+$/;
+/** The story root's private slot for the public `mx` API's uninstaller (lib/islands/mx-host `installPublicMx`). */
+export const PUBLIC_MX_KEY = '__mxPublicApi';
+export type PublicMxHost = HTMLElement & { [PUBLIC_MX_KEY]?: () => void };
 
 /** Fired on `document` once every island has hydrated (the same event today's runtime fires after hydration). */
 export const ISLANDS_READY_EVENT = 'mx:ready';
