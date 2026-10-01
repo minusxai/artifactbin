@@ -1,0 +1,51 @@
+name: runner design validation
+on:
+  pull_request:
+    paths:
+      - 'docs/proposals/runner-validation/**'
+      - 'services/app/__tests__/runner-design.test.ts'
+      - '.github/workflows/runner-design.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: runner-design-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  linux-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: validation
+          POSTGRES_DB: runner_validation
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
+      - run: docker build -t runner-design-worker docs/proposals/runner-validation
+      - name: Prove the path with restricted Linux workers
+        env:
+          RUNNER_VALIDATION_DOCKER: runner-design-worker
+        run: npm test -- --files services/app/__tests__/runner-design.test.ts
+      - name: Prove OS restrictions independently of V8
+        run: node docs/proposals/runner-validation/os-boundary.mjs runner-design-worker
+      - name: Prove real PostgreSQL concurrency
+        env:
+          RUNNER_VALIDATION_DATABASE: postgres://postgres:validation@127.0.0.1:5432/runner_validation
+          RUNNER_VALIDATION_DOCKER: runner-design-worker
+        run: node docs/proposals/runner-validation/postgres-proof.mjs
+      - name: Verify worker cleanup
+        run: test -z "$(docker ps -aq --filter label=artifactbin.runner-validation=true)"

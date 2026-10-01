@@ -1,0 +1,19 @@
+{
+  "runtime": "v22.22.3",
+  "platform": "darwin",
+  "arch": "arm64",
+  "scope": "warm host; in-memory model fixture; excludes IPC, queue, network, real inference",
+  "bundleBytes": 845113,
+  "bare": {
+    "samples": 100,
+    "createAndArithmeticMedianMs": 0.37437499999998636,
+    "heapKiB": 335.953125
+  },
+  "pi": {
+    "samples": 20,
+    "loadMedianMs": 10.191249999999997,
+    "throughToolLoopMedianMs": 13.524417,
+    "heapMiB": 2.1095962524414062
+  },
+  "additional100ContextsRssMiB": 93.921875
+}
