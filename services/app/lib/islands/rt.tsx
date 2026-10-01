@@ -31,7 +31,7 @@ import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
 import { IslandProvider, useIsland } from './context';
-import type { IslandChartModule, IslandContext, IslandViewer, WriteStatusFeed } from './contract';
+import { RENDER_ID_PATTERN, type IslandChartModule, type IslandContext, type IslandViewer, type WriteStatusFeed } from './contract';
 import { trustedPortalOf } from './trusted-portal';
 
 /*
@@ -100,6 +100,20 @@ export interface IslandRuntime {
   setViewer(viewer: IslandViewer): void;
   /** Stop following the store and dispose it. Islands are disposed by their own handles. */
   dispose(): void;
+}
+
+/**
+ * What the document declares, read from the store's current flow (a morph may replace it): a scalar's type,
+ * whether a bound control may offer "All", and whether it runs queries. Without a store the page declares
+ * nothing: no value is typed, every bound value may be null.
+ */
+export function declarationsOf(store: () => DataflowStore | null): Pick<IslandContext, 'valueType' | 'nullable' | 'declaresQueries'> {
+  const scalar = (name: string) => store()?.flow.values.find((v) => v.kind === 'scalar' && v.name === name);
+  return {
+    valueType: (name) => { const type = scalar(name)?.type; return type === 'table' ? undefined : type; },
+    nullable: (name) => !store() || (scalar(name)?.default ?? null) === null,
+    declaresQueries: () => !!store()?.flow.queries.length,
+  };
 }
 
 export const EMPTY_WRITE_FEED: WriteStatusFeed = Object.freeze({ current: () => [], subscribe: () => () => {}, dismiss: () => {} });
@@ -184,6 +198,7 @@ export function createIslandRuntime(
     error: (name) => state.errors[name],
     people: () => state.people,
     setValue: (name, value, opts) => store?.setValue(name, value, opts?.debounce ? { debounce: true } : undefined),
+    ...declarationsOf(() => store),
     /*
      * The write as the wire states it (the store's `mutate(request)`): OPTIMISTIC — a click before
      * the write check has answered is sent and the server decides; a refusal lands in the status
@@ -330,8 +345,6 @@ export function When(props: { test: ReactiveExpression; row?: Record<string, unk
 export const withIsland = (Component: Component, context: IslandContext): JSX.Element =>
   createComponent(IslandProvider, { value: context, get children() { return createComponent(Component, {}); } });
 
-/** A compiler-generated hydration key prefix (`s<i>-`); anything else never reaches a selector. */
-const RENDER_ID = /^[\w-]+$/;
 
 
 /**
@@ -345,7 +358,7 @@ const RENDER_ID = /^[\w-]+$/;
  * as a fresh node; it replaces the served root, still leaving the siblings alone.
  */
 export function hydrateIsland(renderId: string, Component: Component, context: IslandContext, parent: ParentNode = document): (() => void) | null {
-  if (isServer || !RENDER_ID.test(renderId)) return null;
+  if (isServer || !RENDER_ID_PATTERN.test(renderId)) return null;
   const root = parent.querySelector(`[data-hk^="${renderId}"]`);
   const host = root?.parentNode as (Element & ParentNode) | null | undefined;
   if (!root || !host) return null;

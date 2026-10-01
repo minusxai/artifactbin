@@ -90,7 +90,7 @@ describe('Select', () => {
   });
   it('writes a chosen option through the bound Value\'s declared type, like NativeBoundControl', () => {
     const ctx = fakeIsland({ minimum: 0 as unknown as string }); ctx.setValue = vi.fn();
-    ctx.store = () => ({ flow: { values: [{ kind: 'scalar', name: 'minimum', type: 'number' }] } }) as unknown as DataflowStore;
+    ctx.valueType = (name) => (name === 'minimum' ? 'number' : undefined);
     const { host, dispose } = mount(ctx, () => <Select label="Minimum" value="$minimum" options={[{ label: 'All', value: 0 }, { label: 'Above fifteen', value: 15 }]} />);
     (host.querySelector('[aria-haspopup="listbox"]') as HTMLButtonElement).click();
     ([...document.querySelectorAll('[role="option"]')].find(x => x.textContent === 'Above fifteen') as HTMLButtonElement).click();

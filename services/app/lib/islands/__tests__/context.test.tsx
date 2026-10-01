@@ -14,6 +14,7 @@ export const fakeIsland = (values: Record<string, string> = {}): IslandContext =
   assetsUrl: () => null,
   values: () => values, value: (n) => values[n], table: () => undefined, tableSnapshot: () => undefined, pending: () => false, error: () => undefined, people: () => ({}),
   setValue: () => {}, mutate: async () => ({ dataset: 'x' }), writesUnavailable: () => null, mutationUnavailable: () => null, mutating: () => false,
+  valueType: () => undefined, nullable: () => true, declaresQueries: () => false,
   viewer: () => null, drawings: () => ({}), writes: { current: () => [], subscribe: () => () => {}, dismiss: () => {} }, store: () => null,
   trustedPortal: () => null, loadChart: () => Promise.reject(new Error('no charts in this fake')),
 });
