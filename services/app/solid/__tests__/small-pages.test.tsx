@@ -21,7 +21,7 @@ beforeEach(() => {
     calls.push({ url: String(url), method: init?.method ?? 'GET' });
     if (url === '/api/page/session') return Response.json(session);
     if (url === '/api/auth/email-otp/send-verification-otp') return Response.json({});
-    if (url === '/api/start') return Response.json({ id: 'doc_1' }, { status: startStatus });
+    if (url === '/api/start' || url === '/api/start?mode=blank') return Response.json({ id: 'doc_1' }, { status: startStatus });
     if (url === '/api/my/profile/image' && init?.method === 'PUT') return Response.json({ image: '/api/users/new_1/avatar?v=1' });
     if (url === '/api/my/profile' && init?.method === 'PATCH') return Response.json(profileStatus === 200 ? { username: 'chosen' } : { error: 'username_taken' }, { status: profileStatus });
     if (url === '/api/my/profile') return Response.json({ username: 'initial', image: null });
@@ -54,7 +54,17 @@ it('holds the login callback for an anonymous reader without redirecting away', 
 it('starts one artifact and leaves the Solid route for its document', async () => {
   window.history.replaceState(null, '', '/start');
   render(() => <App />);
-  await waitFor(() => expect(calls.filter(call => call.url === '/api/start')).toHaveLength(1));
+  await waitFor(() => expect(calls.filter(call => call.url === '/api/start?mode=blank')).toHaveLength(1));
+  expect(calls).toContainEqual({ url: '/api/start?mode=blank', method: 'POST' });
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1/edit'));
+});
+
+it('preserves explicit external-agent handoff instead of opening the editor', async () => {
+  window.history.replaceState(null, '', '/start?agent=1');
+  render(() => <App />);
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1'));
+  expect(calls).toContainEqual({ url: '/api/start', method: 'POST' });
+  expect(calls.some(call => call.url === '/api/start?mode=blank')).toBe(false);
 });
 
 it('shows an uncertain start failure and never retries it', async () => {
@@ -62,7 +72,8 @@ it('shows an uncertain start failure and never retries it', async () => {
   window.history.replaceState(null, '', '/start');
   render(() => <App />);
   expect(await screen.findByRole('alert')).toHaveTextContent('The request may have completed');
-  expect(calls.filter(call => call.url === '/api/start')).toHaveLength(1);
+  expect(calls.filter(call => call.url === '/api/start?mode=blank')).toHaveLength(1);
+  expect(replaceDocument).not.toHaveBeenCalled();
 });
 
 it('keeps the welcome form on a refused handle and saves the confirmation with the handle', async () => {
