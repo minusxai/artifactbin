@@ -2,13 +2,12 @@
 // DESTINATION: services/app/lib/islands/__tests__/kit-controls.test.tsx
 /**
  * THE CONTROLS, PEOPLE, FILES AND MERMAID KIT (lib/islands/kit: controls, people, files, mermaid) —
- * the same DOM as today's kit (`parityOf`, the unit-level parity gate), bound to the island's data:
+ * labelled, accessible fields bound to the island's data:
  * a control writes its `<Value>` through the context, a `$`-bound native field the same, a person
  * draws from the resolved cards, a diagram from the stored drawings.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
-import { parityOf, reactRender, shapeOf } from './kit-parity';
 import { RECIPES as controlsRecipes } from '../kit/recipes/controls';
 import { RECIPES as peopleRecipes } from '../kit/recipes/people';
 import { RECIPES as filesRecipes } from '../kit/recipes/files';
@@ -23,10 +22,9 @@ import { Mermaid } from '../kit/mermaid';
 const mount = (island = fakeIsland(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={island}>{view()}</IslandProvider>, host); return { host, dispose }; };
 
 describe('controls', () => {
-  // The compiled page runs the LIVE controls, so its reference is the runtime's live face (kit-controls-live.test.tsx,
-  // byte for byte). Against the registry's STATIC face below, exactly the two differences between the faces remain:
-  // the static face stamps its bindings (`data-mx-bound`) and marks a writer-less field read-only.
-  it('Input, Textarea, Segmented, Slider, Switch and DatePicker match today\'s static face except where the live face differs', () => {
+  // The live face (what a compiled page runs; kit-controls-live.test.tsx holds it byte for byte) stamps no
+  // binding and leaves a bound field writable.
+  it('Input, Textarea, Segmented, Slider, Switch and DatePicker render labelled, writable controls with no binding stamp', () => {
     const { host } = mount(undefined, () => <>
       <Input label="Name" placeholder="Your name" value="$name" id="in" />
       <Textarea label="Notes" rows={3} value="$notes" id="ta" />
@@ -35,14 +33,19 @@ describe('controls', () => {
       <Switch label="On" checked="$on" id="sw" />
       <DatePicker label="When" value="$when" id="dp" />
     </>);
-    expect(parityOf('<Input label="Name" placeholder="Your name" value="$name" id="in" /><Textarea label="Notes" rows={3} value="$notes" id="ta" /><Segmented label="Size" value="$size" options={["S","M","L"]} id="seg" /><Slider label="Amount" value="$amount" min={0} max={10} step={1} id="sl" /><Switch label="On" checked="$on" id="sw" /><DatePicker label="When" value="$when" id="dp" />', host)).toEqual([
-      '/0<div> @data-mx-bound: "value:$name" vs undefined', '/0<div>/1<input> @readonly: "" vs undefined',
-      '/1<div> @data-mx-bound: "value:$notes" vs undefined', '/1<div>/1<textarea> @readonly: "" vs undefined',
-      '/2<div> @data-mx-bound: "value:$size" vs undefined',
-      '/3<div> @data-mx-bound: "value:$amount" vs undefined', '/3<div>/1<input> @readonly: "" vs undefined',
-      '/4<div> @data-mx-bound: "checked:$on" vs undefined',
-      '/5<div> @data-mx-bound: "value:$when" vs undefined',
-    ]);
+    expect([...host.children].map((root) => root.id)).toEqual(['in', 'ta', 'seg', 'sl', 'sw', 'dp']);
+    expect(host.querySelector('[data-mx-bound]')).toBeNull();
+    expect(host.querySelector('[readonly]')).toBeNull();
+    const name = host.querySelector<HTMLInputElement>('#in input')!;
+    expect([name.getAttribute('aria-label'), name.placeholder]).toEqual(['Name', 'Your name']);
+    const notes = host.querySelector<HTMLTextAreaElement>('#ta textarea')!;
+    expect([notes.getAttribute('aria-label'), notes.rows]).toEqual(['Notes', 3]);
+    expect([...host.querySelectorAll('#seg [role="group"] button')].map((b) => b.textContent)).toEqual(expect.arrayContaining(['S', 'M', 'L']));
+    const amount = host.querySelector<HTMLInputElement>('#sl input')!;
+    expect([amount.type, amount.min, amount.max, amount.step]).toEqual(['range', '0', '10', '1']);
+    expect(host.querySelector('#sw [role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+    expect(host.querySelector('#dp [aria-haspopup="dialog"]')?.getAttribute('aria-expanded')).toBe('false');
+    for (const label of ['Name', 'Notes', 'Size', 'Amount', 'On', 'When']) expect(host.textContent).toContain(label);
   });
 
   it('a control writes its value through the island, debounced for typing and at once for a switch', () => {
@@ -102,11 +105,19 @@ describe('controls', () => {
 });
 
 describe('people and files', () => {
-  it('User, UserHandle and SignIn match today\'s render for a guest and a known person', () => {
+  it('User and UserHandle show an unresolved person as unknown, and SignIn links to the login page in the top frame', () => {
     const island = fakeIsland();
     island.people = () => ({ u1: { id: 'u1', name: 'Ada', handle: 'ada', image: null } as never });
     const { host } = mount(island, () => <><User userId="u1" id="u" /><UserHandle userId="u1" id="h" /><SignIn id="s" /></>);
-    expect(parityOf('<User userId="u1" id="u" /><UserHandle userId="u1" id="h" /><SignIn id="s" />', host).filter((d) => !/@href/.test(d))).toEqual([]);
+    const user = host.querySelector('#u')!;
+    expect(user.getAttribute('data-slot')).toBe('user');
+    expect(user.querySelector('[data-slot="avatar"]')?.getAttribute('aria-hidden')).toBe('true');
+    expect(user.querySelector('[data-slot="avatar-fallback"]')?.textContent).toBe('?');
+    expect(user.querySelector('[data-slot="user-handle"]')?.textContent).toBe('Unknown person');
+    expect(host.querySelector('#h')?.textContent).toBe('Unknown person');
+    const signIn = host.querySelector<HTMLAnchorElement>('a#s')!;
+    expect([signIn.getAttribute('data-slot'), signIn.target, signIn.rel, signIn.textContent]).toEqual(['sign-in', '_top', 'noopener', 'Sign in']);
+    expect(signIn.getAttribute('href')).toMatch(/^\/login\b/);
   });
   it('resolved people render their public card and SignIn returns to the current address', () => {
     const previous = window.location.pathname + window.location.search + window.location.hash;
@@ -142,35 +153,35 @@ describe('mermaid', () => {
 
 
 describe('class recipes', () => {
-  const cases: [string, Record<string, (p: Record<string, unknown>) => string>, string, Record<string, unknown>][] = [
-    ['Input', controlsRecipes, '<Input />', {}],
-    ['Textarea', controlsRecipes, '<Textarea />', {}],
-    ['Slider', controlsRecipes, '<Slider />', {}],
-    ['Switch', controlsRecipes, '<Switch />', {}],
-    ['DatePicker', controlsRecipes, '<DatePicker />', {}],
-    ['Segmented', controlsRecipes, '<Segmented options={["S","M"]} />', { options: ['S','M'] }],
-    ['User', peopleRecipes, '<User userId="u1" />', { userId: 'u1' }],
-    ['UserHandle', peopleRecipes, '<UserHandle userId="u1" />', { userId: 'u1' }],
-    ['UserImage', peopleRecipes, '<UserImage userId="u1" />', { userId: 'u1' }],
-    ['SignIn', peopleRecipes, '<SignIn />', {}],
-    ['Files', filesRecipes, '<Files />', {}],
-    ['Mermaid', mermaidRecipes, '<Mermaid code="graph TD; A--\x3eB" />', { code: 'graph TD; A-->B' }],
+  // The compiler writes RECIPES[tag](props) onto the served root before hydration; the live component then
+  // draws its own root class. They must agree, or the root's class flips on hydration.
+  const flat = (value: string | null | undefined) => (value ?? '').split(/\s+/).filter(Boolean).sort().join(' ');
+  // `authored`: the live root also merges an author class the way the recipe does. UserHandle and SignIn resolve
+  // a conflicting colour differently, and Files draws no author class, so only their default class is compared.
+  type Case = [string, Record<string, (p: Record<string, unknown>) => string>, (p: Record<string, unknown>) => import('solid-js').JSX.Element, Record<string, unknown>, authored?: false];
+  const island = () => { const i = fakeIsland(); i.people = () => ({ u1: { id: 'u1', name: 'Ada', handle: 'ada', image: null } as never }); return i; };
+  const cases: Case[] = [
+    ['Input', controlsRecipes, (p) => <Input {...p} />, {}],
+    ['Textarea', controlsRecipes, (p) => <Textarea {...p} />, {}],
+    ['Slider', controlsRecipes, (p) => <Slider {...p} />, {}],
+    ['Switch', controlsRecipes, (p) => <Switch {...p} />, {}],
+    ['DatePicker', controlsRecipes, (p) => <DatePicker {...p} />, {}],
+    ['Segmented', controlsRecipes, (p) => <Segmented {...p as { options: string[] }} />, { options: ['S', 'M'] }],
+    ['Input number', controlsRecipes, (p) => <Input {...p} />, { type: 'number' }],
+    ['User', peopleRecipes, (p) => <User {...p as { userId: string }} />, { userId: 'u1' }],
+    ['UserHandle', peopleRecipes, (p) => <UserHandle {...p as { userId: string }} />, { userId: 'u1' }, false],
+    ['SignIn', peopleRecipes, (p) => <SignIn {...p} />, {}, false],
+    ['Files', filesRecipes, (p) => <Files {...p} />, {}, false],
+    ['Files tiles', filesRecipes, (p) => <Files {...p} />, { variant: 'tiles' }, false],
+    ['Mermaid', mermaidRecipes, (p) => <Mermaid {...p as { code: string }} />, { code: 'graph TD; A-->B' }],
   ];
-  const variants: [string, Record<string, (p: Record<string, unknown>) => string>, string, Record<string, unknown>][] = [
-    ['Input number', controlsRecipes, '<Input type="number" />', { type: 'number' }],
-    ['User fallback', peopleRecipes, '<User fallback="Nobody" />', { fallback: 'Nobody' }],
-    ['UserImage large', peopleRecipes, '<UserImage userId="u1" size="lg" />', { userId: 'u1', size: 'lg' }],
-    ['Files tiles', filesRecipes, '<Files variant="tiles" />', { variant: 'tiles' }],
-    ['Mermaid dark', mermaidRecipes, '<Mermaid code="graph TD; A--\x3eB" colorMode="dark" />', { code: 'graph TD; A-->B', colorMode: 'dark' }],
-  ];
-  for (const [label, recipes, markup, props] of [...cases, ...variants]) {
-    const tag = label.split(' ')[0];
-    it(`${tag} root recipe matches today's default and authored class`, () => {
-      const rendered = shapeOf(reactRender(markup))[0];
-      expect(recipes[tag]?.(props).split(/\s+/).sort().join(' ')).toBe(rendered?.attrs.class);
-      const authored = markup.replace(' />', ' className="text-red-500" />');
-      expect(recipes[tag]?.({ ...props, className: 'text-red-500' }).split(/\s+/).sort().join(' '))
-        .toBe(shapeOf(reactRender(authored))[0]?.attrs.class);
+  for (const [label, recipes, view, props, authored] of cases) {
+    const tag = label.split(' ')[0]!;
+    it(`${label}: the compile-time root class is the class the live component renders`, () => {
+      for (const extra of authored === false ? [{}] : [{}, { className: 'text-red-500' }]) {
+        const { host, dispose } = mount(island(), () => view({ ...props, ...extra }));
+        try { expect(flat(recipes[tag]?.({ ...props, ...extra }))).toBe(flat(host.firstElementChild?.getAttribute('class'))); } finally { dispose(); }
+      }
     });
   }
 });
