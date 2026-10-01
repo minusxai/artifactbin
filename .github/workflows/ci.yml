@@ -186,8 +186,6 @@ jobs:
         run: npx playwright install chromium
       - if: matrix.shard == 1
         run: docker pull postgres:17-alpine
-      - if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
-        run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
         run: node scripts/ci.mjs node ${{ matrix.shard }}/8
@@ -204,9 +202,13 @@ jobs:
         run: npm run test:integration
       # The lightest shard: shard 1 already carries the browser, Docker and integration steps,
       # and together they overran its time budget.
+      # The suite needs the server reader and the island build (preview serves the compiled reader),
+      # not the full `npm run build -w services/cli` (SPA, runtime, host bundles: 67s here). The
+      # Vitest run above already built both through its global setup, so these are cache hits.
       - name: CLI source suite on the release runtime
         if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
         run: |
+          (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build-islands.mjs --cache)
           node services/cli/scripts/fetch-runtime.mjs
           PATH="$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node:$PATH" npm test -w services/cli
 
@@ -391,7 +393,9 @@ jobs:
       # No `--with-deps`, hit or miss: ubuntu-latest already ships Chromium's libraries, and the apt
       # pass on a miss cost 135s on api shard 6 of run 36867180747. A miss now costs the download.
       - run: npx playwright install chromium
-      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/12
+      # Files are packed by measured time (scripts/lib/timed-sequencer.mjs), not by count, and the
+      # api project shares one module graph per worker; the files that mock modules run isolated.
+      - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/12
 
   # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
   # the same bytes, twelve times over, in a job that already had to wait for nothing. Rather than

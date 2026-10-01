@@ -696,19 +696,22 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/8)');
     expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/8');
   });
-  it('builds the CLI only on the shard that runs its source suite', () => {
+  it('runs the CLI source suite on the reader and island builds, never the full CLI build', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    const builds = jobs.node.steps.filter(step => step.run === 'npm run build -w services/cli');
-    expect(builds).toHaveLength(1);
-    expect(builds[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
-    expect(jobs.node.steps.indexOf(builds[0])).toBeLessThan(jobs.node.steps.findIndex(step => (step.run ?? '').includes('npm test -w services/cli')));
+    expect(jobs.node.steps.filter(step => (step.run ?? '').includes('npm run build -w services/cli'))).toHaveLength(0);
+    const suite = jobs.node.steps.find(step => (step.run ?? '').includes('npm test -w services/cli'));
+    expect(suite.if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
+    const prepare = suite.run.indexOf('build-islands.mjs --cache');
+    expect(suite.run.indexOf('build-server-reader.mjs --cache')).toBeGreaterThan(-1);
+    expect(prepare).toBeGreaterThan(-1);
+    expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
   });
   it('spreads the API test files over twelve shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
     expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/12)');
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
-      .toBe('npx vitest run --project=api --shard=${{ matrix.shard }}/12');
+      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/12');
   });
 });
 
@@ -926,7 +929,8 @@ describe('the build cache key covers every build input and nothing a build canno
       expect(isBuildInput(path), path).toBe(true);
     }
     for (const path of ['services/app/__tests__/boot-env.test.ts', 'services/app/lib/islands/__tests__/one-tree.ui.test.ts',
-      'scripts/gate-editor-v2.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md']) {
+      'scripts/gate-editor-v2.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md',
+      'scripts/test-timings.json', 'scripts/test-timings.mjs', 'scripts/lib/timed-sequencer.mjs']) {
       expect(isBuildInput(path), path).toBe(false);
     }
   });

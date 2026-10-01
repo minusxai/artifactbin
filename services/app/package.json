@@ -10,7 +10,7 @@
     "build:islands": "node ../../scripts/build-islands.mjs",
     "generate:routes": "node scripts/generate-routes.mjs",
     "test": "vitest run --config ../../vitest.config.ts --project=api && vitest run --config ../../vitest.config.ts --project=node && vitest run --config ../../vitest.config.ts --project=ui && vitest run --config ../../vitest.config.ts --project=islands",
-    "test:api": "vitest run --config ../../vitest.config.ts --project=api",
+    "test:api": "vitest run --config ../../vitest.config.ts --project=api --project=api-isolated",
     "test:node": "vitest run --config ../../vitest.config.ts --project=node",
     "test:ui": "vitest run --config ../../vitest.config.ts --project=ui",
     "test:islands": "vitest run --config ../../vitest.config.ts --project=islands",

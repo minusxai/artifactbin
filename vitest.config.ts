@@ -1,7 +1,9 @@
+import { globSync, readFileSync } from 'node:fs';
 import path from 'path';
 import { defineConfig } from 'vitest/config';
 import solid from 'vite-plugin-solid';
 import yaml from '@rollup/plugin-yaml';
+import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 
 // The CLI's generated teaching is produced by the global setup (and by `npm test` before Vitest
 // starts), behind a content-verified cache, not on every config load.
@@ -28,6 +30,18 @@ const SERVER_BOOT_TESTS = [
   'scripts/__tests__/cli-install.test.mjs',
 ];
 
+const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];
+const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))];
+/**
+ * The api files that replace modules (`vi.mock`/`vi.doMock`). A module mock lives in the worker's
+ * module graph, so without isolation it would leak into every later file on that worker; these run
+ * in `api-isolated`, one fresh graph per file. Every other api file shares one graph per worker
+ * (`api`, isolate: false). Found by reading the files, so a new mock moves its file by itself.
+ */
+const API_MOCKING = globSync(API_INCLUDE, { cwd: import.meta.dirname, exclude: API_EXCLUDE })
+  .filter((file) => /\bvi\.(?:mock|doMock)\(/.test(readFileSync(path.join(import.meta.dirname, file), 'utf8')))
+  .map((file) => file.split(path.sep).join('/'));
+
 export default defineConfig({
   root: import.meta.dirname,
   plugins: [yaml()],
@@ -39,6 +53,8 @@ export default defineConfig({
   test: {
     globals: true,
     experimental: { fsModuleCache: true },
+    // `--shard` packs files by measured CI time (scripts/test-timings.json), not by count.
+    sequence: { sequencer: TimedSequencer },
     testTimeout: 45_000,
     hookTimeout: 45_000,
     // The SSR'd document needs the prebuilt story runtime, which is a
@@ -67,8 +83,22 @@ export default defineConfig({
         test: {
           name: 'api',
           environment: 'node',
-          include: ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'],
-          exclude: ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))],
+          // One module graph per worker, not per file: re-importing the app for each of ~260 files
+          // was a third of every api shard. The harness gives each file a fresh database (restored
+          // from the worker's schema snapshot, lib/db) and resets the rate limiter, so files stay
+          // independent; a file that leaves process-level state behind must clean it up itself.
+          isolate: false,
+          include: API_INCLUDE,
+          exclude: [...API_EXCLUDE, ...API_MOCKING],
+          setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'api-isolated',
+          environment: 'node',
+          include: API_MOCKING,
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
       },

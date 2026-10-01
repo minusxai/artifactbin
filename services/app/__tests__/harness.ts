@@ -11,6 +11,8 @@ import { resetRateLimit } from '@/lib/auth';
 import { EVENTS_SCHEMA } from '@/lib/config';
 import { AUTH_SECRET } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
+import { resetExportRenderer } from '@/lib/export';
+import { services } from '@/lib/services';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
 import { drainSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
@@ -106,6 +108,18 @@ export function cookieValue(response: Response, name: string = AGENT_COOKIE): { 
   return { value: null, cleared: false };
 }
 
+/**
+ * Let a write's fire-and-forget work land before a test counts its own queries: the events writer's
+ * lazy schema setup and insert, and the analytics row. Waits for the writer's setup, lets every queued
+ * continuation run, then passes one statement through the database's serialized queue, so anything
+ * already sent has finished.
+ */
+export async function settleBackgroundWrites(): Promise<void> {
+  await (services().events as { drain?: () => Promise<void> }).drain?.();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await (await getDb()).query('SELECT 1');
+}
+
 export interface AppHarness {
   /** The one open database of this file — an escape hatch for tests whose behaviour includes a direct row assertion. */
   db(): ReturnType<typeof getDb>;
@@ -149,6 +163,9 @@ export function useAppHarness(): AppHarness {
   afterAll(async () => {
     await drainPreparedPageWarmups();
     await drainSnapshotRevalidations();
+    // The export cache holds the database it was opened on; the next file on this worker (the api
+    // project shares one module graph per worker) must open its own, not reuse a closed one.
+    await resetExportRenderer();
     database = undefined;
     await resetDb();
   });

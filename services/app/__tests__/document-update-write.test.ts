@@ -2,7 +2,7 @@ import {createUser} from '@/lib/users';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document-authoring-context';
 import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/story/document-update-history';
 import {expect,it,vi} from 'vitest';
-import {useAppHarness,request} from './harness';
+import {useAppHarness,request,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
 import {getArtifactById,editorScope} from '@/lib/artifacts';
@@ -17,6 +17,8 @@ async function setup(){
  const res=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>'}}));expect(res.status).toBe(201);
  const {id}=await res.json(),db=await getDb(),row=(await getArtifactById(id))!;
  const document=(await db.query<{document:DocumentGraph}>('SELECT document FROM artifacts WHERE id=$1',[id])).rows[0]!.document;
+ // The create's telemetry must not land inside a test's count of its own statements.
+ await settleBackgroundWrites();
  return {db,actor,id,row,base:{document,version:row.version,meta:row.meta}};
 }
 it('checks permissions, mutates JSONB and records compact history in one query',async()=>{
