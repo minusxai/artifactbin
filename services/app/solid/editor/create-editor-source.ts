@@ -59,6 +59,9 @@ export interface EditorSourceOptions {
   commitPending: () => Promise<void>;
 }
 
+/** How long typing rests before the `source` signal follows it. */
+export const SOURCE_REST_MS = 600;
+
 export function createEditorSource(o: EditorSourceOptions): EditorSource {
   let current = o.initial;
   const [source, setSource] = createSignal(current);
@@ -67,16 +70,29 @@ export function createEditorSource(o: EditorSourceOptions): EditorSource {
   const [canUndo, setCanUndo] = createSignal(false);
   const [canRedo, setCanRedo] = createSignal(false);
   const syncHistory = () => { setCanUndo(history.canUndo); setCanRedo(history.canRedo); };
-  const set = (next: string) => { current = next; setSource(next); };
+  /**
+   * Typing moves `current` at once (every edit composes against it) but the `source` signal only once typing
+   * rests: what reads it (title, tables, query cells, settings) parses the whole document, which is not the
+   * keystroke's work. Anything else publishes at once.
+   */
+  let resting: ReturnType<typeof setTimeout> | null = null;
+  const publish = () => { if (resting !== null) clearTimeout(resting); resting = null; setSource(current); };
+  const set = (next: string, typing = false) => {
+    current = next;
+    if (!typing) { publish(); return; }
+    if (resting !== null) clearTimeout(resting);
+    resting = setTimeout(publish, SOURCE_REST_MS);
+  };
 
   const apply: EditorSource['apply'] = (next, how) => {
     if (next === current) return;
     const annotationOps = how.selection?.annotationOperation ? [how.selection.annotationOperation] : undefined;
     history.record(current, next, { group: how.group, before: how.selection?.before, after: how.selection?.after, annotationOps });
     syncHistory();
-    set(next);
+    const typing = how.origin === 'local' && !!how.group?.startsWith('typing:');
+    set(next, typing);
     o.live.queue(annotationOps ? { source: next, annotationOps } : { source: next });
-    if (how.redraw) o.draw(next, undefined, how.origin === 'local' && how.group?.startsWith('typing:') ? { typing: true } : undefined);
+    if (how.redraw) o.draw(next, undefined, typing ? { typing: true } : undefined);
   };
 
   const replaceFromRemote: EditorSource['replaceFromRemote'] = (next, editId) => {

@@ -261,32 +261,32 @@ describe('markdown block shortcuts', () => {
     const e = editor('<p id="a" className="mt-6 text-lg">Title</p>');
     e.caret('start');
     e.type(`${'#'.repeat(level)} `);
-    expect(e.store.source()).toBe(`<h${level} id="a">Title</h${level}>`);
+    expect(e.store.current()).toBe(`<h${level} id="a">Title</h${level}>`);
     expect(e.view.container.querySelector(`h${level}#a`)!.textContent).toBe('Title');
     e.type('New ');
-    expect(e.store.source()).toBe(`<h${level} id="a">New Title</h${level}>`);
+    expect(e.store.current()).toBe(`<h${level} id="a">New Title</h${level}>`);
   });
 
   it.each([['* ', 'ul'], ['- ', 'ul'], ['1. ', 'ol']])('turns "%s" at the start of a paragraph into a %s item, keeping the paragraph\'s identity', (prefix, list) => {
     const e = editor('<p id="a" className="mt-6">item</p>');
     e.caret('start');
     e.type(prefix);
-    expect(e.store.source()).toMatch(new RegExp(`^<${list} id="${ID}"><li id="${ID}"><p id="a">item</p></li></${list}>$`));
+    expect(e.store.current()).toMatch(new RegExp(`^<${list} id="${ID}"><li id="${ID}"><p id="a">item</p></li></${list}>$`));
     expect(e.view.container.querySelector(`${list} > li > p#a`)!.textContent).toBe('item');
   });
 
   it('restores the literal prefix with one undo, then redoes the conversion', async () => {
     const e = editor('<p id="a" className="lead"></p>');
     e.type('## ');
-    expect(e.store.source()).toBe('<h2 id="a"></h2>');
+    expect(e.store.current()).toBe('<h2 id="a"></h2>');
     expect((await e.store.undo()).ok).toBe(true);
-    expect(e.store.source()).toBe('<p id="a" className="lead">## </p>');
+    expect(e.store.current()).toBe('<p id="a" className="lead">## </p>');
     expect((await e.store.redo()).ok).toBe(true);
-    expect(e.store.source()).toBe('<h2 id="a"></h2>');
+    expect(e.store.current()).toBe('<h2 id="a"></h2>');
     const e2 = editor('<p id="b"></p>');
     e2.type('- ');
     await e2.store.undo();
-    expect(e2.store.source()).toBe('<p id="b">- </p>');
+    expect(e2.store.current()).toBe('<p id="b">- </p>');
   });
 
   it('continues a list on Enter and leaves it on Enter in an empty item', () => {
@@ -298,7 +298,7 @@ describe('markdown block shortcuts', () => {
     expect(e.view.container.querySelectorAll('ul > li')).toHaveLength(3);
     e.enter();
     e.type('after');
-    const source = e.store.source();
+    const source = e.store.current();
     expect(source).toMatch(new RegExp(`^<ul id="${ID}"><li id="${ID}"><p id="a">one</p></li><li id="${ID}"><p id="${ID}">two</p></li></ul><p id="${ID}">after</p>$`));
     expect(new Set(source.match(/id="[^"]+"/g)).size).toBe(source.match(/id="[^"]+"/g)!.length);
     const items = e.view.container.querySelectorAll('ul > li');
@@ -311,7 +311,7 @@ describe('markdown block shortcuts', () => {
     e.type('1. first');
     e.enter();
     e.type('second');
-    expect(e.store.source()).toMatch(new RegExp(`^<ol id="${ID}"><li id="${ID}"><p id="a">first</p></li><li id="${ID}"><p id="${ID}">second</p></li></ol>$`));
+    expect(e.store.current()).toMatch(new RegExp(`^<ol id="${ID}"><li id="${ID}"><p id="a">first</p></li><li id="${ID}"><p id="${ID}">second</p></li></ol>$`));
   });
 
   it('keeps the converted source through save and reload', () => {
@@ -320,7 +320,7 @@ describe('markdown block shortcuts', () => {
     e.type('### Results');
     e.v().dispatch(e.v().state.tr.setSelection(TextSelection.atEnd(e.v().state.doc)));
     e.type('* point');
-    const saved = e.store.source();
+    const saved = e.store.current();
     const parsed = nodes(saved);
     expect(serializeJsx(sourceNodes(editorDocument(parsed)))).toBe(saved);
     const reloaded = render(() => <FlowEditor nodes={parsed} path="0" onChange={() => {}} />);
@@ -332,20 +332,20 @@ describe('markdown block shortcuts', () => {
   it('types the marker literally inside code, mid-prose, inside lists, for other markers and while composing', () => {
     const code = editor('<pre id="c"></pre>');
     code.type('# x');
-    expect(code.store.source()).toBe('<pre id="c"># x</pre>');
+    expect(code.store.current()).toBe('<pre id="c"># x</pre>');
     const prose = editor('<p id="a">hello</p>');
     prose.caret('end');
     prose.type(' # - 1. x');
-    expect(prose.store.source()).toBe('<p id="a">hello # - 1. x</p>');
+    expect(prose.store.current()).toBe('<p id="a">hello # - 1. x</p>');
     const listed = editor('<ul id="u"><li id="l"><p id="a"></p></li></ul>');
     listed.type('# x');
-    expect(listed.store.source()).toBe('<ul id="u"><li id="l"><p id="a"># x</p></li></ul>');
+    expect(listed.store.current()).toBe('<ul id="u"><li id="l"><p id="a"># x</p></li></ul>');
     const other = editor('<p id="a"></p>');
     other.type('#tag 2. ####### +');
-    expect(other.store.source()).toBe('<p id="a">#tag 2. ####### +</p>');
+    expect(other.store.current()).toBe('<p id="a">#tag 2. ####### +</p>');
     const composing = editor('<p id="a"></p>');
     fireEvent.compositionStart(composing.view.getByRole('textbox'));
     composing.type('# ');
-    expect(composing.store.source()).toBe('<p id="a"># </p>');
+    expect(composing.store.current()).toBe('<p id="a"># </p>');
   });
 });
