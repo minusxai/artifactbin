@@ -28,6 +28,9 @@ const DECK_DOM = '<nav class="mx-rail"><button class="mx-rail-row"><span class="
   + '<button class="mx-rail-row"><span class="mx-rail-label"><span class="mx-rail-title">Two</span></span></button></nav>'
   + '<section data-mx-ast="0"><div data-mx-ast="0.0"><p data-mx-ast="0.0.0">One</p></div><div data-mx-ast="0.1"><p data-mx-ast="0.1.0">Two</p></div></section>';
 
+// jsdom has no layout. ProseMirror measures the caret to scroll to it when a remounted editor takes focus.
+Object.assign(Range.prototype, { getClientRects: () => [], getBoundingClientRect: () => new DOMRect() });
+
 let session: FrameEditSession | null = null;
 let root: HTMLElement | null = null;
 
@@ -192,6 +195,31 @@ describe('edit session', () => {
     const native = window.getSelection()!;
     expect(native.anchorNode?.textContent).toBe('### ');
     expect(native.anchorOffset).toBe(4);
+  });
+
+  it('keeps a caret the person moved after Undo/Redo when the next draft is drawn', async () => {
+    const frame = () => new Promise((r) => setTimeout(r, 40));
+    const { root } = await open('<div><p id="x">alpha bravo</p></div>', '<div data-mx-ast="0"><p id="x" data-mx-ast="0.0">alpha bravo</p></div>');
+    const editor = root.querySelector<HTMLElement>('.ProseMirror')!;
+    editor.focus();
+    await frame();
+    session!.onParentMessage({ type: STORY_COMMIT_MESSAGE, restore: { anchor: { id: 'x', offset: 11 }, head: { id: 'x', offset: 11 } } });
+    await frame();
+    // The person selects "alpha" before the undo's draft is drawn 
+    const text = root.querySelector('p#x')!.firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 5);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+    await frame();
+    session!.unmountCompiledDom();
+    root.innerHTML = '<div data-mx-ast="0"><p id="x" data-mx-ast="0.0">alpha bravo</p></div>';
+    await session!.mountCompiledDom();
+    await frame();
+    const native = getSelection()!;
+    expect([native.anchorOffset, native.focusOffset]).toEqual([0, 5]);
   });
 });
 

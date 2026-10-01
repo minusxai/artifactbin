@@ -156,10 +156,13 @@ export function createFrameEditSession({
    * it back. Typing first lets the person's own caret win.
    */
   let historyBookmark: EditorBookmark | undefined;
+  /** Where that target landed in the stale draft: moving the caret from there afterwards is the person's own choice. */
+  let historyLanded: string | undefined;
   const restorePending = () => {
     if (pendingBookmark)
       for (const view of views.all)
         if (restoreBookmark(view, pendingBookmark)) {
+          if (historyBookmark) historyLanded = JSON.stringify(captureBookmark(view.state));
           pendingBookmark = undefined;
           break;
         }
@@ -310,9 +313,10 @@ export function createFrameEditSession({
       const focused = [...views.all].find((view) => view.hasFocus()) ?? (toolbarFocus ? views.last : null);
       // An explicit Undo/Redo target may name blocks that do not exist in the
       // currently painted draft. Keep it until the replacement DOM is mounted.
-      if (historyBookmark) pendingBookmark = historyBookmark;
-      else if (focused && !pendingBookmark) pendingBookmark = captureBookmark(focused.state);
-      historyBookmark = undefined;
+      const caret = focused ? captureBookmark(focused.state) : undefined;
+      if (historyBookmark && (historyLanded === undefined || historyLanded === JSON.stringify(caret))) pendingBookmark = historyBookmark;
+      else if (caret && !pendingBookmark) pendingBookmark = caret;
+      historyBookmark = historyLanded = undefined;
       compiledMount?.dispose(); compiledMount = null;
       views.all.clear();
     },
@@ -322,7 +326,7 @@ export function createFrameEditSession({
       compiledMount?.dispose();
       compiledMount = mountCompiled(root, nodes, {
         onFlow(path, expected, replacement, group, change) {
-          historyBookmark = undefined;
+          historyBookmark = historyLanded = undefined;
           post({ type: STORY_FLOW_EDIT_MESSAGE, path, expected, replacement, group, selection: change });
         },
         onLayout(rects) { post({ type: STORY_LAYOUT_EDIT_MESSAGE, rects }); },
