@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/MarkdownPasteDialog.tsx in SOLID — behavioral coverage. The React
+ * Behavioral coverage. The React
  * component had no dedicated test file (only the toolbar button that opens it, owned
  * elsewhere); this covers the dialog's own contract directly.
  */

@@ -8,7 +8,7 @@
  * form whose `<input placeholder="What was it for?">` and
  * `<input type="number">` rendered as floating placeholder text beside a fully
  * framed `<DatePicker>` and a `<Button>`. `<Input>`/`<Textarea>`
- * (components/kit/controls.tsx) are the answer for new markup; this is the
+ * are the answer for new markup; this is the
  * floor under the pages that already exist, applied on their next render.
  *
  * It inherits the typography floor's safety property verbatim

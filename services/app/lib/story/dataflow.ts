@@ -300,7 +300,7 @@ export const REF_ATTRS: {
     DeckGL: { data: 'table' },
     // A folder's listing, bound to the children table its <Query> reads.
     Files: { data: 'table' },
-    // The kit CONTROL components (components/kit/controls.tsx): the same
+    // The kit CONTROL components: the same
     // two-way scalar bindings the native controls carry, in themed chrome.
     // `options` is a table exactly like `<select options>` (column 1 the
     // value, column 2 the label when present).
@@ -320,7 +320,7 @@ export const REF_ATTRS: {
     Button: { run: 'mutation' },
     Dialog: {open: 'scalar'},
     DialogContent: {run: 'mutation'},
-    // A person (components/kit/user.tsx), and the two halves they are made of
+    // A person, and the two halves they are made of
     // — the face (user-image.tsx) and the handle (user-handle.tsx). `userId`
     // READS its reference and never writes it back, which is what lets the
     // viewer's own `$_me.id` sit there (lib/story/builtins READ_ONLY_REF_ATTRS).

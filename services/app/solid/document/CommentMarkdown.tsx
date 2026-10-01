@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/MarkdownLite + components/MarkdownField in SOLID.
+ *
  *
  * READING: the parsed markdown-lite tree as elements, and only elements — the parser refuses raw
  * HTML, so what an agent wrote reaches the app's origin as characters. Prose takes the sans face;

@@ -10,7 +10,7 @@
  * helpers so neither consumer can clobber the other. Per-visit is the ceiling,
  * not a choice: a returning reader starts at the author's default again.
  *
- * React-free on purpose: this ships in anchor-entry (~1.5 KB, loaded by every
+ * Framework-free on purpose: this ships in anchor-entry (~1.5 KB, loaded by every
  * document, hydrating or not) and is also imported by the runtime entry.
  */
 import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
@@ -77,8 +77,30 @@ export function takeReloadAnchor(win: Window): ScrollAnchor | null {
   return anchor && typeof anchor.path === 'string' && typeof anchor.fraction === 'number' ? anchor : null;
 }
 
-/** Flip the mode classes on the document element (mirrors document-update's stamp). */
-export function applyReaderMode(doc: Document, mode: 'light' | 'dark'): void {
-  doc.documentElement.classList.toggle('dark', mode === 'dark');
-  doc.documentElement.classList.toggle('light', mode !== 'dark');
+/**
+ * THE ONE COLOUR-MODE WRITER. The rule every surface used to re-decide lives here: the reader's own
+ * choice beats the author's mode; with no choice the author's applies (a new version's `colorMode`
+ * restyles the page); with neither, what was drawn stays. The mode is the `light`/`dark` class pair
+ * on the element (the document element, or the story root lib/compiled-page/story-element stamps).
+ */
+export function applyColorMode(
+  el: Element | null | undefined,
+  reader: 'light' | 'dark' | null | undefined,
+  author?: 'light' | 'dark' | null,
+): void {
+  const mode = reader ?? author;
+  if (!el || !mode) return;
+  el.classList.toggle('dark', mode === 'dark');
+  el.classList.toggle('light', mode !== 'dark');
+}
+
+/**
+ * The app shell's stored preference: `data-theme` on the document element and `mx_theme` in storage,
+ * the key lib/theme-bootstrap's pre-paint stamp reads. Storage throws in private mode and at a
+ * served document's opaque origin; the stamp still lands.
+ */
+export function chooseTheme(mode: 'light' | 'dark', doc: Document = document): void {
+  if (mode === 'dark') doc.documentElement.dataset.theme = 'dark';
+  else delete doc.documentElement.dataset.theme;
+  try { doc.defaultView?.localStorage.setItem('mx_theme', mode); } catch { /* private mode */ }
 }

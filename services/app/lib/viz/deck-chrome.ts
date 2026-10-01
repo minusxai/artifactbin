@@ -1,12 +1,12 @@
 /**
- * The `<DeckGL>` map's chrome — its classes and attribution line — shared by today's engine
- * (components/kit/deck-gl-engine), the compiled page's island shell and engine (lib/islands/kit/embed).
+ * The `<DeckGL>` map's chrome — its classes and attribution line — shared by the engine and
+ * the compiled page's island shell (lib/islands/kit/embed).
  * A leaf module: the island shell reads the figure class without loading deck.gl. Its class literals
  * are a story class source (scripts/generate-story-ui-classes EXTRA_CLASS_SOURCES).
  */
 /** The map's chrome classes, shared by both views (Tailwind candidates stay in one place). */
 export const MAP_CLASSES = {
-  /** The box before the engine lands (components/kit/deck-gl's stand-in), then the map's figure. */
+  /** The box before the engine lands, then the map's figure. */
   loading: 'w-full rounded-md bg-muted',
   figure: 'relative w-full overflow-hidden rounded-md',
   controls: 'absolute right-2 top-2 flex flex-col divide-y divide-border overflow-hidden rounded-md border border-border shadow-sm',

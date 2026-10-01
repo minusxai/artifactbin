@@ -69,70 +69,51 @@ describe('OSS single-host ownership', () => {
 });
 
 /**
- * THE APPLICATION IS BUILT ONCE PER RUN. Every gate shard used to run `npm run build` and
- * `npm run build -w services/cli` for itself — the same bytes, six times over. The `build` job
- * already produces them, so it uploads them and the shards download them instead.
+ * NO GATE WAITS FOR THE `build` JOB. The shards used to poll it and download its artifact, which put
+ * the CLI's host runtime and type declarations (no gate reads either) on every run's critical path.
+ * Each shard now builds what it runs, in the background while it provisions browsers.
  */
-describe('ci.yml: one build, shared with the gates', () => {
-  it('uploads the build from `build` and downloads it in `gates`, which rebuilds nothing', () => {
-    // `gates` no longer sits behind `build` in the `needs` graph — it starts as soon as `plan`
-    // does, and its own steps (checkout, install, Playwright, sandbox prep) run while `build` is
-    // still assembling the artifact. It still cannot use that artifact before `build` has produced
-    // it, so it polls `build`'s status from the Actions API instead: a real dependency, just not
-    // one that stalls this job's own setup behind it.
+describe('ci.yml: the gates build what they run, off the build job', () => {
+  it('starts the gate build in the background and waits on it, never on `build`', () => {
     expect(ci.jobs.gates.needs).toEqual(['plan']);
-    const wait = ci.jobs.gates.steps.find((step) => step.name === 'Wait for the build job');
-    expect(wait?.run).toContain('.name == "build"');
-    expect(wait?.run).toContain('completed success');
-    const upload = ci.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-artifact'));
-    expect(upload?.with?.name).toBe('app-build');
-    // The whole of what `npm run build` (and the CLI's) writes: the SPA, compiled reader and
-    // its public assets, the generated route table, the bundled server the gates boot, the CLI.
-    const uploaded = String(upload?.with?.path ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
-    expect(uploaded).toEqual(expect.arrayContaining([
-      'dist',
-      'services/app/dist',
-      'services/app/lib/build-assets',
-      'services/app/public/islands',
-      'services/app/public/libraries',
-      'services/app/server/routes.generated.ts',
-      'services/cli/dist',
-    ]));
-    // The CLI build also assembles the host runtime `afbin serve` ships — 154 MB of directory and
-    // a 39 MB archive of the same bytes, next to 4 MB of bundle. No gate boots it (they run
-    // dist/server.mjs), so it must not ride along six downloads.
-    expect(uploaded.filter((line) => line.startsWith('!'))).toEqual(expect.arrayContaining([
-      '!services/cli/dist/runtime',
-      '!services/cli/dist/runtime/**',
-      '!services/cli/dist/afbin-runtime-*.gz',
-    ]));
-    // Vite writes the SPA manifest to `dist/web/.vite/manifest.json`, and the server resolves every
-    // hashed asset through it; upload-artifact drops dotfiles unless this is set.
-    expect(upload?.with?.['include-hidden-files']).toBe(true);
-    const download = ci.jobs.gates.steps.find((step) => step.uses?.startsWith('actions/download-artifact'));
-    expect(download?.with?.name).toBe('app-build');
-    // The wait blocks the download, not this job's own setup: it comes after everything that needs
-    // nothing from `build`, and before the one step that does.
-    expect(ci.jobs.gates.steps.indexOf(wait)).toBeGreaterThan(0);
-    expect(ci.jobs.gates.steps.indexOf(wait)).toBeLessThan(ci.jobs.gates.steps.indexOf(download));
-    for (const command of ['npm run build', 'npm run build -w services/cli']) {
-      expect(ci.jobs.gates.steps.map((step) => step.run), command).not.toContain(command);
+    const steps = ci.jobs.gates.steps;
+    for (const step of steps) {
+      expect(String(step.uses ?? '')).not.toMatch(/^actions\/download-artifact@/);
+      expect(String(step.run ?? '')).not.toContain('.name == "build"');
     }
-    // A build of these exact sources already cached skips the wait and the download: the shard
-    // restores the entry `build` saved, under the same key and paths, and never writes one itself.
+    expect(ci.jobs.build.steps.some((step) => String(step.uses ?? '').startsWith('actions/upload-artifact'))).toBe(false);
+    const start = steps.find((step) => step.name === 'Build the app, server and CLI bundle in the background');
+    const wait = steps.find((step) => step.name === "Wait for this shard's build");
+    // Every stream redirected and the group backgrounded, or the runner holds the step open until it ends.
+    expect(start?.run).toContain('node scripts/build-gate-inputs.mjs');
+    expect(start?.run).toMatch(/< \/dev\/null > \/dev\/null 2>&1 &\s*$/);
+    expect(wait?.run).toContain('gate-build.status');
+    const at = (name) => steps.findIndex((step) => step.name === name);
+    // Overlapped: after the install and the island restore, before every provisioning step it overlaps.
+    const restore = steps.findIndex((step) => String(step.with?.key ?? '').startsWith('test-builds-v1-'));
+    expect(restore).toBeGreaterThan(-1);
+    expect(steps.indexOf(start)).toBeGreaterThan(restore);
+    expect(steps.indexOf(start)).toBeLessThan(at('Install selected gate browsers'));
+    expect(steps.indexOf(wait)).toBeGreaterThan(at('Prepare isolated browser session workers'));
+    expect(steps.indexOf(wait)).toBeLessThan(at('every gate, two servers'));
+    for (const command of ['npm run build', 'npm run build -w services/cli']) {
+      expect(steps.map((step) => step.run), command).not.toContain(command);
+    }
+    // A build of these exact sources already cached skips building: the shard restores the entry
+    // `build` saved, under the same key and paths, and never writes one itself.
     const save = ci.jobs.build.steps.find((step) => step.id === 'build-cache');
-    const restore = ci.jobs.gates.steps.find((step) => step.id === 'build-cache');
+    const cached = steps.find((step) => step.id === 'build-cache');
     expect(save?.uses).toMatch(/^actions\/cache@/);
-    expect(restore?.uses).toMatch(/^actions\/cache\/restore@/);
-    expect(restore.with).toEqual(save.with);
+    expect(cached?.uses).toMatch(/^actions\/cache\/restore@/);
+    expect(cached.with).toEqual(save.with);
     expect(save.with['restore-keys']).toBeUndefined();
     expect(save.with.key).toContain('steps.build-key.outputs.key');
     for (const job of [ci.jobs.build, ci.jobs.gates]) {
       expect(job.steps.find((step) => step.id === 'build-key')?.run).toBe('node scripts/ci.mjs build-key');
     }
     const miss = "steps.build-cache.outputs.cache-hit != 'true'";
+    expect(start.if).toBe(miss);
     expect(wait.if).toBe(miss);
-    expect(download.if).toBe(miss);
     for (const command of ['npm run build -w services/cli', 'node scripts/build-server.mjs dist/server.mjs']) {
       expect(ci.jobs.build.steps.find((step) => step.run === command)?.if, command).toBe(miss);
     }
@@ -142,8 +123,11 @@ describe('ci.yml: one build, shared with the gates', () => {
         if (step.with?.path === '~/.cache/ms-playwright') expect(step.with.key, name).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
       }
     }
-    // The build the CLI job would repeat is still its own; only the gates read this artifact.
-    expect(ci.jobs.build.steps.map((step) => step.run)).toContain('npm run build -w services/cli');
+  });
+  it('builds the gate inputs with the CLI bundle options, not a second bundle definition', () => {
+    const source = readFileSync(path.join(root, 'scripts/build-gate-inputs.mjs'), 'utf8');
+    expect(source).toContain("from '../services/cli/scripts/bundle-options.mjs'");
+    expect(source).toContain("execFileSync('npm', ['run', 'build']");
   });
   it('builds the app once through the CLI host and still bundles the gate server', () => {
     const commands = ci.jobs.build.steps.map((step) => step.run);

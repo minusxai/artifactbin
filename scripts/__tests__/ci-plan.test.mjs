@@ -8,10 +8,10 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
-import { CI_GATE_SHARDS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
-/** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
+/** Built and proved only for a release: the five-target binaries (the Intel proofs consume its artifact) and the distributions gate. */
 const RELEASE_JOBS = ['cli', 'cli-preview', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -708,10 +708,10 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
   });
   it('spreads the API test files over ten shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/10)');
+    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/8)');
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
-      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/10');
+      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/8');
   });
   it('restores the test global setup\'s builds before every Vitest shard and the app build run', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -796,12 +796,12 @@ describe('CI job shape', () => {
 
     const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
-      shardOf(names, { index: offset + 1, total: count }, shardWeight).reduce((sum, name) => sum + shardWeight(name), 0)));
+      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: CI_ISOLATED_GATES }).reduce((sum, name) => sum + shardWeight(name), 0)));
     expect(heaviest(CI_GATE_SHARDS)).toBeLessThanOrEqual(heaviest(CI_GATE_SHARDS - 1));
     // Every shard fits its wall: two servers halve its summed seconds, but the clipboard group runs
     // one gate at a time across both, so it is charged whole.
     for (let index = 1; index <= CI_GATE_SHARDS; index++) {
-      const shard = shardOf(names, { index, total: CI_GATE_SHARDS }, shardWeight);
+      const shard = shardOf(names, { index, total: CI_GATE_SHARDS }, shardWeight, { isolated: CI_ISOLATED_GATES });
       const seconds = shard.reduce((sum, name) => sum + specFor(name).seconds, 0);
       const serial = shard.filter((name) => specFor(name).serialGroup === 'clipboard').reduce((sum, name) => sum + specFor(name).seconds, 0);
       expect(Math.max(seconds / 2, serial), `shard ${index}: ${shard.join(',')}`).toBeLessThanOrEqual(75);

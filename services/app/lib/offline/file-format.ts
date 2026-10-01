@@ -8,7 +8,7 @@
  * own engine queries live, and precomputed filter variants for the queries
  * that need the server — the comment threads and a
  * journal of offline edits. The server writes it at download
- * (lib/offline/download.server.ts); the file's own Save rewrites it
+ * (lib/offline/assemble.server.ts); the file's own Save rewrites it
  * (lib/offline/file-html.ts). Both sides go through this contract.
  *
  * `base` is the version the file was downloaded from, so a later sync can

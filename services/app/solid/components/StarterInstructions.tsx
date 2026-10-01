@@ -6,7 +6,7 @@ import { existingPaste } from '@/lib/agent-copy';
 import { copyText } from '../lib/copy-text';
 
 /**
- * First-party starter chrome (components/StarterInstructions in Solid). The paste is public, tokenless
+ * First-party starter chrome. The paste is public, tokenless
  * text; copying it must not require an owner session or imply permission to edit the document.
  */
 export function StarterInstructions(props: { id: string; onContinueBlank?: () => void; converting?: boolean; conversionError?: string }): JSX.Element {

@@ -3,7 +3,7 @@
  * THE ISLAND RUNTIME (`@mx/rt`, docs/phase2-architecture.md §2.3, §4.1): what every compiled island
  * of one document runs on. Generated islands also import kit helpers when their markup needs them.
  *
- * - The document's data is the EXISTING react-free store (lib/story-runtime/store), bridged into
+ * - The document's data is the EXISTING framework-free store (lib/story-runtime/store), bridged into
  *   one Solid store per document with `reconcile`, so a result that changes one cell re-runs only
  *   the computations that read that cell. Islands read it through `IslandContext` (contract.ts),
  *   provided to every island by `hydrateIsland`; the bridge is this file's detail.

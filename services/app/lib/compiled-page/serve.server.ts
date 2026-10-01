@@ -121,7 +121,7 @@ export interface CompiledReaderRequest {
   behaviors?: readonly string[];
   /**
    * `false`: the document without its own chrome — a deck's slide rail and present bar and their
-   * behaviour (`@mx/deck`) — as today's renderer draws `/raw?chrome=0` (StoryRuntimeApp `chrome`).
+   * behaviour (`@mx/deck`) — as today's renderer draws `/raw?chrome=0`.
    * Default true.
    */
   documentChrome?: boolean;

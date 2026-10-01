@@ -15,7 +15,7 @@ export interface ParityData { tables?: Record<string, TableResult>; values?: Rec
 
 /**
  * The React kit's render of `markup`, as the retired interpreter drew it — recorded (./fixtures/react-oracle.json,
- * keyed by markup and data) from the React reader before it was deleted, so the Solid kit keeps proving the same
+ * keyed by markup and data) from the retired React reader before it was deleted, so the Solid kit keeps proving the same
  * DOM. A markup the oracle never saw has no reference: add the case with an explicit expected shape instead.
  */
 let oracle: Record<string, string> | null = null;
@@ -61,7 +61,7 @@ export function diffShapes(a: Shape[], b: Shape[], path = '', reactIds?: Set<str
     const at = `${path}/${i}<${x.tag}>`;
     if (!y || x.tag !== y.tag) { out.push(`${at}: tag ${x.tag} vs ${y?.tag}`); return; }
     for (const n of new Set([...Object.keys(x.attrs), ...Object.keys(y.attrs)])) if (x.attrs[n] !== y.attrs[n]) {
-      // Today's React kit can emit a dangling idref when an author supplies an id.
+      // The retired React kit can emit a dangling idref when an author supplies an id.
       // Accept a corrected Solid idref only when React's referenced element is absent.
       const reactRef = x.attrs[n];
       if ((n === 'aria-controls' || n === 'aria-labelledby') && reactRef && !reactRef.includes(' ') && !reactIds.has(reactRef)) continue;

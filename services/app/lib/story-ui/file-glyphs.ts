@@ -1,7 +1,7 @@
 /**
  * WHICH GLYPH A FILE DRAWS — one map, shared by the two halves that must agree.
  *
- * `<Files>` (components/kit/files) picks a row's icon from its FORMAT, and the
+ * `<Files>` picks a row's icon from its FORMAT, and the
  * SERVER resolves the glyphs a document needs before the document is served
  * (lib/story/icon-glyphs): the icon set never reaches the reader's bundle, so a
  * glyph nobody resolved draws NOTHING. A folder's whole document is

@@ -3,7 +3,7 @@
  *
  * Every compiled page that learns of a new version calls this, whoever holds the stream: the page's own
  * stream (./live) on `/raw` and on `/a/:id` before the app adopts it, and the adopted page
- * (components/IslandStory) once the app holds it. It is what today's React reader does on a write — the
+ * once the app holds it. It is what the retired React reader does on a write — the
  * new version drawn in place, no navigation — for a page the browser never compiles:
  *
  *   the new version's story fragment (`/a/:id/story`, the same assembler output as the page) is fetched
@@ -30,7 +30,7 @@ export interface StoryUpdateOptions {
    * `window.name` envelope's (lib/story-runtime/reader-mode) otherwise. A new version never stomps it.
    */
   mode?: () => 'light' | 'dark' | null;
-  /** The app holds the page (components/IslandStory): its title and chrome are the app's, never the fragment's. */
+  /** The app holds the page: its title and chrome are the app's, never the fragment's. */
   adopted?: boolean;
 }
 

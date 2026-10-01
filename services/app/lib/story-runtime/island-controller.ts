@@ -17,6 +17,7 @@ import type { FrameSelectionActions } from '@/lib/story-runtime/edit/selection-a
 import type { RuntimeChannel } from '@/lib/story-runtime/pristine';
 import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
+import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
@@ -356,7 +357,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       }
       adoptVersionRecord(win.document, next);
       // The version's compiled colour never replaces the reader's own choice (as the reader's morph keeps it).
-      if (mode) { root.classList.toggle('dark', mode === 'dark'); root.classList.toggle('light', mode !== 'dark'); }
+      applyColorMode(root, mode);
       frozen = false;
       restoreSource = null;
       islands?.setMode('read');
@@ -395,8 +396,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       if (message.type === STORY_READER_MODE_MESSAGE && (message.mode === 'light' || message.mode === 'dark')) {
         // The story root carries the document's mode as its class (lib/story/inline-story-html).
         mode = message.mode;
-        root.classList.toggle('dark', message.mode === 'dark');
-        root.classList.toggle('light', message.mode !== 'dark');
+        applyColorMode(root, mode);
         return;
       }
       if (!isEditParentMessage(command)) return;

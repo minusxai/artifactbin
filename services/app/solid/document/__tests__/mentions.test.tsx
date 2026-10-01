@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * @MENTIONS in a comment draft (components/__tests__/remote-mentions.ui.test.tsx, in Solid): people
+ * @MENTIONS in a comment draft: people
  * and agents, a stable session id in the wire text and only the name in the field, the keyboard
  * owned by the picker while it is open, and a copyable connection request when no agent is there.
  */

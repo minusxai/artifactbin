@@ -67,7 +67,7 @@ const CLOSED_COMPONENTS = new Set([
 ]);
 /** Component props a kit component sets as text, in the body face unless named below. */
 const TEXT_PROPS = new Set(['title', 'label', 'description', 'caption']);
-/** Components that set a text prop in the mono face (components/views/story/QuestionEmbed). */
+/** Components that set a text prop in the mono face. */
 const MONO_TITLE_COMPONENTS = new Set(['Question']);
 
 /** Tags a theme's structural CSS sets italic (`& blockquote { font-style: italic }`). */

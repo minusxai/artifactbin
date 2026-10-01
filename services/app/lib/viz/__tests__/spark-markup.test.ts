@@ -1,6 +1,6 @@
 /**
  * The sparkline's DRAWING RULES. Both callers inject the answer — app chrome
- * (components/ui's `Spark`) and the document kit (components/kit/files) — and
+ * and the document kit — and
  * the kit may not reach into app chrome, which
  * lib/__tests__/reader-bundle-hygiene enforces, so the rules live here.
  *

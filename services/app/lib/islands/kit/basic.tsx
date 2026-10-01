@@ -137,7 +137,7 @@ export function Button(props: ButtonProps) {
   const island = useIsland();
   const store = island.store();
   if (!store) {
-    // Today's static face (components/kit/button): the binding stamped, the button disabled.
+    // Today's static face: the binding stamped, the button disabled.
     const stamp = [name ? `run:${own.run}` : '', own.set && typeof own.set === 'object' ? `set:${Object.keys(own.set).join(',')}` : ''].filter(Boolean).join(' ');
     return <button data-slot="button" data-variant={variant} data-size={size} data-mx-bound={stamp} disabled {...rest} />;
   }

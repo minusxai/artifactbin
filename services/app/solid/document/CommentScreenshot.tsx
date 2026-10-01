@@ -5,7 +5,7 @@ import ImageIcon from 'lucide-solid/icons/image';
 import X from 'lucide-solid/icons/x';
 import type { CommentImageWire } from '../../../contracts/src/comment-image';
 
-/** components/CommentScreenshot in SOLID: a saved comment image — a small preview and an explicit full-size reader. */
+/** A saved comment image — a small preview and an explicit full-size reader. */
 export function CommentScreenshot(props: { image: CommentImageWire }): JSX.Element {
   let dialog!: HTMLDialogElement;
   const [open, setOpen] = createSignal(false);

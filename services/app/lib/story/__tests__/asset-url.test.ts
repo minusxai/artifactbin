@@ -62,7 +62,7 @@ const attrsOf = (nodes: unknown, n: number): Record<string, unknown> => {
 
 describe('assetUrlFor', () => {
   it('is the bare address when all the caller knows is that we hold a copy', () => {
-    // The editor's own push has no rows to consult (components/InPlaceEditor).
+    // The editor's own push has no rows to consult.
     expect(assetUrlFor(URL_A)).toMatch(/^\/assets\/[0-9a-f]{64}$/);
     expect(assetUrlFor(URL_A, true)).toMatch(/^\/assets\/[0-9a-f]{64}$/);
   });

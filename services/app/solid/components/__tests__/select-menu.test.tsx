@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/SelectMenu.tsx port: same listbox contract, ported test cases from the panels that
+ * Same listbox contract, ported test cases from the panels that
  * exercise it (viz-editor-panel.ui.test.tsx's `pick` helper).
  */
 import { expect, it, vi } from 'vitest';

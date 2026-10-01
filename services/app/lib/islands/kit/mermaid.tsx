@@ -8,7 +8,7 @@ import type { MermaidImage } from '@/lib/mermaid-images/mermaid-render';
 import type { Drawn } from '@/lib/mermaid-images/reader-draw';
 
 /**
- * Today's React Mermaid (components/kit/mermaid), ported: a stored drawing (the island's `drawings`)
+ * The retired React Mermaid, ported: a stored drawing (the island's `drawings`)
  * is served and only its bytes are checked; otherwise the reader draws it in the document's theme
  * (lib/mermaid-images/reader-draw: palette resolved to hex, fonts waited for) and marks the figure with
  * what it was drawn under, for the harvest. `ready` only once the image has loaded; a theme change on

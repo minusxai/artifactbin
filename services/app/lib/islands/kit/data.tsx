@@ -42,7 +42,7 @@ import { rowsDigest } from '../digest';
 import type { CellScope } from './cells';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
-/** The authored identity today's adapters put on their outer element (StoryRuntimeApp runtimeTargetIdentity): the id and the compiler's `data-*` stamps, never the chart slot marker. */
+/** The authored identity today's adapters put on their outer element: the id and the compiler's `data-*` stamps, never the chart slot marker. */
 const rootProps = (props: object) => Object.fromEntries(Object.entries(props).filter(([key]) => (key === 'id' || key.startsWith('data-')) && key !== CHART_SLOT_ATTR));
 /** An attribute that is present only when it has a value. */
 const attr = (name: string, value: string | null | undefined | false): Record<string, string> => (value || value === '' ? { [name]: value } : {});
@@ -145,7 +145,7 @@ function UserCell(props: { id: string; card?: PersonCard }) {
   const image = () => props.card?.image && failed() !== props.card.image ? props.card.image : null;
   return <span data-slot="user" class="inline-flex items-center gap-1.5 align-middle"><span data-slot="avatar" data-size="default" {...attr('data-unknown', props.card ? undefined : '')} aria-hidden="true" class="group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-full select-none data-[size=lg]:size-10 data-[size=sm]:size-6 inline-flex shrink-0 align-middle size-5" {...attr('style', props.card ? css({ 'background-color': personFaceBackground(props.id) }) : undefined)}><span data-slot="avatar-fallback" class={`flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs${props.card ? ' bg-transparent font-medium text-white' : ''} text-[10px]`}>{props.card ? personInitial(props.card.name) : '?'}</span><Show when={image()}>{src => <img data-slot="avatar-image" class="absolute inset-0 aspect-square size-full object-cover" src={src()} alt="" aria-hidden="true" onError={() => setFailed(src())} />}</Show></span>{props.card?.handle ? <a data-slot="user-handle" href={`/@${props.card.handle}`} target="_top" rel="noopener" class="underline-offset-2 hover:underline">@{props.card.handle}</a> : <span data-slot="user-handle" {...attr('data-unknown', props.card ? undefined : '')} {...attr('class', props.card ? undefined : 'text-muted-foreground')}>{props.card?.name ?? 'Unknown person'}</span>}</span>;
 }
-/** A row's React key in today's table (components/kit/data-table rowIdentity): the virtualizer's item key. */
+/** A row's React key in today's table: the virtualizer's item key. */
 const rowIdentity = (row: Row | undefined, key: string | undefined, index: number): string => {
   const value = key && row ? row[key] : undefined;
   return value === null || value === undefined || (typeof value !== 'string' && typeof value !== 'number') ? `index:${index}` : `${typeof value}:${String(value)}`;
@@ -201,7 +201,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
   const resolved = createMemo(() => resolveColumns(spec(), table()?.columns ?? [], shown()));
   const ordered = createMemo(() => remote() ? shown() : sortRows(shown(), sort()));
   const templateOf = (col: string) => props.templates?.find(t => t.col === col);
-  // The first template for a column is its content (components/kit/data-table), in the compiler's order.
+  // The first template for a column is its content, in the compiler's order.
   const contentOf = (col: string) => { const at = props.templates?.findIndex(t => t.col === col) ?? -1; return at < 0 ? undefined : props.cells?.[at]; };
   const readWindow = (offset: number, next: SortSpec | null, replace: boolean) => {
     const base = table(), store = island.store();

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/BoundQuery.tsx port: the read-only SQL block under the chart/number
+ * The read-only SQL block under the chart/number
  * table pickers, shown only when the bound table is a Query with known SQL.
  */
 import { expect, it, vi } from 'vitest';

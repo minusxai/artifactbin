@@ -1,10 +1,10 @@
 /* @jsxImportSource solid-js */
 /**
  * THE STARTER (solid/pages/Starter): a document still holding the start placeholder is not compiled
- * (lib/artifact-page), so its page is app UI — the reader's own chrome and the agent instructions
- * (components/StarterInstructions' Solid port). It reloads into the compiled reader the moment the first
+ * (lib/artifact-page), so its page is app UI — the reader's own chrome and the agent instructions.
+ * It reloads into the compiled reader the moment the first
  * real version arrives, reports its view once, and opens the editor on the compiled placeholder at
- * `/edit` (`#edit` included), exactly as components/ArtifactSurface did for a starter.
+ * `/edit` (`#edit` included), as it does for any starter.
  */
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';

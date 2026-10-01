@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * THE MERMAID PORT (lib/islands/kit/mermaid) against today's React Mermaid (components/kit/mermaid), both
+ * THE MERMAID PORT (lib/islands/kit/mermaid) against the retired React Mermaid, both
  * MOUNTED in the document with the same engine stub: the palette reaches Mermaid as hex through the
  * canvas (a theme token such as `oklch(...)` makes Mermaid throw), the figure carries the same marks
  * for the harvest, the image the same inline style, and `ready` waits for the image to load. A stored

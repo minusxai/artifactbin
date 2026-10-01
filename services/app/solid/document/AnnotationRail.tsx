@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/AnnotationRail in SOLID — the comment rail's FRAME, apart from the layer itself.
+ * The comment rail's FRAME, apart from the layer itself.
  *
  * The conversation has three homes: the fixed right rail on desktop (the page narrows the document
  * by its width), the editor's panel when it hosts the rail (rendered into it, not as a column of its

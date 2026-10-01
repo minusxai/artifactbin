@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/VersionHistory in SOLID — the version list: the live document as a row of its own, then
+ * The version list: the live document as a row of its own, then
  * every earlier version; a row previews, and only the row you are looking at offers restore. A side
  * drawer on a wide window, the edit panel's History tab (`embedded`), a half bottom sheet below the
  * panel breakpoint or on a phone.

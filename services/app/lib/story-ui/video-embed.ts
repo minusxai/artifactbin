@@ -3,7 +3,7 @@
  *
  * Raw <iframe> is banned from story markup everywhere (lib/jsx/validate
  * dangerous tags, the paste sanitizer, the surface CSP) because it means
- * "embed any page on the internet". <Video> (components/kit/video.tsx) is the
+ * "embed any page on the internet". <Video> is the
  * sanctioned exception, and THIS module is its whole authority: an authored
  * src resolves only when its host is on the small allowlist below, and every
  * URL the component may emit is CONSTRUCTED from the parsed video id —

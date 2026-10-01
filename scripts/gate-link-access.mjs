@@ -63,7 +63,7 @@ const hasDocument = (page) => page.locator('[data-mx-inline-story]').count().the
 
 /*
  * Everything about a document lives behind ONE control (PageControls, in
- * components/PageChrome), and that popover renders its children only while it
+ * solid/components/PageChrome), and that popover renders its children only while it
  * is OPEN. Two consequences for a gate, and the second is the dangerous one:
  * reaching for `[aria-label="Share"]` on a closed popover simply finds nothing,
  * while a `count() === 0` on a closed popover PASSES — for the wrong reason.
