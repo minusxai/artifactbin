@@ -86,6 +86,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
       if (!head) throw new Error('Could not open this artifact.');
       const result = await backend.commitEdit(prepareBlankReport(head, surface.editId));
       if (!result.ok) throw new Error(result.status === 409 ? 'This artifact has changed. Reload to see the latest version.' : 'Could not create the blank report. Please try again.');
+      reloading = true; // The committed live frame must not race the editor navigation.
       openEditor();
     } catch (error) { setConversionError(error instanceof Error ? error.message : 'Could not create the blank report.'); }
     finally { setConverting(false); }
