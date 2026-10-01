@@ -293,7 +293,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
     // identity; both use the same body-relative paths as the compiled DOM.
     // A saved version drawn after Done has no source: its served nodes stand in (fewer components match, never a wrong one).
     const before = shownTree((source) => storyUpdateParts(source)?.nodes);
-    const after = (pending.source !== null ? storyUpdateParts(pending.source)?.nodes : null) ?? pending.nodes;
+    const afterParts = pending.source !== null ? storyUpdateParts(pending.source) : null;
+    const after = afterParts?.nodes ?? pending.nodes;
     // Anything else redraws: never while typing (the region would be rebuilt under the caret), never over a host
     // commit or composition. It waits, and a newer draft that lands meanwhile replaces it.
     const wait = drawBlockedFor();
@@ -309,7 +310,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
     redrawOwed = false;
     shownSource = pending.source;
-    { const parts = pending.source !== null ? storyUpdateParts(pending.source) : null; shownParts = parts ? partsKey(parts) : null; }
+    shownParts = afterParts ? partsKey(afterParts) : null;
     const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
     if (pending.sheet && sheet) sheet.textContent = pending.sheet.textContent;
