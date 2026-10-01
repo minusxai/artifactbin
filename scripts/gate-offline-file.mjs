@@ -1,6 +1,6 @@
 /**
  * THE OFFLINE FILE, OPENED THE WAY A READER OPENS IT: a double-clicked `.html`
- * from file://, in Chromium, Firefox and WebKit, with no server anywhere.
+ * from file://, in Chromium, Firefox or WebKit (one per gate, below), with no server anywhere.
  *
  * Publishes the checked-in dashboard fixture to the gate's isolated server,
  * downloads its compiled Solid offline file, writes it to a temp dir and
@@ -54,6 +54,11 @@
  *
  * The base URL seeds and downloads the fixture before any file:// browser
  * opens it. Every browser request to the file's origin is intercepted.
+ *
+ * ONE ENGINE PER GATE: `node scripts/gate-offline-file.mjs [base] [engine]`, Chromium when no engine is
+ * named. gate-offline-file-firefox.mjs and gate-offline-file-webkit.mjs run this file for their engine,
+ * so CI runs the three on separate shards (74s together on run 36879103503, behind 48s of browser install) and
+ * only the shard that needs Firefox's or WebKit's system packages installs them.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -71,6 +76,9 @@ import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APP = path.join(ROOT, 'services/app');
 const BASE = process.argv[2] ?? 'http://localhost:3030';
+const ENGINE_NAME = process.argv[3] ?? 'chromium';
+const ENGINES = [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]].filter(([name]) => name === ENGINE_NAME);
+if (ENGINES.length !== 1) throw new Error(`gate-offline-file: unknown engine ${ENGINE_NAME} (chromium, firefox or webkit)`);
 const work = path.join(os.tmpdir(), `afbin-offline-gate-${process.pid}`);
 mkdirSync(work, { recursive: true });
 process.on('exit', () => rmSync(work, { recursive: true, force: true }));
@@ -158,7 +166,7 @@ assert.deepEqual(file.snapshot.variants, [], 'the fixture precomputes nothing fo
 const westRows = file.snapshot.held.sales_data.rows.rows.filter((row) => row.region === 'west');
 const failures = [];
 
-for (const { kind, url } of files) for (const [engine_, engine] of [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]]) {
+for (const { kind, url } of files) for (const [engine_, engine] of ENGINES) {
   const name = `${engine_} (${kind})`;
   const browser = await engine.launch();
   const started = Date.now();
@@ -258,7 +266,6 @@ for (const { kind, url } of files) for (const [engine_, engine] of [['chromium',
 
 const core = files.find((f) => f.kind === 'solid');
 const headingId = /<h1 [^>]*id="([^"]+)"/.exec(file.source)[1];
-const ENGINES = [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]];
 const downloads = {};
 
 /** A page that records what must stay empty: requests off the file, CSP violations, page errors. */
@@ -654,4 +661,4 @@ for (const [label, markup] of [
 }
 
 if (failures.length) throw new AggregateError(failures, 'Offline file checks failed');
-console.log(`offline file gate passed in chromium, firefox and webkit with the ${files.map((f) => f.kind).join(' and ')} bundle; editing, comments, Save, code view offline and online, and agent-edited files`);
+console.log(`offline file gate passed in ${ENGINE_NAME} with the ${files.map((f) => f.kind).join(' and ')} bundle; editing, comments, Save, code view offline and online, and agent-edited files`);
