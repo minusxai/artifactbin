@@ -713,9 +713,9 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
       .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/10');
   });
-  it('restores the test global setup\'s builds before every Vitest shard runs', () => {
+  it('restores the test global setup\'s builds before every Vitest shard and the app build run', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['ui', 'vitest run']]) {
+    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['ui', 'vitest run'], ['build', 'npm run build -w services/cli']]) {
       const steps = jobs[name].steps;
       const restore = steps.findIndex(step => step.id === 'test-builds');
       expect(restore, name).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
