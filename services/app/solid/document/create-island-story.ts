@@ -19,9 +19,9 @@ import { createSignal, onCleanup, type Accessor } from 'solid-js';
 import type { IslandDocument } from '@/lib/islands/contract';
 import type { JsxNode } from '@/lib/jsx/types';
 import { islandDocumentOf } from '@/lib/islands/handover';
-import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, type StoryController } from '@/lib/story-runtime/contract';
+import { STORY_ADOPT_HOOK } from '@/lib/story-runtime/contract';
 import { stopIslandLive } from '@/lib/islands/live';
-import { createIslandController, moveInto } from '@/lib/story-runtime/island-controller';
+import { createIslandController, moveInto, type IslandStoryController } from '@/lib/story-runtime/island-controller';
 import { createTrustedOverlayHost } from '@/lib/story-runtime/trusted-overlay-host';
 
 export interface IslandStoryOptions {
@@ -38,13 +38,9 @@ export interface IslandStoryOptions {
 }
 
 export interface IslandStory {
-  controller: Accessor<StoryController | null>;
+  /** Leaving edit mode is the page's edit lifecycle's (solid/document/create-edit-lifecycle): one edit-off, then `restored`. */
+  controller: Accessor<IslandStoryController | null>;
   nonce: Accessor<string | null>;
-  /**
-   * Leave edit mode in the document (the editor turns it on itself, after it subscribes). Settles once the page
-   * reads again in place (the controller's `restored`); a rejection means it cannot, and the caller reloads.
-   */
-  stopEditing(): Promise<void>;
 }
 
 export function createIslandStory(options: IslandStoryOptions): IslandStory {
@@ -63,7 +59,7 @@ export function createIslandStory(options: IslandStoryOptions): IslandStory {
     id: options.id, editId: options.editId, initialSource: options.source,
   });
   controller.selectionReady();
-  const [current, setCurrent] = createSignal<StoryController | null>(controller);
+  const [current, setCurrent] = createSignal<IslandStoryController | null>(controller);
   const [nonce, setNonce] = createSignal<string | null>(controller.nonce);
   onCleanup(() => {
     setCurrent(null);
@@ -76,9 +72,5 @@ export function createIslandStory(options: IslandStoryOptions): IslandStory {
       story.remove();
     });
   });
-  return {
-    controller: current,
-    nonce,
-    stopEditing: () => { controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false }); return controller.restored(); },
-  };
+  return { controller: current, nonce };
 }

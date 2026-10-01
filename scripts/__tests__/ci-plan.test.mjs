@@ -11,7 +11,7 @@ import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResul
 import { CI_GATE_SHARDS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
-/** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
+/** Built and proved only for a release: the five-target binaries (the Intel proofs consume its artifact) and the distributions gate. */
 const RELEASE_JOBS = ['cli', 'cli-preview', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -690,25 +690,39 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
     expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
   });
-  it('splits the node project into eight shards, and every shard runs its eighth', () => {
+  it('splits the node project into seven shards, and every shard runs its seventh', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/8)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/8');
+    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/7)');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/7');
   });
-  it('builds the CLI only on the shard that runs its source suite', () => {
+  it('runs the CLI source suite on the reader and island builds, never the full CLI build', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    const builds = jobs.node.steps.filter(step => step.run === 'npm run build -w services/cli');
-    expect(builds).toHaveLength(1);
-    expect(builds[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
-    expect(jobs.node.steps.indexOf(builds[0])).toBeLessThan(jobs.node.steps.findIndex(step => (step.run ?? '').includes('npm test -w services/cli')));
+    expect(jobs.node.steps.filter(step => (step.run ?? '').includes('npm run build -w services/cli'))).toHaveLength(0);
+    const suite = jobs.node.steps.find(step => (step.run ?? '').includes('npm test -w services/cli'));
+    expect(suite.if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
+    const prepare = suite.run.indexOf('build-islands.mjs --cache');
+    expect(suite.run.indexOf('build-server-reader.mjs --cache')).toBeGreaterThan(-1);
+    expect(prepare).toBeGreaterThan(-1);
+    expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
   });
-  it('spreads the API test files over twelve shards without dropping a shard', () => {
+  it('spreads the API test files over ten shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/12)');
+    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/10)');
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
-      .toBe('npx vitest run --project=api --shard=${{ matrix.shard }}/12');
+      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/10');
+  });
+  it('restores the test global setup\'s builds before every Vitest shard and the app build run', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['ui', 'vitest run'], ['build', 'npm run build -w services/cli']]) {
+      const steps = jobs[name].steps;
+      const restore = steps.findIndex(step => step.id === 'test-builds');
+      expect(restore, name).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
+      expect(restore, name).toBeLessThan(steps.findIndex(step => (step.run ?? '').includes(runs)));
+      expect(steps[restore].with.path).toContain('node_modules/.cache/build-islands.json');
+    }
+    expect(jobs['warm-caches'].steps.some(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v1-'))).toBe(true);
   });
 });
 
@@ -926,7 +940,8 @@ describe('the build cache key covers every build input and nothing a build canno
       expect(isBuildInput(path), path).toBe(true);
     }
     for (const path of ['services/app/__tests__/boot-env.test.ts', 'services/app/lib/islands/__tests__/one-tree.ui.test.ts',
-      'scripts/gate-editor-v2.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md']) {
+      'scripts/gate-editor-v2.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md',
+      'scripts/test-timings.json', 'scripts/test-timings.mjs', 'scripts/lib/timed-sequencer.mjs']) {
       expect(isBuildInput(path), path).toBe(false);
     }
   });

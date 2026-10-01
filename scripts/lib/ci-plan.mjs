@@ -80,7 +80,7 @@ export const CI_MODULES = {
 };
 
 /**
- * THE STANDALONE BINARIES ARE BUILT ONLY FOR A RELEASE. The four-platform build, the Intel render
+ * THE STANDALONE BINARIES ARE BUILT ONLY FOR A RELEASE. The five-target build, the Intel render
  * proofs and the distributions conformance job were the whole tail of every full run (the Intel
  * build alone is 4.5 minutes, the proofs behind it another 3.5), and they proved bytes nobody was
  * about to ship: the publisher (`release-cli.yml`) only uploads when the CLI version changed. So
@@ -164,6 +164,8 @@ export function isBuildInput(path) {
   if (/(^|\/)__tests__\//.test(path) || /\.test\.[cm]?[jt]sx?$/.test(path)) return false;
   if (/^(\.github|\.agent|docs|evals)\//.test(path)) return false;
   if (/^scripts\/gates?[-.][^/]*\.mjs$/.test(path)) return false;
+  // How the test shards are packed (scripts/lib/timed-sequencer.mjs) never reaches the bundle.
+  if (/^scripts\/(test-timings\.(json|mjs)|lib\/timed-sequencer\.mjs)$/.test(path)) return false;
   if (/^[^/]+\.md$/.test(path)) return false;
   return true;
 }

@@ -79,7 +79,7 @@ runs), which every build carries — the executables and `dist/afbin.mjs` embed 
 runs with nothing installed beside it: there is nothing to download, and no local rows are uploaded.
 Running from source uses the installed `@sqlite.org/sqlite-wasm` dependency's own file.
 For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS base URL with an optional path prefix (HTTP loopback
-also works); append `afbin-vVERSION/afbin-sql-OS-ARCH.gz` to that base. A locally built server
+also works); the service packages (Chromium) are then fetched from `<base>/afbin-vVERSION/<package>`. A locally built server
 uses `CLI__SERVICE_BASE_URL=http://localhost:3030/chat/releases`. Checksums stay pinned in the executable.
 Local JSX image export uses the cached preview runtime and lazily downloaded Chromium: `afbin export report.jsx --output report.png`. It renders current local bytes and registered ID dependencies without publishing or rewriting source. A locally registered ID also selects its local file; other IDs and explicit artifact URLs use their server. PNG/JPG support `--page` and `--og`. `--format html` saves the offline file from the server's `/a/<id>/download`: one self-contained `.html` that opens, edits and comments without a connection (`<id>@N` saves that version's file). It still requires a published head, and the server refuses a document too large for one file with a message saying so.
 
@@ -267,7 +267,7 @@ assets into one directory, then run from the repository root:
 node services/cli/scripts/pin-runtime.mjs cli-node-v22.22.3-r2 /path/to/runtime-assets
 ```
 
-Review and commit the resulting `services/cli/runtime-lock.json`, then require the four-platform
+Review and commit the resulting `services/cli/runtime-lock.json`, then require the five-target
 CLI CI to pass using those downloaded bytes. Existing runtime revisions are never overwritten.
 
 Linux and Intel Mac packaging also need Python 3.8–3.14. The build creates a private virtual

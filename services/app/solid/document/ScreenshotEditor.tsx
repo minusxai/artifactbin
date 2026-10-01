@@ -14,7 +14,7 @@ export interface ScreenshotEditorProps {
   busy: boolean; onRetake: () => void;
 }
 
-/** components/ScreenshotEditor in SOLID: a static image plus bounded vector strokes — undo never retains pixel snapshots, and export waits for submission. */
+/** A static image plus bounded vector strokes — undo never retains pixel snapshots, and export waits for submission. */
 export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
   let canvas!: HTMLCanvasElement;
   let bitmap: HTMLImageElement | null = null;

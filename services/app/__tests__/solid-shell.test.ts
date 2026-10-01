@@ -33,7 +33,7 @@ it('serves the one Solid entry for every address the app answers, whatever the f
   const missing = await app.request('http://localhost/definitely-missing', { headers: accept });
   expect(missing.status).toBe(404);
   expect(await missing.text()).toContain('/solid-entry.tsx');
-  // A served address of every non-compiled kind the React SPA used to answer: the data tiers and the
+  // A served address of every non-compiled kind the Solid SPA used to answer: the data tiers and the
   // starter placeholder's read view. Each is the Solid entry now.
   const { token } = await mintToken('shell');
   const publish = async (body: Record<string, unknown>) => {

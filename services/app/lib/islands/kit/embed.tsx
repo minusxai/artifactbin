@@ -7,7 +7,7 @@
  * - `<Iframe>`: today's managed frame (lib/story-runtime/managed-iframe) — ./embed/frame-engine mounts the
  *   sandboxed author realm in the box and binds it to the document's store, its assets resolved through the
  *   page's own door (IslandPageData.managedAssets) or, framed, the parent page's relay.
- * - `<DeckGL>`: today's map (components/kit/deck-gl + the runtime adapter) — ./embed/deck-engine replaces
+ * - `<DeckGL>`: today's map — ./embed/deck-engine replaces
  *   the loading stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
  */
 import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';

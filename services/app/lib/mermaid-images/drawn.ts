@@ -1,6 +1,6 @@
 /**
  * WHAT A DRAWING WAS DRAWN UNDER — the attributes the kit's engine sets on a
- * figure it drew (components/kit/mermaid) and the harvest reads
+ * figure it drew and the harvest reads
  * (lib/mermaid-images/harvester). Pure: it runs in both.
  *
  *   - `data-mx-mermaid-metrics`: the SVG text boxes (width, height, y) of the

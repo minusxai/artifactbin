@@ -3,7 +3,7 @@
  *
  * ONE pure function turns a compiled version plus one request's overlay into
  * the whole HTML document every reader path serves: `/a/:id` (server-rendered
- * reader chrome, the React app loaded on idle), `/raw` (neither), and the
+ * reader chrome, the Solid app loaded on idle), `/raw` (neither), and the
  * domain post, export, offline file and CLI preview that are one or the other.
  * No I/O, no database, no clock: the same input is the same bytes.
  *

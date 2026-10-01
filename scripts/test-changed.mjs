@@ -15,7 +15,8 @@ import { pathToFileURL } from 'node:url';
 import { changedSpecifications } from './lib/test-graph.mjs';
 
 export const DEFAULT_CAP = 50;
-const PROJECTS = ['api', 'node', 'ui', 'islands'];
+// `api-isolated` is the api files that mock modules (vitest.config.ts): the same suite, own isolation.
+const PROJECTS = ['api', 'api-isolated', 'node', 'ui', 'islands'];
 const TEST_FILE = /\.test\.(?:[cm]?[jt]s|tsx|jsx)$/;
 export const shouldRunCli = (files) => files.some(f => f.startsWith('services/cli/'));
 export const overCap = (count, cap, all) => !all && count > cap;

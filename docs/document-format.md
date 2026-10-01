@@ -10,10 +10,10 @@ An agent sends `markup` — there is no second document tier:
 | Data | In `<Helmet>`: `<Import>` a dataset, `<Value>` page values, `<Query>` in SQLite, `<Mutation>` writes. The body binds them by name: `data="$q"`, `value="$v"`, `run="$m"`, `set={{…}}` |
 | Files | `<img src>` and `<Video poster>` take an upload (`ref:<id>`) or any `https` URL; `<File src>` links a PDF as a card |
 
-A document is SERVED as its own page at `/a/<id>/raw` — server-rendered,
-hydrated by an in-frame runtime, and displayed in a sandboxed iframe with an
-opaque origin. That is what makes an author `<script>` safe: it can paint and
-respond, but it cannot reach the app's session, its storage, or the network.
+A document is SERVED as compiled static HTML with small Solid islands: `/a/<id>` with the app's reader
+chrome, `/a/<id>/raw` without it (see [Phase 2 architecture](phase2-architecture.md)). An author
+`<script>` runs in a separate opaque-origin frame, so it can paint and respond but cannot reach the
+app's session, its storage, or the network.
 
 Documents get: six dual-palette **themes** (`modernist · organic · industry ·
 terminal · manuscript · pop`, each with a light and a dark mode), a stable public link that survives edits, and full

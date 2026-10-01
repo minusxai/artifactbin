@@ -55,7 +55,7 @@ export interface RenderRequest extends PageRequest {
 /**
  * The SVG drawings a page drew, as text: every element under `selector`
  * matching `collect` that holds an `<img>` whose src is an SVG `data:` URL —
- * the form in which the kit's diagrams are drawn (components/kit/mermaid).
+ * the form in which the kit's diagrams are drawn.
  * Loaded `loads` times (1-3, default 1) in fresh pages, so a caller can tell a
  * reproducible drawing from one that differs per load.
  */

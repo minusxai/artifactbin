@@ -1,6 +1,6 @@
 // DESTINATION: services/app/lib/compiled-page/__tests__/flip.test.ts
 /**
- * THE FLIP (docs/phase2-architecture.md §10, §11): the compiled reader is the default, and the legacy
+ * THE FLIP (docs/phase2-architecture.md §10): the compiled reader is the default, and the legacy
  * reader — two runtimes, two assemblers, the browser CSS work — is gone in the same PR.
  */
 import { describe, expect, it } from 'vitest';

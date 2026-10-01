@@ -344,10 +344,19 @@ async function createDb(): Promise<Db> {
     const { mkdirSync } = await import('fs');
     mkdirSync(target.dataDir, { recursive: true });
   }
-  const raw = target.dataDir ? new PGlite(target.dataDir, { parsers }) : new PGlite({ parsers });
+  // A test process boots many in-memory databases (one per file), all from the same schema: the
+  // first applies the DDL and backfills, and every later one restores that dump instead.
+  const snapshot = IS_TEST && !target.dataDir ? global.__artifact_bin_test_schema__ : undefined;
+  const raw = target.dataDir ? new PGlite(target.dataDir, { parsers })
+    : new PGlite(snapshot ? { parsers, loadDataDir: snapshot } : { parsers });
   const db = new PgliteDb(raw as unknown as ConstructorParameters<typeof PgliteDb>[0]);
+  if (snapshot) {
+    await raw.waitReady;
+    return db;
+  }
   await db.initializeSchema();
   await applyBackfills(db);
+  if (IS_TEST && !target.dataDir) global.__artifact_bin_test_schema__ = await raw.dumpDataDir('none');
   return db;
 }
 
@@ -377,6 +386,8 @@ async function applyBackfills(db: Db): Promise<void> {
 declare global {
   // eslint-disable-next-line no-var
   var __artifact_bin_db__: Promise<Db> | undefined;
+  // eslint-disable-next-line no-var
+  var __artifact_bin_test_schema__: Blob | File | undefined;
 }
 
 export function getDb(): Promise<Db> {

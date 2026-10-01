@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/NumberEditorPanel.tsx port: the `<Number>` editor panel — the chart
+ * The `<Number>` editor panel — the chart
  * inspector's sibling for inline figures. A lens like VizEditorPanel: every interaction emits a
  * PARTIAL edit (only the field that changed) — the document stays the source of truth.
  */

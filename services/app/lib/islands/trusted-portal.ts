@@ -1,8 +1,8 @@
 /**
- * THE TRUSTED PORTAL, found from an island (`IslandContext.trustedPortal`). components/TrustedUi is
+ * THE TRUSTED PORTAL, found from an island (`IslandContext.trustedPortal`). solid/components/TrustedUi is
  * React and owns its container: a `[data-trusted-ui]` host whose open shadow root holds
  * `[data-trusted-ui-root]` with two children, the content and then the PORTAL destination (what
- * `useTrustedPortalContainer` hands the React kit's overlays). An island cannot use React context,
+ * `useTrustedPortalContainer` hands the retired React kit's overlays). An island cannot use React context,
  * so it finds the same element in the DOM when an overlay opens; a page with no trusted UI (a
  * compiled reader page before the app loads) answers null and the overlay renders in place.
  */

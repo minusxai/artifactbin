@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE `<DeckGL>` ENGINE ON A COMPILED PAGE, loaded lazily by the island (../embed.tsx) once it is mounted:
- * today's React engine (components/kit/deck-gl-engine) without React. It draws INTO the island's box — the
+ * the retired React engine without React. It draws INTO the island's box — the
  * served stand-in, which the island turns into the map's figure — so the element the page was served with
  * is the element the reader keeps. The layers, legend, fitted view and
  * tooltip record come from the shared framework-free half (lib/viz/deck-engine-core); this file is the

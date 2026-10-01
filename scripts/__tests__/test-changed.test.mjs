@@ -79,8 +79,8 @@ describe('local test command budget', () => {
     const small = fixture({ count: 1 });
     expect(small.status, small.stderr).toBe(0);
     expect(small.commands.map(c => c[0])).toEqual(['create', 'list', 'run', 'close']);
-    // One Vitest instance, configured for the selection: the four local projects and --changed.
-    expect(small.commands[0][2]).toMatchObject({ project: ['api', 'node', 'ui', 'islands'], watch: false });
+    // One Vitest instance, configured for the selection: the local projects and --changed.
+    expect(small.commands[0][2]).toMatchObject({ project: ['api', 'api-isolated', 'node', 'ui', 'islands'], watch: false });
     expect(small.commands[1]).toEqual(['list', true]);
 
     const large = fixture({ count: 51 });

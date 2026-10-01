@@ -25,7 +25,7 @@ export function applyReaderChoice(win: Window, doc: Document, mode: 'light' | 'd
 /**
  * A FACE WHOSE PICTURE FAILS SHOWS ITS INITIAL (lib/person-face). The rail's
  * faces are server strings, so there is no React `onError` to do what
- * components/Avatar does: a browser paints a broken-image glyph over a sized
+ * solid/components/Avatar does: a browser paints a broken-image glyph over a sized
  * `<img alt="">` (measured in Chromium), so the picture is removed instead and
  * the initial underneath shows. A picture that already failed before this ran
  * (`complete` with no pixels) goes at once. Returns the unwiring.

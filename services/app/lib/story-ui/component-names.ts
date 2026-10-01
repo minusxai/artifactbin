@@ -1,8 +1,7 @@
 /**
  * Names-only contract for the story design system — importable by
- * server-side validation (lib/jsx) WITHOUT pulling React or the component sources in.
- * `lib/story-ui/registry.ts` maps these names to the real components; a registry test
- * asserts the two never drift.
+ * server-side validation (lib/jsx) WITHOUT pulling the component sources in.
+ * The compiler's `KIT` table (lib/compiled-page/compiler.ts) maps these names to the real components.
  */
 
 /** The shadcn component tags a new-format (`format:'jsx'`) story may use. */
@@ -22,7 +21,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Tooltip', 'TooltipTrigger', 'TooltipContent', 'TooltipProvider',
   'Popover', 'PopoverTrigger', 'PopoverContent', 'PopoverAnchor', 'PopoverHeader', 'PopoverTitle', 'PopoverDescription',
   'Grid', 'GridItem',
-  // The bound-control kit (components/kit/controls.tsx): themed two-way
+  // The bound-control kit: themed two-way
   // controls over Helmet `<Value>`s — the fancy siblings of the bindable
   // native `input`/`select`/`textarea` (lib/story/dataflow.ts REF_ATTRS).
   // `Input`/`Textarea` are the TEXT members: a bare `<input>` keeps binding,
@@ -31,7 +30,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Input', 'Textarea', 'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch',
   'SlideDeck', 'Slide',
   'Video',
-  // A PDF the document links, as a card that opens it (components/kit/file.tsx).
+  // A PDF the document links, as a card that opens it.
   'File',
   'Icon',
   // WHO IS READING, and what to do about it (components/kit/user.tsx,
@@ -41,7 +40,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   // also tags of their own; `<SignIn>` is the guest's door.
   'User', 'UserImage', 'UserHandle', 'SignIn',
   'DataTable', 'Column', 'For',
-  // A folder's listing (components/kit/files.tsx). Bound like every other data
+  // A folder's listing. Bound like every other data
   // embed — `data="$children"` — over the children table lib/folders computes.
   'Files',
 ] as const;

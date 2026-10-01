@@ -1,6 +1,6 @@
 /**
  * `IslandContext.trustedPortal()` (lib/islands/trusted-portal): the portal destination of the page's
- * first-party trusted UI (components/TrustedUi — a `[data-trusted-ui]` host, an open shadow root,
+ * first-party trusted UI (solid/components/TrustedUi — a `[data-trusted-ui]` host, an open shadow root,
  * `[data-trusted-ui-root]` holding content then portal), found when asked; null when the page has none.
  */
 import { afterEach, describe, expect, it } from 'vitest';

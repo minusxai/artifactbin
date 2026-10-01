@@ -32,7 +32,7 @@ export interface LazyCode {
 /**
  * What a render already holds for its diagrams: the version's stored drawings
  * and the mode it is served in. A diagram with a drawing stored for that mode
- * is drawn from it (components/kit/mermaid), so its kind's engine code is not
+ * is drawn from it, so its kind's engine code is not
  * this document's to preload — unless another diagram of the kind has none.
  */
 export interface StoredDrawings { images?: Readonly<Record<string, StoredMermaidImage>>; mode: 'light' | 'dark' }

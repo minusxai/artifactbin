@@ -12,7 +12,7 @@
  * fade — nothing is hidden there any more.
  *
  * Runs from the ~1 KB entry every document loads (anchor-entry), because a
- * prose document has tables too and ships no runtime. React-free.
+ * prose document has tables too and ships no runtime. Framework-free.
  */
 const SCROLLABLE_ATTR = 'data-mx-scrollable';
 

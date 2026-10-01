@@ -7,7 +7,7 @@ import { apiFetch } from '../lib/api';
 import { primeShared, sharedRequest } from '@/lib/shared-request';
 type Person = { user_id: string; username: string; name: string | null };
 
-/** The document controls' people panel (components/ArtifactPeople in Solid); membership and sharing remain separate grants. */
+/** The document controls' people panel; membership and sharing remain separate grants. */
 export function DocumentPeople(props: { id: string; revision?: number; onChange?: () => void; hideJoin?: boolean; initialOpen?: boolean }): JSX.Element {
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
   const [state, setState] = createSignal<MembershipState | null>(null);

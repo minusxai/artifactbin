@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/ImageDialog.tsx in SOLID — ONE DIALOG FOR PUTTING A PICTURE IN:
+ * ONE DIALOG FOR PUTTING A PICTURE IN:
  * "Insert image" and "Replace image".
  *
  * Two ways in — a file (dropped on the zone or chosen) or a URL — and both end the same

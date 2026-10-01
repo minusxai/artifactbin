@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * THE RAIL AND THE PINS (components/__tests__/annotation-layer.ui.test.tsx, in Solid). Open threads
+ * THE RAIL AND THE PINS. Open threads
  * float over the document at their anchor y; a pin or an annotated-node click opens that thread in
  * the rail; resolved history sits below the open list. Replies, resolution, deletion, provenance
  * marks and the phone's compact marker all live here. The composer is annotation-composer.test.tsx;

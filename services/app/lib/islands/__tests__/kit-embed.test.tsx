@@ -177,7 +177,7 @@ describe('<DeckGL>', () => {
     const box = inner.firstElementChild as HTMLElement;
     expect([box.getAttribute('class'), box.getAttribute('aria-busy'), box.getAttribute('aria-label'), box.getAttribute('style'), box.getAttribute('role')]).toEqual(['w-full rounded-md bg-muted', 'true', 'Places', 'height:300px', null]);
     await until(() => box.getAttribute('role') === 'figure');
-    // Today's engine figure (components/kit/deck-gl-engine), on the element the page was served with.
+    // Today's engine figure, on the element the page was served with.
     expect(inner.firstElementChild).toBe(box);
     expect([box.getAttribute('class'), box.getAttribute('aria-busy'), box.getAttribute('aria-label'), box.style.height]).toEqual(['relative w-full overflow-hidden rounded-md', null, 'Places', '300px']);
     const view = box.querySelector<HTMLElement>('.engine-view')!;

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/MarkdownPasteDialog.tsx in SOLID — the paste dialog owns its
+ * The paste dialog owns its
  * keyboard boundary; insertion still belongs to the live editor.
  */
 import type { JSX } from 'solid-js';

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * The parity helper works inside the islands project: today's React kit renders through the interpreter
+ * The parity helper works inside the islands project: the retired React kit renders through the interpreter
  * (Vite's react-jsx transform, the Solid transform scoped to lib/islands), a Solid render is compared
  * to it, and a difference is reported rather than passing silently.
  */

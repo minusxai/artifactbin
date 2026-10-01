@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/VizEditorPanel.tsx port: the chart editor panel.
+ * The chart editor panel.
  *
  * It is a lens, not a form: every interaction must emit a complete new `viz`
  * prop, because the document is the source of truth and the panel keeps no copy

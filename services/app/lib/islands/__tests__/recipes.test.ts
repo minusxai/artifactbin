@@ -2,7 +2,7 @@
 /**
  * THE KIT'S CLASS RECIPES (lib/islands/kit/recipes.ts): the class string each ported component's
  * DOM carries, evaluated AT COMPILE TIME by the compiler (readers never download cva, clsx or
- * tailwind-merge). Each recipe must produce the class set today's React component renders for the
+ * tailwind-merge). Each recipe must produce the class set the retired React component renders for the
  * same props — the parity gate's attribute comparison, taken one recipe at a time.
  */
 import { describe, expect, it } from 'vitest';

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/SourceEditorPane in SOLID: the JSX source editor with a read-only "View formatted"
+ * The JSX source editor with a read-only "View formatted"
  * preview. The editable editor stays mounted (hidden) while the preview shows, so its draft,
  * selection and undo history survive the round trip; the preview owns a separate read-only editor.
  *

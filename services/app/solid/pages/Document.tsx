@@ -5,7 +5,6 @@ import { useLocation } from '@solidjs/router';
 import { startIslandLive } from '@/lib/islands/live';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
-import { reloadKeepingPlace } from '@/lib/islands/live-update';
 import { applyReaderChoice } from '@/lib/story-runtime/reader-actions';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
@@ -14,7 +13,6 @@ import { keepReadingPlace } from '@/lib/story-runtime/anchor';
 import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared-runtime';
-import type { DocumentGraph } from '@artifactbin/contracts';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { loginHref } from '@/lib/login-href';
 import { takeBootstrap } from '@/web/bootstrap';
@@ -31,6 +29,7 @@ import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DocumentPeople } from '../document/DocumentPeople';
 import { createIslandStory, type IslandStory } from '../document/create-island-story';
+import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
 import { moveInto } from '@/lib/story-runtime/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
@@ -75,9 +74,6 @@ interface DocumentAnswer {
   like?: { liked: boolean; count: number };
   follow?: { userId: string; following: boolean; count: number } | null;
 }
-
-/** THE EDITOR'S DOOR (lib/artifact-page `?part=editor`): what only writing needs. */
-interface EditorPart { editId: string; version: number; source: string; document?: DocumentGraph; compiledCss: string | null; authorCss: string | null }
 
 /** Move the server's existing nodes; the island document and its listeners retain identity. */
 export function adoptReaderDocument(host: HTMLElement): { story: HTMLElement | null; chrome: HTMLElement | null } {
@@ -148,15 +144,10 @@ export function DocumentPage(): JSX.Element {
   const [panel, setPanel] = createSignal<ReaderPanel | null>(null);
   const [fork, setFork] = createSignal(false);
   const [mode, setMode] = createSignal<'light' | 'dark'>('light');
-  const [editing, setEditing] = createSignal(false);
-  /** The editor's bar is on screen (it replaces the entry skeleton), and the document is editable (the loading bar ends). */
+  /** The editor's bar is on screen (it replaces the entry skeleton). */
   const [editorMounted, setEditorMounted] = createSignal(false);
-  const [editorReady, setEditorReady] = createSignal(false);
-  /** Done was pressed and the page is drawing the saved version to read in place (the slim bar runs). */
-  const [restoring, setRestoring] = createSignal(false);
   /** The name the editor's title field last showed: the breadcrumb's when editing ends. */
   let editorTitle: string | null = null;
-  const [initialEditSelectionPath, setInitialEditSelectionPath] = createSignal<string | null>(null);
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
   const [titleHost, setTitleHost] = createSignal<HTMLElement | null>(null);
   const [commentsHost, setCommentsHost] = createSignal<HTMLElement | null>(null);
@@ -164,8 +155,6 @@ export function DocumentPage(): JSX.Element {
   const [panelFits, setPanelFits] = createSignal<boolean | null>(null);
   const [sharingOpen, setSharingOpen] = createSignal(false);
   const [socialPreviewOpen, setSocialPreviewOpen] = createSignal(false);
-  const [editorPart, setEditorPart] = createSignal<EditorPart | null>(null);
-  const [editorPartFailed, setEditorPartFailed] = createSignal(false);
   const [membershipRevision, setMembershipRevision] = createSignal(0);
   const [nonce, setNonce] = createSignal<string | null>(null);
   const wide = createWideEditViewport();
@@ -176,9 +165,6 @@ export function DocumentPage(): JSX.Element {
   let adoptedStory: HTMLElement | null = null;
   let chromeElement: HTMLElement | null = null;
   let host!: HTMLDivElement;
-  let pushedEdit = false;
-  let draining = false;
-  let readingRestoration: ScrollRestoration | null = null;
   const pendingData: string[] = [];
 
   const chooseMode = (next: 'light' | 'dark') => {
@@ -193,19 +179,20 @@ export function DocumentPage(): JSX.Element {
     setMode(next);
   };
 
-  // ── the editor's door: fetched on idle for a writer, or the moment edit mode opens ──
-  let editorPartRequest: Promise<EditorPart | null> | null = null;
-  const loadEditorPart = (): Promise<EditorPart | null> => {
-    if (!id || !editable()) return Promise.resolve(null);
-    return editorPartRequest ??= fetch(`/api/page/artifact/${encodeURIComponent(id)}?part=editor`, { credentials: 'same-origin' })
-      .then((response) => (response.ok ? response.json() as Promise<EditorPart> : null))
-      .catch(() => null)
-      .then((part) => {
-        if (part) setEditorPart(part);
-        else { editorPartRequest = null; setEditorPartFailed(true); }
-        return part;
-      });
-  };
+  // ── the editor's door, and the edit mode's one owner (enter → ready → done → restored) ──
+  const parts = createEditorPartLoader(id, editable);
+  const { part: editorPart, failed: editorPartFailed, load: loadEditorPart } = parts;
+  const lifecycle = createEditLifecycle({
+    editable,
+    pwaChanged: () => pwaEnabled() !== (page?.surface?.pwaEnabled === true),
+    controller: () => island?.controller() ?? null,
+  });
+  const { editing } = lifecycle;
+  /** Done was pressed and the page is drawing the saved version to read in place (the slim bar runs). */
+  const restoring = () => lifecycle.phase() === 'restoring';
+  /** The document is editable (the loading bar ends). */
+  const editorReady = () => lifecycle.phase() !== 'entering';
+  onCleanup(lifecycle.registerFlush(() => editorFlush.current?.() ?? Promise.resolve()));
 
   // ── the live document, while reading (the editor holds its own stream while editing) ──
   const live = backend && page?.surface ? createLiveArtifact({
@@ -231,8 +218,7 @@ export function DocumentPage(): JSX.Element {
     });
   });
 
-  // ── edit mode: a MODE of the one address, mirrored in `#edit` (and accepted as `/edit`) ──
-  const editRoute = () => /\/edit\/?$/.test(window.location.pathname) || window.location.hash === '#edit';
+  // ── edit mode: a MODE of the one address, mirrored in `#edit` (solid/document/create-edit-lifecycle) ──
   /** Everything the switch into editing downloads, started on idle for a writer and again on the click (both deduplicate). */
   const prefetchEditor = () => {
     void loadEditorPart();
@@ -241,72 +227,15 @@ export function DocumentPage(): JSX.Element {
     void import('../editor/dom-mounter').catch(() => {});
   };
   const beginEdit = (selectionPath: string | null) => {
-    if (!editable() || window.location.hash === '#edit' || editing()) return;
-    prefetchEditor();
-    setInitialEditSelectionPath(selectionPath);
-    // The reading entry would remember the scroll from BEFORE the edit bar was compensated, and going back to it
-    // (Done, the back button) would put that back for a frame: a bar's height of jump. The page keeps the reader's
-    // place itself, so the reading entry restores nothing (the mode is the entry's own; it returns on the way back).
-    readingRestoration = window.history.scrollRestoration;
-    window.history.scrollRestoration = 'manual';
-    window.history.pushState(window.history.state, '', window.location.pathname + window.location.search + '#edit');
-    window.history.scrollRestoration = readingRestoration;
-    pushedEdit = true;
-    setEditing(true);
+    if (editable() && !editing()) prefetchEditor();
+    lifecycle.enter(selectionPath);
   };
   const enterEdit = () => beginEdit(null);
-  const drainEditor = async () => {
-    const flush = editorFlush.current;
-    if (!flush || draining) return;
-    draining = true;
-    await Promise.race([flush(), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => { draining = false; });
-  };
-  const exitEdit = () => {
-    setInitialEditSelectionPath(null);
-    if (pushedEdit) { pushedEdit = false; window.history.back(); return; }
-    window.history.replaceState(window.history.state, '', window.location.pathname.replace(/\/edit\/?$/, '') + window.location.search);
-    setEditing(false);
-  };
-  const finishEdit = async () => {
-    await editorFlush.current?.();
-    if (pwaEnabled() !== (page?.surface?.pwaEnabled === true)) {
-      window.location.replace(window.location.pathname.replace(/\/edit\/?$/, '') + window.location.search);
-      return;
-    }
-    exitEdit();
-  };
-  const syncEditRoute = () => {
-    if (editRoute()) { if (editable()) setEditing(true); return; }
-    if (readingRestoration) { window.history.scrollRestoration = readingRestoration; readingRestoration = null; }
-    if (!editing()) return;
-    setInitialEditSelectionPath(null);
-    if (!editorFlush.current || draining) { setEditing(false); return; }
-    void drainEditor().finally(() => setEditing(false));
-  };
-  createEffect(on(editing, (now, before) => {
-    if (now) { setRestoring(false); void loadEditorPart(); return; }
-    setEditorMounted(false);
-    setEditorReady(false);
-    if (!before || !island) return;
-    // Back to reading IN PLACE: the host already gave the bar's height back with the scroll compensated
-    // (keepReadingPlace), the last draft stays on screen, and the controller draws the saved version over it on
-    // the running islands, then returns them to read mode (lib/story-runtime/island-controller `restoreRead`).
-    let current = true;
-    onCleanup(() => { current = false; });
-    setRestoring(true);
-    void island.stopEditing().then(() => {
-      if (!current) return;
-      setRestoring(false);
-      // The next edit opens on the version just saved, not the part this session opened on.
-      editorPartRequest = null;
-      setEditorPart(null);
-      if (editable()) void loadEditorPart();
-    }, (error: unknown) => {
-      // A version this page cannot draw in place (another island build, islands where it runs none, a compile
-      // that never came): the compiled page again, at the reader's place.
-      console.warn('[document] could not return to reading in place; reloading', error);
-      reloadKeepingPlace(window);
-    });
+  createEffect(on(lifecycle.phase, (now, before) => {
+    if (now === 'entering') void loadEditorPart();
+    if (!editing()) setEditorMounted(false);
+    // Back to reading in place: the next edit opens on the version just saved, not the part this session opened on.
+    if (now === 'reading' && before === 'restoring') { parts.reset(); if (editable()) void loadEditorPart(); }
   }, { defer: true }));
   createEffect(() => { if (page?.surface) document.title = editing() ? `${page.surface.title ?? page.surface.runtime?.title ?? 'Untitled'} [edit mode]` : document.title.replace(/ \[edit mode\]$/, ''); });
 
@@ -414,10 +343,10 @@ export function DocumentPage(): JSX.Element {
           if (!accountSession()) { window.location.assign(loginHref(window.location, 'join')); return; }
           void wiring.act('controls');
         }
-        else if (name === 'edit' && editable()) { if (editing()) void finishEdit(); else enterEdit(); }
+        else if (name === 'edit' && editable()) { if (editing()) void lifecycle.done(); else enterEdit(); }
       },
     });
-    window.addEventListener('hashchange', syncEditRoute);
+    window.addEventListener('hashchange', lifecycle.sync);
     const intent = takeChromeIntent();
     const address = new URL(window.location.href);
     const carried = address.searchParams.get('intent');
@@ -426,7 +355,7 @@ export function DocumentPage(): JSX.Element {
       window.history.replaceState(window.history.state, '', address.pathname + address.search + address.hash);
     }
     if (intent || carried) void wiring.act(intent ?? carried!);
-    syncEditRoute();
+    lifecycle.sync();
     let chromeState: ChromeState | null = null;
     let frame = 0;
     const sample = () => {
@@ -446,7 +375,7 @@ export function DocumentPage(): JSX.Element {
     const editId = document.body.getAttribute('data-mx-live-edit');
     const stopLive = !islands && liveId && editId && typeof EventSource === 'function' ? startIslandLive(window, liveId, editId) : null;
     const stopIdle = editable() ? whenIdle(prefetchEditor) : null;
-    onCleanup(() => { wiring.dispose(); window.removeEventListener('hashchange', syncEditRoute); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null;
+    onCleanup(() => { wiring.dispose(); window.removeEventListener('hashchange', lifecycle.sync); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null;
       // The route is leaving this (already-adopted) document: `clearInitialStory` never runs for it
       // (`adoptReaderDocument` nulled `initialStory` on the way in), so this is the one place its own
       // served head sheets — data-mx-story-css chief among them — get removed with it.
@@ -513,14 +442,14 @@ export function DocumentPage(): JSX.Element {
     </Show>
     <Show when={ready() && editing() && backend && (editorSeed() || editorPartFailed())}>
       <Suspense fallback={null}>
-        <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} onExit={() => void finishEdit()} flushRef={editorFlush}
-          runtimeRef={runtimeRef} sessionNonce={nonce()} initialSelectionPath={initialEditSelectionPath()}
+        <ArtifactEditor id={id!} backend={backend!} seed={editorSeed()} onExit={() => void lifecycle.done()} flushRef={editorFlush}
+          runtimeRef={runtimeRef} sessionNonce={nonce()} initialSelectionPath={lifecycle.selectionPath()}
           onComment={editable() ? (selection) => setInitialAnnotationSelection(selection) : undefined}
           onRightInsetChange={setEditorRightInset}
           commentsOpen={railOpen()} onCommentsOpenChange={annotatable() ? setRailOpen : undefined}
           onCommentsHost={setCommentsHost} titleHost={phone() ? null : titleHost()}
           sharingContent={sharingContent} onPwaEnabledChange={setPwaEnabled}
-          onEditorMount={() => setEditorMounted(true)} onEditorReady={() => setEditorReady(true)}
+          onEditorMount={() => setEditorMounted(true)} onEditorReady={lifecycle.ready}
           onTitleChange={(title) => { editorTitle = title; }} />
       </Suspense>
     </Show>
