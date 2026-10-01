@@ -1,8 +1,7 @@
 /* @jsxImportSource solid-js */
 // DESTINATION: services/app/lib/islands/__tests__/kit-data.test.tsx
 /**
- * THE DATA KIT (lib/islands/kit/data: Number, Select, DataTable, Question) — the same DOM as today's
- * kit (`parityOf`), bound to the island's tables: a Number aggregates and formats, a Select offers a
+ * THE DATA KIT (lib/islands/kit/data: Number, Select, DataTable, Question), bound to the island's tables: a Number aggregates and formats, a Select offers a
  * table's rows and writes its value, a DataTable renders rows and sorts, a Question shows its
  * server-drawn chart until its table changes and loads Vega only then.
  */
@@ -11,7 +10,6 @@ import '@testing-library/jest-dom/vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
-import { parityOf } from './kit-parity';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Number as KitNumber, Select, DataTable, Question } from '../kit/data';
@@ -32,7 +30,6 @@ import { createPageEngine } from '@/lib/story-runtime/page-engine';
 
 const monthly: TableResult = { rows: [{ month: '2025-01-01', revenue: 120, units: 3 }, { month: '2025-02-01', revenue: 160, units: 4 }], columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }] };
 const regions: TableResult = { rows: [{ region: 'East' }, { region: 'West' }], columns: [{ name: 'region', type: 'string' }] };
-const parityData = { tables: { monthly, regions }, values: { region: 'West' } };
 const island = () => { const i = fakeIsland({ region: 'West' }); i.table = (n) => (n === 'monthly' ? monthly : n === 'regions' ? regions : undefined); i.tableSnapshot = i.table; return i; };
 const mount = (ctx = island(), view: () => import('solid-js').JSX.Element) => { const host = document.createElement('div'); document.body.append(host); const unmount = render(() => <IslandProvider value={ctx}>{view()}</IslandProvider>, host); return { host, dispose: () => { unmount(); host.remove(); } }; };
 beforeEach(() => document.documentElement.setAttribute('data-mx-ready', ''));
@@ -42,7 +39,9 @@ describe('Number', () => {
   it('aggregates and formats like today\'s InlineNumber', () => {
     const { host } = mount(undefined, () => <KitNumber data="$monthly" col="revenue" agg="sum" prefix="$" format=",.0f" id="n" />);
     expect(host.textContent).toContain('$280');
-    expect(parityOf('<Number data="$monthly" col="revenue" agg="sum" prefix="$" format=",.0f" id="n" />', host, parityData).filter((d) => !/text/.test(d))).toEqual([]);
+    const root = host.querySelector('#n')!;
+    expect(root.getAttribute('aria-busy')).toBe('false');
+    expect(root.querySelector('[aria-label="Live number"]')?.textContent).toBe('$280');
   });
 });
 
@@ -132,12 +131,11 @@ describe('Select', () => {
   it('offers the options table and writes the chosen value', () => {
     const ctx = island(); ctx.setValue = vi.fn();
     const { host } = mount(ctx, () => <Select label="Region" value="$region" options="$regions" placeholder="All regions" id="G2uA" />);
-    // The helper mounts SelectControl with the STATIC render's `bound` stamp; today's live SelectAdapter
-    // writes none (the parity gate compares against the live reader), so that one attribute is asserted apart.
-    const stamp = '/0<div> @data-mx-bound: "value:$region options:$regions" vs undefined';
-    expect(parityOf('<Select label="Region" value="$region" options="$regions" placeholder="All regions" id="G2uA" />', host, parityData).filter((d) => d !== stamp)).toEqual([]);
+    // The live select stamps no binding; its trigger is a labelled, closed listbox button.
+    expect(host.firstElementChild?.id).toBe('G2uA');
     expect(host.querySelector('[data-mx-bound]')).toBeNull();
     const select = host.querySelector('button[aria-haspopup="listbox"]') as HTMLButtonElement;
+    expect([select.type, select.getAttribute('aria-label'), select.getAttribute('aria-expanded')]).toEqual(['button', 'Region', 'false']);
     expect(select.textContent).toContain('West');
     select.click();
     const options = [...document.querySelectorAll('[role="option"]')];
@@ -216,14 +214,19 @@ describe('DataTable', () => {
     await vi.waitFor(() => expect(host.querySelector('tbody')?.textContent).toContain('@mxmx_test_native_user'));
     dispose();
   });
-  it('renders the rows and header of its table and matches today\'s DOM', () => {
+  it('renders the rows and sortable headers of its table inside its author wrapper', () => {
     const { host } = mount(undefined, () => <DataTable data="$monthly" height="300px" id="dIQl" />);
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
     // Today's DataTableAdapter wrapper holds the author identity; the kit table inside it is the helper's bare kit render.
     const wrapper = host.firstElementChild!;
     expect(Object.fromEntries([...wrapper.attributes].map((a) => [a.name, a.value]))).toEqual({ id: 'dIQl', 'aria-label': 'DataTable embed', 'aria-busy': 'false', style: 'width:100%' });
-    const moved = '/0<div> @id: "dIQl" vs undefined';
-    expect(parityOf('<DataTable data="$monthly" height="300px" id="dIQl" />', wrapper, parityData).filter((d) => d !== moved)).toEqual([]);
+    const grid = wrapper.querySelector('[data-slot="data-table"]')!;
+    expect([grid.getAttribute('aria-label'), grid.hasAttribute('id')]).toEqual(['Data grid', false]);
+    expect((grid.firstElementChild as HTMLElement).style.maxHeight).toBe('300px');
+    expect([...grid.querySelectorAll('th')].map((th) => [th.getAttribute('scope'), th.getAttribute('aria-label'), th.getAttribute('aria-sort'), th.style.textAlign]))
+      .toEqual([['col', 'Sort by month', 'none', 'left'], ['col', 'Sort by revenue', 'none', 'right'], ['col', 'Sort by units', 'none', 'right']]);
+    expect([...grid.querySelectorAll('tbody tr')].map((tr) => [tr.getAttribute('data-index'), [...tr.querySelectorAll('td')].map((td) => td.textContent)]))
+      .toEqual([['0', ['2025-01-01', '120', '3']], ['1', ['2025-02-01', '160', '4']]]);
   });
 });
 
@@ -600,18 +603,20 @@ describe('data widget parity with the live reader', () => {
   });
 });
 
-// The compiler writes these classes before hydration; compare them with today's roots.
+// The compiler writes these classes before hydration; the live root must render the same, or it flips on hydration.
 import { RECIPES } from '../kit/recipes/data';
-import { reactRender, shapeOf } from './kit-parity';
 
 describe('data class recipes', () => {
-  for (const tag of ['Select', 'DataTable'] as const) {
-    it(`${tag} preserves its root class and merges author classes`, () => {
-      for (const author of ['', ' ring-2 px-4']) {
-        const props = { className: author.trim() };
-        const markup = `<${tag} label="Region" className="${author.trim()}" />`;
-        const expected = shapeOf(reactRender(markup))[0]?.attrs.class;
-        expect(RECIPES[tag]?.(props).split(/\s+/).sort().join(' ')).toBe(expected);
+  const flat = (value: string | null | undefined) => (value ?? '').split(/\s+/).filter(Boolean).sort().join(' ');
+  const views = {
+    Select: (className: string) => <Select label="Region" className={className} />,
+  };
+  // DataTable is left out: its recipe classes the inner grid, not the author wrapper the live component draws.
+  for (const tag of ['Select'] as const) {
+    it(`${tag}: the compile-time root class is the class the live component renders, with and without an author class`, () => {
+      for (const author of ['', 'ring-2 px-4']) {
+        const { host, dispose } = mount(undefined, () => views[tag](author));
+        try { expect(flat(RECIPES[tag]?.({ className: author }))).toBe(flat(host.firstElementChild?.getAttribute('class'))); } finally { dispose(); }
       }
     });
   }
