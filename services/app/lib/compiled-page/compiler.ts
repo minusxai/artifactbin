@@ -46,11 +46,11 @@ import type { GeneratedSources } from './codegen-safety';
 import { CHART_SLOT_ATTR, EMPTY_LINK_HINTS, MIN_HANDOVER_CONTRACT, type CompileInput, type CompiledPage, type CompilerBuild, type IslandRef } from './contract';
 import { linkHintsOf } from './links';
 import { planOf } from './plan';
-import { buildDocumentModules } from './bundle.server';
+import { buildDocumentModules, loadKitServer, type KitServer } from './bundle.server';
 import { contentSha } from './speculation';
 import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
-import { solidAttrs, solidChildren, solidText, solidTextChild, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
+import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -131,6 +131,16 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Breadcrumb: { mod: 'static' }, BreadcrumbList: { mod: 'static' }, BreadcrumbItem: { mod: 'static' }, BreadcrumbLink: { mod: 'static' }, BreadcrumbPage: { mod: 'static' }, BreadcrumbSeparator: { mod: 'static' }, BreadcrumbEllipsis: { mod: 'static' },
   SlideDeck: { mod: 'static' }, Slide: { mod: 'static', api: ['title'] }, Video: { mod: 'static', api: ['src', 'poster', 'title', 'interactive'] }, File: { mod: 'static', api: ['src', 'title', 'name', 'bytes', 'pages', 'interactive'] },
 };
+/**
+ * Kit components whose server render is a pure function of static props (no behaviour, no context, no asset or
+ * deck lookup): a static one renders to HTML at compile time with the plain elements (`kitHtml`).
+ */
+const KIT_CHUNK: ReadonlySet<string> = new Set([
+  'Table', 'TableHeader', 'TableBody', 'TableFooter', 'TableRow', 'TableHead', 'TableCell', 'TableCaption',
+  'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction', 'CardContent', 'CardFooter',
+  'Badge', 'Alert', 'AlertTitle', 'AlertDescription', 'Progress', 'Icon', 'Separator', 'Skeleton',
+  'Breadcrumb', 'BreadcrumbList', 'BreadcrumbItem', 'BreadcrumbLink', 'BreadcrumbPage', 'BreadcrumbSeparator', 'BreadcrumbEllipsis',
+]);
 /** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
@@ -247,6 +257,8 @@ type GenerateInput = Omit<CompileInput, 'build'> & {
   glyphCatalogUrl?: string;
   /** Render static plain-HTML subtrees here (the default); `false` keeps every one as JSX (the parity tests' reference). */
   staticHtml?: boolean;
+  /** The shared build's server kit (bundle.server `loadKitServer`): static kit subtrees render here too. Absent, they keep their JSX. */
+  kitServer?: KitServer;
 };
 
 export function generate(input: GenerateInput): Generated {
@@ -388,16 +400,62 @@ export function generate(input: GenerateInput): Generated {
     return html === null ? null : { html, counts: true };
   }
 
-  /** A static plain element's server HTML (see SOLID_BOOLEAN), or null when it keeps its JSX. Memoized: a JSX fallback re-asks its children. */
-  const htmlMemo = new WeakMap<JsxElement, string | null>();
+  /**
+   * A static element's server HTML (see SOLID_BOOLEAN), or null when it keeps its JSX. Memoized: a JSX fallback
+   * re-asks its children. A kit component's JSX hoists its object props to module constants (`json`), which number
+   * the browser module's: a rendered subtree keeps the constants its JSX would have made, in the same order, and a
+   * subtree that falls back to JSX keeps none (its JSX makes them) — each time a memoized one is used, it makes them again.
+   */
+  const htmlMemo = new WeakMap<JsxElement, { html: string | null; data: string[] }>();
   function htmlOf(node: JsxElement, path: string, ctx: Ctx): string | null {
-    if (htmlMemo.has(node)) return htmlMemo.get(node)!;
-    const html = renderHtml(node, path, ctx);
-    htmlMemo.set(node, html);
-    return html;
+    let known = htmlMemo.get(node);
+    if (!known) {
+      const mark = data.length;
+      const html = renderHtml(node, path, ctx);
+      known = { html, data: data.splice(mark) };
+      htmlMemo.set(node, known);
+    }
+    if (known.html !== null) data.push(...known.data);
+    return known.html;
+  }
+  /** A static kit component's server HTML (`KIT_CHUNK`), from the build's server kit; null when it keeps its JSX. */
+  function kitHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
+    if (!input.kitServer || ctx.liveKit || !KIT_CHUNK.has(node.tag)) return null;
+    if (node.attributes.some((a) => !a.value.static)) return null;
+    const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
+    const component = meta && input.kitServer[meta.mod]?.[node.tag];
+    if (!meta || typeof component !== 'function') return null;
+    useKit(node.tag, 'static', ctx);
+    const parts = kitParts(node, path, 'static', ctx, meta);
+    if (typeof parts === 'string') return null;
+    // Keyed in the JSX's order: the API props, the class, the DOM attributes (`emitElement`).
+    const props: Props = {};
+    for (const [k, v] of Object.entries(parts.api)) {
+      safeAttr(k);
+      if (typeof v === 'string') props[k] = v;
+      else { json(v); props[k] = JSON.parse(data[data.length - 1]!); }
+    }
+    if (parts.cls) props.class = parts.cls;
+    for (const [n, v] of parts.attrs) props[safeAttr(n)] = v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? true : v;
+    const children: unknown[] = [];
+    for (let i = 0; i < node.children.length; i++) {
+      const child = node.children[i]!;
+      if (child.type === 'text') { if (child.value) children.push(solidTextValue(child.value)); continue; }
+      if (child.type === 'expression') {
+        if (!child.value.static) return null;
+        const v = child.value.json;
+        if (typeof v === 'string' || typeof v === 'number') children.push(String(v));
+        continue;
+      }
+      const html = childHtmlOf(child, `${path}.${i}`, ctx);
+      if (html === null) return null;
+      if (html.counts) children.push({ t: html.html });
+    }
+    return kitServerHtml(component, props, children);
   }
   function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
-    if (node.isComponent || node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    if (node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    if (node.isComponent) return kitHtml(node, path, ctx);
     const lower = node.tag.toLowerCase();
     if (SOLID_SPECIAL_TAGS.has(lower)) return null;
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
@@ -432,6 +490,64 @@ export function generate(input: GenerateInput): Generated {
     return `${open}${solidChildren(parts)}</${tag}>`;
   }
 
+  /**
+   * A kit component's props as `emitElement` hands them to it (its API props, its recipe class, its DOM attributes),
+   * or the JSX that stands in for it. Shared with the static chunks (`kitHtml`), which call the component itself.
+   */
+  function kitParts(node: JsxElement, path: string, mode: Mode, ctx: Ctx, meta: KitMeta) {
+    const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
+    if (!ctx.preview && ['TabsContent', 'AccordionContent', 'CollapsibleContent', 'PopoverContent', 'TooltipContent'].includes(node.tag)) props.forceMount = true;
+    if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
+    if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
+    // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
+    if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
+    // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
+    if (node.tag === 'DialogContent') props.stacked = !(typeof props.className === 'string' && props.className);
+    // The runtime registry hands Mermaid the document's colour mode.
+    if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
+    // <Column> children ARE the column spec (interpreter DataTable templates → parseColumnSpecs(templates.map(t => t.props))).
+    let cellsJsx = '';
+    if (node.tag === 'DataTable') {
+      const columns = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'Column' ? [[c, i] as const] : []));
+      const cols = columns.map(([c, i]) => rawBuildProps(c.attributes, true, 'Column', `${path}.${i}`, undefined, {}));
+      if (cols.length) {
+        props.columns = cols.map(({ [AST]: _ast, ...rest }) => rest);
+        props.templates = cols.map((c, k) => {
+          const ids = [...templateIds(columns[k]![0].children)];
+          return { col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST], ...(ids.length ? { ids } : {}) };
+        });
+        cellsJsx = emitCells(columns, path, mode, ctx);
+      }
+    }
+    if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
+    if (node.tag === 'Icon' && input.glyphCatalogUrl) props.catalogUrl = input.glyphCatalogUrl;
+    if (node.tag === 'Iframe') {
+      // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
+      if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
+      props.compiled = managedFrameOf(node);
+    }
+    // The runtime hands the map the document's colour mode.
+    if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
+    const classes = peopleClasses(node.tag, props);
+    if (classes) props.classes = classes;
+    const viz = props.viz as { recipe?: unknown } | undefined;
+    if (node.tag === 'Question' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
+    const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
+    // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
+    const recipe = RECIPES[node.tag];
+    // In a fixed grid's tile the tile owns the size: the recipe and the port both know.
+    const inGrid = !!(meta.grid && ctx.grid && !ctx.grid.flow);
+    const cls = meta.dom === 'identity' ? null : node.tag === 'Icon' ? cn(ICON_BASE_CLASS, typeof props.className === 'string' ? props.className : undefined) : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
+    let dom: Props = { ...props };
+    for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
+    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
+    // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
+    if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
+    if (inGrid) api.inGridItem = true;
+    const attrs = elementAttrs('div', dom).filter(([n]) => n !== 'class');
+    return { props, api, recipe, inGrid, cls, attrs, cellsJsx };
+  }
+
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const children = (inner: Ctx = ctx): string => node.children.map((c, i) => emit(c, `${path}.${i}`, mode, inner)).join('');
     if (node.tag === 'For') return emitFor(node, path, mode, ctx);
@@ -454,56 +570,9 @@ export function generate(input: GenerateInput): Generated {
       const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
       useKit(node.tag, mode, ctx);
-      const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
-      if (!ctx.preview && ['TabsContent', 'AccordionContent', 'CollapsibleContent', 'PopoverContent', 'TooltipContent'].includes(node.tag)) props.forceMount = true;
-      if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
-      if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
-      // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
-      if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
-      // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
-      if (node.tag === 'DialogContent') props.stacked = !(typeof props.className === 'string' && props.className);
-      // The runtime registry hands Mermaid the document's colour mode.
-      if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
-      // <Column> children ARE the column spec (interpreter DataTable templates → parseColumnSpecs(templates.map(t => t.props))).
-      let cellsJsx = '';
-      if (node.tag === 'DataTable') {
-        const columns = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'Column' ? [[c, i] as const] : []));
-        const cols = columns.map(([c, i]) => rawBuildProps(c.attributes, true, 'Column', `${path}.${i}`, undefined, {}));
-        if (cols.length) {
-          props.columns = cols.map(({ [AST]: _ast, ...rest }) => rest);
-          props.templates = cols.map((c, k) => {
-            const ids = [...templateIds(columns[k]![0].children)];
-            return { col: c.col, id: typeof c.id === 'string' ? c.id : undefined, path: c[AST], ...(ids.length ? { ids } : {}) };
-          });
-          cellsJsx = emitCells(columns, path, mode, ctx);
-        }
-      }
-      if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
-      if (node.tag === 'Icon' && input.glyphCatalogUrl) props.catalogUrl = input.glyphCatalogUrl;
-      if (node.tag === 'Iframe') {
-        // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
-        if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
-        props.compiled = managedFrameOf(node);
-      }
-      // The runtime hands the map the document's colour mode.
-      if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
-      const classes = peopleClasses(node.tag, props);
-      if (classes) props.classes = classes;
-      const viz = props.viz as { recipe?: unknown } | undefined;
-      if (node.tag === 'Question' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
-      const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
-      // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
-      const recipe = RECIPES[node.tag];
-      // In a fixed grid's tile the tile owns the size: the recipe and the port both know.
-      const inGrid = !!(meta.grid && ctx.grid && !ctx.grid.flow);
-      const cls = meta.dom === 'identity' ? null : node.tag === 'Icon' ? cn(ICON_BASE_CLASS, typeof props.className === 'string' ? props.className : undefined) : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
-      let dom: Props = { ...props };
-      for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
-      if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
-      // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
-      if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
-      if (inGrid) api.inGridItem = true;
-      const attrs = elementAttrs('div', dom).filter(([n]) => n !== 'class');
+      const parts = kitParts(node, path, mode, ctx, meta);
+      if (typeof parts === 'string') return parts;
+      const { props, api, recipe, inGrid, cls, attrs, cellsJsx } = parts;
       const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? ctx.row ? `rt.sub(${lit(v)}, ${ctx.row})` : lit(v) : json(v)}}`).join('');
       const authorClass = typeof props.className === 'string' ? props.className : '';
       const rowClass = !!ctx.row && !!authorClass;
@@ -774,7 +843,7 @@ const deploymentOrigins = (): string[] => { try { return [new URL(PUBLIC_BASE_UR
  */
 export async function compilePage(input: CompileInput, build: CompilerBuild): Promise<CompiledPage> {
   if (input.build !== build.id) throw new Error(`compile: input is for build ${input.build}, not ${build.id}`);
-  const generated = generate({ ...input, glyphCatalogUrl: build.manifest['@mx/glyphs'] });
+  const generated = generate({ ...input, glyphCatalogUrl: build.manifest['@mx/glyphs'], kitServer: await loadKitServer() });
   const unknown = generated.behaviors.filter((b) => !build.manifest[b]);
   if (unknown.length) throw new Error(`compile: the island build carries no ${unknown.join(', ')}`);
   // Classified with the anonymous reader's admission the caller decided (snapshots.server

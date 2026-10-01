@@ -9,6 +9,47 @@ import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import { serializeJsx } from '@/lib/jsx';
 
 describe('compiled DOM edit mounter', () => {
+  it('mounts the regions on screen at once and the off-screen ones in later slices, never after dispose', async () => {
+    // A component between each heading and table pair: six regions, one editor each.
+    const blocks = Array.from({ length: 6 }, (_, i) => `<Badge id="b${i}">b</Badge><h2 id="h${i}">Table ${i}</h2><table id="t${i}"><tbody><tr><td>r${i}</td></tr></tbody></table>`).join('');
+    const source = `<div id="r">${blocks}</div>`;
+    const html = Array.from({ length: 6 }, (_, i) => `<span data-mx-ast="0.${i * 3}" id="b${i}">b</span><h2 data-mx-ast="0.${i * 3 + 1}" id="h${i}">Table ${i}</h2><table data-mx-ast="0.${i * 3 + 2}" id="t${i}"><tbody><tr><td>r${i}</td></tr></tbody></table>`).join('');
+    const setup = () => {
+      const root = document.createElement('div');
+      root.innerHTML = `<div data-mx-ast="0" id="r">${html}</div>`;
+      document.body.append(root);
+      // Only the first heading is on screen; every other block sits below the fold.
+      for (const el of root.querySelectorAll<HTMLElement>('[data-mx-ast^="0."]')) {
+        const below = el.id !== 'h0';
+        el.getBoundingClientRect = () => ({ top: below ? 5000 : 10, bottom: below ? 5100 : 40, left: 0, right: 100, width: 100, height: 30, x: 0, y: 0, toJSON: () => ({}) });
+      }
+      return root;
+    };
+    const root = setup();
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow: vi.fn() });
+    const editors = () => root.querySelectorAll('[data-mx-edit-region]').length;
+    const onScreen = editors();
+    expect(onScreen).toBeGreaterThan(0);
+    // Off-screen blocks still read as compiled until their slice mounts them.
+    expect(root.querySelector('#t5')).not.toBeNull();
+    for (let i = 0; i < 20 && root.querySelector('#r > table#t5'); i++) await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(editors()).toBeGreaterThan(onScreen);
+    expect(root.querySelector('#r > table#t5')).toBeNull();
+    mounted.dispose();
+    expect(root.querySelectorAll('[data-mx-edit-region]').length).toBe(0);
+    expect(root.querySelector('#t5')).not.toBeNull();
+    root.remove();
+
+    const again = setup();
+    const early = mountCompiledEditRegions(again, parseJsxOrThrow(source).nodes, { onFlow: vi.fn() });
+    const before = again.querySelectorAll('[data-mx-edit-region]').length;
+    early.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(before).toBeGreaterThan(0);
+    expect(again.querySelectorAll('[data-mx-edit-region]').length).toBe(0);
+    expect(again.querySelectorAll('h2[data-mx-ast], table[data-mx-ast]').length).toBe(12);
+    again.remove();
+  });
   it('renames a compiled deck slide through the rail edit control', () => {
     const root = document.createElement('div');
     root.innerHTML = '<nav class="mx-rail"><button class="mx-rail-row"><span class="mx-rail-label"><span class="mx-rail-title">One</span></span></button><button class="mx-rail-row"><span class="mx-rail-label"><span class="mx-rail-title">Two</span></span></button></nav>';

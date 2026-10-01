@@ -409,8 +409,12 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
           && oldElement.getAttribute(AST_PATH_ATTR) === newElement.getAttribute(AST_PATH_ATTR);
         if (!sameChart && !ctx.stableElementIds?.has(oldElement.id)
           && !(path && ctx.stableElementPaths?.has(path))) {
-          syncAttributes(oldElement, newElement, null);
-          morphChildren(oldElement, newElement, ctx);
+          // An element the new version draws exactly as it is (a table the edit did not touch) stays as it is: one
+          // native comparison instead of a walk over every cell.
+          if (!oldElement.isEqualNode(newElement)) {
+            syncAttributes(oldElement, newElement, null);
+            morphChildren(oldElement, newElement, ctx);
+          }
         } else if (!sameChart) adoptHydrationKeys(oldElement, newElement);
       } else if (match.nodeValue !== next.nodeValue) {
         match.nodeValue = next.nodeValue;

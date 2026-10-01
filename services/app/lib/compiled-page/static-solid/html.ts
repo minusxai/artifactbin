@@ -46,14 +46,34 @@ export function solidAttrs(attrs: ReadonlyArray<readonly [string, string]>, chec
 }
 
 /**
- * A static element child's text, as Solid serves the JSX the compiler writes for it (compiler `emit`): `{lit}`
+ * A static element child's text (`solidTextValue`: the string Solid's server receives; `solidTextChild`: its HTML), as Solid serves the JSX the compiler writes for it (compiler `emit`): `{lit}`
  * and the long-text marker reach Solid verbatim; a short JSX text has its whitespace runs collapsed (`jsxLiteral`
  * encodes U+2028/U+2029 as entities, so those survive the collapse).
  */
-export const solidTextChild = (value: string): string => solidText(value.length > 1024 || /\r|\n/.test(value) ? value : value.replace(/[^\S\u2028\u2029]+/g, ' '));
+export const solidTextValue = (value: string): string => (value.length > 1024 || /\r|\n/.test(value) ? value : value.replace(/[^\S\u2028\u2029]+/g, ' '));
+export const solidTextChild = (value: string): string => solidText(solidTextValue(value));
 
 /** An element's rendered children: a run of two or more is boxed child by child, as Solid's hydratable template boxes its holes. */
 export const solidChildren = (parts: readonly string[]): string => (parts.length > 1 ? parts.map((part) => `<!--$-->${part}<!--/-->`).join('') : parts.join(''));
 
 /** The skeleton's JSX for chunk `i`: its HTML is `$mxH[i]` (bundle.server `ssrModuleCode`), an object Solid's server inserts unescaped. */
 export const staticChunkJsx = (i: number): string => `<rt.NoHydration>{{ t: $mxH[${i}] }}</rt.NoHydration>`;
+
+/**
+ * A static kit component's server HTML: the component of the shared build's server half (`@mx/kit/<mod>`), called
+ * with the props the skeleton's JSX would hand it and its children as Babel shapes them under `NoHydration` (a text
+ * child a string, an element child its `{ t }`; one child bare, several an array). Called outside any render, so
+ * no hydration key is written — as under the `NoHydration` boundary it sits in. Null when it renders anything but
+ * one server node.
+ */
+export function kitServerHtml(component: unknown, props: Record<string, unknown>, children: readonly unknown[]): string | null {
+  if (typeof component !== 'function') return null;
+  const given = { ...props };
+  if (children.length) Object.defineProperty(given, 'children', { enumerable: true, configurable: true, get: () => (children.length === 1 ? children[0] : [...children]) });
+  try {
+    const out = (component as (p: Record<string, unknown>) => unknown)(given);
+    return out && typeof out === 'object' && typeof (out as { t?: unknown }).t === 'string' ? (out as { t: string }).t : null;
+  } catch {
+    return null;
+  }
+}
