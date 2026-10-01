@@ -210,12 +210,20 @@ export function normalizeSplice(source: string, splice: Splice): Splice {
   const parsed = parseJsx(source);
   if (!parsed.ok) return splice;
 
-  const target = applySplice(source, splice);
   const width = (s: Splice) => {
     const span = spanIn(parsed.nodes, s);
     return span.end - span.start;
   };
 
+  /**
+   * Two splices of `source` give the same document when they agree over the window both touch: outside it each
+   * keeps `source` as it was. Compared there, not as two whole documents per step (a report is half a megabyte).
+   */
+  const sameResult = (a: Splice, b: Splice): boolean => {
+    const lo = Math.min(a.start, b.start), hi = Math.max(a.start + a.removed.length, b.start + b.removed.length);
+    const middle = (s: Splice) => source.slice(lo, s.start) + s.inserted + source.slice(s.start + s.removed.length, hi);
+    return a.inserted.length - a.removed.length === b.inserted.length - b.removed.length && middle(a) === middle(b);
+  };
   let best = splice;
   let bestWidth = width(splice);
   for (const slide of [slideLeft, slideRight]) {
@@ -224,7 +232,7 @@ export function normalizeSplice(source: string, splice: Splice): Splice {
       const next = slide(source, current);
       // Equivalence is verified, not assumed: a candidate that would alter the
       // document is not a rewording of this edit.
-      if (!next || applySplice(source, next) !== target) break;
+      if (!next || !sameResult(splice, next)) break;
       const w = width(next);
       if (w < bestWidth) { best = next; bestWidth = w; }
       current = next;

@@ -136,6 +136,23 @@ interface FrameEditSessionOptions {
  * Ctrl/Cmd-Z (solid/editor/InPlaceEditor): it runs before any document listener and steps aside
  * inside an `<input>` or `<textarea>`, where the key belongs to that field's own text.
  */
+/** Two JSON-shaped values hold the same data (what equal JSON.stringify output meant, without building it). */
+function sameData(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!sameData(a[i], b[i])) return false;
+    return true;
+  }
+  if (Array.isArray(b)) return false;
+  const left = Object.keys(a).filter((key) => (a as Record<string, unknown>)[key] !== undefined);
+  const right = Object.keys(b).filter((key) => (b as Record<string, unknown>)[key] !== undefined);
+  if (left.length !== right.length) return false;
+  for (const key of left) if (!sameData((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) return false;
+  return true;
+}
+
 export function createFrameEditSession({
   win,
   channel,
@@ -145,7 +162,6 @@ export function createFrameEditSession({
 }: FrameEditSessionOptions): FrameEditSession {
   const doc = win.document;
   let nodes: JsxNode[] = [];
-  let nodesContent = JSON.stringify(nodes);
   let active: ActiveHost | null = null;
   let typingReported = false;
   let disposed = false;
@@ -362,12 +378,12 @@ export function createFrameEditSession({
       if (next === nodes) return;
       // A refetch can deserialize the same document into fresh objects. It is
       // not an edit and must not cancel a selection or an active resize.
-      const nextContent = JSON.stringify(next);
-      if (nextContent === nodesContent) {
+      // Compared in place, stopping at the first difference: serializing a report's tree at every pause was most
+      // of the pause.
+      if (sameData(next, nodes)) {
         nodes = next;
         return;
       }
-      nodesContent = nextContent;
       nodes = next;
       selection.nodesChanged();
     },

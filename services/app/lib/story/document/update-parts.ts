@@ -17,7 +17,8 @@
  * Pure: source in, parts out, no DOM, no I/O.
  */
 import type { JsxNode } from '@/lib/jsx';
-import { storyBodyFor } from '@/lib/story/document/body';
+import { storyBodyFor, storyBodyOf } from '@/lib/story/document/body';
+import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import type { AssetLookup } from '@/lib/story/assets/asset-url';
 
 interface StoryUpdateParts {
@@ -47,7 +48,27 @@ interface StoryUpdateParts {
  * write but not what the rows recorded.
  */
 export function storyUpdateParts(source: string, assets?: AssetLookup): StoryUpdateParts | null {
-  const parts = storyBodyFor(source, assets);
+  return partsOf(storyBodyFor(source, assets));
+}
+
+/**
+ * The same parts from the page's SHARED parse (lib/jsx/parse-shared): the owner's editor asks for one source's
+ * parts from several places at a pause (the draft sender, the frame's reconcile, the declarations check), and the
+ * undo history and save diff parse that same source, so it is parsed once. Browser callers only: the tree is
+ * shared and read-only (no pass of `storyBodyOf` mutates it).
+ */
+export function storyUpdatePartsShared(source: string, assets?: AssetLookup): StoryUpdateParts | null {
+  const kept = sharedParts.find((entry) => entry.source === source && entry.assets === assets);
+  if (kept) return kept.parts;
+  const parts = partsOf(storyBodyOf(parseJsxShared(source), assets));
+  sharedParts.unshift({ source, assets, parts });
+  if (sharedParts.length > 4) sharedParts.length = 4;
+  return parts;
+}
+/** The last few answers: one pause asks for the same source's parts from the sender, the frame and the query check. */
+const sharedParts: Array<{ source: string; assets: AssetLookup | undefined; parts: StoryUpdateParts | null }> = [];
+
+function partsOf(parts: ReturnType<typeof storyBodyFor>): StoryUpdateParts | null {
   if (!parts) return null;
   const { content, body } = parts;
   return {

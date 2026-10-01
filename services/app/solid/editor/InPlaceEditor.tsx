@@ -39,7 +39,7 @@ import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/reader/edit-bar';
-import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { storyUpdateParts, storyUpdatePartsShared } from '@/lib/story/document/update-parts';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
 import {
   freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath,
@@ -342,7 +342,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     if (queriesUnavailable) return;
     let alive = true;
     const timer = window.setTimeout(() => {
-      const signature = storyUpdateParts(editorSource.current())?.declarations ?? null;
+      const signature = storyUpdatePartsShared(editorSource.current())?.declarations ?? null;
       if (signature === null || signature === ranSignature) return;
       if (!hasDeclarations(signature)) { ranSignature = signature; return; }
       ranSignature = signature;

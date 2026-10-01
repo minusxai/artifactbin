@@ -81,3 +81,23 @@ it('advances the graph by an accepted patch in the worker: only the patch crosse
  // Untouched nodes are shared, not copied; the input graph is left as it was.
  expect(graphSource(document)).toBe(source);
 });
+
+it('sends a large graph in parts, never whole, and prepares exactly as the page would',async()=>{
+ const {GRAPH_PART}=await import('../document/document-authoring-client');
+ const sent:WorkerRequest[]=[];const worker=await inProcessWorker(sent);
+ const prepare=createDocumentPreparer(()=>worker);
+ const big=`<main id="root">${Array.from({length:GRAPH_PART+150},(_,i)=>`<p id="p${i}">Paragraph ${i} <b id="b${i}">bold</b></p>`).join('')}</main>`;
+ const document=createDocumentGraph(big,1),base={document,version:1,meta:{}};
+ expect(Object.keys(document.nodes).length).toBeGreaterThan(GRAPH_PART*2);
+ const change={source:big.replace('Paragraph 7 ','Paragraph 7, typed ')};
+ const viaWorker=await prepare(base,change);
+ expect(viaWorker.update).toEqual(prepareClientDocumentUpdate(base,change));
+ const parts=sent.filter(message=>message.kind==='graph-part');
+ expect(parts.length).toBeGreaterThan(2);
+ expect(sent.some(message=>'document' in message&&message.document!==undefined)).toBe(false);
+ // The next flush on the same snapshot sends only its change.
+ sent.length=0;
+ const again=await prepare({...base},{source:big.replace('Paragraph 9 ','Paragraph 9, typed ')});
+ expect(sent.map(message=>message.kind??'prepare')).toEqual(['prepare']);
+ expect(graphSource(applyGraphPatch(document,1,again.update.patch)!)).toContain('Paragraph 9, typed');
+});

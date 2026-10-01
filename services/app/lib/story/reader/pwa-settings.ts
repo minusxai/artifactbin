@@ -1,4 +1,5 @@
 import { escapeHtml } from '@artifactbin/utils/escape';
+import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '../document/helmet';
 
@@ -16,7 +17,8 @@ const metaName = (key: keyof typeof fields) => `artifactbin:pwa-${fields[key]}`;
 const keys = Object.keys(fields) as Array<keyof typeof fields>;
 
 export function readPwaSettings(source: string | JsxNode[]): PwaSettings {
-  const parsed = typeof source === 'string' ? parseJsx(source) : { ok: true as const, nodes: source };
+  // Read-only: the editor asks on every source change, so the parse is the shared one.
+  const parsed = typeof source === 'string' ? parseJsxShared(source) : { ok: true as const, nodes: source };
   if (!parsed.ok) return {};
   const { helmet } = splitHelmet(parsed.nodes);
   const result: PwaSettings = {};

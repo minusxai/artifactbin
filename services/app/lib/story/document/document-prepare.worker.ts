@@ -16,11 +16,19 @@ import {graphSource} from '../graph/document-graph';
 import type {WorkerRequest,PrepareResponse} from './document-prepare-protocol';
 
 let graph:DocumentGraph|null=null;
+/** A graph arriving in parts (GraphPartRequest), adopted by the `staged` preparation that follows them. */
+let staged:DocumentGraph|null=null;
+const own=(target:Record<string,unknown>,from:Record<string,unknown>)=>{for(const key of Object.keys(from))Object.defineProperty(target,key,{value:from[key],enumerable:true,writable:true,configurable:true});};
 /** The worker's global scope: the slice used here, typed without the webworker lib the page's DOM types exclude. */
 const scope=globalThis as unknown as {onmessage:((event:MessageEvent<WorkerRequest>)=>void)|null;postMessage:(message:PrepareResponse)=>void};
 scope.onmessage=(event:MessageEvent<WorkerRequest>)=>{
  const request=event.data;
  let reply:PrepareResponse;
+ if(request.kind==='graph-part'){
+  if(request.graph)staged={...request.graph,nodes:{},claimedIds:{}} as DocumentGraph;
+  if(staged){own(staged.nodes,request.nodes);own(staged.claimedIds,request.claimedIds);}
+  return;
+ }
  if(request.kind==='advance'){
   const next=graph&&advanceGraph(graph,request.version,request.patch);
   graph=next;
@@ -29,6 +37,7 @@ scope.onmessage=(event:MessageEvent<WorkerRequest>)=>{
  }
  const {id,document,base,change}=request;
  if(document)graph=document;
+ if(request.staged){graph=staged;staged=null;}
  try {
   if(!graph)throw new Error('Refresh the document before saving.');
   const prepared=prepareClientDocument({...base,document:graph} as ClientDocumentSnapshot,change as ClientDocumentChange);
