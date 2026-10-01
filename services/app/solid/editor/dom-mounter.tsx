@@ -370,13 +370,15 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     // the editor root: ProseMirror owns its root's attributes.
     if (layout) mount.setAttribute('data-mx-parent-layout', Array.from(parent.children).every((child) => child === mount) ? layout : 'item');
     cleanups.push(() => {
-      disposeSolid();
       mounted.delete(path);
       if (mount.isConnected) {
         // The compiled blocks of the last draft adopted, so leaving shows what was typed.
         for (const element of restore) parent.insertBefore(element, mount);
         mount.remove();
       }
+      // Torn down off the page, as it was built: removing an editable root in place brought the page's styles up to
+      // date at every region.
+      disposeSolid();
     });
   };
   visit(nodes, '');
