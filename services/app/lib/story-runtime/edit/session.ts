@@ -82,8 +82,18 @@ const EDIT_ROOT_ATTR = 'data-mx-edit-root';
  * NOT part of the document's served stylesheet: a reader must never download
  * or apply editor chrome.
  */
+/** Set by dom-mounter on a region wrapper whose authored parent is a flex or grid container. */
+const EDIT_LAYOUT_ATTR = 'data-mx-parent-layout';
 const EDIT_MODE_CSS = [
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
+  // A prose region's blocks sit inside the editor root (a focusable box: with `display: contents`
+  // it cannot take focus), not in their authored parent. Under a flex or grid parent the root takes the
+  // parent's place in full and inherits its layout through the box-less region wrappers, so a flex
+  // column's gap, a card's centring and a grid's tracks lay the blocks out as in reading mode.
+  `[${EDIT_LAYOUT_ATTR}="flex"], [${EDIT_LAYOUT_ATTR}="grid"], [${EDIT_LAYOUT_ATTR}] > .mx-prose-region, [${EDIT_LAYOUT_ATTR}="flex"] > .mx-prose-region > .ProseMirror, [${EDIT_LAYOUT_ATTR}="grid"] > .mx-prose-region > .ProseMirror { flex-direction: inherit; flex-wrap: inherit; justify-content: inherit; justify-items: inherit; align-items: inherit; align-content: inherit; row-gap: inherit; column-gap: inherit; grid-template-columns: inherit; grid-template-rows: inherit; grid-auto-flow: inherit; grid-auto-columns: inherit; grid-auto-rows: inherit; }`,
+  `[${EDIT_LAYOUT_ATTR}="flex"] > .mx-prose-region > .ProseMirror { display: flex; flex: 1 1 auto; align-self: stretch; min-width: 0; }`,
+  `[${EDIT_LAYOUT_ATTR}="grid"] > .mx-prose-region > .ProseMirror { display: grid; grid-column: 1 / -1; min-width: 0; }`,
+  `[${EDIT_LAYOUT_ATTR}="item"] > .mx-prose-region > .ProseMirror { grid-column-start: var(--mx-place-grid-column-start, auto); grid-column-end: var(--mx-place-grid-column-end, auto); grid-row-start: var(--mx-place-grid-row-start, auto); grid-row-end: var(--mx-place-grid-row-end, auto); flex-grow: var(--mx-place-flex-grow, 0); flex-shrink: var(--mx-place-flex-shrink, 1); flex-basis: var(--mx-place-flex-basis, auto); align-self: var(--mx-place-align-self, auto); justify-self: var(--mx-place-justify-self, auto); order: var(--mx-place-order, 0); min-width: 0; }`,
   '[contenteditable="true"]:focus { outline: none; }',
   // Hover draws nothing: the cursor says what a click does, and one grip sits in the margin.
   `[${EDIT_HOVER_ATTR}="block"][${EDIT_HOVER_ATTR}] { cursor: pointer; }`,

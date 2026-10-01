@@ -250,12 +250,14 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
     composing: () => state.composing,
     sync(nodes) {
       if (state.composing) return;
-      if (serializeJsx(sourceNodes(view.state.doc)) === serializeJsx(nodes)) {
+      // Compare engine to engine: parsing collapses source whitespace, so the incoming source is
+      // compared in its parsed form — an echo of our own edit, or a reindent, rebuilds nothing.
+      const doc = editorDocument(nodes);
+      if (serializeJsx(sourceNodes(view.state.doc)) === serializeJsx(sourceNodes(doc))) {
         // A normalized source echo can change AST paths without changing prose.
         view.updateState(view.state);
         return;
       }
-      const doc = editorDocument(nodes);
       const position = Math.min(view.state.selection.from, doc.content.size);
       view.updateState(EditorState.create({ doc, plugins: view.state.plugins, selection: TextSelection.near(doc.resolve(position)) }));
       props().onView?.(view);
