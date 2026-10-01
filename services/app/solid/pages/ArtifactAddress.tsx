@@ -67,6 +67,9 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
     if (compiledDocument() && !served) replaceDocument(window.location.pathname + window.location.search + window.location.hash);
   });
   return <Switch fallback={<main aria-label="Loading artifact" class={`${PAGE_COLUMN} mt-8 pb-24`}><Show when={page.error()} fallback="Loading artifact…"><button type="button" aria-label="Retry artifact" onClick={() => void page.refresh(true)}>Could not load artifact. Retry</button></Show></main>}>
+    {/* The page door answers a uniform 404 for a missing artifact and a private one alike (lib/artifacts/access): that
+        is the not-found page, not a load failure to retry. */}
+    <Match when={(page.error() as { status?: number } | undefined)?.status === 404}><NotFoundPage /></Match>
     <Match when={page.data()?.folder}>{(folder) => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}</Match>
     <Match when={isStarter(page.data())}><StarterPage answer={page.data() as unknown as StarterAnswer} /></Match>
     <Match when={isData(page.data())}><ArtifactDataPage answer={page.data() as unknown as DataAnswer} /></Match>
