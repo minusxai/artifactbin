@@ -23,6 +23,7 @@
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/agent-discovery-tags';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
+import { withModuleDataId } from '@/lib/compiled-page/carriers';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
 
 /** The file's origin as a CSP source (scheme://host[:port]), or null when it is not an http(s) origin. */
@@ -137,8 +138,7 @@ export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
   const title = escapeHtml(file.metadata.title);
   // A large document's module reads its dataflow literal by the reader page's
   // fixed id. The normal reader shell adds that id; this file owns its shell.
-  const compiledHtml = file.compiled?.html.replace(/<script type="application\/json" data-mx-module-data(?:="")?>/,
-    '<script type="application/json" id="mx-story-data" data-mx-module-data>') ?? '';
+  const compiledHtml = file.compiled ? withModuleDataId(file.compiled.html) : '';
   const compiledStory = file.compiled ? inlineStoryElement(compiledHtml, file.metadata.colorMode ?? 'light', file.metadata.theme) : '';
   // `source` right after `format`: the first "source" in the text is the one to edit, not `base.source`.
   const { format, source, ...rest } = file;

@@ -52,7 +52,6 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    experimental: { fsModuleCache: true },
     // `--shard` packs files by measured CI time (scripts/test-timings.json), not by count.
     sequence: { sequencer: TimedSequencer },
     testTimeout: 45_000,

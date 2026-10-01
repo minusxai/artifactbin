@@ -48,6 +48,7 @@ import { linkHintsOf } from './links';
 import { planOf } from './plan';
 import { buildDocumentModules } from './bundle.server';
 import { contentSha } from './speculation';
+import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -655,7 +656,7 @@ export function generate(input: GenerateInput): Generated {
   return {
     skeleton,
     islands: skeleton,
-    browserIslands: dataConsts ? browserSource.replace(dataConsts, `${moduleData.length ? 'const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n' : ''}${browserConsts}`) : browserSource,
+    browserIslands: dataConsts ? browserSource.replace(dataConsts, `${moduleData.length ? MODULE_DATA_READ_CODE : ''}${browserConsts}`) : browserSource,
     moduleData,
     islandRefs: nodes.some(needsBrowser) ? [{ renderId: 'd-', path: '0', kit: [...kitUsed.islands].sort(), readsData: !!input.flow && nodes.some(readsDataNode) }] : [],
     kit: { skeleton: [...kitUsed.skeleton].sort(), islands: [...kitUsed.islands].sort() },

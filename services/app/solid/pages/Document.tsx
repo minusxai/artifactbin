@@ -46,7 +46,7 @@ import Sun from 'lucide-solid/icons/sun';
 import Moon from 'lucide-solid/icons/moon';
 import X from 'lucide-solid/icons/x';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
-import { apiFetch } from '../lib/api';
+import { toggleReaction, wireReaderChrome, type ReaderPanel } from '../document/reader-chrome-adapter';
 
 /** The page panels wear the reader chrome's own sheet; inside the trusted root they need its tokens too. */
 const PANEL_CSS = `${STORY_CHROME_CSS}
@@ -145,7 +145,7 @@ export function DocumentPage(): JSX.Element {
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
   const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
   const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
-  const [panel, setPanel] = createSignal<'controls' | 'menu' | 'notifications' | null>(null);
+  const [panel, setPanel] = createSignal<ReaderPanel | null>(null);
   const [fork, setFork] = createSignal(false);
   const [mode, setMode] = createSignal<'light' | 'dark'>('light');
   const [editing, setEditing] = createSignal(false);
@@ -397,62 +397,26 @@ export function DocumentPage(): JSX.Element {
     if (pendingData.length) runtimeRef.current?.send({ type: STORY_DATA_MESSAGE, datasets: [...new Set(pendingData.splice(0))] });
     setReady(true);
     const sharing = wireReaderSharing(window, document, chrome);
-    const action = async (name: string) => {
-      if (name === 'controls' || name === 'menu') {
-        const trigger = chrome.querySelector<HTMLElement>(`[data-mx-reader-trigger="${name}"]`);
-        const expanded = panel() !== name;
-        setPanel(expanded ? name : null);
-        chrome.classList.remove(READER_CHROME_HIDDEN_CLASS);
-        chrome.setAttribute('data-mx-reader-state', 'shown');
-        trigger?.setAttribute('aria-expanded', String(expanded));
-        trigger?.setAttribute('aria-label', `${expanded ? 'Close' : 'Open'} ${name === 'controls' ? 'artifact controls' : 'menu'}`);
-      } else if (name === 'like' || name === 'follow') {
-        if (page.kind !== 'account' && session()?.kind !== 'account') { window.location.assign(loginHref(window.location, name)); return; }
-        const control = chrome.querySelector<HTMLElement>(`[data-mx-reader-action="${name}"]`);
-        const on = control?.getAttribute(name === 'like' ? 'data-mx-liked' : 'data-mx-following') === 'true';
-        const href = name === 'like' ? `/api/my/artifacts/${id}/like` : page.follow ? `/api/users/${page.follow.userId}/follow` : '';
-        if (!href || href.includes('/undefined/')) return;
-        const response = await apiFetch(href, on ? 'DELETE' : 'POST').catch(() => null);
-        if (!response?.ok) return;
-        const answer = await response.json() as { liked?: boolean; following?: boolean; count: number };
-        const next = name === 'like' ? answer.liked : answer.following;
-        control?.setAttribute(name === 'like' ? 'data-mx-liked' : 'data-mx-following', String(next));
-        control?.setAttribute('aria-label', name === 'like' ? next ? 'Unlike' : 'Like' : `${next ? 'Unfollow' : 'Follow'} @${control.getAttribute('data-mx-author') ?? ''}`);
-        const count = control?.querySelector('[data-mx-reader-count]'); if (count) count.textContent = answer.count > 0 ? String(answer.count) : '';
-      } else if (name === 'comment') {
-        if (!annotatable()) { window.location.assign(loginHref(window.location, 'comment')); return; }
-        setRailOpen((open) => !open);
-      } else if (name === 'fork') setFork(true);
-      else if (name === 'share') { if (isOwner()) setSharingOpen(true); else void sharing.share(); }
-      else if (name === 'notifications') setPanel((open) => (open === 'notifications' ? null : 'notifications'));
-      else if (name === 'membership' || name === 'join') {
-        // The rail's Join/Joined/Pending pill: joining needs an account; the people panel is where it happens.
-        if (!accountSession()) { window.location.assign(loginHref(window.location, 'join')); return; }
-        void action('controls');
-      }
-      else if (name === 'edit' && editable()) { if (editing()) void finishEdit(); else enterEdit(); }
-    };
-    const click = (event: MouseEvent) => {
-      const target = (event.target as Element).closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger],[data-mx-mode-choice]');
-      if (!target || !chrome.contains(target)) return;
-      if (target.closest('[data-mx-title-editor]')) return;
-      event.preventDefault();
-      const choice = target.getAttribute('data-mx-mode-choice');
-      if (choice === 'light' || choice === 'dark') { chooseMode(choice); return; }
-      void action(target.getAttribute('data-mx-reader-action') ?? target.getAttribute('data-mx-reader-trigger') ?? '');
-    };
-    chrome.addEventListener('click', click);
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanel(null); };
-    // The rail's triggers say whether their panel is open, however it closed (scrim, Escape, an action inside it).
-    createEffect(() => {
-      const open = panel();
-      for (const name of ['controls', 'menu'] as const) {
-        const trigger = chrome.querySelector<HTMLElement>(`[data-mx-reader-trigger="${name}"]`);
-        trigger?.setAttribute('aria-expanded', String(open === name));
-        trigger?.setAttribute('aria-label', `${open === name ? 'Close' : 'Open'} ${name === 'controls' ? 'artifact controls' : 'menu'}`);
-      }
+    const wiring = wireReaderChrome(chrome, {
+      panel, setPanel, onMode: chooseMode,
+      onAction: async (name) => {
+        if (name === 'like' || name === 'follow') {
+          const href = name === 'like' ? `/api/my/artifacts/${id}/like` : page.follow ? `/api/users/${page.follow.userId}/follow` : null;
+          await toggleReaction(chrome, name, href, { signedIn: page.kind === 'account' || session()?.kind === 'account' });
+        } else if (name === 'comment') {
+          if (!annotatable()) { window.location.assign(loginHref(window.location, 'comment')); return; }
+          setRailOpen((open) => !open);
+        } else if (name === 'fork') setFork(true);
+        else if (name === 'share') { if (isOwner()) setSharingOpen(true); else void sharing.share(); }
+        else if (name === 'notifications') setPanel((open) => (open === 'notifications' ? null : 'notifications'));
+        else if (name === 'membership' || name === 'join') {
+          // The rail's Join/Joined/Pending pill: joining needs an account; the people panel is where it happens.
+          if (!accountSession()) { window.location.assign(loginHref(window.location, 'join')); return; }
+          void wiring.act('controls');
+        }
+        else if (name === 'edit' && editable()) { if (editing()) void finishEdit(); else enterEdit(); }
+      },
     });
-    window.addEventListener('keydown', escape);
     window.addEventListener('hashchange', syncEditRoute);
     const intent = takeChromeIntent();
     const address = new URL(window.location.href);
@@ -461,7 +425,7 @@ export function DocumentPage(): JSX.Element {
       address.searchParams.delete('intent');
       window.history.replaceState(window.history.state, '', address.pathname + address.search + address.hash);
     }
-    if (intent || carried) void action(intent ?? carried!);
+    if (intent || carried) void wiring.act(intent ?? carried!);
     syncEditRoute();
     let chromeState: ChromeState | null = null;
     let frame = 0;
@@ -482,7 +446,7 @@ export function DocumentPage(): JSX.Element {
     const editId = document.body.getAttribute('data-mx-live-edit');
     const stopLive = !islands && liveId && editId && typeof EventSource === 'function' ? startIslandLive(window, liveId, editId) : null;
     const stopIdle = editable() ? whenIdle(prefetchEditor) : null;
-    onCleanup(() => { chrome.removeEventListener('click', click); window.removeEventListener('keydown', escape); window.removeEventListener('hashchange', syncEditRoute); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null;
+    onCleanup(() => { wiring.dispose(); window.removeEventListener('hashchange', syncEditRoute); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null;
       // The route is leaving this (already-adopted) document: `clearInitialStory` never runs for it
       // (`adoptReaderDocument` nulled `initialStory` on the way in), so this is the one place its own
       // served head sheets — data-mx-story-css chief among them — get removed with it.

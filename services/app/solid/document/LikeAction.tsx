@@ -2,9 +2,8 @@
 import { createSignal, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
 import { loginHref } from '@/lib/login-href';
-import { refusedForSignIn } from '@/lib/story/sign-in-required';
-import { pageDataChanged } from '@/web/page-data-events';
 import { Tooltip } from '../components/Tooltip';
+import { sendReaction } from './reader-chrome-adapter';
 
 export interface LikeActionProps {
   id: string; accountSession: boolean; initial: { liked: boolean; count: number };
@@ -19,14 +18,10 @@ export function LikeAction(props: LikeActionProps): JSX.Element {
     if (!props.accountSession) { navigate(loginHref(location, 'like')); return; }
     if (busy()) return;
     setBusy(true);
-    try {
-      const response = await fetch(`/api/my/artifacts/${encodeURIComponent(props.id)}/like`, { method: state().liked ? 'DELETE' : 'POST', credentials: 'same-origin' });
-      if (await refusedForSignIn(response)) { navigate(loginHref(location, 'like')); return; }
-      if (!response.ok) return;
-      const answer = await response.json() as { liked: boolean; count: number };
-      setState(answer); props.onChange?.(answer); pageDataChanged();
-    } catch { /* Keep the server's last known state. */ }
-    finally { setBusy(false); }
+    // The rail's like press sends through the same door (reader-chrome-adapter): a sign-in refusal goes to login.
+    const answer = await sendReaction<{ liked: boolean; count: number }>(`/api/my/artifacts/${encodeURIComponent(props.id)}/like`, state().liked, 'like', navigate);
+    setBusy(false);
+    if (answer) { setState(answer); props.onChange?.(answer); }
   };
   return <Tooltip content={state().liked ? 'unlike' : 'like'}><button type="button" aria-label={state().liked ? 'Unlike artifact' : 'Like artifact'} aria-pressed={state().liked} disabled={busy()} onClick={() => void toggle()} class="inline-flex items-center gap-1 rounded px-2 py-1 text-sm text-muted hover:text-accent"><Heart size={14} fill={state().liked ? 'currentColor' : 'none'} />{state().count}</button></Tooltip>;
 }
