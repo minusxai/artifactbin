@@ -161,6 +161,29 @@ describe('buffering is batching, never a draft', () => {
   });
 });
 
+describe('a save answered with its patch', () => {
+  it('advances the graph it prepared against and prepares the next save on it, without reading the document again', async () => {
+    const first = '<div id="d"><p id="a">Initial</p></div>';
+    const { hook } = setup({ initialSource: first });
+    const patchAnswer = (editId: string, version: number) => async (_url: string, init: RequestInit) =>
+      ({ ok: true, status: 200, json: async () => ({ edit_id: editId, version, patch: JSON.parse(init.body as string).document_update.patch }) }) as Response;
+    fetchMock.mockImplementationOnce(patchAnswer('edit-2', 2)).mockImplementationOnce(patchAnswer('edit-3', 3));
+    act(() => { hook.result.queue({ source: first.replace('Initial', 'Initial, typed') }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(hook.result.state).toMatchObject({ editId: 'edit-2', version: 2, status: '' });
+    act(() => { hook.result.queue({ source: first.replace('Initial', 'Initial, typed again') }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    // Two saves and nothing else: no GET of the whole document between them.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [one, two] = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body as string).document_update.patch);
+    expect(two.baseVersion).toBe(2);
+    // The second patch applies to exactly the graph the server holds after the first.
+    const server = applyGraphPatch(snapshots.get('edit-1')!.document, 1, one)!;
+    expect(graphSource(applyGraphPatch(server, 2, two)!)).toBe(first.replace('Initial', 'Initial, typed again'));
+    expect(hook.result.state).toMatchObject({ editId: 'edit-3', version: 3 });
+  });
+});
+
 describe('adopting a remote document', () => {
   it('adopts when there is nothing local to lose', () => {
     const { hook, adopted } = setup();

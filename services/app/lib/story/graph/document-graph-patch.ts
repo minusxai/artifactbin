@@ -77,17 +77,31 @@ export function applyGraphPatch(current:DocumentGraph,version:number,patch:Graph
   if(Object.keys(patch.inserted).some(key=>Object.hasOwn(current.nodes,key)))return null;
   const bytes=current.bytes+patch.byteDelta;
   if(bytes<0||bytes>MAX_CONTENT_BYTES)return null;
-  const next=structuredClone(current),revision=version+1;
-  for(const key of patch.removed)delete next.nodes[key];
-  for(const [key,node] of Object.entries(patch.inserted))next.nodes[key]={...structuredClone(node),selfVersion:revision,childrenVersion:revision,subtreeVersion:revision};
+  return advanceGraph(structuredClone(current),version,patch);
+}
+
+/**
+ * The write half of `applyGraphPatch`, for a patch already admitted at exactly this version (the server answered
+ * it): no checks, and only the nodes the patch writes are copied, so advancing a large graph by one typed change
+ * costs the change, not the graph. The result shares every untouched node with `current`; neither may be mutated.
+ */
+export function advanceGraph(current:DocumentGraph,version:number,patch:GraphPatch):DocumentGraph|null {
+  const nodes:DocumentGraph['nodes']={...current.nodes},claimedIds:DocumentGraph['claimedIds']={...current.claimedIds},revision=version+1,own=new Set<string>();
+  const writable=(key:string):DocumentGraphNode|null=>{
+    const node=nodes[key];if(!node)return null;
+    if(!own.has(key)){nodes[key]=structuredClone(node);own.add(key);}
+    return nodes[key]!;
+  };
+  for(const key of patch.removed)delete nodes[key];
+  for(const [key,node] of Object.entries(patch.inserted)){nodes[key]={...structuredClone(node),selfVersion:revision,childrenVersion:revision,subtreeVersion:revision};own.add(key);}
   for(const [key,write] of Object.entries(patch.updated)){
-    const node=next.nodes[key];if(!node)return null;
+    const node=writable(key);if(!node)return null;
     Object.assign(node,applyDocumentPatch(node,write.patches));
     if(write.self)node.selfVersion=revision;
     if(write.children)node.childrenVersion=revision;
   }
-  for(const key of patch.touched){const node=next.nodes[key];if(!node)return null;node.subtreeVersion=revision;}
-  for(const [key,delta] of Object.entries(patch.unitDeltas))next.nodes[key]!.subtreeUnits+=delta;
-  for(const {id} of patch.claims)Object.defineProperty(next.claimedIds,id,{value:revision,enumerable:true,writable:true,configurable:true});
-  next.bytes=bytes;return next;
+  for(const key of patch.touched){const node=writable(key);if(!node)return null;node.subtreeVersion=revision;}
+  for(const [key,delta] of Object.entries(patch.unitDeltas)){const node=writable(key);if(!node)return null;node.subtreeUnits+=delta;}
+  for(const {id} of patch.claims)Object.defineProperty(claimedIds,id,{value:revision,enumerable:true,writable:true,configurable:true});
+  return {...current,nodes,claimedIds,bytes:current.bytes+patch.byteDelta};
 }

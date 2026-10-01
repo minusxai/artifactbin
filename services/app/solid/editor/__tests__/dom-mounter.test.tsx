@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { mountCompiledEditRegions } from '../dom-mounter';
+import { mountCompiledEditRegions, withRegionBreaks } from '../dom-mounter';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import { flushFlowView } from '@/lib/editor-v2/flow-view';
 import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { serializeJsx } from '@/lib/jsx';
 
 describe('compiled DOM edit mounter', () => {
   it('renames a compiled deck slide through the rail edit control', () => {
@@ -113,6 +114,81 @@ describe('compiled DOM edit mounter', () => {
     expect(saved).not.toContain('id="second"');
     mounted.dispose();
     root.remove();
+  });
+
+  it('keeps the source\'s line breaks between a region\'s blocks, so typing moves no path and needs no compile', () => {
+    // Authored with a line between blocks: those breaks are child nodes, and every later path counts them.
+    const source = '<div>\n<h1 id="t">Title</h1>\n<p id="a">Alpha</p>\n<p id="b">Bravo</p>\n<Question id="q" />\n<h2 id="h">After</h2>\n</div>';
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0"><h1 id="t" data-mx-ast="0.1">Title</h1><p id="a" data-mx-ast="0.3">Alpha</p><p id="b" data-mx-ast="0.5">Bravo</p><div id="q" data-mx-ast="0.7">chart</div><h2 id="h" data-mx-ast="0.9">After</h2></div>';
+    document.body.append(root);
+    const before = parseJsxOrThrow(source).nodes;
+    let view: EditorView | null = null;
+    let saved = source;
+    const mounted = mountCompiledEditRegions(root, before, {
+      onView(next) { if (next && !view) view = next; },
+      onFlow(path, expected, replacement) { saved = replaceProseRegion(saved, path, expected, replacement); },
+    });
+    const editor = view! as EditorView;
+    let end = 0;
+    editor.state.doc.descendants((node, pos) => { if (node.type.name === 'paragraph' && node.textContent === 'Bravo') end = pos + 1 + node.content.size; });
+    editor.dispatch(editor.state.tr.insertText(' typed', end));
+    flushFlowView(editor);
+    // Only the typed words changed: the line breaks, and so every path after the region, are where they were.
+    expect(saved).toBe(source.replace('Bravo', 'Bravo typed'));
+    const after = parseJsxOrThrow(saved).nodes;
+    expect(mounted.reconcile(before, after, after, null, { beforeSource: source, afterSource: saved })).toBe(true);
+    // A second burst finds the region where the first left it.
+    editor.dispatch(editor.state.tr.insertText(' again', end + ' typed'.length));
+    flushFlowView(editor);
+    expect(saved).toBe(source.replace('Bravo', 'Bravo typed again'));
+    mounted.dispose();
+    root.remove();
+  });
+
+  it('keeps typing that went on while a typed draft travelled: the late draft is not compiled and does not rewind the editor', () => {
+    const source = '<div>\n<h1 id="t">Title</h1>\n<p id="b">Bravo</p>\n<Question id="q" />\n</div>';
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0"><h1 id="t" data-mx-ast="0.1">Title</h1><p id="b" data-mx-ast="0.3">Bravo</p><div id="q" data-mx-ast="0.5">chart</div></div>';
+    document.body.append(root);
+    // The served tree the editor mounts on spells attribute values {json, static}; the page's own parse {static, json}.
+    const before = JSON.parse(JSON.stringify(parseJsxOrThrow(source).nodes, (_key, value) =>
+      value && typeof value === 'object' && 'static' in value && 'json' in value ? { json: value.json, static: value.static } : value));
+    let view: EditorView | null = null;
+    let saved = source;
+    const mounted = mountCompiledEditRegions(root, before, {
+      onView(next) { if (next && !view) view = next; },
+      onFlow(path, expected, replacement) { saved = replaceProseRegion(saved, path, expected, replacement); },
+    });
+    const editor = view! as EditorView;
+    let end = 0;
+    editor.state.doc.descendants((node, pos) => { if (node.type.name === 'paragraph' && node.textContent === 'Bravo') end = pos + 1 + node.content.size; });
+    editor.dispatch(editor.state.tr.insertText(' typed', end));
+    flushFlowView(editor);
+    const draft = saved;
+    // Typing goes on before the draft of the first pause comes back.
+    editor.dispatch(editor.state.tr.insertText(' on', end + ' typed'.length));
+    // The draft's tree as the page parses it (storyUpdateParts), whose attribute values spell their keys in another order.
+    const after = storyUpdateParts(draft)!.nodes;
+    expect(mounted.reconcile(before, after, after, null, { beforeSource: source, afterSource: draft })).toBe(true);
+    expect(editor.state.doc.textContent).toContain('Bravo typed on');
+    // The next pause hands over from where the source is.
+    flushFlowView(editor);
+    expect(saved).toBe(source.replace('Bravo', 'Bravo typed on'));
+    // A changed SHAPE is still drawn.
+    const restyled = parseJsxOrThrow(saved.replace('<p id="b">', '<p id="b" className="text-xl">')).nodes;
+    expect(mounted.reconcile(parseJsxOrThrow(saved).nodes, restyled, restyled, null, {})).toBe(false);
+    mounted.dispose();
+    root.remove();
+  });
+
+  it('lays a split block out with the region\'s usual break, and leaves a compact region compact', () => {
+    const blocks = (source: string) => parseJsxOrThrow(source).nodes;
+    const spaced = parseJsxOrThrow('<div>\n<p id="a">A</p>\n<p id="b">B</p>\n</div>').nodes[0] as { children: Parameters<typeof withRegionBreaks>[0] };
+    expect(serializeJsx(withRegionBreaks(spaced.children.slice(1), blocks('<p id="a">A</p><p>new</p><p id="b">B</p>'))))
+      .toBe('<p id="a">A</p>\n<p>new</p>\n<p id="b">B</p>\n');
+    const compact = blocks('<p id="a">A</p><p id="b">B</p>');
+    expect(withRegionBreaks(compact, blocks('<p id="a">A!</p><p id="b">B</p>'))).toHaveLength(2);
   });
 
   it('persists prose inside the acceptance document with a heading and adjacent Grids', () => {

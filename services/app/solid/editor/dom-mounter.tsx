@@ -68,6 +68,33 @@ function regionEnd(siblings: JsxNode[], start: number): number {
   return index;
 }
 
+/** How many recent hand-overs an editor remembers: drafts in flight are one or two behind it. */
+const HANDED_KEPT = 8;
+const isBreak = (node: JsxNode | undefined): boolean => node?.type === 'text' && !node.value.trim();
+/**
+ * The editor's blocks, laid out with the line breaks the region had between and after its blocks. Breaks are child
+ * nodes, and every path after the region counts them: written compactly, the first pause would move every later
+ * block's path, so the draft no longer matched the page and went to the compiler for a full redraw. A block the
+ * editor added takes the region's usual break.
+ */
+export function withRegionBreaks(previous: JsxNode[], replacement: JsxNode[]): JsxNode[] {
+  if (!previous.some(isBreak)) return replacement;
+  // A region starts at a block; the breaks after block i are gaps[i], the last block's are the region's trailing ones.
+  const gaps: JsxNode[][] = [];
+  for (const node of previous) {
+    if (!isBreak(node)) gaps.push([]);
+    else gaps.at(-1)?.push(node);
+  }
+  const trailing = gaps.pop() ?? [];
+  const usual = gaps.find((gap) => gap.length) ?? trailing;
+  const out: JsxNode[] = [];
+  replacement.forEach((node, index) => {
+    out.push(node);
+    if (index < replacement.length - 1) out.push(...(gaps[index] ?? usual));
+  });
+  return [...out, ...trailing];
+}
+
 /** The prose runs the mounter gives one editor each, by the same walk as `visit` (without the DOM). */
 export function proseRegions(nodes: JsxNode[]): ProseRegion[] {
   const regions: ProseRegion[] = [];
@@ -111,7 +138,11 @@ function outsideProse(nodes: JsxNode[], regions: ProseRegion[]): Map<string, str
 }
 
 /** A tree with its text left out: what text-only changes leave alone. */
-const shapeKey = (nodes: JsxNode[]): string => JSON.stringify(nodes, (key, value) => (key === 'value' && typeof value === 'string') || key === 'start' || key === 'end' ? undefined : value);
+/** Blocks and attributes without their text: key order is not shape (a served tree spells values {json, static}, the page's parse {static, json}). */
+const shapeKey = (nodes: JsxNode[]): string => JSON.stringify(nodes, (key, value) => {
+  if ((key === 'value' && typeof value === 'string') || key === 'start' || key === 'end') return undefined;
+  return value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.keys(value).sort().map((name) => [name, value[name]])) : value;
+});
 
 /** Prose as the editor holds it: parsing collapses source whitespace, so compare engine to engine. */
 const proseKey = (nodes: JsxNode[]): string => serializeJsx(sourceNodes(editorDocument(nodes)));
@@ -126,7 +157,7 @@ const PLACEMENT = ['grid-column-start', 'grid-column-end', 'grid-row-start', 'gr
 export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks): CompiledEditMount {
   const cleanups: Array<() => void> = [];
   /** Every mounted prose editor, by its region's path: what `reconcile` keeps alive. */
-  const mounted = new Map<string, { view: () => EditorView | null; adopt(region: JsxNode[], elements: () => HTMLElement[]): void }>();
+  const mounted = new Map<string, { view: () => EditorView | null; adopt(region: JsxNode[], elements: () => HTMLElement[]): void; handedOver(text: string): boolean }>();
   // GridEdit's grip/resize affordances (STORY_GRID_EDIT_CSS's [data-mx-grid-tile]/.mx-grid-resize
   // rules) are structural, not authored content — same reasoning as the React adapter's own
   // `<style data-mx-grid-css>`, injected inside the story surface rather than the app's <head>.
@@ -278,18 +309,25 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       parent.insertBefore(mount, elements[0]!);
       for (const element of elements) element.remove();
       let previous = region;
+      /** What this editor handed over at its recent pauses: a draft of one of them is this editor's own, passed. */
+      const handed: string[] = [];
       let liveView: EditorView | null = null;
       let restore = elements;
       const [current, setCurrent] = createSignal(region) as [() => JsxNode[], Setter<JsxNode[]>];
       const disposeSolid = render(() => <FlowEditor nodes={current()} path={path}
         onError={callbacks.onError} onBusy={callbacks.onBusy}
         onView={(view) => { if (view) liveView = view; callbacks.onView?.(view); }}
-        onChange={(replacement, group, selection) => {
-          callbacks.onFlow(path, serializeJsx(previous), serializeJsx(replacement), group, selection);
+        onChange={(blocks, group, selection) => {
+          const replacement = withRegionBreaks(previous, blocks);
+          const written = serializeJsx(replacement);
+          callbacks.onFlow(path, serializeJsx(previous), written, group, selection);
           previous = replacement;
+          handed.push(written.trim());
+          if (handed.length > HANDED_KEPT) handed.shift();
         }} />, mount);
       mounted.set(path, {
         view: () => liveView,
+        handedOver: (text) => handed.includes(text.trim()),
         adopt(next, compiled) {
           previous = next;
           setCurrent(() => next);
@@ -325,7 +363,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         const first = region.nodes[0] as { start?: unknown } | undefined, last = region.nodes.at(-1) as { end?: unknown } | undefined;
         return source !== undefined && typeof first?.start === 'number' && typeof last?.end === 'number' ? source.slice(first.start, last.end) : null;
       };
-      const changed = new Set<string>();
+      const changed = new Set<string>(), ahead = new Set<string>();
       for (const [i, region] of now.entries()) {
         const old = was[i]!;
         // Unchanged text since the tree on screen: nothing to compare (the editors show it).
@@ -341,14 +379,20 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         if (serializeJsx(shown) !== serializeJsx(wanted)) {
           // Only TEXT is taken in place: blocks split, joined, restyled or resized are drawn (their chrome and
           // previews belong to the drawn page).
-          if (!options.sync || shapeKey(shown) !== shapeKey(wanted)) return false;
+          if (shapeKey(shown) !== shapeKey(wanted)) return false;
+          // A typed draft the editor has already passed: this editor handed exactly that text over at a pause and
+          // typing went on while it travelled, so it shows newer text in the same blocks. The editor keeps its text
+          // (the next hand-over brings the source up to it); compiling the older draft would redraw the page under
+          // the caret. Text the editor never handed over (an undo, a remote edit) is not this and is refused.
+          if (!options.sync && b !== null && editor.handedOver(b)) { ahead.add(region.path); continue; }
+          if (!options.sync) return false;
           changed.add(region.path);
         }
       }
       const doc = root.ownerDocument;
       for (const [i, region] of into.entries()) {
         const editor = mounted.get(region.path);
-        if (!editor) continue;
+        if (!editor || ahead.has(region.path)) continue;
         const a = text(was[i]!, options.beforeSource), b = text(now[i]!, options.afterSource);
         if (a !== null && a === b && !changed.has(region.path)) continue;
         editor.adopt(region.nodes, () => draft

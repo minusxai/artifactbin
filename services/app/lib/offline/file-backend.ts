@@ -455,7 +455,8 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
         ok: true,
         status: 200,
         body: {
-          document: structuredClone(graph), markup: source, edit_id: editId, version,
+          // The server's answer: the patch when it landed where it was prepared, the whole graph for a replacement.
+          ...(update.whole ? { document: structuredClone(graph), markup: source } : { patch: update.patch }), edit_id: editId, version,
           title: metadata.title, theme: metadata.theme, template: metadata.template, colorMode: metadata.colorMode,
         },
       };

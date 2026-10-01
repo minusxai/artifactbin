@@ -21,7 +21,8 @@
  * string coordinates) into the STORED source, which is canonical serialize
  * form — see publishJsx — so parser spans index into it exactly.
  */
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
+import { parseJsxShared as parseJsx } from '@/lib/jsx/parse-shared';
 
 /** Replace `[start, start+removed.length)` with `inserted`, in base-version coords. */
 export interface Splice {
