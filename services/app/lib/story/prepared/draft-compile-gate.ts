@@ -5,7 +5,9 @@
  *
  *   per session  at most ONE compile runs and ONE waits. A newer draft answers the waiting one, and
  *                the running one, `superseded` at once: the running compile finishes (its slot stays
- *                held) and its result is dropped.
+ *                held) and its result is dropped. A draft is placed in its session when its request
+ *                ARRIVES (`arrive`, before the route awaits anything): while a compile holds the
+ *                thread, requests pile up unread, and when it ends only the newest of them compiles.
  *   globally     at most `concurrency` compiles run at once across sessions. A draft that cannot start
  *                within `waitMs` of becoming eligible is answered `busy`, never queued further.
  *
@@ -14,9 +16,14 @@
 
 export type GateResult<T> = { ok: true; value: T } | { ok: false; reason: 'superseded' | 'busy' };
 
+/** One draft's place in its session's order of arrival. */
+export interface DraftTicket { readonly session: string; readonly seq: number }
+
 export interface DraftCompileGate {
-  /** Run `work` for `session` under the gate; the promise settles as soon as its answer is known. */
-  run<T>(session: string, work: () => Promise<T>): Promise<GateResult<T>>;
+  /** Place a draft in its session as its request arrives; a later arrival supersedes it. */
+  arrive(session: string): DraftTicket;
+  /** Run `work` for an arrived draft under the gate; the promise settles as soon as its answer is known. */
+  run<T>(ticket: DraftTicket, work: () => Promise<T>): Promise<GateResult<T>>;
 }
 
 interface Waiter {
@@ -28,9 +35,23 @@ interface Waiter {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-interface Session { running: Waiter | null; pending: Waiter | null }
+interface Session { running: Waiter | null; pending: Waiter | null; latest: number; touched: number }
 
-export function createDraftCompileGate(options: { concurrency: number; waitMs: number }): DraftCompileGate {
+/** Sessions idle this long with nothing running or waiting are forgotten. */
+const IDLE_MS = 60_000;
+
+export interface DraftCompileGateOptions {
+  concurrency: number;
+  waitMs: number;
+  /**
+   * How long the thread is left to other requests after a compile that took `ms`, before the next starts.
+   * Compiles on the request thread need it (a stream of them would otherwise hold it for good); compiles
+   * on worker threads do not.
+   */
+  restMs?: (ms: number) => number;
+}
+
+export function createDraftCompileGate(options: DraftCompileGateOptions): DraftCompileGate {
   const concurrency = Math.max(1, Math.floor(options.concurrency));
   const sessions = new Map<string, Session>();
   const queue: Waiter[] = [];
@@ -47,9 +68,9 @@ export function createDraftCompileGate(options: { concurrency: number; waitMs: n
     const i = queue.indexOf(waiter);
     if (i >= 0) queue.splice(i, 1);
   };
-  const forget = (key: string) => {
-    const session = sessions.get(key);
-    if (session && !session.running && !session.pending) sessions.delete(key);
+  // A session outlives its compiles (its arrival order must survive the gap between them); idle ones are pruned.
+  const prune = (now: number) => {
+    for (const [key, session] of sessions) if (!session.running && !session.pending && now - session.touched > IDLE_MS) sessions.delete(key);
   };
   // The wait clock runs only while the draft is eligible (its session has nothing running): a draft
   // waiting on its own session's compile is bounded by that compile, and there is only ever one.
@@ -60,11 +81,21 @@ export function createDraftCompileGate(options: { concurrency: number; waitMs: n
       const session = sessions.get(waiter.session);
       if (session?.pending === waiter) session.pending = null;
       answer(waiter, { ok: false, reason: 'busy' });
-      forget(waiter.session);
     }, options.waitMs);
   };
 
+  // Starts are decided one macrotask later: drafts that arrived while a compile held the thread reach the
+  // gate in the meantime, so only the newest of them starts (a compile can finish without ever yielding).
+  let scheduled = false;
+  let restUntil = 0;
   const pump = () => {
+    if (scheduled) return;
+    scheduled = true;
+    const wait = restUntil - Date.now();
+    const go = () => { scheduled = false; start(); };
+    if (wait > 0) setTimeout(go, wait); else setImmediate(go);
+  };
+  const start = () => {
     for (const waiter of queue) if (!sessions.get(waiter.session)?.running) arm(waiter);
     while (active < concurrency) {
       const next = queue.find((w) => !sessions.get(w.session)?.running);
@@ -76,34 +107,49 @@ export function createDraftCompileGate(options: { concurrency: number; waitMs: n
       session.pending = null;
       session.running = next;
       active++;
+      const began = performance.now();
       void next.work().then(
         (value) => answer(next, { ok: true, value }),
         // A failed compile fails its own caller, unless a newer draft already answered it.
         (error: unknown) => { if (!next.settled) { next.settled = true; next.fail(error); } },
       ).finally(() => {
         active--;
+        if (options.restMs) restUntil = Math.max(restUntil, Date.now() + options.restMs(performance.now() - began));
         session.running = null;
-        forget(next.session);
+        session.touched = Date.now();
         pump();
       });
     }
   };
 
   return {
-    run<T>(key: string, work: () => Promise<T>): Promise<GateResult<T>> {
+    arrive(key: string): DraftTicket {
+      const now = Date.now();
+      if (sessions.size > 256) prune(now);
+      let session = sessions.get(key);
+      if (!session) { session = { running: null, pending: null, latest: 0, touched: now }; sessions.set(key, session); }
+      session.touched = now;
+      return { session: key, seq: ++session.latest };
+    },
+    run<T>(ticket: DraftTicket, work: () => Promise<T>): Promise<GateResult<T>> {
+      const key = ticket.session;
+      const known = sessions.get(key);
+      const session: Session = known ?? { running: null, pending: null, latest: ticket.seq, touched: Date.now() };
+      if (!known) sessions.set(key, session);
+      // A newer draft of this session has already arrived: this one is never compiled.
+      if (ticket.seq < session.latest) return Promise.resolve({ ok: false, reason: 'superseded' });
       return new Promise<GateResult<T>>((resolve, reject) => {
         const waiter: Waiter = {
           session: key, work, settled: false, timer: null,
           settle: (result) => resolve(result as GateResult<T>), fail: reject,
         };
-        let session = sessions.get(key);
-        if (!session) { session = { running: null, pending: null }; sessions.set(key, session); }
         if (session.pending) {
           dequeue(session.pending);
           answer(session.pending, { ok: false, reason: 'superseded' });
         }
         if (session.running) answer(session.running, { ok: false, reason: 'superseded' });
         session.pending = waiter;
+        session.touched = Date.now();
         queue.push(waiter);
         pump();
       });

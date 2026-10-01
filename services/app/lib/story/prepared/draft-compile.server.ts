@@ -46,7 +46,11 @@ function compilePool(): DraftCompilePool | null {
 export function draftCompileGate(): DraftCompileGate {
   if (gate) return gate;
   const workers = compilePool()?.size ?? 0;
-  gate = createDraftCompileGate({ concurrency: workers ? Math.min(MAX_WORKER_COMPILES, workers) : 1, waitMs: DRAFT_COMPILE_WAIT_MS });
+  gate = workers
+    ? createDraftCompileGate({ concurrency: Math.min(MAX_WORKER_COMPILES, workers), waitMs: DRAFT_COMPILE_WAIT_MS })
+    // On the request thread: one at a time, and after each the thread is left to other requests for as long
+    // as the compile held it (up to a second), so pages and saves keep being answered between drafts.
+    : createDraftCompileGate({ concurrency: 1, waitMs: DRAFT_COMPILE_WAIT_MS, restMs: (ms) => Math.min(ms, 1_000) });
   return gate;
 }
 

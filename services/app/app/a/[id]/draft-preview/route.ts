@@ -13,12 +13,22 @@ import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
 import { collectExternalAssetUrls } from '@/lib/story/assets';
 import { lookupWebAssets } from '@/lib/web-assets';
+import { createHash } from 'node:crypto';
 import { collectRefUses } from '@/lib/story/data';
 
 const MAX_SOURCE_LENGTH = 1024 * 1024;
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
+/** This document under this request's credential: one editor's drafts, known without awaiting anything. */
+function draftSession(request: Request): string {
+  const credential = request.headers.get('authorization') ?? request.headers.get('cookie') ?? '';
+  return `${new URL(request.url).pathname}:${createHash('sha256').update(credential).digest('base64url')}`;
+}
+
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  // The draft takes its place in its editor's session before anything is awaited (draft-compile-gate):
+  // the session is this document under this request's credential, as it arrived.
+  const ticket = draftCompileGate().arrive(draftSession(request));
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404, NO_STORE);
   const artifact = await getArtifactById(id);
@@ -47,8 +57,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const search = typeof body.search === 'string' && body.search.length <= 8192 ? body.search : '';
   const declared = search ? await declarationsForRow(draft) : null;
   const values = declared?.flow ? readUrlValues(search, declared.flow) : undefined;
-  // One running and one waiting compile per editor session; a newer draft answers older ones at once.
-  const session = `${artifact.id}:${actor.viewer?.userId ?? actor.tokenId ?? ''}`;
   const compile = async (): Promise<string> => {
     const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
       compileStoryCss(body.source, { force: true }),
@@ -69,7 +77,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     });
   };
   try {
-    const result = await draftCompileGate().run(session, compile);
+    const result = await draftCompileGate().run(ticket, compile);
     if (!result.ok) {
       return result.reason === 'superseded'
         ? json({ error: 'superseded' }, 409, NO_STORE)
