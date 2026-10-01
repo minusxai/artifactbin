@@ -23,6 +23,22 @@ describe('compiled DOM edit mounter', () => {
     mounted.dispose();
     root.remove();
   });
+  it('lets a region keep its flex/grid layout: the whole content adopts it, a lone block hands over its placement', () => {
+    const source = '<CardContent id="c" className="flex"><p id="a">A</p><p id="b">B</p></CardContent><div id="g" className="grid"><Badge id="x">x</Badge><div id="w" className="col-span-2">Wide</div></div>';
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0" id="c" style="display:flex;flex-direction:column;gap:4px"><p data-mx-ast="0.0" id="a">A</p><p data-mx-ast="0.1" id="b">B</p></div>'
+      + '<div data-mx-ast="1" id="g" style="display:grid"><span data-mx-ast="1.0" id="x">x</span><div data-mx-ast="1.1" id="w" style="grid-column-start:span 2;grid-column-end:span 2">Wide</div></div>';
+    document.body.append(root);
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow: vi.fn() });
+    const whole = root.querySelector<HTMLElement>('#c > [data-mx-edit-region]')!;
+    expect(whole.getAttribute('data-mx-parent-layout')).toBe('flex');
+    const lone = root.querySelector<HTMLElement>('#g > [data-mx-edit-region]')!;
+    expect(lone.getAttribute('data-mx-parent-layout')).toBe('item');
+    expect(lone.style.getPropertyValue('--mx-place-grid-column-start')).toBe('span 2');
+    mounted.dispose();
+    expect(root.querySelector('#c > p#a')).not.toBeNull();
+    root.remove();
+  });
   it('writes nothing just for entering edit mode: mounting a CLI-shaped document reports no edit', async () => {
     const source = '<div id="r"><h1 id="h">Preview QA</h1><p id="a">First paragraph.</p><p id="b">Chosen fruit: {$fruit}</p>'
       + '<Grid id="g"><GridItem x={0} w={6} h={2} id="g1"><p id="t1">Card A</p></GridItem><GridItem x={6} w={6} h={2} id="g2"><p id="t2">Card B</p></GridItem></Grid>'

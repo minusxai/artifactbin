@@ -32,6 +32,9 @@ const isBlock = (node: JsxNode): boolean => node.type === 'element'
   && !['thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u'].includes(node.tag)
   && isProseTree(node);
 
+/** Item placement a lone block hands to the editor root that stands in for it in a flex/grid parent. */
+const PLACEMENT = ['grid-column-start', 'grid-column-end', 'grid-row-start', 'grid-row-end', 'flex-grow', 'flex-shrink', 'flex-basis', 'align-self', 'justify-self', 'order'] as const;
+
 /** One region replaces only its authored prose siblings; adjacent compiled islands keep their DOM identity. */
 export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks): CompiledEditMount {
   const cleanups: Array<() => void> = [];
@@ -175,6 +178,15 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       const mount = root.ownerDocument.createElement('div');
       mount.dataset.mxEditRegion = path;
       mount.style.display = 'contents';
+      const view = root.ownerDocument.defaultView ?? window;
+      const display = view.getComputedStyle(parent).display;
+      const layout = display.includes('grid') ? 'grid' : display.includes('flex') ? 'flex' : null;
+      // One block among other flex/grid items: the editor root becomes that item, so it takes the
+      // block's own placement (col-span, flex grow, self-alignment) — read before the block leaves.
+      if (layout && elements.length === 1) {
+        const own = view.getComputedStyle(elements[0]!);
+        for (const name of PLACEMENT) mount.style.setProperty(`--mx-place-${name}`, own.getPropertyValue(name));
+      }
       parent.insertBefore(mount, elements[0]!);
       for (const element of elements) element.remove();
       let previous = region;
@@ -186,6 +198,12 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
           callbacks.onFlow(path, serializeJsx(previous), serializeJsx(replacement), group, selection);
           previous = replacement;
         }} />, mount);
+      // The editor root replaces the region's blocks as ONE child of their parent; under a flex or
+      // grid parent it adopts that layout (edit-mode CSS) so the blocks lay out as they read.
+      // The whole content of a flex/grid parent: the root fills it and adopts its layout. Beside
+      // other items it stays one item, placed as its single block was. Set on the wrapper, not
+      // the editor root: ProseMirror owns its root's attributes.
+      if (layout) mount.setAttribute('data-mx-parent-layout', Array.from(parent.children).every((child) => child === mount) ? layout : 'item');
       cleanups.push(() => {
         disposeSolid();
         if (mount.isConnected) {

@@ -119,3 +119,36 @@ it('does not duplicate inline identities when a marked run is split by a paragra
   expect(new Set(ids).size).toBe(ids.length);
   expect(source(s)).toContain('id="bold"');
 });
+
+describe('reading-mode parity of the parsed document', () => {
+  const doc = (s: string) => editorDocument(parseJsxOrThrow(s).nodes);
+  it('collapses source indentation and line breaks the way the reader lays them out', () => {
+    const parsed = doc('<header>\n  <h1 id="t">\n    Among mainstream languages,\n    dynamic looks cheaper.\n  </h1>\n  <p id="l">Has <strong>bold</strong> and\n    <a href="https://example.com">a link</a>\n  </p>\n</header>');
+    expect(parsed.child(0).child(0).textContent).toBe('Among mainstream languages, dynamic looks cheaper.');
+    expect(parsed.child(0).child(1).textContent).toBe('Has bold and a link');
+    expect(serializeJsx(sourceNodes(parsed))).toBe('<header><h1 id="t">Among mainstream languages, dynamic looks cheaper.</h1><p id="l">Has <strong>bold</strong> and <a href="https://example.com">a link</a></p></header>');
+  });
+  it('drops the space around a line break and keeps pre text verbatim', () => {
+    const parsed = doc('<div><p>one \n <br /> two</p><pre>  a\n    b</pre></div>');
+    expect(serializeJsx(sourceNodes(parsed))).toBe('<div><p>one<br />two</p><pre>  a\n    b</pre></div>');
+  });
+  it('keeps childless inline elements (legend swatches) with their attributes through a round trip', () => {
+    const source = '<div id="legend" className="flex gap-4"><span id="a"><span className="inline-block size-2.5 bg-[#7b6fe0]" id="sw"></span> static</span></div>';
+    const parsed = doc(source);
+    expect(serializeJsx(sourceNodes(parsed))).toBe(source);
+    const atom = parsed.child(0).child(0).child(0);
+    expect(atom.type.name).toBe('inline_atom');
+    expect(atom.marks.map((m) => m.attrs.tag)).toEqual(['span']);
+  });
+  it('draws a rule with its authored class, as the reader does', () => {
+    const rule = doc('<hr id="r" className="my-8" />').child(0);
+    expect(rule.type.spec.toDOM!(rule)).toEqual(['hr', { id: 'r', class: 'my-8' }]);
+  });
+  it('renders a container’s own inline run without a themed box of its own', () => {
+    const run = doc('<div className="flex"><span>a</span><span>b</span></div>').child(0).child(0);
+    expect(run.attrs.synthetic).toBe(true);
+    const spec = run.type.spec.toDOM!(run) as [string, Record<string, string>, number];
+    expect(spec[0]).toBe('span');
+    expect(spec[1].style).toBe('display: contents');
+  });
+});

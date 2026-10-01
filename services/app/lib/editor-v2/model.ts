@@ -53,14 +53,20 @@ function domAttributes(node: EditorNode | Mark): Record<string, string> {
       attrs[a.name === 'className' ? 'class' : a.name] = a.value.json;
     }
   }
-  if (node.attrs.synthetic) attrs.style = 'margin:0';
   return attrs;
 }
+/**
+ * A synthetic text run (inline content written straight inside a container) has no element of
+ * its own in the reader: its text and spans are the container's own inline content, so they flow
+ * — or become flex/grid items — exactly as they read. A box-less, unthemed span keeps that: a
+ * `p` would pick up theme typography (line-height) and turn flex items back into inline text.
+ */
+const SYNTHETIC_RUN_DOM = { 'data-mx-synthetic': '', style: 'display: contents' };
 const paragraph: NodeSpec = {
   group: 'block',
   content: 'inline*',
   attrs: metadata,
-  toDOM: (node) => [node.attrs.tag, domAttributes(node), 0],
+  toDOM: (node) => (node.attrs.synthetic ? ['span', SYNTHETIC_RUN_DOM, 0] : [node.attrs.tag, domAttributes(node), 0]),
   parseDOM: [...blockTags].map((tag) => ({ tag, getAttrs: () => ({ tag }) })),
 };
 export const editorSchema = new Schema({
@@ -116,6 +122,15 @@ export const editorSchema = new Schema({
       toDOM: (node) => ['div', domAttributes(node), 0],
     },
     text: { group: 'inline' },
+    /** A childless inline element — a colour swatch, an icon box — is content the reader draws. */
+    inline_atom: {
+      attrs: metadata,
+      inline: true,
+      atom: true,
+      group: 'inline',
+      selectable: false,
+      toDOM: (node) => [node.attrs.tag, domAttributes(node)],
+    },
     hard_break: {
       attrs: metadata,
       inline: true,
@@ -127,7 +142,7 @@ export const editorSchema = new Schema({
     horizontal_rule: {
       attrs: metadata,
       group: 'block',
-      toDOM: () => ['hr'],
+      toDOM: (node) => ['hr', domAttributes(node)],
       parseDOM: [{ tag: 'hr' }],
     },
   },
@@ -164,6 +179,7 @@ function inline(nodes: JsxNode[], marks: Mark[] = []): EditorNode[] {
     if (n.type === 'text') return n.value ? [editorSchema.text(n.value, marks)] : [];
     if (n.type !== 'element') return [];
     if (n.tag === 'br') return [editorSchema.nodes.hard_break.create({ source: sourceMetadata(n) }, null, marks)];
+    if (!n.children.length) return [editorSchema.nodes.inline_atom.create({ tag: n.tag, source: sourceMetadata(n) }, null, marks)];
     return inline(n.children, [
       ...marks,
       editorSchema.marks.inline.create({
@@ -173,9 +189,46 @@ function inline(nodes: JsxNode[], marks: Mark[] = []): EditorNode[] {
     ]);
   });
 }
+/**
+ * The reader lays source text out with HTML's white-space rules: indentation and line breaks in
+ * the source collapse to one space, and a line's leading and trailing space disappears. The editor
+ * renders `white-space: pre-wrap` (typing needs it), so a textblock's text is collapsed the same
+ * way once, on the way in — across mark boundaries, after a <br>, around inline atoms — and
+ * reads exactly as it does in reading mode. `pre` keeps its text verbatim.
+ */
+function collapseWhitespace(nodes: EditorNode[]): EditorNode[] {
+  const out: EditorNode[] = [];
+  let atLineStart = true;
+  const trimEnd = () => {
+    const last = out.at(-1);
+    if (!last?.isText || !last.text!.endsWith(' ')) return;
+    const text = last.text!.slice(0, -1);
+    if (text) out[out.length - 1] = editorSchema.text(text, last.marks);
+    else out.pop();
+  };
+  for (const node of nodes) {
+    if (!node.isText) {
+      if (node.type === editorSchema.nodes.hard_break) trimEnd();
+      out.push(node);
+      atLineStart = node.type === editorSchema.nodes.hard_break;
+      continue;
+    }
+    let text = node.text!.replace(/[ \t\n\r\f]+/g, ' ');
+    if (atLineStart || out.at(-1)?.text?.endsWith(' ')) text = text.replace(/^ /, '');
+    if (!text) continue;
+    out.push(editorSchema.text(text, node.marks));
+    atLineStart = false;
+  }
+  trimEnd();
+  return out;
+}
+function textblock(tag: string, children: JsxNode[]): EditorNode[] {
+  const content = inline(children);
+  return tag === 'pre' ? content : collapseWhitespace(content);
+}
 function blocks(nodes: JsxNode[]): EditorNode[] {
   return nodes.flatMap((n) => {
-    if (n.type === 'text') return n.value.trim() ? [editorSchema.nodes.paragraph.create(null, inline([n]))] : [];
+    if (n.type === 'text') return n.value.trim() ? [editorSchema.nodes.paragraph.create(null, textblock('p', [n]))] : [];
     if (n.type !== 'element') return [];
     if (n.tag === 'hr')
       return [
@@ -184,7 +237,7 @@ function blocks(nodes: JsxNode[]): EditorNode[] {
         }),
       ];
     const attrs = { tag: n.tag, source: sourceMetadata(n) };
-    if (blockTags.has(n.tag)) return [editorSchema.nodes.paragraph.create(attrs, inline(n.children))];
+    if (blockTags.has(n.tag)) return [editorSchema.nodes.paragraph.create(attrs, textblock(n.tag, n.children))];
     const type =
       n.tag === 'GridItem'
         ? 'column'
@@ -201,7 +254,7 @@ function blocks(nodes: JsxNode[]): EditorNode[] {
     let run: JsxNode[] = [];
     const flush = () => {
       if (run.some((c) => c.type !== 'text' || c.value.trim()))
-        children.push(editorSchema.nodes.paragraph.create({ synthetic: true }, inline(run)));
+        children.push(editorSchema.nodes.paragraph.create({ synthetic: true }, textblock('p', run)));
       run = [];
     };
     for (const child of n.children) {
