@@ -23,7 +23,9 @@ import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from '../r
 import {extractClassCandidates,hasDesignSystemMarker} from '../../data/story/story-css';
 export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
 export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
-function prepareDocument(base:ClientDocumentSnapshot,change:ClientDocumentChange):{update:DocumentUpdate;context?:string} {
+/** The whole preparation, pure and synchronous: the update, and the source whose authoring context it needs.
+ * The browser runs it in a worker (document/document-prepare.worker), the CLI and tests in place. */
+export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientDocumentChange):{update:DocumentUpdate;context?:string} {
  const before=graphSource(base.document);
  let source=change.operations?graphSource(createDocumentGraph(applyOperationsToNodes(graphNodes(base.document),change.operations),base.version)):change.source??before;
  source=repairJsxSource(source)?.source??source;
@@ -64,12 +66,15 @@ function prepareDocument(base:ClientDocumentSnapshot,change:ClientDocumentChange
 }
 /** Pure local compiler; tests and offline preparation can use it without IO. */
 export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:ClientDocumentChange):DocumentUpdate {
- return prepareDocument(base,change).update;
+ return prepareClientDocument(base,change).update;
 }
 /** External reference shapes and cached assets are authoring inputs. Resolve
  * only the affected context before submitting the independent atomic commit. */
 export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>,onWarnings?:(warnings:NonNullable<DocumentResourcePreparation['warnings']>)=>void):Promise<DocumentUpdate> {
- const prepared=prepareDocument(base,change);
+ return attachAuthoringContext(prepareClientDocument(base,change),prepareContext,onWarnings);
+}
+/** Resolve a prepared update's authoring context (asset warnings, dataset bindings) and attach it. */
+export async function attachAuthoringContext(prepared:{update:DocumentUpdate;context?:string},prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>,onWarnings?:(warnings:NonNullable<DocumentResourcePreparation['warnings']>)=>void):Promise<DocumentUpdate> {
  if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.warnings?.length)onWarnings?.(resources.warnings);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
  return prepared.update;
 }
