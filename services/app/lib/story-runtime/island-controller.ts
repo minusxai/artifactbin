@@ -183,12 +183,6 @@ export function createIslandController({ win, root, islands, nodes: served, port
   let previewing = false;
   let editLoading = false;
   let draftSequence = 0;
-  /**
-   * One draft compile on the server at a time. Typing sends a draft per keystroke; each one supersedes the
-   * last at once (the sequence), but only the newest waiting draft is compiled once the current compile answers.
-   */
-  let compiling = false;
-  let queuedCompile: (() => void) | null = null;
   /** The last draw that completed, by sequence: a restore waits for ITS draw, not an earlier one. */
   let drawnSequence = -1;
   /** The newest source the editor sent: after Done, what the saved version was written from. */
@@ -474,38 +468,20 @@ export function createIslandController({ win, root, islands, nodes: served, port
         previewing = !!command.preview;
         if (previewing && !frozen) { freezeIslandPaint(root, islands); frozen = true; }
         if (!previewing) latestSource = source;
-        const compile = () => {
-          // Superseded while it waited (a newer draft queued itself instead, or Done moved on): nothing to compile.
-          if (disposed || sequence !== draftSequence) return;
-          compiling = true;
-          // Frees THIS compile's slot once (after its answer is read, or on failure), never the next one's.
-          let released = false;
-          const release = () => {
-            if (released) return;
-            released = true;
-            compiling = false;
-            const next = queuedCompile;
-            queuedCompile = null;
-            next?.();
-          };
-          void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
-            method: 'POST', credentials: 'same-origin', cache: 'no-store',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode, search: win.location.search }),
-          }).then(async (response) => {
-            // A failed or superseded compile leaves the last good preview in place.
-            if (response.status === 422 || disposed || sequence !== draftSequence) return;
-            if (!response.ok) throw new Error(`draft preview answered ${response.status}`);
-            const payload = await response.json() as { html: string };
-            // The server is free for the next draft while this one is drawn.
-            release();
-            await queueDraw(payload.html, command.nodes, source, sequence);
-            if (pendingDraft?.sequence === sequence && quietDraftTimer === null) {
-              quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(true); }, 500);
-            }
-          }).catch((error) => { if (!disposed) console.error('Failed to compile editor draft', error); }).finally(release);
-        };
-        if (compiling) queuedCompile = compile; else compile();
+        void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
+          method: 'POST', credentials: 'same-origin', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode, search: win.location.search }),
+        }).then(async (response) => {
+          // A failed or superseded compile leaves the last good preview in place.
+          if (response.status === 422 || disposed || sequence !== draftSequence) return;
+          if (!response.ok) throw new Error(`draft preview answered ${response.status}`);
+          const payload = await response.json() as { html: string };
+          await queueDraw(payload.html, command.nodes, source, sequence);
+          if (pendingDraft?.sequence === sequence && quietDraftTimer === null) {
+            quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(true); }, 500);
+          }
+        }).catch((error) => { if (!disposed) console.error('Failed to compile editor draft', error); });
         return;
       }
       previewing = false;

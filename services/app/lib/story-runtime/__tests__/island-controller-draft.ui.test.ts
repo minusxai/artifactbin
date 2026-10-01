@@ -92,43 +92,6 @@ describe('island controller editor drafts', () => {
     controller.dispose();
   });
 
-  it('compiles one draft at a time while typing: drafts sent during a compile wait, and only the newest is compiled next', async () => {
-    engine.state.applied.length = 0;
-    const root = document.createElement('div');
-    root.setAttribute('data-mx-inline-story', '');
-    root.innerHTML = '<p>v0</p>';
-    document.body.append(root);
-    const answers: Array<() => void> = [];
-    const fetch = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((resolve) => {
-      const { source } = JSON.parse(String(init.body)) as { source: string };
-      answers.push(() => resolve(new Response(JSON.stringify({ html: `<div data-mx-inline-story>${source}</div>` }), { status: 200 })));
-    }));
-    vi.spyOn(window, 'fetch').mockImplementation(fetch as typeof window.fetch);
-    const controller = createIslandController({
-      win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
-      initialSource: () => '<p>v0</p>', portal: { current: null },
-    });
-    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
-    await settle(() => editSession.mounts > 0);
-    // Five keystrokes' drafts while the first compile is still on the server.
-    for (const n of [1, 2, 3, 4, 5]) controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: `<p>v${n}</p>`, editId: 'e1', theme: null, colorMode: 'light' });
-    await tick(); await tick();
-    expect(fetch).toHaveBeenCalledTimes(1);
-    answers.shift()!();
-    await settle(() => fetch.mock.calls.length === 2);
-    await tick();
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)).source).toBe('<p>v5</p>');
-    answers.shift()!();
-    await settle(() => engine.state.releases.length === 1);
-    engine.state.releases.shift()!();
-    await settle(() => engine.state.active === 0 && root.textContent === 'v5');
-    // The superseded v1 compile was never drawn over newer typing.
-    expect(engine.state.applied).toEqual(['v5']);
-    expect(root.textContent).toBe('v5');
-    controller.dispose();
-  });
-
   it("keeps the editor mounted while a draft's module loads, and sends the reader's values with the draft", async () => {
     engine.state.applied.length = 0;
     const root = document.createElement('div');
