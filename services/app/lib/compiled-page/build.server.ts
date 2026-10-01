@@ -19,7 +19,12 @@ import type { CompilerBuild } from './contract';
 /** Relative to the app's cwd (services/app — the cwd contract every runner keeps). */
 export const ISLANDS_MANIFEST_PATH = 'public/islands/manifest.json';
 
+/** A file of the shared build (`rt-<hash>.js`, `manifest.json`) on this server's disk. */
+export const islandFile = (name: string, root = process.cwd()): string => path.resolve(root, path.dirname(ISLANDS_MANIFEST_PATH), name);
+
 const BUILD_ID_RE = /^[0-9a-f]{16}$/;
+/** The server half is ONE same-origin file directly under /islands/; the server evaluates it, so nothing else is accepted. */
+const SSR_URL_RE = /^\/islands\/[\w-]+\.js$/;
 
 let cached: { text: string; build: CompilerBuild } | null = null;
 
@@ -35,17 +40,17 @@ export function parseCompilerBuild(text: string, file: string): CompilerBuild {
     manifest[specifier] = url;
   }
   if (raw.sqliteWasm !== undefined && (typeof raw.sqliteWasm !== 'string' || !/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/.test(raw.sqliteWasm))) throw new Error(`island build: ${file} has an invalid SQLite wasm URL`);
+  const ssr = raw.ssr;
+  if (ssr !== undefined && (typeof ssr.url !== 'string' || !SSR_URL_RE.test(ssr.url) || !ssr.exports || typeof ssr.exports !== 'object' || Array.isArray(ssr.exports))) throw new Error(`island build: ${file} has an invalid server half`);
   const graph = Object.fromEntries(Object.entries(raw.files ?? {}).map(([url, file]) => [url, file.imports ?? []]));
   return Object.freeze({ id: raw.build, manifest: Object.freeze(manifest), graph: Object.freeze(graph), ...(raw.sqliteWasm ? { sqliteWasm: raw.sqliteWasm } : {}),
-    ...(raw.ssr && typeof raw.ssr.url === 'string' && raw.ssr.url.startsWith('/islands/') && raw.ssr.exports && typeof raw.ssr.exports === 'object'
-      ? { ssr: { url: raw.ssr.url, exports: raw.ssr.exports as Record<string, string> } } : {}) });
+    ...(ssr ? { ssr: { url: ssr.url as string, exports: ssr.exports as Record<string, string> } } : {}) });
 }
 
 /** The shared island build this server serves with. Throws when the build has not been run (`node scripts/build-islands.mjs`). */
 export function loadCompilerBuild(): CompilerBuild {
   if (cached && !IS_DEV) return cached.build;
-  const file = path.resolve(process.cwd(), ISLANDS_MANIFEST_PATH);
-  const text = readFileSync(file, 'utf8');
+  const text = readFileSync(islandFile('manifest.json'), 'utf8');
   if (cached?.text === text) return cached.build;
   cached = { text, build: parseCompilerBuild(text, ISLANDS_MANIFEST_PATH) };
   return cached.build;

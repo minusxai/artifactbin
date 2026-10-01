@@ -453,8 +453,7 @@ function cacheHit(outDir) {
     // A source added under lib/islands since the last build is a miss too.
     const now = sourceHashes(trackedSources(Object.keys(marker.sources)));
     if (JSON.stringify(now) !== JSON.stringify(marker.sources)) return false;
-    const { manifest, files, ssr } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
-    const { offline } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
+    const { manifest, files, ssr, offline } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
     return [...Object.keys(files), ssr?.url ?? '/missing-server-half', offline ?? '/missing-offline-half'].every((u) => fs.existsSync(path.join(outDir, u.slice(ISLANDS_PATH.length + 1)))) && ISLAND_SPECIFIERS.every((s) => manifest[s]);
   } catch {
     return false;

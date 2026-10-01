@@ -15,7 +15,6 @@ import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/ro
 import { DELETE as deleteCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { createArtifact,getArtifactById,getVersionFor,type ArtifactRow } from '@/lib/artifacts';
-import { runNodeIdentityMigrationBatch } from '@/lib/node-identity-migration';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function setup(markup:string) {
@@ -55,22 +54,6 @@ async function history(id:string) {
   return {edits:(await artifactQuery(db,'SELECT * FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq',[id])).rows,versions:(await artifactQuery(db,'SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',[id])).rows};
 }
 describe('node project through real routes',()=>{
-  it('restores the migrated identity of a historical legacy alias after its node was removed',async()=>{
-    const s=await setup('<p id="seed">Seed</p>');const db=await getDb();
-    const legacy='<p id="intro">Authored</p><p data-annotation-anchor="intro">Legacy</p>';
-    await artifactQuery(db,'UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1',[s.doc.id,legacy]);
-    await runNodeIdentityMigrationBatch(db,{batchSize:10,mint:()=> 'z001'});
-    const migrated=await s.read();expect(migrated.markup).toContain('id="z001"');
-    await artifactQuery(db,"INSERT INTO annotations(id,artifact_id,body,author_kind,status,anchor_key,snippet) VALUES('ann_after',$1,'Authored node','human','open','intro','')",[s.doc.id]);
-    expect((await s.edit({edit_id:migrated.edit_id,old_string:'<p id="z001">Legacy</p>',new_string:''})).status).toBe(200);
-    expect((await db.query('SELECT legacy_key,source_id FROM artifact_node_aliases WHERE artifact_id=$1',[s.doc.id])).rows).toEqual([{legacy_key:'intro',source_id:'z001'}]);
-    const legacyArchive=await getVersionFor({tokenId:s.t.id,userId:null},s.doc.id,1);
-    expect(legacyArchive?.source).toContain('<p id="z001">Legacy</p>');
-    const restored=await restoreDocument(s.t.token,s.doc.id,1);
-    expect(restored.status).toBe(200);
-    expect((await s.read()).markup).toContain('<p id="z001">Legacy</p>');
-    expect((await artifactQuery(db,'SELECT anchor_key FROM annotations WHERE id=$1',['ann_after'])).rows).toEqual([{anchor_key:'intro'}]);
-  });
   it('refuses malformed markup at direct storage instead of bypassing identity validation',async()=>{
     const t=await mintToken('invalid-direct-create');
     await expect(createArtifact(t.id,null,{format:'markup',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');

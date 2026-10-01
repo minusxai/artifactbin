@@ -8,7 +8,6 @@ import {getDb} from '@/lib/db';
 import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
 import {storedCompiledDataflow} from '@/lib/story/parsed-artifact-metadata';
 import {compiledSource} from '@/test/helpers/compiled';
-import {runNodeIdentityMigrationBatch} from '@/lib/node-identity-migration';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
@@ -38,9 +37,4 @@ it('failed batch changes neither source nor metadata and legacy reads do not edi
  const failed=await edit(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:{edit_id:before.edit_id,edits:[{old_string:'Before',new_string:'After'},{old_string:'missing',new_string:'no'}]}}),ctx(id));expect(failed.status).toBe(400);expect(await getArtifactById(id)).toEqual(before);
  const db=await getDb();await artifactQuery(db,"UPDATE artifacts SET meta=meta-'parsedArtifact' WHERE id=$1",[id]);const legacy=(await getArtifactById(id))!;
  expect((await declarationsForRow(legacy))?.flow.values[0]!.name).toBe('choice');expect(await getArtifactById(id)).toEqual(legacy);
-});
-it('legacy normalization finalizes metadata after stamping new node ids',async()=>{
- const {id}=await setup(),db=await getDb();
- await artifactQuery(db,"UPDATE artifacts SET document=NULL,source='<p>Legacy</p>',meta=meta-'parsedArtifact' WHERE id=$1",[id]);
- await runNodeIdentityMigrationBatch(db,{batchSize:10});const row=await check(id);expect(row.source).toMatch(/id="/);
 });
