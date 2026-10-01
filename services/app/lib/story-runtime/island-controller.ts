@@ -576,10 +576,11 @@ export function createIslandController({ win, root, islands, nodes: served, port
         // Prose needs no compile at all: typed, it is on screen already; moved by the source (undo, a command, a
         // remote document), the editor takes it in place. Only when the tree says otherwise (a component, a block
         // ahead of one, a query) is it compiled and drawn.
-        const local = ({ storyUpdateParts }: typeof import('@/lib/story/document/update-parts')) => {
+        // The shared parse: the editor that sent this draft parsed the same source a moment ago (lib/jsx/parse-shared).
+        const local = ({ storyUpdatePartsShared }: typeof import('@/lib/story/document/update-parts')) => {
           if (disposed || sequence !== draftSequence) return;
-          const parts = storyUpdateParts(source);
-          if (parts && reconcileLocal(parts.nodes, source, partsKey(parts), command.nodes, storyUpdateParts)) { pendingDraft = null; return; }
+          const parts = storyUpdatePartsShared(source);
+          if (parts && reconcileLocal(parts.nodes, source, partsKey(parts), command.nodes, storyUpdatePartsShared)) { pendingDraft = null; return; }
           request();
         };
         // Once loaded, synchronously: an undo's caret, restored right after its source, lands on the adopted prose.

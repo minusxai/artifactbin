@@ -96,3 +96,15 @@ describe('storyUpdateParts', () => {
     expect(parts.declarations).toBe(storyUpdateParts('<div><h2>Other</h2></div>')!.declarations);
   });
 });
+
+describe('the shared parts', () => {
+  it('equal the parts of a fresh parse, before and after a typed change, and repeat for the same source', async () => {
+    const { storyUpdateParts, storyUpdatePartsShared } = await import('@/lib/story/document/update-parts');
+    const source = '<Helmet><Query name="q">{`select 1 as a`}</Query></Helmet>\n<div id="r">\n<p id="a">Typed here</p>\n<p id="b">Then <img src="https://example.com/x.png" /></p>\n</div>';
+    const typed = source.replace('Typed here', 'Typed here and more');
+    const held = (url: string) => url.startsWith('https://example.com/');
+    expect(storyUpdatePartsShared(source)).toEqual(storyUpdateParts(source));
+    expect(storyUpdatePartsShared(typed, held)).toEqual(storyUpdateParts(typed, held));
+    expect(storyUpdatePartsShared(typed, held)).toBe(storyUpdatePartsShared(typed, held));
+  });
+});

@@ -11,6 +11,7 @@
  * declarations) re-runs it, so the notebook needs no query path of its own.
  */
 import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
+import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import { HELMET_TAG, splitHelmet } from '../document/helmet';
 import { helmetOffset } from '../document/edit-compose';
 import { QUERY_TAG, refName, type DataflowState, type QueryDecl, type TableResult } from './dataflow';
@@ -96,7 +97,8 @@ const cellOf = (q: QueryDecl, state: DataflowState | null | undefined, pending: 
 
 /** The document's `<Query>` declarations in authored order, each with its last-run state and what reads it. */
 export function queryCells(source: string, state: DataflowState | null | undefined, pending = false, compiled?: CompiledDataflow | null): QueryCell[] {
-  const parsed = parseJsx(source);
+  // Read-only, shared: the editor reads these once the source rests, the same source every other reader parses.
+  const parsed = parseJsxShared(source);
   if (!parsed.ok) return [];
   const bound = boundByName(parsed.nodes);
   return splitHelmet(parsed.nodes).content.queries.map((q) => cellOf(q, state, pending, bound.get(q.name) ?? [], compiled));

@@ -10,7 +10,7 @@
  * own output would make every write diff against a different base.
  */
 import { describe, expect, it } from 'vitest';
-import { serializeJsx, type JsxNode } from '@/lib/jsx';
+import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { fixHtmlNesting } from '@/lib/story/document/nesting';
 import { canonicalizeMarkup } from '@/lib/story/document/jsx-tier';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
@@ -200,5 +200,20 @@ describe('a <For> inside an <svg>', () => {
   it('still looks inside its template for a tag that breaks out of the svg', () => {
     const out = fix('<p id="x"><svg><For each={$bars}><div /></For></svg></p>');
     expect(out.startsWith('<div id="x">')).toBe(true);
+  });
+});
+
+describe('a tree with nothing to repair', () => {
+  it('is answered as it came, while a repaired one is a copy', () => {
+    const clean = parseJsx('<div><p>one <b>two</b></p><ul><li>x</li></ul></div>');
+    if (!clean.ok) throw new Error('parse');
+    expect(fixHtmlNesting(clean.nodes)).toBe(clean.nodes);
+    const broken = parseJsx('<section><p>a<div>b</div></p><p>c</p></section>');
+    if (!broken.ok) throw new Error('parse');
+    const fixed = fixHtmlNesting(broken.nodes);
+    expect(fixed).not.toBe(broken.nodes);
+    expect((broken.nodes[0] as { children: Array<{ tag: string }> }).children[0]!.tag).toBe('p');
+    expect((fixed[0] as { children: Array<{ tag: string }> }).children[0]!.tag).toBe('div');
+    expect((fixed[0] as { children: unknown[] }).children[1]).toBe((broken.nodes[0] as { children: unknown[] }).children[1]);
   });
 });

@@ -25,7 +25,7 @@
  * `module` and can never run in a browser, which is why this is its own module
  * rather than a function over there.
  */
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { parseJsx, type JsxNode, type ParseResult } from '@/lib/jsx';
 import { splitHelmet, type HelmetContent } from '@/lib/story/document/helmet';
 import { fixHtmlNesting } from '@/lib/story/document/nesting';
 import { mapExternalCssUrls, mapExternalImageSources, type AssetLookup, type AssetMapOptions } from '@/lib/story/assets/asset-url';
@@ -47,7 +47,11 @@ export interface StoryBody {
  * document IS and not who is looking at it.
  */
 export function storyBodyFor(source: string, assets?: AssetLookup, opts?: AssetMapOptions): StoryBody | null {
-  const parsed = parseJsx(source);
+  return storyBodyOf(parseJsx(source), assets, opts);
+}
+
+/** `storyBodyFor` over a parse the caller already holds (read-only: every pass here copies, none mutates). */
+export function storyBodyOf(parsed: ParseResult, assets?: AssetLookup, opts?: AssetMapOptions): StoryBody | null {
   if (!parsed.ok) return null;
   const { content, body } = splitHelmet(fixHtmlNesting(parsed.nodes));
   if (!assets) return { content, body };
