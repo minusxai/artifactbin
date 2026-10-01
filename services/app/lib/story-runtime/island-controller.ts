@@ -149,7 +149,6 @@ const RESTORE_RETRIES = 12;
 const RESTORE_DELAY_MS = 250;
 /** A draft that must redraw the document waits until typing has paused this long: the typed region is never redrawn under the caret. */
 export const TYPING_QUIET_MS = 1000;
-const FOCUSED_DRAW_MS = 500;
 
 export interface IslandStoryController extends StoryController {
   selectionReady(): void;
@@ -221,7 +220,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const draftSession = runtimeId().replace(/[^\w-]/g, '').slice(0, 64) || 'editor';
   let draftsSent = 0;
   let updateParts: typeof import('@/lib/story/document/update-parts') | null = null;
-  let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string | null; sequence: number; arrivedAt: number } | null = null;
+  let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string | null; sequence: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
     const found = new Map<string, string>();
     const visit = (items: JsxNode[]) => { for (const item of items) {
@@ -273,22 +272,12 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer);
     quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(); }, Math.max(0, delay));
   };
-  /** The editor's prose has the caret (a toolbar keeps it there while it acts). */
-  const focusedRegion = () => {
-    const active = win.document.activeElement;
-    return active instanceof HTMLElement && root.contains(active) && !!active.closest('[data-mx-edit-region]');
-  };
-  /**
-   * Why a full draw must wait now (and for how long), or null: never under typing, a pending host commit or a
-   * composition; and with the caret in the prose, not until the draft has stood for FOCUSED_DRAW_MS (a toolbar
-   * acting on the selection finishes first).
-   */
-  const drawBlockedFor = (arrivedAt: number): number | null => {
+  /** Why a full draw must wait now (and for how long), or null: never under typing, a pending host commit or a composition. */
+  const drawBlockedFor = (): number | null => {
     if (!editRequested) return null;
     const now = win.performance.now();
     const quiet = now - lastInputAt;
     if (quiet < TYPING_QUIET_MS) return TYPING_QUIET_MS - quiet;
-    if (focusedRegion() && now - arrivedAt < FOCUSED_DRAW_MS) return FOCUSED_DRAW_MS - (now - arrivedAt);
     if (edit && !edit.canApplyDraft()) return 250;
     return null;
   };
@@ -307,14 +296,14 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const after = (pending.source !== null ? storyUpdateParts(pending.source)?.nodes : null) ?? pending.nodes;
     // Anything else redraws: never while typing (the region would be rebuilt under the caret), never over a host
     // commit or composition. It waits, and a newer draft that lands meanwhile replaces it.
-    const wait = drawBlockedFor(pending.arrivedAt);
+    const wait = drawBlockedFor();
     if (wait !== null) { retryDraw(wait); return; }
     // Fetch the draft's module while the editor is still mounted. From here to the remount nothing
     // awaits: a keystroke typed during a slow module fetch otherwise lands on no editor, and the
     // caret comes back where it was when the fetch began (mid-word).
     const module = await loadDraftModule(win, root, pending.document);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
-    const late = drawBlockedFor(pending.arrivedAt);
+    const late = drawBlockedFor();
     if (late !== null) { retryDraw(late); return; }
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
@@ -377,7 +366,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (disposed || sequence !== draftSequence || !drafting()) return;
     const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]');
     if (!nextRoot) throw new Error('draft preview carried no story');
-    pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes, source, sequence, arrivedAt: win.performance.now() };
+    pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes, source, sequence };
     await applyDraft();
   };
   /**
@@ -423,7 +412,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         selection?.setNodes(nodes);
       } else {
         const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]')!;
-        pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: nextNodes ?? nodes, source: restoreSource, sequence, arrivedAt: win.performance.now() };
+        pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes: nextNodes ?? nodes, source: restoreSource, sequence };
         // The islands hydrate again under the charts: their last drawings stay on screen until each has redrawn.
         const hold = holdChartDrawings(win, root);
         try {

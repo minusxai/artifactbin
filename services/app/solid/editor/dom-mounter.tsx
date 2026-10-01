@@ -110,6 +110,9 @@ function outsideProse(nodes: JsxNode[], regions: ProseRegion[]): Map<string, str
   return found;
 }
 
+/** A tree with its text left out: what text-only changes leave alone. */
+const shapeKey = (nodes: JsxNode[]): string => JSON.stringify(nodes, (key, value) => (key === 'value' && typeof value === 'string') || key === 'start' || key === 'end' ? undefined : value);
+
 /** Prose as the editor holds it: parsing collapses source whitespace, so compare engine to engine. */
 const proseKey = (nodes: JsxNode[]): string => serializeJsx(sourceNodes(editorDocument(nodes)));
 
@@ -334,8 +337,11 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         if (!view) return false;
         // A mounted editor shows the draft's prose already (it typed it), or — the source moved under it (an
         // undo, a remote document) — takes it in place when the caller says the draft is the source now.
-        if (serializeJsx(sourceNodes(view.state.doc)) !== proseKey(region.nodes)) {
-          if (!options.sync) return false;
+        const shown = sourceNodes(view.state.doc), wanted = sourceNodes(editorDocument(region.nodes));
+        if (serializeJsx(shown) !== serializeJsx(wanted)) {
+          // Only TEXT is taken in place: blocks split, joined, restyled or resized are drawn (their chrome and
+          // previews belong to the drawn page).
+          if (!options.sync || shapeKey(shown) !== shapeKey(wanted)) return false;
           changed.add(region.path);
         }
       }
