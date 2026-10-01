@@ -188,10 +188,23 @@ type AcornNode = acorn.Node & Record<string, any>;
 const nameOf = (node: AcornNode): string => (node.type === 'Identifier' ? node.name : String(node.value));
 const parseModule = (code: string): AcornNode[] => (acorn.parse(code, { ecmaVersion: 'latest', sourceType: 'module', allowReturnOutsideFunction: true }) as unknown as { body: AcornNode[] }).body;
 
+/**
+ * An SSR module's static chunks are its first line (`ssrModuleCode`): one `JSON.parse` of a JSON string
+ * literal, which never holds a raw line break. Split off, megabytes of markup are never walked by acorn.
+ */
+const STATIC_HTML_LINE = 'const $mxH = JSON.parse("';
+function splitStaticHtml(code: string): { line: string; rest: string } {
+  if (!code.startsWith(STATIC_HTML_LINE)) return { line: '', rest: code };
+  const end = code.indexOf('\n');
+  if (end < 0 || !code.slice(0, end).endsWith('");')) throw new Error('evaluate: a malformed static-chunk line');
+  return { line: code.slice(0, end), rest: code.slice(end + 1) };
+}
+
 /** A module's text as the body of a function of `__mx_import` that returns its exports (see `moduleToFunction`). */
-export function moduleFunctionBody(code: string): string {
+export function moduleFunctionBody(source: string): string {
+  const { line, rest: code } = splitStaticHtml(source);
   const hoisted: string[] = [];
-  const body: string[] = [];
+  const body: string[] = line ? [line] : [];
   const exported: Array<[string, string]> = [];
   const text = (node: AcornNode) => code.slice(node.start, node.end);
   for (const statement of parseModule(code)) {
@@ -305,7 +318,7 @@ async function islandSsrNamespace(specifier: string, retained?: SsrHalf): Promis
 /** Every static import specifier of a module's text. */
 async function importsOf(code: string): Promise<string[]> {
   const found = new Set<string>();
-  for (const statement of parseModule(code)) if (statement.type === 'ImportDeclaration') found.add(String(statement.source.value));
+  for (const statement of parseModule(splitStaticHtml(code).rest)) if (statement.type === 'ImportDeclaration') found.add(String(statement.source.value));
   return [...found].sort();
 }
 
@@ -444,7 +457,7 @@ export interface BuildOptions {
  * declared state. A version with no island has neither module — unless it must boot (`boot`), when it
  * has the browser module alone.
  */
-export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; browserIslands?: string; moduleData?: readonly string[]; staticTexts?: Readonly<Record<string, string>> }, options: BuildOptions): Promise<DocumentModules> {
+export async function buildDocumentModules(sources: GeneratedSources & { islandRefs: readonly unknown[]; browserIslands?: string; moduleData?: readonly string[]; staticTexts?: Readonly<Record<string, string>>; staticHtml?: readonly string[] }, options: BuildOptions): Promise<DocumentModules> {
   const moduleData = [...(sources.moduleData ?? [])];
   const flowJson = options.flow ? JSON.stringify(readerDataflow(options.flow)) : null;
   const flowIndex = flowJson && flowJson.length > 1024 ? moduleData.push(flowJson) - 1 : undefined;
@@ -452,7 +465,7 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const browserWithData = flowIndex !== undefined && !sources.moduleData?.length
     ? `${MODULE_DATA_READ_CODE}${browserIslands}`
     : browserIslands;
-  const ssrCode = await ssrModuleCode(sources.skeleton, options.flow, sources.staticTexts);
+  const ssrCode = await ssrModuleCode(sources.skeleton, options.flow, sources.staticTexts, sources.staticHtml);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
   const rendered = loaded.render({ values: options.values, results: null, mermaidImages: {}, drawings: {} });
   if (!sources.islandRefs.length && !options.boot) return { html: rendered.replace(/\sdata-hk="[^"]*"/g, ''), module: null, ssr: null, templateBrBytes: null };
@@ -526,10 +539,42 @@ async function externalizeLiterals(source: string): Promise<{ code: string; lite
   return { code: literals.length ? `${literalsReadCode(key)}${out.code}` : out.code, literals, key };
 }
 
-/** The per-document SSR module renders the same generated tree as the browser. */
-export const ssrModuleCode = async (document: string, flow: CompiledDataflow | null, staticTexts: Readonly<Record<string, string>> = {}): Promise<string> => {
-  const code = await transformSolid(ssrSource(document, flow), { generate: 'ssr', hydratable: true });
-  return restoreStaticText(code, staticTexts, true);
+/**
+ * The SSR transforms this process ran most recently, by the content hash of their source. The generated
+ * source carries static chunks by index (compiler `staticHtml`), so successive drafts of one document —
+ * an editor session typing in its static text — hand in the same source and skip Babel entirely. A hit
+ * returns exactly what a transform of that source returns: the key is the whole source.
+ */
+const SSR_TRANSFORMS = 16;
+const ssrTransforms = new Map<string, Promise<string>>();
+const ssrTransformCounts = { hits: 0, misses: 0 };
+/** The transform cache's hit and miss counts (tests). */
+export const ssrTransformStats = (): Readonly<typeof ssrTransformCounts> => ({ ...ssrTransformCounts });
+
+function ssrTransform(source: string): Promise<string> {
+  const key = contentSha(source);
+  let code = ssrTransforms.get(key);
+  if (code) {
+    ssrTransformCounts.hits++;
+    ssrTransforms.delete(key);
+  } else {
+    ssrTransformCounts.misses++;
+    code = transformSolid(source, { generate: 'ssr', hydratable: true });
+    code.catch(() => ssrTransforms.delete(key));
+    if (ssrTransforms.size >= SSR_TRANSFORMS) ssrTransforms.delete(ssrTransforms.keys().next().value!);
+  }
+  ssrTransforms.set(key, code);
+  return code;
+}
+
+/**
+ * The per-document SSR module renders the same generated tree as the browser. Its static chunks
+ * (`$mxH[i]`) are one `JSON.parse(<lit>)` constant, added after the transform and the static-text
+ * restore, so neither Babel nor a marker ever reads them.
+ */
+export const ssrModuleCode = async (document: string, flow: CompiledDataflow | null, staticTexts: Readonly<Record<string, string>> = {}, staticHtml: readonly string[] = []): Promise<string> => {
+  const code = restoreStaticText(await ssrTransform(ssrSource(document, flow)), staticTexts, true);
+  return staticHtml.length ? `const $mxH = JSON.parse(${lit(JSON.stringify(staticHtml))});\n${code}` : code;
 };
 
 const jsStringText = (value: string): string => value

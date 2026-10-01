@@ -50,6 +50,7 @@ import { buildDocumentModules } from './bundle.server';
 import { contentSha } from './speculation';
 import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
+import { solidAttrs, solidChildren, solidText, solidTextChild, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -231,6 +232,8 @@ export interface Generated extends GeneratedSources {
   browserIslands: string;
   moduleData: string[];
   staticTexts: Record<string, string>;
+  /** The skeleton's pre-rendered static chunks: `$mxH[i]` in the skeleton is `staticHtml[i]` (bundle.server `ssrModuleCode`). */
+  staticHtml: string[];
   islandRefs: IslandRef[];
   kit: { skeleton: string[]; islands: string[] };
   reactStatic: string[];
@@ -240,7 +243,11 @@ export interface Generated extends GeneratedSources {
 }
 
 /** One version's facts the generator reads (CompileInput without the build). */
-type GenerateInput = Omit<CompileInput, 'build'> & { glyphCatalogUrl?: string };
+type GenerateInput = Omit<CompileInput, 'build'> & {
+  glyphCatalogUrl?: string;
+  /** Render static plain-HTML subtrees here (the default); `false` keeps every one as JSX (the parity tests' reference). */
+  staticHtml?: boolean;
+};
 
 export function generate(input: GenerateInput): Generated {
   const elementAttrs = reactAttrs;
@@ -251,6 +258,7 @@ export function generate(input: GenerateInput): Generated {
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
   const staticTexts: Record<string, string> = {};
+  const staticHtml: string[] = [];
   const staticText = (value: string, noHydration = false): string => {
     if (value.length <= 1024) return jsxLiteral(value);
     const marker = `${noHydration ? 'MXSTATICTEXT' : 'MXSTATIC'}${contentSha(value)}${Object.keys(staticTexts).length}END`;
@@ -345,11 +353,83 @@ export function generate(input: GenerateInput): Generated {
     // server markup only; the browser emits an empty boundary at the same position.
     // A live control is emitted as a sibling of these boundaries, never inside one.
     // A branch absent from SSR must carry its static descendants in the browser to appear later.
-    if (!ctx.preview && !ctx.row && !ctx.branch && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag]))
-      return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${emitElement(node, path, mode, ctx)}</rt.NoHydration>`;
+    if (!ctx.preview && !ctx.row && !ctx.branch && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag])) {
+      if (mode === 'browser') return '<rt.NoHydration />';
+      const html = input.staticHtml === false ? null : htmlOf(node, path, ctx);
+      // An index, never the content: a draft that edits static text leaves the module Babel sees unchanged.
+      if (html !== null) return staticChunkJsx(staticHtml.push(html) - 1);
+      return `<rt.NoHydration>${emitElement(node, path, mode, ctx)}</rt.NoHydration>`;
+    }
     const live = selfDynamic(node) || !!ctx.liveKit && !!KIT[node.tag];
     const element = emitElement(node, path, mode, { ...ctx, liveKit: ctx.liveKit || !!KIT[node.tag] && live });
     return element;
+  }
+
+  /**
+   * What `emit` would render for a child of a static plain element, as Solid renders it under `NoHydration`:
+   * `{ html, counts }` (`counts`: it is a JSX child, so it takes part in the child-run boxing), or null when
+   * it keeps its JSX. Mirrors `emit` for the static branch only (static-solid/html holds the byte rules).
+   */
+  function childHtmlOf(node: JsxNode, path: string, ctx: Ctx): { html: string; counts: boolean } | null {
+    if (node.type === 'text') {
+      if (!node.value) return { html: '', counts: false };
+      return { html: solidTextChild(node.value), counts: true };
+    }
+    if (node.type === 'expression') {
+      if (!node.value.static) return null;
+      const v = node.value.json;
+      return typeof v === 'string' || typeof v === 'number' ? { html: solidText(String(v)), counts: true } : { html: '', counts: false };
+    }
+    if (node.control) return null;
+    if (INERT.has(node.tag)) return { html: '', counts: false };
+    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return { html: '', counts: false };
+    if (needsBrowser(node)) return null;
+    const html = htmlOf(node, path, ctx);
+    return html === null ? null : { html, counts: true };
+  }
+
+  /** A static plain element's server HTML (see SOLID_BOOLEAN), or null when it keeps its JSX. Memoized: a JSX fallback re-asks its children. */
+  const htmlMemo = new WeakMap<JsxElement, string | null>();
+  function htmlOf(node: JsxElement, path: string, ctx: Ctx): string | null {
+    if (htmlMemo.has(node)) return htmlMemo.get(node)!;
+    const html = renderHtml(node, path, ctx);
+    htmlMemo.set(node, html);
+    return html;
+  }
+  function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
+    if (node.isComponent || node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    const lower = node.tag.toLowerCase();
+    if (SOLID_SPECIAL_TAGS.has(lower)) return null;
+    const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
+    if (node.attributes.some((a) => !a.value.static)) return null;
+    const source = lower === 'img' ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
+    if (source?.value.static && typeof source.value.json === 'string' && (refName(source.value.json) || parseRowRef(source.value.json) || carriesRef(source.value.json))) return null;
+    const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
+    if (boundTable && node.attributes.some((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json))) return null;
+    let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, {});
+    const patch = resolveRefProps(node, props, refData);
+    if (patch) props = { ...props, ...patch };
+    const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
+    const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
+    const attrs = elementAttrs(tag, props);
+    if (lower === 'option' && ctx.selectValue !== undefined) {
+      const value = props.value ?? node.children.map((child) => child.type === 'text' ? child.value : '').join('');
+      const i = attrs.findIndex(([name]) => name === 'selected');
+      if (i >= 0) attrs.splice(i, 1);
+      if (String(value) === ctx.selectValue) attrs.push(['selected', '']);
+    }
+    const attrHtml = solidAttrs(attrs, safeAttr);
+    if (attrHtml === null) return null;
+    const open = `<${tag}${attrHtml}>`;
+    if (VOID.test(lower)) return open;
+    if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return `${open}${solidText(String(props.defaultValue ?? props.value))}</${tag}>`;
+    const parts: string[] = [];
+    for (let i = 0; i < node.children.length; i++) {
+      const child = childHtmlOf(node.children[i]!, `${path}.${i}`, inner);
+      if (child === null) return null;
+      if (child.counts) parts.push(child.html);
+    }
+    return `${open}${solidChildren(parts)}</${tag}>`;
   }
 
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
@@ -665,6 +745,7 @@ export function generate(input: GenerateInput): Generated {
     partial: [...partial].sort(),
     behaviors: deck ? [DECK_BEHAVIOR] : [],
     staticTexts,
+    staticHtml,
   };
 }
 
