@@ -58,8 +58,15 @@ export function storyUpdateParts(source: string, assets?: AssetLookup): StoryUpd
  * shared and read-only (no pass of `storyBodyOf` mutates it).
  */
 export function storyUpdatePartsShared(source: string, assets?: AssetLookup): StoryUpdateParts | null {
-  return partsOf(storyBodyOf(parseJsxShared(source), assets));
+  const kept = sharedParts.find((entry) => entry.source === source && entry.assets === assets);
+  if (kept) return kept.parts;
+  const parts = partsOf(storyBodyOf(parseJsxShared(source), assets));
+  sharedParts.unshift({ source, assets, parts });
+  if (sharedParts.length > 4) sharedParts.length = 4;
+  return parts;
 }
+/** The last few answers: one pause asks for the same source's parts from the sender, the frame and the query check. */
+const sharedParts: Array<{ source: string; assets: AssetLookup | undefined; parts: StoryUpdateParts | null }> = [];
 
 function partsOf(parts: ReturnType<typeof storyBodyFor>): StoryUpdateParts | null {
   if (!parts) return null;

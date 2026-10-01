@@ -126,10 +126,16 @@ function breaksParagraph(nodes: JsxNode[], inSvg = false): boolean {
  * canonicalizeMarkup) rather than a one-off pass at publish.
  */
 export function fixHtmlNesting(nodes: JsxNode[]): JsxNode[] {
-  return nodes.map((node) => {
+  // A subtree with nothing to repair is answered as it came (the same objects): the editor asks at every pause
+  // of a report thousands of nodes long, and a copy of all of them was most of the answer.
+  let changed = false;
+  const out = nodes.map((node) => {
     if (!isElement(node)) return node;
     const children = fixHtmlNesting(node.children);
     const rewrite = !node.isComponent && node.tag.toLowerCase() === 'p' && breaksParagraph(node.children);
+    if (!rewrite && children === node.children) return node;
+    changed = true;
     return { ...node, ...(rewrite ? { tag: 'div' } : {}), children };
   });
+  return changed ? out : nodes;
 }
