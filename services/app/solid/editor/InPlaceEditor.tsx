@@ -37,9 +37,7 @@ import X from 'lucide-solid/icons/x';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import { editBlock } from '@/lib/editor-v2/block-edit';
-import { SourceHistory } from '@/lib/editor-v2/history';
 import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/edit-bar';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
@@ -60,6 +58,7 @@ import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtim
 import type { ArtifactVersionSnapshot } from '@/lib/artifact-backend/types';
 import { createInPlaceEdit, type ImageDropPlacement, type InPlaceEditController } from './create-in-place-edit';
 import { createLiveEdits } from './create-live-edits';
+import { createEditorSource } from './create-editor-source';
 import { createEditDraftSender } from './edit-draft';
 import { createLiveArtifact } from './create-live-artifact';
 import { createArtifactVersions } from './create-versions';
@@ -151,7 +150,6 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   createEffect(() => props.onTitleChange?.(shownTitle()));
   const [theme, setTheme] = createSignal<StoryThemeName | null>((art.theme as StoryThemeName) ?? null);
   const [colorMode, setColorMode] = createSignal<'light' | 'dark' | null>(art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null);
-  const [source, setSource] = createSignal(art.markup ?? '');
   const pwaEnabled = () => readPwaSettings(source()).enabled === true;
   createEffect(() => {
     props.onPwaEnabledChange?.(pwaEnabled());
@@ -188,9 +186,6 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const setCollapsed = (next: boolean) => { setCollapsedState(next); writeEditPanelCollapsed(next); };
   const [sheet, setSheet] = createSignal<'selection' | 'history' | null>(null);
 
-  const sourceRef = { current: art.markup ?? '' };
-  const sourceHistory = new SourceHistory();
-  const [historyTick, setHistoryTick] = createSignal(0);
   const [markdownDraft, setMarkdownDraft] = createSignal<string | null>(null);
   const [discardDraft, setDiscardDraft] = createSignal(false);
   const [rejectedFragment, setRejectedFragment] = createSignal<string | null>(null);
@@ -200,33 +195,23 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const barH = EDIT_BAR_H;
   let compiledFlow = art.dataflow?.flow ?? null;
   const surfaceMode = () => colorMode() ?? storyThemeDefaultMode(theme()) ?? 'light';
-  const record = (...args: Parameters<SourceHistory['record']>) => { sourceHistory.record(...args); setHistoryTick((n) => n + 1); };
 
   /** Show a version of the document in the adopted runtime WITHOUT replacing it, in the theme and mode shown now. */
   const showInDocument = createEditDraftSender(runtimeRef, {
     editId: () => previewEditId, theme: () => untrack(theme), colorMode: () => untrack(surfaceMode),
   });
 
-  let queue: (change: Parameters<ReturnType<typeof createLiveEdits>['queue']>[0]) => void = () => {};
-  const commitStructural = (next: string) => {
-    if (next === sourceRef.current) return;
-    record(sourceRef.current, next);
-    sourceRef.current = next;
-    setSource(next);
-    queue({ source: next });
-    showInDocument(next);
-  };
-
-  const [sourceRevision, setSourceRevision] = createSignal(0);
-  const onRemoteDocument = (next: string, editId: string) => {
-    previewEditId = editId;
-    sourceRef.current = next;
-    setSource(next);
-    setSourceRevision((n) => n + 1);
-    showInDocument(next);
-  };
-
   let edit: InPlaceEditController | null = null;
+  /** The source, its history, and the only ways to change them (solid/editor/create-editor-source). */
+  const editorSource = createEditorSource({
+    initial: art.markup ?? '',
+    live: { queue: (change) => live.queue(change) },
+    draw: (next, editId) => { if (editId !== undefined) previewEditId = editId; showInDocument(next); },
+    commitPending: async () => { await edit?.commitPending(); },
+  });
+  const source = editorSource.source;
+  const commitStructural = (next: string) => editorSource.apply(next, { origin: 'structural', redraw: true });
+
   const live = createLiveEdits({
     backend,
     initialEditId: art.edit_id,
@@ -234,26 +219,20 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     initialDocument: art.document,
     initialMetadata: { title: art.title, theme: art.theme, template: art.template, colorMode: art.colorMode },
     initialSource: art.markup ?? '',
-    onRemoteDocument,
+    onRemoteDocument: (next, editId) => editorSource.replaceFromRemote(next, editId),
     isUserEditing: () => edit?.isUserEditing() ?? false,
   });
-  queue = live.queue;
+  const queue = live.queue;
   createEffect(() => { previewEditId = live.state.editId; });
 
   const applyHistory = async (direction: 'undo' | 'redo') => {
-    try { await edit?.commitPending(); } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Editor is unavailable.'); return; }
-    const result = sourceHistory[direction](sourceRef.current);
-    setHistoryTick((n) => n + 1);
+    const result = await editorSource[direction]();
     if (!result.ok) {
+      if (result.reason === 'unavailable') setHistoryError(result.message);
       if (result.reason === 'conflict') setHistoryError('Undo is blocked because this content changed elsewhere. Your current document is preserved.');
       return;
     }
     setHistoryError(null);
-    sourceRef.current = result.source;
-    setSource(result.source);
-    setSourceRevision((n) => n + 1);
-    queue({ source: result.source, annotationOps: result.annotationOps });
-    showInDocument(result.source);
     if (result.bookmark) edit?.restoreSelection(result.bookmark);
   };
   onMount(() => {
@@ -279,22 +258,17 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     onImageDrop: (file, where) => imageDoors?.dropped(file, where),
     onImageReplaceRequest: (path) => imageDoors?.pick(path),
     get editing() { return mode() === 'design' && !preview(); },
-    sourceRef,
-    onSourceEdited: (next, render = false, group, selection?: EditorSelectionChange) => {
-      record(sourceRef.current, next, group, selection?.before, selection?.after,
-        selection?.annotationOperation ? [selection.annotationOperation] : []);
-      sourceRef.current = next;
-      setSource(next);
-      queue({ source: next, annotationOps: selection?.annotationOperation ? [selection.annotationOperation] : undefined });
-      if (render) showInDocument(next);
+    sourceRef: { get current() { return editorSource.current(); } },
+    onSourceEdited: (next, render = false, group, selection) => {
+      editorSource.apply(next, { origin: 'local', group, selection, redraw: render });
     },
     onSlideTitle: (path, title) => {
-      commitStructural(updateSlideTitleInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, path), title));
+      commitStructural(updateSlideTitleInJsx(editorSource.current(), bodyPathToSourcePath(editorSource.current(), path), title));
     },
     onEditKey: (key, selection) => {
       if (key === 'Escape') { edit?.select(null); return; }
       if (!selection) return;
-      commitStructural(removeJsxNodeAtPath(sourceRef.current, bodyPathToSourcePath(sourceRef.current, selection.path)));
+      commitStructural(removeJsxNodeAtPath(editorSource.current(), bodyPathToSourcePath(editorSource.current(), selection.path)));
     },
   });
   edit = inPlace;
@@ -359,7 +333,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     const timer = window.setTimeout(() => {
       ranSignature = signature;
       setDataflowPending(true);
-      void backend.previewQueries(sourceRef.current).then((body) => {
+      void backend.previewQueries(editorSource.current()).then((body) => {
         if (!alive) return;
         setDataflowPending(false);
         if (!body) return;
@@ -403,12 +377,12 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const queryNotebook = createMemo(() => queryCells(source(), dataflowState(), dataflowPending(), compiledFlow));
   const onChartChange = (next: { viz: unknown; table: string | null }) => {
     const p = embedPath(); if (!p) return;
-    commitStructural(updateQuestionChartInJsx(sourceRef.current, p, { viz: next.viz as VizEnvelopeValue | undefined, table: next.table }));
+    commitStructural(updateQuestionChartInJsx(editorSource.current(), p, { viz: next.viz as VizEnvelopeValue | undefined, table: next.table }));
   };
-  const onChartTitleChange = (next: string | null) => { const p = embedPath(); if (p) commitStructural(updateQuestionTitleInJsx(sourceRef.current, p, next)); };
-  const onNumberChange = (next: NumberEmbedEdit) => { const p = embedPath(); if (p) commitStructural(updateNumberEmbedInJsx(sourceRef.current, p, next)); };
-  const onMermaidChange = (next: MermaidEmbedEdit) => { const p = embedPath(); if (p) commitStructural(updateMermaidEmbedInJsx(sourceRef.current, p, next)); };
-  const onQuerySqlChange = (name: string, sql: string) => commitStructural(updateQuerySqlInJsx(sourceRef.current, name, sql));
+  const onChartTitleChange = (next: string | null) => { const p = embedPath(); if (p) commitStructural(updateQuestionTitleInJsx(editorSource.current(), p, next)); };
+  const onNumberChange = (next: NumberEmbedEdit) => { const p = embedPath(); if (p) commitStructural(updateNumberEmbedInJsx(editorSource.current(), p, next)); };
+  const onMermaidChange = (next: MermaidEmbedEdit) => { const p = embedPath(); if (p) commitStructural(updateMermaidEmbedInJsx(editorSource.current(), p, next)); };
+  const onQuerySqlChange = (name: string, sql: string) => commitStructural(updateQuerySqlInJsx(editorSource.current(), name, sql));
   const notebookVisible = () => queriesOpen() && !inspector() && mode() === 'design' && !preview() && queryNotebook().length > 0;
   createEffect(() => {
     if (notebookVisible()) return;
@@ -486,7 +460,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const onOpenQuery = (name: string) => { inPlace.select(null); setQueryFocus(name); setContentView('data'); };
   const deleteSelected = () => {
     const s = selection(); if (!s) return;
-    commitStructural(removeJsxNodeAtPath(sourceRef.current, bodyPathToSourcePath(sourceRef.current, s.path)));
+    commitStructural(removeJsxNodeAtPath(editorSource.current(), bodyPathToSourcePath(editorSource.current(), s.path)));
     inPlace.select(null);
   };
 
@@ -500,23 +474,23 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     catch (error) { setImageError(error instanceof Error ? error.message : 'Could not change the document.'); return false; }
   };
   const anchorAt = (bodyPath: string | null | undefined): JsxInsertAnchor | null =>
-    bodyPath ? nodeTargetInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, bodyPath)) : null;
+    bodyPath ? nodeTargetInJsx(editorSource.current(), bodyPathToSourcePath(editorSource.current(), bodyPath)) : null;
   const insertImage = async (anchor: JsxInsertAnchor | null, image: ChosenImage) => {
     if (!(await drainTyping())) return;
-    const nodeId = freshNodeId(sourceRef.current);
-    const placed = placeImageInJsx(sourceRef.current, image.id, anchor, { nodeId });
-    if (placed.source === sourceRef.current || !placed.path) return;
+    const nodeId = freshNodeId(editorSource.current());
+    const placed = placeImageInJsx(editorSource.current(), image.id, anchor, { nodeId });
+    if (placed.source === editorSource.current() || !placed.path) return;
     commitStructural(placed.source);
     const bodyPath = sourcePathToBodyPath(placed.source, placed.path);
     if (bodyPath) inPlace.select(bodyPath, { reveal: true, nodeId });
   };
   const replaceImage = async (target: JsxImageTarget, image: ChosenImage) => {
     if (!(await drainTyping())) return;
-    const next = replaceImageSrcInJsx(sourceRef.current, target, image.id);
-    if (next === sourceRef.current) { setImageError('That image changed while the new one was uploading. Select it and try again.'); return; }
+    const next = replaceImageSrcInJsx(editorSource.current(), target, image.id);
+    if (next === editorSource.current()) { setImageError('That image changed while the new one was uploading. Select it and try again.'); return; }
     commitStructural(next);
   };
-  const imageTargetAt = (bodyPath: string) => imageTargetInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, bodyPath));
+  const imageTargetAt = (bodyPath: string) => imageTargetInJsx(editorSource.current(), bodyPathToSourcePath(editorSource.current(), bodyPath));
   const uploadOrSay = async (file: File): Promise<ChosenImage | null> => {
     if (!file.type.startsWith('image/')) return null;
     setImageError(null);
@@ -552,7 +526,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     return {
       alt: imageAltInJsx(source(), { path: bodyPathToSourcePath(source(), path) }),
       onReplace: () => { const target = imageTargetAt(path); if (target) setImageDialog({ mode: 'replace', target }); },
-      onAlt: (alt: string) => commitStructural(setImageAltInJsx(sourceRef.current, { path: bodyPathToSourcePath(sourceRef.current, path) }, alt)),
+      onAlt: (alt: string) => commitStructural(setImageAltInJsx(editorSource.current(), { path: bodyPathToSourcePath(editorSource.current(), path) }, alt)),
     };
   };
 
@@ -568,7 +542,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     setPreview(snapshot);
     inPlace.select(null);
   };
-  const backToCurrent = () => { setPreview(null); showInDocument(sourceRef.current); };
+  const backToCurrent = () => { setPreview(null); showInDocument(editorSource.current()); };
   const restoreVersion = async (v: number) => {
     let next: number | null;
     try { next = await history.restore(v); } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Could not restore that version.'); return; }
@@ -577,9 +551,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     await history.refresh();
   };
 
-  /** The history's own flags, re-read whenever it records or moves (`historyTick`). */
-  const canUndo = () => { historyTick(); return sourceHistory.canUndo; };
-  const canRedo = () => { historyTick(); return sourceHistory.canRedo; };
+    const { canUndo, canRedo } = editorSource;
   const historyControls = () => <>
     <Tooltip content="Undo (Ctrl/Cmd Z)">
       <button type="button" aria-label="Undo" disabled={!canUndo()} onMouseDown={(e) => e.preventDefault()} onClick={() => void applyHistory('undo')}
@@ -623,7 +595,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     const s = selection();
     if (!s || mode() !== 'design' || preview() || contentView() !== null) return null;
     return <StoryFormatToolbar layout="panel" artifactId={art.id} selection={s} onApply={inPlace.applyFormat} onApplyLink={inPlace.applyLink} onApplyInline={inPlace.applyInline}
-      onAutoHeight={() => commitStructural(editBlock(sourceRef.current, { kind: 'auto-height', path: s.path }))}
+      onAutoHeight={() => commitStructural(editBlock(editorSource.current(), { kind: 'auto-height', path: s.path }))}
       onSelect={inPlace.select} onDelete={deleteSelected} onComment={props.onComment} image={imageControls()} backend={formatBackend} />;
   };
   const titleEditor = () => (
@@ -639,13 +611,13 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       <ThemePicker value={theme()} colorMode={colorMode()} onPick={(t) => {
         setTheme(t);
         queue({ theme: t });
-        showInDocument(sourceRef.current);
+        showInDocument(editorSource.current());
       }} />
       <TemplateChip template={art.template} />
       <ModeChip mode={colorMode()} themeDefault={storyThemeDefaultMode(theme()) ?? 'light'} onPick={(next) => {
         setColorMode(next);
         queue({ colorMode: next });
-        showInDocument(sourceRef.current);
+        showInDocument(editorSource.current());
       }} />
     </section>
     <hr class="my-3 border-edge" />
@@ -703,7 +675,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           <p>{live.state.status}</p>
           <div class="mt-2 flex flex-wrap gap-3">
             <button type="button" onClick={() => void live.recover('retry')}>Retry save</button>
-            <button type="button" onClick={() => void copyText(sourceRef.current).then((ok) => { if (!ok) setHistoryError('Could not copy. Open the source editor to select and copy your draft.'); })}>Copy draft</button>
+            <button type="button" onClick={() => void copyText(editorSource.current()).then((ok) => { if (!ok) setHistoryError('Could not copy. Open the source editor to select and copy your draft.'); })}>Copy draft</button>
             <button type="button" onClick={() => setDiscardDraft(true)}>Use server version</button>
           </div>
           <Show when={discardDraft()}>
@@ -720,7 +692,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           <p>This text could not be applied to the current document. Copy it before restoring the document.</p>
           <textarea aria-label="Uncommitted text" readOnly value={rejectedFragment() ?? ''} class="mt-2 h-32 w-full font-mono text-sm" />
           <button type="button" onClick={() => void copyText(rejectedFragment() ?? '').then((ok) => { if (!ok) setHistoryError('Select and copy the text from the field.'); })}>Copy uncommitted text</button>
-          <button type="button" onClick={() => { inPlace.discardRejectedEdit(); setRejectedFragment(null); showInDocument(sourceRef.current); }}>Discard this text and restore document</button>
+          <button type="button" onClick={() => { inPlace.discardRejectedEdit(); setRejectedFragment(null); showInDocument(editorSource.current()); }}>Discard this text and restore document</button>
         </div>
       </Show>
       <Show when={historyError()}>
@@ -807,12 +779,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       </Show>
       <Show when={mode() === 'code'}>
         <div class="fixed bottom-0 z-20" style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }} aria-label="Source pane">
-          <SourceEditorPane value={source()} revision={sourceRevision()} onChange={(text) => {
-            record(sourceRef.current, text);
-            sourceRef.current = text;
-            setSource(text);
-            queue({ source: text });
-          }} />
+          <SourceEditorPane value={source()} revision={editorSource.revision()} onChange={(text) => editorSource.apply(text, { origin: 'local' })} />
         </div>
       </Show>
       <Show when={wide() && appView()}>

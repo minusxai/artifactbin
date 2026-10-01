@@ -73,8 +73,8 @@ export interface InPlaceEditOptions {
    * this controller is mounted — an editor-held listener would hear nothing.
    */
   sessionNonce: string | null;
-  /** The current source, read at the moment an edit arrives. */
-  sourceRef: { current: string };
+  /** The current source, read at the moment an edit arrives; `onSourceEdited` is what moves it. */
+  sourceRef: { readonly current: string };
   /** A frame-originated edit, already composed into the source. */
   onSourceEdited: (next: string, render?: boolean, group?: string, selection?: EditorSelectionChange) => void;
   /** Delete/Backspace pressed with a selection, or Escape. */
@@ -149,10 +149,7 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
               break;
             case 'mx:block-edit': {
               const next = editBlock(sourceRef.current, event.data.command);
-              if (next !== sourceRef.current) {
-                options.onSourceEdited(next, true);
-                sourceRef.current = next;
-              }
+              if (next !== sourceRef.current) options.onSourceEdited(next, true);
               break;
             }
             case 'mx:edit-error':
@@ -172,7 +169,6 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
               const next = replaceProseRegion(sourceRef.current, path, expected, replacement);
               if (next !== sourceRef.current) {
                 options.onSourceEdited(next, true, event.data.group, event.data.selection);
-                sourceRef.current = next;
               } else if (expected !== replacement) {
                 rejected = true;
                 options.onRejectedEdit?.(replacement);

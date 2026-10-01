@@ -18,7 +18,16 @@ interface Entry {
   group?: string;
   time?: number;
 }
-type HistoryResult =
+/** What one recorded change carries besides its before/after source. */
+export interface RecordOptions {
+  /** Consecutive changes in one group within 750 ms collapse into one undo step. */
+  group?: string;
+  /** The selection to restore on undo (before) and on redo (after). */
+  before?: EditorBookmark;
+  after?: EditorBookmark;
+  annotationOps?: AnnotationOperation[];
+}
+export type HistoryResult =
   | {
       ok: true;
       source: string;
@@ -35,14 +44,8 @@ export class SourceHistory {
   get canRedo() {
     return this.future.length > 0;
   }
-  record(
-    before: string,
-    after: string,
-    group?: string,
-    beforeBookmark?: EditorBookmark,
-    afterBookmark?: EditorBookmark,
-    annotationOps: AnnotationOperation[] = [],
-  ) {
+  record(before: string, after: string, options: RecordOptions = {}) {
+    const { group, before: beforeBookmark, after: afterBookmark, annotationOps = [] } = options;
     if (before === after) return;
     const undoOps = annotationOps
       .slice()

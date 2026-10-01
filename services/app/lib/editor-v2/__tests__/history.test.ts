@@ -58,8 +58,8 @@ it('groups contiguous typing but keeps paste and structure as separate undo step
   const b = a.replace('one', 'onex'),
     c = a.replace('one', 'onexy'),
     d = a.replace('one', 'pasted');
-  h.record(a, b, 'typing:p');
-  h.record(b, c, 'typing:p');
+  h.record(a, b, { group: 'typing:p' });
+  h.record(b, c, { group: 'typing:p' });
   h.record(c, d);
   expect(h.undo(d)).toEqual({ ok: true, source: c });
   expect(h.undo(c)).toEqual({ ok: true, source: a });
@@ -72,7 +72,7 @@ it('returns the pre-edit selection for undo and the post-edit selection for redo
       head: { id: 'a', offset: 3 },
     },
     after = { anchor: { id: 'a', offset: 2 }, head: { id: 'a', offset: 2 } };
-  h.record('<p id="a">abcd</p>', '<p id="a">aXd</p>', undefined, before, after);
+  h.record('<p id="a">abcd</p>', '<p id="a">aXd</p>', { before, after });
   const undo = h.undo('<p id="a">aXd</p>');
   expect(undo).toMatchObject({ ok: true, bookmark: before });
   expect(h.redo('<p id="a">abcd</p>')).toMatchObject({
