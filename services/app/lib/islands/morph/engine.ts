@@ -30,17 +30,12 @@ import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/story/url-values';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import { ISLAND_DOCUMENT_KEY, type IslandHost } from '../contract';
+import { ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 
-const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
-const LIVE_ID_ATTR = 'data-mx-live-id';
-const LIVE_EDIT_ATTR = 'data-mx-live-edit';
 const HK = 'data-hk';
-/** A compiler-generated render id (`s<i>-`), as rt's `hydrateIsland` accepts one. */
-const RENDER_ID = /^[\w-]+$/;
 /** Sheets that belong to one version and may be absent from the next (lib/story/document-styles, the assembler). */
 const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-webfonts', 'data-mx-font-vars', 'data-mx-author'];
 /** How often a version the server is still compiling is asked for again, and how long apart. */
@@ -306,7 +301,7 @@ function renderIdOf(node: Node): string | null {
 function unitsOf(tree: ParentNode, renderIds: readonly string[]): Map<string, Element[]> {
   const units = new Map<string, Element[]>();
   for (const rid of renderIds) {
-    if (!RENDER_ID.test(rid)) continue;
+    if (!RENDER_ID_PATTERN.test(rid)) continue;
     const selector = `[${HK}^="${rid}"]`;
     const nodes = [...tree.querySelectorAll(selector)].filter((el) => !el.parentElement?.closest(selector));
     if (nodes.length) units.set(rid, nodes);

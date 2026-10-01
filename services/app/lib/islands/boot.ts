@@ -34,14 +34,11 @@ import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
-import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
+import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer, type PublicMxHost } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
-
-/** Page behaviour installs a cleanup here; boot owns its lifetime. */
-const PUBLIC_MX_KEY = '__mxPublicApi';
 
 /**
  * One island of the per-document module: its hydration key prefix (`IslandRef.renderId`), its component,
@@ -80,12 +77,6 @@ export interface IslandMorphSeam {
   restartAuthor(source: string | null): Promise<void>;
 }
 export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
-
-/** The story element the islands live in (the assembler's `inlineStoryElement`). */
-const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
-/** The document's live identity on `<body>` (lib/story/document's convention, read as anchor-entry reads it). */
-const LIVE_ID_ATTR = 'data-mx-live-id';
-const LIVE_EDIT_ATTR = 'data-mx-live-edit';
 
 const EMPTY_PAGE: IslandPageData = { values: {}, results: null, appPage: false, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
 
@@ -233,7 +224,7 @@ export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDat
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
-  const uninstallMx = () => (root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY]?.();
+  const uninstallMx = () => (root as PublicMxHost)[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
@@ -259,13 +250,8 @@ export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDat
          */
         mode = 'read';
         openLive(data.results?.since ?? null);
-        if (store && win.parent === win) void import('./mx-host').then(({ publicMxFor }) => {
-          if (disposed || mode !== 'read') return;
-          uninstallMx();
-          const api = publicMxFor(store);
-          const host = root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void };
-          host[PUBLIC_MX_KEY] = () => { if (win.mx === api) delete win.mx; delete host[PUBLIC_MX_KEY]; };
-          win.mx = api;
+        if (store && win.parent === win) void import('./mx-host').then(({ installPublicMx }) => {
+          installPublicMx(root, store, win, () => !disposed && mode === 'read');
         }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
         const script = readPageData(doc).authorScript;
         void restartAuthor(typeof script === 'string' && script ? script : null).catch((error: unknown) => console.error('[islands] author host failed', error));
