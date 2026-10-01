@@ -321,15 +321,15 @@ const KIT_SERVER_MODS = ['basic', 'static'] as const;
 
 /**
  * The live build's server kit — the half `defaultSsrImports` hands the SSR module, so a component rendered at
- * compile time is the one the module would have run. Undefined when the build has no server half.
+ * compile time is the one the module would have run. Undefined when it cannot be loaded.
  */
 export async function loadKitServer(): Promise<KitServer | undefined> {
   try {
     const entries = await Promise.all(KIT_SERVER_MODS.map(async (mod) => [mod, await islandSsrNamespace(`@mx/kit/${mod}`)] as const));
     return Object.fromEntries(entries);
-  } catch (error) {
-    if (error instanceof IslandSsrUnavailable) return undefined;
-    throw error;
+  } catch {
+    // The kit renders through its JSX instead: the same bytes, only slower.
+    return undefined;
   }
 }
 
