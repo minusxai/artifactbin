@@ -13,7 +13,10 @@ import '@testing-library/jest-dom/vitest';
 export { fireEvent } from '@testing-library/dom';
 
 const mounted = new Set<() => void>();
-afterEach(() => { for (const dispose of mounted) dispose(); mounted.clear(); });
+/** Dispose every mount. Registered here for an isolated file; the shared `islands` graph imports this
+ * module once, so its setup (test/setup/vitest.setup.shared-jsdom.ts) registers it for every file. */
+export function cleanup() { for (const dispose of mounted) dispose(); mounted.clear(); }
+afterEach(cleanup);
 
 export function render(ui: () => JSX.Element) {
   const container = document.body.appendChild(document.createElement('div'));

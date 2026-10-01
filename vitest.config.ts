@@ -1,9 +1,9 @@
 import { globSync, readFileSync } from 'node:fs';
 import path from 'path';
 import { defineConfig } from 'vitest/config';
-import solid from 'vite-plugin-solid';
 import yaml from '@rollup/plugin-yaml';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
+import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 
 // The CLI's generated teaching is produced by the global setup (and by `npm test` before Vitest
 // starts), behind a content-verified cache, not on every config load.
@@ -40,9 +40,28 @@ const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_B
  * Found by reading the files, so a new mock or env write moves its file by itself.
  */
 const LEAKS_PAST_ITS_FILE = /\bvi\.(?:mock|doMock|resetModules|stubEnv)\(|process\.env(?:\.\w+|\[[^\]]+\])\s*(?:=[^=]|\?\?=)|delete process\.env/;
-const API_MOCKING = globSync(API_INCLUDE, { cwd: import.meta.dirname, exclude: API_EXCLUDE })
+const leaking = (include: string[], exclude: string[]) => globSync(include, { cwd: import.meta.dirname, exclude })
   .filter((file) => LEAKS_PAST_ITS_FILE.test(readFileSync(path.join(import.meta.dirname, file), 'utf8')))
   .map((file) => file.split(path.sep).join('/'));
+const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
+
+const UI_INCLUDE = ['services/app/lib/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/web/**/__tests__/**/*.ui.test.{ts,tsx}'];
+/**
+ * The Solid tests (islands and the Solid app) share one module graph and one jsdom per worker, like
+ * `api`: re-importing the Solid app for every file was most of an affected `npm test`. Their files
+ * that mock modules or rewrite the environment run in `ui`, which stays isolated (one fresh graph and
+ * jsdom per file) — both names are what CI selects (`--project=ui --project=islands`).
+ */
+const ISLANDS_MOCKING = leaking([ISLAND_TESTS, SOLID_TESTS], ['**/node_modules/**']);
+const ISLANDS_SHARED = globSync([ISLAND_TESTS, SOLID_TESTS], { cwd: import.meta.dirname, exclude: ['**/node_modules/**', ...ISLANDS_MOCKING] })
+  .map((file) => file.split(path.sep).join('/'));
+// The Solid transform the island build uses (babel-preset-solid), remembered across runs
+// (scripts/lib/cached-solid.mjs). Tests render client-side (`hydratable` off); the build emits
+// hydratable code. Fresh plugin instances per project: each project has its own Vite server.
+const solidJsdom = () => ({
+  plugins: [declaredLucideIcons(import.meta.dirname), cachedSolid(import.meta.dirname, { include: ['services/app/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
+  server: { deps: { inline: [/@solidjs\/router/, /@solidjs\/testing-library/, /lucide-solid/] } },
+});
 
 export default defineConfig({
   root: import.meta.dirname,
@@ -155,28 +174,30 @@ export default defineConfig({
         },
       },
       {
+        // Every jsdom file that mocks modules or writes the environment, isolated per file: the
+        // engine/kit tests (with their polyfills, vitest.setup.ui.ts) and the Solid tests in
+        // ISLANDS_MOCKING (which get only the base setup, as in `islands`: vitest.setup.jsdom.ts).
         extends: true,
-        plugins: [solid({ include: ['services/app/**/*.{tsx,jsx}'], hot: false })],
+        plugins: solidJsdom().plugins,
         test: {
           name: 'ui',
           environment: 'jsdom',
-          include: ['services/app/lib/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/web/**/__tests__/**/*.ui.test.{ts,tsx}'],
-          exclude: ['**/node_modules/**', ISLAND_TESTS],
-          setupFiles: ['./services/app/test/setup/vitest.setup.ts', './services/app/test/setup/vitest.setup.ui.ts'],
+          include: [...UI_INCLUDE, ...ISLANDS_MOCKING],
+          exclude: ['**/node_modules/**', ...ISLANDS_SHARED],
+          server: solidJsdom().server,
+          setupFiles: ['./services/app/test/setup/vitest.setup.ts', './services/app/test/setup/vitest.setup.jsdom.ts'],
         },
       },
       {
-        // The Solid transform the island build uses (babel-preset-solid). One difference: tests render
-        // client-side (`hydratable` off), the build emits hydratable code.
         extends: true,
-        plugins: [solid({ include: ['services/app/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
+        plugins: solidJsdom().plugins,
         test: {
           name: 'islands',
           environment: 'jsdom',
-          include: [ISLAND_TESTS, SOLID_TESTS],
-          exclude: ['**/node_modules/**'],
-          server: { deps: { inline: [/@solidjs\/router/, /@solidjs\/testing-library/, /lucide-solid/] } },
-          setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
+          isolate: false,
+          include: ISLANDS_SHARED,
+          server: solidJsdom().server,
+          setupFiles: ['./services/app/test/setup/vitest.setup.ts', './services/app/test/setup/vitest.setup.shared-jsdom.ts'],
         },
       },
     ],
