@@ -147,3 +147,20 @@ it('on wake (visible, online) reads the head once and surfaces only a strictly n
   wake();
   await vi.waitFor(() => expect(live()?.version).toBe(6));
 });
+
+it('a page coming back online retries a frame fetch that failed while offline at once, not after its backoff', async () => {
+  vi.useFakeTimers();
+  let offline = true;
+  const liveFrame = vi.fn(async () => { if (offline) throw new TypeError('Failed to fetch'); return frame(5); });
+  const { backend, ping, wake } = liveBackend(liveFrame);
+  const { result: live } = renderHook(() => createLiveArtifact({ backend, id: 'a1', initialEditId: 'e0', initialVersion: 1 }));
+  ping({ version: 5, editId: 'e5' }); // the ping got through; the fetch did not
+  await vi.advanceTimersByTimeAsync(0);
+  for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(30_000); // offline for a while: backoff grows
+  const calls = liveFrame.mock.calls.length;
+  offline = false;
+  wake();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(liveFrame).toHaveBeenCalledTimes(calls + 1);
+  expect(live()?.version).toBe(5);
+});

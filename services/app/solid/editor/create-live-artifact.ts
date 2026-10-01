@@ -132,7 +132,10 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
              * (or this page's own last write) changes nothing.
              */
             onWake: () => {
-              if (!alive || fetching || wanted) return;
+              if (!alive) return;
+              // A frame fetch is waiting out its backoff (it failed while offline): the page is back, try now.
+              if (wanted && retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; fetchWanted(); return; }
+              if (fetching || wanted) return;
               void backend.liveFrame().then((frame) => {
                 if (!alive || !frame || frame.version <= seenVersion || wanted || fetching) return;
                 if (options.isOwnFrame?.(frame.editId)) { seenVersion = frame.version; return; }
