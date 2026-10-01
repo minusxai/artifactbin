@@ -48,7 +48,7 @@ describe('draft compiles under a burst of keystrokes', () => {
 
     // The editor: one draft every 50 ms for 5 s, sent on its own clock (no debounce, no in-flight limit): a
     // compile that holds the thread delays the drafts behind it, which then arrive together.
-    const drafts = Array.from({ length: 100 }, (_, i) => sleep(i * 50).then(() => preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: {
+    const drafts = Array.from({ length: 100 }, (_, i) => sleep(i * 50).then(() => preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, headers: { 'x-draft-sequence': `editor-1.${i}` }, json: {
       editId: row.edit_id, source: `<div id="root"><p id="copy">Draft ${'x'.repeat(i)}</p></div>`,
     } }), params(id))).then((answer) => answer.status));
     const typing = Promise.all(drafts);

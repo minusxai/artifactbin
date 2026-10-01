@@ -17,11 +17,15 @@
 export type GateResult<T> = { ok: true; value: T } | { ok: false; reason: 'superseded' | 'busy' };
 
 /** One draft's place in its session's order of arrival. */
-export interface DraftTicket { readonly session: string; readonly seq: number }
+export interface DraftTicket { readonly session: string; readonly seq: number; readonly waitMs?: number }
 
 export interface DraftCompileGate {
-  /** Place a draft in its session as its request arrives; a later arrival supersedes it. */
-  arrive(session: string): DraftTicket;
+  /**
+   * Place a draft in its session as its request arrives. `seq` is the sender's own order of its drafts;
+   * without it, arrival order stands in. A draft with a higher place supersedes the lower ones.
+   * `waitMs` overrides the gate's wait for this draft.
+   */
+  arrive(session: string, seq?: number, waitMs?: number): DraftTicket;
   /** Whether a newer draft of the ticket's session has arrived since: the caller can stop preparing it. */
   superseded(ticket: DraftTicket): boolean;
   /** Run `work` for an arrived draft under the gate; the promise settles as soon as its answer is known. */
@@ -30,6 +34,7 @@ export interface DraftCompileGate {
 
 interface Waiter {
   session: string;
+  waitMs: number;
   work: () => Promise<unknown>;
   settle: (result: GateResult<unknown>) => void;
   fail: (error: unknown) => void;
@@ -83,7 +88,7 @@ export function createDraftCompileGate(options: DraftCompileGateOptions): DraftC
       const session = sessions.get(waiter.session);
       if (session?.pending === waiter) session.pending = null;
       answer(waiter, { ok: false, reason: 'busy' });
-    }, options.waitMs);
+    }, waiter.waitMs);
   };
 
   // Starts are decided one macrotask later: drafts that arrived while a compile held the thread reach the
@@ -125,13 +130,15 @@ export function createDraftCompileGate(options: DraftCompileGateOptions): DraftC
   };
 
   return {
-    arrive(key: string): DraftTicket {
+    arrive(key: string, seq?: number, waitMs?: number): DraftTicket {
       const now = Date.now();
       if (sessions.size > 256) prune(now);
       let session = sessions.get(key);
       if (!session) { session = { running: null, pending: null, latest: 0, touched: now }; sessions.set(key, session); }
       session.touched = now;
-      return { session: key, seq: ++session.latest };
+      const place = seq ?? session.latest + 1;
+      session.latest = Math.max(session.latest, place);
+      return { session: key, seq: place, ...(waitMs !== undefined ? { waitMs } : {}) };
     },
     superseded: (ticket) => ticket.seq < (sessions.get(ticket.session)?.latest ?? ticket.seq),
     run<T>(ticket: DraftTicket, work: () => Promise<T>): Promise<GateResult<T>> {
@@ -143,7 +150,7 @@ export function createDraftCompileGate(options: DraftCompileGateOptions): DraftC
       if (ticket.seq < session.latest) return Promise.resolve({ ok: false, reason: 'superseded' });
       return new Promise<GateResult<T>>((resolve, reject) => {
         const waiter: Waiter = {
-          session: key, work, settled: false, timer: null,
+          session: key, waitMs: ticket.waitMs ?? options.waitMs, work, settled: false, timer: null,
           settle: (result) => resolve(result as GateResult<T>), fail: reject,
         };
         if (session.pending) {
