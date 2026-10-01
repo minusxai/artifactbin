@@ -18,7 +18,6 @@
  *   usage: node scripts/gate-annotations.mjs [base]
  */
 import { createChecker } from './lib/assert.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -64,7 +63,7 @@ const run = async () => {
     const owner = await browser.newContext();
     const page = await owner.newPage();
     await becomeOwner(page, BASE, token);
-    await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
+    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
     const frame = page.locator('[data-mx-inline-story]');
     await frame.locator('#figure').waitFor({ timeout: 15000 });
 
@@ -315,7 +314,7 @@ const run = async () => {
     // ── a logged-out reader sees nothing ──────────────────────────────────
     const strangerCtx = await browser.newContext();
     const stranger = await strangerCtx.newPage();
-    await stranger.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
+    await stranger.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
     await sleep(1500);
     const strangerPins = await stranger.locator('[data-mx-annotated], [data-mx-annotation-open]').count();
     const strangerButtons = await stranger.locator('[aria-label="Toggle comments"]').count();
@@ -371,7 +370,7 @@ async function quoteLeg(browser) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
-  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#second').waitFor({ timeout: 15000 });
   const raw = await until(async () => page.mainFrame(), (f) => !!f, 15000);
@@ -517,7 +516,7 @@ async function markdownLeg(browser) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
-  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
@@ -618,7 +617,7 @@ async function foldLeg(browser) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
-  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
@@ -781,7 +780,7 @@ async function pickLeg(browser) {
   const page = await ctx.newPage();
   await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined,configurable:true});});
   await becomeOwner(page, BASE, token);
-  await page.goto(readerUrl(`${BASE}/a/${id}`), { waitUntil: 'load' });
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#figure').waitFor({ timeout: 15000 });
 

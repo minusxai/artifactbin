@@ -41,7 +41,7 @@ reach a CDN. See [serving and security](serving-and-security.md).
    surface authors should receive, including any supported addons.
 3. Add its name, npm package, exact version, and wrapper filename to
    `services/app/lib/libraries/registry.json`.
-4. Run `npm run build:runtime`. The generic library build checks the version
+4. Run `node services/app/scripts/build-libraries.mjs`. The generic library build checks the version
    pin and bundles the wrapper's dependency graph into
    `/libraries/<name>-<version>/index.js`.
 5. Add a browser gate proving it works under the artifact sandbox and in
@@ -60,23 +60,6 @@ textures. External model dependencies and additional decoder workers are not
 included. Authors own rendering, resizing, animation and GPU cleanup. Export
 uses the existing bounded settling window; long asynchronous scene preparation
 may exceed that window; there is no new scene-readiness protocol in this version.
-
-## Legacy: the Helmet author-script API
-
-Documents written before managed frames load libraries from a `<Helmet>`
-author script through two helpers, which `lib/story/script-api.ts` still
-defines:
-
-```js
-const THREE = await artifact.library('three');
-const url = await artifact.resolve('ref:Abc123');
-```
-
-`library(name)` imports the same platform-owned ES module, lazily and once per
-page; `resolve(ref)` checks anonymous read access and returns a
-document-scoped URL, and the subsequent GET rechecks it. **Neither helper is
-exposed inside the isolated `<Iframe>` realm.** New documents use the frame
-above; existing ones keep working.
 
 ## File transport
 

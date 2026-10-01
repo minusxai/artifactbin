@@ -24,7 +24,6 @@ import { chromium } from 'playwright';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { kitchenSinkMarkup } from './lib/kitchen-sink-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
-import { compiledReader, readerUrl } from './lib/gate-reader.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const origin = new URL(BASE).origin;
@@ -82,7 +81,7 @@ await page.addInitScript(() => {
   document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective}: ${e.blockedURI}`));
 });
 
-await page.goto(readerUrl(`${BASE}/a/${doc.id}`));
+await page.goto(`${BASE}/a/${doc.id}`);
 const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
 const frame = page.mainFrame();
 await frame.waitForSelector('h1', { timeout: 30000 });
@@ -161,10 +160,8 @@ check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErr
 // visibility (or idle), while the server drawing remains visible. The positive control is that
 // a chart on this page becomes interactive without input; prose still fetches no chart chunk.
 const islandChunks = () => requests.filter((u) => new URL(u).pathname.startsWith('/islands/'));
-if (compiledReader) {
-  const drawn = await frame.waitForFunction(() => [...document.querySelectorAll('[data-mx-chart-state="ready"]')].some(el => !el.querySelector(':scope > svg.absolute.inset-0') && !!el.querySelector('canvas, svg')), null, { timeout: 20000 }).then(() => true, () => false);
-  check(drawn, `a chart document loaded the lazy chart module after reader readiness without input (${islandChunks().length} island chunks)`);
-} else check(requests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a chart document fetched the lazy chart chunk');
+const drawn = await frame.waitForFunction(() => [...document.querySelectorAll('[data-mx-chart-state="ready"]')].some(el => !el.querySelector(':scope > svg.absolute.inset-0') && !!el.querySelector('canvas, svg')), null, { timeout: 20000 }).then(() => true, () => false);
+check(drawn, `a chart document loaded the lazy chart module after reader readiness without input (${islandChunks().length} island chunks)`);
 
 // 4. the font resolved INSIDE the opaque frame
 const fontOk = await frame.evaluate(async () => {
@@ -200,7 +197,7 @@ const again = Buffer.from(await (await fetch(`${BASE}/a/${doc.id}/export?format=
 check(again.equals(pngBytes), 'a repeat export serves the stored render, byte for byte');
 
 // The capture must not contain the document's own chrome.
-check(!(await (await fetch(readerUrl(`${BASE}/a/${doc.id}/raw?chrome=0`))).text()).includes('Slide controls'),
+check(!(await (await fetch(`${BASE}/a/${doc.id}/raw?chrome=0`)).text()).includes('Slide controls'),
   'the capture render carries no navigation chrome');
 
 // A prose document (no embeds) must not pay for the chart module at all.
@@ -209,25 +206,23 @@ const proseRequests = [];
 const prosePage = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   await becomeOwner(prosePage, BASE, mint.token); // a fresh context owns nothing
 prosePage.on('request', (r) => proseRequests.push(r.url()));
-await prosePage.goto(readerUrl(`${BASE}/a/${prose.id}`));
+await prosePage.goto(`${BASE}/a/${prose.id}`);
 const proseFrame = await artifactDocument(prosePage);
 await proseFrame.waitForSelector('h1', { timeout: 20000 });
 await prosePage.waitForTimeout(3000);
-if (compiledReader) {
-  // A compiled prose page loads its own behaviour (@mx/page) and nothing of the islands' runtime or charts.
-  const manifest = await (await fetch(`${BASE}/islands/manifest.json`)).json();
-  const closure = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u) || !manifest.files[u]) continue; seen.add(u); closure(manifest.files[u].imports, seen); } return seen; };
-  const allowed = closure([manifest.manifest['@mx/page']]);
-  const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p));
-  check(extra.length === 0, `a prose document never fetches the chart chunk (island files beyond its page behaviour: ${extra.join(', ') || 'none'})`);
-} else check(!proseRequests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a prose document never fetches the chart chunk');
+// A compiled prose page loads its own behaviour (@mx/page) and nothing of the islands' runtime or charts.
+const manifest = await (await fetch(`${BASE}/islands/manifest.json`)).json();
+const closure = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u) || !manifest.files[u]) continue; seen.add(u); closure(manifest.files[u].imports, seen); } return seen; };
+const allowed = closure([manifest.manifest['@mx/page']]);
+const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p));
+check(extra.length === 0, `a prose document never fetches the chart chunk (island files beyond its page behaviour: ${extra.join(', ') || 'none'})`);
 
 // 6. A Popover opens NEXT TO its trigger, not at the viewport's corner (the placement is measured, so only a
 //    browser proves it): mid-page trigger on the right of a row, at desktop and phone width.
 const popover = await publish({ markup: '<h1 className="text-3xl">Popover</h1><p>Some text above.</p><div className="flex justify-end pt-24"><Popover><PopoverTrigger>Open popover</PopoverTrigger><PopoverContent>Popover body</PopoverContent></Popover></div><p className="pt-24">Text below.</p>', title: 'Popover placement' });
 for (const viewport of [{ width: 1200, height: 800 }, { width: 390, height: 800 }]) {
   const popPage = await browser.newPage({ viewport });
-  await popPage.goto(readerUrl(`${BASE}/a/${popover.id}`));
+  await popPage.goto(`${BASE}/a/${popover.id}`);
   await popPage.waitForSelector('[data-mx-inline-story] h1', { timeout: 20000 });
   await popPage.waitForTimeout(1500);
   await popPage.getByRole('button', { name: 'Open popover' }).click();

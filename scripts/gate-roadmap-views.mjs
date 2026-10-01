@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
 import { startDocument, becomeOwner } from './lib/start-doc.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
 const rows = Array.from({length:15}, (_,i) => ({id:i+1,item:`Task ${i+1}`,owner:'TBD',hours:2,depends_on:i===1 || i===2 ? '["1"]' : '[]',tags:'[]',status:'backlog',sprint:''}));
 const fixture = await createEditableTableFixture(base, 15, {workspace:true,rows,seed:await startDocument(base)});
@@ -13,7 +12,7 @@ try {
   const ownerPage = await browser.newPage({viewport:{width:1450,height:950}});
   ownerPage.on('pageerror', error => console.error(error.message));
   await becomeOwner(ownerPage,base,fixture.token);
-  await ownerPage.goto(readerUrl(fixture.url));
+  await ownerPage.goto(fixture.url);
   await ownerPage.locator('[data-mx-inline-story]').waitFor();
   let page = await artifactDocument(ownerPage);
   const switchView = async name => {

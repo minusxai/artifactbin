@@ -82,8 +82,3 @@ function compareCells(a: unknown, b: unknown): number {
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   return String(a).localeCompare(String(b));
 }
-
-/** The Values whose controls must be disabled offline: every frozen Value. */
-export function frozenValueNames(snapshot: ArtifactFileSnapshot): Set<string> {
-  return new Set(snapshot.frozen);
-}
