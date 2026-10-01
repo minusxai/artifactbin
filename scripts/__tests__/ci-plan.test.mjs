@@ -690,11 +690,11 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
     expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
   });
-  it('splits the node project into eight shards, and every shard runs its eighth', () => {
+  it('splits the node project into seven shards, and every shard runs its seventh', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/8)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/8');
+    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/7)');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/7');
   });
   it('runs the CLI source suite on the reader and island builds, never the full CLI build', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -706,12 +706,23 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(prepare).toBeGreaterThan(-1);
     expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
   });
-  it('spreads the API test files over twelve shards without dropping a shard', () => {
+  it('spreads the API test files over ten shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/12)');
+    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/10)');
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
-      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/12');
+      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/10');
+  });
+  it('restores the test global setup\'s builds before every Vitest shard runs', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['ui', 'vitest run']]) {
+      const steps = jobs[name].steps;
+      const restore = steps.findIndex(step => step.id === 'test-builds');
+      expect(restore, name).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
+      expect(restore, name).toBeLessThan(steps.findIndex(step => (step.run ?? '').includes(runs)));
+      expect(steps[restore].with.path).toContain('node_modules/.cache/build-islands.json');
+    }
+    expect(jobs['warm-caches'].steps.some(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v1-'))).toBe(true);
   });
 });
 

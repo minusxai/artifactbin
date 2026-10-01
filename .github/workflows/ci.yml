@@ -145,13 +145,13 @@ jobs:
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
-    name: node tests (${{ matrix.shard }}/8)
+    name: node tests (${{ matrix.shard }}/7)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -186,9 +186,21 @@ jobs:
         run: npx playwright install chromium
       - if: matrix.shard == 1
         run: docker pull postgres:17-alpine
+      # The test global setup builds the server reader and the islands behind content-verified
+      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
+      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-builds-v1-${{ runner.os }}-
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
-        run: node scripts/ci.mjs node ${{ matrix.shard }}/8
+        run: node scripts/ci.mjs node ${{ matrix.shard }}/7
       # The heavy tests that `npm test` leaves out — a disposable Dockerised
       # Postgres and real Chromium — live in the `integration` project and
       # would otherwise run nowhere in CI. This job already provisions both
@@ -246,6 +258,18 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      # The test global setup builds the server reader and the islands behind content-verified
+      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
+      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-builds-v1-${{ runner.os }}-
       - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/3
 
   # The BUILD catches what tsc and vitest cannot: a route the generated table
@@ -350,13 +374,13 @@ jobs:
   api:
     needs: [ plan ]
     if: needs.plan.outputs.api == 'true'
-    name: api tests (${{ matrix.shard }}/12)
+    name: api tests (${{ matrix.shard }}/10)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -393,9 +417,29 @@ jobs:
       # No `--with-deps`, hit or miss: ubuntu-latest already ships Chromium's libraries, and the apt
       # pass on a miss cost 135s on api shard 6 of run 36867180747. A miss now costs the download.
       - run: npx playwright install chromium
+      # The test global setup builds the server reader and the islands behind content-verified
+      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
+      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-builds-v1-${{ runner.os }}-
       # Files are packed by measured time (scripts/lib/timed-sequencer.mjs), not by count, and the
       # api project shares one module graph per worker; the files that mock modules run isolated.
-      - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/12
+      - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/10
+      - if: matrix.shard == 1 && steps.test-builds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
 
   # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
   # the same bytes, twelve times over, in a job that already had to wait for nothing. Rather than
@@ -638,6 +682,15 @@ jobs:
         run: node scripts/build-server.mjs dist/server.mjs
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: rm -rf services/cli/dist/runtime services/cli/dist/afbin-runtime-*.gz
+      # What the test shards restore (see the api job): the server reader and islands with their markers.
+      - run: (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build-islands.mjs --cache)
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #

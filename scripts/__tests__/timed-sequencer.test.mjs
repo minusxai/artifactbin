@@ -47,11 +47,13 @@ describe('timed shard packing', () => {
     const log = [
       '2026-10-01T08:46:41.6Z  ✓  node  scripts/__tests__/workflows.test.mjs (8 tests) 300ms',
       '2026-10-01T08:46:51.8Z  ✓  api  services/app/__tests__/edits.test.ts (1 test) 12671ms',
+      '2026-10-01T08:46:51.9Z  ✓  api-isolated  services/app/__tests__/mocks.test.ts (3 tests) 4100ms',
       '2026-10-01T08:46:52.0Z stderr | services/app/__tests__/edits.test.ts > something 99ms',
     ].join('\n');
     expect(parseTimings(log)).toEqual({
       node: { 'scripts/__tests__/workflows.test.mjs': 300 },
       api: { 'services/app/__tests__/edits.test.ts': 12671 },
+      'api-isolated': { 'services/app/__tests__/mocks.test.ts': 4100 },
     });
   });
 });

@@ -9,13 +9,15 @@
  * Files a log does not mention keep their recorded time; the reserve table is kept as written.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { readTimings } from './lib/timed-sequencer.mjs';
 
 const OUT = path.resolve(import.meta.dirname, 'test-timings.json');
+/** The Vitest projects CI runs with `--shard` (the api and node jobs). */
+const SHARDED = ['api', 'api-isolated', 'node'];
 // ` ✓  api  services/app/__tests__/x.test.ts (12 tests) 3456ms` (also ✗/× for a failed file).
-const LINE = /[✓✗×]\s+(\w+)\s+(\S+\.test\.\w+)\s+\(\d+ tests?[^)]*\)\s+(\d+)ms/;
+const LINE = /[✓✗×]\s+([\w-]+)\s+(\S+\.test\.\w+)\s+\(\d+ tests?[^)]*\)\s+(\d+)ms/;
 
 /** Per-file times (ms) by project from Vitest log text. */
 export function parseTimings(text) {
@@ -42,8 +44,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     timings.files[project] = { ...timings.files[project], ...files };
     count += Object.keys(files).length;
   }
+  // Only the projects CI shards, and only files that still exist.
+  const root = path.resolve(import.meta.dirname, '..');
   for (const project of Object.keys(timings.files)) {
-    timings.files[project] = Object.fromEntries(Object.entries(timings.files[project]).sort(([a], [b]) => (a < b ? -1 : 1)));
+    if (!SHARDED.includes(project)) { delete timings.files[project]; continue; }
+    timings.files[project] = Object.fromEntries(Object.entries(timings.files[project])
+      .filter(([file]) => existsSync(path.join(root, file)))
+      .sort(([a], [b]) => (a < b ? -1 : 1)));
   }
   writeFileSync(OUT, `${JSON.stringify(timings, null, 1)}\n`);
   console.log(`test-timings: ${count} file times from ${run ? `run ${run}` : `${args.length} log(s)`}`);
