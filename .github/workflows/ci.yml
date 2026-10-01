@@ -182,9 +182,7 @@ jobs:
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
-      - if: matrix.shard == 1 && steps.playwright.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-      - if: matrix.shard == 1 && steps.playwright.outputs.cache-hit == 'true'
+      - if: matrix.shard == 1
         run: npx playwright install chromium
       - if: matrix.shard == 1
         run: docker pull postgres:17-alpine
@@ -390,10 +388,9 @@ jobs:
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
-      - if: steps.playwright.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-      - if: steps.playwright.outputs.cache-hit == 'true'
-        run: npx playwright install chromium
+      # No `--with-deps`, hit or miss: ubuntu-latest already ships Chromium's libraries, and the apt
+      # pass on a miss cost 135s on api shard 6 of run 36867180747. A miss now costs the download.
+      - run: npx playwright install chromium
       - run: npx vitest run --project=api --shard=${{ matrix.shard }}/12
 
   # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
@@ -454,6 +451,15 @@ jobs:
         run: |
           echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/10)" >> "$GITHUB_OUTPUT"
           echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/10)" >> "$GITHUB_OUTPUT"
+      # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
+      # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
+      # (gates 3/24), against a 240s job budget. Only the cross-browser shards pay it, and with the
+      # packages already in apt's archive they install without downloading anything.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.gate-browsers.outputs.browsers != 'chromium'
+        with:
+          path: ~/browser-debs
+          key: browser-debs-v1-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -461,10 +467,19 @@ jobs:
         run: |
           read -ra selected_engines <<< "$BROWSERS"
           deps=()
-          if [[ "$CACHE_HIT" != true || "$BROWSERS" != chromium ]]; then
+          # A Chromium-only shard never runs apt: ubuntu-latest ships Chromium's libraries, so a browser
+          # cache miss costs the download alone, never a mirror's mood. (The cache is warmed on main —
+          # see `warm-caches` — so a PR's first run restores it too.)
+          if [[ "$BROWSERS" != chromium ]]; then
             deps+=(--with-deps)
+            if compgen -G "$HOME/browser-debs/*.deb" > /dev/null; then sudo cp "$HOME"/browser-debs/*.deb /var/cache/apt/archives/; fi
           fi
+          echo "browser cache hit: ${CACHE_HIT:-false}"
           npx playwright install "${deps[@]}" "${selected_engines[@]}"
+          if [[ "$BROWSERS" != chromium ]]; then
+            mkdir -p "$HOME/browser-debs"
+            cp /var/cache/apt/archives/*.deb "$HOME/browser-debs/" 2>/dev/null || true
+          fi
       # The gate runner selects the shard on this host; pull Postgres only when
       # that selection includes postgres-datasets, before its gate timeout starts.
       # Neither this nor the sandbox prep below needs anything `build` produces, so both run
@@ -553,6 +568,72 @@ jobs:
           name: browser-session-images-${{ matrix.shard }}
           path: tmp/browser-session-evidence/*.png
           if-no-files-found: ignore
+
+  # CACHES A PULL REQUEST CAN ACTUALLY READ. A PR reads caches from its own branch and from main, and a
+  # push to main runs nothing (`plan` finds the tree PR CI already tested), so nothing ever saved these
+  # on main: every new PR's first run missed the install, the browsers and the build together. This
+  # job fills main's scope on every push and nightly (caches unused for a week are evicted), off every
+  # path anyone waits on: no job needs it and the `test` roll-up does not wait for it. Each step is a
+  # no-op when its entry already exists.
+  warm-caches:
+    if: github.event_name != 'pull_request'
+    name: warm caches
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: node scripts/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # All three engines under the one key every job restores: on main this job is the only writer.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: browser-debs
+        with:
+          path: ~/browser-debs
+          key: browser-debs-v1-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - if: steps.playwright.outputs.cache-hit != 'true' || steps.browser-debs.outputs.cache-hit != 'true'
+        run: |
+          npx playwright install --with-deps chromium firefox webkit
+          mkdir -p "$HOME/browser-debs"
+          cp /var/cache/apt/archives/*.deb "$HOME/browser-debs/" 2>/dev/null || true
+      - id: build-key
+        run: node scripts/ci.mjs build-key
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: build-cache
+        with:
+          path: |
+            dist
+            services/app/dist
+            services/app/lib/build-assets
+            services/app/public/islands
+            services/app/public/libraries
+            services/app/server/routes.generated.ts
+            services/cli/dist
+          key: app-build-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}
+      - if: steps.build-cache.outputs.cache-hit != 'true'
+        run: npm run build -w services/cli
+      - if: steps.build-cache.outputs.cache-hit != 'true'
+        run: node scripts/build-server.mjs dist/server.mjs
+      - if: steps.build-cache.outputs.cache-hit != 'true'
+        run: rm -rf services/cli/dist/runtime services/cli/dist/afbin-runtime-*.gz
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #
@@ -808,7 +889,8 @@ jobs:
         gates,
         cli,
         cli-preview,
-        reference-compatibility
+        reference-compatibility,
+        warm-caches
       ]
     if: always()
     # NOT behind `test` (nor `notify-consumer`, which waits on it): the roll-up is a 10s job that only

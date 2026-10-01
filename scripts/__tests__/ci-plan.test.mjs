@@ -758,8 +758,23 @@ describe('CI job shape', () => {
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
-    expect(install.run).toContain('"$CACHE_HIT" != true');
     expect(install.run).toContain('npx playwright install "${deps[@]}" "${selected_engines[@]}"');
+    // Only Firefox/WebKit ever run apt, and from cached .debs; a Chromium cache miss is a download.
+    expect(install.run).not.toMatch(/CACHE_HIT" != true[^\n]*\n\s*deps\+=/);
+    const debs = jobs.gates.steps.find((step) => step.with?.path === '~/browser-debs');
+    expect(debs.if).toBe("steps.gate-browsers.outputs.browsers != 'chromium'");
+    expect(jobs.gates.steps.indexOf(debs)).toBeLessThan(jobs.gates.steps.indexOf(install));
+    for (const job of ['api', 'node']) {
+      for (const step of jobs[job].steps) expect(step.run ?? '', job).not.toContain('--with-deps');
+    }
+    // Main fills the caches PRs read, and nothing waits for it.
+    expect(jobs['warm-caches'].if).toBe("github.event_name != 'pull_request'");
+    expect(jobs['warm-caches'].needs).toBeUndefined();
+    expect(jobs.test.needs).not.toContain('warm-caches');
+    const warmKeys = jobs['warm-caches'].steps.filter((step) => step.uses?.startsWith('actions/cache@')).map((step) => step.with.key);
+    for (const restore of [debs, jobs.gates.steps.find((step) => step.id === 'playwright'), jobs.gates.steps.find((step) => step.id === 'build-cache')]) {
+      expect(warmKeys).toContain(restore.with.key);
+    }
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
