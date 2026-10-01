@@ -49,7 +49,7 @@ function options(p: Props) { const n = nameOf(p,'options'); return normalize(p.o
 const nullable = (p: Props) => { const name = nameOf(p); return !!name && useIsland().nullable(name); };
 const choiceValue = (p: Props) => nameOf(p) ? valueOf(p) == null ? null : String(valueOf(p)) : lit(p.value);
 export function Segmented(p: Props) {
-  // "All" only when the bound Value's declared default is null (StoryRuntimeApp useScalarControl `nullable`);
+  // "All" only when the bound Value's declared default is null;
   // without the declarations (no store), the static face's rule: a bound value may offer it.
   const island = useIsland(); const entries = () => [...(nullable(p) ? [{ value: null, label: str(p.placeholder) ?? 'All' }] : []), ...options(p)];
   return <Shell authored={p}><div role="group" aria-label={str(p.label)} class="inline-flex w-fit items-center gap-0.5 rounded-md border border-input bg-muted/40 p-0.5 shadow-xs"><For each={entries()}>{o =>

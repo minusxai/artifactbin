@@ -3,7 +3,7 @@
  * deck.gl's own JSON dialect (`@@type`, `@@=` accessors) because agents already
  * write it. One module, no deck.gl import: publish validation (lib/jsx/validate,
  * which `afbin validate` also runs offline), the column checks
- * (lib/story/data-checks) and the renderer (components/kit/deck-gl-engine) all
+ * (lib/story/data-checks) and the renderer all
  * read it, so what publish accepts is exactly what the engine builds.
  *
  * Props are ALLOWLISTED per layer, never denylisted: deck.gl fetches any URL it

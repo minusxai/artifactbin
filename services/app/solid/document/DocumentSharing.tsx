@@ -32,7 +32,7 @@ export function VisibilityIcon(props: { icon: SharingIcon; size: number; class?:
 
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean;
-  /** A dataset's writes (components/ShareLink's WRITES row): who may change it through a document. */
+  /** A dataset's writes: who may change it through a document. */
   access?: DatasetAccess; datasetKind?: DatasetCatalog['kind']; policyVersion?: number;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }

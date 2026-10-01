@@ -1,7 +1,7 @@
 /**
  * The runtime store's WRITE half: `mutate` (perform a declared `<Mutation>`
  * with the current values) and `invalidateDatasets` (a dataset changed
- * elsewhere — re-run what reads it). React-free, like the store.
+ * elsewhere — re-run what reads it). framework-free, like the store.
  *
  * The property that matters most here: the click that writes is the click that
  * redraws. A write invalidates its own target immediately, so the reader never

@@ -4,7 +4,7 @@ import type { JSX } from 'solid-js';
 type P = Omit<JSX.HTMLAttributes<HTMLElement>, 'ref'>;
 export function Skeleton(props: P) { return <div data-slot="skeleton" {...props} />; }
 /**
- * Today's React wrapper (components/kit/progress) destructures `value` off the props it spreads onto
+ * Today's React wrapper destructures `value` off the props it spreads onto
  * ProgressPrimitive.Root, so Radix's Root NEVER sees a value — it always computes state from `null`
  * ("indeterminate", no aria-valuenow/data-value) — only the indicator's inline transform uses the real
  * number. Ported as-is: this IS today's render, not the state a value would earn from an unmodified Root.

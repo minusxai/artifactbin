@@ -43,7 +43,7 @@ export interface SourceView {
   destroy(): void;
 }
 
-/** The plain editor's palette (components/LazySourceEditor), so the handoff does not flash. */
+/** The plain editor's palette, so the handoff does not flash. */
 const BACKGROUND = '#1e1e1e', FOREGROUND = '#d4d4d4';
 
 const theme = EditorView.theme({

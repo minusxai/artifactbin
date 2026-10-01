@@ -106,7 +106,7 @@ describe('odd input', () => {
   });
 
   it('is null for front matter and init directives — the kit refuses to draw them', () => {
-    // A refused source never reaches the engine (components/kit/mermaid.tsx),
+    // A refused source never reaches the engine,
     // so preloading its code would be a download nothing uses.
     expect(mermaidDiagramKind('---\ntitle: T\n---\nflowchart LR\n  a --> b')).toBeNull();
     expect(mermaidDiagramKind('%%{init: {"theme": "dark"}}%%\nsequenceDiagram\n  A->>B: hi')).toBeNull();

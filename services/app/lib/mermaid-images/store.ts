@@ -20,7 +20,7 @@
  *
  * THE READ. `mermaidImagesFor` answers a version's drawings for one surface,
  * both modes, keyed as the island wants them (StoryIslandData.mermaidImages);
- * the component shows one wherever it is offered (components/kit/mermaid).
+ * the component shows one wherever it is offered.
  * That is sound because a stored drawing depends on nothing of the reader's:
  * its layout is fixed in SVG coordinates, measured by the harvest at unhinted
  * advances, and it CARRIES ITS OWN FONTS — the document's bundled web faces,

@@ -1,6 +1,6 @@
 // DESTINATION: scripts/__tests__/page-speed-compiled.test.mjs
 /**
- * THE LAB MEASURES THE COMPILED READER (docs/phase2-architecture.md §12): the page-speed fixtures gain
+ * THE LAB MEASURES THE COMPILED READER (docs/phase2-architecture.md §11): the page-speed fixtures gain
  * the kitchen sink ("every component", target 2), the head build is measured with the compiled reader
  * on, and the size-target check sees every fixture it judges.
  */

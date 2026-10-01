@@ -8,9 +8,9 @@
  * semantics — consuming the anchor must never drop the mode, and vice versa.
  */
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  applyReaderMode, persistReaderMode, readerMode, takeReloadAnchor, writeReloadAnchor,
+  applyColorMode, chooseTheme, persistReaderMode, readerMode, takeReloadAnchor, writeReloadAnchor,
 } from '../reader-mode';
 
 const win = () => window as Window & { name: string };
@@ -58,14 +58,48 @@ describe('the mx:doc window.name envelope', () => {
   });
 });
 
-describe('applyReaderMode', () => {
-  it('flips the mode classes on the document element', () => {
-    document.documentElement.className = 'light';
-    applyReaderMode(document, 'dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(document.documentElement.classList.contains('light')).toBe(false);
-    applyReaderMode(document, 'light');
-    expect(document.documentElement.classList.contains('light')).toBe(true);
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
+describe('applyColorMode: the one colour-mode writer, the reader\'s choice beats the author\'s', () => {
+  const cases: Array<{ name: string; was: string; reader: 'light' | 'dark' | null; author?: 'light' | 'dark'; is: string }> = [
+    { name: 'a reader override beats the author', was: 'light', reader: 'dark', author: 'light', is: 'dark' },
+    { name: 'a reader override beats the author (the other way)', was: 'dark', reader: 'light', author: 'dark', is: 'light' },
+    { name: 'an author change with no override applies', was: 'light', reader: null, author: 'dark', is: 'dark' },
+    { name: 'an author change back to light with no override applies', was: 'dark', reader: null, author: 'light', is: 'light' },
+    { name: 'a reader choice alone applies', was: 'light', reader: 'dark', is: 'dark' },
+    { name: 'neither leaves what was drawn', was: 'dark', reader: null, is: 'dark' },
+    { name: 'other classes stay', was: 'mx-story light', reader: 'dark', is: 'mx-story dark' },
+  ];
+  for (const c of cases) {
+    it(c.name, () => {
+      const el = document.createElement('div');
+      el.className = c.was;
+      applyColorMode(el, c.reader, c.author);
+      expect(el.className).toBe(c.is);
+    });
+  }
+
+  it('a missing element is a no-op, never a throw', () => {
+    expect(() => applyColorMode(null, 'dark')).not.toThrow();
+    expect(() => applyColorMode(undefined, null, 'light')).not.toThrow();
+  });
+});
+
+describe('chooseTheme: the app shell\'s stored preference', () => {
+  beforeEach(() => { delete document.documentElement.dataset.theme; localStorage.clear(); });
+
+  it('dark stamps data-theme and stores mx_theme; light clears the stamp and stores light', () => {
+    chooseTheme('dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(localStorage.getItem('mx_theme')).toBe('dark');
+    chooseTheme('light');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(localStorage.getItem('mx_theme')).toBe('light');
+  });
+
+  it('a storage that throws (private mode, an opaque origin) still stamps the page', () => {
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied'); });
+    try {
+      expect(() => chooseTheme('dark')).not.toThrow();
+      expect(document.documentElement.dataset.theme).toBe('dark');
+    } finally { set.mockRestore(); }
   });
 });

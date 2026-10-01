@@ -172,7 +172,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
    * THE EDITOR'S DOOR: what only writing needs — the source, the document
    * graph and the raw sheets the in-place editor re-isolates as it types.
    * The reader payload below carries none of it; a writer's page prefetches
-   * this on idle (components/ArtifactSurface).
+   * this on idle.
    */
   if (search.get('part') === 'editor') {
     if (!isDoc || at || exporting || !canEdit(role)) return notFound();
@@ -392,7 +392,7 @@ export async function artifactPageResponse(request: Request, id: string): Promis
 
 /**
  * THE READER CHROME the HTML-first page draws on the server (lib/story/reader-chrome): the same
- * input the app's own chrome (components/ArtifactSurface → InlineReaderChrome) builds from this
+ * input the app's own chrome builds from this
  * answer once it adopts the page, so the takeover changes no pixel of it. Its Edit control is what the
  * page's loader reads a writer by (web/idle-boot `capabilityOf`).
  */

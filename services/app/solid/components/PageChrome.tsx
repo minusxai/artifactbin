@@ -16,6 +16,7 @@ import { PeopleInbox } from './PeopleInbox';
 import { useInbox } from '../lib/notifications';
 import { Avatar } from './Avatar';
 import { closeOnEscape } from '../lib/close-on-escape';
+import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 
 /** Artifact controls from the editor seam; the named export below owns app pages. */
 export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {
@@ -66,9 +67,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const close = () => setPanel(null);
   const pick = (next: 'light' | 'dark') => {
     setMode(next);
-    if (next === 'dark') document.documentElement.dataset.theme = 'dark';
-    else delete document.documentElement.dataset.theme;
-    try { localStorage.setItem('mx_theme', next); } catch { /* private mode */ }
+    chooseTheme(next);
   };
   const unread = () => Boolean(inbox.state()?.unread);
   // Whatever closes a panel (Escape, scrim, its own close button, a link) returns focus to the bar button that opened it.

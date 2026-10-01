@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * THE COMPOSER (components/__tests__/annotation-composer.ui.test.tsx, in Solid) — what a new comment
+ * THE COMPOSER — what a new comment
  * carries and what it must drop. The selection's quote travels with an anchor-relative range, and
  * both are discarded the moment the thing they describe changes: a different durable node at the
  * same path, a widened target, a removed id. A caret comment carries no quote and is still a comment.

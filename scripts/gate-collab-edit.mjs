@@ -31,7 +31,7 @@ import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 /*
- * The role control is the HOUSE dropdown (components/SelectMenu), not a native
+ * The role control is the HOUSE dropdown, not a native
  * <select>: an option list is drawn by the OS, which put system chrome in the
  * middle of the panel. So it is a trigger button naming the current value over
  * a listbox — read its TEXT, and pick by clicking an option.

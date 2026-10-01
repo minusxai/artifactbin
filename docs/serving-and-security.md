@@ -54,8 +54,8 @@ small interactive islands. `/a/<id>` serves that HTML with reader chrome;
 `/a/<id>/raw`, custom-domain posts and exports use the same assembled document
 without app chrome. The response identifies the served path with
 `x-mx-reader: compiled`. A missing, stale or refused compile is recompiled
-within the read budget or returns a failure with its reason in
-`x-mx-reader-fallback`; access checks run before the response. A prose page
+within the read budget; if it still cannot be made the read fails with a reported
+500 (there is no other renderer); access checks run before the response. A prose page
 needs no island module.
 Interactive pages load only their needed same-origin, content-addressed chunks.
 The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
@@ -107,7 +107,7 @@ Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
 page, the standalone `/raw` document and the offline file. It admits compiling
 WebAssembly and nothing else — `eval`, `new Function` and string timers stay
 refused — and it is never added to the author-script frames, where author code
-runs. The wasm is fetched from this origin at a content-addressed `/story/`
+runs. The wasm is fetched from this origin at a content-addressed `/islands/`
 URL (the `/raw` document's `connect-src` names that directory), cached
 `immutable`; the offline file carries it inside itself.
 
@@ -138,3 +138,21 @@ to one must never become a page on this origin. When a source changes,
 `POST /api/artifacts/assets/refresh` re-fetches it: pass a document's `id` for
 every URL it names, or one `url`. Nothing else moves — no new version, and the
 markup keeps the URL it has.
+
+## The offline file
+
+`GET /a/<id>/download` (`app/a/[id]/download/route.ts`, `?version=<n>` for an archived version) answers one
+self-contained `.html` a reader can open from `file://` and pass on. Access is the served document's own
+decision; the file can never show more than its downloader could see. `lib/offline/assemble.server.ts`
+builds an `ArtifactFile` (`lib/offline/file-format.ts`: source, the compiled page, CSS with fonts inlined,
+the data snapshot, comment threads and a journal of offline edits) from the same paths that serve the page
+online, and `file-html.ts` writes it into one shell, with the island build's offline half
+(`compiled-bundle.server.ts`: every shared chunk as a CommonJS factory, one loader, the document's own
+module) and the SQLite engine's wasm (`compiled-sqlite.ts`) inside it. Queries over data the downloader
+may hold run live in the file; queries that need the server (a connected database, data the downloader
+may not hold) answer from precomputed filter variants (`variants.ts`), and a filter with no finite domain
+is frozen with a reason. The file's backend (`file-backend.ts`) lets the editor and comments run
+unchanged; what needs artifactbin says so through `unavailable()`. Save rewrites the file in place
+(`save-file.ts`); offline edits sync later by a three-way merge onto the version the file was downloaded
+from, and the server re-validates everything. `snapshot-transport.ts` answers the file's queries from the
+snapshot, and nothing in the file opens a connection.

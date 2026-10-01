@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/TrustedUi in SOLID — the CSS boundary for first-party UI on a page that also shows
+ * The CSS boundary for first-party UI on a page that also shows
  * author content (the document page). Children render into a shadow root carrying the app's own
  * sheet, so the document's stylesheet (its preflight, its utilities, its author rules) cannot restyle
  * them; as an overlay the root sits in the top layer so an author sibling cannot paint over it. Its
@@ -21,7 +21,7 @@ export function TrustedUi(props: { overlay?: boolean; layer?: TrustedLayer; chil
 }
 
 /**
- * components/TrustedUi's useForegroundComposer in SOLID: while `active`, the trusted root that holds
+ * While `active`, the trusted root that holds
  * `element` (a comment composer) is lifted above navigation, without remounting the draft, and put
  * back where it was after. Outside a trusted overlay (a unit test, a bare page) it does nothing.
  */

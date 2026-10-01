@@ -2,7 +2,7 @@
  * EDITABLE DATATABLE CELLS ON A COMPILED PAGE, END TO END THROUGH THE SHIPPED BUILD (w3-cells-assets).
  *
  * Today's reader draws a `<Column>`'s content in every row, and a control there with `run="$mutation"` is an
- * editing cell (StoryRuntimeApp RuntimeCellControl): a draft per cell that survives the row re-rendering, a
+ * editing cell: a draft per cell that survives the row re-rendering, a
  * write on commit with the row and the draft as `$_value`, `aria-busy` while it saves, the server's refusal in
  * a `role="alert"` beside it, and — for a reader who may not write — the cell disabled with the reason on it.
  *

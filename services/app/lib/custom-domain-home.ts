@@ -13,7 +13,7 @@
  * title and link in the first response.
  *
  * Keep this in parity with `components/ProfileListing.tsx` + `components/
- * Listing.tsx` + `components/Shelf.tsx`'s `surface="domain"` branch — the
+ * Listing.tsx` + `solid/components/Shelf.tsx`'s `surface="domain"` branch — the
  * server test (`server/__tests__/custom-domain-host.test.ts`) checks the two
  * render the same markup, less the follow header and the toolbar (script the
  * domain page cannot run).
@@ -76,7 +76,7 @@ export function linkedStylesheets(html: string): string[] {
 /** components/Listing's `NothingHere`. */
 const NOTHING_HERE_HTML = '<p class="reveal font-mono text-sm text-muted"><span class="text-accent">$</span> nothing here yet<span class="caret text-accent">▍</span></p>';
 
-/** components/Avatar, at the one size (48) ListingHero draws it. */
+/** solid/components/Avatar, at the one size (48) ListingHero draws it. */
 function avatarHtml(userId: string, image: string | null | undefined, initial: string, size: number): string {
   const faceStyle = `background-color:${personFaceBackground(userId)};font-size:${Math.round(size * 0.42)}px`;
   const picture = image ? `<img src="${escapeHtml(image)}" alt="" class="absolute inset-0 size-full object-cover">` : '';
@@ -100,7 +100,7 @@ function listingHeroHtml(handle: string, count: number, owner?: { id: string; im
     + '</header>';
 }
 
-/** components/Shelf's `Thumb`. */
+/** solid/components/Shelf's `Thumb`. */
 function thumbHtml(row: ProfileFile): string {
   const src = `/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`;
   return '<span class="relative block w-full overflow-hidden bg-raised gallery-paper aspect-[5/3] rounded-[4px] border border-edge shadow-sm">'
@@ -109,7 +109,7 @@ function thumbHtml(row: ProfileFile): string {
     + '</span>';
 }
 
-/** components/Shelf's grid card — `showVisibility={false}`, `actions="share"` and no `views`, so nothing else draws over the thumbnail. */
+/** solid/components/Shelf's grid card — `showVisibility={false}`, `actions="share"` and no `views`, so nothing else draws over the thumbnail. */
 function documentCardHtml(row: ProfileFile, url: string, index: number): string {
   const name = row.title ?? row.id;
   const delay = Math.min(index * 35, 280);
@@ -121,7 +121,7 @@ function documentCardHtml(row: ProfileFile, url: string, index: number): string 
 }
 
 /**
- * components/Shelf's `surface="domain"` branch: no toolbar (search, filters,
+ * solid/components/Shelf's `surface="domain"` branch: no toolbar (search, filters,
  * the grid/list toggle — controls that need the SPA's script), so it is
  * always the grid, date-grouped, and never the "no matches" state (nothing
  * can filter what there is no script to filter with).

@@ -29,10 +29,12 @@ the artifact's own url, for the owner (a browser session, or the connection
 that created it) and
 for anyone invited as an editor:
 
-- **WYSIWYG**: click into text to edit it; for `markup`, click any element to
-  select it — ancestor breadcrumbs, a font-size stepper, bold/italic, alignment,
-  and a color picker write **surgical patches back to your markup source** via
-  AST spans. Source stays the truth.
+- **In place**: edit mode opens on the page you were reading, not on a copy of it. Click into text to
+  edit it; click any element to select it and use the format toolbar and the right-hand panel. A
+  ProseMirror view (`lib/editor-v2`, `solid/editor/FlowEditor.tsx`) edits the document's flow and every
+  change is composed back into your **markup source** as a surgical patch, so source stays the truth;
+  the draft is previewed through the server compiler and saved through the save-less protocol above.
+  **Done** returns to reading in place.
 - **Code mode**: the raw markup with live re-render and instant theme switching.
 - **History rail**: every save is a version; click any to preview, one click to
   restore (restores are themselves versioned — nothing is ever lost, and the

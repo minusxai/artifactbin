@@ -1,7 +1,7 @@
 import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmark';
 import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 /**
- * The react-free contract between the document builder (server), the SSR
+ * The framework-free contract between the document builder (server), the SSR
  * bundle, and the in-iframe hydration runtime. BOTH sides import it, so it
  * carries ONLY types and ids: a value here would drag one side's graph into
  * the other's bundle. The React composition lives in StoryRuntimeApp.tsx,

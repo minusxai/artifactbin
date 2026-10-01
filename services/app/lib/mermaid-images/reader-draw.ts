@@ -2,7 +2,7 @@
  * A READER'S OWN MERMAID DRAWING, framework-free: the palette the document's theme resolves to (tokens as
  * hex, through a canvas — Mermaid's colour math cannot parse `oklch(...)`), the fonts it waits for, and
  * what a drawing is marked with for the harvest (lib/mermaid-images). ONE implementation for both readers:
- * today's React Mermaid (components/kit/mermaid) and the compiled reader's Solid one
+ * the retired React Mermaid and the compiled reader's Solid one
  * (lib/islands/kit/mermaid) draw through `drawForReader`, so they draw and mark identically.
  */
 import { sha256Hex } from '@/lib/sha256';

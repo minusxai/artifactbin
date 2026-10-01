@@ -3,7 +3,7 @@
  * (anchor-entry), never from the runtime.
  *
  * The rail's markup is server-rendered by the runtime's React tree so it is
- * in the SSR string at its final width (StoryRuntimeApp OutlineRail). Its
+ * in the SSR string at its final width. Its
  * behaviour cannot live there: a document of pure prose — which is exactly
  * the kind that has sections — ships no runtime at all, so a React `onClick`
  * on those rows would never exist and the rail would be furniture. Measured:

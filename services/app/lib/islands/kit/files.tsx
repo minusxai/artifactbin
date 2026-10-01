@@ -15,7 +15,7 @@ export function rowImageAttrs(result: Record<string, string>): Record<string, st
   return result;
 }
 /**
- * A format's glyph as today's `<Icon>` draws it (components/kit/icon): lucide's svg attributes, the glyph's
+ * A format's glyph as today's `<Icon>` draws it: lucide's svg attributes, the glyph's
  * own class, `ICON_BASE_CLASS` with the listing's size merged in (tailwind-merge's result, precomputed —
  * readers never download it), decorative, and the server-resolved glyph markup (never author text).
  */
@@ -30,7 +30,7 @@ const count = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : 
 const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');
 const GRID = { icons: 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4', tiles: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3' };
 export function Files(p: Props) {
-  // Today's live listing (StoryRuntimeApp FilesAdapter) hands `<Files>` its rows, variant and capture only: the
+  // Today's live listing hands `<Files>` its rows, variant and capture only: the
   // section carries no authored id, stamp or class — so neither does this one.
   const island = useIsland(); const { data,rows,variant,capture } = p;
   const density = () => variant === 'tiles' ? 'tiles' : 'icons';

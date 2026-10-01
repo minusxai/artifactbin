@@ -3,7 +3,7 @@ import { useIsland } from '../context';
 import { createContext, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, splitProps, untrack, useContext, type JSX } from 'solid-js';
 
 /**
- * Radix Tabs, as today's React kit renders and runs it (components/kit/tabs over @radix-ui/react-tabs and
+ * Radix Tabs, as the retired React kit renders and runs it (components/kit/tabs over @radix-ui/react-tabs and
  * its roving focus group). The served markup is Radix's server render; what Radix changes once it runs,
  * this changes the same way and at the same moment:
  *  - the tablist is `tabindex=-1` until its tabs have mounted, then `0` (and `-1` again while a Shift+Tab

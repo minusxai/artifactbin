@@ -1,6 +1,6 @@
 // DESTINATION: services/app/web/__tests__/island-handover.ui.test.ts
 /**
- * THE SPA'S HANDOVER (docs/phase2-architecture.md §7; lib/islands/contract IslandDocument): the React app
+ * THE SPA'S HANDOVER (docs/phase2-architecture.md §7; lib/islands/contract IslandDocument): the Solid app
  * boots on idle or first interaction, finds the live island document on the story root, adopts the
  * element WITHOUT re-rendering it (same nodes before and after), and disposes the islands only when
  * edit mode begins.

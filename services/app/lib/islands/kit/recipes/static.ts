@@ -4,7 +4,7 @@ import { videoWatchUrl } from '@/lib/story-ui/video-embed';
 
 const withClass = (base: string): Recipe => (props) => cn(base, props.className as string | undefined);
 
-/** Static faces: every class is calculated at publish, using the same merger as the React kit. */
+/** Static faces: every class is calculated at publish, using the same merger as the retired React kit. */
 export const RECIPES: Record<string, Recipe> = {
   Table: withClass('w-full caption-bottom text-sm'),
   TableHeader: withClass('[&_tr]:border-b'),

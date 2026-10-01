@@ -90,7 +90,7 @@ function PopoverPopper(p: { ctx: PopupState; side?: Side; align?: Align; sideOff
 }
 type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; panel: () => HTMLElement | undefined; setPanel: (el: HTMLElement) => void; announce: () => void };
 /**
- * TOOLTIP — today's story tooltip (components/Tooltip over @radix-ui/react-tooltip): the trigger is the popper
+ * TOOLTIP — today's story tooltip: the trigger is the popper
  * anchor (no `type`, `data-state` closed / delayed-open / instant-open, described by the content while open,
  * the placed side/align once placed); the content is portaled out of the document — to the trusted portal when
  * the page has one, else the body, as Radix's Portal does — inside a theme host, placed by Radix's popper

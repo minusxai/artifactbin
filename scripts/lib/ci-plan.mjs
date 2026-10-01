@@ -80,7 +80,7 @@ export const CI_MODULES = {
 };
 
 /**
- * THE STANDALONE BINARIES ARE BUILT ONLY FOR A RELEASE. The four-platform build, the Intel render
+ * THE STANDALONE BINARIES ARE BUILT ONLY FOR A RELEASE. The five-target build, the Intel render
  * proofs and the distributions conformance job were the whole tail of every full run (the Intel
  * build alone is 4.5 minutes, the proofs behind it another 3.5), and they proved bytes nobody was
  * about to ship: the publisher (`release-cli.yml`) only uploads when the CLI version changed. So

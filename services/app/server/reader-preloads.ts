@@ -52,7 +52,7 @@ export function createReaderPreloader(webDir: string): ReaderPreloader {
 }
 
 /**
- * A folder's listing is a separate React chunk, kept out of document readers.
+ * A folder's listing is a separate route chunk, kept out of document readers.
  * The public profile index uses the Solid entry and its own route chunk.
  */
 const LISTING_ENTRIES = {

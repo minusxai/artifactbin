@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/PersonMention in SOLID. One membership-status read per comment surface (the layer
+ * One membership-status read per comment surface (the layer
  * mounts one provider, not one per rendered body): only explicitly saved mentions come back, never
  * private invite details, and a mention of someone who has not accepted yet reads "· Pending".
  */

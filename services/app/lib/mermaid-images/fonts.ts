@@ -7,8 +7,8 @@
  * from public/fonts) are embedded in it: each subset to exactly the drawing's
  * characters and pinned to the weights it draws, as `data:font/woff2` in ONE
  * leading stylesheet, with `text-rendering: geometricPrecision` so every
- * platform lays that text out at the unhinted advances the harvest measured
- * (components/kit/mermaid). The drawing is then the same picture everywhere,
+ * platform lays that text out at the unhinted advances the harvest measured.
+ * The drawing is then the same picture everywhere,
  * and a reader shows it as it is.
  *
  * A drawing in a face the app does not bundle (a system stack, a character no

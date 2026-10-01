@@ -1,4 +1,4 @@
-/** The HTML-first reader reports its open before the React app is requested. */
+/** The HTML-first reader reports its open before the Solid app is requested. */
 const VIEW_REPORTED_ATTR = 'data-mx-view-reported';
 
 export const initialViewWasReported = (doc: Document, id: string): boolean =>

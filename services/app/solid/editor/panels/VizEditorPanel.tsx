@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/VizEditorPanel.tsx in SOLID.
+ *
  *
  * Pick a table (a <Query> or table <Value> the document declares), a chart type, and what goes on each axis.
  *

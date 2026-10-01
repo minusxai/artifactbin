@@ -1,7 +1,7 @@
 /**
  * THE READER'S CHROME — everything a top-level reader gets AROUND the served
  * document, as one HTML string the builder (lib/story/document) drops after
- * the story root. Pure and react-free: it compiles inside the server graph and
+ * the story root. Pure and framework-free: it compiles inside the server graph and
  * inlines like the chrome CSS does.
  *
  * Server-rendered SHOWN (`data-mx-reader-state="shown"`, no hidden class): the
@@ -216,7 +216,7 @@ const trigger = (name: 'controls' | 'menu', aria: string, icon: string, text: st
   + `${icon}${ICON_X}${label(text)}</button>`;
 
 /**
- * A PERSON'S FACE, as a string — the rail's twin of components/Avatar, on the
+ * A PERSON'S FACE, as a string — the rail's twin of solid/components/Avatar, on the
  * same rules (lib/person-face): the initial on the account's colour is ALWAYS
  * underneath, and the picture, when there is one, is painted over it, so an
  * address that stops answering reveals the letter. Decorative: whatever holds

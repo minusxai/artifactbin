@@ -1,7 +1,7 @@
 /**
  * The runtime dataflow store: seeding, identity-stable snapshots, value
  * changes → dependents no longer current → a transport run (debounced for a
- * continuous input) → merged results, with superseded answers dropped. React-free.
+ * continuous input) → merged results, with superseded answers dropped. framework-free.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';

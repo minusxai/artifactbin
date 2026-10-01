@@ -1,5 +1,5 @@
 /**
- * components/SourceEditorTools in SOLID: where code view gets its rich editor and its formatter.
+ * Where code view gets its rich editor and its formatter.
  * On the site both are lazy chunks (the default below); an offline file would provide its own.
  * The rich editor chunk is solid/editor/SourceEditor plus lib/source-editor/codemirror, and the
  * latter imports no framework.

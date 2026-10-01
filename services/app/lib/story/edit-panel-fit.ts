@@ -1,7 +1,7 @@
 /**
  * DOES THE EDIT PANEL FIT IN THE DOCUMENT'S OWN MARGIN?
  *
- * Asked ONCE, when edit mode opens on a wide window (components/ArtifactSurface).
+ * Asked ONCE, when edit mode opens on a wide window.
  * Yes: the panel sits over empty margin and the document does not move at all.
  * No: the page reserves the panel's width and the document narrows once, on
  * entry. Either answer then holds for the whole session — selecting, switching

@@ -1,10 +1,10 @@
 /**
  * EVERY ARTIFACT ADDRESS IS SOLID'S (lib/solid-routes isSolidPage): no markup answer the app page serves
- * may fall back to the React SPA any more. What is left without the compiled page is the starter
+ * may fall back to the Solid SPA any more. What is left without the compiled page is the starter
  * placeholder's READ view (its instructions are app UI, solid/pages/Starter); its `/edit`, a capture of
  * it and a keyed capture of any document are the compiled page, whose idle entry is the Solid reader's.
  * The standalone renderer's `legacy` fallback is gone: a compile that cannot be served is a 500, never
- * a page drawn by the React reader.
+ * a page drawn by the retired React reader.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';

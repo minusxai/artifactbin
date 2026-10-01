@@ -1,6 +1,6 @@
 import type {ImageAssetAnswer} from '@/lib/story/ref-data';
 /**
- * The document's DATA at runtime — one store per document, react-free.
+ * The document's DATA at runtime — one store per document, framework-free.
  *
  * Seeded from the island's `dataflow` (the compiled declarations + the state the server
  * rendered with), it holds every scalar's current value and every table's

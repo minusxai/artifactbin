@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/EditPanel.tsx port: same frame contract — tabs, the dot, collapse — ported from
+ * Same frame contract — tabs, the dot, collapse — ported from
  * components/__tests__/backend-unavailable.ui.test.tsx's EditPanel cases (adapted: this Solid panel
  * takes `historyUnavailable` as a prop instead of reading it from a backend context — see the
  * DEVIATION note in EditPanel.tsx) plus the frame's own basic tab/collapse behavior.

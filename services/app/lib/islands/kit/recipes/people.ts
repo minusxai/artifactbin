@@ -25,7 +25,7 @@ const handleClasses = (className?: string) => ({
 /**
  * A PERSON'S CLASSES, EVERY STATE, AT COMPILE TIME. Which class a person's element carries depends on whom it
  * resolves to in the browser (a guest's fallback, an unknown id, a card), and each is today's component merging
- * an author's className with tailwind-merge (components/kit/user, user-image, user-handle, avatar). Readers never
+ * an author's className with tailwind-merge. Readers never
  * download tailwind-merge, so the compiler evaluates every state here and hands the port the map (`classes`).
  */
 export function peopleClasses(tag: string, props: Record<string, unknown>): Record<string, unknown> | null {

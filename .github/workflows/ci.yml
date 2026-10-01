@@ -130,7 +130,7 @@ jobs:
       - run: npm run validate
 
   # THE NODE PROJECT SHARDS, like api and ui. It is the biggest project in the
-  # repo — 288 files, ~3,060 tests against api's 1,029 — and it was the only one
+  # repo, and it was the only one
   # running whole, which made `validate + node` a 2m16s job of which 103s was
   # this step alone.
   #
@@ -507,7 +507,7 @@ jobs:
           echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/10)" >> "$GITHUB_OUTPUT"
       # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
       # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
-      # (gates 3/24), against a 240s job budget. Only the cross-browser shards pay it, and with the
+      # (one gate shard), against a 240s job budget. Only the cross-browser shards pay it, and with the
       # packages already in apt's archive they install without downloading anything.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: steps.gate-browsers.outputs.browsers != 'chromium'
@@ -557,7 +557,7 @@ jobs:
           cat "$RUNNER_TEMP/gate-build.log"
           exit "$(cat "$RUNNER_TEMP/gate-build.status")"
       # The runner boots the servers with one protected per-run mail outbox.
-      # Two servers within each of the fourteen runners. The
+      # Two servers within each runner. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so no one runner
       # ends up holding every slow gate (scripts/gates.shard.mjs). More than two

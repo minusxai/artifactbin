@@ -2,8 +2,8 @@
  * link-edit — href normalization for authored links in jsx stories.
  *
  * The one rule this module owns: what a user-typed URL is allowed to become
- * before it reaches a document. Its callers are the format toolbar's popover
- * (components/views/story/StoryFormatToolbar), the edit session that applies
+ * before it reaches a document. Its callers are the format toolbar's popover,
+ * the edit session that applies
  * the mark (lib/story-runtime/edit/session), and the clipboard/AST paths in
  * lib/editor-v2. Normalizing at that boundary means an href the publish
  * sanitizer would strip is refused where it is typed, rather than saved and

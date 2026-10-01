@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/QueryNotebookPanel.tsx port: the document's `<Query>`
+ * The document's `<Query>`
  * declarations as cells — SQL above, the last run's answer below. A lens like
  * the other inspectors: a cell commits its SQL on blur or ⌘⏎, and the document
  * stays the source of truth.
