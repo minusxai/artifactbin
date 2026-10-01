@@ -19,7 +19,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createComputed, createRoot, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { createIslandRuntime } from '../rt';
+import { createIslandRuntime, declarationsOf } from '../rt';
 import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
 import { compiledOf } from '@/test/helpers/compiled';
 import { IslandProvider } from '../context';
@@ -72,7 +72,7 @@ const islandOn = (store: DataflowStore, viewer: IslandContext['viewer'] = () => 
   const [tick, setTick] = createSignal(0, { equals: false });
   store.subscribe(() => setTick(0));
   return {
-    ...fakeIsland(values), store: () => store, viewer,
+    ...fakeIsland(values), store: () => store, ...declarationsOf(() => store), viewer,
     mutationUnavailable: (name) => { tick(); return store.mutationUnavailable(name); },
     mutating: (name) => { tick(); return store.mutating().has(name); },
   };

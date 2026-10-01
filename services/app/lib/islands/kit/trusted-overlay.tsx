@@ -2,12 +2,12 @@
 import { Show, createUniqueId, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { useIsland } from '../context';
-import type { IslandContext } from '../contract';
+import { STORY_ROOT_SELECTOR, type IslandContext } from '../contract';
 
 export function overlayDestination(island: IslandContext): HTMLElement | null {
   if (typeof document === 'undefined') return null;
   // Inside the story root, the overlay inherits the story's font and theme, not the app shell's.
-  const story = document.querySelector<HTMLElement>('[data-mx-inline-story]');
+  const story = document.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
   return story && document.querySelector('style[data-mx-story-css], style[data-mx-tw]')
     ? story : island.trustedPortal();
 }

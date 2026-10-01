@@ -97,7 +97,7 @@ export function Select(p: SelectProps) {
   const choose = (value: string | null) => {
    const name = valueName();
    if (name) {
-    const type = island.store()?.flow.values.find(declared => declared.kind === 'scalar' && declared.name === name)?.type;
+    const type = island.valueType(name);
     island.setValue(name, coerceScalarInput(type, value ?? ''), undefined);
    }
    setOpen(false); setQuery('');

@@ -132,7 +132,7 @@ export function TabsContent(props: JSX.HTMLAttributes<HTMLDivElement> & { value:
   // after the first frame: an active panel then drops its mount style (`style=""`). A compiled page
   // serves those results, so its store never lands them; a document that runs queries is re-rendered
   // here, once, at the same point — a document without queries keeps the mount style, as it does today.
-  const runsQueries = !!island.store()?.flow.queries.length;
+  const runsQueries = island.declaresQueries();
   onMount(() => {
     const frame = requestAnimationFrame(() => { prevented = false; if (runsQueries) rerender(); });
     onCleanup(() => cancelAnimationFrame(frame));
