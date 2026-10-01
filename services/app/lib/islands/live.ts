@@ -15,8 +15,9 @@
  *  - a version ping (a new `editId`) → the new version drawn IN PLACE by the one update path
  *    (./live-update: the story fragment fetched and morphed, islands kept or re-hydrated, the store
  *    surviving), falling back to a reload that keeps the reader's place. Once the app has adopted the
- *    page (solid/document/create-island-story installs `STORY_ADOPT_HOOK` and calls `stopIslandLive`)
- *    the app holds the document's stream and calls the same path itself; this one closes.
+ *    page (solid/document/create-island-story installs `STORY_ADOPT_HOOK`) the app holds the
+ *    document's stream and calls the same path itself; this stream still carries the `data` frames
+ *    to the island store (closing it on adoption left an in-place editing reader's tables stale).
  *
  * The stream reconnects on its own (lib/live-stream): any error or close reopens it with backoff,
  * heartbeat silence counts as dead, and a page coming back visible or online reopens a stale one.
@@ -32,30 +33,16 @@ import { STORY_ADOPT_HOOK, STORY_DATA_EVENT, STORY_DATA_HOOK } from '@/lib/story
 import { openLiveStream } from '@/lib/live-stream';
 import { reloadKeepingPlace, updateCompiledStory } from './live-update';
 
-/** The page's open stream, on the window: a second starter reuses it, and the app closes it on adoption. */
+/** The page's open stream, on the window: a second starter reuses it. */
 const LIVE_KEY = '__mxLiveStream';
 
 /** The stream's address: the document's own events door, with the snapshot's marks when the page was served from one. */
 export const islandLiveUrl = (id: string, since?: string | null): string =>
   `/a/${encodeURIComponent(id)}/events${since ? `?since=${encodeURIComponent(since)}` : ''}`;
 
-const adopted = (win: Window): boolean => typeof (win as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] === 'function';
-
-/**
- * The app has taken the page (solid/document/create-island-story installs `STORY_ADOPT_HOOK`) and
- * holds the document's stream itself: close this one, so a tab holds ONE document stream. Under
- * HTTP/1.1's six connections per host, two tabs each holding two document streams plus the inbox
- * stalled every further request (the frame fetch, the morph fragment) behind them.
- */
-export function stopIslandLive(win: Window): void {
-  const open = (win as unknown as Record<string, unknown>)[LIVE_KEY] as { close?: () => void } | undefined;
-  open?.close?.();
-}
-
 export function startIslandLive(win: Window, id: string, initialEditId: string, since?: string | null): () => void {
   const hooks = win as unknown as Record<string, unknown>;
-  // Already adopted (boot's lazy start can land after the app took the page): the app's stream covers it.
-  if (hooks[LIVE_KEY] || adopted(win)) return () => {};
+  if (hooks[LIVE_KEY]) return () => {};
   let seen = initialEditId;
 
   const reload = () => {
@@ -68,7 +55,6 @@ export function startIslandLive(win: Window, id: string, initialEditId: string, 
     host: win,
     events: {
       [STORY_DATA_EVENT]: (data) => {
-        if (adopted(win)) return stop();
         let frame: { datasets?: unknown };
         try { frame = JSON.parse(data) as { datasets?: unknown }; } catch { return; }
         if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
@@ -79,11 +65,11 @@ export function startIslandLive(win: Window, id: string, initialEditId: string, 
       },
     },
     onMessage: (data) => {
-      if (adopted(win)) return stop();
       let ping: { editId?: unknown };
       try { ping = JSON.parse(data) as { editId?: unknown }; } catch { return; }
       if (typeof ping.editId !== 'string' || !ping.editId || ping.editId === seen) return;
       seen = ping.editId;
+      if (typeof hooks[STORY_ADOPT_HOOK] === 'function') return;
       if (win.location.hash === '#edit') return;
       void updateCompiledStory(win);
     },

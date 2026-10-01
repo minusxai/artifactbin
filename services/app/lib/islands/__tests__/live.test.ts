@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boot } from '../boot';
-import { islandLiveUrl, startIslandLive, stopIslandLive } from '../live';
+import { islandLiveUrl, startIslandLive } from '../live';
 import { updateCompiledStory } from '../live-update';
 
 vi.mock('../live-update', async (original) => ({ ...(await original<typeof import('../live-update')>()), updateCompiledStory: vi.fn(async () => 'morphed') }));
@@ -77,7 +77,7 @@ describe('the island live stream', () => {
     expect(source!.closed).toBe(true);
   });
 
-  it('leaves a new version to the app once it has adopted the page, and closes so the tab holds one document stream', () => {
+  it('leaves a new version to the app once it has adopted the page (no reload under it)', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     const reload = vi.fn();
     const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { reload } : Reflect.get(target, key, target)) });
@@ -87,20 +87,8 @@ describe('the island live stream', () => {
     (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = () => {};
     source!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
     expect(reload).not.toHaveBeenCalled();
-    expect(updateCompiledStory, 'the app calls the update path itself').not.toHaveBeenCalled();
-    expect(source!.closed, 'an adopted page\'s own stream closes on its next frame').toBe(true);
+    expect(updateCompiledStory, 'the app calls the update path itself (solid/document/create-island-story)').not.toHaveBeenCalled();
     stop();
-  });
-
-  it('the app closes the stream when it adopts the page, and a later start (boot\'s lazy import) opens none', () => {
-    vi.stubGlobal('EventSource', FakeEventSource);
-    startIslandLive(window, 'abc', 'e1');
-    const [source] = FakeEventSource.made;
-    (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = () => {};
-    stopIslandLive(window);
-    expect(source!.closed).toBe(true);
-    startIslandLive(window, 'abc', 'e1', 'DS1.aaaaaaaaaaaa');
-    expect(FakeEventSource.made, 'adopted: the app\'s stream is the only one').toHaveLength(1);
   });
 
   it('reopens after an error (a 502 while the server restarts) and draws the version it missed', () => {

@@ -137,6 +137,22 @@ describe('openLiveStream', () => {
     stream.close();
   });
 
+  it('coming back online while a reopen hangs in connecting (no event heard for a while) reopens at once', () => {
+    const page = fakeHost();
+    const onWake = vi.fn();
+    const stream = openLiveStream({ url: '/a/x/events', host: page.host, onWake, random: noJitter });
+    latest().open();
+    latest().message('{}');
+    vi.advanceTimersByTime(LIVE_SILENCE_MS); // offline: silence, the watchdog reopens
+    vi.advanceTimersByTime(1000);
+    expect(FakeEventSource.made).toHaveLength(2); // this one hangs: no error, no event
+    vi.advanceTimersByTime(10_000);
+    page.online();
+    expect(FakeEventSource.made, 'nothing heard for 56 s: reopened, not trusted').toHaveLength(3);
+    expect(onWake).not.toHaveBeenCalled();
+    stream.close();
+  });
+
   it('a page made visible after a silent spell reopens; one whose stream is alive asks its owner to check the head', () => {
     const page = fakeHost();
     const onWake = vi.fn();

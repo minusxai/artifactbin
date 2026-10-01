@@ -95,7 +95,8 @@ export function openLiveStream(options: LiveStreamOptions): LiveStream {
     source?.close();
     const current = new EventSourceCtor(options.url);
     source = current;
-    lastEvent = Date.now();
+    // `lastEvent` is NOT reset here: a reopen that hangs while connecting has heard nothing, and a
+    // page coming back online must treat it as stale rather than as a live stream.
     const mine = () => source === current && !closed;
     current.onopen = () => { if (mine()) armWatchdog(); };
     current.onmessage = (event) => { if (!mine()) return; heard(); options.onMessage?.(String(event.data)); };
