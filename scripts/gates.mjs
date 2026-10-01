@@ -26,7 +26,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, CI_ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -74,7 +74,7 @@ const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
 // those two" rather than "whichever of them fell in shard 1 of the whole set".
 const selected = shard
   ? (() => {
-      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight);
+      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, { isolated: CI_ISOLATED_GATES });
       return chosen.filter((g) => names.includes(g.name));
     })()
   : chosen;

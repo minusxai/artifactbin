@@ -3,8 +3,9 @@
  * artifact's live document (`GET /a/<id>/events`).
  *
  * The server's stream carries a current head ping; the complete document is
- * fetched from /events/frame after a newer ping. EventSource reconnects and
- * the ping plus frame fetch self-heal a dropped connection.
+ * fetched from /events/frame after a newer ping. The stream reconnects itself
+ * (lib/live-stream), and its first frame is the current head, so a dropped
+ * connection heals; a failed frame fetch is retried with backoff.
  *
  * The returned accessor reads null until a frame arrives that differs from
  * what the page was server-rendered with, so the first paint is never
@@ -25,7 +26,8 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import type { ArtifactDataEvent, ArtifactLiveEvent } from '@/lib/story/live';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/live';
+import { liveBackoffDelay } from '@/lib/live-stream';
 
 export interface LiveArtifactOptions {
   /** Where the stream comes from; a backend without `live` is simply never subscribed. */
@@ -58,10 +60,52 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
       [() => options.backend, () => options.id, () => options.initialEditId, () => options.initialVersion, () => options.enabled ?? true],
       ([backend, id, initialEditId, initialVersion, enabled]) => {
         if (!enabled || backend.unavailable('live')) return;
-        /** Highest version this connection has SEEN — including frames it dropped. */
+        /**
+         * Highest version this connection has SEEN — including frames it dropped as its own. A
+         * version someone else wrote counts as seen only once its frame has been FETCHED: a failed
+         * fetch must not mark it seen, or the page sits one version behind until the next write.
+         */
         let seenVersion = initialVersion;
         let alive = true;
         let annotationsRequest: AbortController | undefined;
+        /** The newest head announced and not yet fetched; a ping arriving mid-fetch replaces it. */
+        let wanted: ArtifactVersionPing | null = null;
+        let fetching = false;
+        let attempt = 0;
+        let retry: ReturnType<typeof setTimeout> | undefined;
+        const surface = (frame: ArtifactLiveEvent, by: string | null | undefined) => {
+          seenVersion = frame.version;
+          setLive({ id, frame: { ...frame, by: frame.by ?? by ?? null } });
+        };
+        /*
+         * ONE fetch at a time, so frames cannot overtake each other. A failure (unreachable, or a
+         * refused answer) is retried with the stream's backoff until it lands or a newer ping
+         * supersedes it — never left for "the next ping", which may not come until the next write.
+         */
+        const fetchWanted = () => {
+          if (!alive || fetching || !wanted) return;
+          clearTimeout(retry);
+          retry = undefined;
+          const target = wanted;
+          fetching = true;
+          void backend
+            .liveFrame()
+            .then((frame) => {
+              fetching = false;
+              if (!alive) return;
+              // Refused, or a head older than the one announced (a lagging read): not yet seen, retry.
+              if (!frame || frame.version < target.version) throw new Error('frame not available yet');
+              attempt = 0;
+              if (frame.version >= seenVersion) surface(frame, target.by);
+              if (wanted === target) wanted = null;
+              else fetchWanted();
+            })
+            .catch(() => {
+              fetching = false;
+              if (!alive) return;
+              retry = setTimeout(fetchWanted, liveBackoffDelay(attempt++));
+            });
+        };
         /*
          * The stream carries PINGS; the document is fetched. A ping names the
          * head (`{editId, version, by}`), and the frame — complete, cached per
@@ -73,17 +117,30 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
           {
             onPing: (ping) => {
               if (!Number.isInteger(ping.version)) return;
-              if (ping.version < Math.max(initialVersion, seenVersion)) return;
-              seenVersion = ping.version;
-              if (options.isOwnFrame?.(ping.editId)) return;
+              if (ping.version < seenVersion) return;
+              if (options.isOwnFrame?.(ping.editId)) { seenVersion = ping.version; return; }
               if (ping.version === initialVersion && ping.editId === initialEditId) return;
-              void backend
-                .liveFrame()
-                .then((frame) => {
-                  if (!alive || !frame || frame.version < seenVersion) return;
-                  setLive({ id, frame: { ...frame, by: frame.by ?? ping.by } });
-                })
-                .catch(() => { /* a failed fetch is a dropped wakeup; the next ping retries */ });
+              if (wanted && wanted.version > ping.version) return;
+              wanted = ping;
+              // A fresh announcement retries now rather than waiting out the backoff.
+              if (retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; }
+              fetchWanted();
+            },
+            /*
+             * The page came back (visible, online) and the stream looked alive: one out-of-band read
+             * of the head. Only a STRICTLY newer version surfaces, so a check that finds nothing new
+             * (or this page's own last write) changes nothing.
+             */
+            onWake: () => {
+              if (!alive) return;
+              // A frame fetch is waiting out its backoff (it failed while offline): the page is back, try now.
+              if (wanted && retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; fetchWanted(); return; }
+              if (fetching || wanted) return;
+              void backend.liveFrame().then((frame) => {
+                if (!alive || !frame || frame.version <= seenVersion || wanted || fetching) return;
+                if (options.isOwnFrame?.(frame.editId)) { seenVersion = frame.version; return; }
+                surface(frame, null);
+              }).catch(() => { /* the stream's own reconnect covers an unreachable server */ });
             },
             onData: (frame) => {
               if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
@@ -102,7 +159,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
           },
           options.since ? { since: options.since } : undefined,
         );
-        onCleanup(() => { alive = false; annotationsRequest?.abort(); unsubscribe(); });
+        onCleanup(() => { alive = false; clearTimeout(retry); annotationsRequest?.abort(); unsubscribe(); });
       },
     ),
   );

@@ -161,6 +161,8 @@ export interface LiveHandlers {
   onData: (event: ArtifactDataEvent) => void;
   /** The annotations changed (owner-credentialed connections only). */
   onAnnotations: () => void;
+  /** The page came back (visible, online) while the stream still looked alive: check the head with `liveFrame()`. */
+  onWake?: () => void;
 }
 
 export interface ArtifactBackend {
