@@ -10,7 +10,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const VERSION = 1;
@@ -28,9 +28,20 @@ const SKIPPED = /^(?:components|web|lib)\/(?:.*\/)?__tests__\//;
 const sha = (buffer) => createHash('sha256').update(buffer).digest('hex');
 
 function sourceList() {
-  const files = execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z', '--', ...SOURCE_DIRS], { cwd: APP, encoding: 'utf8', maxBuffer: 64 << 20 })
-    .split('\0').filter((file) => file && !SKIPPED.test(file)).sort();
-  return sha(files.join('\0'));
+  return sha(sourceFiles().filter((file) => !SKIPPED.test(file)).sort().join('\0'));
+}
+
+// The gate container builds from a copy of the tree with no repository, so git is a fast path, not a requirement.
+function sourceFiles() {
+  try {
+    return execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z', '--', ...SOURCE_DIRS], { cwd: APP, encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\0').filter(Boolean);
+  } catch {
+    return SOURCE_DIRS.filter((dir) => existsSync(path.join(APP, dir)))
+      .flatMap((dir) => readdirSync(path.join(APP, dir), { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile() && !entry.parentPath.split(path.sep).includes('node_modules'))
+        .map((entry) => path.relative(APP, path.join(entry.parentPath, entry.name)).split(path.sep).join('/')));
+  }
 }
 
 /** True when the outputs exist and nothing the last build read has changed. */
