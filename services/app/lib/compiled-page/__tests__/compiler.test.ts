@@ -116,7 +116,8 @@ describe('compilePage', () => {
     const bytes = (await store.get(built.module!.sha))!;
     expect(Buffer.byteLength(blocks)).toBeGreaterThan(3_000_000);
     expect(brotliCompressSync(generated.islands).byteLength).toBeLessThan(10_000);
-    expect(Object.values(generated.staticTexts).join('')).toContain(blocks.slice(3, 120));
+    expect([...Object.values(generated.staticTexts), ...generated.staticHtml].join('')).toContain(blocks.slice(3, 120));
+    expect(generated.skeleton).not.toContain(blocks.slice(3, 120));
     expect(dom(built.html).querySelectorAll('template[data-mx-island-template]')).toHaveLength(0);
     // The deleted template resource no longer carries unopened panels; the server DOM does.
     expect(built.html).toContain(blocks.slice(3, 120));
@@ -579,7 +580,7 @@ describe('the generated modules, compiled', () => {
     const verdict = await structureIndependent(async (doc) => {
       const generated = generate(doc);
       // The deleted standalone skeleton render is replaced by the one-tree SSR source.
-      return { skeleton: await ssrModuleCode(generated.skeleton, doc.flow), islands: (await browserModuleCode(generated.browserIslands, build)).code };
+      return { skeleton: await ssrModuleCode(generated.skeleton, doc.flow, generated.staticTexts, generated.staticHtml), islands: (await browserModuleCode(generated.browserIslands, build)).code };
     });
     expect(verdict).toEqual({ skeletonIndependent: true, islandsIndependent: true, leaked: [] });
   });

@@ -18,9 +18,11 @@ const input = (source: string) => ({
 describe('one document tree', () => {
   it('emits static siblings as empty NoHydration placeholders in the browser tree', () => {
     const result = generate(input('<h1 id="heading">Server prose</h1><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger></TabsList><TabsContent value="one"><p id="panel-prose">Panel prose</p><Switch label="Live" /></TabsContent></Tabs><footer id="end">End prose</footer>'));
+    // The server half: the skeleton and its pre-rendered static chunks.
+    const server = `${result.skeleton}${result.staticHtml.join('')}`;
     expect(result.skeleton).toContain('NoHydration');
-    expect(result.skeleton).toContain('Server prose');
-    expect(result.skeleton).toContain('Panel prose');
+    expect(server).toContain('Server prose');
+    expect(server).toContain('Panel prose');
     expect(result.browserIslands).toContain('NoHydration');
     expect(result.browserIslands).not.toContain('Server prose');
     expect(result.browserIslands).not.toContain('Panel prose');
