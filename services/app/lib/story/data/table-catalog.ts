@@ -5,7 +5,7 @@
  * query's result columns once it has run, a table Value's own. Pure: derived
  * from source (+ state), never fetched — the shelf is the document itself.
  */
-import { parseJsx } from '@/lib/jsx';
+import { parseJsxShared } from '@/lib/jsx/parse-shared';
 import { splitHelmet } from '../document/helmet';
 import type { DatasetColumn } from '../datasets/dataset-shape';
 import type { DataflowState } from './dataflow';
@@ -20,7 +20,8 @@ export interface TableChoice {
 }
 
 export function tableChoices(source: string, state?: DataflowState | null): TableChoice[] {
-  const parsed = parseJsx(source);
+  // Read-only, shared: the editor reads these once the source rests, the same source every other reader parses.
+  const parsed = parseJsxShared(source);
   if (!parsed.ok) return [];
   const { content } = splitHelmet(parsed.nodes);
   const out: TableChoice[] = [];

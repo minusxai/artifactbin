@@ -6,7 +6,7 @@
  * without it compiles in the stored theme, which lags a pick until the debounced metadata save lands.
  */
 import { isWebUrl } from '@/lib/story/assets/asset-url';
-import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { storyUpdatePartsShared } from '@/lib/story/document/update-parts';
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { STORY_DOCUMENT_MESSAGE, type EditDraft } from '@/lib/story-runtime/contract';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
@@ -41,7 +41,7 @@ export function createEditDraftSender(runtimeRef: DocumentRuntimeRef, state: Edi
   const cancel = () => { if (timer !== null) clearTimeout(timer); timer = null; held = null; };
   const post = (source: string, options: { preview?: true; typing?: true; redraw?: true }) => {
     // Parsed at send time, not per keystroke: typing pays for no parse of the whole document.
-    const parts = storyUpdateParts(source, HELD_ASSETS);
+    const parts = storyUpdatePartsShared(source, HELD_ASSETS);
     if (!parts) return;
     const draft: EditDraft = {
       type: STORY_DOCUMENT_MESSAGE, nodes: parts.nodes, source, editId: state.editId(),

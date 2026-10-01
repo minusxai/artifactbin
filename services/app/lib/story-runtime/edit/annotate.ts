@@ -253,13 +253,23 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   };
 
   /** Take back every highlight this session registered — on 'off', on dispose, and before each rebuild. */
+  /**
+   * What this layer put on the page — area boxes, the band, stamped attributes — held here rather than found by
+   * querying the page: the sweep runs every frame while typing reflows the document, and a query over a report's
+   * thousands of elements per frame was most of each keystroke's work.
+   */
+  const overlays = new Set<Element>();
+  const stamped = new Set<Element>();
+  let band: HTMLElement | null = null;
+  const stamp = (el: Element, attr: string) => { el.setAttribute(attr, ''); stamped.add(el); };
   const clearHighlights = () => {
     const api = highlightApi(win);
     for (const name of registeredHighlights) api?.registry.delete(name);
     registeredHighlights.clear();
     painted = new Map();
     paintedAreas = new Map();
-    for (const overlay of scope.querySelectorAll(`[${ANNOTATION_AREA_ATTR}]`)) overlay.remove();
+    for (const overlay of overlays) overlay.remove();
+    overlays.clear();
   };
 
   // ── area overlays ─────────────────────────────────────────────────────────
@@ -300,14 +310,14 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       overlay.style.outline = AREA_FILL[emphasis].outline;
       overlay.style.outlineOffset = '1px';
       (root ?? doc.body).appendChild(overlay);
-      el.setAttribute(ANNOTATION_RANGED_ATTR, '');
+      overlays.add(overlay);
+      stamp(el, ANNOTATION_RANGED_ATTR);
     }
   };
 
   /** The band: while a drag is in progress, and then the drawn area while its comment is composed. */
   const bandElement = (): HTMLElement => {
-    let band = scope.querySelector<HTMLElement>(`[${ANNOTATE_BAND_ATTR}]`);
-    if (!band) {
+    if (!band?.isConnected) {
       band = doc.createElement('div');
       band.setAttribute(ANNOTATE_BAND_ATTR, '');
       band.style.background = BAND_STYLE.background;
@@ -316,7 +326,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     }
     return band;
   };
-  const removeBand = () => scope.querySelector(`[${ANNOTATE_BAND_ATTR}]`)?.remove();
+  const removeBand = () => { band?.remove(); band = null; };
 
   /** The composing area follows its anchor and leaves with the selection. */
   const paintComposingArea = () => {
@@ -362,7 +372,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const name = highlightNameFor(pin.id);
       api.registry.set(name, new api.Highlight(...ranges));
       registeredHighlights.add(name);
-      el.setAttribute(ANNOTATION_RANGED_ATTR, '');
+      stamp(el, ANNOTATION_RANGED_ATTR);
       const fill = state.openId === pin.id
         ? HIGHLIGHT_FILL.open
         : state.hoverId === pin.id ? HIGHLIGHT_FILL.hover : HIGHLIGHT_FILL.base;
@@ -376,8 +386,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
    * decides what to do with it — float a card, align a rail row, or ignore it —
    * because the page is the only side that knows whether a rail is open.
    */
-  const reportLayout = () => {
-    if (!state || state.mode === 'off') return;
+  /** The last geometry posted: a frame that moved nothing (typing that did not reflow an anchor) posts nothing. */
+  let postedLayout: string | null = null;
+  let postedSelection: string | null = null;
+  const reportLayout = (unchangedQuiet = false) => {
+    if (!state || state.mode === 'off') { postedLayout = null; return; }
     const positions = state.pins.flatMap((pin) => {
       const el = elementForPin(pin);
       if (!el) return [];
@@ -393,6 +406,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const status = isTargetRange(pin.range) ? (pin.range.target.kind === 'iframe' ? (managedRects.has(pin.id) ? 'exact' : 'missing') : (el.getAttribute(COMMENT_TARGET_ATTR) ? 'exact' : 'missing')) : undefined;
       return [{ id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, ...(status ? {status}:{}) }];
     });
+    const key = JSON.stringify(positions);
+    if (unchangedQuiet && key === postedLayout) return;
+    postedLayout = key;
     post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions });
   };
 
@@ -407,13 +423,14 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     // Nothing painted since the last sweep and nothing to paint (edit mode, typing): no query over the page per key.
     if ((!state || state.mode === 'off') && !dirty) return;
     dirty = !!state && state.mode !== 'off';
-    for (const el of scope.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}], [${ANNOTATION_RANGED_ATTR}]`)) {
+    for (const el of stamped) {
       el.removeAttribute(ANNOTATED_ATTR);
       el.removeAttribute(ANNOTATION_OPEN_ATTR);
       el.removeAttribute(ANNOTATION_HOVER_ATTR);
       el.removeAttribute(ANNOTATE_SELECTED_ATTR);
       el.removeAttribute(ANNOTATION_RANGED_ATTR);
     }
+    stamped.clear();
     if (!state || state.mode === 'off') {
       clearHighlights();
       removeBand();
@@ -423,12 +440,12 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       if (pin.layoutOnly || paintsInChild(pin)) continue;
       const el = elementForPin(pin);
       if (!el) continue;
-      el.setAttribute(ANNOTATED_ATTR, '');
-      if (state.openId === pin.id) el.setAttribute(ANNOTATION_OPEN_ATTR, '');
+      stamp(el, ANNOTATED_ATTR);
+      if (state.openId === pin.id) stamp(el, ANNOTATION_OPEN_ATTR);
     }
-    if (selectedPath) elementFor(selectedPath)?.setAttribute(ANNOTATE_SELECTED_ATTR, '');
+    if (selectedPath) { const el = elementFor(selectedPath); if (el) stamp(el, ANNOTATE_SELECTED_ATTR); }
     const hovered = state.hoverId ? state.pins.find((pin) => !pin.layoutOnly && pin.id === state!.hoverId) : null;
-    if (hovered && !paintsInChild(hovered)) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
+    if (hovered && !paintsInChild(hovered)) { const el = elementForPin(hovered); if (el) stamp(el, ANNOTATION_HOVER_ATTR); }
     // The words last, so their rules follow the state that was just stamped.
     ensureCss(true, paintRanges());
     paintAreas();
@@ -436,12 +453,18 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   };
 
   /** Keep the page-level draft popover attached while the document moves. */
-  const reportSelectedGeometry = () => {
-    if (!state || state.mode === 'off' || !selectedPath || managedSelection || pick) return;
+  const reportSelectedGeometry = (unchangedQuiet = false) => {
+    if (!state || state.mode === 'off' || !selectedPath || managedSelection || pick) { postedSelection = null; return; }
+    const report = (selection: unknown) => {
+      const key = JSON.stringify(selection);
+      if (unchangedQuiet && key === postedSelection) return;
+      postedSelection = key;
+      post({ type: STORY_SELECTION_MESSAGE, selection });
+    };
     if (isTargetRange(state.selected?.range)) {
       const selected = state.selected!;
       const target = elementForPin({path:selected.path,key:null,nodeId:selected.nodeId,range:selected.range});
-      if (target) {const r=target.getBoundingClientRect();post({type:STORY_SELECTION_MESSAGE,selection:{...selected,rect:{x:r.x,y:r.y,width:r.width,height:r.height}}});}
+      if (target) {const r=target.getBoundingClientRect();report({...selected,rect:{x:r.x,y:r.y,width:r.width,height:r.height}});}
       return;
     }
     const el = elementFor(selectedPath);
@@ -453,7 +476,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       if (previous.quote !== undefined) selection.quote = previous.quote;
       if (previous.range) selection.range = previous.range;
     }
-    post({ type: STORY_SELECTION_MESSAGE, selection });
+    report(selection);
   };
 
   const scheduleSync = () => {
@@ -462,8 +485,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     win.requestAnimationFrame(() => {
       rafPending = false;
       applyState();
-      reportLayout();
-      reportSelectedGeometry();
+      reportLayout(true);
+      reportSelectedGeometry(true);
     });
   };
 
