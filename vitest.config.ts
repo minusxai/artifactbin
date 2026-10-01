@@ -38,7 +38,6 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    experimental: { fsModuleCache: true },
     testTimeout: 45_000,
     hookTimeout: 45_000,
     // The SSR'd document needs the prebuilt story runtime, which is a
