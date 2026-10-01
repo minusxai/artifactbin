@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { Show, type JSX } from 'solid-js';
-import type { AccountWorkspace, AccountWorkspaceCore, AccountWorkspaceInsights } from '@/lib/workspace';
+import type { AccountWorkspace, AccountWorkspaceCore, AccountWorkspaceInsights } from '@/lib/workspace/dashboard';
 import WorkspaceCreate from './WorkspaceCreate';
 import Dashboard from './Dashboard';
 

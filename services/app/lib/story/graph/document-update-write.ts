@@ -1,4 +1,4 @@
-import {documentEditEventSql} from '../../analytics';
+import {documentEditEventSql} from '../../platform/analytics';
 import {documentResourceSql} from './document-update-resources';
 import {documentMentionSql} from './document-update-mentions';
 import {documentReplacementSql} from './document-replacement-sql';
@@ -7,8 +7,8 @@ import {documentAnnotationSql,annotationSqlInput,annotationSqlGuard} from './doc
  * SQL or authorization predicates. Permissions, dependency guards, history and
  * identity maintenance share the artifact row lock and the same SQL statement. */
 import type {DocumentUpdate,Queryable} from '@artifactbin/contracts';
-import {ownerPredicate,type ArtifactRow,type Scope,type TokenActor} from '../../artifacts';
-import {hydrateArtifactDocument} from '../../artifact-document';
+import { ownerPredicate, type ArtifactRow, type Scope, type TokenActor } from '../../artifacts/access';
+import {hydrateArtifactDocument} from '../../artifacts/document';
 import {GRAPH_POLICY} from './document-graph';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
 import {newEditId} from '../document/splice';

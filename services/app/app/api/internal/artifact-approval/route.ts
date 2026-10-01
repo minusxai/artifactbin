@@ -2,11 +2,11 @@ import { actorOf } from '@artifactbin/utils';
 import { ANONYMOUS } from '@artifactbin/contracts';
 import { json, readJson } from '@/lib/http';
 import { effectiveRole, getArtifactById } from '@/lib/artifacts';
-import { canEdit } from '@/lib/share-roles';
-import { createGuestOwner, mergeGuestUsers } from '@/lib/guest-owner';
-import { resolveTokenById } from '@/lib/tokens';
-import { getUserById, claimTokenById } from '@/lib/users';
-import { sessionActor } from '@/lib/viewer';
+import { canEdit } from '@/lib/artifacts';
+import { createGuestOwner, mergeGuestUsers } from '@/lib/accounts';
+import { resolveTokenById } from '@/lib/accounts';
+import { getUserById, claimTokenById } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 /** Auth-to-app seam. Reuse/create browser ownership, never copy artifact permissions. */
 export async function POST(request: Request) {

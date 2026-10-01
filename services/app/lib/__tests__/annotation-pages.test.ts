@@ -1,5 +1,5 @@
 import {it,expect,vi,afterEach} from 'vitest';
-import {readAnnotationPages} from '../annotation-pages';
+import {readAnnotationPages} from '@/lib/annotations';
 afterEach(()=>vi.unstubAllGlobals());
 it('browser annotation reads include every page and preserve filters while deduplicating roots',async()=>{
  const urls:string[]=[];vi.stubGlobal('fetch',vi.fn(async(url:string)=>{urls.push(url);return Response.json(url.includes('cursor=')?{annotations:[{id:'first',body:'updated'},{id:'second'}],next_cursor:null}:{annotations:[{id:'first'}],next_cursor:'opaque_cursor'});}));

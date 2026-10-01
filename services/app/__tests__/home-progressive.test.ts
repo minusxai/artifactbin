@@ -1,12 +1,12 @@
 import { expect, it, vi } from 'vitest';
 import { GET as assetsPage } from '@/app/api/page/assets/route';
 import { GET } from '@/app/api/page/home/route';
-import { createUser } from '@/lib/users';
+import { createUser } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
-import * as feed from '@/lib/workspace-analytics';
+import * as feed from '@/lib/workspace/analytics';
 import { accountWorkspaceInsightsFor, accountWorkspaceFor } from '@/lib/workspace';
-import { mintToken } from '@/lib/tokens';
-import { EVENTS_SCHEMA } from '@/lib/config';
+import { mintToken } from '@/lib/accounts';
+import { EVENTS_SCHEMA } from '@/lib/platform';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 const harness = useAppHarness();
 

@@ -1,7 +1,7 @@
 import {documentEdit} from './prepared-document';
 import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {POST as create} from '@/app/api/artifacts/route';
 import {getArtifactFor,setMetadataFor,applyEditFor} from '@/lib/artifacts';
 const harness=useAppHarness();

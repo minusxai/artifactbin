@@ -16,8 +16,8 @@ import { applyEditFor,getArtifactById } from '@/lib/artifacts';
 
 
 import { parseContentInput } from '@/lib/story/document/input';
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();

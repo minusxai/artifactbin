@@ -12,9 +12,9 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { getArtifactById } from '@/lib/artifacts';
 
-import { mintToken } from '@/lib/tokens';
-import { createGuestOwner } from '@/lib/guest-owner';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createGuestOwner } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

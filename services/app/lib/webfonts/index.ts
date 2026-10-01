@@ -19,7 +19,7 @@
  * Bundled families short-circuit: a document asking for Inter or JetBrains
  * Mono resolves against the compiled-in catalog and fetches nothing.
  */
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform/db';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { STORY_FONT_FAMILIES, type StoryFontAsset } from '@/lib/data/story/story-fonts';
 import { fetchWebResource } from '@/lib/web-ingest/fetch';

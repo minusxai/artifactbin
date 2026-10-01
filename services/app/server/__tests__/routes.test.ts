@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { mountRoutes } from '../api';
 import { ROUTES } from '../routes.generated';
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

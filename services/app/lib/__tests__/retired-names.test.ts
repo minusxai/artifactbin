@@ -196,7 +196,7 @@ describe('the surviving vocabulary', () => {
 
 /** Application identity has no request-rate engine. */
 describe('the app counts no door of its own', () => {
-  const authSource = readFileSync(path.join(APP_ROOT, 'lib/auth.ts'), 'utf8');
+  const authSource = readFileSync(path.join(APP_ROOT, 'lib/accounts/auth.ts'), 'utf8');
 
   it('makes no request limiter call', () => {
     expect([...authSource.matchAll(/\.(limit|check|hit)\(\s*'?([A-Za-z_]*)/g)].map((m) => `${m[1]}(${m[2]})`)).toEqual([]);
@@ -224,7 +224,7 @@ describe('the retired env names', () => {
   // and the guard then flags ITSELF, which reads exactly like a real violation.
   const SELF = path.relative(REPO_ROOT, fileURLToPath(import.meta.url));
   const EXEMPT = new Set([
-    'services/app/lib/config.ts',
+    'services/app/lib/platform/config.ts',
     'services/app/lib/__tests__/env-namespacing.test.ts',
     SELF,
     'services/utils/__tests__/env.test.ts',

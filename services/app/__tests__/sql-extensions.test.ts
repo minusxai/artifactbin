@@ -13,9 +13,9 @@ import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { services, setServices } from '@/lib/services';
+import { services, setServices } from '@/lib/platform';
 import { useSqlExtensions } from '@/lib/sql/extensions';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { createAppHost } from '@/server/host';
 import { request, useAppHarness } from '@/__tests__/harness';
 

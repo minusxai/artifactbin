@@ -13,7 +13,7 @@
  * a `javascript:` href that this module hands out.
  */
 import { describe, it, expect } from 'vitest';
-import { parseInline, parseMarkdownLite, plainText, safeHref, wrapSelection, type MdNode } from '../markdown-lite';
+import { parseInline, parseMarkdownLite, plainText, safeHref, wrapSelection, type MdNode } from '@/lib/annotations';
 
 /** The tests read blocks by shape, so a tiny reader keeps them legible. */
 const para = (nodes: MdNode[], at = 0) => {

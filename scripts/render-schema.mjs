@@ -130,7 +130,7 @@ const tableNames = (statements) => {
 const { renderSchema } = await tsImport('@artifactbin/utils', import.meta.url);
 
 async function appSide() {
-  const mod = await tsImport('../services/app/lib/schema.ts', import.meta.url);
+  const mod = await tsImport('../services/app/lib/platform/schema.ts', import.meta.url);
   const data = tableData(mod);
   if (data) return { statements: renderSchema(data, { schema: APP_SCHEMA }), names: data.map((t) => t.name) };
   if (Array.isArray(mod.SCHEMA_STATEMENTS)) {

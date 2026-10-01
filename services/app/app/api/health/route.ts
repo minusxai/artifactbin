@@ -9,7 +9,7 @@
  * Which service failed is the operator's business (one log line), not the
  * public's — service names are topology.
  */
-import { stackHealth } from '@/lib/health';
+import { stackHealth } from '@/lib/runtime';
 
 export async function GET(_request: Request): Promise<Response> {
   const { ok, failing } = await stackHealth();

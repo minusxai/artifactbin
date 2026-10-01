@@ -7,18 +7,9 @@ import type {
   DatasetMutationPolicy,
 } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
-import { getDb } from '@/lib/db';
-import {
-  editorScope,
-  canWriteDataset,
-  getArtifactById,
-  getArtifactFor,
-  writerFor,
-  canReadArtifact,
-  type ArtifactRow,
-  type TokenActor,
-  type RoleActor,
-} from '@/lib/artifacts';
+import { getDb } from '@/lib/platform/db';
+import { editorScope, canWriteDataset, writerFor, canReadArtifact, type ArtifactRow, type TokenActor, type RoleActor } from '@/lib/artifacts/access';
+import { getArtifactById, getArtifactFor } from '@/lib/artifacts/store';
 import { catalogOf } from '@/lib/datasets/catalog';
 
 /** One read-access fence for policy actions: sharing remains the only audience.

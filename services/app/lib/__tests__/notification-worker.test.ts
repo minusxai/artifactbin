@@ -1,6 +1,6 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
 import type {MutationNotificationClaim,MutationNotificationJobStore,MutationNotificationPlan} from '@artifactbin/contracts';
-import {createNotificationWorker} from '../notification-worker';
+import {createNotificationWorker} from '@/lib/notifications';
 const claim={jobId:'job',generation:1,leaseUntil:'2100-01-01',input:{}} as MutationNotificationClaim;
 const plan:MutationNotificationPlan={executionFence:{principalRevision:'p',documentRevision:'d',contextRevision:'c'},rules:[]};
 const fixture=()=>{let next:MutationNotificationClaim|null=claim;const store={claim:vi.fn(async()=>{const value=next;next=null;return value;}),renew:vi.fn(async()=>true),complete:vi.fn(async()=>true),fail:vi.fn(async()=>true)} as unknown as MutationNotificationJobStore;const evaluator={evaluate:vi.fn(async()=>plan)};return {store,evaluator};};

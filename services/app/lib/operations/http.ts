@@ -1,12 +1,13 @@
-import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/mutation-operation';
-import {MembershipError} from '../membership';
+import {adaptMutationOperationReply,mutationInitiator,normalizeMutationOperation} from '@/lib/artifacts/mutation-operation';
+import {MembershipError} from '../accounts/membership';
 import {grantsOf,grantsPermitWrite} from '../datasets/policy/grants';
-import {tokenActorForRequest} from '@/lib/viewer';
-import {readableArtifact} from '@/lib/artifact-read';
-import {canAnnotate} from '@/lib/share-roles';
-import {durableMutation} from '@/lib/mutation-receipt';
-import {getArtifactFor,getArtifactById,canReadArtifact} from '@/lib/artifacts';
-import {ownedArtifactState} from '@/lib/trash';
+import {tokenActorForRequest} from '@/lib/accounts/viewer';
+import {readableArtifact} from '@/lib/artifacts/read-access';
+import {canAnnotate} from '@/lib/artifacts/share-roles';
+import {durableMutation} from '@/lib/artifacts/mutation-receipt';
+import { getArtifactFor, getArtifactById } from '@/lib/artifacts/store';
+import { canReadArtifact } from '@/lib/artifacts/access';
+import {ownedArtifactState} from '@/lib/workspace/trash';
 import {sessionOwnedBy} from '@/lib/remote/resource';
 /**
  * The HTTP half of the operations registry: a bearer route is a TRANSLATION
@@ -16,7 +17,7 @@ import {sessionOwnedBy} from '@/lib/remote/resource';
  * the operation's `run` (which is itself the shared lib/artifact-wire
  * pipeline).
  */
-import { json, baseUrl } from '@/lib/http';
+import { json, baseUrl } from '@/lib/http/http';
 import type { TokenActor } from '@/lib/artifacts';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';

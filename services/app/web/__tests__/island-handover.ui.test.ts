@@ -10,7 +10,7 @@ import { scheduleSpaBoot } from '../idle-boot';
 import { adoptInitialStory, captureInitialStory, initialDocumentStory } from '../initial-story';
 import { capabilityOf, startSpaIdle, stampSavedTheme, takeChromeIntent } from '../idle-boot';
 import { clearInitialStory } from '../initial-story';
-import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
+import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/serving/theme-bootstrap';
 import { installIslandDocument, islandDocumentOf } from '@/lib/islands/handover';
 import { reportInitialArtifactView, initialViewWasReported } from '../artifact-view-report';
 import type { IslandDocument } from '@/lib/islands/contract';

@@ -11,8 +11,8 @@
  * DELETE → 204, whatever the flag says.
  */
 import { auth } from '@/auth';
-import { CUSTOM_DOMAINS_TARGET } from '@/lib/config';
-import { attachDomain, domainOf, domainResolver, removeDomain } from '@/lib/custom-domains';
+import { CUSTOM_DOMAINS_TARGET } from '@/lib/platform';
+import { attachDomain, domainOf, domainResolver, removeDomain } from '@/lib/serving';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };

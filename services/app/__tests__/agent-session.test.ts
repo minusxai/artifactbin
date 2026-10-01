@@ -21,10 +21,10 @@ import { POST as agentPrompt } from '@/app/api/my/artifacts/[id]/agent-prompt/ro
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { APP_CSP, createAppServer } from '@/server/app';
-import { AGENT_COOKIE, decodeAgentSessionEnvelope, encodeAgentSession } from '@/lib/agent-session';
-import { existingPaste } from '@/lib/agent-copy';
-import { mintToken, resolveTokenById, revokeToken } from '@/lib/tokens';
-import { claimableTokensById, claimTokenById, createUser } from '@/lib/users';
+import { AGENT_COOKIE, decodeAgentSessionEnvelope, encodeAgentSession } from '@/lib/accounts';
+import { existingPaste } from '@/lib/serving';
+import { mintToken, resolveTokenById, revokeToken } from '@/lib/accounts';
+import { claimableTokensById, claimTokenById, createUser } from '@/lib/accounts';
 import { getArtifactFor } from '@/lib/artifacts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
@@ -310,7 +310,7 @@ describe('the cookie is production-shaped wherever it is SERVED over https', () 
   it('is __Host- prefixed, Secure, httpOnly, SameSite=Lax, Path=/', async () => {
     vi.resetModules();
     vi.stubEnv('APP__PUBLIC_BASE_URL', 'https://artifactbin.dev');
-    const { AGENT_COOKIE: name, agentCookieOptions } = await import('@/lib/agent-session');
+    const { AGENT_COOKIE: name, agentCookieOptions } = await import('@/lib/accounts/agent-session');
     expect(name).toBe('__Host-mx-agent-session');
     // __Host- FORBIDS a Domain attribute and REQUIRES Secure + Path=/, so no
     // subdomain can plant or shadow it — the cookie-tossing defense the account

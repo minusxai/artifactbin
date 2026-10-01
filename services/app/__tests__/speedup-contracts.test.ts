@@ -5,7 +5,7 @@ import { useAppHarness, request } from './harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { PUT as replaceArtifact } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
 import { compiledSource } from '@/test/helpers/compiled';
 

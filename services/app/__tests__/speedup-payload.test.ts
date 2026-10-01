@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 
 useAppHarness();
 

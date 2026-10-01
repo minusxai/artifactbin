@@ -1,4 +1,4 @@
-import { withTokenAuth } from '@/lib/auth';
+import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { json, readJson } from '@/lib/http';
 export const GET = withTokenAuth(async (request, { tokenId, userId, params }) =>

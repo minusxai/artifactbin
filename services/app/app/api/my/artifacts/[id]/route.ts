@@ -8,13 +8,13 @@
  * authenticated, so a browser is by definition the caller and Origin is
  * present and unforgeable.
  */
-import { artifactToWireWithAnnotations, replaceArtifactFromRequest } from '@/lib/artifact-wire';
+import { artifactToWireWithAnnotations, replaceArtifactFromRequest } from '@/lib/artifacts';
 import { getEditableArtifactFor } from '@/lib/artifacts';
-import {updateMetadataFromBody} from '@/lib/metadata-wire';
-import { browserActor } from '@/lib/auth';
+import {updateMetadataFromBody} from '@/lib/artifacts';
+import { browserActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { trashArtifactFor } from '@/lib/trash';
-import { actorForArtifacts } from '@/lib/viewer';
+import { trashArtifactFor } from '@/lib/workspace';
+import { actorForArtifacts } from '@/lib/accounts';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 
 /** The caller as an artifact scope, or the Response that refuses them. */

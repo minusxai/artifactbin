@@ -1,8 +1,8 @@
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {getArtifactById,type ArtifactRow,type TokenActor} from '@/lib/artifacts';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import {prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/story/graph/document-update-client';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
 import {POST as createRoute} from '@/app/api/artifacts/route';

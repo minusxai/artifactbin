@@ -10,8 +10,8 @@
 import { describe, expect, it } from 'vitest';
 
 
-import { createUser } from '@/lib/users';
-import { mintToken } from '@/lib/tokens';
+import { createUser } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
 import { POST as mintAdmin } from '@/app/api/tokens/route';
 import { DELETE as revokeAdmin } from '@/app/api/tokens/[id]/route';
 import { POST as mintInternal } from '@/app/api/internal/tokens/route';

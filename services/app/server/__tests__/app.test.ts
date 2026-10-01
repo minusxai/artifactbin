@@ -11,10 +11,10 @@ import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintExportKey } from '@/lib/export-key';
+import { mintExportKey } from '@/lib/serving';
 import { APP_CSP, createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 

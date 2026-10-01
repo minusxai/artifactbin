@@ -5,7 +5,7 @@ on:
     paths:
       - '**reserved*'
       - 'services/cli/src/identities.ts'
-      - 'services/app/lib/artifact-identities.ts'
+      - 'services/app/lib/artifacts/identities.ts'
       - '.github/workflows/reserved-ids-proof.yml'
 permissions:
   contents: read

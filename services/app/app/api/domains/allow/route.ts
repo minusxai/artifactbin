@@ -8,7 +8,7 @@
  * pending. It deliberately IGNORES FLAG__CUSTOM_DOMAINS — reading it would
  * let turning the flag off stop renewals and break live domains within 90 days.
  */
-import { isServable } from '@/lib/custom-domains';
+import { isServable } from '@/lib/serving';
 
 const answer = (status: 200 | 404) => new Response(status === 200 ? 'ok' : 'not found', {
   status, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },

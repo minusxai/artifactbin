@@ -1,4 +1,4 @@
-import { REPO_URL } from '@/lib/repo';
+import { REPO_URL } from '@/lib/serving';
 
 const TTL = 60_000;
 const API_URL = `https://api.github.com/repos${new URL(REPO_URL).pathname}`;

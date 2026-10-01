@@ -19,7 +19,7 @@ import { getArtifactById, refDataForRow } from '@/lib/artifacts';
 import { objectStore } from '@/lib/object-store';
 
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

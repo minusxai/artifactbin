@@ -5,8 +5,8 @@
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { cliWorkspace } from './cli-harness';
-import { mintToken } from '@/lib/tokens';
-import { createUser, claimToken } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
 import { createArtifact, getArtifactFor } from '@/lib/artifacts';
 import * as annotations from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as createComment, GET as listComments } from '@/app/api/artifacts/[id]/annotations/route';

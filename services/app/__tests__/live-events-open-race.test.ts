@@ -22,8 +22,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** Runs inside the handler, between its first read and its subscription. */
 let duringSetup: (() => Promise<void>) | null = null;
-vi.mock('@/lib/viewer', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/viewer')>();
+vi.mock('@/lib/accounts/viewer', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/accounts/viewer')>();
   return {
     ...actual,
     sessionActor: async () => {

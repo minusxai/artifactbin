@@ -1,18 +1,18 @@
-import {createUser} from '@/lib/users';
-import {changeMembership} from '@/lib/membership';
-import {membershipInbox} from '@/lib/membership-inbox';
+import {createUser} from '@/lib/accounts';
+import {changeMembership} from '@/lib/accounts';
+import {membershipInbox} from '@/lib/accounts';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {getDb} from '@/lib/db';
-import {services,setServices} from '@/lib/services';
-import {mintToken} from '@/lib/tokens';
-import {notificationJobStore} from '@/lib/notification-runtime';
-import {evaluateNotificationQuery} from '@/lib/notification-query';
-import {createNotificationWorker} from '@/lib/notification-worker';
+import {getDb} from '@/lib/platform';
+import {services,setServices} from '@/lib/platform';
+import {mintToken} from '@/lib/accounts';
+import {notificationJobStore} from '@/lib/notifications';
+import {evaluateNotificationQuery} from '@/lib/notifications';
+import {createNotificationWorker} from '@/lib/notifications';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 
 useAppHarness();

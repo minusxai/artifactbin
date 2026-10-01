@@ -14,16 +14,16 @@ import { readerDataflow } from './compiled-dataflow';
  * build per version, not one per connection.
  */
 import type { ArtifactRow } from '@/lib/artifacts';
-import { datasetsForDocument, declarationsForRow } from '@/lib/artifacts';
+import { datasetsForDocument, declarationsForRow } from '@/lib/artifacts/dataflow';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { authorHandle } from '@/lib/users';
+import { authorHandle } from '@/lib/accounts/users';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { loadDatasetRows } from '../datasets/dataset-store';
 import type { ArtifactLiveEvent } from '../realtime/live';
 import { storyUpdateParts } from '../document/update-parts';
 import { assetLookupFrom } from '../assets/asset-url';
-import { webAssetsForSource } from '@/lib/web-assets';
+import { webAssetsForSource } from '@/lib/serving/web-assets';
 import { inCurrentSyntax } from '@/lib/migrate/sqlite/stored';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {

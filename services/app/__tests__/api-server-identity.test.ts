@@ -17,14 +17,14 @@ import { vi } from 'vitest';
 
 // Hoisted with the mock factory: `@/__tests__/harness` reads config while importing.
 const settings = vi.hoisted(() => ({ base: 'https://app.example.com', aliases: [] as readonly string[] }));
-vi.mock('@/lib/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/config')>()),
+vi.mock('@/lib/platform/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/platform/config')>()),
   get PUBLIC_BASE_URL() { return settings.base; },
   get ALIAS_ORIGINS() { return settings.aliases; },
 }));
 
 const { GET } = await import('@/app/api/server/route');
-const { parseAliasOrigins } = await import('@/lib/config');
+const { parseAliasOrigins } = await import('@/lib/platform/config');
 
 describe('GET /api/server', () => {
   it('answers the configured origin and aliases, publicly and cacheably', async () => {

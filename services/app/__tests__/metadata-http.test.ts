@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
 import {documentEditBody} from './prepared-document';
 import {getArtifactById} from '@/lib/artifacts';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {PATCH as patch} from '@/app/api/artifacts/[id]/route';

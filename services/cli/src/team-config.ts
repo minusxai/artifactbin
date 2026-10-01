@@ -1,7 +1,7 @@
 /** Explicit team hosting owns its settings and data; it never reads client profiles. */
 import {readFile,realpath} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
-import {parseDatabaseUrl} from '../../app/lib/database-url';
+import {parseDatabaseUrl} from '../../app/lib/platform/database-url';
 // The auth service owns both questions: which settings amount to a login someone could COMPLETE,
 // and which origins the local outbox serves. Asking it keeps the refusals and the startup text true
 // to the mailer, and keeps the provider names spelled out in exactly one module.

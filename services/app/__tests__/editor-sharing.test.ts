@@ -6,8 +6,8 @@ import {observedRequest} from './conditional-request';
 import {DELETE as remove,PATCH as metadata} from '@/app/api/my/artifacts/[id]/route';
 import {POST as restore} from '@/app/api/my/artifacts/[id]/restore/route';
 import {getArtifactById,effectiveRole,updateSharingFor} from '@/lib/artifacts';
-import {createUser,claimToken} from '@/lib/users';
-import {mintToken} from '@/lib/tokens';
+import {createUser,claimToken} from '@/lib/accounts';
+import {mintToken} from '@/lib/accounts';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function person(name:string){

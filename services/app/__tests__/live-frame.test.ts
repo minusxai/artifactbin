@@ -24,8 +24,8 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { resetFrameCache, frameBuilds } from '@/lib/story/data/frame';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

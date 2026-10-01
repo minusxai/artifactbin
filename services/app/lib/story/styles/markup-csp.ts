@@ -25,7 +25,7 @@
  * configured, the asset origin on `script`/`img`/`font`/`media-src`. Guarded by
  * __tests__/raw-document.test.ts.
  */
-import { BASEMAP_PATH } from '@/lib/basemap';
+import { BASEMAP_PATH } from '@/lib/serving/basemap';
 import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [

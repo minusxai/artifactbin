@@ -23,8 +23,8 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { mintToken, revokeToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken, revokeToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 
 import { POST as claimableRoute } from '@/app/api/tokens/claimable/route';

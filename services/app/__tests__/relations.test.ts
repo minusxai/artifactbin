@@ -8,8 +8,8 @@ import type {EventEnvelope} from '@artifactbin/contracts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { useAppHarness } from '@/__tests__/harness';
-import { count, has, link, linked, unlink } from '@/lib/relations';
-import { setServices } from '@/lib/services';
+import { count, has, link, linked, unlink } from '@/lib/accounts';
+import { setServices } from '@/lib/platform';
 
 const harness = useAppHarness();
 let fake: FakeEvents;

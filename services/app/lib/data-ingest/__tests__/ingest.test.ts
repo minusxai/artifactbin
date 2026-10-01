@@ -10,7 +10,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { sheetCsvUrl, fetchSheetCsv } from '../sheets';
 import { ingestDataset } from '../index';
 import { IngestError, MAX_DATASET_BYTES } from '../types';
-import { MAX_ROWS_LIMIT } from '@/lib/config';
+import { MAX_ROWS_LIMIT } from '@/lib/platform';
 
 const SHEET_ID = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms';
 

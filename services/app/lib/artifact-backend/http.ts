@@ -11,12 +11,12 @@
  * `fetch` and `EventSource` are looked up at call time, never captured.
  */
 import type { AnnotationWire } from '@/lib/annotations';
-import { readAnnotationPages } from '@/lib/annotation-pages';
+import { readAnnotationPages } from '@/lib/annotations/pages';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
 import { SIGN_IN_REQUIRED } from '@/lib/story/reader/sign-in-required';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
-import { openLiveStream } from '@/lib/live-stream';
+import { openLiveStream } from '@/lib/http/live-stream';
 import { BackendRequestError } from './errors';
 import type {
   ArtifactBackend,

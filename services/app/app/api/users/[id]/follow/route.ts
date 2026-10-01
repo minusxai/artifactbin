@@ -9,13 +9,13 @@
  * verb rather than only the writes, because a door that will never allow a
  * relation has no state to report about it either.
  */
-import { refusesCrossSite } from '@/lib/auth';
+import { refusesCrossSite } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
-import { count, has, link, unlink } from '@/lib/relations';
-import { getUserById } from '@/lib/users';
-import { can, capabilityRefusal, type CapabilityActor } from '@/lib/capabilities';
-import { userKindOf } from '@/lib/user-kinds';
-import { sessionActor } from '@/lib/viewer';
+import { count, has, link, unlink } from '@/lib/accounts';
+import { getUserById } from '@/lib/accounts';
+import { can, capabilityRefusal, type CapabilityActor } from '@/lib/artifacts';
+import { userKindOf } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 type Ctx = { params: Promise<{ id: string }> };
 

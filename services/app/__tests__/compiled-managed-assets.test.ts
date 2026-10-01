@@ -9,8 +9,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 const settings = vi.hoisted(() => ({ assets: 'https://assets.example.test' as string | null }));
-vi.mock('@/lib/config', async (original) => ({
-  ...(await original<typeof import('@/lib/config')>()),
+vi.mock('@/lib/platform/config', async (original) => ({
+  ...(await original<typeof import('@/lib/platform/config')>()),
   get ASSETS_ORIGIN() { return settings.assets; },
 }));
 vi.mock('@/auth', () => ({ auth: async () => null }));
@@ -19,11 +19,11 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
-import { mintExportKey } from '@/lib/export-key';
+import { mintExportKey } from '@/lib/serving';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

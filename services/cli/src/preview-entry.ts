@@ -1,6 +1,6 @@
 import {renderSocialPreviewImage} from '../../app/lib/story/assets/social-preview-image.server';
 import {socialPreviewCrop,socialPreviewImage} from '../../app/lib/story/assets/social-preview';
-import {CARD_WIDTH,CARD_HEIGHT} from '../../app/lib/export-card';
+import {CARD_WIDTH,CARD_HEIGHT} from '../../app/lib/serving/og-card';
 import {createBrowser} from '@artifactbin/browser/local';
 import {chromiumExecutable} from './standalone-browser';
 import type {LocalImageOptions} from './local-image-options';

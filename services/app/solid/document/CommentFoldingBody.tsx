@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
-import { foldFromMeasure } from '@/lib/comment-folds';
+import { foldFromMeasure } from '@/lib/annotations/comment-folds';
 import { CommentMarkdown } from './CommentMarkdown';
 
 /** The rail measures rendered markdown and clamps only bodies over ten laid-out lines. */

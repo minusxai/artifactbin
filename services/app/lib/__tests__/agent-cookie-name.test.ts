@@ -25,7 +25,7 @@ async function appCookieName(nodeEnv: string, baseUrl: string): Promise<string> 
   vi.resetModules();
   vi.stubEnv('NODE_ENV', nodeEnv);
   vi.stubEnv('APP__PUBLIC_BASE_URL', baseUrl);
-  return (await import('@/lib/agent-session')).AGENT_COOKIE;
+  return (await import('@/lib/accounts/agent-session')).AGENT_COOKIE;
 }
 
 describe('the agent cookie is named by ONE rule', () => {
@@ -45,13 +45,13 @@ describe('the agent cookie is named by ONE rule', () => {
     vi.resetModules();
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('APP__PUBLIC_BASE_URL', 'http://localhost:3030');
-    const mod = await import('@/lib/agent-session');
+    const mod = await import('@/lib/accounts/agent-session');
     expect(mod.AGENT_COOKIE.startsWith('__Host-')).toBe(false);
     expect(mod.agentCookieOptions().secure).toBe(false);
 
     vi.resetModules();
     vi.stubEnv('APP__PUBLIC_BASE_URL', 'https://artifactbin.dev');
-    const secure = await import('@/lib/agent-session');
+    const secure = await import('@/lib/accounts/agent-session');
     expect(secure.AGENT_COOKIE.startsWith('__Host-')).toBe(true);
     expect(secure.agentCookieOptions().secure).toBe(true);
   });

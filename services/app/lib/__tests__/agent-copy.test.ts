@@ -4,8 +4,8 @@
  * by both /api/start and the agent-prompt route) — and no second wording beside it.
  */
 import { describe, expect, it } from 'vitest';
-import * as agentCopy from '@/lib/agent-copy';
-import { existingPaste } from '@/lib/agent-copy';
+import * as agentCopy from '@/lib/serving/agent-copy';
+import { existingPaste } from '@/lib/serving';
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
 
 const B = 'https://x.test';

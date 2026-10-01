@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LIVE_BACKOFF_MAX_MS, LIVE_KEEPALIVE_EVENT, LIVE_SILENCE_MS, LIVE_STALE_MS, liveBackoffDelay, openLiveStream, type LiveStreamHost,
-} from '../live-stream';
+} from '@/lib/http';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];

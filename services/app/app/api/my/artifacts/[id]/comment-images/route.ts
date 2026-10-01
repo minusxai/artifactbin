@@ -1,8 +1,8 @@
-import {browserActor} from '@/lib/auth';
-import {actorForArtifacts} from '@/lib/viewer';
-import {capabilityGuard} from '@/lib/capabilities';
+import {browserActor} from '@/lib/accounts';
+import {actorForArtifacts} from '@/lib/accounts';
+import {capabilityGuard} from '@/lib/artifacts';
 import {json,unauthorized} from '@/lib/http';
-import {stageCommentImage} from '@/lib/comment-images';
+import {stageCommentImage} from '@/lib/annotations';
 import {COMMENT_IMAGE_LIMITS} from '../../../../../../../contracts/src/comment-image';
 
 export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){

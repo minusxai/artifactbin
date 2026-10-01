@@ -1,4 +1,4 @@
-import {artifactQuery} from '@/lib/artifact-document';
+import {artifactQuery} from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes, with reply/state transitions.
@@ -22,10 +22,10 @@ import { DELETE as deleteArtifactRoute, GET as getArtifactRoute, PUT as putArtif
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as myDeleteAnnotationRoute, POST as myActOnAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, setUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, setUsername } from '@/lib/accounts';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { avatarUrl } from '@/lib/avatars';
+import { avatarUrl } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isQueryFailure } from '@artifactbin/contracts';
 import { fakeSql } from '@artifactbin/utils';
 
-const load = async () => { vi.resetModules(); return import('@/lib/services'); };
+const load = async () => { vi.resetModules(); return import('@/lib/platform/services'); };
 const RUN = { tables: {}, queries: [{ name: 'q', sql: 'select 1' }], params: {} };
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.resetModules(); });
 

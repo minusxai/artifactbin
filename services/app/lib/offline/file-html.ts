@@ -21,7 +21,7 @@
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/agent-discovery-tags';
+import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/serving/agent-discovery-tags';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { withModuleDataId } from '@/lib/compiled-page/carriers';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';

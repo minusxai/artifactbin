@@ -13,11 +13,11 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
-import { mintExportKey } from '@/lib/export-key';
-import { getDb } from '@/lib/db';
+import { mintExportKey } from '@/lib/serving';
+import { getDb } from '@/lib/platform';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 useAppHarness();

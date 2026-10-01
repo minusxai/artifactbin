@@ -1,11 +1,11 @@
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/db';
-import {createUser} from '@/lib/users';
-import {mintToken} from '@/lib/tokens';
-import {seedOwnerJoin} from '@/lib/relation-state';
-import {notificationExecutionFence,notificationExecutionSource,notificationSourcesReadable,notificationAuthority} from '@/lib/notification-authority';
+import {getDb} from '@/lib/platform';
+import {createUser} from '@/lib/accounts';
+import {mintToken} from '@/lib/accounts';
+import {seedOwnerJoin} from '@/lib/accounts';
+import {notificationExecutionFence,notificationExecutionSource,notificationSourcesReadable,notificationAuthority} from '@/lib/notifications';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 useAppHarness();
 async function setup(){

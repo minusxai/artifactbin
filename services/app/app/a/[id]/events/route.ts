@@ -12,17 +12,17 @@
  * stream self-syncing — a client that connects late, reconnects, or misses a
  * wakeup converges on the next event with no cursor bookkeeping.
  */
-import { trackEvent } from '@/lib/analytics';
+import { trackEvent } from '@/lib/platform';
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
 import { isDocumentFormat } from '@/lib/story/document/input';
-import { isOwner, roleFor, sessionActor } from '@/lib/viewer';
-import { canAnnotate } from '@/lib/share-roles';
-import { authorHandle } from '@/lib/users';
-import { ID_RE } from '@/lib/ids';
+import { isOwner, roleFor, sessionActor } from '@/lib/accounts';
+import { canAnnotate } from '@/lib/artifacts';
+import { authorHandle } from '@/lib/accounts';
+import { ID_RE } from '@/lib/platform';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { changedSince } from '@/lib/story/prepared/served-results.server';
-import { LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS } from '@/lib/live-stream';
+import { LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS } from '@/lib/http';
 
 /**
  * The heartbeat: keeps proxies from closing an idle stream AND tells the

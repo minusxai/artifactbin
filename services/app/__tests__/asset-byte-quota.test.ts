@@ -15,10 +15,10 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { mintToken } from '@/lib/tokens';
-import { getDb } from '@/lib/db';
-import { createUser } from '@/lib/users';
-import { assetBytesForToken, assetByteQuotaExceeded, setAssetByteQuotaForTests } from '@/lib/asset-quota';
+import { mintToken } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
+import { createUser } from '@/lib/accounts';
+import { assetBytesForToken, assetByteQuotaExceeded, setAssetByteQuotaForTests } from '@/lib/serving';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { request } from '@/__tests__/harness';
 

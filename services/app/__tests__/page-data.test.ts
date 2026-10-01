@@ -13,11 +13,11 @@ import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { updateSharingFor } from '@/lib/artifacts';
-import { link, unlink } from '@/lib/relations';
+import { link, unlink } from '@/lib/accounts';
 
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -156,7 +156,7 @@ describe('GET /api/page/artifact/:id', () => {
   });
   it('lets the exporter\'s signed key read a private document without a session', async () => {
     const w = await world();
-    const { mintExportKey } = await import('@/lib/export-key');
+    const { mintExportKey } = await import('@/lib/serving/export-read-key');
     const res = await artifactPage(request(`/api/page/artifact/${w.priv.id}?key=${mintExportKey(w.priv.id)}`), params({ id: w.priv.id }));
     expect(res.status).toBe(200);
     expect((await res.json()).surface.captureKey).toBeTruthy();

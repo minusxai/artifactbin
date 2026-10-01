@@ -3,7 +3,7 @@ import {useAppHarness} from './harness';
 import {prepareContentInput,applyPreparedContent} from '@/lib/story/prepared/prepare-content';
 import {objectStore} from '@/lib/object-store';
 import {prepareCatalog} from '@/lib/datasets/catalog';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 useAppHarness();
 const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" /></svg>');
 for(const [kind,body] of Object.entries({

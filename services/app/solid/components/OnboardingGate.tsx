@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createMemo, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation } from '@solidjs/router';
-import { readIntent } from '@/lib/intent';
+import { readIntent } from '@/lib/http/intent';
 import { useSession } from '../lib/session';
 
 const EXEMPT = new Set(['/welcome', '/login', '/start']);

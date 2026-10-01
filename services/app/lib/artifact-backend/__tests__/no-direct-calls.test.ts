@@ -23,7 +23,7 @@ const CONE = [
   'solid/document/CommentCapture.ts',
   'solid/document/CommentMentionPicker.tsx',
   'lib/story/document/document-authoring-client.ts',
-  'lib/browser-artifact-write.ts',
+  'lib/artifacts/browser-artifact-write.ts',
 ]
 const SERVER_CALL = /\bfetch\s*\(|new\s+EventSource\s*\(|readAnnotationPages\s*\(/;
 

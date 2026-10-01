@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {DISPLAY_ROWS} from '@artifactbin/contracts';
 import {request,useAppHarness} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as query} from '@/app/a/[id]/query/route';
 import {POST as tableQuery} from '@/app/a/[id]/tables/route';

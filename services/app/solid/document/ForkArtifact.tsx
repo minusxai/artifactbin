@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import GitFork from 'lucide-solid/icons/git-fork';
-import { loginHref } from '@/lib/login-href';
+import { loginHref } from '@/lib/http/login-href';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Tooltip } from '../components/Tooltip';
 

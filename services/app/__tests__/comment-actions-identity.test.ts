@@ -12,8 +12,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, agentCookie } from './harness';
-import { mintToken } from '@/lib/tokens';
-import { getDb } from '@/lib/db';
+import { mintToken } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';

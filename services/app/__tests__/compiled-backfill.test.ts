@@ -11,11 +11,11 @@ import { observedRequest } from '@/__tests__/conditional-request';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { createAppServer } from '@/server/app';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { mintExportKey } from '@/lib/export-key';
+import { mintExportKey } from '@/lib/serving';
 import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions } from '@/lib/compiled-page/backfill.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));

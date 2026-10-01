@@ -12,12 +12,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { request } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { GET as apiHealth } from '@/app/api/health/route';
-import { stackHealth } from '@/lib/health';
+import { stackHealth } from '@/lib/runtime';
 
 /** What `@/lib/config` answers for the three URLs in THIS file — live, so one file covers both outcomes. */
 const urls: { sql?: string; browser?: string; events?: string } = {};
-vi.mock('@/lib/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/config')>()),
+vi.mock('@/lib/platform/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/platform/config')>()),
   get SQL_SERVICE_URL() { return urls.sql; },
   get BROWSER_SERVICE_URL() { return urls.browser; },
   get EVENTS_SERVICE_URL() { return urls.events; },

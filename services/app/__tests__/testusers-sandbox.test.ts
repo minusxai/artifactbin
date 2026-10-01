@@ -17,12 +17,12 @@ import { POST as annotateWeb } from '@/app/api/my/artifacts/[id]/annotations/rou
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { POST as followRoute } from '@/app/api/users/[id]/follow/route';
 import { getArtifactById, viewerIdentityFor } from '@/lib/artifacts';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform';
 import { agentCookie, request, useAppHarness } from './harness';
-import { createTestUser } from '@/lib/testusers';
+import { createTestUser } from '@/lib/accounts';
 import { userOptions } from '@/lib/datasets/user-fields';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, getUserByUsername, listPublicArtifactsByUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, getUserByUsername, listPublicArtifactsByUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

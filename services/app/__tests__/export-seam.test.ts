@@ -13,11 +13,11 @@ import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest, RenderResult } from '@artifactbin/contracts';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { createArtifact } from '@/lib/artifacts';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { resetExportRenderer, renderArtifactImage } from '@/lib/export';
-import { setServices } from '@/lib/services';
-import { mintToken } from '@/lib/tokens';
+import { setServices } from '@/lib/platform';
+import { mintToken } from '@/lib/accounts';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/assets/social-preview';
 import { useAppHarness } from '@/__tests__/harness';
 

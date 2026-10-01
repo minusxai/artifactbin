@@ -1,4 +1,4 @@
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import type {EventEnvelope} from '@artifactbin/contracts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -21,9 +21,9 @@ import { PATCH as patchRoute, DELETE as deleteRoute } from '@/app/api/my/artifac
 import { POST as restoreRoute } from '@/app/api/my/artifacts/[id]/restore/route';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceOneRoute } from '@/app/api/artifacts/[id]/route';
-import { setServices } from '@/lib/services';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { setServices } from '@/lib/platform';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

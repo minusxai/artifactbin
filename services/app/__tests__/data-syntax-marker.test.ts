@@ -6,7 +6,7 @@
  */
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {editorScope,getArtifactById} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {prepareClientDocumentReplacement,prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';

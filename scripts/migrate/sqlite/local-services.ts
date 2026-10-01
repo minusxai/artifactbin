@@ -18,7 +18,7 @@ export async function useLocalServices(options: { db: string; objects?: string; 
   if (options.liveObjects && !process.env.S3_URL) throw new Error('--live-objects needs S3_URL in the environment');
   for (const name of remote) delete process.env[name];
   const [{ setServices }, { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS }, { createSql }] = await Promise.all([
-    import('@/lib/services'), import('@/lib/config'), import('@artifactbin/sql/local'),
+    import('@/lib/platform/services'), import('@/lib/platform/config'), import('@artifactbin/sql/local'),
   ]);
   setServices({ sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }) });
 }

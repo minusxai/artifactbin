@@ -29,7 +29,7 @@ import { numberFormatter } from '@/lib/story/data/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story/data/data-table';
 import { commentMetadata, keyedRowsError } from '@/lib/story/data/repeat-identity';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
-import { personFaceBackground, personInitial } from '@/lib/person-face';
+import { personFaceBackground, personInitial } from '@/lib/accounts/person-face';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { Row } from '@/lib/story/data/dataflow';
 import { CHART_SLOT_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/compiled-page/contract';

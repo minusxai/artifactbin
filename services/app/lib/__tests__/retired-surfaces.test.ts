@@ -16,9 +16,9 @@
  * wrong FOR THAT SURFACE, and the row's own comment says why.
  */
 import { describe, expect, it } from 'vitest';
-import { agentContract } from '@/lib/agent-contract';
-import { llmsText } from '@/lib/agent-discovery';
-import { MARKUP_FIELD_GUIDANCE } from '@/lib/agent-guidance';
+import { agentContract } from '@/lib/serving';
+import { llmsText } from '@/lib/serving';
+import { MARKUP_FIELD_GUIDANCE } from '@/lib/serving';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
 import { JSX_TIER_COMPONENTS } from '@/lib/story/document/jsx-tier';
 import { HELMET_TAG } from '@/lib/story/document/helmet';

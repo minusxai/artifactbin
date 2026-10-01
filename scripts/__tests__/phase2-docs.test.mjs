@@ -17,7 +17,7 @@ describe('documentation', () => {
     expect(doc).not.toContain('FLAG__COMPILED_READER');
     expect(doc).toMatch(/x-mx-reader/);
     expect(doc).toMatch(/script-src 'self'/);
-    for (const file of ['services/app/lib/config.ts', '.env.example', 'docs/phase2-architecture.md']) {
+    for (const file of ['services/app/lib/platform/config.ts', '.env.example', 'docs/phase2-architecture.md']) {
       expect(read(file), file).not.toContain('FLAG__COMPILED_READER');
     }
   });

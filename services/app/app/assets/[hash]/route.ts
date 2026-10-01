@@ -29,9 +29,9 @@
  */
 import { objectStore } from '@/lib/object-store';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
-import { fileNameFromUrl } from '@/lib/file-display';
+import { fileNameFromUrl } from '@/lib/workspace';
 import { pdfFilename } from '@/lib/story/assets/pdf-store';
-import { webAssetByHash } from '@/lib/web-assets';
+import { webAssetByHash } from '@/lib/serving';
 
 /** Every asset response carries these, whatever the asset turns out to be. */
 export const ASSET_HEADERS: Readonly<Record<string, string>> = {

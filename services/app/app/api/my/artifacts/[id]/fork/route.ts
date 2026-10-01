@@ -1,12 +1,12 @@
 import { forkArtifact, forkDatasetPreview, forkRefusal, getArtifactById } from '@/lib/artifacts';
 import { forkOwner } from '@/lib/operations/registry';
-import { capabilityGuard } from '@/lib/capabilities';
-import { browserActor } from '@/lib/auth';
-import { canRead } from '@/lib/share-roles';
-import { roleFor } from '@/lib/viewer';
-import { ensureUserToken } from '@/lib/tokens';
-import { ownerUsername } from '@/lib/users';
-import { canonicalArtifactPath } from '@/lib/urls';
+import { capabilityGuard } from '@/lib/artifacts';
+import { browserActor } from '@/lib/accounts';
+import { canRead } from '@/lib/artifacts';
+import { roleFor } from '@/lib/accounts';
+import { ensureUserToken } from '@/lib/accounts';
+import { ownerUsername } from '@/lib/accounts';
+import { canonicalArtifactPath } from '@/lib/http';
 import { baseUrl, json } from '@/lib/http';
 
 /**

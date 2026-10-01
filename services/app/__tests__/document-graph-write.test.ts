@@ -1,8 +1,8 @@
 import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request,settleBackgroundWrites} from './harness';
-import {getDb} from '@/lib/db';
-import {mintToken} from '@/lib/tokens';
+import {getDb} from '@/lib/platform';
+import {mintToken} from '@/lib/accounts';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {createDocumentGraph} from '@/lib/story/graph/document-graph';

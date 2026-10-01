@@ -10,7 +10,7 @@
  */
 import { vi } from 'vitest';
 import { createSignal } from 'solid-js';
-import type { AnnotationWire } from '@/lib/annotations';
+import type { AnnotationWire } from '@/lib/annotations/store';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { STORY_ANNOTATIONS_MESSAGE, type StoryController, type StoryEditSelection } from '@/lib/story-runtime/contract';

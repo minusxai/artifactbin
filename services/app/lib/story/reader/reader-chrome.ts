@@ -41,14 +41,14 @@
  * it at all.
  */
 
-import { artifactAppPath } from '@/lib/artifact-pwa';
+import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { visibilityIconPaths, sharingIconFor } from '@/lib/visibility-icons';
+import { visibilityIconPaths, sharingIconFor } from '@/lib/workspace/visibility-icons';
 import type { Visibility } from '@/lib/artifacts';
-import { REPO_URL } from '@/lib/repo';
-import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
-import { githubStarMarkup } from '@/lib/github-star';
-import { personFaceBackground, personInitial } from '@/lib/person-face';
+import { REPO_URL } from '@/lib/serving/repo';
+import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/serving/github-mark';
+import { githubStarMarkup } from '@/lib/serving/github-star';
+import { personFaceBackground, personInitial } from '@/lib/accounts/person-face';
 
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
 interface ReaderSignIn {

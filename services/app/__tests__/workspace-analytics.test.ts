@@ -7,17 +7,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Queryable } from '@artifactbin/contracts';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
-import { trackEvent } from '@/lib/analytics';
-import { EVENTS_SCHEMA } from '@/lib/config';
-import { dailyViewsByUser, eventsTablePresent, forkCountByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace-analytics';
-import { setServices } from '@/lib/services';
+import { trackEvent } from '@/lib/platform';
+import { EVENTS_SCHEMA } from '@/lib/platform';
+import { dailyViewsByUser, eventsTablePresent, forkCountByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
+import { setServices } from '@/lib/platform';
 
 const harness = useAppHarness();
 
 // The request the live test's views arrive on: a user-agent is what makes a visitor hash.
 const requestHeaders = new Map<string, string>();
-vi.mock('@/lib/request-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/request-context')>()),
+vi.mock('@/lib/platform/request-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/platform/request-context')>()),
   currentHeaders: async () => (requestHeaders.size === 0 ? null : { get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
 }));
 

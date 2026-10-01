@@ -2,7 +2,7 @@ import {it,expect} from 'vitest';
 import {useAppHarness} from './harness';
 import {createAppHost} from '@/server/host';
 import {localOwner} from '../../utils/src/local-owner';
-import {mintToken,resolveToken} from '@/lib/tokens';
+import {mintToken,resolveToken} from '@/lib/accounts';
 
 useAppHarness();
 it.each([false,true])('assembles identity and an optional host document policy (grant=%s)',async(grant)=>{

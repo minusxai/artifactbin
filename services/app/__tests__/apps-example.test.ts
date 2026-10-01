@@ -5,9 +5,9 @@ import {expect,it} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as query} from '@/app/a/[id]/query/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {changeMembership} from '@/lib/membership';
-import {mintToken} from '@/lib/tokens';
-import {claimToken,createUser} from '@/lib/users';
+import {changeMembership} from '@/lib/accounts';
+import {mintToken} from '@/lib/accounts';
+import {claimToken,createUser} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 useAppHarness();
 it('publishes the reference and exposes accepted members, never pending requests or custom join rows',async()=>{

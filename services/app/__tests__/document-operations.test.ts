@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import {encodeDocument,decodeDocument,type StoredDocument} from '@/lib/story/document/document-codec';
 import {prepareDocumentPatch,documentPatchSql} from '@/lib/story/graph/document-patch';
 useAppHarness();

@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { GET } from '@/app/assets/[hash]/route';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { assetUrlFor, urlHash } from '@/lib/story/assets/asset-url';
 

@@ -1,7 +1,7 @@
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
-import { sessionActor } from '@/lib/viewer';
+import { sessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/story/document/input';
-import { resolveToken } from '@/lib/tokens';
+import { resolveToken } from '@/lib/accounts';
 
 /**
  * POST /api/preview { markup, theme?, title? } → { html, format, css? }: the

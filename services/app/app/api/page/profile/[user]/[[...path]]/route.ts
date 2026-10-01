@@ -10,12 +10,12 @@
  * so a trailing path that does not identify an artifact is a uniform 404.
  */
 import { canReadArtifact, getArtifactById, type ArtifactSummary } from '@/lib/artifacts';
-import { avatarUrl } from '@/lib/avatars';
+import { avatarUrl } from '@/lib/accounts';
 import { json } from '@/lib/http';
-import { profileSocial } from '@/lib/profile-social';
-import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
-import { getUserByUsername, listPublicArtifactsByUser, ownerUsername } from '@/lib/users';
-import { browserSessionKind, sessionActor } from '@/lib/viewer';
+import { profileSocial } from '@/lib/accounts';
+import { canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
+import { getUserByUsername, listPublicArtifactsByUser, ownerUsername } from '@/lib/accounts';
+import { browserSessionKind, sessionActor } from '@/lib/accounts';
 
 const decoded = (segment: string): string => { try { return decodeURIComponent(segment); } catch { return segment; } };
 export async function GET(request: Request, ctx: { params: Promise<{ user: string; path?: string }> }) {

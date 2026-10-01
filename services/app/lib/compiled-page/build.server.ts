@@ -13,7 +13,7 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { IS_DEV } from '@/lib/config';
+import { IS_DEV } from '@/lib/platform/config';
 import type { CompilerBuild } from './contract';
 
 /** Relative to the app's cwd (services/app — the cwd contract every runner keeps). */

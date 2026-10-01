@@ -1,4 +1,4 @@
-import {DATASET_ALLOW_PRIVATE_NETWORKS,DATASET_DNS_SERVERS} from '@/lib/config';
+import {DATASET_ALLOW_PRIVATE_NETWORKS,DATASET_DNS_SERVERS} from '@/lib/platform/config';
 import {resolvePostgresHost} from './network';
 import {isIP} from 'node:net';
 import {checkServerIdentity, type PeerCertificate} from 'node:tls';

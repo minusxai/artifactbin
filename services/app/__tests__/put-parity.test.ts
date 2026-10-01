@@ -19,7 +19,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { PUT as putBrowser } from '@/app/api/my/artifacts/[id]/route';
 
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

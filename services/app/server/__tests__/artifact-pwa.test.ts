@@ -5,9 +5,9 @@ import { signActor } from '@artifactbin/utils';
 import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { mintExportKey } from '@/lib/export-key';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { mintExportKey } from '@/lib/serving';
 
 const harness = useAppHarness();
 const secret = 'vitest-actor-secret-0000000000000000';

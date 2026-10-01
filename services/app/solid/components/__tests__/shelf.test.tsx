@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import Shelf from '@/solid/components/Shelf';
-import type { ShelfRow } from '@/lib/shelf';
+import type { ShelfRow } from '@/lib/workspace/shelf';
 
 const doc = (id: string, extra: Partial<ShelfRow> = {}): ShelfRow => ({ id, url: `/a/${id}`, title: `Doc ${id}`, format: 'markup', version: 1, updated_at: '2026-09-01T00:00:00.000Z', ...extra });
 const folder = doc('fold01', { title: 'Reports', format: 'folder' });

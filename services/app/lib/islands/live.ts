@@ -30,7 +30,7 @@
  * runtime's deletion removes); only `since` is new.
  */
 import { STORY_ADOPT_HOOK, STORY_DATA_EVENT, STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
-import { openLiveStream } from '@/lib/live-stream';
+import { openLiveStream } from '@/lib/http/live-stream';
 import { reloadKeepingPlace, updateCompiledStory } from './live-update';
 
 /** The page's open stream, on the window: a second starter reuses it. */

@@ -2,7 +2,7 @@
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import Copy from 'lucide-solid/icons/copy';
-import { existingPaste } from '@/lib/agent-copy';
+import { existingPaste } from '@/lib/serving/agent-copy';
 import { copyText } from '../lib/copy-text';
 
 /**

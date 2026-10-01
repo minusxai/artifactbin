@@ -1,5 +1,5 @@
-import { browserActor } from '@/lib/auth';
-import { actorForArtifacts } from '@/lib/viewer';
+import { browserActor } from '@/lib/accounts';
+import { actorForArtifacts } from '@/lib/accounts';
 import { unauthorized } from '@/lib/http';
 import { datasetPolicyRequest } from '@/lib/datasets/policy/http';
 async function handle(

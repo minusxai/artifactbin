@@ -13,14 +13,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 describe('lib/config.ts', () => {
   it('reads every env through env(), except DATABASE_URL, S3_URL and NODE_ENV', () => {
-    const src = readFileSync(new URL('../config.ts', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const src = readFileSync(new URL('../platform/config.ts', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     const direct = [...src.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((m) => m[1]);
     const allowed = new Set(['DATABASE_URL', 'S3_URL', 'NODE_ENV']);
     expect(direct.filter((n) => !allowed.has(n))).toEqual([]);
   });
 
   it('carries no legacy fallback: env() takes a module and a name, and that is all', () => {
-    const src = readFileSync(new URL('../config.ts', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../platform/config.ts', import.meta.url), 'utf8');
     expect(src, 'a third argument is a second spelling').not.toMatch(/env\('[A-Z_]+',\s*'[A-Z_0-9]+',\s*'/);
   });
 });
@@ -31,13 +31,13 @@ describe('env()', () => {
   it('defaults every artifact upload to 50 MB and account assets to 10 GB', async () => {
     for (const name of ['IMAGES__MAX_BYTES', 'PDF__MAX_BYTES', 'FILES__MAX_BYTES', 'ASSETS__MAX_BYTES_PER_TOKEN']) vi.stubEnv(name, undefined);
     vi.resetModules();
-    const config = await import('../config');
+    const config = await import('../platform/config');
     expect([config.MAX_IMAGE_BYTES, config.MAX_PDF_BYTES, config.MAX_FILE_BYTES]).toEqual([50_000_000, 50_000_000, 50_000_000]);
     expect(config.ASSETS_MAX_BYTES_PER_TOKEN).toBe(10_000_000_000);
   });
 
   it('reads the namespaced name and nothing else', async () => {
-    const { env } = await import('../config');
+    const { env } = await import('../platform/config');
     vi.stubEnv('QUOTA__ARTIFACTS_PER_TOKEN', '7');
     expect(env('QUOTA', 'ARTIFACTS_PER_TOKEN')).toBe('7');
     expect(env('QUOTA', 'NOPE')).toBeUndefined();
@@ -46,12 +46,12 @@ describe('env()', () => {
 
 describe('dataset DNS servers',()=>{
   it('accepts trimmed literal IPv4 and IPv6 servers and treats empty as the OS default',async()=>{
-    const {parseDatasetDnsServers}=await import('../config');
+    const {parseDatasetDnsServers}=await import('../platform/config');
     expect(parseDatasetDnsServers(undefined)).toEqual([]);
     expect(parseDatasetDnsServers(' 1.1.1.1, 2606:4700:4700::1111 ')).toEqual(['1.1.1.1','2606:4700:4700::1111']);
   });
   it('rejects hostnames and empty list entries without echoing their values',async()=>{
-    const {parseDatasetDnsServers}=await import('../config');
+    const {parseDatasetDnsServers}=await import('../platform/config');
     for(const value of ['resolver.example.com','1.1.1.1,,8.8.8.8','1.1.1.1,']){
       expect(()=>parseDatasetDnsServers(value)).toThrow('DATASET__DNS_SERVERS must contain only literal DNS server IP addresses.');
       try{parseDatasetDnsServers(value);}catch(error){expect(String(error)).not.toContain(value);}
@@ -61,14 +61,14 @@ describe('dataset DNS servers',()=>{
 
 describe('a name nothing reads', () => {
   it('is reported — a typo looks exactly like a setting that does nothing', async () => {
-    const { unknownEnvNames } = await import('../config');
+    const { unknownEnvNames } = await import('../platform/config');
     const read = new Set(['AUTH__SECRET', 'EMAIL__FROM']);
     const found = unknownEnvNames({ AUTH__SECRET: 'x', AUTH__SECERT: 'typo', EMAIL__FROM: 'a@b' }, read);
     expect(found).toEqual(['AUTH__SECERT']);
   });
 
   it('says nothing about the machine\'s own environment', async () => {
-    const { unknownEnvNames } = await import('../config');
+    const { unknownEnvNames } = await import('../platform/config');
     const found = unknownEnvNames(
       { PATH: '/usr/bin', HOME: '/root', NODE_ENV: 'production', DATABASE_URL: 'x', S3_URL: 'y', npm_package_name: 'z' },
       new Set(),
@@ -87,7 +87,7 @@ describe('a name nothing reads', () => {
  */
 describe('the unread notice does not cry wolf', () => {
   it('config.ts reads every setting eagerly — no env() behind a ??', () => {
-    const src = readFileSync(new URL('../config.ts', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../platform/config.ts', import.meta.url), 'utf8');
     // A read on the RIGHT of `??` happens only when the left side is unset, so
     // the name never reaches `envNamesRead` on a deployment that set the left.
     // Comment lines are skipped by SHAPE — stripping `//` would cut every URL
@@ -102,7 +102,7 @@ describe('the unread notice does not cry wolf', () => {
   });
 
   it('names a knob from the retired door vocabulary — every rate-limit number lives in a policy file now', async () => {
-    const { unknownEnvNames } = await import('../config');
+    const { unknownEnvNames } = await import('../platform/config');
     const found = unknownEnvNames(
       { RATE_LIMITER__LOGIN_SEND_MAX: '5', RATE_LIMITER__QUERY_KEY: 'ip', WOBBLE__THING: 'x' },
       new Set(),

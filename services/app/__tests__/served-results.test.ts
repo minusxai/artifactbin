@@ -22,13 +22,13 @@ import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { readEvents } from '@/__tests__/sse';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { createAppServer } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { services, setServices } from '@/lib/services';
+import { services, setServices } from '@/lib/platform';
 import { SERVED_RESULTS_BUDGET_MS } from '@/lib/story/prepared/served-results.server';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 

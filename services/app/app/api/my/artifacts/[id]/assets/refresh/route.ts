@@ -1,6 +1,6 @@
-import { browserActor } from '@/lib/auth';
-import { actorForArtifacts } from '@/lib/viewer';
-import { refreshAssetsFor } from '@/lib/artifact-wire';
+import { browserActor } from '@/lib/accounts';
+import { actorForArtifacts } from '@/lib/accounts';
+import { refreshAssetsFor } from '@/lib/artifacts';
 import { unauthorized } from '@/lib/http';
 
 /**

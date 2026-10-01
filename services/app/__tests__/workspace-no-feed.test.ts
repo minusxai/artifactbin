@@ -1,9 +1,9 @@
 import { expect, it } from 'vitest';
 import { createEvents } from '@artifactbin/events/local';
 import { GET } from '@/app/api/page/home/route';
-import { createUser } from '@/lib/users';
-import { mintToken } from '@/lib/tokens';
-import { EVENTS_SCHEMA } from '@/lib/config';
+import { createUser } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { EVENTS_SCHEMA } from '@/lib/platform';
 import { request, useAppHarness } from './harness';
 
 const harness = useAppHarness();

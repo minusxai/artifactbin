@@ -13,7 +13,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { renderDoc } from '@/lib/skills';
-import { COMPUTED_FIGURE_RULE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/agent-guidance';
+import { COMPUTED_FIGURE_RULE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/serving';
 
 describe('the markup field description', () => {
   const text = MARKUP_FIELD_GUIDANCE;
@@ -87,7 +87,7 @@ describe('figures must be computed, not typed', () => {
 
 describe('the sheetUrl description', () => {
   it('tells the agent the SERVER fetches the sheet', async () => {
-    const { SHEET_URL_FIELD_GUIDANCE } = await import('@/lib/agent-guidance');
+    const { SHEET_URL_FIELD_GUIDANCE } = await import('@/lib/serving/agent-guidance');
     // ChatGPT refused an import and asked the user to connect Google Drive,
     // believing it needed access itself. The schema must rule that out.
     expect(SHEET_URL_FIELD_GUIDANCE).toMatch(/DO NOT NEED ACCESS|server-side/i);
