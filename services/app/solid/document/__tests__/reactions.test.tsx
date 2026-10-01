@@ -26,3 +26,12 @@ it('sends anonymous readers to login with the like intent', () => {
   expect(callback).toBe('/a/abc?$region=west&intent=like#note');
   expect(screen.queryByRole('alert')).toBeNull();
 });
+
+it('sends a signed-in reader whose like the server refuses for sign-in to login', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'sign_in_required' }, { status: 401 })));
+  const navigate = vi.fn();
+  const view = render(() => <LikeAction id="abc" accountSession initial={{ liked: false, count: 1 }} navigate={navigate} />);
+  fireEvent.click(view.getByRole('button', { name: 'Like artifact' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringContaining('intent%3Dlike')));
+  expect(view.getByRole('button', { name: 'Like artifact' })).toHaveTextContent('1');
+});
