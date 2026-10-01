@@ -683,6 +683,17 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS forked_from TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_attribute
+     WHERE attrelid = to_regclass('app.artifacts') AND attname = 'document' AND attcompression IS DISTINCT FROM 'l'
+  ) THEN
+    ALTER TABLE app.artifacts ALTER COLUMN document SET COMPRESSION lz4;
+  END IF;
+EXCEPTION WHEN feature_not_supported THEN NULL;
+END $$;
+
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
 
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS content;
