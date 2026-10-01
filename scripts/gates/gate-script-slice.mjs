@@ -257,19 +257,21 @@ check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentE
  * that simply failed to run would pass every refusal check above.
  */
 {
+  // Author code runs in the page's QuickJS realm: `top`, `document`, `fetch` and `WebAssembly` do not exist
+  // there, so the forging attempts of the frame era are now a report of what is absent.
   const AUTHOR = [
-    "for (const kind of ['like','follow','edit']) top.postMessage({type:'mx:reader-action',kind},'*');",
-    "top.postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'*');",
+    "mx.set({escape:[typeof top, typeof parent, typeof document, typeof fetch, typeof WebAssembly, typeof XMLHttpRequest].join(',')});",
     "mx.mutate('undeclared').then(()=>mx.set({mutation:'escaped'}),()=>mx.set({mutation:'refused'}));",
     'mx.subscribe(["input","output"],snapshot=>{const input=snapshot.signals.input.value;if(snapshot.signals.output.value!==input*2)void mx.set({output:input*2});});',
+    "dom.setText(dom.query('#heading'), 'Script boundary: realm');",
     "mx.set({input:3});",
   ].join('\n');
   const scripted = (code) => '<Helmet>'
-    + '<Value name="mutation" type="string" default="waiting" />'
+    + '<Value name="mutation" type="string" default="waiting" /><Value name="escape" type="string" default="unknown" />'
     + '<Value name="input" type="number" default={0} /><Value name="output" type="number" default={0} />'
     + `<script>{\`${code}\`}</script></Helmet>`
     + '<h1 id="heading">Script boundary</h1>'
-    + '<output id="probe-mutation">{$mutation}</output><output id="probe-output">{$output}</output>';
+    + '<output id="probe-mutation">{$mutation}</output><output id="probe-output">{$output}</output><output id="probe-escape">{$escape}</output>';
 
   const isolated = await api('/api/artifacts', { title: 'mxmx_test_script_isolation', markup: scripted(AUTHOR) });
   const head = async () => (await fetch(`${BASE}/api/artifacts/${isolated.id}`, {
@@ -312,22 +314,23 @@ check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentE
     return false;
   });
   check(settled, 'an undeclared mx.mutate() is refused while the declared signal still round-trips (3 → 6)');
+  check(await f4.locator('#probe-escape').textContent() === 'undefined,undefined,undefined,undefined,undefined,undefined',
+    'author code sees no top, parent, document, fetch, WebAssembly or XMLHttpRequest');
+  check(await f4.locator('#heading').textContent() === 'Script boundary: realm', 'and reaches the page only through the dom API');
   check(accountRequests.length === 0,
-    `forged reader actions invoke no account API (${accountRequests.slice(0, 2).join(', ') || 'none'})`);
-  check((await head()).version === 1, 'and a forged mx:text-edit never reached the source');
-  check(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('sandbox') === 'allow-scripts',
-    'the author realm is sandboxed to scripts alone');
-  check(new URL(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('src'), BASE).pathname === '/author-frame',
-    'on the fixed HTTP wrapper, never an inherited srcdoc');
+    `author code invoked no account API (${accountRequests.slice(0, 2).join(', ') || 'none'})`);
+  check((await head()).version === 1, 'and nothing reached the source');
+  check(await f4.locator('iframe').count() === 0, 'no author frame exists: the script runs in the page\'s interpreter');
+  const realmBefore = await f4.evaluate(() => document.documentElement.getAttribute('data-mx-author-realm'));
+  check(!!realmBefore, `the running realm is recorded on the document (${realmBefore})`);
 
-  // A changed script replaces its old realm, and a removed script revokes it.
-  const oldRealm = await f4.locator('iframe[title="Isolated artifact script"]').elementHandle();
+  // A changed script replaces its old realm, and a removed script ends it.
   await api(`/api/artifacts/${isolated.id}`, { markup: scripted("mx.set({output:77})") }, 'PUT');
   await f4.waitForFunction(() => document.querySelector('#probe-output')?.textContent === '77', null, { timeout: 20000 });
-  check(await oldRealm.evaluate((el) => el.isConnected) === false, 'a changed script replaces its old realm');
+  check(await f4.evaluate(() => document.documentElement.getAttribute('data-mx-author-realm')) !== realmBefore, 'a changed script replaces its old realm');
   await api(`/api/artifacts/${isolated.id}`, { markup: '<h1 id="heading">Script removed</h1><Card>Still interactive</Card>' }, 'PUT');
   await f4.waitForFunction(() => document.querySelector('#heading')?.textContent === 'Script removed', null, { timeout: 20000 });
-  check(await f4.locator('iframe[title="Isolated artifact script"]').count() === 0, 'and a removed script revokes it');
+  check(await f4.evaluate(() => document.documentElement.getAttribute('data-mx-author-realm')) === null, 'and a removed script ends it');
   await p4.close();
 }
 

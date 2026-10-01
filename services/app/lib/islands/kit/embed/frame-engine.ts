@@ -88,7 +88,7 @@ export function mountManagedFrame(mount: ManagedFrameMount): () => void {
   const stopRelay = installFrameAssetRelay(doc, mount.host, assets);
   void prepareManagedContent(mount.compiled, resolver, doc).then((prepared) => {
     if (disposed) return;
-    stop = startAuthorScript('', store, doc, { host: mount.host, title: mount.label, html: prepared.html, scripts: prepared.scripts, document: managedAuthorDocument(assets?.origin), assets, importAsset });
+    stop = startAuthorScript(store, { host: mount.host, title: mount.label, html: prepared.html, scripts: prepared.scripts, document: managedAuthorDocument(assets?.origin), assets, importAsset }, doc);
   }).catch((error: Error) => { if (!disposed) mount.onError(String(error.message).slice(0, 500)); });
   return () => {
     disposed = true;

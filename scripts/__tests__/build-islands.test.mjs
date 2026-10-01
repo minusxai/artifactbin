@@ -48,7 +48,7 @@ describe('buildIslands', () => {
       expect(url, specifier).toMatch(/^\/islands\/[\w-]+-[0-9a-f]{8,}\.js$/);
       expect(existsSync(path.join(outDir, url.slice('/islands/'.length))), `${specifier} → ${url} exists`).toBe(true);
     }
-    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr, offline: first.offline, sqliteWasm: expect.stringMatching(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/) });
+    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr, offline: first.offline, sqliteWasm: expect.stringMatching(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/), quickjsWasm: expect.stringMatching(/^\/islands\/quickjs-[0-9a-f]{16}\.wasm$/) });
     // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
     const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
     expect(withSolidWeb).toHaveLength(1);
@@ -102,22 +102,26 @@ describe('buildIslands', () => {
     expect([...reach([manifest['@mx/rt'], manifest['@mx/boot']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
   });
 
-  it('bundles the author script host alone: its own file, no imports, no Solid, loaded by boot by content address and only there', () => {
+  it('bundles the author realm alone: its own file, no imports, no Solid, the interpreter glue inlined, loaded by boot by content address and only there', () => {
     const { manifest, files } = first;
-    const hosts = Object.keys(files).filter((url) => /\/author-host-[0-9a-f]{16}\.js$/.test(url));
+    const hosts = Object.keys(files).filter((url) => /\/author-realm-[0-9a-f]{16}\.js$/.test(url));
     expect(hosts).toHaveLength(1);
     const host = hosts[0];
     expect(files[host].imports).toEqual([]);
     const code = readFileSync(path.join(outDir, host.slice('/islands/'.length)), 'utf8');
     expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
-    expect(code, 'today\'s wrapper and sandbox').toContain('/author-frame');
+    expect(code, 'the realm prelude and its one host hook').toContain('__mxHost');
+    expect(code, 'browser build: no Node builtins').not.toMatch(/["']node:(?:fs|path|url|module)["']/);
+    // The interpreter's wasm beside the chunks, content-addressed and recorded for the server, like SQLite's.
+    expect(first.quickjsWasm).toMatch(/^\/islands\/quickjs-[0-9a-f]{16}\.wasm$/);
+    expect(files[first.quickjsWasm].imports).toEqual([]);
     const name = host.slice('/islands/'.length);
     const text = (url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8');
     const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
     const runtime = [...reach([manifest['@mx/rt'], manifest['@mx/boot']])];
     // Boot asks for it lazily, by file name; nothing in the runtime's closure carries its code.
     expect(runtime.some((url) => text(url).includes(`import("./${name}")`))).toBe(true);
-    expect(runtime.some((url) => text(url).includes('mx:author:init'))).toBe(false);
+    expect(runtime.some((url) => text(url).includes('mx:author:init') || text(url).includes('__mxHost'))).toBe(false);
     expect(runtime).not.toContain(host);
   });
 

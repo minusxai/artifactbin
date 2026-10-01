@@ -263,12 +263,14 @@ export interface IslandPageData {
   hold: string[];
   /** The SQLite engine's wasm, content-addressed (StoryIslandData.sqliteWasm); present only when `hold` is not empty. */
   sqliteWasm?: string;
+  /** The author realm's interpreter wasm, content-addressed (CompilerBuild.quickjsWasm); present only with `authorScript`. */
+  quickjsWasm?: string;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   readOnly: string | null;
   /**
    * The version's author script (CompiledPage.authorScript), present only when it has one: `boot`
-   * then loads the lazy author host, which runs it in the sandboxed author frame against this page's
-   * store — never in this document.
+   * then loads the lazy author realm (./author-realm), which runs it in a QuickJS interpreter over this
+   * page's store and story root — never as a script of this document.
    */
   authorScript?: string | null;
 }

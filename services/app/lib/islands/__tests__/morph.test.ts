@@ -362,16 +362,21 @@ describe('the live morph', () => {
     expect(document.body.getAttribute('data-mx-live-edit')).toBe('e2');
   });
 
-  it('restarts only the author realm when its source changes', async () => {
+  it('ends the author realm before the morph and starts the new version\'s after it, whatever its source', async () => {
     load(served({ edit: 'e1' }).replace('"readOnly":null', '"readOnly":null,"authorScript":"one"'));
     const doc = start();
-    const restart = vi.fn(async () => {});
+    const order: Array<string | null> = [];
+    const restart = vi.fn(async (source: string | null) => { order.push(source === null ? `stop:${$('lede')!.textContent}` : `start:${$('lede')!.textContent}`); });
     doc.morph!.restartAuthor = restart;
     const root = $('mx-story-root');
-    await morph(window, { fetch: answer(served({ edit: 'e2', lede: 'changed' }).replace('"readOnly":null', '"readOnly":null,"authorScript":"two"')) });
-    expect(restart).toHaveBeenCalledWith('two');
+    await morph(window, { fetch: answer(served({ edit: 'e2', lede: 'changed' }).replace('"readOnly":null', '"readOnly":null,"authorScript":"one"')) });
+    // Stopped while the old page still stood, started once the new one did — the SAME source included.
+    expect(restart.mock.calls.map(([source]) => source)).toEqual([null, 'one']);
+    expect(order).toEqual(['stop:the first version', 'start:changed']);
     expect($('mx-story-root')).toBe(root);
-    expect($('lede')!.textContent).toBe('changed');
+    await morph(window, { fetch: answer(served({ edit: 'e3', lede: 'again' })) });
+    // A version without a script only ends the realm.
+    expect(restart.mock.calls.map(([source]) => source)).toEqual([null, 'one', null]);
   });
 
   it('uses the raw copy\'s existing key without cookies for its opaque-origin fragment fetch', async () => {

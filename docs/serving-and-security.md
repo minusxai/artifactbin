@@ -61,16 +61,29 @@ Interactive pages load only their needed same-origin, content-addressed chunks.
 The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
 not executable inline script, and author strings never become generated code.
 
-Author scripts run in a second opaque child reached through the fixed
-`/author-frame` wrapper, never in the visible renderer. The page carries the
+**Author scripts.** The version's `<Helmet><script>` runs in a QuickJS
+interpreter compiled to WebAssembly, on the page's own thread, never as a
+script of the page (`lib/story-runtime/author-realm`). The page carries the
 script only as data (inside its JSON data island, which is not script under
-the page's `script-src`); the page's runtime hands it to the child over a
-MessagePort after the wrapper loads, and the wrapper answers under its own
-policy (`sandbox allow-scripts`, no framing, no forms). A bounded
-MessagePort exposes only declared values, query refreshes and permitted
-dataset mutations. Managed `<Iframe>` assets are imported through the
-document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;
-arbitrary network, navigation, account APIs and parent DOM access remain denied.
+the page's `script-src`); the realm chunk fetches the interpreter from a
+content-addressed `/islands/` URL and runs the source in it. Author code sees
+no browser global at all — no `window` of the page, `document`, `fetch`,
+`WebAssembly`, storage or history — only the realm's own `mx` (declared values,
+query refreshes, permitted dataset mutations) and `dom` (elements under the
+story root, by integer handle: text, form values, classes, a fixed set of
+events, and attributes only on elements the script created, every one checked
+against the same attribute and URL policy as stored markup). Each realm has its
+own bounded wasm memory and runs under an interrupt deadline; a script that
+exceeds either is ended, not caught. A live update ends the realm before the
+new version is drawn and starts it again after.
+
+The visible managed `<Iframe>` is different: real DOM, canvas and library code
+run in an opaque child reached through the fixed `/author-frame` wrapper
+(`sandbox allow-scripts`, no framing, no forms), bound to the page over a
+MessagePort that exposes only the same data operations. Its assets are
+imported through the document-scoped resolver and served anonymously from
+`APP__ASSETS_ORIGIN`; arbitrary network, navigation, account APIs and parent
+DOM access remain denied.
 
 **Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
 at publish — against the artifacts it may read, by the SQLite engine the
@@ -106,10 +119,12 @@ hold, when one of the document's queries shows a person from it.
 Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
 page, the standalone `/raw` document and the offline file. It admits compiling
 WebAssembly and nothing else — `eval`, `new Function` and string timers stay
-refused — and it is never added to the author-script frames, where author code
-runs. The wasm is fetched from this origin at a content-addressed `/islands/`
-URL (the `/raw` document's `connect-src` names that directory), cached
-`immutable`; the offline file carries it inside itself.
+refused — and it is never added to the managed `<Iframe>`'s frames. The author
+realm's interpreter is itself WebAssembly compiled under this source, and the
+realm hands author code no `WebAssembly` global of its own. Both engines are
+fetched from this origin at content-addressed `/islands/` URLs (the `/raw`
+document's `connect-src` names that directory), cached `immutable`; the offline
+file carries the SQLite engine inside itself and runs no author script.
 
 **Import from the web.** Point at an image, a PDF, a font or a CSV and the
 server fetches it once, stores a copy, and serves it from this origin:

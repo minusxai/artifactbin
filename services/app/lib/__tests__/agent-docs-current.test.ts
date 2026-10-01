@@ -69,7 +69,8 @@ describe('the reference teaches what a document CAN do', () => {
     expect(markup).toContain('<script>');
   });
 
-  it('connects the inline-handler ban to the mechanism that works', () => {
+  it('connects the inline-handler ban to the mechanisms that work', () => {
+    expect(markup).toMatch(/dom\.on\(/);
     expect(markup).toMatch(/addEventListener/);
   });
 

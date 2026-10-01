@@ -7,8 +7,8 @@ description: "Libraries (Three.js), file uploads and script refs."
 Put canvas and scripts inside managed [Iframe](markup-iframe.md). Declare a
 self-contained library bundle URL; it is cached through the asset pipeline.
 Fetch public file bytes with `fetch('ref:<id>')`. Private assets never resolve.
-Legacy Helmet DOM scripts and `artifact.library/resolve` calls must migrate;
-those helpers are not exposed inside the isolated realm.
+A Helmet script has no library access and no `artifact.library/resolve`: it
+runs in the page's interpreter with `mx` and `dom` only ([script APIs](markup-scripts.md)).
 
 ## Contents
 

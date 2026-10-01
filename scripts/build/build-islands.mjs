@@ -41,6 +41,7 @@ const ISLANDS_SRC = path.join(APP, 'lib/islands');
 export const DEFAULT_OUT_DIR = path.join(APP, 'public/islands');
 const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
 const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm');
+const QUICKJS_WASM = path.join(ROOT, 'node_modules/@jitl/quickjs-wasmfile-release-sync/dist/emscripten-module.wasm');
 
 const escapeAttribute = (value) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /**
@@ -104,8 +105,8 @@ export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
 const STANDALONE_LAZY = [
   { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
   { request: './image-map', name: 'image-map', file: () => path.join(ISLANDS_SRC, 'kit/image-map.ts') },
-  // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
-  { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
+  // The version's author script (lib/islands/author-realm: the QuickJS realm), loaded by boot only when the page data names one.
+  { request: './author-realm', name: 'author-realm', file: () => path.join(ISLANDS_SRC, 'author-realm.ts') },
   // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.
   { request: './morph/engine', name: 'morph-engine', file: () => path.join(ISLANDS_SRC, 'morph/engine.ts') },
   // The page's own SQLite engine (today's page engine and the SQLite core), loaded by boot behind the first paint.
@@ -288,6 +289,12 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   writeImmutable(sqliteName, sqliteBytes);
   const sqliteWasm = url(sqliteName);
   files[sqliteWasm] = { ...sizes(sqliteBytes), imports: [] };
+  // The author realm's interpreter, the same way: fetched by the realm chunk, never bundled into it.
+  const quickjsBytes = fs.readFileSync(QUICKJS_WASM);
+  const quickjsName = `quickjs-${sha256(quickjsBytes).slice(0, 16)}.wasm`;
+  writeImmutable(quickjsName, quickjsBytes);
+  const quickjsWasm = url(quickjsName);
+  files[quickjsWasm] = { ...sizes(quickjsBytes), imports: [] };
   const missing = ISLAND_SPECIFIERS.filter((s) => !manifest[s]);
   if (missing.length) throw new Error(`build-islands: no chunk for ${missing.join(', ')}`);
 
@@ -302,8 +309,8 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs'].map((s) => [s, manifest[s]]));
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
   const build = buildId(sortedManifest, { ssr, offline }, inputs);
-  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr, offline, sqliteWasm }, null, 1) + '\n');
-  return { build, manifest: sortedManifest, files: sortedFiles, ssr, offline, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr, offline, sqliteWasm, quickjsWasm }, null, 1) + '\n');
+  return { build, manifest: sortedManifest, files: sortedFiles, ssr, offline, sqliteWasm, quickjsWasm, closure: (urls) => closureOf(sortedFiles, urls), inputs, outputInputs, metafile: result.metafile };
 }
 
 /**
@@ -439,7 +446,7 @@ function buildId(manifest, halves, graphInputs) {
 }
 
 /** What the `--cache` marker keys on: this script, the lockfile, and every repository file the last build read. */
-const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'scripts/lib/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json')), fs.readFileSync(SQLITE_WASM)]));
+const toolHash = () => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'scripts/lib/precompress.mjs')), fs.readFileSync(path.join(ROOT, 'package-lock.json')), fs.readFileSync(SQLITE_WASM), fs.readFileSync(QUICKJS_WASM)]));
 const sourceHashes = (rels) => Object.fromEntries(rels.map((rel) => [rel, fs.existsSync(path.join(ROOT, rel)) ? sha256(fs.readFileSync(path.join(ROOT, rel))) : null]));
 const trackedSources = (inputs) => [...new Set([
   ...listFiles(ISLANDS_SRC).filter((f) => !f.split(path.sep).includes('__tests__')).map((f) => toPosix(path.relative(ROOT, f))),

@@ -2,71 +2,56 @@ import { mxFlowKey } from './mx';
 import {connectManagedComments} from './managed-comment-host';
 import type { DataflowStore } from './store';
 import { createAuthorScriptBridge } from './author-script-bridge';
-import { AUTHOR_SCRIPT_DOCUMENT } from './author-script-bootstrap';
-import { AUTHOR_SCRIPT_FRAME_TITLE, AUTHOR_SCRIPT_INIT } from './author-script-contract';
+import { AUTHOR_SCRIPT_INIT } from './author-script-contract';
 import { AUTHOR_FRAME_PATH } from './author-frame';
 import type {ManagedIframeContent} from '@/lib/story/reader/managed-iframe';
 import {createManagedAssetResolver,type ManagedAssetsConfig,type ManagedAssetRelay} from './managed-assets';
 
-/** Changed code revokes its old realm; unchanged code keeps its subscriptions. */
-export function createAuthorScriptSession(store: DataflowStore, doc: Document = document): {
-  replace(source: string | null): void;
-  dispose(): void;
-} {
-  let previous: string | null = null;
-  let stop = () => {};
-  let disposed = false;
-  return {
-    replace(source) {
-      if (disposed || source === previous) return;
-      stop();
-      previous = source;
-      stop = source ? startAuthorScript(source, store, doc) : () => {};
-    },
-    dispose() { disposed = true; stop(); },
-  };
-}
+/**
+ * THE MANAGED `<Iframe>`'S REALM: one visible sandboxed frame on the fixed `/author-frame` wrapper, its
+ * prepared content and scripts sent as data over a transferred port after load, bound to the document's
+ * store through the author-script bridge. (The version's own `<Helmet><script>` no longer runs in a frame:
+ * it runs in the page's QuickJS realm, lib/story-runtime/author-realm.)
+ */
+export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay; resolveArtifactId?:string}
 
-/** Own one sandbox + port. Disposing revokes its capability and removes its frame. */
-interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay; resolveArtifactId?:string}
-export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document, visible?: AuthorScriptMount): () => void {
+/** Mount the frame; a changed set of declarations remounts it, so its `mx` instance is never stale. Disposing revokes its capability and removes its frame. */
+export function startAuthorScript(store: DataflowStore, mount: AuthorScriptMount, doc: Document = document): () => void {
   let key = mxFlowKey(store.flow);
-  let stop = mountAuthorScript(source, store, doc, visible);
+  let stop = mountAuthorScript(store, mount, doc);
   const unsubscribe = store.subscribe(() => {
     const next = mxFlowKey(store.flow);
     if (next === key) return;
     key = next; stop();
-    stop = mountAuthorScript(source, store, doc, visible);
+    stop = mountAuthorScript(store, mount, doc);
   });
   return () => { unsubscribe(); stop(); };
 }
 
-function mountAuthorScript(source: string, store: DataflowStore, doc: Document, visible?: AuthorScriptMount): () => void {
+function mountAuthorScript(store: DataflowStore, mount: AuthorScriptMount, doc: Document): () => void {
   const frame = doc.createElement('iframe');
-  frame.title = visible?.title ?? AUTHOR_SCRIPT_FRAME_TITLE;
-  frame.hidden = !visible;
-  if (!visible) frame.setAttribute('aria-hidden', 'true');
-  else { frame.style.width='100%'; frame.style.height='100%'; frame.style.border='0'; frame.style.display='block'; }
+  frame.title = mount.title;
+  frame.style.width='100%'; frame.style.height='100%'; frame.style.border='0'; frame.style.display='block';
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   // Use the module's serving origin even when the containing raw document is
   // opaque. A real HTTP response does not inherit the main app's script CSP.
   const moduleUrl=new URL(import.meta.url);
   const wrapperUrl=new URL(AUTHOR_FRAME_PATH,/^https?:$/.test(moduleUrl.protocol)?moduleUrl:doc.baseURI);
-  if(visible?.resolveArtifactId){
-    if(!/^[A-Za-z0-9]{6}$/.test(visible.resolveArtifactId))throw new Error('Invalid author resolver scope');
-    wrapperUrl.searchParams.set('artifact',visible.resolveArtifactId);
+  if(mount.resolveArtifactId){
+    if(!/^[A-Za-z0-9]{6}$/.test(mount.resolveArtifactId))throw new Error('Invalid author resolver scope');
+    wrapperUrl.searchParams.set('artifact',mount.resolveArtifactId);
   }
   frame.src=wrapperUrl.href;
   const bridge = createAuthorScriptBridge(store, packet => { if (!disposed) port?.postMessage(packet); });
-  const assets=createManagedAssetResolver(visible?.assets,visible?.importAsset);
+  const assets=createManagedAssetResolver(mount.assets,mount.importAsset);
   let disposed = false;
   let port: MessagePort | null = null;
   let comments: ReturnType<typeof connectManagedComments> | null = null;
   let lastRequestId = 0;
   const fail=(message:string)=>{
     dispose();
-    if(visible){const error=doc.createElement('p');error.setAttribute('role','alert');error.textContent=message;visible.host.append(error);}
+    const error=doc.createElement('p');error.setAttribute('role','alert');error.textContent=message;mount.host.append(error);
   };
   const startup=setTimeout(()=>fail('Interactive content did not start. Reload to retry.'),15000);
   const navigation=(event:MessageEvent)=>{
@@ -113,13 +98,11 @@ function mountAuthorScript(source: string, store: DataflowStore, doc: Document, 
     };
     port.start();
     // '*' is necessary for an opaque target. The port goes only to this exact WindowProxy.
-    frame.contentWindow.postMessage({type:AUTHOR_SCRIPT_INIT,document:visible?.document??AUTHOR_SCRIPT_DOCUMENT}, '*', [channel.port2]);
-    port.postMessage({ type: 'run', source, ...(visible ? {html:visible.html,scripts:visible.scripts,assetOrigin:visible.assets?.origin,managed:visible.scripts!==undefined} : {}) });
-    if(visible?.scripts!==undefined) {
-      const owner=visible.host.closest<HTMLElement>('[data-mx-managed-frame]')??visible.host;
-      comments=connectManagedComments(owner,state=>{if(!disposed)port?.postMessage(state);});
-    }
+    frame.contentWindow.postMessage({type:AUTHOR_SCRIPT_INIT,document:mount.document}, '*', [channel.port2]);
+    port.postMessage({ type: 'run', html:mount.html, scripts:mount.scripts, assetOrigin:mount.assets?.origin, managed:true });
+    const owner=mount.host.closest<HTMLElement>('[data-mx-managed-frame]')??mount.host;
+    comments=connectManagedComments(owner,state=>{if(!disposed)port?.postMessage(state);});
   };
-  (visible?.host ?? doc.body).append(frame);
+  mount.host.append(frame);
   return dispose;
 }

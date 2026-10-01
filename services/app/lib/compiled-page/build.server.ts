@@ -30,7 +30,7 @@ let cached: { text: string; build: CompilerBuild } | null = null;
 
 /** Validate the manifest the build wrote; a malformed one is an error, never a build a compile could key on. */
 export function parseCompilerBuild(text: string, file: string): CompilerBuild {
-  const raw = JSON.parse(text) as { files?: Record<string, { imports?: string[] }>; build?: unknown; manifest?: unknown; sqliteWasm?: unknown; ssr?: { url?: unknown; exports?: unknown } };
+  const raw = JSON.parse(text) as { files?: Record<string, { imports?: string[] }>; build?: unknown; manifest?: unknown; sqliteWasm?: unknown; quickjsWasm?: unknown; ssr?: { url?: unknown; exports?: unknown } };
   if (typeof raw.build !== 'string' || !BUILD_ID_RE.test(raw.build)) throw new Error(`island build: ${file} has no 16-hex build id`);
   if (!raw.manifest || typeof raw.manifest !== 'object' || Array.isArray(raw.manifest)) throw new Error(`island build: ${file} has no manifest`);
   const manifest: Record<string, string> = {};
@@ -40,10 +40,11 @@ export function parseCompilerBuild(text: string, file: string): CompilerBuild {
     manifest[specifier] = url;
   }
   if (raw.sqliteWasm !== undefined && (typeof raw.sqliteWasm !== 'string' || !/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/.test(raw.sqliteWasm))) throw new Error(`island build: ${file} has an invalid SQLite wasm URL`);
+  if (raw.quickjsWasm !== undefined && (typeof raw.quickjsWasm !== 'string' || !/^\/islands\/quickjs-[0-9a-f]{16}\.wasm$/.test(raw.quickjsWasm))) throw new Error(`island build: ${file} has an invalid QuickJS wasm URL`);
   const ssr = raw.ssr;
   if (ssr !== undefined && (typeof ssr.url !== 'string' || !SSR_URL_RE.test(ssr.url) || !ssr.exports || typeof ssr.exports !== 'object' || Array.isArray(ssr.exports))) throw new Error(`island build: ${file} has an invalid server half`);
   const graph = Object.fromEntries(Object.entries(raw.files ?? {}).map(([url, file]) => [url, file.imports ?? []]));
-  return Object.freeze({ id: raw.build, manifest: Object.freeze(manifest), graph: Object.freeze(graph), ...(raw.sqliteWasm ? { sqliteWasm: raw.sqliteWasm } : {}),
+  return Object.freeze({ id: raw.build, manifest: Object.freeze(manifest), graph: Object.freeze(graph), ...(raw.sqliteWasm ? { sqliteWasm: raw.sqliteWasm } : {}), ...(raw.quickjsWasm ? { quickjsWasm: raw.quickjsWasm } : {}),
     ...(ssr ? { ssr: { url: ssr.url as string, exports: ssr.exports as Record<string, string> } } : {}) });
 }
 

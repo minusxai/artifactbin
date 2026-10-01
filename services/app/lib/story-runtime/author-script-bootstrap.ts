@@ -4,9 +4,9 @@ import {MANAGED_FETCH_BOOTSTRAP} from './managed-fetch-bootstrap';
 import {AUTHOR_REALM_LOCKDOWN} from './author-realm-lockdown';
 import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
 /**
- * A deliberately self-contained classic-script bootstrap. It runs ONLY in
- * the opaque child; no bundler closure or parent globals may be referenced.
- * Author code arrives as data over a transferred port after the frame loads.
+ * A deliberately self-contained classic-script bootstrap for the managed `<Iframe>`'s child
+ * (./managed-author-document). It runs ONLY in the opaque child; no bundler closure or parent
+ * globals may be referenced. Author content arrives as data over a transferred port after the frame loads.
  */
 export const AUTHOR_SCRIPT_BOOTSTRAP = `
 ${AUTHOR_REALM_LOCKDOWN}
@@ -116,8 +116,3 @@ ${AUTHOR_REALM_LOCKDOWN}
     port.start();
   });
 })();`;
-
-/** No network, descendants, forms, objects, workers, or external code in the child. */
-export const AUTHOR_SCRIPT_DOCUMENT = '<!doctype html><html><head>'
-  + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; connect-src \'none\'; frame-src \'none\'; form-action \'none\'; base-uri \'none\'">'
-  + '</head><body><script>' + AUTHOR_SCRIPT_BOOTSTRAP + '</script></body></html>';

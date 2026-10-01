@@ -27,7 +27,7 @@ describe('fixed HTTP author wrapper',()=>{
   vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
   const host=document.createElement('div');document.body.append(host);
   const store=createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW});
-  const stop=startAuthorScript('',store,document,{host,title:'Visible',html:'<p>inside</p>',document:'<script>inner only</script>'});
+  const stop=startAuthorScript(store,{host,title:'Visible',html:'<p>inside</p>',document:'<script>inner only</script>',scripts:[]},document);
   const frame=host.querySelector('iframe')!,post=vi.spyOn(frame.contentWindow!,'postMessage');
   expect(new URL(frame.src).pathname).toBe(AUTHOR_FRAME_PATH);expect(frame.srcdoc).toBe('');
   expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
@@ -38,7 +38,7 @@ describe('fixed HTTP author wrapper',()=>{
  it('shows a visible startup timeout and removes the failed frame',()=>{
   vi.useFakeTimers();const host=document.createElement('div');document.body.append(host);
   const store=createDataflowStore({flow:EMPTY_COMPILED_DATAFLOW});
-  const stop=startAuthorScript('',store,document,{host,title:'Slow',html:'',document:'<p>never booted</p>'});
+  const stop=startAuthorScript(store,{host,title:'Slow',html:'',document:'<p>never booted</p>',scripts:[]},document);
   vi.advanceTimersByTime(15000);expect(host.querySelector('iframe')).toBeNull();expect(host.querySelector('[role="alert"]')?.textContent).toContain('did not start');
   stop();host.remove();vi.useRealTimers();
  });

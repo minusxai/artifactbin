@@ -14,7 +14,7 @@
  *    islands, so a page with a module always signals ready;
  * 6. top-level only: holds the document's live stream (./live, from the snapshot's `since`) and
  *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`);
- * 7. when the page data names the version's author script, loads the lazy author host (./author-host,
+ * 7. when the page data names the version's author script, loads the lazy author realm (./author-realm,
  *    a standalone chunk) and runs the script in its sandboxed frame against this store, after the
  *    islands have hydrated — as today's runtime runs it after its first commit. Edit mode and dispose
  *    revoke it (the editor starts its own).
@@ -195,8 +195,10 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     const generation = ++authorGeneration;
     stopAuthor();
     if (!source) return;
-    const { startAuthorHost } = await import('./author-host');
-    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
+    const wasm = readPageData(doc).quickjsWasm;
+    if (!wasm) { console.error('[islands] the page names an author script but no interpreter for it'); return; }
+    const { startAuthorRealm } = await import('./author-realm');
+    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorRealm(source, store, doc, wasm);
   };
   const islandDocument: MorphableIslandDocument = {
     morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), trees: new WeakMap(module.TREE ? [[module.TREE, module]] : []), restartAuthor },

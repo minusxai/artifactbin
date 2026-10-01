@@ -13,7 +13,7 @@ import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
-import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
+import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl } from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
 import { DENIED_JSX_ATTRS } from './denied-attrs';
 import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
@@ -34,25 +34,9 @@ const DENIED_ATTRS = DENIED_JSX_ATTRS;
 // alias (<Param>); keep this list explicit so unrelated data props are never rejected by suffix.
 const INLINE_STYLE_ATTRS = immutableSet(['style', 'labelstyle']);
 
-// `data:image/...` is allowed (inline images); other `data:` (e.g. text/html) is not.
-const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
-const SAFE_DATA_URL = /^data:image\//i;
-
-/**
- * True when a URL value carries a dangerous scheme. Browsers strip ASCII control chars and
- * spaces INSIDE the scheme before resolving (`java\tscript:` runs as `javascript:`), so the
- * check normalizes the same way instead of trusting the raw string.
- */
-export function hasDangerousScheme(url: string): boolean {
-  // eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
-  const normalized = url.replace(/[\x00-\x20]/g, '');
-  return DANGEROUS_URL.test(normalized) && !SAFE_DATA_URL.test(normalized);
-}
-
-/** Check ping's ASCII-whitespace-separated URLs or srcset's comma-separated URL/descriptor entries. */
-export function listHasDangerousScheme(value: string, lowerAttributeName: string): boolean {
-  return urlListUrls(value, lowerAttributeName).some(hasDangerousScheme);
-}
+// The scheme check itself lives in ./url-schemes, shared with the render gate and the author realm.
+export { hasDangerousScheme, listHasDangerousScheme } from './url-schemes';
+import { hasDangerousScheme, listHasDangerousScheme } from './url-schemes';
 
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
   const components = new Set(options.components);

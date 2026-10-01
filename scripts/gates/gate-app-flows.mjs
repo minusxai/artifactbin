@@ -179,18 +179,13 @@ const ownerCtx = await browser.newContext({ viewport: { width: 1500, height: 950
 const op = await ownerCtx.newPage();
 await becomeOwner(op, B, T);
 await op.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
-await op.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'attached' });
+await op.waitForFunction(() => document.documentElement.hasAttribute('data-mx-author-realm'), null, { timeout: 20000 });
 {
-  const probe = await op.evaluate(() => {
-    const f = document.querySelector('iframe[title="Isolated artifact script"]');
-    if (!f) return { missing: true };
-    let readable = true;
-    try { readable = !!f.contentDocument; } catch { readable = false; }
-    return { sandbox: f.getAttribute('sandbox') || '', readable };
-  });
-  check(!probe.missing && probe.sandbox.includes('allow-scripts') && !probe.sandbox.includes('allow-same-origin'),
-     'author code renders in a child frame sandboxed without allow-same-origin');
-  check(probe.readable === false, 'the author script frame is opaque to the app page');
+  const probe = await op.evaluate(() => ({
+    realm: document.documentElement.getAttribute('data-mx-author-realm'),
+    frames: document.querySelectorAll('iframe[title="Isolated artifact script"]').length,
+  }));
+  check(!!probe.realm && probe.frames === 0, 'author code runs in the page\'s bounded interpreter, with no author frame');
 }
 
 // And the reader's copy — same document, no frame, still opaque.
@@ -199,9 +194,8 @@ await op.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'a
   const rp = await readerCtx.newPage();
   await rp.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
   check(await servedTopLevel(rp), 'a reader is served the document itself, with no app frame');
-  const script = await (await rp.waitForSelector('iframe[title="Isolated artifact script"]', { state: 'attached' })).contentFrame();
-  const opaque = await script.evaluate(() => { try { void localStorage.length; return false; } catch { return true; } });
-  check(opaque, 'author code retains an opaque origin — storage is unreachable inside it');
+  await rp.waitForFunction(() => document.documentElement.hasAttribute('data-mx-author-realm'), null, { timeout: 20000 });
+  check(await rp.evaluate(() => document.querySelectorAll('iframe[title="Isolated artifact script"]').length === 0), 'the reader\'s copy runs it the same way, with no author frame');
   await readerCtx.close();
 }
 await ownerCtx.close();

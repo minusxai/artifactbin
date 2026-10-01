@@ -203,10 +203,11 @@ function islandData(input: AssembleInput): IslandPageData {
     signedIn: overlay.signedIn,
     hold: [...(overlay.hold ?? [])],
     ...(overlay.sqliteWasm ? { sqliteWasm: overlay.sqliteWasm } : {}),
+    ...(overlay.quickjsWasm ? { quickjsWasm: overlay.quickjsWasm } : {}),
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
-    // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to
-    // hand to its sandboxed frame; it is never a script of this page (contract CompiledPage.authorScript).
+    // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author realm to
+    // run in its interpreter; it is never a script of this page (contract CompiledPage.authorScript).
     ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript } : {}),
   };
 }

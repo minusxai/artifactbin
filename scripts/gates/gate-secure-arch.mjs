@@ -76,6 +76,8 @@ const api = async (path, body) => {
 // reporting channel; it must never reach the parent's DOM to report a result.
 const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string" default="{}"/><script>{\`
 (function(){
+  // Author code runs in the page's QuickJS realm: no window, document, network or history exists there.
+  // Every probe is wrapped, so a missing global is reported, never fatal.
   var out = {};
   function t(k, fn){ try { out[k] = String(fn()); } catch (e) { out[k] = 'THROW ' + e.name; } }
   t('origin', function(){ return window.origin; });
@@ -84,16 +86,13 @@ const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string"
   t('cookie', function(){ return document.cookie; });
   t('storage', function(){ return localStorage.length; });
   t('sw', function(){ navigator.serviceWorker.register('/sw.js').catch(function(){}); return 'attempted'; });
-  var before = location.pathname;
-  t('replaceState', function(){ history.replaceState(null, '', '/spoofed'); return location.pathname === before ? 'held' : 'SPOOFED ' + location.pathname; });
-  fetch('/api/artifacts').then(function(r){ out.fetch = 'OK ' + r.status; render(); }, function(){ out.fetch = 'blocked'; render(); });
-  // Direct requests from author code are denied; declared data operations use
-  // the bridge. The trusted parent query allowance is checked separately.
-  var id = location.pathname.split('/')[2] || 'unknown';
-  fetch('/a/' + id + '/query?q=%7B%7D').then(function(r){ out.ownQuery = 'OK ' + r.status; render(); }, function(){ out.ownQuery = 'blocked'; render(); });
-  fetch('/a/' + id + '/start', { method: 'POST' }).then(function(r){ out.start = 'OK ' + r.status; render(); }, function(){ out.start = 'blocked'; render(); });
-  function render(){ void mx.set({probe:JSON.stringify(out)}); }
-  render();
+  t('replaceState', function(){ var before = location.pathname; history.replaceState(null, '', '/spoofed'); return location.pathname === before ? 'held' : 'SPOOFED ' + location.pathname; });
+  t('fetch', function(){ fetch('/api/artifacts'); return 'attempted'; });
+  t('ownQuery', function(){ fetch('/a/' + location.pathname.split('/')[2] + '/query?q=%7B%7D'); return 'attempted'; });
+  t('start', function(){ fetch('/a/' + location.pathname.split('/')[2] + '/start', { method: 'POST' }); return 'attempted'; });
+  t('wasm', function(){ return typeof WebAssembly; });
+  t('pageText', function(){ return dom.text(dom.query('h1')); });
+  void mx.set({probe:JSON.stringify(out)});
 })();
 \`}</script></Helmet>
 <div className="p-8"><h1 className="text-3xl font-bold">SEC-PROBE-DOC</h1><pre id="sec-probe">{$probe}</pre></div>`;
@@ -110,17 +109,20 @@ check(readerPath.includes(doc.id) && new URL(reader.url()).origin === BASE, `rea
 check(await servedTopLevel(reader), 'reader page has NO artifact iframe');
 await reader.waitForFunction(() => { const t = document.getElementById('sec-probe')?.textContent ?? ''; return /"fetch"/.test(t) && /"ownQuery"/.test(t) && /"start"/.test(t); }, null, { timeout: 15000 }).catch(() => {});
 const probe = JSON.parse(await reader.locator('#sec-probe').textContent().catch(() => '{}') || '{}');
-check(probe.origin === 'null', `author origin is opaque (${probe.origin})`);
-check(probe.isTop === 'false', 'author code runs in a child realm, not the top-level document');
-check(/THROW/.test(probe.parentDom ?? ''), 'author cannot access the parent DOM');
-check(/THROW/.test(probe.cookie ?? ''), `document.cookie throws (${probe.cookie})`);
-check(/THROW/.test(probe.storage ?? ''), `localStorage throws (${probe.storage})`);
-check(probe.fetch === 'blocked', `fetch to /api is blocked (${probe.fetch})`);
-check(probe.ownQuery === 'blocked', `author code cannot directly fetch a query endpoint (${probe.ownQuery})`);
+check(probe.origin === 'undefined', `author code has no window of its own (window.origin is ${probe.origin})`);
+check(probe.isTop === 'false', 'author code is not the top-level document');
+check(/THROW/.test(probe.parentDom ?? ''), 'author cannot reach the page DOM directly');
+check(/THROW/.test(probe.cookie ?? ''), `document.cookie is unreachable (${probe.cookie})`);
+check(/THROW/.test(probe.storage ?? ''), `localStorage is unreachable (${probe.storage})`);
+check(/THROW/.test(probe.fetch ?? ''), `fetch does not exist for author code (${probe.fetch})`);
+check(/THROW/.test(probe.ownQuery ?? ''), `author code cannot fetch a query endpoint (${probe.ownQuery})`);
 const parentQuery = await reader.evaluate(async id => (await fetch('/a/' + id + '/query?q=%7B%7D')).status, doc.id);
 check(parentQuery === 200, `trusted document runtime can fetch its scoped query (${parentQuery})`);
-check(probe.start === 'blocked', `fetch to /a/<id>/start is blocked (${probe.start}) — path-exact, not a prefix`);
+check(/THROW/.test(probe.start ?? ''), `author code cannot POST /a/<id>/start (${probe.start})`);
 check(probe.replaceState === 'held' || /THROW/.test(probe.replaceState ?? ''), `author history cannot spoof the page URL (${probe.replaceState})`);
+check(probe.wasm === 'undefined', `the realm compiles no WebAssembly of its own (typeof WebAssembly is ${probe.wasm})`);
+check(probe.pageText === 'SEC-PROBE-DOC', `and the dom API reads the page it is given (${probe.pageText})`);
+check(await reader.evaluate(() => document.querySelectorAll('iframe').length) === 0, 'no author frame exists on the reader page');
 check(new URL(reader.url()).pathname === readerPath && new URL(reader.url()).origin === BASE, 'author probe cannot change the canonical top-level path or origin');
 
 // signed-in NON-owner: same document, same URL, no hop
@@ -150,23 +152,18 @@ check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document in 
  * nothing about the sandbox. Entering edit may stop the author realm entirely;
  * if it remains, it must keep its sandbox and opaque origin.
  */
-await owner.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'attached' });
-const sandboxBefore = await owner.evaluate(() =>
-  document.querySelector('iframe[title="Isolated artifact script"]')?.getAttribute('sandbox') ?? null);
+await owner.waitForFunction(() => document.documentElement.hasAttribute('data-mx-author-realm'), null, { timeout: 20000 });
+const realmBefore = await owner.evaluate(() => document.documentElement.getAttribute('data-mx-author-realm'));
 await openArtifactControls(owner);
 await owner.click('[aria-label="Edit artifact"]');
 await owner.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
 await owner.waitForTimeout(3000);
-const editing = await owner.evaluate(() => {
-  const f = document.querySelector('iframe[title="Isolated artifact script"]');
-  let reachable = false;
-  try { reachable = !!f?.contentDocument; } catch { reachable = false; }
-  return { sandbox: f?.getAttribute('sandbox') ?? null, reachable };
-});
-check(!!sandboxBefore && (editing.sandbox === null || editing.sandbox === sandboxBefore),
-  'entering edit mode stops the author realm or keeps every sandbox flag');
-check(!editing.reachable,
-  'and author code is STILL opaque to the page (contentDocument null)');
+const editing = await owner.evaluate(() => ({
+  realm: document.documentElement.getAttribute('data-mx-author-realm'),
+  frames: document.querySelectorAll('iframe[title="Isolated artifact script"]').length,
+}));
+check(!!realmBefore && editing.realm === null, 'entering edit mode ends the author realm');
+check(editing.frames === 0, 'and no author frame exists in either mode');
 
 // ── 3. export still works for a reader ────────────────────────────────────
 const shot = await readerCtx.request.get(`${BASE}/a/${doc.id}/export`);

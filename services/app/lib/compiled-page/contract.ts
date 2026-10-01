@@ -113,6 +113,8 @@ export interface CompilerBuild {
   manifest: Readonly<Record<string, string>>;
   /** Content-addressed SQLite engine fetched only when the reader runs a page query. */
   sqliteWasm?: string;
+  /** Content-addressed QuickJS interpreter (lib/story-runtime/author-realm), fetched only when the version has an author script. */
+  quickjsWasm?: string;
   /** Content-addressed server half and its exported namespaces, retained with this build. */
   ssr?: { url: string; exports: Readonly<Record<string, string>> };
   /** Chunk URL → the chunk URLs it statically imports (manifest.json `files`), for a module's preload closure. */
@@ -465,6 +467,8 @@ export interface AssembleOverlay {
   hold?: string[];
   /** The page's SQLite engine wasm (IslandPageData.sqliteWasm), when `hold` is not empty. */
   sqliteWasm?: string | null;
+  /** The author realm's interpreter wasm (IslandPageData.quickjsWasm), when the version has an author script. */
+  quickjsWasm?: string | null;
 }
 
 export interface AssembleInput {

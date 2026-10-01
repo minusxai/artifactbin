@@ -161,9 +161,10 @@ export const APP_INLINE_SCRIPT_HASHES = [
 
 export const APP_CSP = [
   // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
-  // reader's document runs its queries on (lib/story-runtime/page-sqlite) —
-  // and nothing else: no eval, no Function, no string timers. Author code
-  // never runs here; it runs in its own frame, whose policy does not admit it.
+  // reader's document runs its queries on (lib/story-runtime/page-sqlite) and the
+  // QuickJS interpreter its author script runs in (lib/story-runtime/author-realm) —
+  // and nothing else: no eval, no Function, no string timers. Author code never
+  // runs as this page's script; the realm gives it no WebAssembly of its own.
   "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
   // Listing thumbnails redirect from /a/:id/export to the configured asset
   // origin. Admit that destination for images; local posters remain same-origin.

@@ -30,8 +30,9 @@ import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
   "default-src 'none'",
-  // 'wasm-unsafe-eval': the runtime compiles its SQLite engine (WebAssembly
-  // only — no eval); the author's script runs in a child frame without it.
+  // 'wasm-unsafe-eval': the runtime compiles WebAssembly only — its SQLite engine and the
+  // author realm's QuickJS interpreter (lib/story-runtime/author-realm) — never eval; the managed
+  // <Iframe>'s child frame is not given it.
   "script-src 'unsafe-inline' 'self' 'wasm-unsafe-eval'",
   "style-src 'unsafe-inline'",
   "img-src 'self' data: blob:",
