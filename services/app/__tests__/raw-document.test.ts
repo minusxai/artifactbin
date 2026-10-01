@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { markupCsp } from '@/lib/story/styles/markup-csp';

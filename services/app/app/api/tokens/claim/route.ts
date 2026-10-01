@@ -1,7 +1,7 @@
 import { auth } from '@/auth';
-import { liveAgentSession } from '@/lib/agent-session';
+import { liveAgentSession } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
-import { claimToken, claimTokenById } from '@/lib/users';
+import { claimToken, claimTokenById } from '@/lib/accounts';
 
 /**
  * POST /api/tokens/claim { token } — session-authenticated. Attaches an

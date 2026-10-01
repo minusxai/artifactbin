@@ -1,8 +1,8 @@
-import {backfillExplicitJoins,seedOwnerJoin} from '@/lib/relation-state';
+import {backfillExplicitJoins,seedOwnerJoin} from '@/lib/accounts';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/db';
-import {hasExplicitNotificationMembership} from '@/lib/notification-membership';
+import {getDb} from '@/lib/platform';
+import {hasExplicitNotificationMembership} from '@/lib/notifications';
 useAppHarness();
 it('does not treat an automatically accepted invitation as explicit artifact consent',async()=>{
  const db=await getDb();

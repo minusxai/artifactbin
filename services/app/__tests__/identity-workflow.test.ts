@@ -1,22 +1,22 @@
 import {it,expect,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {POST as create,GET as list} from '@/app/api/artifacts/route';
 import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';
-import {reserveIds} from '@/lib/artifact-identities';
+import {reserveIds} from '@/lib/artifacts';
 import {writeFile,readFile,rename,copyFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {cliWorkspace,artifactTransport} from './cli-harness';
 import {startPreview} from '../../cli/src/preview/session';
-import {createUser} from '@/lib/users';
-import * as identifiers from '@/lib/ids';
+import {createUser} from '@/lib/accounts';
+import * as identifiers from '@/lib/platform/ids';
 import {POST as reserve} from '@/app/api/artifacts/reservations/route';
 import {addFiles,moveFile,localIdentities} from '../../cli/src/identities';
 import {loadWorkspace} from '../../cli/src/workspace';
 import {HttpClient} from '../../cli/src/http';
 import {stateFor} from '../../cli/src/state-access';
 import {HOME_SCOPE} from '../../cli/src/state';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 useAppHarness();
 it('reserves an invisible batch and publishes the exact identity with durable replay',async()=>{
  const token=await mintToken('mxmx_test_reservations');const actor={tokenId:token.id,userId:null};

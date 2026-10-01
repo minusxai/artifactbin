@@ -9,15 +9,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { useAppHarness } from '@/__tests__/harness';
-import { trackEvent } from '@/lib/analytics';
-import { setServices } from '@/lib/services';
+import { trackEvent } from '@/lib/platform';
+import { setServices } from '@/lib/platform';
 
 const harness = useAppHarness();
 
 // A request carrying a user-agent, so the visitor hash exists (lib/analytics reads it off the request context).
 const requestHeaders = new Map<string, string>([['user-agent', 'Mozilla/5.0 (test)']]);
-vi.mock('@/lib/request-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/request-context')>()),
+vi.mock('@/lib/platform/request-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/platform/request-context')>()),
   currentHeaders: async () => (requestHeaders.size === 0 ? null : { get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
 }));
 

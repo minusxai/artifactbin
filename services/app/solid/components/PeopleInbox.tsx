@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
-import type { InboxItem, LegacyInboxItem } from '@/lib/notification-inbox';
+import type { InboxItem, LegacyInboxItem } from '@/lib/notifications/inbox';
 import { timeAgo } from './ui';
 import { useInbox } from '../lib/notifications';
 import { apiFetch } from '../lib/api';

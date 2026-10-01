@@ -2,11 +2,11 @@ import { beforeEach, expect, it } from 'vitest';
 import { createEvents } from '@artifactbin/events/local';
 import { POST } from '@/app/api/page/artifact/[id]/view/route';
 import { request, useAppHarness } from '@/__tests__/harness';
-import { EVENTS_SCHEMA } from '@/lib/config';
-import { viewSeriesByUser } from '@/lib/workspace-analytics';
-import { runWithRequest } from '@/lib/request-context';
-import { setServices } from '@/lib/services';
-import { createUser } from '@/lib/users';
+import { EVENTS_SCHEMA } from '@/lib/platform';
+import { viewSeriesByUser } from '@/lib/workspace';
+import { runWithRequest } from '@/lib/platform';
+import { setServices } from '@/lib/platform';
+import { createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 let owner: Awaited<ReturnType<typeof createUser>>;

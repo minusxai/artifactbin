@@ -9,8 +9,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const settings = vi.hoisted(() => ({ target: 'domains.example.test' as string | null }));
-vi.mock('@/lib/config', async (original) => ({
-  ...(await original<typeof import('@/lib/config')>()),
+vi.mock('@/lib/platform/config', async (original) => ({
+  ...(await original<typeof import('@/lib/platform/config')>()),
   get CUSTOM_DOMAINS_TARGET() { return settings.target; },
   get PUBLIC_BASE_URL() { return 'https://app.example.test'; },
   get ALIAS_ORIGINS() { return ['https://www.example-alias.test']; },
@@ -18,14 +18,14 @@ vi.mock('@/lib/config', async (original) => ({
 }));
 
 import { useAppHarness } from '@/__tests__/harness';
-import { parseCustomDomainsTarget } from '@/lib/config';
+import { parseCustomDomainsTarget } from '@/lib/platform';
 import {
   attachDomain, domainOf, isServable, normalizeHostname, ownerForHost, recheckDomains, removeDomain, verifiedHostOf, verifyDomain,
   type CaaRecord, type DomainResolver,
-} from '@/lib/custom-domains';
-import { createTestUser, eraseTestUser } from '@/lib/testusers';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+} from '@/lib/serving';
+import { createTestUser, eraseTestUser } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 beforeEach(() => { settings.target = 'domains.example.test'; });

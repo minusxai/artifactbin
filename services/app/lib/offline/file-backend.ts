@@ -16,7 +16,7 @@
  */
 import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate } from '@artifactbin/contracts';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
-import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/annotation-anchors';
+import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/annotations/anchors';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend, BackendFeature, EditAnswer, FlushResponse, LoadedArtifact } from '@/lib/artifact-backend/types';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';

@@ -3,7 +3,7 @@
  * the device's own light/dark setting decides.
  */
 import { afterEach, expect, it, vi } from 'vitest';
-import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
+import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/serving/theme-bootstrap';
 
 const run = (stored: string | null, systemDark: boolean) => {
   delete document.documentElement.dataset.theme;

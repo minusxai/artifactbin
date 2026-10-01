@@ -9,7 +9,7 @@ import { parse, View } from 'vega';
 import { compile, type TopLevelSpec } from 'vega-lite';
 import { assembleReaderPage, isInertSvg, scriptJson } from '../assembler';
 import { speculationRulesOf } from '../speculation';
-import { agentDiscovery, agentDiscoveryTail } from '@/lib/agent-discovery';
+import { agentDiscovery, agentDiscoveryTail } from '@/lib/serving';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
 
 const build = { id: 'b'.repeat(16), manifest: { '@mx/rt': '/islands/rt-4444dddd.js', '@mx/deck': '/islands/deck-6666ffff.js' } };

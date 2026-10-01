@@ -4,12 +4,12 @@ import { createContext, createEffect, createSignal, For, on, onCleanup, Show, us
 import { Bell, BookOpen, ChevronRight, CircleUser, FileText, LogIn, LogOut, Moon, SlidersVertical, Sun, User, X } from 'lucide-solid';
 import { GitHubIcon } from './brand-icons';
 import { useLocation } from '@solidjs/router';
-import { crumbsFor } from '@/lib/breadcrumb';
-import { CHROME_IDENTITY } from '@/lib/chrome-identity';
-import { githubStarMarkup, wireGithubStar } from '@/lib/github-star';
-import { REPO_URL } from '@/lib/repo';
-import { forgetTokens } from '@/lib/browser-session';
-import { loginHref } from '@/lib/login-href';
+import { crumbsFor } from '@/lib/workspace/breadcrumb';
+import { CHROME_IDENTITY } from '@/lib/accounts/chrome-identity';
+import { githubStarMarkup, wireGithubStar } from '@/lib/serving/github-star';
+import { REPO_URL } from '@/lib/serving/repo';
+import { forgetTokens } from '@/lib/accounts/browser-session';
+import { loginHref } from '@/lib/http/login-href';
 import { useSession } from '../lib/session';
 import { Tooltip } from './Tooltip';
 import { PeopleInbox } from './PeopleInbox';

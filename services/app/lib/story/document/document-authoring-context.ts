@@ -4,9 +4,11 @@
 import {catalogOf} from '../../datasets/catalog';
 import {retainUserScope} from '../../datasets/user-fields';
 import {MAX_DOCUMENT_BYTES,type DocumentResourcePreparation} from '@artifactbin/contracts';
-import {getDb} from '../../db';
-import {editorScope,refLoaderForActor,assetImporterFor,fontResolver,type TokenActor} from '../../artifacts';
-import {json} from '../../http';
+import {getDb} from '../../platform/db';
+import { editorScope, type TokenActor } from '../../artifacts/access';
+import { refLoaderForActor } from '../../artifacts/dataflow';
+import { assetImporterFor, fontResolver } from '../../artifacts/store';
+import {json} from '../../http/http';
 import {prepareJsx,applyPreparedJsx} from './jsx-tier';
 export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{
  if(typeof body.source!=='string'||Buffer.byteLength(body.source)>MAX_DOCUMENT_BYTES)return json({error:'invalid_authoring_context'},400);

@@ -1,6 +1,6 @@
 import { getVersionFor, versionToWire } from '@/lib/artifacts';
-import { browserActor } from '@/lib/auth';
-import { actorForArtifacts } from '@/lib/viewer';
+import { browserActor } from '@/lib/accounts';
+import { actorForArtifacts } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
 
 /** GET /api/my/artifacts/:id/versions/:version — owner-scoped version content. */

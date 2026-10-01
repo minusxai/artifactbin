@@ -24,8 +24,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -115,7 +115,7 @@ describe('cross-site writes', () => {
   });
 
   it('reports the credential KIND on the actor — the thing the guard keys on', async () => {
-    const { requestOrSessionActor } = await import('@/lib/viewer');
+    const { requestOrSessionActor } = await import('@/lib/accounts/viewer');
     const { t, user } = await setup();
     const at = (init: { token?: string; cookie?: string }) => requestOrSessionActor(mutationRequest('/x', init));
     expect((await at({ token: t.token })).credential).toBe('bearer');

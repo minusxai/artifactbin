@@ -38,11 +38,11 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
  * that resolves the real one on the first render and never before: nothing to
  * launch, nothing to close, for a suite that never asks for a picture.
  */
-const { setServices } = await import('@/lib/services');
-const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } = await import('@/lib/config');
+const { setServices } = await import('@/lib/platform/services');
+const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } = await import('@/lib/platform/config');
 const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
 const { createEvents } = await import('@artifactbin/events/local');
-const { getDb } = await import('@/lib/db');
+const { getDb } = await import('@/lib/platform/db');
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());

@@ -11,7 +11,7 @@ import LayoutDashboard from 'lucide-solid/icons/layout-dashboard';
 import Maximize2 from 'lucide-solid/icons/maximize-2';
 import Users from 'lucide-solid/icons/users';
 import X from 'lucide-solid/icons/x';
-import type { WorkspaceStats } from '@/lib/workspace-inventory';
+import type { WorkspaceStats } from '@/lib/workspace/inventory';
 import { DialogShell } from '@/solid/components/DialogShell';
 import { formatCount } from '../lib/format';
 

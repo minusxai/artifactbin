@@ -1,8 +1,8 @@
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {documentEdit,documentEditBody} from './prepared-document';
-import {mintToken} from '@/lib/tokens';
-import {getDb} from '@/lib/db';
+import {mintToken} from '@/lib/accounts';
+import {getDb} from '@/lib/platform';
 import {getArtifactById,applyEditScoped} from '@/lib/artifacts';
 import {documentAfterOperation,type DocumentOperationHistory} from '@/lib/story/graph/document-update-history';
 import {graphSource} from '@/lib/story/graph/document-graph';

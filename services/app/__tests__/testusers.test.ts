@@ -12,9 +12,9 @@ import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { POST as newTestUser, GET as listTestUsers } from '@/app/api/testusers/route';
 import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { getUserById } from '@/lib/users';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { getUserById } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { TESTUSER_LIMITS } from '@artifactbin/contracts';
 
 const BASE = 'http://localhost:3000';
@@ -47,7 +47,7 @@ describe('minting', () => {
     expect((await list.json()).testusers.map((t: { id: string }) => t.id).sort()).toEqual([...made].sort());
   });
   it('a guest cannot mint one', async () => {
-    const { createGuestOwner } = await import('@/lib/guest-owner');
+    const { createGuestOwner } = await import('@/lib/accounts/guest-owner');
     const g = await createGuestOwner();
     const cookie = await agentCookie([g.tokenId]);
     const r = await newTestUser(jreq('/api/testusers', 'POST', {}, undefined, cookie));
@@ -85,7 +85,7 @@ describe('guests at the doors', () => {
     const dsId = ((await ds.json()) as { id: string }).id;
     const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: `<Helmet><Import name="join_data" src="ref:${dsId}" /><Mutation name="join">{\`insert into join_data.rows (who) select $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>`, visibility: 'unlisted' }, a.token));
     const pageId = ((await page.json()) as { id: string }).id;
-    const { createGuestOwner } = await import('@/lib/guest-owner');
+    const { createGuestOwner } = await import('@/lib/accounts/guest-owner');
     const g = await createGuestOwner();
     const cookie = await agentCookie([g.tokenId]);
     sessionUser.id = g.userId; sessionUser.email = '';

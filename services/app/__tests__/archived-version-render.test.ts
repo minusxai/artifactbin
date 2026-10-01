@@ -9,11 +9,11 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
-import { archivedReadOnly } from '@/lib/archived-version';
+import { archivedReadOnly } from '@/lib/serving';
 import {documentEditBody} from './prepared-document';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

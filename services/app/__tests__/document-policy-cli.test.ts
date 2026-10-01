@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {setDocumentEditorPolicy} from '@/lib/document-policy';
+import {setDocumentEditorPolicy} from '@/lib/artifacts';
 import {Hono} from 'hono';
 import {createAuthHost} from '@artifactbin/auth';
 import {createTokenReader,inProcess} from '@artifactbin/utils';
@@ -14,8 +14,8 @@ import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {GET as versions} from '@/app/api/artifacts/[id]/versions/route';
 import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {mintToken,revokeToken} from '@/lib/tokens';
-import {createUser,claimToken} from '@/lib/users';
+import {mintToken,revokeToken} from '@/lib/accounts';
+import {createUser,claimToken} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 
 const harness=useAppHarness();

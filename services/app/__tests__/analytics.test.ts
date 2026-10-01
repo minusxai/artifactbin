@@ -25,12 +25,12 @@ import { POST as revertRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
-import { trackEvent } from '@/lib/analytics';
-import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace-analytics';
-import { mintExportKey } from '@/lib/export-key';
+import { trackEvent } from '@/lib/platform';
+import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
+import { mintExportKey } from '@/lib/serving';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, listArtifactsByUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, listArtifactsByUser } from '@/lib/accounts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const BASE = 'http://localhost:3000';
@@ -47,8 +47,8 @@ vi.mock('@/auth', () => ({
 // holding none — exactly like production code called from a test), populated =
 // a request carrying these headers (lib/request-context).
 const requestHeaders = new Map<string, string>();
-vi.mock('@/lib/request-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/request-context')>()),
+vi.mock('@/lib/platform/request-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/platform/request-context')>()),
   currentHeaders: async () => (requestHeaders.size === 0 ? null : { get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
 }));
 
@@ -228,7 +228,7 @@ describe('read events', () => {
 
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    const { username } = await (await import('@/lib/users')).ensureUsername(owner);
+    const { username } = await (await import('@/lib/accounts/users')).ensureUsername(owner);
     const rendered = await outcome(
       UserPage(`@${username}`, [`${doc.id}-secret`]),
     );

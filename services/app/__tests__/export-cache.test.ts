@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import {createExportCache,type ExportProducer} from '@/lib/export/cache';
 
 useAppHarness();

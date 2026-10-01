@@ -3,8 +3,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { FolderPage } from '@/solid/pages/Folder';
-import type { FolderPage as FolderData } from '@/lib/folders';
-import type { AccountWorkspace } from '@/lib/workspace';
+import type { FolderPage as FolderData } from '@/lib/workspace/folders';
+import type { AccountWorkspace } from '@/lib/workspace/dashboard';
 
 const row = (id: string, format = 'markup', title = `Doc ${id}`) => ({ id, url: `/a/${id}`, title, format, version: 1, visibility: 'public' as const, parent_id: 'fold01', ancestor_ids: ['fold01'], updated_at: '2026-09-01T00:00:00.000Z' });
 const folder = (over: Record<string, unknown> = {}) => ({ id: 'fold01', title: 'Reports', trail: [], count: { documents: 2, folders: 1 }, rows: [row('aaa111'), row('bbb222'), row('ccc333', 'folder', 'Q3')], ...over }) as FolderData;

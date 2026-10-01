@@ -12,10 +12,10 @@
  * and a refused rename leaves the confirmation undone rather than half-applied.
  */
 import { auth } from '@/auth';
-import { avatarUrl } from '@/lib/avatars';
+import { avatarUrl } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
-import { confirmWelcome } from '@/lib/profiles';
-import { ensureUsername, getUserById, setUsername } from '@/lib/users';
+import { confirmWelcome } from '@/lib/accounts';
+import { ensureUsername, getUserById, setUsername } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const session = await auth();

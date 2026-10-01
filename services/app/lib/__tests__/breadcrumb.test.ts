@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { crumbsFor } from '@/lib/breadcrumb';
+import { crumbsFor } from '@/lib/workspace';
 
 describe('crumbsFor — the app pages', () => {
   it('gives the root nothing to say: the brand mark IS the root', () => {

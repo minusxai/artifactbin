@@ -24,7 +24,7 @@ import { DELETE as myDeleteAnnotationRoute } from '@/app/api/my/artifacts/[id]/a
 import { POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();

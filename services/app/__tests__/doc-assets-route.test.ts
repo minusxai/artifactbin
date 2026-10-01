@@ -26,13 +26,13 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { setDocAssetImportCapForTests } from '@/lib/auth';
+import { setDocAssetImportCapForTests } from '@/lib/accounts';
 import { assetUrlFor, urlHash } from '@/lib/story/assets/asset-url';
-import { getDb } from '@/lib/db';
-import { mintExportKey } from '@/lib/export-key';
+import { getDb } from '@/lib/platform';
+import { mintExportKey } from '@/lib/serving';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 useAppHarness();

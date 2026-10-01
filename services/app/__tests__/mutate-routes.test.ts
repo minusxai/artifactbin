@@ -1,5 +1,5 @@
-import {getDb} from '@/lib/db';
-import {revokeToken} from '@/lib/tokens';
+import {getDb} from '@/lib/platform';
+import {revokeToken} from '@/lib/accounts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The WRITE endpoints:
@@ -28,8 +28,8 @@ import { setDatasetRowCap } from '@/lib/story/datasets/dataset-mutate';
 
 
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request, type RequestOptions } from '@/__tests__/harness';
 
 useAppHarness();

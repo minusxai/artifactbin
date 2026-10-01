@@ -10,7 +10,7 @@ import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my
 
 import {
   createUser, ensureUsername, getUserByUsername, setUsername, usernameFromEmail, USERNAME_RE,
-} from '@/lib/users';
+} from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

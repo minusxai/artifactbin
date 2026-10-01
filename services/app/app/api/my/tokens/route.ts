@@ -5,8 +5,8 @@
  * tokens are not the account's list, so this is session-only.
  */
 import { json, unauthorized } from '@/lib/http';
-import { listTokensByUser, tokenStatus } from '@/lib/tokens';
-import { sessionActor } from '@/lib/viewer';
+import { listTokensByUser, tokenStatus } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

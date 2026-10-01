@@ -1,6 +1,6 @@
 import {runOperation} from '@/lib/operations/http';
-import { browserActor } from '@/lib/auth';
-import { actorForArtifacts } from '@/lib/viewer';
+import { browserActor } from '@/lib/accounts';
+import { actorForArtifacts } from '@/lib/accounts';
 import { json, readJson, unauthorized } from '@/lib/http';
 
 /** POST /api/my/artifacts/:id/revert { version } — owner-scoped revert. */

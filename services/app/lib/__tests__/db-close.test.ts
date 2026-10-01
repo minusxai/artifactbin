@@ -15,7 +15,7 @@
  */
 // harness-exempt: reset closing the database, and the global handle it leaves behind, IS the subject here
 import { afterAll, describe, expect, it } from 'vitest';
-import { getDb, resetDb } from '../db';
+import { getDb, resetDb } from '@/lib/platform';
 
 afterAll(() => resetDb());
 

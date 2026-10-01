@@ -2,11 +2,11 @@
 import { createMemo, createSignal, For, lazy, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List, Search } from 'lucide-solid';
-import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
-import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';
-import type { ProfileSocial } from '@/lib/profile-social';
+import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http/urls';
+import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/workspace/shelf';
+import type { ProfileSocial } from '@/lib/accounts/profile-social';
 import { refusedForSignIn } from '@/lib/story/reader/sign-in-required';
-import { loginHref } from '@/lib/login-href';
+import { loginHref } from '@/lib/http/login-href';
 import { pageDataChanged } from '@/web/page-data-events';
 import { takeBootstrap } from '@/web/bootstrap';
 import { initialDocumentStory } from '@/web/initial-story';

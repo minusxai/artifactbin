@@ -12,10 +12,10 @@ import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
-import { getDb } from '@/lib/db';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
-import { buildShelf } from '@/lib/shelf';
+import { getDb } from '@/lib/platform';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
+import { buildShelf } from '@/lib/workspace';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

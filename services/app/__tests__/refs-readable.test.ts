@@ -20,8 +20,8 @@ import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { dataflowForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

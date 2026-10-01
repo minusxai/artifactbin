@@ -15,8 +15,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { OPERATIONS as operations } from '@/lib/operations/registry';
 import { getArtifactById, listArtifactsFor } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();

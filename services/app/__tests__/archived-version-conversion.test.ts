@@ -12,9 +12,9 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { documentEditBody } from './prepared-document';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
-import { archivedVersionForActor, servedRow } from '@/lib/archived-version';
+import { archivedVersionForActor, servedRow } from '@/lib/serving';
 import { PREVIOUS_ENGINE } from '@/lib/story/data/data-syntax';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

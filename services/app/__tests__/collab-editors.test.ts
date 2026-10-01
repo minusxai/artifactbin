@@ -36,10 +36,10 @@ import { DELETE as deleteAnnotationRoute, POST as actOnAnnotationRoute } from '@
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
-import { roleFor as requestRoleFor } from '@/lib/viewer';
+import { roleFor as requestRoleFor } from '@/lib/accounts';
 import { canReadArtifact, effectiveRole as roleFor, getArtifactById,getVersionFor } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const sessionUser = { id: '', email: '' };

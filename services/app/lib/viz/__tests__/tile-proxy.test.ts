@@ -7,7 +7,7 @@
  * the proxy existed carry them baked in.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from '@/lib/tiles';
+import { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from '@/lib/serving';
 import { POINT_MAP_DARK_TILE_URL, POINT_MAP_DEFAULT_TILE_URL, themeTileUrl } from '@/lib/viz/viz-templates';
 import { GET as serveTile } from '@/app/tiles/[...tile]/route';
 

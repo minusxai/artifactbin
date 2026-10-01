@@ -1,4 +1,4 @@
-import {withTokenAuth} from '@/lib/auth';
+import {withTokenAuth} from '@/lib/accounts';
 import {readJson,json} from '@/lib/http';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
 export const POST=withTokenAuth(async(request,{tokenId,userId,params})=>{

@@ -17,8 +17,8 @@ import type { DatasetColumn } from '@artifactbin/contracts';
 import { POST as create } from '@/app/api/artifacts/route';
 import { parseDatasetDefinition } from '@/lib/datasets/definition';
 import { renderTree, skillTree } from '@/lib/skills';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { examples as starters } from '../../cli/src/teaching';
 import { request, useAppHarness } from './harness';
 

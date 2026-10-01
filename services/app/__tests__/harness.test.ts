@@ -5,9 +5,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createArtifact } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
-import { SCHEMA_STATEMENTS } from '@/lib/schema';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { SCHEMA_STATEMENTS } from '@/lib/platform';
 import { useAppHarness } from './harness';
 
 const h = useAppHarness();

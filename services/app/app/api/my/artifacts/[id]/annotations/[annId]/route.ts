@@ -3,12 +3,12 @@
  * the same protocol as the bearer twin. The current ACL admits the owner;
  * attribution remains HUMAN so future non-owner commenters fit the contract.
  */
-import { respondToAnnotationAction } from '@/lib/artifact-wire';
+import { respondToAnnotationAction } from '@/lib/artifacts';
 import { deleteAnnotationFor } from '@/lib/annotations';
-import { browserActor } from '@/lib/auth';
+import { browserActor } from '@/lib/accounts';
 import { json, readJson, unauthorized } from '@/lib/http';
-import { ownerUsername } from '@/lib/users';
-import { actorForArtifacts } from '@/lib/viewer';
+import { ownerUsername } from '@/lib/accounts';
+import { actorForArtifacts } from '@/lib/accounts';
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string; annId: string }> }) {
   const actor = await browserActor(request);

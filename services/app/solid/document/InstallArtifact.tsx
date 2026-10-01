@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { createSignal, onCleanup, Show } from 'solid-js';
 import Download from 'lucide-solid/icons/download';
-import { artifactAppPath } from '@/lib/artifact-pwa';
-import { consumeInstall, currentInstall, subscribeInstall } from '@/lib/pwa-install';
+import { artifactAppPath } from '@/lib/serving/artifact-pwa';
+import { consumeInstall, currentInstall, subscribeInstall } from '@/lib/serving/pwa-install';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 /** Native discovery needs a full document navigation, not a client route transition. */

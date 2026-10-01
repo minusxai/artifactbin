@@ -12,7 +12,7 @@ import type { ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
 import { VIZ_DATASET_MAIN } from './types';
 import type { VizResultColumn } from './types';
 import { GEO_ASSETS, GEO_BOUNDARY_DATASET, resolveGeoAsset } from './geo-assets';
-import { tileUrlTemplate } from '../tiles';
+import { tileUrlTemplate } from '../serving/tiles';
 
 interface VizTemplateBinding {
   name: string;

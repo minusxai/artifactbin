@@ -20,8 +20,8 @@ import { POST as patchMineRoute } from '@/app/api/my/artifacts/[id]/edits/route'
 
 import { getArtifactById,getVersionFor } from '@/lib/artifacts';
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

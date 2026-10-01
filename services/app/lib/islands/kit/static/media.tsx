@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import type { JSX } from 'solid-js';
 import { videoWatchUrl } from '@/lib/story-ui/video-embed';
-import { fileNameFromUrl, formatFileSize } from '@/lib/file-display';
+import { fileNameFromUrl, formatFileSize } from '@/lib/workspace/file-display';
 
 type P = JSX.HTMLAttributes<HTMLDivElement>;
 function PlayBadge() { return <div data-slot="video-play" aria-hidden="true" class="flex h-14 w-20 items-center justify-center rounded-xl bg-[#FF0000]"><div class="ml-1 h-0 w-0 border-y-[12px] border-l-[20px] border-y-transparent border-l-white" /></div>; }

@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { compareTables, type TableDifference } from '@/lib/migrate/sqlite/diff';
-import type { SqliteSyntaxMigrationOutcome } from '@/lib/sqlite-syntax-migration';
+import type { SqliteSyntaxMigrationOutcome } from '@/lib/artifacts';
 import type { RecordedResult } from './record-results';
 
 /**

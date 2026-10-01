@@ -13,8 +13,8 @@ import { createArtifact, getArtifactById, refDataForRow } from '@/lib/artifacts'
 import { storeImageContent } from '@/lib/story/data/data-tiers';
 
 
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import type { StoredContent } from '@/lib/story/document/input';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as previewRoute } from '@/app/api/preview/route';

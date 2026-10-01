@@ -16,7 +16,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

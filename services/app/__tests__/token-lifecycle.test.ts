@@ -9,7 +9,7 @@
  *   reject    → POST /api/tokens/reject revokes a cookie-held token and rewrites the cookie without it
  */
 import { describe, expect, it } from 'vitest';
-import { claimTokenById, createUser } from '@/lib/users';
+import { claimTokenById, createUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import {
   DEFAULT_TOKEN_TTL_MS,
@@ -22,8 +22,8 @@ import {
   resolveTokenById,
   tokenStatus,
   touchToken,
-} from '@/lib/tokens';
-import { decodeAgentSessionEnvelope } from '@/lib/agent-session';
+} from '@/lib/accounts';
+import { decodeAgentSessionEnvelope } from '@/lib/accounts';
 import { POST as mintAnonymous } from '@/app/api/internal/tokens/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';

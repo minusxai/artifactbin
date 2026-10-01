@@ -9,10 +9,10 @@ import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById, type TokenActor } from '@/lib/artifacts';
-import { getDb } from '@/lib/db';
-import { mintToken, resolveToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
-import { listTrashFor, restoreArtifactFor } from '@/lib/trash';
+import { getDb } from '@/lib/platform';
+import { mintToken, resolveToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
+import { listTrashFor, restoreArtifactFor } from '@/lib/workspace';
 import { createAppServer } from '@/server/app';
 
 useAppHarness();

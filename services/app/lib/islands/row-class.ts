@@ -1,4 +1,4 @@
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/islands/cn';
 import { substituteRow } from '@/lib/story/data/row-scope';
 
 /** Merge a row's class after substitution, only in documents with authored row classes. */

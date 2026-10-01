@@ -19,11 +19,11 @@ import { GET as sharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as profileRoute } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { GET as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { EVENTS_SCHEMA } from '@/lib/config';
-import { getDb } from '@/lib/db';
-import { dailyViewsByUser, viewSeriesByUser } from '@/lib/workspace-analytics';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { EVENTS_SCHEMA } from '@/lib/platform';
+import { getDb } from '@/lib/platform';
+import { dailyViewsByUser, viewSeriesByUser } from '@/lib/workspace';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

@@ -16,8 +16,8 @@ import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/rout
 import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById,getVersionFor,applyEditFor,listVersionsFor,revertArtifactFor } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
-import { createUser, listAccountTokenRows, revokeUserToken } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser, listAccountTokenRows, revokeUserToken } from '@/lib/accounts';
 
 const harness = useAppHarness();
 

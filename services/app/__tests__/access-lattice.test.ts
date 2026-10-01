@@ -19,9 +19,9 @@ import {
 import {
   ROLE_ORDER, atLeast, canAnnotate, canEdit, canGovern, canRead, maxRole, rankOf, shareRolesAtLeast,
   type ArtifactRole, type ShareRole,
-} from '@/lib/share-roles';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, setUserEmail } from '@/lib/users';
+} from '@/lib/artifacts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, setUserEmail } from '@/lib/accounts';
 import type { Visibility } from '@/lib/artifacts';
 
 useAppHarness();

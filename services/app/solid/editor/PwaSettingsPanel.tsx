@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createMemo, createSignal, Show } from 'solid-js';
 import type { ImageChoice } from '@/lib/artifact-backend/types';
-import { artifactAppPath } from '@/lib/artifact-pwa';
+import { artifactAppPath } from '@/lib/serving/artifact-pwa';
 import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/story/reader/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
 

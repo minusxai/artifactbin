@@ -11,11 +11,11 @@ import {GET as inbox} from '@/app/api/my/people/route';
 import {notificationDemoDataset,notificationDemoDocument} from '../../../scripts/fixtures/mutation-notifications.mjs';
 import {getArtifactById} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
-import {createUser} from '@/lib/users';
+import {createUser} from '@/lib/accounts';
 import {executeCatalog} from '@/lib/datasets/execute';
-import {notificationJobStore} from '@/lib/notification-runtime';
-import {evaluateNotificationQuery} from '@/lib/notification-query';
-import {createNotificationWorker} from '@/lib/notification-worker';
+import {notificationJobStore} from '@/lib/notifications';
+import {evaluateNotificationQuery} from '@/lib/notifications';
+import {createNotificationWorker} from '@/lib/notifications';
 import {notificationDocumentPayload,notificationMutationPayload,modelNoticeSql,physicalNoticeSql,invalidRecipientSql} from '../../../scripts/fixtures/postgres-notifications.mjs';
 vi.mock('@/lib/datasets/execute',async importOriginal=>{
  const actual=await importOriginal<typeof import('@/lib/datasets/execute')>();

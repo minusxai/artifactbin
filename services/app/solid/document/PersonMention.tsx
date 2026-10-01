@@ -7,7 +7,7 @@
 import { createContext, createSignal, onCleanup, onMount, Show, useContext, type Accessor, type JSX } from 'solid-js';
 import type { MembershipStatus } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { isPersonMentionHref } from '@/lib/person-mentions';
+import { isPersonMentionHref } from '@/lib/annotations/person-mentions';
 
 const MentionStatuses = createContext<Accessor<Record<string, MembershipStatus>>>(() => ({}));
 

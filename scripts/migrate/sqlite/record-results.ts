@@ -20,7 +20,7 @@
 import { createWriteStream } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import type { Queryable } from '@/lib/db';
+import type { Queryable } from '@/lib/platform';
 import { useLocalServices } from './local-services';
 
 type Artifacts = typeof import('@/lib/artifacts');
@@ -72,7 +72,7 @@ async function main() {
   if (!values.db || !(values.objects || values['live-objects']) || !values.out) throw new Error('usage: record-results.ts --db <url> (--objects <dir> | --live-objects) --out <file.jsonl>');
   await useLocalServices({ db: values.db, objects: values.objects, liveObjects: !!values['live-objects'] });
   // After the environment is set: lib/config reads it on first import.
-  const [{ getDb }, artifacts] = await Promise.all([import('@/lib/db'), import('@/lib/artifacts')]);
+  const [{ getDb }, artifacts] = await Promise.all([import('@/lib/platform/db'), import('@/lib/artifacts')]);
   const db = await getDb();
   const out = createWriteStream(values.out);
   const summary = await recordResults({ db, getArtifactById: artifacts.getArtifactById, dataflowForRow: artifacts.dataflowForRow }, (result) => out.write(`${JSON.stringify(result, (_, value) => plain(value))}\n`));

@@ -5,8 +5,8 @@
  * the import doors are a port-scanning oracle with a bandwidth bill.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { resetWebIngestRateLimit, webIngestRateLimited } from '@/lib/auth';
-import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/config';
+import { resetWebIngestRateLimit, webIngestRateLimited } from '@/lib/accounts';
+import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/platform';
 
 afterEach(() => resetWebIngestRateLimit());
 

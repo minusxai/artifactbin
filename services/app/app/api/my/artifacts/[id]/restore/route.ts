@@ -1,7 +1,7 @@
-import { browserActor } from '@/lib/auth';
+import { browserActor } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
-import { restoreArtifactFor } from '@/lib/trash';
-import { actorForArtifacts } from '@/lib/viewer';
+import { restoreArtifactFor } from '@/lib/workspace';
+import { actorForArtifacts } from '@/lib/accounts';
 
 /**
  * POST /api/my/artifacts/:id/restore — take a row of YOUR OWN back out of the

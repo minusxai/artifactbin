@@ -5,7 +5,7 @@
  * the retired React Mermaid and the compiled reader's Solid one
  * (lib/islands/kit/mermaid) draw through `drawForReader`, so they draw and mark identically.
  */
-import { sha256Hex } from '@/lib/sha256';
+import { sha256Hex } from '@/lib/platform/sha256';
 import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
 import type { MermaidImage, MermaidPalette } from '@/lib/mermaid-images/mermaid-render';
 import { embedPageFonts, pageFontFaces } from '@/lib/mermaid-images/mermaid-fonts';

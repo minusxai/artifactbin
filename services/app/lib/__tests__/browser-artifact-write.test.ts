@@ -1,7 +1,7 @@
 import {createDocumentGraph,graphSource} from '../story/graph/document-graph';
 import {applyGraphPatch} from '../story/graph/document-graph-patch';
 import {afterEach,expect,it,vi} from 'vitest';
-import {writeBrowserArtifact,restoreBrowserArtifact} from '../browser-artifact-write';
+import {writeBrowserArtifact,restoreBrowserArtifact} from '@/lib/artifacts';
 import {createHttpBackend} from '../artifact-backend/http';
 afterEach(()=>vi.unstubAllGlobals());
 it('prepares metadata and mixed edits locally for the same atomic JSONB endpoint',async()=>{

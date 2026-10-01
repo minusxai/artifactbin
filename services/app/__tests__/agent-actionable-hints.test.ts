@@ -25,10 +25,10 @@ import { GET as listAnnotations, POST as createAnnotation } from '@/app/api/arti
 import { DELETE as deleteAnnotation } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { runOperation } from '@/lib/operations/http';
 import { remoteRoute } from '@/lib/remote/route';
-import { accountProfile, updateAccountProfile } from '@/lib/account-profile';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
-import { MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
+import { accountProfile, updateAccountProfile } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
+import { MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/platform';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

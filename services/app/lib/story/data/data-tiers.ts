@@ -15,8 +15,8 @@ import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
  */
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import type {ContentObjects} from '../prepared/prepared-objects';
-import { json } from '../../http';
-import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
+import { json } from '../../http/http';
+import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
 import { storeDatasetRows } from '../datasets/dataset-store';
 import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from '../assets/image-store';
 import { uploadedSha256 } from '../assets/file-store';

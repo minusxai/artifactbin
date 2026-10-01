@@ -17,7 +17,7 @@ import { GET as myVersionRoute } from '@/app/api/my/artifacts/[id]/versions/[ver
 import { documentEditBody } from './prepared-document';
 import { getArtifactById } from '@/lib/artifacts';
 import { graphSource, type DocumentGraph } from '@/lib/story/graph/document-graph';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

@@ -10,8 +10,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

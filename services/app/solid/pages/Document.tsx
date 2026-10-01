@@ -15,14 +15,14 @@ import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, 
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
-import { loginHref } from '@/lib/login-href';
+import { loginHref } from '@/lib/http/login-href';
 import { takeBootstrap } from '@/web/bootstrap';
 import { takeChromeIntent } from '@/web/idle-boot';
 import { adoptInitialStory, removeServedHeadStyles } from '@/web/initial-story';
 import { useSession } from '../lib/session';
 import { NotFoundPage } from './NotFound';
-import type { AnnotationWire } from '@/lib/annotations';
-import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/share-roles';
+import type { AnnotationWire } from '@/lib/annotations/store';
+import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/artifacts/share-roles';
 import { DocumentActions } from '../document/DocumentActions';
 import { AnnotationLayer } from '../document/AnnotationLayer';
 import { SelectionActions } from '../document/SelectionActions';

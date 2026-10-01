@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import type {MutationNotificationJobStore} from '@artifactbin/contracts';
 import type {Operation} from './registry';
-import {mutationInitiator} from '../mutation-operation';
+import {mutationInitiator} from '../artifacts/mutation-operation';
 
 /** Transport adapters depend only on the authorized job repository, never queue SQL. */
 export function notificationJobOperations(store:()=>Promise<MutationNotificationJobStore>):Operation[]{

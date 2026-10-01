@@ -21,7 +21,7 @@ import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 
 
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { ID_RE } from '@/lib/ids';
+import { ID_RE } from '@/lib/platform';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';
 

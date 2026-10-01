@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   FOLD_LINES, FOLD_STORAGE_KEY, foldFromMeasure, isFolded, readFolds, toggleFold, unfold,
-} from '@/lib/comment-folds';
+} from '@/lib/annotations';
 
 /** A minimal store: the four members this module may touch, and nothing else. */
 function fakeStorage(seed: Record<string, string> = {}) {

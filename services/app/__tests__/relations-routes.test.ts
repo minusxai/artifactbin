@@ -8,8 +8,8 @@ import { fakeEvents } from '@artifactbin/utils';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { DELETE as unlike, GET as likeState, POST as like } from '@/app/api/my/artifacts/[id]/like/route';
 import { DELETE as unfollow, GET as followState, POST as follow } from '@/app/api/users/[id]/follow/route';
-import { createUser } from '@/lib/users';
-import { setServices } from '@/lib/services';
+import { createUser } from '@/lib/accounts';
+import { setServices } from '@/lib/platform';
 
 const harness = useAppHarness();
 const session = (user: { id: string; email: string | null }) => ({ credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true });

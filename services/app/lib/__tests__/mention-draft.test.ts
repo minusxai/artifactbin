@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mentionDraft } from '../mention-draft';
+import { mentionDraft } from '@/lib/annotations';
 
 const first = '[@Claude](/chat?session=7d545566-1a47-4aaf-be61-cffcb7b8e8f2)';
 const second = '[@Claude](/chat?session=7d545566-1a47-4aaf-be61-cffcb7b8e8f3)';

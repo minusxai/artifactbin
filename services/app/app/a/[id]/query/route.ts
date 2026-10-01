@@ -1,7 +1,7 @@
 import { canReadArtifact, dataflowForRow, getArtifactById, holdImport, nameablePeople, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
-import { ID_RE } from '@/lib/ids';
+import { ID_RE } from '@/lib/platform';
 import { json, readJson } from '@/lib/http';
-import { sessionActor } from '@/lib/viewer';
+import { sessionActor } from '@/lib/accounts';
 import { parseQueryRequest, type QueryRequest } from '@/lib/story/data/query-request';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
 import { LocalStateInputError } from '@/lib/story/datasets';

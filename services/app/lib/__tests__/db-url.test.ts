@@ -10,7 +10,7 @@
  * No DB_TYPE, no PGLITE_DATA_DIR: the URL is the type.
  */
 import { describe, expect, it } from 'vitest';
-import { databaseTargetForRuntime, parseDatabaseUrl } from '../db';
+import { databaseTargetForRuntime, parseDatabaseUrl } from '@/lib/platform';
 
 describe('parseDatabaseUrl', () => {
   it('defaults to embedded PGLite at ./data/pglite when unset or empty', () => {

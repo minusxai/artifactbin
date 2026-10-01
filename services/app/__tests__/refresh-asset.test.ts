@@ -17,8 +17,8 @@ import { POST as refreshRoute } from '@/app/api/artifacts/assets/refresh/route';
 import { POST as myRefreshRoute } from '@/app/api/my/artifacts/[id]/assets/refresh/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { mintToken } from '@/lib/tokens';
-import { webAssetByHash } from '@/lib/web-assets';
+import { mintToken } from '@/lib/accounts';
+import { webAssetByHash } from '@/lib/serving';
 import { urlHash } from '@/lib/story/assets/asset-url';
 import { agentCookie } from '@/__tests__/harness';
 

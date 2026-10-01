@@ -3,11 +3,11 @@
  * owner-only routes. The domain transaction rechecks authorization under a lock.
  */
 import { getArtifactFor, getSharingFor, updateSharingFor, type SharingPatch } from '@/lib/artifacts';
-import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue } from '@/lib/artifact-wire';
-import { browserActor } from '@/lib/auth';
+import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue } from '@/lib/artifacts';
+import { browserActor } from '@/lib/accounts';
 import { json, readJson, unauthorized } from '@/lib/http';
-import { capabilityGuard } from '@/lib/capabilities';
-import { actorForArtifacts } from '@/lib/viewer';
+import { capabilityGuard } from '@/lib/artifacts';
+import { actorForArtifacts } from '@/lib/accounts';
 import { catalogOf } from '@/lib/datasets/catalog';
 
 /** The caller as an artifact scope, or the Response that refuses them. */

@@ -6,7 +6,7 @@
  * (lib/sqlite-syntax-migration convertArtifactNow), so an edit never mixes
  * syntaxes.
  */
-import { artifactQuery } from '@/lib/artifact-document';
+import { artifactQuery } from '@/lib/artifacts';
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -19,8 +19,8 @@ import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { PREVIOUS_ENGINE } from '@/lib/story/data/data-syntax';
 import { prepareClientDocumentReplacement, prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
 import type { DocumentGraph } from '@/lib/story/graph/document-graph';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });

@@ -216,7 +216,7 @@ describe('license', () => {
 /** THE ONBOARDING DEFECTS: one port story, no stale text, a generator hint for every secret. */
 describe('one port story', () => {
   it('config.ts falls back to the same default port as dev-env.mjs (3030)', () => {
-    const src = read('services', 'app', 'lib', 'config.ts');
+    const src = read('services', 'app', 'lib', 'platform', 'config.ts');
     expect(src).not.toMatch(/PUBLIC_BASE_URL[^\n]*\?\?\s*'http:\/\/localhost:3000'/);
     expect(src).toMatch(/PUBLIC_BASE_URL[^\n]*3030|APP__PORT[^\n]*3030/);
   });
@@ -229,7 +229,7 @@ describe('one port story', () => {
 
 describe('no stale text, no dead code', () => {
   it('config.ts no longer claims the runner refuses to start on retired names', () => {
-    expect(read('services', 'app', 'lib', 'config.ts')).not.toMatch(/REFUSES TO START/);
+    expect(read('services', 'app', 'lib', 'platform', 'config.ts')).not.toMatch(/REFUSES TO START/);
   });
   it('.env.example gives a generator hint for ADMIN__SECRET too', () => {
     const lines = read('.env.example').split('\n');

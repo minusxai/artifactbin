@@ -13,9 +13,9 @@ import { artifactPage as ArtifactPage } from '@/test/helpers/pages';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PATCH as patchArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
-import { mintExportKey } from '@/lib/export-key';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
+import { mintExportKey } from '@/lib/serving';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
 

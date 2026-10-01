@@ -11,8 +11,8 @@ import { POST as discover } from '@/app/api/my/datasets/discover/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import {POST as revertArtifact} from '@/app/api/artifacts/[id]/revert/route';
-import { mintToken } from '@/lib/tokens';
-import { createUser, claimToken } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 
 const harness = useAppHarness();

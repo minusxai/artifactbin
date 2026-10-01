@@ -1,10 +1,10 @@
-import {createUser} from '@/lib/users';
+import {createUser} from '@/lib/accounts';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
 import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/story/graph/document-update-history';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request,settleBackgroundWrites} from './harness';
-import {getDb} from '@/lib/db';
-import {mintToken} from '@/lib/tokens';
+import {getDb} from '@/lib/platform';
+import {mintToken} from '@/lib/accounts';
 import {getArtifactById,editorScope} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {prepareClientDocumentUpdate,prepareClientDocumentReplacement} from '@/lib/story/graph/document-update-client';

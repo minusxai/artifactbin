@@ -219,7 +219,7 @@ function OfflineShell(props: Opened) {
   };
   const format = () => {
     if (extrasState() !== 'ready') return;
-    void import('@/lib/format-jsx-preview').then(({ formatJsxPreview }) => formatJsxPreview(source())).then((result) => { setFormattedText(result); setFormatted(true); });
+    void import('@/lib/workspace/format-jsx-preview').then(({ formatJsxPreview }) => formatJsxPreview(source())).then((result) => { setFormattedText(result); setFormatted(true); });
   };
   const style = document.createElement('style');
   style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', file().css.base, file().css.compiled, file().css.author,

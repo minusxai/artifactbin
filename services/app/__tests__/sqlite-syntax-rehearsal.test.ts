@@ -3,13 +3,13 @@
  * document's results on this tree's engine, comparing two recordings through
  * the differential check's normalisation, and looping the migration to done.
  */
-import { artifactQuery } from '@/lib/artifact-document';
+import { artifactQuery } from '@/lib/artifacts';
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
-import { runSqliteSyntaxMigrationBatch, type SqliteSyntaxMigrationOutcome } from '@/lib/sqlite-syntax-migration';
-import { mintToken } from '@/lib/tokens';
+import { runSqliteSyntaxMigrationBatch, type SqliteSyntaxMigrationOutcome } from '@/lib/artifacts';
+import { mintToken } from '@/lib/accounts';
 import { recordResults, type RecordedResult } from '../../../scripts/migrate/sqlite/record-results';
 import { compareResults, formatComparison, regressions } from '../../../scripts/migrate/sqlite/compare-results';
 import { conflictReport, runMigration } from '../../../scripts/migrate/sqlite/run-migration';

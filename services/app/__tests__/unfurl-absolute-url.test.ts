@@ -13,7 +13,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 const headerBag = { host: 'localhost:3000', 'x-forwarded-host': 'artifactbin.dev', 'x-forwarded-proto': 'https' };
-vi.mock('@/lib/request-context', () => ({
+vi.mock('@/lib/platform/request-context', () => ({
   currentHeaders: async () => ({ get: (k: string) => (headerBag as Record<string, string>)[k.toLowerCase()] ?? null }),
   currentRequest: () => null,
   runWithRequest: <T,>(_r: unknown, fn: () => Promise<T>) => fn(),

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
-import { loginRedirectTarget, internalRedirectTarget } from '@/lib/safe-redirect';
+import { loginRedirectTarget, internalRedirectTarget } from '@/lib/http/safe-redirect';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 

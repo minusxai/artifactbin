@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
-import { services, setServices } from '@/lib/services';
+import { services, setServices } from '@/lib/platform';
 
 describe('the registry is curated, not generated', () => {
   it('teaches atomic batches and persistent ids in the model-facing descriptions',()=>{

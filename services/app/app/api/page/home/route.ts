@@ -1,8 +1,8 @@
 /** Account library and view/engagement insights; anonymous callers receive landing or held drafts. */
-import { liveAgentSession } from '@/lib/agent-session';
+import { liveAgentSession } from '@/lib/accounts';
 import { json } from '@/lib/http';
-import { listDraftsByTokenIds } from '@/lib/users';
-import { sessionActor } from '@/lib/viewer';
+import { listDraftsByTokenIds } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsFor } from '@/lib/workspace';
 
 export async function GET(request: Request) {
