@@ -29,13 +29,13 @@
 // `seconds` re-read from CI runs 36875088399, 36875673784 and 36876517464: the slowest of the three
 // `──── name (Ns) ────` lines for each gate (a failed first attempt excluded).
 export const GATE_SPECS = Object.freeze([
-  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 32, timeoutMs: 150_000 },
+  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 37, timeoutMs: 150_000 },
   // Opens rendered offline files from file:// (reading, editing, comments, Save, code view offline and
-  // online, agent-edited files), one engine per gate. All three took 74s on run 36879103503 (after 48s of cross-browser install), so the
-  // per-engine seconds are a third of that plus the shared publish and download, until CI measures them.
-  { name: 'offline-file', needsMail: false, seconds: 30, timeoutMs: 120_000 },
-  { name: 'offline-file-firefox', browsers: ['firefox'], needsMail: false, seconds: 30, timeoutMs: 120_000 },
-  { name: 'offline-file-webkit', browsers: ['webkit'], needsMail: false, seconds: 30, timeoutMs: 120_000 },
+  // online, agent-edited files), one engine per gate. All three took 74s on run 36879103503 (after 48s of
+  // cross-browser install); alone, 29s/38s/28s on run 36880158113.
+  { name: 'offline-file', needsMail: false, seconds: 29, timeoutMs: 120_000 },
+  { name: 'offline-file-firefox', browsers: ['firefox'], needsMail: false, seconds: 38, timeoutMs: 120_000 },
+  { name: 'offline-file-webkit', browsers: ['webkit'], needsMail: false, seconds: 28, timeoutMs: 120_000 },
   { name: 'cli-conformance', needsMail: true, seconds: 12, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
   { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
