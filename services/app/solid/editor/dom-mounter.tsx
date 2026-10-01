@@ -70,6 +70,11 @@ function regionEnd(siblings: JsxNode[], start: number): number {
 
 /** How many recent hand-overs an editor remembers: drafts in flight are one or two behind it. */
 const HANDED_KEPT = 8;
+/**
+ * How long an off-screen mount slice may build editors (one region at least). The page's own style pass for what a
+ * slice inserted follows at the next frame; on a table-heavy page that pass, not the editors, is most of the time.
+ */
+const SLICE_MS = 50;
 const isBreak = (node: JsxNode | undefined): boolean => node?.type === 'text' && !node.value.trim();
 /**
  * The editor's blocks, laid out with the line breaks the region had between and after its blocks. Breaks are child
@@ -259,15 +264,28 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     }
     cleanups.push(() => { disposeSolid(); overlay.remove(); grid.style.position = oldPosition; });
   };
+  /** A prose region found by the read pass: everything its mount needs, measured before any region is mounted. */
+  interface RegionMount { path: string; region: JsxNode[]; elements: HTMLElement[]; parent: HTMLElement; layout: 'grid' | 'flex' | null; placement: string[] | null; visible: boolean }
+  const view = root.ownerDocument.defaultView ?? window;
+  const regions: RegionMount[] = [];
+  const hosts: Array<() => void> = [];
+  const displays = new Map<HTMLElement, string>();
+  const viewportHeight = view.innerHeight;
+  /**
+   * THE READ PASS. Every computed style and position a mount needs is read here, over the compiled DOM as it is,
+   * before anything is written. Interleaved (read a region's layout, mount it, read the next one's), each read
+   * after a mount recomputed the styles of the whole document: on a table-heavy page that was most of a second per
+   * region at slow CPUs, and a redraw remounts every region.
+   */
   const visit = (siblings: JsxNode[], parentPath: string) => {
     for (let index = 0; index < siblings.length;) {
       const node = siblings[index]!;
       const path = [parentPath, String(index)].filter(Boolean).join('.');
       if (!isBlock(node)) {
-        mountGrid(node, path);
+        hosts.push(() => mountGrid(node, path));
         if (node.type === 'element' && isEditableTextHost(node)) {
           const host = at(path);
-          if (host) {
+          if (host) hosts.push(() => {
             host.contentEditable = 'true';
             const focus = (event: FocusEvent) => { if (event.target === host) callbacks.onHostFocus?.(path, host); };
             const input = (event: Event) => { if (event.target === host) callbacks.onHostInput?.(path); };
@@ -281,7 +299,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
               host.removeEventListener('blur', blur);
               host.removeAttribute('contenteditable');
             });
-          }
+          });
         }
         if (node.type === 'element') visit(node.children, path);
         index++;
@@ -294,65 +312,98 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         .filter((el): el is HTMLElement => !!el);
       if (!elements.length || !elements[0]!.parentElement || !elements.every((el) => el.parentElement === elements[0]!.parentElement)) continue;
       const parent = elements[0]!.parentElement;
-      const mount = root.ownerDocument.createElement('div');
-      mount.dataset.mxEditRegion = path;
-      mount.style.display = 'contents';
-      const view = root.ownerDocument.defaultView ?? window;
-      const display = view.getComputedStyle(parent).display;
+      let display = displays.get(parent);
+      if (display === undefined) { display = view.getComputedStyle(parent).display; displays.set(parent, display); }
       const layout = display.includes('grid') ? 'grid' : display.includes('flex') ? 'flex' : null;
       // One block among other flex/grid items: the editor root becomes that item, so it takes the
       // block's own placement (col-span, flex grow, self-alignment) — read before the block leaves.
-      if (layout && elements.length === 1) {
-        const own = view.getComputedStyle(elements[0]!);
-        for (const name of PLACEMENT) mount.style.setProperty(`--mx-place-${name}`, own.getPropertyValue(name));
-      }
-      parent.insertBefore(mount, elements[0]!);
-      for (const element of elements) element.remove();
-      let previous = region;
-      /** What this editor handed over at its recent pauses: a draft of one of them is this editor's own, passed. */
-      const handed: string[] = [];
-      let liveView: EditorView | null = null;
-      let restore = elements;
-      const [current, setCurrent] = createSignal(region) as [() => JsxNode[], Setter<JsxNode[]>];
-      const disposeSolid = render(() => <FlowEditor nodes={current()} path={path}
-        onError={callbacks.onError} onBusy={callbacks.onBusy}
-        onView={(view) => { if (view) liveView = view; callbacks.onView?.(view); }}
-        onChange={(blocks, group, selection) => {
-          const replacement = withRegionBreaks(previous, blocks);
-          const written = serializeJsx(replacement);
-          callbacks.onFlow(path, serializeJsx(previous), written, group, selection);
-          previous = replacement;
-          handed.push(written.trim());
-          if (handed.length > HANDED_KEPT) handed.shift();
-        }} />, mount);
-      mounted.set(path, {
-        view: () => liveView,
-        handedOver: (text) => handed.includes(text.trim()),
-        adopt(next, compiled) {
-          previous = next;
-          setCurrent(() => next);
-          const blocks = compiled();
-          if (blocks.length) restore = blocks;
-        },
-      });
-      // The editor root replaces the region's blocks as ONE child of their parent; under a flex or
-      // grid parent it adopts that layout (edit-mode CSS) so the blocks lay out as they read.
-      // The whole content of a flex/grid parent: the root fills it and adopts its layout. Beside
-      // other items it stays one item, placed as its single block was. Set on the wrapper, not
-      // the editor root: ProseMirror owns its root's attributes.
-      if (layout) mount.setAttribute('data-mx-parent-layout', Array.from(parent.children).every((child) => child === mount) ? layout : 'item');
-      cleanups.push(() => {
-        disposeSolid();
-        mounted.delete(path);
-        if (mount.isConnected) {
-          // The compiled blocks of the last draft adopted, so leaving shows what was typed.
-          for (const element of restore) parent.insertBefore(element, mount);
-          mount.remove();
-        }
-      });
+      let placement: string[] | null = null;
+      if (layout && elements.length === 1) { const own = view.getComputedStyle(elements[0]!); placement = PLACEMENT.map((name) => own.getPropertyValue(name)); }
+      const first = elements[0]!.getBoundingClientRect(), last = elements.at(-1)!.getBoundingClientRect();
+      regions.push({ path, region, elements, parent, layout, placement, visible: last.bottom >= 0 && first.top <= viewportHeight });
     }
   };
+  /** THE WRITE PASS for one region: its blocks leave, one editor stands in for them. */
+  const mountRegion = ({ path, region, elements, parent, layout, placement }: RegionMount) => {
+    if (!elements.every((el) => el.isConnected && el.parentElement === parent)) return;
+    const mount = root.ownerDocument.createElement('div');
+    mount.dataset.mxEditRegion = path;
+    mount.style.display = 'contents';
+    if (placement) PLACEMENT.forEach((name, i) => mount.style.setProperty(`--mx-place-${name}`, placement[i]!));
+    let previous = region;
+    /** What this editor handed over at its recent pauses: a draft of one of them is this editor's own, passed. */
+    const handed: string[] = [];
+    let liveView: EditorView | null = null;
+    let restore = elements;
+    const [current, setCurrent] = createSignal(region) as [() => JsxNode[], Setter<JsxNode[]>];
+    const disposeSolid = render(() => <FlowEditor nodes={current()} path={path}
+      onError={callbacks.onError} onBusy={callbacks.onBusy}
+      onView={(view) => { if (view) liveView = view; callbacks.onView?.(view); }}
+      onChange={(blocks, group, selection) => {
+        const replacement = withRegionBreaks(previous, blocks);
+        const written = serializeJsx(replacement);
+        callbacks.onFlow(path, serializeJsx(previous), written, group, selection);
+        previous = replacement;
+        handed.push(written.trim());
+        if (handed.length > HANDED_KEPT) handed.shift();
+      }} />, mount);
+    // The editor is built OFF the document and only then takes its blocks' place. ProseMirror writes its root's
+    // `contenteditable`, and the browser answers that write by bringing the whole page's styles up to date at once
+    // when anything is pending: built in place, every region paid a full style pass of the page (most of a second on
+    // a table-heavy document at slow CPUs). Built here, a slice of regions shares one, at the next frame.
+    parent.insertBefore(mount, elements[0]!);
+    for (const element of elements) element.remove();
+    mounted.set(path, {
+      view: () => liveView,
+      handedOver: (text) => handed.includes(text.trim()),
+      adopt(next, compiled) {
+        previous = next;
+        setCurrent(() => next);
+        const blocks = compiled();
+        if (blocks.length) restore = blocks;
+      },
+    });
+    // The editor root replaces the region's blocks as ONE child of their parent; under a flex or
+    // grid parent it adopts that layout (edit-mode CSS) so the blocks lay out as they read.
+    // The whole content of a flex/grid parent: the root fills it and adopts its layout. Beside
+    // other items it stays one item, placed as its single block was. Set on the wrapper, not
+    // the editor root: ProseMirror owns its root's attributes.
+    if (layout) mount.setAttribute('data-mx-parent-layout', Array.from(parent.children).every((child) => child === mount) ? layout : 'item');
+    cleanups.push(() => {
+      mounted.delete(path);
+      if (mount.isConnected) {
+        // The compiled blocks of the last draft adopted, so leaving shows what was typed.
+        for (const element of restore) parent.insertBefore(element, mount);
+        mount.remove();
+      }
+      // Torn down off the page, as it was built: removing an editable root in place brought the page's styles up to
+      // date at every region.
+      disposeSolid();
+    });
+  };
   visit(nodes, '');
+  for (const host of hosts) host();
+  /**
+   * Regions on screen are editable when this returns. The rest (a long document's off-screen tables) mount in
+   * idle slices of about SLICE_MS between frames and input, so a redraw is never one task that freezes typing; until
+   * then each shows its compiled blocks, exactly as it reads.
+   */
+  for (const region of regions) if (region.visible) mountRegion(region);
+  let pending = regions.filter((region) => !region.visible);
+  let slice: number | null = null;
+  const idle = view as Window & { requestIdleCallback?: (run: () => void, options?: { timeout: number }) => number; cancelIdleCallback?: (handle: number) => void };
+  const schedule = () => { slice = idle.requestIdleCallback ? idle.requestIdleCallback(run, { timeout: 100 }) : view.setTimeout(run, 0); };
+  const run = () => {
+    slice = null;
+    const until = view.performance.now() + SLICE_MS;
+    while (pending.length && view.performance.now() < until) mountRegion(pending.shift()!);
+    if (pending.length) schedule();
+  };
+  if (pending.length) schedule();
+  cleanups.unshift(() => {
+    pending = [];
+    if (slice !== null) { if (idle.cancelIdleCallback) idle.cancelIdleCallback(slice); else view.clearTimeout(slice); }
+  });
   return {
     dispose() { for (const cleanup of cleanups.reverse()) cleanup(); },
     reconcile(before, after, next, draft, options = {}) {
