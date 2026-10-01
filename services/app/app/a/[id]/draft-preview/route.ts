@@ -6,27 +6,54 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { canEdit } from '@/lib/artifacts';
-import { renderDraftPreview } from '@/lib/story/prepared/draft-preview.server';
+import { compileDraft, draftCompileGate } from '@/lib/story/prepared/draft-compile.server';
 import { requestOrSessionActor, roleFor } from '@/lib/accounts';
 import { refusesCrossSite } from '@/lib/accounts';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
 import { collectExternalAssetUrls } from '@/lib/story/assets';
 import { lookupWebAssets } from '@/lib/serving';
+import { createHash } from 'node:crypto';
 import { collectRefUses } from '@/lib/story/data';
 
 const MAX_SOURCE_LENGTH = 1024 * 1024;
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
+/**
+ * The editor names its drafts' order in `X-Draft-Sequence: <editor session>.<n>` (n rising per draft).
+ * Drafts so named supersede within their session — this document, this credential, that editor — and
+ * only by that order: the order requests ARRIVE in is not the order they were sent (parallel
+ * connections), and superseding by it can drop the newest draft. An unnamed draft is its own session,
+ * bounded only by the global cap, and may wait longer for a slot.
+ */
+const SEQUENCE_RE = /^([\w-]{1,64})\.(\d{1,15})$/;
+const UNORDERED_WAIT_MS = 20_000;
+let unordered = 0;
+function draftTicket(request: Request, gate: ReturnType<typeof draftCompileGate>) {
+  const named = SEQUENCE_RE.exec(request.headers.get('x-draft-sequence') ?? '');
+  if (!named) return gate.arrive(`unordered:${++unordered}`, 1, UNORDERED_WAIT_MS);
+  const credential = request.headers.get('authorization') ?? request.headers.get('cookie') ?? '';
+  const session = `${new URL(request.url).pathname}:${createHash('sha256').update(credential).digest('base64url')}:${named[1]}`;
+  return gate.arrive(session, Number(named[2]));
+}
+
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  // The draft takes its place in its editor's session before anything is awaited (draft-compile-gate).
+  const gate = draftCompileGate();
+  const ticket = draftTicket(request, gate);
+  // Overtaken while it waited for the thread: answered before its document and body are read and parsed.
+  const SUPERSEDED = () => json({ error: 'superseded' }, 409, NO_STORE);
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (gate.superseded(ticket)) return SUPERSEDED();
   const artifact = await getArtifactById(id);
   if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403, NO_STORE);
   if (!canEdit(await roleFor(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (gate.superseded(ticket)) return SUPERSEDED();
   const body = await readJson(request);
+  if (gate.superseded(ticket)) return SUPERSEDED();
   if (!body || typeof body.source !== 'string' || typeof body.editId !== 'string' || body.source.length > MAX_SOURCE_LENGTH) {
     return json({ error: 'invalid_draft' }, 400, NO_STORE);
   }
@@ -47,15 +74,16 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const search = typeof body.search === 'string' && body.search.length <= 8192 ? body.search : '';
   const declared = search ? await declarationsForRow(draft) : null;
   const values = declared?.flow ? readUrlValues(search, declared.flow) : undefined;
-  try {
+  const source: string = body.source;
+  const compile = async (): Promise<string> => {
     const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
-      compileStoryCss(body.source, { force: true }),
+      compileStoryCss(source, { force: true }),
       dataflowForRow(draft, { ...(values ? { values } : {}), viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null } }),
       refDataForRow(draft),
-      lookupWebAssets(collectExternalAssetUrls(body.source).all),
+      lookupWebAssets(collectExternalAssetUrls(source).all),
     ]);
-    const html = await renderDraftPreview({
-      source: body.source,
+    return compileDraft({
+      source: source,
       title: artifact.title,
       theme: design.theme,
       template: meta.template ?? null,
@@ -65,7 +93,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       refData,
       assetUrls,
     });
-    return json({ html }, 200, { ...NO_STORE, 'X-Content-Type-Options': 'nosniff' });
+  };
+  try {
+    const result = await gate.run(ticket, compile);
+    if (!result.ok) {
+      return result.reason === 'superseded'
+        ? SUPERSEDED()
+        : json({ error: 'draft_compile_busy' }, 429, { ...NO_STORE, 'Retry-After': '2' });
+    }
+    return json({ html: result.value }, 200, { ...NO_STORE, 'X-Content-Type-Options': 'nosniff' });
   } catch (error) {
     if (error instanceof Error && error.message === 'draft source is incomplete') return json({ error: 'invalid_draft' }, 422, NO_STORE);
     throw error;

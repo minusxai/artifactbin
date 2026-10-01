@@ -34,6 +34,7 @@ import * as solidStore from 'solid-js/store';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import * as acorn from 'acorn';
 import { readerDataflow, type CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import type { Scalar } from '@/lib/story/data';
 import { islandFile, loadCompilerBuild } from './build.server';
@@ -173,16 +174,58 @@ export function moduleToFunction(t: typeof BabelTypes, options: { sideEffects?: 
 /**
  * Evaluate an ES module's text as a function of its imports: `import` statements become lookups on
  * `imports`, exports become the returned object. No file, no resolver, no second Solid.
+ *
+ * Only top-level statements change, so this parses once (acorn, no traversal) and splices the text:
+ * the same function `moduleToFunction` builds — imports hoisted as `const` lookups, exports collected
+ * into the returned object — without a Babel pass over a document module that can run to megabytes.
  */
 export async function evaluateModule(code: string, imports: SsrImports, filename: string): Promise<Record<string, unknown>> {
-  const out = await transformAsync(code, {
-    filename, babelrc: false, configFile: false, sourceType: 'module', compact: false, comments: false,
-    parserOpts: { allowReturnOutsideFunction: true },
-    plugins: [({ types }: { types: typeof BabelTypes }) => moduleToFunction(types)],
-  });
-  if (!out?.code) throw new Error(`evaluate: ${filename} produced nothing`);
-  const fn = vm.compileFunction(`'use strict';\n${out.code}`, ['__mx_import'], { filename }) as (load: SsrImports) => Record<string, unknown>;
+  const fn = vm.compileFunction(`'use strict';\n${moduleFunctionBody(code)}`, ['__mx_import'], { filename }) as (load: SsrImports) => Record<string, unknown>;
   return fn(imports);
+}
+
+type AcornNode = acorn.Node & Record<string, any>;
+const nameOf = (node: AcornNode): string => (node.type === 'Identifier' ? node.name : String(node.value));
+const parseModule = (code: string): AcornNode[] => (acorn.parse(code, { ecmaVersion: 'latest', sourceType: 'module', allowReturnOutsideFunction: true }) as unknown as { body: AcornNode[] }).body;
+
+/** A module's text as the body of a function of `__mx_import` that returns its exports (see `moduleToFunction`). */
+export function moduleFunctionBody(code: string): string {
+  const hoisted: string[] = [];
+  const body: string[] = [];
+  const exported: Array<[string, string]> = [];
+  const text = (node: AcornNode) => code.slice(node.start, node.end);
+  for (const statement of parseModule(code)) {
+    if (statement.type === 'ImportDeclaration') {
+      const namespace = `__mx_import(${JSON.stringify(statement.source.value)})`;
+      for (const s of statement.specifiers as AcornNode[]) {
+        const value = s.type === 'ImportNamespaceSpecifier' ? namespace
+          : s.type === 'ImportDefaultSpecifier' ? `${namespace}.default`
+          : `${namespace}[${JSON.stringify(nameOf(s.imported))}]`;
+        hoisted.push(`const ${s.local.name} = ${value};`);
+      }
+    } else if (statement.type === 'ExportNamedDeclaration') {
+      if (statement.source) throw new Error('evaluate: a re-export');
+      const d = statement.declaration as AcornNode | null;
+      if (d) {
+        body.push(text(d));
+        if (d.type === 'FunctionDeclaration' && d.id) exported.push([d.id.name, d.id.name]);
+        else if (d.type === 'VariableDeclaration') for (const v of d.declarations as AcornNode[]) if (v.id.type === 'Identifier') exported.push([v.id.name, v.id.name]);
+      }
+      for (const s of statement.specifiers as AcornNode[]) exported.push([nameOf(s.local), nameOf(s.exported)]);
+    } else if (statement.type === 'ExportDefaultDeclaration') {
+      const d = statement.declaration as AcornNode;
+      if (d.type === 'FunctionDeclaration' && d.id) { body.push(text(d)); exported.push([d.id.name, 'default']); } else {
+        body.push(`const __mx_default = ${d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration' ? text(d) : `(${text(d)})`};`);
+        exported.push(['__mx_default', 'default']);
+      }
+    } else if (statement.type === 'ExportAllDeclaration') {
+      throw new Error('evaluate: a re-export');
+    } else {
+      body.push(text(statement));
+    }
+  }
+  body.push(`return {${exported.map(([local, name]) => `${JSON.stringify(name)}: ${local}`).join(', ')}};`);
+  return [...hoisted, ...body].join('\n');
 }
 
 /**
@@ -262,7 +305,7 @@ async function islandSsrNamespace(specifier: string, retained?: SsrHalf): Promis
 /** Every static import specifier of a module's text. */
 async function importsOf(code: string): Promise<string[]> {
   const found = new Set<string>();
-  await transformAsync(code, { filename: 'scan.js', babelrc: false, configFile: false, sourceType: 'module', code: false, plugins: [(): PluginObj => ({ visitor: { ImportDeclaration(p) { found.add(p.node.source.value); } } })] });
+  for (const statement of parseModule(code)) if (statement.type === 'ImportDeclaration') found.add(String(statement.source.value));
   return [...found].sort();
 }
 
@@ -422,6 +465,9 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
     store.put(new TextEncoder().encode(browser.code), browser.imports, browser.specifiers),
     ssrStore.put(new TextEncoder().encode(ssrCode), await importsOf(ssrCode)),
   ]);
+  // The module just evaluated IS the stored one: a render of this version in this process (a draft's,
+  // at once) need not evaluate it again.
+  if (!options.imports && !ssrModules.has(`${ssr.sha}:current`)) ssrModules.set(`${ssr.sha}:current`, Promise.resolve(loaded));
   return { html, module, ssr, templateBrBytes: null };
 }
 
