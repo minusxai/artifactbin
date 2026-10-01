@@ -11,7 +11,6 @@
  * Owners (one per module; see the parallel plan):
  *   compiler.ts         compilePage            w2-compiler
  *   modules.server.ts   ModuleStore            w1-assembler
- *   reader-mode.ts      compiledReaderForView w4-flip-docs
  *   plan.ts             planOf                 w1-planners
  *   snapshots.server.ts SnapshotStore          w1-snapshots
  *   charts.server.ts    drawn charts           w1-planners
@@ -38,16 +37,12 @@ import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
  * version, never a viewer.
  */
 export const READER_MODE_HEADER = 'x-mx-reader';
-/** Present only when a compiled path fell back to legacy for this request; the value is the reason (§6 of the spec). */
-export const READER_FALLBACK_HEADER = 'x-mx-reader-fallback';
 /**
- * Why a compiled read could not be served as stored (spec §6). While today's renderer exists
- * (serve.server `fallbackPolicy()` = `legacy`) each one serves it for the request. After Wave 4
- * (`compiled-only`, spec §6): a missing compile or one below a compatibility minimum compiles inline,
- * `over-budget` is never an answer (the budget only marks a slow compile), `compile-error` is a
- * reported 500, and `unported` is never reached (every registered component compiles).
+ * Why a compiled read could not be served (spec §6): each is a reported 500, since no other renderer
+ * exists. A missing compile or one below a compatibility minimum compiles inline first; `unported` is
+ * never reached (every registered component compiles).
  */
-export type ReaderFallbackReason = 'not-compiled' | 'compile-error' | 'build-mismatch' | 'unported' | 'over-budget';
+export type ReaderFallbackReason = 'compile-error' | 'build-mismatch' | 'unported';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Compile input and output

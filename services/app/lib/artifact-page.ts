@@ -46,7 +46,7 @@ import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { LazyCode } from '@/lib/story/lazy-code';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { ASSETS_ORIGIN } from '@/lib/config';
-import { VIEWER_OVERLAY_PATH, type AssembleInput, type ReaderFallbackReason } from '@/lib/compiled-page/contract';
+import { VIEWER_OVERLAY_PATH, type AssembleInput } from '@/lib/compiled-page/contract';
 
 
 import { CompiledPageFailed, compiledPageFor } from '@/lib/compiled-page/serve.server';
@@ -86,8 +86,8 @@ export interface ArtifactPageAnswer {
   story?: InitialStory;
   /** The compiled page, when this request is served by the compiled reader. */
   compiled?: CompiledStory;
-  /** Which renderer answered a document's page, and why a compiled request fell back (the page's `x-mx-reader` headers). */
-  reader?: { mode: 'compiled' | 'legacy'; fallback?: ReaderFallbackReason };
+  /** Which renderer answered a document's page (the page's `x-mx-reader` header). */
+  reader?: { mode: 'compiled' };
 }
 
 /** What the app page (never the JSON door) hands the answer. */
@@ -292,11 +292,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
         help: agentDiscovery(baseUrl(request)),
       },
     });
-    if (answer.mode !== 'compiled') {
-      // No renderer is left to answer: the React reader that drew a `legacy` fallback is gone, so a page the
-      // compiled reader cannot make is a 500 whatever lib/compiled-page/serve.server's fallbackPolicy says.
-      throw new CompiledPageFailed(artifact.id, answer.mode === 'failed' ? answer.reason : answer.fallback);
-    }
+    // No renderer is left to answer: a page the compiled reader cannot make is a 500.
+    if (answer.mode === 'failed') throw new CompiledPageFailed(artifact.id, answer.reason);
     compiled = { html: answer.html, headers: answer.headers };
     reader = { mode: 'compiled' };
   }

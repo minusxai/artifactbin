@@ -310,50 +310,6 @@ export const STORY_MODE_HOOK = '__mxSetColorMode';
 /** A trusted parent asks its opaque document frame to change the reader's
  * local appearance. It changes no stored document field and grants nothing. */
 export const STORY_READER_MODE_MESSAGE = 'mx:reader-mode';
-/**
- * A FRAMED document's reader chrome asks its trusted parent to act. The chrome
- * is drawn inside the document so it looks the same for everyone, but a frame
- * holds no session: like, comment, follow, edit, share and the two panels are
- * the PAGE's to perform, and it answers `share` so the frame can say "copied".
- */
-export const STORY_READER_ACTION_MESSAGE = 'mx:reader-action';
-export type StoryReaderActionKind = 'like' | 'comment' | 'share' | 'follow' | 'edit' | 'controls' | 'menu';
-export interface StoryReaderActionMessage {
-  type: typeof STORY_READER_ACTION_MESSAGE;
-  kind: StoryReaderActionKind;
-  author?: string | null;
-}
-export const STORY_READER_ACTION_RESULT_MESSAGE = 'mx:reader-action-result';
-export interface StoryReaderActionResultMessage {
-  type: typeof STORY_READER_ACTION_RESULT_MESSAGE;
-  kind: StoryReaderActionKind;
-  ok: boolean;
-  /** `like`: the door's answer. */
-  liked?: boolean;
-  /** `follow`: the door's answer. */
-  following?: boolean;
-  count?: number;
-}
-/**
- * The parent sets the framed chrome's mode: `on` (the reveal-on-scroll rule),
- * `off` (gone), or `pinned` — held at the top for EDIT MODE, where the page's
- * editor toolbar sits under it; `inset` is that toolbar's height, which the
- * document adds under its own bar so nothing it shows is covered.
- */
-export const STORY_READER_CHROME_MESSAGE = 'mx:reader-chrome';
-export interface StoryReaderChromeMessage {
-  type: typeof STORY_READER_CHROME_MESSAGE;
-  mode: 'on' | 'off' | 'pinned';
-  inset?: number;
-  /**
-   * The width of the page's comment rail, which the document leaves free on
-   * its right — the frame itself stays full-width, so the bar drawn inside
-   * it does not narrow and its controls do not move when the rail opens.
-   * Absent or 0: no rail.
-   */
-  railInset?: number;
-}
-
 /** A framed document's scroll port lives across an opaque-origin boundary
  * from the page chrome. This unprivileged sample lets the parent apply its
  * mobile bar visibility policy; the parent still checks the source window. */
@@ -467,44 +423,6 @@ export type StoryMutateResult =
 export const STORY_DATA_MESSAGE = 'mx:data';
 
 /**
- * The TOP-LEVEL document's own narrow URL capability, installed by the history
- * prelude (lib/story/document HISTORY_PRELUDE) — the one window left open in
- * an otherwise frozen History API. It takes `{name: string | null}`: a string
- * sets `$name`, `null` removes it, and it reads the path and hash fresh at
- * call time so no address ever arrives as an argument.
- *
- * Named here rather than only inside that string so the runtime and the
- * prelude cannot drift apart; the prelude BUILDS its `defineProperty` from
- * this constant.
- */
-export const STORY_VALUES_HOOK = '__mxValues';
-
-/**
- * FRAME → PAGE: the reader changed a `<Value>`, and this is the document's
- * whole scalar state after the change.
- *
- * A document served TOP-LEVEL writes its own address through the one narrow
- * capability its history prelude leaves open (`__mxValues`). A FRAMED one
- * cannot: `location` inside the frame is the frame's, so writing there moves
- * `/a/<id>/raw?edit=1`, which nobody can see or copy — which is the reason
- * this message exists at all.
- *
- * Signed like every other frame → page message, because the author's script
- * shares this realm. And the page does not simply write what arrives: it
- * re-derives the address through `writeUrlValues` against the flow IT holds,
- * so a frame can never put a name the document does not declare into the
- * address bar.
- */
-export const STORY_VALUES_MESSAGE = 'mx:values';
-
-export interface StoryValuesMessage {
-  type: typeof STORY_VALUES_MESSAGE;
-  nonce: string;
-  /** Every scalar the document declares, at its current value. */
-  values: Record<string, Scalar>;
-}
-
-/**
  * The SSE event name a DATA wakeup carries on `/a/<id>/events` (the default,
  * unnamed frame stays the document). It lives HERE rather than beside the
  * route because both ends need it and only one of them is a server: a client
@@ -527,10 +445,6 @@ export const STORY_DATA_EVENT = 'data';
  * script that shares the frame's realm. Parent → frame messages must be
  * `isTrusted`: a synthetic MessageEvent can spoof `source`, never that.
  * ──────────────────────────────────────────────────────────────────────────── */
-
-/** First thing the runtime says to its parent: here is this session's nonce. Posted before any author code exists. */
-export const STORY_SESSION_MESSAGE = 'mx:session';
-interface StorySessionMessage { type: typeof STORY_SESSION_MESSAGE; nonce: string }
 
 /** Parent → frame: enter or leave edit mode. The frame lazy-loads its edit chunk on the first `on`. */
 export const STORY_EDIT_MODE_MESSAGE = 'mx:edit-mode';
@@ -905,12 +819,6 @@ export function isEditParentMessage(data: unknown): data is StoryEditParentMessa
   if (!data || typeof data !== 'object') return false;
   const d = data as { type?: unknown };
   return typeof d.type === 'string' && EDIT_PARENT_TYPES.has(d.type);
-}
-
-export function isSessionMessage(data: unknown): data is StorySessionMessage {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as { type?: unknown; nonce?: unknown };
-  return d.type === STORY_SESSION_MESSAGE && typeof d.nonce === 'string' && d.nonce.length >= 16;
 }
 
 /**
