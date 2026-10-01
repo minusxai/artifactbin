@@ -120,6 +120,12 @@ describe('reading-mode parity of the parsed document', () => {
     const parsed = doc('<div><p>one \n <br /> two</p><pre>  a\n    b</pre></div>');
     expect(serializeJsx(sourceNodes(parsed))).toBe('<div><p>one<br />two</p><pre>  a\n    b</pre></div>');
   });
+  it('keeps one typed trailing space at the end of a block, but not source formatting', () => {
+    expect(doc('<p id="a">### </p>').child(0).textContent).toBe('### ');
+    expect(doc('<p id="a">Has <strong>bold</strong> </p>').child(0).textContent).toBe('Has bold');
+    expect(doc('<p id="a">text\n  </p>').child(0).textContent).toBe('text');
+    expect(doc('<p id="a">text  </p>').child(0).textContent).toBe('text');
+  });
   it('keeps childless inline elements (legend swatches) with their attributes through a round trip', () => {
     const source = '<div id="legend" className="flex gap-4"><span id="a"><span className="inline-block size-2.5 bg-[#7b6fe0]" id="sw"></span> static</span></div>';
     const parsed = doc(source);
