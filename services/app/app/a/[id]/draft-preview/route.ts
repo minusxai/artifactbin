@@ -57,15 +57,16 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const search = typeof body.search === 'string' && body.search.length <= 8192 ? body.search : '';
   const declared = search ? await declarationsForRow(draft) : null;
   const values = declared?.flow ? readUrlValues(search, declared.flow) : undefined;
+  const source: string = body.source;
   const compile = async (): Promise<string> => {
     const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
-      compileStoryCss(body.source, { force: true }),
+      compileStoryCss(source, { force: true }),
       dataflowForRow(draft, { ...(values ? { values } : {}), viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null } }),
       refDataForRow(draft),
-      lookupWebAssets(collectExternalAssetUrls(body.source).all),
+      lookupWebAssets(collectExternalAssetUrls(source).all),
     ]);
     return compileDraft({
-      source: body.source,
+      source: source,
       title: artifact.title,
       theme: design.theme,
       template: meta.template ?? null,
