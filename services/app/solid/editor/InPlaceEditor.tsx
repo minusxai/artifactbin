@@ -328,7 +328,6 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   });
 
   // ── draft data ──
-  const flowSignature = createMemo(() => storyUpdateParts(source())?.declarations ?? null);
   const initialFlowSignature = storyUpdateParts(art.markup ?? '')?.declarations ?? null;
   const hasDeclarations = (signature: string): boolean => {
     const groups = JSON.parse(signature) as Record<string, unknown>;
@@ -336,13 +335,16 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   };
   let ranSignature: string | null = art.dataflow?.state || (initialFlowSignature !== null && !hasDeclarations(initialFlowSignature)) ? initialFlowSignature : null;
   const queriesUnavailable = backend.unavailable('runQueries');
+  // The declarations are read once the source rests, not on every change: parsing the whole document is not
+  // the edit's work, and a typed sentence never changes them.
   createEffect(() => {
-    const signature = flowSignature();
-    if (signature === null || signature === ranSignature) return;
-    if (!hasDeclarations(signature)) { ranSignature = signature; return; }
+    void source();
     if (queriesUnavailable) return;
     let alive = true;
     const timer = window.setTimeout(() => {
+      const signature = storyUpdateParts(editorSource.current())?.declarations ?? null;
+      if (signature === null || signature === ranSignature) return;
+      if (!hasDeclarations(signature)) { ranSignature = signature; return; }
       ranSignature = signature;
       setDataflowPending(true);
       void backend.previewQueries(editorSource.current()).then((body) => {

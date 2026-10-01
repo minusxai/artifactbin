@@ -220,6 +220,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
   /** This editor session's name for its drafts' order (`X-Draft-Sequence`), and how many it has sent. */
   const draftSession = runtimeId().replace(/[^\w-]/g, '').slice(0, 64) || 'editor';
   let draftsSent = 0;
+  let updateParts: typeof import('@/lib/story/document/update-parts') | null = null;
   let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string | null; sequence: number; arrivedAt: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
     const found = new Map<string, string>();
@@ -585,12 +586,16 @@ export function createIslandController({ win, root, islands, nodes: served, port
         // Prose needs no compile at all: typed, it is on screen already; moved by the source (undo, a command, a
         // remote document), the editor takes it in place. Only when the tree says otherwise (a component, a block
         // ahead of one, a query) is it compiled and drawn.
-        void import('@/lib/story/document/update-parts').then(({ storyUpdateParts }) => {
+        const local = ({ storyUpdateParts }: typeof import('@/lib/story/document/update-parts')) => {
           if (disposed || sequence !== draftSequence) return;
           const parts = storyUpdateParts(source);
           if (parts && reconcileLocal(parts.nodes, source, partsKey(parts), command.nodes, storyUpdateParts)) { pendingDraft = null; return; }
           request();
-        }).catch((error: unknown) => { if (!disposed) console.error('Failed to reconcile editor draft', error); });
+        };
+        // Once loaded, synchronously: an undo's caret, restored right after its source, lands on the adopted prose.
+        if (updateParts) { local(updateParts); return; }
+        void import('@/lib/story/document/update-parts').then((module) => { updateParts = module; local(module); })
+          .catch((error: unknown) => { if (!disposed) console.error('Failed to reconcile editor draft', error); });
         return;
       }
       previewing = false;
