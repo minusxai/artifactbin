@@ -2,6 +2,7 @@
 import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { mermaidImageKey, mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { useIsland } from '../context';
+import { STORY_ROOT_SELECTOR } from '../contract';
 import { deferEngine } from '../defer-engine';
 import type { MermaidImage } from '@/lib/mermaid-images/mermaid-render';
 import type { Drawn } from '@/lib/mermaid-images/reader-draw';
@@ -31,7 +32,7 @@ export function Mermaid(p: Props) {
   const invalid = () => mermaidSourceError(p.code);
   const liveMode = () => {
     revision();
-    const themed = host?.closest('[data-mx-inline-story]') ?? host?.closest('.dark, .light');
+    const themed = host?.closest(STORY_ROOT_SELECTOR) ?? host?.closest('.dark, .light');
     const modeRoot = themed ?? (typeof document !== 'undefined' ? document.documentElement : null);
     const mode = modeRoot?.classList.contains('dark') ? 'dark' : modeRoot?.classList.contains('light') ? 'light' : p.colorMode ?? 'light';
     if (host?.isConnected && mode === pageMode()) document.documentElement.removeAttribute('data-mx-reader-mode');
