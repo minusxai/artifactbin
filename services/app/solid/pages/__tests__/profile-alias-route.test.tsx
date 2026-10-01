@@ -57,3 +57,13 @@ it('sends the /edit alias to the dataset editor, not the folder view', async () 
   await waitFor(() => expect(screen.queryByLabelText('Not found')).toBeNull());
   expect(screen.queryByLabelText('Loading folder')).toBeNull();
 });
+
+// The page door answers a uniform 404 for a missing artifact and a private one alike: that is the not-found
+// page, not a load failure to retry (there is nothing a retry could change).
+it('shows the not-found page, not a retry, when the alias answers 404', async () => {
+  vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'not_found' }, { status: 404 })));
+  at('/@bob/doc002-private');
+  await waitFor(() => expect(screen.getByLabelText('Not found')).toBeInTheDocument());
+  expect(screen.queryByRole('button', { name: 'Retry artifact' })).toBeNull();
+});
