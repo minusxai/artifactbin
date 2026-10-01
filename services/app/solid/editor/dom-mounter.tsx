@@ -71,10 +71,10 @@ function regionEnd(siblings: JsxNode[], start: number): number {
 /** How many recent hand-overs an editor remembers: drafts in flight are one or two behind it. */
 const HANDED_KEPT = 8;
 /**
- * How long an off-screen mount slice may build editors (one region at least). Every slice that changes the page also
- * costs one style pass of the whole page at the next frame, so fewer, fuller slices block less in all.
+ * How long an off-screen mount slice may build editors (one region at least). The page's own style pass for what a
+ * slice inserted follows at the next frame; on a table-heavy page that pass, not the editors, is most of the time.
  */
-const SLICE_MS = 200;
+const SLICE_MS = 50;
 const isBreak = (node: JsxNode | undefined): boolean => node?.type === 'text' && !node.value.trim();
 /**
  * The editor's blocks, laid out with the line breaks the region had between and after its blocks. Breaks are child
