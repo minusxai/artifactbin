@@ -30,11 +30,12 @@
 // `──── name (Ns) ────` lines for each gate (a failed first attempt excluded).
 export const GATE_SPECS = Object.freeze([
   { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 32, timeoutMs: 150_000 },
-  // Needs no server: opens rendered offline files from file:// in all three engines (reading, editing,
-  // comments, Save, code view offline and online, agent-edited files). Measured 42–44s in the
-  // playwright:v1.62.1-noble image on a laptop and 39s on macOS; CI runners are slower (an earlier,
-  // smaller version overran 60s there), so the budget is ~5x the measured run.
-  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 76, timeoutMs: 240_000 },
+  // Opens rendered offline files from file:// (reading, editing, comments, Save, code view offline and
+  // online, agent-edited files), one engine per gate. All three took 74s on run 36879103503 (after 48s of cross-browser install), so the
+  // per-engine seconds are a third of that plus the shared publish and download, until CI measures them.
+  { name: 'offline-file', needsMail: false, seconds: 30, timeoutMs: 120_000 },
+  { name: 'offline-file-firefox', browsers: ['firefox'], needsMail: false, seconds: 30, timeoutMs: 120_000 },
+  { name: 'offline-file-webkit', browsers: ['webkit'], needsMail: false, seconds: 30, timeoutMs: 120_000 },
   { name: 'cli-conformance', needsMail: true, seconds: 12, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
   { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
@@ -143,10 +144,10 @@ export function browsersFor(names) {
 /**
  * The gate matrix's total shard count in `.github/workflows/ci.yml` (the `gates` job). Keep this in
  * step with the workflow's shard count — scripts/__tests__/ci-plan.test.mjs checks the matrix against it.
- * Ten bins of ~70s of wall each (two servers per runner) from ~1,250s of measured gate work, down from
- * twenty-four bins packed by timeout, which gave a 13s gate a runner of its own.
+ * Twelve bins of <=~75s of wall each (two servers per runner) from ~1,250s of measured gate work, two of
+ * them held alone by CI_ISOLATED_GATES; ten left ~89s of work on the shared bins (run 36879103503).
  */
-export const CI_GATE_SHARDS = 10;
+export const CI_GATE_SHARDS = 12;
 
 /**
  * Gates that each get a CI runner to themselves. Both FAIL under a neighbour's browser load and then

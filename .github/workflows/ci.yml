@@ -350,16 +350,18 @@ jobs:
   # provisioning Chromium. Eight spread the growing API file set while the
   # independent runners kept the run's critical path at the slowest shard; by run 36608202961 the
   # slowest of eight was 188s (shard 3) — over the ~150s per-job target — so it splits ten ways.
+  # EIGHT again after run 36879103503: ten shards ran 75-90s while the gate shards ran 110-160s, so two
+  # of their runners went to the gates (twelve shards) and the run's runner count stayed the same.
   api:
     needs: [ plan ]
     if: needs.plan.outputs.api == 'true'
-    name: api tests (${{ matrix.shard }}/10)
+    name: api tests (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -410,7 +412,7 @@ jobs:
           restore-keys: test-builds-v1-${{ runner.os }}-
       # Files are packed by measured time (scripts/lib/timed-sequencer.mjs), not by count, and the
       # api project shares one module graph per worker; the files that mock modules run isolated.
-      - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/10
+      - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/8
       - if: matrix.shard == 1 && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
@@ -430,13 +432,13 @@ jobs:
   gates:
     needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/10)
+    name: browser gates (${{ matrix.shard }}/12)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -503,8 +505,8 @@ jobs:
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/10)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/10)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
       # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
       # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
       # (one gate shard), against a 240s job budget. Only the cross-browser shards pay it, and with the
@@ -564,11 +566,11 @@ jobs:
       # shards: the set ran 213s and ~170s of gate work in two shards on main run
       # 34697938970, and further shards divide that work rather than the machine.
       #
-      # Ten shards, down from twenty-four, packed by each gate's MEASURED CI seconds rather than its
-      # timeout (scripts/gates.manifest.mjs `shardWeight`): ~70s of wall per shard, and no runner
-      # held by one 13s gate. The 118s editor gate is three gates now, so none sets the path alone.
+      # Twelve shards (two taken from api), packed by each gate's MEASURED CI seconds rather than its
+      # timeout (scripts/gates.manifest.mjs `shardWeight`): <=~75s of gate work per shard. The gates that
+      # lose races under a neighbour's load (`CI_ISOLATED_GATES`) each hold a shard alone.
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/10
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/12
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

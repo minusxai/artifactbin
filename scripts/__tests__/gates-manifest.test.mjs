@@ -93,6 +93,13 @@ describe('the rows tell the truth about their sources', () => {
   it('8. every gate reports through the one verdict dialect, or asserts and throws', () => {
     for (const name of onDisk) {
       const src = source(name);
+      // A per-engine gate runs another gate's file (gate-offline-file-firefox.mjs): that file, itself a
+      // gate on disk and checked by this same loop, is the one that must report.
+      const delegate = /await import\('\.\/gate-([a-z0-9-]+)\.mjs'\)/.exec(src);
+      if (delegate) {
+        expect(onDisk, `${name} runs a gate that is not on disk`).toContain(delegate[1]);
+        continue;
+      }
       if (!/createChecker\(/.test(src)) {
         // The alternative is node:assert, which fails the process on the spot.
         expect(src, `${name} neither checks nor asserts`).toMatch(/from ['"]node:assert/);
