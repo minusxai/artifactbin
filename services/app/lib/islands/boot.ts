@@ -15,8 +15,8 @@
  * 6. top-level only: holds the document's live stream (./live, from the snapshot's `since`) and
  *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`);
  * 7. when the page data names the version's author script, loads the lazy author realm (./author-realm,
- *    a standalone chunk) and runs the script in its sandboxed frame against this store, after the
- *    islands have hydrated — as today's runtime runs it after its first commit. Edit mode and dispose
+ *    a standalone chunk) and runs the script in its QuickJS realm over this store and the story root,
+ *    after the islands have hydrated. Edit mode and dispose
  *    revoke it (the editor starts its own).
  * 8. when the page may hold data (`hold`, `sqliteWasm`): gives the store the page's own SQLite engine
  *    (./sqlite-engine, bundled alone and loaded behind the first paint — the store asks for it once the

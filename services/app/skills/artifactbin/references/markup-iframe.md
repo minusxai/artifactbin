@@ -152,5 +152,5 @@ Use `await mx.read(['results'], {refresh:true})` to refresh declared queries and
 only to that call. No bridge operation permits arbitrary account APIs or source
 edits. See [script API](markup-scripts.md).
 
-The Helmet script runs in the page's interpreter with `mx` and `dom` ([script APIs](markup-scripts.md)). Use generic `<Iframe>` for new
+Helmet scripts get the same `mx` in the page's realm. Use generic `<Iframe>` for new
 visible scenes; pinned libraries are documented in [libraries](markup-libraries.md).

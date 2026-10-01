@@ -84,15 +84,12 @@ Parent CSS and data declarations belong here. Iframe owns its own CSS/JS.
 ```
 
 <!--bundle:skip-->
-The Helmet `<script>` runs after hydration in a bounded interpreter on the
-page: no browser globals (no `document`, `fetch`, storage), only `mx` for the
-document's data and `dom` for the page's elements (text, form values, classes,
-events, elements it creates). Bindings first: `$value` covers selection,
-filtering and display; write JavaScript for branching, sequencing or computed
-state: attach handlers with `dom.on(node, 'click', fn)`, never an inline
-`onClick=`. See [script APIs](markup-scripts.md). Canvas and library code go in
-Iframe, where handlers use `addEventListener`. `</script` cannot appear in the
-text (split it: `'</scr' + 'ipt'`).
+The Helmet `<script>` runs in a bounded interpreter on the page: no browser
+globals, only `mx` (data) and `dom` (elements: text, values, classes,
+`dom.on(node, 'click', fn)`, created nodes). Bindings first; script for
+branching or computed state. See [script APIs](markup-scripts.md). Iframe
+handlers use `addEventListener`. `</script` cannot appear in the text (split
+it: `'</scr' + 'ipt'`).
 
 <!--/bundle:skip-->
 - **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
