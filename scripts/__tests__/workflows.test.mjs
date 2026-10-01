@@ -136,6 +136,12 @@ describe('ci.yml: one build, shared with the gates', () => {
     for (const command of ['npm run build -w services/cli', 'node scripts/build-server.mjs dist/server.mjs']) {
       expect(ci.jobs.build.steps.find((step) => step.run === command)?.if, command).toBe(miss);
     }
+    // Every Chromium cache keys on what pins the browser, never on the whole lockfile.
+    for (const [name, job] of Object.entries(ci.jobs)) {
+      for (const step of job.steps ?? []) {
+        if (step.with?.path === '~/.cache/ms-playwright') expect(step.with.key, name).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
+      }
+    }
     // The build the CLI job would repeat is still its own; only the gates read this artifact.
     expect(ci.jobs.build.steps.map((step) => step.run)).toContain('npm run build -w services/cli');
   });

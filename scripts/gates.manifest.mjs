@@ -51,11 +51,11 @@ export const GATE_SPECS = Object.freeze([
   { name: 'data-ux', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'dataflow', needsMail: true, seconds: 15, timeoutMs: 60_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
-  // run 36838282615 that held a runner to itself and set the run's critical path. The three seconds
-  // are the sections' estimated shares until a CI run measures them.
-  { name: 'editor-v2', needsMail: false, serialGroup: 'clipboard', seconds: 60, timeoutMs: 200_000 },
-  { name: 'editor-path', needsMail: true, seconds: 35, timeoutMs: 150_000 },
-  { name: 'editor-exits', needsMail: false, seconds: 25, timeoutMs: 120_000 },
+  // run 36838282615 that held a runner to itself and set the run's critical path. Seconds: the
+  // container run's 34s/42s/36s scaled by CI's 118s for the whole, until CI measures them alone.
+  { name: 'editor-v2', needsMail: false, serialGroup: 'clipboard', seconds: 42, timeoutMs: 200_000 },
+  { name: 'editor-path', needsMail: true, seconds: 52, timeoutMs: 150_000 },
+  { name: 'editor-exits', needsMail: false, seconds: 44, timeoutMs: 120_000 },
   { name: 'editable-table', needsMail: true, seconds: 30, timeoutMs: 120_000 },
   { name: 'roadmap-views', needsMail: false, seconds: 11, timeoutMs: 60_000 },
   { name: 'export-slice', needsMail: false, seconds: 11, timeoutMs: 60_000 },

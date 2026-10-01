@@ -134,7 +134,8 @@ jobs:
   # running whole, which made `validate + node` a 2m16s job of which 103s was
   # this step alone.
   #
-  # TEN shards, up from four: shard 3 also builds and tests the CLI (~141s fixed, unaffected by
+  # EIGHT shards, down from ten after run 36838282615, where the plain shards ran 63-111s against a
+  # 240s budget and the gates set the run's path. Before that, TEN, up from four: shard 3 also builds and tests the CLI (~141s fixed, unaffected by
   # shard count — see below), so on run 36611975484 it was the tallest job in the run at 236s even
   # though its own share of the plain vitest work was only 72s. Downloading `build`'s artifact instead
   # of rebuilding was tried and reverted: shard 3 has almost no OTHER setup to overlap the wait
@@ -144,13 +145,13 @@ jobs:
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
-    name: node tests (${{ matrix.shard }}/10)
+    name: node tests (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -177,7 +178,7 @@ jobs:
         id: playwright
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
@@ -191,7 +192,7 @@ jobs:
         run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
-        run: node scripts/ci.mjs node ${{ matrix.shard }}/10
+        run: node scripts/ci.mjs node ${{ matrix.shard }}/8
       # The heavy tests that `npm test` leaves out — a disposable Dockerised
       # Postgres and real Chromium — live in the `integration` project and
       # would otherwise run nowhere in CI. This job already provisions both
@@ -213,17 +214,18 @@ jobs:
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
-  # on run 36608202961 — over the ~150s per-job target — so it splits three ways.
+  # on run 36608202961 — over the ~150s per-job target — so it split three, then four ways. Three
+  # again after run 36838282615 (four shards, 84-129s): the gates, not this job, set the run's path.
   ui:
     needs: [ plan ]
     if: needs.plan.outputs.ui == 'true'
-    name: ui tests (${{ matrix.shard }}/4)
+    name: ui tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4 ]
+        shard: [ 1, 2, 3 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -244,7 +246,7 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/4
+      - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/3
 
   # The BUILD catches what tsc and vitest cannot: a route the generated table
   # has not seen, an import that only resolves under the bundler, a SPA module
@@ -376,14 +378,15 @@ jobs:
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The export tests drive real headless Chromium (lib/export.ts). The
-      # browser download is the slow half of the install; cache it on the lock
-      # file (which pins the playwright version). --with-deps still apt-installs
-      # shared libraries on every run — cheap next to the download.
+      # browser download is the slow half of the install; cache it on what pins
+      # the browser (playwright-core's browsers.json), as the gates do — keyed on
+      # the whole lockfile, any dependency change missed it and paid a download
+      # plus a --with-deps apt pass: 135s on api shard 6 of run 36867180747.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
