@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-/** components/views/story/StoryToolbarMenu.tsx port: the popover shell every editor menu shares. */
+/** The popover shell every editor menu shares. */
 import { screen, fireEvent } from '@testing-library/dom';
 import { expect, it } from 'vitest';
 import { createSignal } from 'solid-js';

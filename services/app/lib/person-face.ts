@@ -2,7 +2,7 @@
  * HOW A PERSON IS DRAWN — the rules, once.
  *
  * A face is drawn by three renderers that cannot share a component: the app's
- * React chrome (`components/Avatar`), the document kit (`components/kit/
+ * React chrome (`solid/components/Avatar`), the document kit (`components/kit/
  * user-image`, rendered on the server and hydrated inside a document) and the
  * reader rail (`lib/story/reader-chrome`, an HTML string). They share THIS
  * module instead, so the same person is the same colour, the same letter and
@@ -14,7 +14,7 @@
  *  - no picture → the initial on `personFaceBackground(id)`, white text;
  *  - an id we cannot name → a neutral `?`, never the raw id.
  *
- * Pure and React-free: the reader rail and the server import it.
+ * Pure and framework-free: the reader rail and the server import it.
  */
 
 /**

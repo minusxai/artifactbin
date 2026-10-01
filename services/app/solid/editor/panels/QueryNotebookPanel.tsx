@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/QueryNotebookPanel.tsx in SOLID — the document's `<Query>`
+ * The document's `<Query>`
  * declarations as cells: the SQL above, the last run's answer below, the way a
  * notebook reads.
  *

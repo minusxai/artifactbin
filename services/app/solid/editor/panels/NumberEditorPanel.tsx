@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/NumberEditorPanel.tsx in SOLID.
+ *
  *
  * Pick a table, a column, an aggregation, and the decorations for an inline
  * `<Number>` — the chart inspector's sibling for the figure that lives in a

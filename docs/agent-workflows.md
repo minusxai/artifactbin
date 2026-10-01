@@ -15,7 +15,10 @@ Resume the same task with `--reuse --install`: its environment, data and brief a
 a matching successful installation receipt avoids reinstalling and refreshes generated assets.
 A failed install stops the handoff. Each worktree owns its dependencies and caches. The default base is `main`; use an explicit
 base when continuing dependent work. Downstream repositories can use `--pin-submodule`. `--secrets`
-adds fresh local secrets; never commit `.env` or `.agent/`. Each worktree owns its database/object paths,
+adds fresh local secrets; `--from <port>` starts the search for a free 100-port block at that port,
+`--dir <path>` places the tree (default `../<repo>-<phase>`), `--reuse` resumes an existing task tree,
+`--remove` tears the worktree down (the branch is kept) and `--harness claude|codex|pi` prints the exact
+launch line for that coding agent (check the installed CLI's help before trusting it); never commit `.env` or `.agent/`. Each worktree owns its database/object paths,
 compose project and ports. `node scripts/port-block.mjs --env` measures availability instead of guessing.
 
 Keep the concrete handoff in `.agent/BRIEF.md` and completion evidence in `.agent/REPORT.md`.

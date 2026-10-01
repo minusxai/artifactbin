@@ -2,7 +2,7 @@ import { createEffect, on, onCleanup, onMount, untrack } from 'solid-js';
 
 /**
  * Radix's CollapsibleContent measurement (CollapsibleContentImpl), which Accordion and Collapsible
- * content both run in today's React kit. Once mounted, and on every open/close, it writes through the
+ * content both run in the retired React kit. Once mounted, and on every open/close, it writes through the
  * CSSOM — so the served `style` string comes back in the CSSOM's form, as it does on today's page:
  *  - `transition-duration: 0s; animation-name: none` while it measures, kept for content that was
  *    open on mount until its first change after the first frame, restored (removed) otherwise;

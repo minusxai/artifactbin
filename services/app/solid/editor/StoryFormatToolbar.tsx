@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/StoryFormatToolbar.tsx in SOLID — format controls for whatever is selected
+ * Format controls for whatever is selected
  * in the document. The toolbar holds no element from the document, only the DESCRIPTION it sent (its
  * path, its current classes, where it is on screen); every change goes back as one message.
  *

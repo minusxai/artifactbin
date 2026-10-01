@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/ArtifactEditor in SOLID — the gate into editing, mounted by the document page when edit
+ * The gate into editing, mounted by the document page when edit
  * mode is on. It decides whether this browser may write at all (one `backend.load()`, authorized by
  * whichever browser credential the cookie carries), else the locked card; otherwise it is the
  * in-place editor over the page's adopted document, seeded with what the page already holds.

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/SourceEditor in SOLID: the same CodeMirror engine (lib/source-editor/codemirror, whose
+ * The same CodeMirror engine (lib/source-editor/codemirror, whose
  * `createSourceView` imports no framework) mounted once per (readOnly, ariaLabel), with the same
  * contract: THE EDITOR OWNS THE BUFFER; A REPLACEMENT IS ANNOUNCED, NEVER INFERRED. Local typing
  * never writes back into the buffer; only a `revision` bump moves it, and it reads `value` at that

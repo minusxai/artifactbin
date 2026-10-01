@@ -99,7 +99,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Card: { mod: 'basic' }, CardHeader: { mod: 'basic' }, CardTitle: { mod: 'basic' }, CardDescription: { mod: 'basic' }, CardAction: { mod: 'basic' }, CardContent: { mod: 'basic' }, CardFooter: { mod: 'basic' },
   Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value', 'forceMount'] },
   Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion', api: ['forceMount'] },
-  // Store adapters (StoryRuntimeApp): the DOM carries only the node's identity (id, data-mx-ast).
+  // Store adapters: the DOM carries only the node's identity (id, data-mx-ast).
   Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format'], dom: 'identity' },
   Question: { mod: 'data', island: true, api: ['data', 'viz', 'title', 'height', 'recipeData'], dom: 'identity', grid: true },
   DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates'], dom: 'identity', grid: true, noChildren: true },
@@ -130,10 +130,10 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Breadcrumb: { mod: 'static' }, BreadcrumbList: { mod: 'static' }, BreadcrumbItem: { mod: 'static' }, BreadcrumbLink: { mod: 'static' }, BreadcrumbPage: { mod: 'static' }, BreadcrumbSeparator: { mod: 'static' }, BreadcrumbEllipsis: { mod: 'static' },
   SlideDeck: { mod: 'static' }, Slide: { mod: 'static', api: ['title'] }, Video: { mod: 'static', api: ['src', 'poster', 'title', 'interactive'] }, File: { mod: 'static', api: ['src', 'title', 'name', 'bytes', 'pages', 'interactive'] },
 };
-/** The rail's miniature stubs its embeds (StoryRuntimeApp PREVIEW_REGISTRY). */
+/** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
-/** Components whose HTML the React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
+/** Components whose HTML the retired React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
 const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import', 'Mutation', 'Column']);
@@ -144,7 +144,7 @@ const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((ta
  * control, and the cell scope's attribute resolver every element in a column's content uses.
  */
 const CELL_EXPORTS: ReadonlySet<string> = new Set(['CellControl', 'cellAttrs']);
-/** The tags today's editing cell draws (StoryRuntimeApp RuntimeCellControl); another tag with `run` in a cell draws nothing. */
+/** The tags today's editing cell draws; another tag with `run` in a cell draws nothing. */
 const CELL_CONTROLS: ReadonlySet<string> = new Set(['Select', 'DatePicker', 'input', 'textarea', 'select']);
 /** Today's native editing cell's classes (RuntimeCellControl), before the author's. */
 const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50';
@@ -152,7 +152,7 @@ const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-tran
 const CELL_API = ['value', 'label', 'aria-label', 'placeholder', 'options', 'multiple', 'allowCreate', 'valueFormat', 'nullable', 'exclude', 'min', 'max', 'type', 'args', 'disabled'];
 /** The authored control props that remain on its static wrapper. */
 const shellRest = ({ label: _label, placeholder: _placeholder, className: _className, value: _value, options: _options, multiple: _multiple, allowCreate: _allowCreate, valueFormat: _valueFormat, checked: _checked, min: _min, max: _max, step: _step, format: _format, prefix: _prefix, suffix: _suffix, disabled: _disabled, children: _children, ...rest }: Props): Props => rest;
-/** A column's content that draws something (components/kit/data-table: whitespace alone is no template). */
+/** A column's content that draws something. */
 const hasContent = (nodes: JsxNode[]): boolean => nodes.some((n) => n.type !== 'text' || !!n.value.trim());
 /** A rail miniature served inert, put in place by the deck behaviour (lib/islands/deck RAIL_THUMB_ATTR, the same name). */
 const RAIL_THUMB_ATTR = 'data-mx-thumb';
@@ -382,7 +382,7 @@ export function generate(input: GenerateInput): Generated {
       if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
       // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
       if (node.tag === 'DialogContent') props.stacked = !(typeof props.className === 'string' && props.className);
-      // The runtime registry hands Mermaid the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY).
+      // The runtime registry hands Mermaid the document's colour mode.
       if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
       // <Column> children ARE the column spec (interpreter DataTable templates → parseColumnSpecs(templates.map(t => t.props))).
       let cellsJsx = '';
@@ -405,7 +405,7 @@ export function generate(input: GenerateInput): Generated {
         if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
         props.compiled = managedFrameOf(node);
       }
-      // The runtime hands the map the document's colour mode (StoryRuntimeApp RUNTIME_REGISTRY DeckGL).
+      // The runtime hands the map the document's colour mode.
       if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
       const classes = peopleClasses(node.tag, props);
       if (classes) props.classes = classes;
@@ -414,7 +414,7 @@ export function generate(input: GenerateInput): Generated {
       const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
       // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
       const recipe = RECIPES[node.tag];
-      // In a fixed grid's tile the tile owns the size (components/kit/grid GridItemContext): the recipe and the port both know.
+      // In a fixed grid's tile the tile owns the size: the recipe and the port both know.
       const inGrid = !!(meta.grid && ctx.grid && !ctx.grid.flow);
       const cls = meta.dom === 'identity' ? null : node.tag === 'Icon' ? cn(ICON_BASE_CLASS, typeof props.className === 'string' ? props.className : undefined) : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
       let dom: Props = { ...props };
@@ -520,7 +520,7 @@ export function generate(input: GenerateInput): Generated {
   }
 
   /**
-   * Today's editing cell (StoryRuntimeApp RuntimeCellControl). What differs per row — the row's values, the
+   * Today's editing cell. What differs per row — the row's values, the
    * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here, as
    * today's React renders it: the element's attributes serialised by React's server renderer, and its class
    * merged by the kit's merger (order included).
@@ -548,7 +548,7 @@ export function generate(input: GenerateInput): Generated {
     return `<CellControl tag={${lit(tag)}} run={${lit(refName(run))}}${field ? ` field={${lit(field)}}` : ''} p={${json(api)}} attrs={${json(Object.fromEntries(attrs.filter(([n]) => n !== 'class')))}} cls={${lit(cls)}} path={${lit(path)}} row={${ctx.row}} cell={${ctx.scope}}>${children}</CellControl>`;
   }
 
-  /** Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out (components/kit/grid). */
+  /** Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out. */
   function emitGrid(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const raw = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
     const props = ctx.preview ? ctx.preview.rewrite(raw) : raw;
@@ -608,10 +608,10 @@ export function generate(input: GenerateInput): Generated {
     return `<rt.Repeat name={${lit(name)}}${keyJsx} owner={${lit(ownerId)}} ids={${json([...templateIds(node.children)])}}${isTableParts(node) ? ' tableParts={true}' : ''}${svg ? ' svg={true}' : ''}${jsxAttrs(attrs)}>{(${row}, ${scope}) => <>${body}</>}</rt.Repeat>`;
   }
 
-  // The column wrapper the runtime always draws (StoryRuntimeApp: `.mx-doc`).
+  // The column wrapper the runtime always draws.
   const body = nodes.map((n, i) => emit(n, String(i), 'static', { row: null })).join('');
   const browserBody = nodes.map((n, i) => emit(n, String(i), 'browser', { row: null })).join('');
-  // A DECK's chrome (StoryRuntimeApp SlideRail/PresentBar): static HTML at compile time, thumbnails
+  // A DECK's chrome: static HTML at compile time, thumbnails
   // included; its behaviour is the framework-free `@mx/deck` chunk.
   const slides = input.chrome !== false ? discoverSlides(nodes) : [];
   const deck = slides.length >= MIN_SLIDES_FOR_RAIL;

@@ -95,7 +95,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (error instanceof WebAssetRefused) {
       // A refusal an agent never sees — nothing was published — so it is the
       // RUNTIME that has to say something: the image goes to its alt text with
-      // `data-mx-asset="refused"` (lib/story-runtime/StoryRuntimeApp).
+      // `data-mx-asset="refused"`.
       const status = error.code === 'rate_limited' ? 429 : 400;
       return reply({ error: status === 429 ? 'rate_limited' : 'asset_fetch_failed', code: error.code, details: [error.message] }, status);
     }

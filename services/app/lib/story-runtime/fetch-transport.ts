@@ -14,7 +14,7 @@
  *
  * The relay (relay-transport.ts) stays the transport INSIDE a parent page:
  * the page holds the session a private document's queries need. The choice
- * is made once, by document-transport.ts. React-free.
+ * is made once, by document-transport.ts. framework-free.
  */
 import { QUERY_REQUEST_PARAM } from './contract';
 import type { QueryTransport } from './store';

@@ -76,14 +76,14 @@ Run these from the repository root. Keep this list current.
 - `npm run validate` — name guard and incremental TypeScript (native `tsgo` where its platform binary is
   installed, here and in CI; tsc otherwise), including unused declarations;
   shared utils/contracts also use `noUncheckedIndexedAccess` for downstream compatibility.
-- `npm test` — affected api/node/ui + CLI tests, at most 50 files combined. Exit 2: use PR CI,
+- `npm test` — affected api/node/ui/islands + CLI tests, at most 50 files combined. Exit 2: use PR CI,
   never widen. `-- <ref>` selects branch changes; `-- --files <paths>` selects TDD tests;
   `-- --reuse` reuses matching evidence. Config/package edits may defer everything; that is expected.
 - `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — the named browser gates in
   a Linux container, built and served as CI does; the output and exit status are the gates'.
-- CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:integration`, `build`,
-  `test:gates`. Do not invoke these locally to work around deferral.
-- `npm run build:islands` — build the shared reader islands and manifest.
+- CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:islands`, `test:integration`,
+  `build`, `test:gates`. Never use them to bypass deferral.
+- `npm run build:islands -w services/app` — build the shared reader islands and manifest.
 - `node scripts/gate-container.mjs hydration` — verify the compiled reader handover in a Linux container.
 - `npm run generate:routes`, `generate-story-ui-classes`, `render:schema` —
   generated inputs.

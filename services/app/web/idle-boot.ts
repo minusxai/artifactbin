@@ -17,7 +17,7 @@
  * buttons carry no behaviour of their own.
  *
  * Framework-free and tiny: it is the whole of the entry the assembler tags `data-mx-spa-idle`
- * (web/spa-idle.ts).
+ * (web/solid-spa-idle.ts).
  */
 import { reportInitialArtifactView } from './artifact-view-report';
 
@@ -148,7 +148,7 @@ export const capabilityOf = (doc: Document): SpaCapability =>
  * created HIDDEN while the compiled story is still the body's, so nothing the app draws before it
  * adopts the story (a loading skeleton) can push the document down; web/initial-story reveals it
  * as it adopts — and the app's own stylesheet, loaded before the app runs, because
- * components/TrustedUi reads the shell's stylesheet links from `<head>` when web/main is evaluated.
+ * solid/components/TrustedUi reads the shell's stylesheet links from `<head>` when web/main is evaluated.
  */
 async function prepareAppShell(doc: Document, stylesheet: string | null): Promise<void> {
   if (!doc.getElementById('root')) {
@@ -179,7 +179,7 @@ export interface SpaIdleOptions {
 }
 
 /**
- * THE HTML-FIRST PAGE'S LOADER (web/spa-idle): the reader's capability from the served chrome, the
+ * THE HTML-FIRST PAGE'S LOADER (web/solid-spa-idle): the reader's capability from the served chrome, the
  * app's saved theme at once, and the app itself when it is wanted — at once for a deep link that
  * needs it.
  */

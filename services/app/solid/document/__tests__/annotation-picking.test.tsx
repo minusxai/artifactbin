@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * PICKING — the Select tool (components/__tests__/annotation-picking.ui.test.tsx, in Solid). Opening
+ * PICKING — the Select tool. Opening
  * the rail starts a pick; the editor ends one; the document answers with the block (or the drawn
  * area) the reader chose, and the composer opens on it. Includes where the rail sits under the bars.
  */

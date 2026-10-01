@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/FeatureUnavailable.tsx in SOLID — A CONTROL THAT EXISTS ONLY FOR A BACKEND
+ * A CONTROL THAT EXISTS ONLY FOR A BACKEND
  * FEATURE (lib/artifact-backend): when the backend says the feature is unavailable, the
  * control stays where it is, disabled, and says why — as its accessible description and
  * as a tooltip on a focusable wrapper (a disabled control receives neither focus nor

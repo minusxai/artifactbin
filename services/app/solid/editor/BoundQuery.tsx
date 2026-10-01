@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/BoundQuery.tsx in SOLID — the query behind the data: what the chart and
+ * The query behind the data: what the chart and
  * number inspectors show under their table picker when the bound table is a `<Query>`. A table
  * `<Value>` has no query, so this renders nothing.
  */

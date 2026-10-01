@@ -51,7 +51,7 @@ function harvestRequest(artifactId: string, surface: MermaidSurface, mode: Mode)
   const url = new URL(surface === 'document' ? `/a/${artifactId}/raw?chrome=0&${query}` : `/a/${artifactId}?${query}`, EXPORT_INTERNAL_ORIGIN).toString();
   return {
     url, viewport: { width: 1440, height: 1000 }, selector: 'body',
-    // Only what the ENGINE drew here carries its palette and measurements (components/kit/mermaid).
+    // Only what the ENGINE drew here carries its palette and measurements.
     collect: 'figure[data-mx-mermaid-palette][data-mx-mermaid-key]',
     sameOriginOnly: true, ...(ASSETS_ORIGIN ? { assetOrigin: ASSETS_ORIGIN } : {}),
     settleMs: 100, timeoutMs: HARVEST_TIMEOUT_MS, loads: 1,

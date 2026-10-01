@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * EDITING, IN THE DOCUMENT THE READER IS ALREADY LOOKING AT (components/InPlaceEditor in SOLID).
+ * EDITING, IN THE DOCUMENT THE READER IS ALREADY LOOKING AT.
  *
  * The page's adopted compiled document (solid/document/create-island-story) becomes editable in
  * place; this component owns the editing chrome, source composition, persistence and history.

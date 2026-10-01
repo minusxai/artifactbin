@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/EditPanel.tsx in SOLID — one right panel for the whole edit session, on a window wide
+ * One right panel for the whole edit session, on a window wide
  * enough to hold it beside the document (lib/story/edit-bar's EDIT_PANEL_BREAKPOINT; narrower windows
  * get bottom sheets instead).
  *

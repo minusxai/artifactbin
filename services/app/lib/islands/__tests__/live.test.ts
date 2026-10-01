@@ -82,11 +82,11 @@ describe('the island live stream', () => {
     const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { reload } : Reflect.get(target, key, target)) });
     const stop = startIslandLive(win, 'abc', 'e1');
     const [source] = FakeEventSource.made;
-    // components/IslandStory installs the adopt hook when the app takes the page: it holds the stream now.
+    // solid/document/create-island-story installs the adopt hook when the app takes the page: it holds the stream now.
     (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = () => {};
     source!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
     expect(reload).not.toHaveBeenCalled();
-    expect(updateCompiledStory, 'the app calls the update path itself (components/IslandStory)').not.toHaveBeenCalled();
+    expect(updateCompiledStory, 'the app calls the update path itself (solid/document/create-island-story)').not.toHaveBeenCalled();
     stop();
   });
 

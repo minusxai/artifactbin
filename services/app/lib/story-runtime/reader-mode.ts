@@ -10,7 +10,7 @@
  * helpers so neither consumer can clobber the other. Per-visit is the ceiling,
  * not a choice: a returning reader starts at the author's default again.
  *
- * React-free on purpose: this ships in anchor-entry (~1.5 KB, loaded by every
+ * Framework-free on purpose: this ships in anchor-entry (~1.5 KB, loaded by every
  * document, hydrating or not) and is also imported by the runtime entry.
  */
 import type { ScrollAnchor } from '@/lib/story/scroll-anchor';

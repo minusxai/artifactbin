@@ -1,6 +1,6 @@
 /**
  * THE LIVE MORPH (lib/islands/morph/engine, lib/islands/live-update; docs/phase2-architecture.md §2.4):
- * a compiled page brought to the document's newest version in place, as today's React reader re-renders
+ * a compiled page brought to the document's newest version in place, as the retired React reader re-renders
  * a write. A booted page (the real `boot`, hydratable islands written as babel-preset-solid emits them —
  * see rt-adopt.test) is morphed into the next version's fragment: static nodes keep their identity and
  * take the new content, an island whose key the new version carries again keeps its nodes and keeps

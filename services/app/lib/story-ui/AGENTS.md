@@ -2,7 +2,7 @@
 
 These rules cover `lib/story-ui` and the parser in `lib/jsx`, and only what is specific to markup.
 The shared rules live once elsewhere and are not restated here: working rules and app chrome
-(tooltips included) in the root [AGENTS.md](../../../../AGENTS.md); node identity, the runtime
+(tooltips included) in the root [AGENTS.md](../../../../AGENTS.md); node identity, the runtime and
 the author-script sandbox boundary in [serving and security](../../../../docs/serving-and-security.md). Read those first.
 
 - Static JSX is data. `lib/jsx/parse.ts` uses acorn/acorn-jsx and records non-static expressions.
@@ -10,7 +10,7 @@ the author-script sandbox boundary in [serving and security](../../../../docs/se
   rest with useful spans. Do not replace this with an executable JSX/MDX compiler.
 - Keep publish validation (`lib/jsx/validate.ts`) and renderer filtering (`interpreter-primitives.ts`, the compiler's `rawBuildProps`) independent.
   Stored content may predate current validation. Update both sides when changing denied attributes,
-  URL schemes or component vocabulary; account for authored versus React attribute spellings.
+  URL schemes or component vocabulary; account for authored HTML spellings versus compiled JSX prop names.
 - The publish path (`lib/story/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
   Inline style policy and authored style blocks have different rules. Do not relax one because another
   layer also sanitizes. Managed HTML/iframes and author scripts use their own explicit contracts.

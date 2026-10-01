@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-/** The kit pieces the ported pages use (components/ui.tsx in Solid) and its tokens and labels. */
+/** The kit pieces the ported pages use and its tokens and labels. */
 import type { JSX } from 'solid-js';
 export { dateStamp, timeAgo } from '../lib/format';
 /** Display name for a normalized format — the designed tier is BRANDED "mx-markup". */

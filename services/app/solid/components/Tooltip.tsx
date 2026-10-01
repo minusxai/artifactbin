@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * The app tooltip (components/Tooltip.tsx, Radix `asChild` + a body portal) in Solid, compact
+ * The app tooltip in Solid, compact
  * `content="…"` form only — the one every app page uses.
  *
  * Radix `asChild` merges the trigger's props and handlers INTO the child element. Solid has no

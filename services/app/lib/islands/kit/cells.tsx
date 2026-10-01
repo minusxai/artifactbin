@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * EDITING CELLS (`@mx/kit/cells`, a family of its own: only a page whose table has column content loads it): a `<Column>`'s content in each row of a
- * `<DataTable>`, and in it today's editing cell (lib/story-runtime/StoryRuntimeApp RuntimeCellControl) — a
+ * `<DataTable>`, and in it today's editing cell — a
  * `<Select>`, a `<DatePicker>` or a native `<input>`/`<textarea>`/`<select>` with `run="$mutation"`.
  *
  * - `cellAttrs` is the interpreter's table scope (story-ui/interpreter scopeProps with a tableCommentScope) over
@@ -75,7 +75,7 @@ export function cellAttrs(attrs: Readonly<Record<string, unknown>>, row: Row | n
   return out;
 }
 
-/** One draft store per document (StoryRuntimeApp CellSessionsContext): cells unmount and remount, their drafts stay. */
+/** One draft store per document: cells unmount and remount, their drafts stay. */
 const documents = new WeakMap<IslandContext, CellSessions>();
 const sessionsOf = (island: IslandContext): CellSessions => {
   let sessions = documents.get(island);
@@ -105,7 +105,7 @@ const parseMulti = (raw: string | null | undefined): string[] | null => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
- * The popup, as today's cell controls place it (components/kit/controls popupHost, useAnchoredPopup)
+ * The popup, as today's cell controls place it
  * ──────────────────────────────────────────────────────────────────────────── */
 
 const POPUP_TOKENS = ['--background', '--foreground', '--popover', '--popover-foreground', '--primary', '--primary-foreground', '--muted', '--muted-foreground', '--accent', '--accent-foreground', '--border', '--input', '--ring', '--radius', '--font-body', '--font-mono'];
@@ -200,7 +200,7 @@ export function CellControl(props: CellControlProps) {
   const [version, setVersion] = createSignal(0);
   if (!isServer) onCleanup(sessions.subscribe(() => setVersion((n) => n + 1)));
   const session = () => { version(); return sessions.get(identity); };
-  // A saved draft is dropped once the authoritative rows carry it (StoryRuntimeApp reconcile).
+  // A saved draft is dropped once the authoritative rows carry it.
   createEffect(() => { void session()?.phase; sessions.reconcile(identity, initial()); });
   const writable = () => unavailable() === null;
   const value = () => { const s = session(); return s ? s.draft : initial(); };
@@ -226,7 +226,7 @@ export function CellControl(props: CellControlProps) {
     if (props.tag === 'DatePicker') return <CellDate {...{ authored, label, value, disabled, busy, unavailable, change, commit, valueType, attrs, cls: props.cls }} />;
     return <CellNative {...{ tag: props.tag, authored, label, value, disabled, reason, begin, change, commit, cancel, typed, attrs, cls: props.cls, sessions, identity }}>{props.children}</CellNative>;
   };
-  // The disabled control cannot take focus: its stable wrapper carries the reason (StoryRuntimeApp MutationCellHint),
+  // The disabled control cannot take focus: its stable wrapper carries the reason,
   // and holds the refusal of a write beside the control.
   return <MutationHint reason={reason()} fullWidth>{control()}
     <Show when={session()?.error}>{(error) => <span role="alert" class="mx-write-error">{error()}</span>}</Show>
@@ -242,7 +242,7 @@ interface Shared {
   cls: string;
 }
 
-/** Today's SelectControl, `appearance="cell"` (components/kit/controls), over a cell session. */
+/** Today's SelectControl, `appearance="cell"`, over a cell session. */
 function CellSelect(props: Shared & {
   session: () => { draft: Scalar } | undefined; busy: () => boolean; unavailable: () => string | null; change(v: Scalar): void; commit(): void; cancel(): void; begin(): void;
   typed(v: string | null): Scalar; valueType: () => string | undefined; cell: CellScope; field?: string; children?: JSX.Element;
