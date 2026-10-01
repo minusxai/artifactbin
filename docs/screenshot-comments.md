@@ -16,7 +16,7 @@ and an independently captured rectangle; cross-block drags are not clipped to th
   probes returned successful crop promises but then stopped delivering frames. Frames use actual source
   dimensions, not devicePixelRatio. Streams stop on completion, failure, navigation,
   source change or timeout. Capture is invoked before asynchronous imports.
-- `use-comment-capture.ts`: draft lifecycle, explicit retry/upload/text-only recovery,
+- `solid/document/CommentCapture.ts`: draft lifecycle, explicit retry/upload/text-only recovery,
   captured revision and staged upload. The brush editor is a separate lazy chunk.
 - `comment-images.ts`: validated private raster stages, quota reservations, single-use
   attachment consumption inside the root-comment transaction, and authorized reads.

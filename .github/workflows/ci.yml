@@ -130,7 +130,7 @@ jobs:
       - run: npm run validate
 
   # THE NODE PROJECT SHARDS, like api and ui. It is the biggest project in the
-  # repo — 288 files, ~3,060 tests against api's 1,029 — and it was the only one
+  # repo, and it was the only one
   # running whole, which made `validate + node` a 2m16s job of which 103s was
   # this step alone.
   #
@@ -306,7 +306,7 @@ jobs:
       # out of the cache entry as the artifact below already keeps it out of the upload.
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: rm -rf services/cli/dist/runtime services/cli/dist/afbin-runtime-*.gz
-      # ONE BUILD FOR THE WHOLE RUN. Each of the six gate shards used to rebuild these same bytes
+      # ONE BUILD FOR THE WHOLE RUN. Each gate shard used to rebuild these same bytes
       # for itself (`npm run build` ~7s, `npm run build -w services/cli` ~22s, measured on run
       # 35335620538) while this job produced them and threw them away. Compression is off: the
       # payload is already-compressed assets, and both ends are on the same network.
@@ -453,7 +453,7 @@ jobs:
           echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/10)" >> "$GITHUB_OUTPUT"
       # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
       # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
-      # (gates 3/24), against a 240s job budget. Only the cross-browser shards pay it, and with the
+      # (one gate shard), against a 240s job budget. Only the cross-browser shards pay it, and with the
       # packages already in apt's archive they install without downloading anything.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: steps.gate-browsers.outputs.browsers != 'chromium'
@@ -547,7 +547,7 @@ jobs:
         with:
           name: app-build
       # The runner boots the servers with one protected per-run mail outbox.
-      # Two servers within each of the fourteen runners. The
+      # Two servers within each runner. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so no one runner
       # ends up holding every slow gate (scripts/gates.shard.mjs). More than two

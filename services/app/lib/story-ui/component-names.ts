@@ -1,8 +1,7 @@
 /**
  * Names-only contract for the story design system — importable by
- * server-side validation (lib/jsx) WITHOUT pulling React or the component sources in.
- * `lib/story-ui/registry.ts` maps these names to the real components; a registry test
- * asserts the two never drift.
+ * server-side validation (lib/jsx) WITHOUT pulling the component sources in.
+ * The compiler's `KIT` table (lib/compiled-page/compiler.ts) maps these names to the real components.
  */
 
 /** The shadcn component tags a new-format (`format:'jsx'`) story may use. */

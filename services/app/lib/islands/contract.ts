@@ -157,7 +157,7 @@ export type IslandDocumentMode = 'read' | 'edit';
  * The live island document, as the Solid app adopts it WITHOUT re-rendering:
  * the app moves `root` into its tree and renders chrome around it; the islands
  * keep running on the same store. `setMode('edit')` disposes every island and
- * the editor mounts today's interpreter over the source in the same element.
+ * the in-place editor makes the same element editable.
  */
 export interface IslandDocument {
   /** The story element (`[data-mx-inline-story]`), server-rendered, hydrated in place. */

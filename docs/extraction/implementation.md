@@ -15,7 +15,7 @@ Postgres/object storage and local or HTTP compute adapters. They import module e
 not CLI commands or an unpinned sibling checkout.
 
 CI checks source, installed-package and standalone-client compatibility, reader/editor browser
-flows, persistence, permissions and real SQL/rendering. Release publication uses the four-platform
+flows, persistence, permissions and real SQL/rendering. Release publication uses the five-target
 executables tested by successful main CI; downstream deployment has its own compatibility checks.
 
 See [client configuration](client-config.md), [hosting](team.md),

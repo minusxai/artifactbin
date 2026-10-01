@@ -11,7 +11,7 @@ import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResul
 import { CI_GATE_SHARDS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
-/** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
+/** Built and proved only for a release: the five-target binaries (the Intel proofs consume its artifact) and the distributions gate. */
 const RELEASE_JOBS = ['cli', 'cli-preview', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));

@@ -361,7 +361,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const island: StoryIslandData = { ...parts.runtime.data, nodes: withoutSrcSets(parts.runtime.data.nodes) };
   // Never a door back to the server: prepareStoryParts was given none, and these are dropped by name besides.
   delete island.queryUrl; delete island.mutateUrl; delete island.assetsUrl; delete island.managedAssets;
-  // The file carries its engine's wasm inside its code (lib/offline/sqlite-wasm), never a server address.
+  // The file carries its engine's wasm inside its code (lib/offline/compiled-sqlite), never a server address.
   delete island.sqliteWasm;
 
   /*

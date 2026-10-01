@@ -50,7 +50,6 @@ export type ReaderFallbackReason = 'compile-error' | 'build-mismatch' | 'unporte
 
 /** What the compiler reads: the prepared page's version-owned inputs, nothing per reader. */
 export interface CompileInput {
-  /** Research probe: render static skeleton content with Solid SSR. Production defaults to React. */
   nodes: JsxNode[];
   colorMode: 'light' | 'dark';
   template: string | null;
@@ -193,8 +192,8 @@ export interface CompiledPage {
   reactStatic: string[];
   /**
    * Registered components the compile could not place: a non-empty list refuses the compile (fallback).
-   * Empty for every stored document since w3-compiler-coverage (a component with no Solid port compiles
-   * as a React shell around its children, spec §6); kept as the refusal's door.
+   * Empty for every stored document since w3-compiler-coverage (every registered component has a compile
+   * path); kept as the refusal's door.
    */
   unported: string[];
   /** Components rendered statically whose BEHAVIOUR is not ported yet (`Iframe`, `DeckGL`): served, reported. */
