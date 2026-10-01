@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { mountCompiledEditRegions, withRegionBreaks } from '../dom-mounter';
+import { mountCompiledEditRegions, runSlice, withRegionBreaks } from '../dom-mounter';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
@@ -8,6 +8,24 @@ import { flushFlowView } from '@/lib/editor-v2/flow-view';
 import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import { serializeJsx } from '@/lib/jsx';
 import { morphDraftDom } from '@/lib/islands/morph/engine';
+
+describe('an idle slice of editor work', () => {
+  /** Items costing `costs[i]` ms on a fake clock: which ran in this slice, and the clock at its end. */
+  const slice = (costs: number[], expected = 0) => {
+    let clock = 0; const ran: number[] = []; let index = 0;
+    const next = runSlice(() => { const i = index; if (i >= costs.length) return undefined; index++; return () => { ran.push(i); clock += costs[i]!; }; }, () => clock, 50, expected);
+    return { ran, clock, next };
+  };
+  it('never starts an item the last one says will not fit, so a slice ends within its budget', () => {
+    // Overrunning items one per slice: 46 + 46 would be 92.
+    expect(slice([46, 46, 46])).toMatchObject({ ran: [0], clock: 46, next: 46 });
+    // Small items fill the slice up to the budget, no further.
+    expect(slice([10, 10, 10, 10, 10, 10, 10])).toMatchObject({ ran: [0, 1, 2, 3, 4], clock: 50 });
+    // The first item always runs, even when the last slice's says it is large.
+    expect(slice([20, 20], 60)).toMatchObject({ ran: [0, 1], clock: 40 });
+    expect(slice([])).toMatchObject({ ran: [], clock: 0 });
+  });
+});
 
 describe('compiled DOM edit mounter', () => {
   it('mounts the regions on screen at once and the off-screen ones in later slices, never after dispose', async () => {

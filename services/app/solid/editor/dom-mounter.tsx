@@ -115,6 +115,22 @@ const HANDED_KEPT = 8;
  * slice inserted follows at the next frame; on a table-heavy page that pass, not the editors, is most of the time.
  */
 const SLICE_MS = 50;
+/**
+ * One idle slice of queued work (`next` hands the next item, undefined when none is left). An item is started only
+ * when the last one's cost still fits in what is left of `budget`, so a slice ends under it instead of one item past
+ * it (a table's path redraw is most of a slice by itself); the first item always runs. Returns the cost to expect next.
+ */
+export function runSlice(next: () => (() => void) | undefined, now: () => number, budget: number, expected: number): number {
+  const until = now() + budget;
+  for (let first = true; ; first = false) {
+    const started = now();
+    if (!first && started + expected > until) return expected;
+    const item = next();
+    if (!item) return expected;
+    item();
+    expected = now() - started;
+  }
+}
 const isBreak = (node: JsxNode | undefined): boolean => node?.type === 'text' && !node.value.trim();
 /**
  * The editor's blocks, laid out with the line breaks the region had between and after its blocks. Breaks are child
@@ -486,13 +502,15 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   let slice: number | null = null;
   const idle = view as Window & { requestIdleCallback?: (run: () => void, options?: { timeout: number }) => number; cancelIdleCallback?: (handle: number) => void };
   const schedule = () => { slice = idle.requestIdleCallback ? idle.requestIdleCallback(run, { timeout: 100 }) : view.setTimeout(run, 0); };
+  let expected = 0;
+  const nextItem = (): (() => void) | undefined => {
+    if (redraws.length) return redraws.shift()!;
+    const region = pending.shift();
+    return region ? () => mountRegion(region) : undefined;
+  };
   const run = () => {
     slice = null;
-    const until = view.performance.now() + SLICE_MS;
-    while ((redraws.length || pending.length) && view.performance.now() < until) {
-      if (redraws.length) redraws.shift()!();
-      else mountRegion(pending.shift()!);
-    }
+    expected = runSlice(nextItem, () => view.performance.now(), SLICE_MS, expected);
     if (redraws.length || pending.length) schedule();
   };
   if (redraws.length || pending.length) schedule();
