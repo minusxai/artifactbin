@@ -17,7 +17,6 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { expect } from 'playwright/test';
 import { createChecker } from './lib/assert.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeAccountOwner, becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, isSignedInAs } from './lib/mail-login.mjs';
@@ -45,7 +44,7 @@ const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
 await becomeOwner(page, base, st.token);
-await page.goto(`${readerUrl(`${base}/a/${st.id}`)}#edit`, { waitUntil: 'load' });
+await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
 await page.getByRole('textbox', { name: 'Document text' }).first().waitFor({ timeout: 30000 });
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 const head = async () => {
@@ -390,7 +389,7 @@ try {
   must((await api('', { method: 'PUT', body: JSON.stringify({ markup: extended }) })).status === 200, 'the 300-paragraph fixture publishes');
   await page.goto('about:blank');
   const entered = Date.now();
-  await page.goto(`${readerUrl(`${base}/a/${st.id}`)}#edit`, { waitUntil: 'load' });
+  await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
   await page.getByRole('textbox', { name: 'Document text' }).first().waitFor();
   check.note(`300-paragraph editor ready in ${Date.now() - entered}ms including navigation`);
   must((await head()).markup.includes('id="a3"'), 'the three-column fixture is what the editor opened');
@@ -464,13 +463,13 @@ try {
 
     const reader = await browser.newContext({ viewport: { width: 1400, height: 950 } });
     const readerPage = await reader.newPage();
-    await readerPage.goto(readerUrl(`${base}/a/${human.id}`), { waitUntil: 'load' });
+    await readerPage.goto(`${base}/a/${human.id}`, { waitUntil: 'load' });
     await readerPage.waitForTimeout(2000);
     // No credential in this browser: the viewer bar is owner chrome and must
     // not render. The way into edit mode without it is the #edit fragment.
     check((await readerPage.locator('[aria-label="Edit this document"]').count()) === 0,
       'a reader with no credential sees no edit chrome');
-    await readerPage.goto(`${readerUrl(`${base}/a/${human.id}`)}#edit`);
+    await readerPage.goto(`${base}/a/${human.id}#edit`);
     await readerPage.waitForTimeout(2500);
     check(readerPage.url().includes(`/a/${human.id}`) && readerPage.url().endsWith('#edit'),
       `Edit stays on the same url, as a mode (${readerPage.url()})`);
@@ -479,7 +478,7 @@ try {
     const humanCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
     const humanPage = await humanCtx.newPage();
     await becomeOwner(humanPage, base, human.token);
-    await humanPage.goto(`${readerUrl(`${base}/a/${human.id}`)}#edit`, { waitUntil: 'load' });
+    await humanPage.goto(`${base}/a/${human.id}#edit`, { waitUntil: 'load' });
     await humanPage.waitForTimeout(4500);
     check((await humanPage.mainFrame().locator('svg.marks, canvas').count()) > 0, 'embeds render inside the editor');
     check((await humanPage.locator('[aria-label="Save"]').count()) === 0, 'the editor has no Save button');
@@ -542,7 +541,7 @@ try {
     humanPage.on('request', (r) => { if (r.resourceType() === 'script' && !r.url().startsWith(base)) offOrigin.push(r.url()); });
     humanPage.on('console', (m) => { if (m.type() === 'error' && /violates the following Content Security Policy directive: "script-src/.test(m.text())) cspErrors.push(m.text()); });
 
-    await humanPage.goto(`${readerUrl(`${base}/a/${human.id}`)}#edit`, { waitUntil: 'load' });
+    await humanPage.goto(`${base}/a/${human.id}#edit`, { waitUntil: 'load' });
     await humanPage.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
     await humanPage.waitForTimeout(2500);
     let releaseRichEditor;
@@ -647,7 +646,7 @@ try {
     const stranger = await strangerCtx.newPage();
     const otherDocument = await startDocument(base);
     await becomeOwner(stranger, base, otherDocument.token);
-    await stranger.goto(`${readerUrl(`${base}/a/${human.id}`)}#edit`, { waitUntil: 'load' });
+    await stranger.goto(`${base}/a/${human.id}#edit`, { waitUntil: 'load' });
     await stranger.waitForTimeout(4500);
     check((await stranger.locator('[aria-label="Exit edit mode"]').count()) === 0,
       'no editor chrome is offered to someone who cannot save');
@@ -673,7 +672,7 @@ try {
     await accountPage.waitForTimeout(1200);
     check((await accountPage.getByText('Session edited', { exact: false }).count()) > 0,
       'the account’s document appears on its dashboard');
-    await accountPage.goto(`${readerUrl(`${base}/a/${owned.id}`)}#edit`, { waitUntil: 'load' });
+    await accountPage.goto(`${base}/a/${owned.id}#edit`, { waitUntil: 'load' });
     await accountPage.waitForTimeout(4500);
     check((await accountPage.locator('[aria-label="Owning token"]').count()) === 0,
       'a signed-in owner opens the editor with nothing to paste');
@@ -722,14 +721,14 @@ try {
       if (leaveBy === 'back') {
         // Enter the way a person does, so the history entry `back` undoes is
         // the one the page pushed. A deep link to #edit has nothing to go back to.
-        await page.goto(readerUrl(`${base}/a/${st.id}`), { waitUntil: 'load' });
+        await page.goto(`${base}/a/${st.id}`, { waitUntil: 'load' });
         // Reading is chromeless until the artifact controls are revealed, and
         // the owner rail is decided client-side, so the control appears a beat
         // after load — a fixed pause here is a flake on a cold server.
         await openArtifactControls(page);
         await page.locator('[aria-label="Edit artifact"]').first().click({ timeout: 30_000 });
       } else {
-        await page.goto(`${readerUrl(`${base}/a/${st.id}`)}#edit`, { waitUntil: 'load' });
+        await page.goto(`${base}/a/${st.id}#edit`, { waitUntil: 'load' });
       }
       await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
       // The canvas mounts after the editor bar; typing before it exists types

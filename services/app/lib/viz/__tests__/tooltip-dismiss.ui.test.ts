@@ -4,14 +4,12 @@
  * Vega's per-mark tooltip (`#vg-tooltip-element`) hides only when Vega calls the
  * handler with an empty value, which it does on scenegraph `mouseout` — an event a
  * tap never produces. On a phone the card then stays pinned (`position: fixed`)
- * and untappable (`pointer-events: none`) until a different mark is tapped. The
- * shared multi-series card (`#mx-shared-tooltip`) has the same hole minus one
- * listener. These tests state the dismiss policy BOTH cards must obey, through
- * their existing public entry points only.
+ * and untappable (`pointer-events: none`) until a different mark is tapped. These
+ * tests state the dismiss policy the card must obey, through its existing public
+ * entry points only.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createVegaTooltipHandler, hideVegaTooltip } from '@/lib/viz/vega-tooltip-handler';
-import { SharedTooltip } from '@/lib/viz/shared-tooltip';
 
 // jsdom may not ship PointerEvent; a MouseEvent carrying `pointerType` is enough here.
 const PE: typeof PointerEvent =
@@ -94,54 +92,5 @@ describe('per-mark (vega) tooltip dismissal', () => {
     const el = show();
     hideVegaTooltip(document);
     expect(shown(el)).toBe(false);
-  });
-});
-
-describe('shared multi-series tooltip dismissal', () => {
-  let chart: HTMLElement;
-  const shown = (el: HTMLElement) => el.style.display !== 'none';
-
-  beforeEach(() => {
-    document.body.innerHTML = '<main><div id="chart"><svg></svg></div><p id="prose">text</p></main>';
-    chart = document.getElementById('chart')!;
-  });
-
-  it('a pointercancel, a scroll, or a pointerdown outside the chart hides it', () => {
-    const tip = new SharedTooltip('light', document, chart);
-    const el = document.getElementById('mx-shared-tooltip')!;
-    tip.show('<b>x</b>', 10, 10);
-    expect(shown(el)).toBe(true);
-    pointer(document, 'pointercancel', 'touch');
-    expect(shown(el)).toBe(false);
-
-    tip.show('<b>x</b>', 10, 10);
-    document.dispatchEvent(new Event('scroll', { bubbles: true }));
-    expect(shown(el)).toBe(false);
-
-    tip.show('<b>x</b>', 10, 10);
-    pointer(chart.querySelector('svg')!, 'pointerdown', 'mouse');
-    expect(shown(el)).toBe(true);
-    pointer(document.getElementById('prose')!, 'pointerdown', 'mouse');
-    expect(shown(el)).toBe(false);
-    tip.destroy();
-  });
-
-  it('opened after a touch it carries a close button; destroy() releases its listeners', () => {
-    const tip = new SharedTooltip('light', document, chart);
-    const el = document.getElementById('mx-shared-tooltip')!;
-    pointer(chart, 'pointerdown', 'touch');
-    tip.show('<b>x</b>', 10, 10);
-    const close = el.querySelector<HTMLButtonElement>(CLOSE);
-    expect(close).not.toBeNull();
-    close!.click();
-    expect(shown(el)).toBe(false);
-
-    tip.destroy();
-    // After destroy nothing of this instance may still react: showing through a NEW
-    // instance and cancelling must be that instance's doing, not a leaked listener.
-    const next = new SharedTooltip('light', document, chart);
-    next.show('<b>y</b>', 10, 10);
-    expect(shown(el)).toBe(true);
-    next.destroy();
   });
 });

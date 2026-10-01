@@ -117,16 +117,6 @@ export async function listTestUsers(userId: string): Promise<TestUser[]> {
   }));
 }
 
-/** One live test user of this account's, by id — the ownership check every operation makes. */
-export async function getOwnTestUser(userId: string, testUserId: string): Promise<{ id: string; label: string } | null> {
-  const db = await getDb();
-  const row = await db.query<{ id: string; label: string }>(
-    `SELECT id, name AS label FROM users WHERE id = $1 AND parent_user_id = $2 AND ${LIVE_TESTUSER_SQL}`,
-    [testUserId, userId],
-  );
-  return row.rows[0] ?? null;
-}
-
 /**
  * One test user row by id, WHOEVER it belongs to — the only reader that does
  * not filter by parent, so a delete can tell "not yours" from "already gone"

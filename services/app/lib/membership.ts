@@ -42,9 +42,6 @@ async function blocked(tx: Queryable, a: string, b: string): Promise<boolean> {
 async function follows(tx: Queryable, follower: string, followed: string): Promise<boolean> {
   return !!(await tx.query("SELECT 1 FROM relations WHERE subject_kind='user' AND subject_id=$1 AND verb='follow' AND object_kind='user' AND object_id=$2 AND deleted_at IS NULL AND status='accepted'",[follower,followed])).rows.length;
 }
-async function accepted(tx: Queryable,id:string,userId:string):Promise<boolean> {
-  return !!(await tx.query(`SELECT 1 FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2 AND status='accepted'`,[id,userId])).rows.length;
-}
 /** Candidate eligibility is enforced again on send, including when an agent supplies raw IDs. */
 export async function mentionCandidates(actor: RoleActor, id: string, query: string, purpose: 'mention' | 'invite' = 'mention'): Promise<Array<{user_id:string;username:string;name:string|null}>> {
   const {artifact,role}=await opened(actor,id);
@@ -137,10 +134,6 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
     await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[id]);
   });
   return membershipState(actor,id);
-}
-
-export async function isArtifactMember(id:string,userId:string|null,tx?:Queryable):Promise<boolean> {
-  return !!userId && accepted(tx??await getDb(),id,userId);
 }
 
 /** The saved artifact is already locked by the caller. Shared by UI, CLI and saved mentions. */
