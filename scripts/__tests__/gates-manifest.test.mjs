@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { CI_GATE_SHARDS, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
@@ -179,11 +179,21 @@ it('weighs every gate by a measured duration that fits inside its own timeout', 
 it('prints the same browser plan used by the CI shards without starting servers', () => {
   const set = onDisk;
   for (let index = 1; index <= CI_GATE_SHARDS; index++) {
-    const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight);
+    const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight, {isolated: CI_ISOLATED_GATES});
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
     const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(postgres).toBe(String(selected.includes('postgres-datasets')));
   }
 
+});
+
+describe('CI isolation', () => {
+  it('gives each gate that loses races under load a CI shard of its own', () => {
+    const names = GATE_SPECS.map((spec) => spec.name);
+    expect(CI_ISOLATED_GATES.length).toBeGreaterThan(0);
+    const shards = Array.from({ length: CI_GATE_SHARDS }, (_, i) => shardOf(names, { index: i + 1, total: CI_GATE_SHARDS }, shardWeight, { isolated: CI_ISOLATED_GATES }));
+    for (const name of CI_ISOLATED_GATES) expect(shards.find((shard) => shard.includes(name))).toEqual([name]);
+    expect(shards.flat().sort()).toEqual([...names].sort());
+  });
 });

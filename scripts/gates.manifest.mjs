@@ -26,69 +26,70 @@
  */
 
 /** @type {readonly GateSpec[]} */
+// `seconds` re-read from CI runs 36875088399, 36875673784 and 36876517464: the slowest of the three
+// `──── name (Ns) ────` lines for each gate (a failed first attempt excluded).
 export const GATE_SPECS = Object.freeze([
-  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 25, timeoutMs: 150_000 },
+  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 32, timeoutMs: 150_000 },
   // Needs no server: opens rendered offline files from file:// in all three engines (reading, editing,
   // comments, Save, code view offline and online, agent-edited files). Measured 42–44s in the
   // playwright:v1.62.1-noble image on a laptop and 39s on macOS; CI runners are slower (an earlier,
   // smaller version overran 60s there), so the budget is ~5x the measured run.
-  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 59, timeoutMs: 240_000 },
-  { name: 'cli-conformance', needsMail: true, seconds: 13, timeoutMs: 180_000 },
-  { name: 'browser-sessions', needsMail: false, seconds: 31, timeoutMs: 150_000 },
-  { name: 'chart-width', needsMail: false, seconds: 7, timeoutMs: 90_000 },
-  { name: 'testusers', needsMail: true, seconds: 11, timeoutMs: 60_000 },
-  { name: 'comment-targets', needsMail: false, seconds: 18, timeoutMs: 60_000 },
-  { name: 'dataset-policies', needsMail: true, seconds: 9, timeoutMs: 60_000 },
-  { name: 'app-home', needsMail: false, serialGroup: 'clipboard', seconds: 2, timeoutMs: 120_000 },
-  { name: 'seamless-navigation', needsMail: true, seconds: 7, timeoutMs: 60_000 },
-  { name: 'managed-iframe', needsMail: false, seconds: 22, timeoutMs: 60_000 },
-  { name: 'libraries', needsMail: false, seconds: 11, timeoutMs: 60_000 },
-  { name: 'postgres-datasets', needsMail: true, seconds: 15, timeoutMs: 60_000 },
-  { name: 'annotations', needsMail: false, seconds: 21, timeoutMs: 60_000 },
-  { name: 'app-flows', needsMail: true, seconds: 66, timeoutMs: 210_000 },
-  { name: 'claim-flow', needsMail: true, seconds: 9, timeoutMs: 60_000 },
-  { name: 'collab-edit', needsMail: true, seconds: 40, timeoutMs: 100_000 },
-  { name: 'data-ux', needsMail: false, seconds: 17, timeoutMs: 60_000 },
-  { name: 'dataflow', needsMail: true, seconds: 15, timeoutMs: 60_000 },
+  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 76, timeoutMs: 240_000 },
+  { name: 'cli-conformance', needsMail: true, seconds: 12, timeoutMs: 180_000 },
+  { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
+  { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
+  { name: 'testusers', needsMail: true, seconds: 10, timeoutMs: 60_000 },
+  { name: 'comment-targets', needsMail: false, seconds: 17, timeoutMs: 60_000 },
+  { name: 'dataset-policies', needsMail: true, seconds: 5, timeoutMs: 60_000 },
+  { name: 'app-home', needsMail: false, serialGroup: 'clipboard', seconds: 1, timeoutMs: 120_000 },
+  { name: 'seamless-navigation', needsMail: true, seconds: 5, timeoutMs: 60_000 },
+  { name: 'managed-iframe', needsMail: false, seconds: 18, timeoutMs: 60_000 },
+  { name: 'libraries', needsMail: false, seconds: 10, timeoutMs: 60_000 },
+  { name: 'postgres-datasets', needsMail: true, seconds: 14, timeoutMs: 60_000 },
+  { name: 'annotations', needsMail: false, seconds: 20, timeoutMs: 60_000 },
+  { name: 'app-flows', needsMail: true, seconds: 75, timeoutMs: 210_000 },
+  { name: 'claim-flow', needsMail: true, seconds: 6, timeoutMs: 60_000 },
+  { name: 'collab-edit', needsMail: true, seconds: 37, timeoutMs: 100_000 },
+  { name: 'data-ux', needsMail: false, seconds: 16, timeoutMs: 60_000 },
+  { name: 'dataflow', needsMail: true, seconds: 13, timeoutMs: 60_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
-  // run 36838282615 that held a runner to itself and set the run's critical path. Seconds: the
-  // container run's 34s/42s/36s scaled by CI's 118s for the whole, until CI measures them alone.
-  { name: 'editor-v2', needsMail: false, serialGroup: 'clipboard', seconds: 42, timeoutMs: 200_000 },
-  { name: 'editor-path', needsMail: true, seconds: 52, timeoutMs: 150_000 },
-  { name: 'editor-exits', needsMail: false, seconds: 44, timeoutMs: 120_000 },
-  { name: 'editable-table', needsMail: true, seconds: 30, timeoutMs: 120_000 },
-  { name: 'roadmap-views', needsMail: false, seconds: 11, timeoutMs: 60_000 },
-  { name: 'export-slice', needsMail: false, seconds: 11, timeoutMs: 60_000 },
+  // run 36838282615 that held a runner to itself and set the run's critical path.
+  { name: 'editor-v2', needsMail: false, serialGroup: 'clipboard', seconds: 45, timeoutMs: 200_000 },
+  { name: 'editor-path', needsMail: true, seconds: 47, timeoutMs: 150_000 },
+  { name: 'editor-exits', needsMail: false, seconds: 42, timeoutMs: 120_000 },
+  { name: 'editable-table', needsMail: true, seconds: 36, timeoutMs: 120_000 },
+  { name: 'roadmap-views', needsMail: false, seconds: 8, timeoutMs: 60_000 },
+  { name: 'export-slice', needsMail: false, seconds: 13, timeoutMs: 60_000 },
   { name: 'fonts', needsMail: false, seconds: 39, timeoutMs: 150_000 },
-  { name: 'folders', needsMail: true, seconds: 18, timeoutMs: 60_000 },
-  { name: 'fork', needsMail: true, seconds: 9, timeoutMs: 60_000 },
-  { name: 'full-kit', needsMail: false, seconds: 35, timeoutMs: 60_000 },
-  { name: 'hydration', needsMail: true, seconds: 26, timeoutMs: 190_000 },
-  { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 38, timeoutMs: 110_000 },
+  { name: 'folders', needsMail: true, seconds: 12, timeoutMs: 60_000 },
+  { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
+  { name: 'full-kit', needsMail: false, seconds: 33, timeoutMs: 60_000 },
+  { name: 'hydration', needsMail: true, seconds: 31, timeoutMs: 190_000 },
+  { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 47, timeoutMs: 110_000 },
   // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
-  { name: 'row-images', needsMail: false, seconds: 13, timeoutMs: 60_000 },
-  { name: 'inplace-edit', needsMail: false, seconds: 62, timeoutMs: 180_000 },
-  { name: 'layout-shift', needsMail: false, seconds: 41, timeoutMs: 140_000 },
-  { name: 'link-access', needsMail: true, seconds: 7, timeoutMs: 60_000 },
-  { name: 'local-sql-state', needsMail: true, seconds: 8, timeoutMs: 60_000 },
-  { name: 'live-data', needsMail: false, seconds: 11, timeoutMs: 60_000 },
+  { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
+  { name: 'inplace-edit', needsMail: false, seconds: 66, timeoutMs: 180_000 },
+  { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
+  { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
+  { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },
+  { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
   { name: 'live-reader', needsMail: false, seconds: 30, timeoutMs: 70_000 },
   // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
-  { name: 'mermaid-prerender', needsMail: false, seconds: 61, timeoutMs: 130_000 },
-  { name: 'mobile', needsMail: false, seconds: 23, timeoutMs: 100_000 },
-  { name: 'oauth-browser', needsMail: true, seconds: 5, timeoutMs: 60_000 },
-  { name: 'reading-chrome', needsMail: false, seconds: 22, timeoutMs: 90_000 },
+  { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
+  { name: 'mobile', needsMail: false, seconds: 21, timeoutMs: 100_000 },
+  { name: 'oauth-browser', needsMail: true, seconds: 3, timeoutMs: 60_000 },
+  { name: 'reading-chrome', needsMail: false, seconds: 19, timeoutMs: 90_000 },
   { name: 'reader-chrome', needsMail: true, serialGroup: 'clipboard', seconds: 24, timeoutMs: 110_000 },
-  { name: 'web-assets', needsMail: true, seconds: 16, timeoutMs: 60_000 },
+  { name: 'web-assets', needsMail: true, seconds: 17, timeoutMs: 60_000 },
   { name: 'pdf', needsMail: false, seconds: 2, timeoutMs: 60_000 },
-  { name: 'script-slice', needsMail: false, seconds: 18, timeoutMs: 70_000 },
-  { name: 'secure-arch', needsMail: true, seconds: 16, timeoutMs: 60_000 },
-  { name: 'shell-seo', needsMail: false, seconds: 2, timeoutMs: 60_000 },
-  { name: 'social-preview', needsMail: false, seconds: 25, timeoutMs: 80_000 },
-  { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 2, timeoutMs: 60_000 },
-  { name: 'visibility', needsMail: true, seconds: 8, timeoutMs: 60_000 },
-  { name: 'viz-editor', needsMail: true, seconds: 58, timeoutMs: 130_000 },
+  { name: 'script-slice', needsMail: false, seconds: 21, timeoutMs: 70_000 },
+  { name: 'secure-arch', needsMail: true, seconds: 14, timeoutMs: 60_000 },
+  { name: 'shell-seo', needsMail: false, seconds: 3, timeoutMs: 60_000 },
+  { name: 'social-preview', needsMail: false, seconds: 29, timeoutMs: 80_000 },
+  { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 3, timeoutMs: 60_000 },
+  { name: 'visibility', needsMail: true, seconds: 9, timeoutMs: 60_000 },
+  { name: 'viz-editor', needsMail: true, seconds: 61, timeoutMs: 130_000 },
 ]);
 
 /**
@@ -146,6 +147,15 @@ export function browsersFor(names) {
  * twenty-four bins packed by timeout, which gave a 13s gate a runner of its own.
  */
 export const CI_GATE_SHARDS = 10;
+
+/**
+ * Gates that each get a CI runner to themselves. Both FAIL under a neighbour's browser load and then
+ * pass alone in the runner's retry: inplace-edit ("typing did not move the reader (145 → 995)", then
+ * "passed alone in 62s") doubled shard 4/10 to 134s on run 36875673784, and collab-edit retried on two
+ * of three runs (36876517464, 36875088399), +33s each. Alone they cannot lose that race, so the shard's
+ * time is the gate's own: no retry to pad for.
+ */
+export const CI_ISOLATED_GATES = Object.freeze(['inplace-edit', 'collab-edit']);
 
 /** The extra a shard pays to apt-install Firefox/WebKit system packages: 91s on CI run 35740918148. */
 export const CROSS_BROWSER_SETUP_SECONDS = 91;
