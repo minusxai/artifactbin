@@ -15,6 +15,8 @@ import { POST as startRoute } from '@/app/api/start/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as artifactPage, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 
+import { prepareBlankReport } from '@/solid/lib/blank-report';
+import { getArtifactById } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
@@ -32,6 +34,46 @@ const start = async (opts: Parameters<typeof request>[1] = {}): Promise<Start> =
   (await (await startRoute(request('/api/start', { method: 'POST', ...opts }))).json()) as Start;
 
 describe('POST /api/start', () => {
+  it('creates an editable blank report only when explicitly requested, retaining owner and privacy', async () => {
+    const user = await createUser({ email: 'blank-owner@example.com' });
+    const res = await startRoute(request('/api/start?mode=blank', { method: 'POST', actor: { credential: 'session', userId: user.id, email: user.email!, emailVerified: true } }));
+    expect(res.status).toBe(201);
+    const body = await res.json() as Start;
+    const db = await harness.db();
+    const { rows } = await db.query<{ source: string; user_id: string; visibility: string }>('SELECT source, user_id, visibility FROM artifacts WHERE id = $1', [body.id]);
+    const source = (await getArtifactById(body.id))!.source;
+    expect(source).toContain('Untitled report');
+    expect(source).toContain('Start writing here.');
+    expect(source).not.toContain('Waiting for your agent');
+    expect(rows[0].user_id).toBe(user.id);
+    expect(rows[0].visibility).toBe('private');
+  });
+
+  it('converts the same starter, persists edits, and refuses a stale conversion after an agent writes', async () => {
+    const agent = await mintToken('device-approval');
+    const doc = await start({ token: agent.token });
+    const before = (await getArtifactById(doc.id))!;
+    if (before.document?.kind !== 'graph') throw new Error('Missing graph');
+    const blank = prepareBlankReport({ ...before, document: before.document, markup: before.source, theme: null }, before.edit_id);
+    const saved = await editRoute(request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: agent.token, json: blank }), params({ id: doc.id }));
+    expect(saved.status).toBe(200);
+    const typed = await editRoute(request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: agent.token, json: await observedTextBody(doc.id, 'Start writing here.', 'My first report.') }), params({ id: doc.id }));
+    expect(typed.status).toBe(200);
+    const read = await artifactPage(request(`/api/artifacts/${doc.id}`, { token: agent.token }), params({ id: doc.id }));
+    expect((await read.json()).markup).toContain('My first report.');
+    const conflicting = await start({ token: agent.token });
+    const old = (await getArtifactById(conflicting.id))!;
+    if (old.document?.kind !== 'graph') throw new Error('Missing graph');
+    const oldDocument = old.document;
+    const stale = prepareBlankReport({ ...old, document: oldDocument, markup: old.source, theme: null }, old.edit_id);
+    const agentWrite = await editRoute(request(`/api/artifacts/${conflicting.id}/edits`, { method: 'POST', token: agent.token, json: await observedSourceBody(conflicting.id, '<h1>Agent work</h1>') }), params({ id: conflicting.id }));
+    expect(agentWrite.status).toBe(200);
+    const rejected = await editRoute(request(`/api/artifacts/${conflicting.id}/edits`, { method: 'POST', token: agent.token, json: stale }), params({ id: conflicting.id }));
+    expect(rejected.status).toBe(409);
+    expect((await getArtifactById(conflicting.id))!.source).toContain('Agent work');
+    expect(() => prepareBlankReport({ ...old, document: oldDocument, markup: old.source, theme: null }, 'different')).toThrow();
+  });
+
   it('returns a live document and tokenless instructions with HttpOnly guest ownership', async () => {
     const res = await startRoute(request('/api/start', { method: 'POST' }));
     expect(res.status).toBe(201);
