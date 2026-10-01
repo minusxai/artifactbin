@@ -47,10 +47,9 @@ interface DailyViews {
 }
 
 /*
- * THE TWO VIEW QUERIES, AND THEIR TWO SOURCES. Both read the same shape — one
+ * THE TWO VIEW QUERIES. Both read the same shape — one
  * row per (artifact, UTC day) with the unique-visitor count — so the zero-fill
- * below is written once and the only thing that changes is WHERE the rows come
- * from.
+ * below is written once.
  *
  * `to_char` pins the bucket key to a plain UTC date string: TIMESTAMPTZ
  * round-trips as driver-dependent Date/string shapes, a text key doesn't. AT
@@ -61,8 +60,7 @@ interface DailyViews {
  *
  * The dedupe key is the SUBJECT, coalesced to the row's own id: one person
  * refreshing is one view, and a row with no subject (a legacy visitor-less
- * open) has nothing to dedupe on and counts once, exactly as `COALESCE(visitor,
- * seq::text)` treated it before.
+ * open) has nothing to dedupe on and counts once.
  */
 const LOG_SERIES = `SELECT e.object_id AS artifact_id, to_char(date_trunc('day', e.at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
      COUNT(DISTINCT COALESCE(e.subject_id, e.id))::int AS n
@@ -81,39 +79,10 @@ const LOG_DAILY = `SELECT to_char(date_trunc('day', e.at AT TIME ZONE 'UTC'), 'Y
   GROUP BY day
   ORDER BY day`;
 
-/*
- * THE FALLBACK. A split self-host that runs no events service has no
- * `events.events` to read, and its dashboard must not go blank while
- * `analytics_events` is still being written (the dual-write). These two mirror
- * the log queries above against that table.
- */
-const LEGACY_SERIES = `SELECT e.artifact_id, to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-     COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS n
-   FROM analytics_events e
-   JOIN artifacts a ON a.id = e.artifact_id
-  WHERE a.user_id = $1 AND e.event = 'view' AND a.${LIVE_ARTIFACT_SQL}
-    AND e.created_at > now() - ($2::int * interval '1 day')
-    AND ($3::text IS NULL OR a.format = $3)
-  GROUP BY e.artifact_id, day`;
-
-const LEGACY_DAILY = `SELECT to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-     COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS views
-   FROM analytics_events e
-   JOIN artifacts a ON a.id = e.artifact_id
-  WHERE a.user_id = $1 AND e.event = 'view' AND a.${LIVE_ARTIFACT_SQL}
-  GROUP BY day
-  ORDER BY day`;
-
 const LOG_FORK_COUNT = `SELECT COUNT(*)::int AS n
    FROM ${EVENTS_SCHEMA}.events e
    JOIN artifacts a ON a.id = e.object_id
   WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'forked'
-    AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}`;
-
-const LEGACY_FORK_COUNT = `SELECT COUNT(*)::int AS n
-   FROM analytics_events e
-   JOIN artifacts a ON a.id = e.artifact_id
-  WHERE a.user_id = $1 AND e.event = 'fork'
     AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}`;
 
 /**
@@ -121,15 +90,12 @@ const LEGACY_FORK_COUNT = `SELECT COUNT(*)::int AS n
  * to exactly `days` buckets (oldest → newest, last bucket = today UTC), read
  * from the log: one row per open, deduped per UTC day on the subject (the
  * daily visitor hash; a NULL subject counts once). Artifacts with no views in
- * the window are absent from the map. While `analytics_events` still exists
- * and the log's table does not, the legacy table answers instead.
+ * the window are absent from the map; with no events table the map is empty.
  */
 export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIES_DAYS, format: 'markup' | null = null): Promise<Map<string, number[]>> {
+  if (!(await eventsTablePresent())) return new Map();
   const db = await getDb();
-  const r = await db.query<{ artifact_id: string; day: string; n: number }>(
-    (await eventsTablePresent()) ? LOG_SERIES : LEGACY_SERIES,
-    [userId, days, format],
-  );
+  const r = await db.query<{ artifact_id: string; day: string; n: number }>(LOG_SERIES, [userId, days, format]);
   return dailySeries(r.rows, days);
 }
 
@@ -173,15 +139,12 @@ export async function likeSummaryByUser(userId: string, days: number = VIEW_SERI
 
 /**
  * Forks made from the user's live markup artifacts. The canonical event log
- * records the fork against its source artifact; the analytics table remains
- * the fallback for split deployments that have not installed the log yet.
+ * records the fork against its source artifact; 0 when there is no log.
  */
 export async function forkCountByUser(userId: string): Promise<number> {
+  if (!(await eventsTablePresent())) return 0;
   const db = await getDb();
-  const r = await db.query<{ n: number | string }>(
-    (await eventsTablePresent()) ? LOG_FORK_COUNT : LEGACY_FORK_COUNT,
-    [userId],
-  );
+  const r = await db.query<{ n: number | string }>(LOG_FORK_COUNT, [userId]);
   return Number(r.rows[0]?.n ?? 0);
 }
 
@@ -191,8 +154,9 @@ export async function forkCountByUser(userId: string): Promise<number> {
  * Same source rule as `viewSeriesByUser`.
  */
 export async function dailyViewsByUser(userId: string): Promise<DailyViews[]> {
+  if (!(await eventsTablePresent())) return [];
   const db = await getDb();
-  const r = await db.query<{ day: string; views: number }>((await eventsTablePresent()) ? LOG_DAILY : LEGACY_DAILY, [userId]);
+  const r = await db.query<{ day: string; views: number }>(LOG_DAILY, [userId]);
   if (r.rows.length === 0) return [];
   const byDay = new Map(r.rows.map((row) => [row.day, row.views]));
   const out: DailyViews[] = [];

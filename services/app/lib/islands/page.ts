@@ -28,13 +28,9 @@ import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
 import { startIslandLive } from './live';
-import { ISLANDS_READY_EVENT, ISLAND_DOCUMENT_KEY, type IslandHost } from './contract';
-
-/** The private root cleanup boot calls on edit/dispose; repeated here to keep boot out of page's chunk. */
-const PUBLIC_MX_KEY = '__mxPublicApi';
+import { ISLANDS_READY_EVENT, ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandHost } from './contract';
 import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
 
-const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 /**
  * lib/story/reader-chrome READER_CHROME_HIDDEN_CLASS, restated: that module is the chrome's server
  * renderer and has no place in a reader chunk (page.test pins the two equal).
@@ -106,15 +102,8 @@ export function startPage(doc: Document = document, win: Window = window): () =>
     const island = root?.[ISLAND_DOCUMENT_KEY];
     const store = island?.store;
     if (!root || !store) return;
-    void import('./mx-host').then(({ publicMxFor }) => {
-      if (!store.disposed && island.mode() === 'read' && root.isConnected) {
-        const api = publicMxFor(store);
-        (root as IslandHost & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY] = () => {
-          if (win.mx === api) delete win.mx;
-          delete (root as IslandHost & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY];
-        };
-        win.mx = api;
-      }
+    void import('./mx-host').then(({ installPublicMx }) => {
+      installPublicMx(root, store, win, () => island.mode() === 'read' && root.isConnected);
     }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
   };
   doc.addEventListener(ISLANDS_READY_EVENT, installPublicMx);
@@ -127,8 +116,8 @@ export function startPage(doc: Document = document, win: Window = window): () =>
     stops.push(relayFrameScroll(win, doc));
     return () => { for (const stop of stops.splice(0)) stop(); for (const stop of persistent.splice(0)) stop(); };
   }
-  const id = doc.body?.getAttribute('data-mx-live-id');
-  const editId = doc.body?.getAttribute('data-mx-live-edit');
+  const id = doc.body?.getAttribute(LIVE_ID_ATTR);
+  const editId = doc.body?.getAttribute(LIVE_EDIT_ATTR);
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);
   if (id && editId && !hasModule && typeof (win as { EventSource?: unknown }).EventSource === 'function') stops.push(startIslandLive(win, id, editId));
 

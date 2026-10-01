@@ -83,8 +83,6 @@ export interface LiveEditsCore {
   isIdle(): boolean;
   /** "That head pointer is one WE produced" — lets the live stream drop our own echo early. */
   isOwnEdit(candidate: string): boolean;
-  /** The owner is mounted (again): React StrictMode runs effect cleanups and re-runs them. */
-  attach(): void;
   /** The owner is gone: stop scheduling, and let an in-flight response land without side effects. */
   dispose(): void;
 }
@@ -330,7 +328,6 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
     recover,
     isIdle,
     isOwnEdit: (candidate) => candidate === editId,
-    attach() { alive = true; },
     dispose() {
       alive = false;
       window.clearTimeout(timer);

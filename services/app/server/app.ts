@@ -58,7 +58,7 @@ import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
 import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
-import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_FALLBACK_HEADER, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { bindModule } from '@/lib/compiled-page/runtime-binding';
@@ -274,10 +274,8 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 
 /** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
 interface Admitted { row: ArtifactRow; canonicalPath?: string }
-/** The document page's reader headers (docs/phase2-architecture.md §6): which renderer answered, and why a compiled request fell back. */
-const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader
-  ? { [READER_MODE_HEADER]: reader.mode, ...(reader.fallback ? { [READER_FALLBACK_HEADER]: reader.fallback } : {}) }
-  : {});
+/** The document page's reader header (docs/phase2-architecture.md §6): which renderer answered. */
+const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { [READER_MODE_HEADER]: reader.mode } : {});
 /** The agent pointer's tail as the assembler ends a page with it (lib/agent-discovery). */
 const agentDiscoveryTailOf = (origin: string): string => agentDiscoveryTail(agentDiscovery(origin));
 

@@ -139,11 +139,9 @@ export function readUrlValues(search: string, flow: Declared): Record<string, Sc
  * WHAT THE LINK SHOULD SAY about each Value, as a `$`-less map of name → the
  * param's text, or `null` for "there should be no param".
  *
- * This is the one decision, made once, because it has three consumers that
- * must never disagree: `writeUrlValues` below, the frozen `__mxValues`
- * capability in the served document's history prelude (which deletes on null
- * and sets on a string), and the `mx:values` message the framed document sends
- * its page. In particular the reader's explicit "All" is an EMPTY param and
+ * This is the one decision, made once, because its consumers must never
+ * disagree: `writeUrlValues` below and the compiled page's link follower
+ * (lib/islands/url-sync), which compares on it. In particular the reader's explicit "All" is an EMPTY param and
  * not a deletion — deleting it would restore a non-null default on the next
  * read, which is the opposite of what they picked.
  */

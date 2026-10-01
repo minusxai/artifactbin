@@ -19,7 +19,7 @@ import { artifactPageAnswer } from '@/lib/artifact-page';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
-import { MIN_HANDOVER_CONTRACT, READER_FALLBACK_HEADER, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
+import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export-key';
@@ -60,7 +60,6 @@ describe('the reader mode on /raw', () => {
     const compiled = await raw(id, '?reader=compiled');
     expect(compiled.status).toBe(200);
     expect(compiled.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    expect(compiled.headers.get(READER_FALLBACK_HEADER)).toBeNull();
     const [ordinaryHtml, compiledHtml] = [await ordinary.text(), await compiled.text()];
     expect(storyText(compiledHtml)).toBe(storyText(ordinaryHtml));
     expect(new JSDOM(compiledHtml).window.document.querySelector('#mx-story-root [role="tablist"]')).toBeTruthy();
@@ -392,7 +391,6 @@ describe('the one reader path', () => {
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
       const res = await raw(id, '?reader=compiled');
       expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
-      expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
       expect(res.headers.get('content-security-policy')).toMatch(/script-src 'self'/);
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
@@ -409,7 +407,6 @@ describe('the one reader path', () => {
     expect(post.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const editing = await raw(id, '?reader=compiled&edit=1');
     expect(editing.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    expect(editing.headers.get(READER_FALLBACK_HEADER)).toBeNull();
   });
 
   it('on: readers get the compiled page everywhere, including a legacy query and a domain post', async () => {
@@ -526,7 +523,6 @@ describe('a version with an author script', () => {
     const id = await publish(who.token, { title: 'Scripted', markup: SCRIPTED });
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    expect(res.headers.get(READER_FALLBACK_HEADER)).toBeNull();
     const csp = res.headers.get('content-security-policy')!;
     const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src '))!;
     expect(scriptSrc).toMatch(/^script-src 'self'/);
@@ -543,7 +539,6 @@ describe('a version with an author script', () => {
 
     const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    expect(page.headers.get(READER_FALLBACK_HEADER)).toBeNull();
     expect(authorOnly(await page.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');
   });
 

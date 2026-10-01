@@ -1,8 +1,15 @@
 /**
- * THE LINK FOLLOWS THE READER on a compiled page (today's lib/story-runtime/url-values-sync, unchanged):
- * when a `<Value>` the link carries moves, the top-level page rewrites its own address — its `$` params
- * only (lib/story/url-values), every other param and the hash kept, replaced rather than pushed — so the
- * address bar says what the reader narrowed the document to, and a copy of it opens the same document.
+ * THE LINK FOLLOWS THE READER on a compiled page: when a `<Value>` the link carries moves, the
+ * top-level page rewrites its own address — its `$` params only (lib/story/url-values), every other
+ * param and the hash kept, replaced rather than pushed — so the address bar says what the reader
+ * narrowed the document to, and a copy of it opens the same document.
+ *
+ * Two rules, both about not being noisy: the write is DEBOUNCED (a slider is a burst, not a decision),
+ * and it is COMPARED against what the link last said — a store notifies for things that are not a value
+ * change at all (rows landing, a query going busy), and an address rewritten on each of those is churn
+ * a reader can see in their own back button. The flow is read at write time, never captured: an
+ * agent's write replaces the declarations under an open document (`store.replaceFlow`), and a Value
+ * that version no longer declares must stop appearing in the link.
  *
  * Bundled alone (scripts/build-islands.mjs STANDALONE_LAZY) and loaded by boot after hydration, off the
  * shared runtime's closure; a value moved before it loaded is written at once. A sandboxed copy whose
@@ -10,16 +17,39 @@
  */
 import { readUrlValues, urlValueParams, writeUrlValues } from '@/lib/story/url-values';
 import type { DataflowStore } from '@/lib/story-runtime/store';
-import { syncValuesToUrl } from '@/lib/story-runtime/url-values-sync';
 
-export function startUrlSync(win: Window, store: DataflowStore): () => void {
+/** ~150ms: long enough to swallow a drag, short enough that a click feels answered. */
+const URL_SYNC_DEBOUNCE_MS = 150;
+
+export function startUrlSync(
+  win: Window,
+  store: Pick<DataflowStore, 'subscribe' | 'getState' | 'flow'>,
+  debounceMs: number = URL_SYNC_DEBOUNCE_MS,
+): () => void {
+  const said = () => JSON.stringify(urlValueParams(store.flow, store.getState().values));
   const write = () => {
     const { pathname, search, hash } = win.location;
     try { win.history.replaceState(win.history.state, '', `${pathname}${writeUrlValues(search, store.flow, store.getState().values)}${hash}`); } catch { /* an opaque origin keeps its address */ }
   };
-  const params = (values: Record<string, import('@/lib/story/dataflow').Scalar>) => JSON.stringify(urlValueParams(store.flow, values));
   // What the address says now: the declared defaults under the link's own `$` values.
   const linked = { ...Object.fromEntries(store.flow.values.flatMap((v) => (v.kind === 'scalar' ? [[v.name, v.default ?? null]] : []))), ...readUrlValues(win.location.search, store.flow) };
-  if (params(store.getState().values) !== params(linked)) write();
-  return syncValuesToUrl(store, () => store.flow, { hook: write });
+  let last = said();
+  if (last !== JSON.stringify(urlValueParams(store.flow, linked))) write();
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const flush = () => {
+    timer = null;
+    const next = said();
+    if (next === last) return;
+    last = next;
+    write();
+  };
+  const stop = store.subscribe(() => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(flush, debounceMs);
+  });
+  return () => {
+    if (timer) clearTimeout(timer);
+    stop();
+  };
 }

@@ -15,7 +15,7 @@ export const DEFAULT_EVENTS_SCHEMA = 'events';
 
 /**
  * THE NAMING RULE for everything this package interpolates into SQL. A schema
- * (and the legacy table the backfill reads) reaches DDL as text, never as a
+ * reaches DDL as text, never as a
  * parameter, so the grammar is stated ONCE here and every caller in the
  * package tests against this one regex.
  */

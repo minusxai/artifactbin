@@ -8,7 +8,6 @@ import {
   sourceNodes,
   normalizeIdentities,
   pasteFragment,
-  replaceColumnText,
   toggleInline,
 } from '../model';
 import { clipboardAst } from '../clipboard';
@@ -48,17 +47,6 @@ describe('source-backed editor transactions', () => {
     );
     expect(source(s)).not.toMatch(/stolen|bad/);
     expect(source(s)).toContain('<strong>new</strong>');
-  });
-  it('cross-column replacement keeps both containers and one empty paragraph', () => {
-    let s = state(
-      '<GridItem id="left"><p id="a">alpha</p></GridItem><GridItem id="right"><p id="b">bravo</p></GridItem>',
-    );
-    s = s.apply(s.tr.setSelection(TextSelection.create(s.doc, 4, 16)));
-    s = s.apply(replaceColumnText(s, 'X'));
-    expect(source(s)).toBe(
-      '<GridItem id="left"><p id="a">alX</p></GridItem><GridItem id="right"><p id="b"></p></GridItem>',
-    );
-    expect(s.selection.from).toBe(5);
   });
 });
 

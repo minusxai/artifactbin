@@ -10,7 +10,7 @@ let mockTitle: string | null = 'A copy';
 vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, surface: { id: 'doc12345', title: mockTitle, format: 'markup', version: 3, author: { forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/web/initial-story', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/web/initial-story')>()), adoptInitialStory: () => null }));
 
-import { DocumentPage, markChromeEditing, readerProvenancePath } from '../pages/Document';
+import { DocumentPage, markChromeEditing } from '../pages/Document';
 
 beforeEach(() => {
   mockRole = 'commenter';
@@ -36,12 +36,6 @@ function mount(path = '/a/doc', extraChrome = '') {
 
 /** The page's own UI renders inside trusted shadow roots: 0 the navigation layer (panels, dialogs), 1 discussion (comments, editor). */
 const trusted = (index = 0) => within(document.querySelectorAll('[data-trusted-ui]')[index]!.shadowRoot as unknown as HTMLElement);
-
-it('keeps provenance navigation on an internal artifact path', () => {
-  expect(readerProvenancePath('/a/source')).toBe('/a/source');
-  expect(readerProvenancePath('javascript:alert(1)')).toBeNull();
-  expect(readerProvenancePath('//outside.example/a/source')).toBeNull();
-});
 
 it('opens the reader settings and phone menu and applies document mode to the adopted story', () => {
   const { story } = mount();
@@ -71,6 +65,14 @@ it('an owner sees edit and delete in the controls panel', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   expect(trusted().getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
   expect(trusted().getByRole('button', { name: 'Delete A copy' })).toBeInTheDocument();
+});
+
+it('an editor reaches the social preview from the sharing dialog the controls panel opens', async () => {
+  mockRole = 'owner';
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  fireEvent.click(trusted().getByRole('button', { name: 'Share' }));
+  expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
 });
 
 it('opens the current comments in the document rail', async () => {
