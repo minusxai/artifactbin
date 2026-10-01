@@ -18,7 +18,7 @@
  * props proxy. The `initial*` fields are read once, at creation, as the hook's `useRef(initial)` did.
  */
 import type { DocumentGraph, DocumentAssetWarning } from '@artifactbin/contracts';
-import { advanceBrowserDocument, prepareBrowserDocumentUpdate } from '@/lib/story/document/document-authoring-client';
+import { advanceBrowserDocument, prepareBrowserDocumentUpdate, warmBrowserPreparer } from '@/lib/story/document/document-authoring-client';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/document/edit-batch';
@@ -27,6 +27,8 @@ import { sourceEdits } from '@/lib/editor-v2/source-edits';
 
 /** How long a burst of typing coalesces before it is persisted. */
 export const FLUSH_DEBOUNCE_MS = 500;
+/** How long after editing starts the save worker is warmed (the graph posted, one preparation run): after the editors mount. */
+export const WARM_PREPARER_MS = 1500;
 
 export interface LiveEditState {
   /** Head pointer this client is based on — every flush carries it. */
@@ -121,6 +123,12 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
   let retryOwed = false;
 
   const isUserEditing = () => options().isUserEditing?.() ?? false;
+  // The first save of a session would otherwise post the whole graph to the worker and prepare cold (see warmBrowserPreparer).
+  const warmTimer = typeof window === 'undefined' ? 0 : window.setTimeout(() => {
+    const current = snapshot;
+    if (!alive || pending || inFlight || !current.document) return;
+    void warmBrowserPreparer({ ...current, document: current.document, title: current.meta.title as string | null, description: current.meta.description as string | null });
+  }, WARM_PREPARER_MS);
   type Snapshot = typeof snapshot;
   type Prepared = { update: Awaited<ReturnType<typeof prepareBrowserDocumentUpdate>>; warnings: DocumentAssetWarning[] };
   const prepareChange = (backend: ArtifactBackend, current: Snapshot & { document: DocumentGraph }, change: PendingChange): Promise<Prepared> => {
@@ -372,6 +380,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
     isOwnEdit: (candidate) => candidate === editId,
     dispose() {
       alive = false;
+      window.clearTimeout(warmTimer);
       window.clearTimeout(timer);
     },
   };

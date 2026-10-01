@@ -101,3 +101,23 @@ it('sends a large graph in parts, never whole, and prepares exactly as the page 
  expect(sent.map(message=>message.kind??'prepare')).toEqual(['prepare']);
  expect(graphSource(applyGraphPatch(document,1,again.update.patch)!)).toContain('Paragraph 9, typed');
 });
+
+it('warms the worker ahead of the first save: the graph crosses and one preparation runs, so the save sends only its change',async()=>{
+ const {GRAPH_PART}=await import('../document/document-authoring-client');
+ const sent:WorkerRequest[]=[];const worker=await inProcessWorker(sent);
+ const prepare=createDocumentPreparer(()=>worker);
+ const big=`<main id="root">${Array.from({length:GRAPH_PART+150},(_,i)=>`<p id="p${i}">Paragraph ${i}</p>`).join('')}</main>`;
+ const document=createDocumentGraph(big,1),base={document,version:1,meta:{}};
+ await prepare.warm(base);
+ expect(sent.filter(message=>message.kind==='graph-part').length).toBeGreaterThan(1);
+ expect(sent.at(-1)).toMatchObject({staged:true});
+ sent.length=0;
+ const change={source:big.replace('Paragraph 7<','Paragraph 7, typed<')};
+ const saved=await prepare({...base},change);
+ expect(sent.map(message=>message.kind??'prepare')).toEqual(['prepare']);
+ expect(saved.update).toEqual(prepareClientDocumentUpdate(base,change));
+ // No worker: nothing is warmed in the page (that is the main-thread work the worker keeps off it).
+ const inPage=vi.fn(()=>null);
+ await createDocumentPreparer(inPage).warm(base);
+ expect(inPage).toHaveBeenCalledTimes(1);
+});

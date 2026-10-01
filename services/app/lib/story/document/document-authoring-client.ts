@@ -98,13 +98,24 @@ export function createDocumentPreparer(start:()=>PrepareWorker|null){
   }
   return {document:next,source:graphSource(next)};
  };
- return Object.assign(prepare,{advance});
+ /**
+  * WARM THE PREPARER while nothing is owed: the graph crosses (in its parts) and one preparation of the unchanged
+  * document runs, so the first save of a session neither waits for a report's graph to cross nor runs the
+  * preparation's code cold (together seconds at slow CPUs). Only with a worker: in the page it would be the very
+  * main-thread work the worker exists to keep off it.
+  */
+ const warm=(base:ClientDocumentSnapshot):Promise<void>=>ready()?prepare(base,{}).then(()=>{},()=>{}):Promise.resolve();
+ return Object.assign(prepare,{advance,warm});
 }
 const startWorker=():PrepareWorker|null=>typeof Worker==='undefined'?null:new Worker(new URL('./document-prepare.worker.ts',import.meta.url),{type:'module',name:'document-prepare'}) as unknown as PrepareWorker;
 const prepareInWorker=createDocumentPreparer(startWorker);
 /** Advance the editor's graph by an accepted save's patch (see `advance` above). */
 export function advanceBrowserDocument(document:DocumentGraph,version:number,patch:GraphPatch){
  return prepareInWorker.advance(document,version,patch);
+}
+/** Post the editor's graph to the save worker and run one preparation there, ahead of the first save (see `warm`). */
+export function warmBrowserPreparer(base:ClientDocumentSnapshot):Promise<void>{
+ return prepareInWorker.warm(base);
 }
 export async function prepareBrowserDocumentUpdate(backend:Pick<ArtifactBackend,'prepare'>,base:ClientDocumentSnapshot,change:ClientDocumentChange,onWarnings?:(warnings:DocumentAssetWarning[])=>void){
  return attachAuthoringContext(await prepareInWorker(base,change),source=>backend.prepare(source),onWarnings);
