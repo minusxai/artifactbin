@@ -34,7 +34,7 @@ describe('preloadKeyFor', () => {
 describe('link intent', () => {
   it('hovering a profile link fetches it once; the page then adopts it without a second request', async () => {
     render(() => <App />);
-    await screen.findByRole('link', { name: /.+/ }, { timeout: 3000 }).catch(() => undefined);
+    await screen.findByRole('region', { name: 'Trash' }, { timeout: 3000 });
     const link = document.createElement('a');
     link.href = '/@sam'; link.textContent = 'sam'; document.body.append(link);
     fireEvent.pointerOver(link, { pointerType: 'mouse' });
