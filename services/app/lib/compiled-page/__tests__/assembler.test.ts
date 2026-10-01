@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { assembleReaderPage, splitModuleData } from '../assembler';
+import { assembleReaderPage } from '../assembler';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
 
 const build = { id: 'b'.repeat(16), manifest: { 'solid-js': '/islands/solid-1111aaaa.js', 'solid-js/web': '/islands/web-2222bbbb.js', 'solid-js/store': '/islands/store-3333cccc.js', '@mx/rt': '/islands/rt-4444dddd.js', '@mx/boot': '/islands/boot-5555eeee.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
@@ -198,15 +198,5 @@ describe('assembleReaderPage', () => {
     expect(page.html).not.toContain('<script>alert(1)');
     expect(page.html).not.toContain('</script><script>alert(2)');
     expect(dom(page).title).toBe('</title><script>alert(1)</script>');
-  });
-});
-
-describe('splitModuleData (also the offline file\'s carrier reader)', () => {
-  it('returns the trailing module-data carrier as data and as its own tag, and every island-literals tag', () => {
-    const literals = '<script type="application/json" data-mx-island-literals="aaaaaaaaaaaaaaaa">["chart"]</script>';
-    const tag = '<script type="application/json" data-mx-module-data>{"moduleData":[{"rows":[1]}]}</script>';
-    const split = splitModuleData(`<div>seed</div>${literals}${tag}`);
-    expect(split).toEqual({ story: '<div>seed</div>', moduleData: [{ rows: [1] }], moduleDataTag: tag, literals });
-    expect(splitModuleData('<div>fresh</div>')).toEqual({ story: '<div>fresh</div>', moduleData: null, moduleDataTag: '', literals: '' });
   });
 });

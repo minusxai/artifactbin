@@ -178,6 +178,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
   /** The islands were frozen for editing: from then on the page draws drafts (and versions) from the server compiler. */
   let frozen = false;
   const drafting = () => editRequested || frozen;
+  /** A saved version is shown for reading while editing is paused (version history): Done returns to the head. */
+  let previewing = false;
   let editLoading = false;
   let draftSequence = 0;
   /** The last draw that completed, by sequence: a restore waits for ITS draw, not an earlier one. */
@@ -380,7 +382,11 @@ export function createIslandController({ win, root, islands, nodes: served, port
   const controller = {
     nonce,
     selectionReady: ensureSelection,
-    restored: () => (frozen && !editRequested ? restoreSettled().promise : Promise.resolve()),
+    restored: () => {
+      // Done while a version preview is on screen: nothing else asks for the saved head back.
+      if (previewing && frozen && !editRequested) { previewing = false; restoreSource = latestSource ?? initialSource(); restoreRead(); }
+      return frozen && !editRequested ? restoreSettled().promise : Promise.resolve();
+    },
     send(command: unknown) {
       if (disposed || !command || typeof command !== 'object') return;
       if (isStoryDocumentUpdate(command)) { controller.update(command); return; }
@@ -400,10 +406,14 @@ export function createIslandController({ win, root, islands, nodes: served, port
         if (!command.on) {
           // The editor and the page both say so on Done: the first ends the session and starts the return to reading.
           if (!wasEditing) return;
-          draftSequence++; pendingDraft = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null; edit?.dispose(); edit = null;
+          edit?.dispose(); edit = null;
+          // Editing paused to preview a version: that version draws on, and Done (`restored`) returns to the head.
+          if (previewing) return;
+          draftSequence++; pendingDraft = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null;
           if (frozen) { restoreSource = latestSource ?? initialSource(); restoreRead(); }
           return;
         }
+        previewing = false;
         if (edit || editLoading) return;
         editLoading = true;
         if (!frozen) freezeIslandPaint(root, islands);
@@ -451,10 +461,13 @@ export function createIslandController({ win, root, islands, nodes: served, port
     },
     update(command: StoryDocumentUpdate) {
       if (disposed) return;
-      if (editRequested && command.source !== undefined) {
+      if (command.source !== undefined && (editRequested || command.preview)) {
         const sequence = ++draftSequence;
         const source = command.source;
-        latestSource = source;
+        // A previewed version is drawn like a draft but is not what Done saves: the head comes back after it.
+        previewing = !!command.preview;
+        if (previewing && !frozen) { freezeIslandPaint(root, islands); frozen = true; }
+        if (!previewing) latestSource = source;
         void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
           headers: { 'Content-Type': 'application/json' },
@@ -471,6 +484,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         }).catch((error) => { if (!disposed) console.error('Failed to compile editor draft', error); });
         return;
       }
+      previewing = false;
       if (frozen) {
         // Editing froze the islands and the page has not finished returning to reading: a version that lands
         // now (Done's own save, another writer) is what the page returns to.

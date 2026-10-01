@@ -44,6 +44,8 @@ vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => (
 
 import { createIslandController, holdChartDrawings } from '../island-controller';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
+import { createEditDraftSender } from '@/solid/editor/edit-draft';
+import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 // Time-bounded, not tick-bounded: the first dynamic import of a module is slow when other suites transform alongside.
@@ -69,10 +71,10 @@ describe('island controller editor drafts', () => {
     controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
     await settle(() => editSession.mounts > 0);
 
-    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1' });
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
     await settle(() => engine.state.releases.length === 1);
     // A newer draft lands while the first is still hydrating.
-    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v2</p>', editId: 'e2' });
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v2</p>', editId: 'e2', theme: null, colorMode: 'light' });
     await settle(() => fetch.mock.calls.length === 2);
     await tick(); await tick();
     expect(engine.state.overlapped).toBe(false);
@@ -110,7 +112,7 @@ describe('island controller editor drafts', () => {
     await settle(() => editSession.mounts > 0);
     const unmounts = editSession.unmounts;
     hold.on = true;
-    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1' });
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
     await settle(() => engine.state.loads.length === 1);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)).search).toBe('?$fruit=banana');
     // The module is still on its way: the page must not have taken the editable DOM away yet.
@@ -201,7 +203,7 @@ describe('island controller editor drafts', () => {
     });
     controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
     await settle(() => editSession.mounts > 0);
-    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1' });
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
     await settle(() => engine.state.releases.length === 1);
     engine.state.releases.shift()!();
     await settle(() => engine.state.active === 0 && root.textContent === 'v1');
@@ -235,6 +237,117 @@ describe('island controller editor drafts', () => {
     expect(islands.setMode).not.toHaveBeenCalledWith('read');
     expect(root.textContent).toBe('v0');
     engine.blocker = null;
+    controller.dispose();
+  });
+
+  it("sends the editor's current theme with every draft: a theme pick, then a text edit, compiles in that theme", async () => {
+    engine.state.applied.length = 0;
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const { source } = JSON.parse(String(init.body)) as { source: string };
+      return new Response(JSON.stringify({ html: `<div data-mx-inline-story>${source}</div>` }), { status: 200 });
+    });
+    vi.spyOn(window, 'fetch').mockImplementation(fetch as typeof window.fetch);
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null },
+    });
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > 0);
+    // The editor's own state, as InPlaceEditor holds it: the picked theme lands in a signal, its save is debounced.
+    let theme: StoryThemeName | null = null;
+    const show = createEditDraftSender({ current: controller }, { editId: () => 'e1', theme: () => theme, colorMode: () => 'dark' });
+    theme = 'terminal';
+    show('<p>v0</p>');
+    // A text edit straight after, while the theme's metadata save is still pending.
+    show('<p>v1</p>');
+    await settle(() => fetch.mock.calls.length === 2);
+    const bodies = fetch.mock.calls.map(([, init]) => JSON.parse(String(init.body)) as { source: string; theme: unknown; colorMode: unknown });
+    expect(bodies.map((body) => body.source)).toEqual(['<p>v0</p>', '<p>v1</p>']);
+    expect(bodies[1]?.theme, 'the text edit compiles in the picked theme').toBe('terminal');
+    expect(bodies[1]?.colorMode).toBe('dark');
+    // A theme back to none is sent as none (null), not left to the stored theme.
+    theme = null;
+    show('<p>v2</p>');
+    await settle(() => fetch.mock.calls.length === 3);
+    expect(JSON.parse(String(fetch.mock.calls[2]?.[1]?.body)).theme).toBeNull();
+    await settle(() => engine.state.releases.length > 0);
+    while (engine.state.releases.length) { engine.state.releases.shift()!(); await tick(); }
+    controller.dispose();
+  });
+
+  it("draws a previewed version's own markup, not the saved head; Done while previewing returns to the saved version", async () => {
+    engine.state.applied.length = 0;
+    engine.state.releases.length = 0;
+    engine.adopted = 0;
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('draft-preview')) {
+        const { source } = JSON.parse(String(init!.body)) as { source: string };
+        return new Response(JSON.stringify({ html: `<html><body><div data-mx-inline-story>${source}</div></body></html>` }), { status: 200 });
+      }
+      return new Response('<html><body><div data-mx-inline-story><p>head</p></div></body></html>', { status: 200 });
+    });
+    vi.spyOn(window, 'fetch').mockImplementation(fetch as typeof window.fetch);
+    const islands = { setMode: vi.fn(), mode: () => 'edit', store: null } as unknown as import('@/lib/islands/contract').IslandDocument;
+    const controller = createIslandController({
+      win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null },
+    });
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > 0);
+    const headFetches = () => fetch.mock.calls.filter(([url]) => String(url).startsWith('/a/doc/story')).length;
+
+    // What InPlaceEditor sends for "preview version 1": the snapshot, then editing ends (twice: the effect's cleanup and its rerun).
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>old v1</p>', editId: 'e1', theme: null, colorMode: 'light', preview: true });
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    await settle(() => engine.state.releases.length === 1);
+    engine.state.releases.shift()!();
+    await settle(() => engine.state.active === 0 && root.textContent === 'old v1');
+
+    expect(root.textContent, 'the previewed version is on screen').toBe('old v1');
+    expect(JSON.parse(String(fetch.mock.calls.find(([url]) => String(url).includes('draft-preview'))?.[1]?.body)).source).toBe('<p>old v1</p>');
+    expect(headFetches(), 'the saved head is not fetched while previewing').toBe(0);
+    expect(islands.setMode).not.toHaveBeenCalledWith('read');
+
+    // Done while previewing: the page reads the saved version again, in place.
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    const restored = controller.restored();
+    await settle(() => engine.state.releases.length === 1);
+    engine.state.releases.shift()!();
+    await restored;
+    expect(headFetches()).toBe(1);
+    expect(root.textContent).toBe('head');
+    expect(islands.setMode).toHaveBeenLastCalledWith('read');
+    controller.dispose();
+  });
+
+  it('morphs a new version in place while reading (neither frozen nor editing)', async () => {
+    liveUpdate.updateCompiledStory.mockClear();
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const fetch = vi.spyOn(window, 'fetch');
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null },
+    });
+    controller.send({ type: STORY_READER_MODE_MESSAGE, mode: 'dark' });
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [] });
+    expect(liveUpdate.updateCompiledStory).toHaveBeenCalledTimes(1);
+    const [win, options] = liveUpdate.updateCompiledStory.mock.calls[0] as unknown as [Window, { mode: () => string | null; adopted: boolean }];
+    expect(win).toBe(window);
+    expect(options.adopted).toBe(true);
+    expect(options.mode(), "the reader's own mode survives the new version").toBe('dark');
+    expect(fetch, 'no draft compile and no fragment fetch while reading').not.toHaveBeenCalled();
     controller.dispose();
   });
 

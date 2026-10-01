@@ -11,11 +11,10 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
  */
 import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
-import type { StyleOverride } from '@/lib/story/style-overrides';
-import type { StoryBaseCssRecipe } from '@/lib/story/story-base-css';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ImageRefData, RefDataMap } from '@/lib/story/ref-data';
 import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
@@ -224,56 +223,65 @@ export const STORY_ROOT_ID = 'mx-story-root';
  * `id`; a request the page never answers times out in the frame's transport.
  */
 /**
- * A NEW VERSION OF THIS DOCUMENT, posted in by the parent page.
+ * A NEW VERSION OF THIS DOCUMENT, posted to the page's controller (lib/story-runtime/island-controller).
  *
- * The page holds the live stream (an opaque frame cannot open an EventSource
- * against our origin). Delivering what it hears by REPLACING the frame costs
- * the reader everything: the document re-fetched, re-parsed and re-hydrated,
- * every chart rebuilt, their scroll position and their `<Value>` choices gone,
- * once per agent write. The document is a React tree, so a new version of it
- * is a re-render, and this message is that version.
- *
- * `nodes` is the body in the same shape the island carries, because the
- * runtime deliberately ships no JSX parser. Style fields follow the stream's
- * own convention: ABSENT means "unchanged", null means "there is none".
+ * The app's editor sends an `EditDraft`: unsaved source the controller compiles on the
+ * server (`/a/<id>/draft-preview`) and morphs into the running islands. The reader page sends a
+ * `ReaderFrame` from the live stream: a saved version the controller morphs in from its compiled fragment
+ * (lib/islands/live-update). `nodes` is the body in the shape the island carries; comments and selections
+ * are classified against it.
  */
 export const STORY_DOCUMENT_MESSAGE = 'mx:document';
 
-export interface StoryDocumentUpdate {
+export interface EditDraft {
   type: typeof STORY_DOCUMENT_MESSAGE;
   nodes: JsxNode[];
-  /** Unsaved source for the server compiler while the adopted document is in edit mode. */
-  source?: string;
+  /** The unsaved source the server compiles. */
+  source: string;
   /** The editor's current head pointer; a page chrome snapshot may lag its own save. */
-  editId?: string;
+  editId: string;
+  /** The theme the editor shows NOW (null: none). Always sent: the stored theme lags a pick until its save lands. */
+  theme: StoryThemeName | null;
+  colorMode: 'light' | 'dark';
   /**
-   * Refs the document did not have when it was served — MERGED, not replaced.
-   * An image inserted while editing is a brand-new artifact, so the island's
-   * map cannot know it, and the interpreter renders the literal `ref:<id>`
-   * string into `src` (a broken image, naturalWidth 0) until a full reload.
+   * A saved VERSION shown for reading while editing is paused (version history). Drawn like a draft even with
+   * edit mode off; Done afterwards returns the page to the saved head.
    */
-  refData?: RefDataMap;
-  /**
-   * The declarations as a flow. `state` is OPTIONAL: a live frame carries the
-   * flow and no rows (the store re-runs every query through its transport —
-   * lib/story/frame); the page's own island and the editor carry both.
-   */
+  preview?: true;
+}
+
+/**
+ * A saved version heard on the reader's live stream (solid/pages/Document). Only `nodes` is read: the morph
+ * fetches the version's compiled fragment itself; the rest is what the frame carries.
+ */
+export interface ReaderFrame {
+  type: typeof STORY_DOCUMENT_MESSAGE;
+  nodes: JsxNode[];
+  source?: undefined;
+  preview?: undefined;
   dataflow?: { flow: StoryIslandDataflow['flow']; state?: StoryIslandDataflow['state'] };
-  /** The compiled per-document stylesheet (data-mx-tw). */
   compiledCss?: string | null;
-  /** The author's own <Helmet> <style> (data-mx-author). */
   authorCss?: string | null;
   authorScript?: string | null;
   theme?: string | null;
   colorMode?: 'light' | 'dark';
-  /**
-   * THE SHEET ALREADY ISOLATED for exactly these `nodes` — a newer prepared
-   * page the reader's route refreshed to (lib/story/prepared-runtime
-   * ServedStoryRuntime). Replaces the raw parts above: the runtime renders it
-   * as it is, with no CSS parser.
-   */
-  sheet?: { css: string; overrides?: StyleOverride[]; base: StoryBaseCssRecipe };
 }
+
+/**
+ * The local preview's draft (services/cli/src/preview/client): source only. Its own controller
+ * (services/cli/src/preview/edit-controller) compiles the file on disk and reads nothing else.
+ */
+export interface LocalDraft {
+  type: typeof STORY_DOCUMENT_MESSAGE;
+  nodes: JsxNode[];
+  source: string;
+  editId?: undefined;
+  theme?: undefined;
+  colorMode?: undefined;
+  preview?: undefined;
+}
+
+export type StoryDocumentUpdate = EditDraft | LocalDraft | ReaderFrame;
 
 /** Private page-to-document capability, shared by the compiled and legacy editor bridges. */
 export interface StoryController {

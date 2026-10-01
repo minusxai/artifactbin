@@ -15,6 +15,7 @@ import { Tooltip } from './Tooltip';
 import { PeopleInbox } from './PeopleInbox';
 import { useInbox } from '../lib/notifications';
 import { Avatar } from './Avatar';
+import { closeOnEscape } from '../lib/close-on-escape';
 
 /** Artifact controls from the editor seam; the named export below owns app pages. */
 export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {
@@ -72,12 +73,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const unread = () => Boolean(inbox.state()?.unread);
   // Whatever closes a panel (Escape, scrim, its own close button, a link) returns focus to the bar button that opened it.
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
-  createEffect(() => {
-    if (!panel()) return;
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
-    window.addEventListener('keydown', escape);
-    onCleanup(() => window.removeEventListener('keydown', escape));
-  });
+  createEffect(() => { if (panel()) onCleanup(closeOnEscape(close)); });
   return <>
     <header aria-label="Page bar" class="sticky top-0 z-40 flex h-11 items-center gap-2 border-b border-edge bg-surface/85 px-3 backdrop-blur-md sm:gap-3">
       <a href="/" aria-label="Home" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised"><img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} /></a>

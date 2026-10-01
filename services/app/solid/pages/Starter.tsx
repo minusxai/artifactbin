@@ -15,7 +15,7 @@
  *    compiled placeholder with the editor in place (solid/pages/Document);
  *  - a capture never reaches here: a keyed request is compiled.
  */
-import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import Sun from 'lucide-solid/icons/sun';
 import Moon from 'lucide-solid/icons/moon';
 import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/share-roles';
@@ -44,7 +44,7 @@ import { DocumentActions } from '../document/DocumentActions';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
-import { apiFetch } from '../lib/api';
+import { syncPanelTriggers, toggleReaction, wireReaderChrome, type ReaderPanel } from '../document/reader-chrome-adapter';
 
 export interface StarterAnswer {
   role: ArtifactRole;
@@ -73,7 +73,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   const editable = canEditRole(answer.role);
   const annotatable = canAnnotateRole(answer.role);
   const phone = createIsPhoneViewport();
-  const [panel, setPanel] = createSignal<'controls' | 'menu' | null>(null);
+  const [panel, setPanel] = createSignal<ReaderPanel | null>(null);
   const [fork, setFork] = createSignal(false);
   const [sharingOpen, setSharingOpen] = createSignal(false);
   const [membershipRevision, setMembershipRevision] = createSignal(0);
@@ -147,56 +147,28 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     // Drawn from this answer, and again once the session names who is reading (the rail's face).
     createEffect(() => {
       holder.innerHTML = renderReaderChrome(chromeInput()).replaceAll('target="_top"', 'target="_self"');
+      // A redrawn chrome starts with every panel closed: it says which one is open.
+      syncPanelTriggers(holder, untrack(panel));
       const chrome = chromeElement()!;
       sharing = wireReaderSharing(window, document, chrome);
       const stopStar = wireGithubStar(chrome);
       const stopFaces = wireFaceFallback(chrome);
       onCleanup(() => { sharing?.dispose(); stopStar(); stopFaces(); });
     });
-    const action = async (name: string) => {
-      const chrome = chromeElement();
-      if (!chrome) return;
-      if (name === 'controls' || name === 'menu') { setPanel((open) => (open === name ? null : name)); return; }
-      if (name === 'like' || name === 'follow') {
-        if (!accountSession()) { window.location.assign(loginHref(window.location, name)); return; }
-        const control = chrome.querySelector<HTMLElement>(`[data-mx-reader-action="${name}"]`);
-        const on = control?.getAttribute(name === 'like' ? 'data-mx-liked' : 'data-mx-following') === 'true';
-        const href = name === 'like' ? `/api/my/artifacts/${id}/like` : answer.follow ? `/api/users/${answer.follow.userId}/follow` : '';
-        if (!href) return;
-        const response = await apiFetch(href, on ? 'DELETE' : 'POST').catch(() => null);
-        if (!response?.ok) return;
-        const next = await response.json() as { liked?: boolean; following?: boolean; count: number };
-        const now = name === 'like' ? next.liked : next.following;
-        control?.setAttribute(name === 'like' ? 'data-mx-liked' : 'data-mx-following', String(now));
-        control?.setAttribute('aria-label', name === 'like' ? now ? 'Unlike' : 'Like' : `${now ? 'Unfollow' : 'Follow'} @${control.getAttribute('data-mx-author') ?? ''}`);
-        const count = control?.querySelector('[data-mx-reader-count]');
-        if (count) count.textContent = next.count > 0 ? String(next.count) : '';
-      } else if (name === 'comment') {
-        // Nothing is written yet to comment on; a reader who may not comment is offered a way in.
-        if (!annotatable) window.location.assign(loginHref(window.location, 'comment'));
-      } else if (name === 'fork') setFork(true);
-      else if (name === 'share') { if (owner) setSharingOpen(true); else sharing?.share(); }
-      else if (name === 'notifications') window.location.assign('/notifications');
-      else if (name === 'edit') openEditor();
-    };
-    const click = (event: MouseEvent) => {
-      const target = (event.target as Element).closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger]');
-      if (!target || !holder.contains(target)) return;
-      event.preventDefault();
-      void action(target.getAttribute('data-mx-reader-action') ?? target.getAttribute('data-mx-reader-trigger') ?? '');
-    };
-    holder.addEventListener('click', click);
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanel(null); };
-    window.addEventListener('keydown', escape);
-    // The rail's triggers say whether their panel is open, however it closed.
-    createEffect(() => {
-      const open = panel();
-      person();
-      for (const name of ['controls', 'menu'] as const) {
-        const trigger = chromeElement()?.querySelector<HTMLElement>(`[data-mx-reader-trigger="${name}"]`);
-        trigger?.setAttribute('aria-expanded', String(open === name));
-        trigger?.setAttribute('aria-label', `${open === name ? 'Close' : 'Open'} ${name === 'controls' ? 'artifact controls' : 'menu'}`);
-      }
+    const wiring = wireReaderChrome(holder, {
+      panel, setPanel,
+      onAction: async (name) => {
+        if (name === 'like' || name === 'follow') {
+          const href = name === 'like' ? `/api/my/artifacts/${id}/like` : answer.follow ? `/api/users/${answer.follow.userId}/follow` : null;
+          await toggleReaction(holder, name, href, { signedIn: accountSession() });
+        } else if (name === 'comment') {
+          // Nothing is written yet to comment on; a reader who may not comment is offered a way in.
+          if (!annotatable) window.location.assign(loginHref(window.location, 'comment'));
+        } else if (name === 'fork') setFork(true);
+        else if (name === 'share') { if (owner) setSharingOpen(true); else sharing?.share(); }
+        else if (name === 'notifications') window.location.assign('/notifications');
+        else if (name === 'edit') openEditor();
+      },
     });
     // Shown while a panel is open, otherwise by the reader's scroll (lib/story-runtime/reader-chrome-policy).
     let state: ChromeState | null = null;
@@ -215,7 +187,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule);
     onCleanup(() => {
-      holder.removeEventListener('click', click); window.removeEventListener('keydown', escape);
+      wiring.dispose();
       window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule);
       window.cancelAnimationFrame(frame);
     });
