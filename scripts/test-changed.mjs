@@ -1,4 +1,6 @@
 /** Local test boundary: discover -> budget BOTH runners -> execute -> report.
+ * Discovery and the run share ONE Vitest instance (the Node API): the config, the projects and the
+ * module graph `--changed` walks are built once, and the run reuses the transforms discovery made.
  * Exit 0 means tests passed; 1 means discovery/usage failed; 2 means unverified
  * or deferred to PR CI. Test failures retain the test runner's exit status.
  * npm test: affected uncommitted tests; npm test -- origin/main: branch tests.
@@ -6,13 +8,14 @@
  * Human-only --all / -n overrides remain available, never agent recovery steps.
  */
 import { spawnSync, execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { changedSpecifications } from './lib/test-graph.mjs';
 
 export const DEFAULT_CAP = 50;
-const PROJECTS = ['--project=api', '--project=node', '--project=ui', '--project=islands'];
+const PROJECTS = ['api', 'node', 'ui', 'islands'];
 const TEST_FILE = /\.test\.(?:[cm]?[jt]s|tsx|jsx)$/;
 export const shouldRunCli = (files) => files.some(f => f.startsWith('services/cli/'));
 export const overCap = (count, cap, all) => !all && count > cap;
@@ -45,21 +48,25 @@ function changedFiles(base) {
   return [...tracked.split('\0'), ...untracked.split('\0')].filter(Boolean);
 }
 
-function discover(args) {
-  const temp = mkdtempSync(path.join(tmpdir(), 'artifactbin-test-discovery-'));
-  try {
-    const output = path.join(temp, 'files.json');
-    const res = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'list', ...args,
-      '--filesOnly', `--json=${output}`], { encoding: 'utf8', timeout: 60_000 });
-    if (res.status !== 0 || res.error) throw new Error(`Test discovery failed.\n${res.stderr || res.error || res.stdout}`);
-    let files;
-    try { files = JSON.parse(readFileSync(output, 'utf8')); }
-    catch { throw new Error(`Test discovery returned missing or malformed JSON.\n${res.stderr || ''}`); }
-    if (!Array.isArray(files) || files.some(f => typeof f.file !== 'string' || !TEST_FILE.test(f.file))) {
-      throw new Error('Test discovery returned an invalid file list.');
-    }
-    return [...new Set(files.map(f => f.file))];
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+/** The checkout's own installed Vitest, resolved from the working directory like `npx vitest` would:
+ * the one dynamic import here, because the module to load depends on the checkout being tested. */
+async function createVitest(options) {
+  const resolved = createRequire(path.resolve('package.json')).resolve('vitest/node');
+  const { createVitest: create } = await import(pathToFileURL(resolved).href);
+  process.env.TEST = 'true'; process.env.VITEST = 'true'; process.env.NODE_ENV ??= 'test';
+  return create('test', { ...options, run: true, watch: false });
+}
+
+/** Requested files (--files) or the tests whose import graph reaches a changed file (default/ref). */
+async function discover(vitest, { files, base }) {
+  let specs;
+  try { specs = files ? await vitest.getRelevantTestSpecifications(files) : await changedSpecifications(vitest, base ?? true); }
+  catch (error) { throw new Error(`Test discovery failed.\n${error?.stack || error}`); }
+  if (!Array.isArray(specs) || specs.some(s => typeof s?.moduleId !== 'string' || !TEST_FILE.test(s.moduleId))) {
+    throw new Error('Test discovery returned an invalid file list.');
+  }
+  const cwd = realpathSync(process.cwd());
+  return { specs, files: [...new Set(specs.map(s => path.relative(cwd, existsSync(s.moduleId) ? realpathSync(s.moduleId) : s.moduleId)))] };
 }
 
 function run(cmd, args, options = {}) {
@@ -74,35 +81,52 @@ const defer = reason => {
   return 2;
 };
 
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
   const { dry, all, cap, base, files } = parseArgs(argv);
   const changed = changedFiles(base);
   const cliFiles = files ? files.filter(f => f.startsWith('services/cli/test/'))
     : shouldRunCli(changed) && existsSync('services/cli/test')
       ? readdirSync('services/cli/test').filter(f => f.endsWith('.test.ts')).map(f => `services/cli/test/${f}`) : [];
   const vitestFiles = files?.filter(f => !cliFiles.includes(f));
-  const args = [...PROJECTS, ...(files ? vitestFiles : base ? ['--changed', base] : ['--changed'])];
-  const affected = files && !vitestFiles.length ? [] : discover(args);
-  if (files && files.some(f => !cliFiles.includes(f) && !affected.some(a => path.resolve(a) === path.resolve(f)))) {
-    throw new Error('A requested test was not discovered in the local api/node/ui/islands projects. Heavy tests belong on CI.');
-  }
-  const total = affected.length + cliFiles.length;
-  if (dry) { console.log(JSON.stringify({ vitest: affected, cli: cliFiles, total, cap }, null, 2)); return 0; }
-  if (!total) return defer('No affected tests. Use a focused behavioral test or let PR CI verify committed work.');
-  if (overCap(total, cap, all)) return defer(`${total} test files exceed the ${cap}-file local budget (${affected.length} Vitest + ${cliFiles.length} CLI).`);
-  console.log(`[test] Running ${total} test files (${affected.length} Vitest + ${cliFiles.length} CLI; budget ${cap}).`);
-  if (affected.length) {
-    const status = run(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...args]);
+  let affected = [];
+  let status = 0;
+  if (!files || vitestFiles.length) {
+    const vitest = await createVitest({ project: PROJECTS });
+    try {
+      const selection = await discover(vitest, { files: vitestFiles, base });
+      affected = selection.files;
+      if (files && files.some(f => !cliFiles.includes(f) && !affected.some(a => path.resolve(a) === path.resolve(f)))) {
+        throw new Error('A requested test was not discovered in the local api/node/ui/islands projects. Heavy tests belong on CI.');
+      }
+      const total = affected.length + cliFiles.length;
+      if (dry) { console.log(JSON.stringify({ vitest: affected, cli: cliFiles, total, cap }, null, 2)); return 0; }
+      if (!total) return defer('No affected tests. Use a focused behavioral test or let PR CI verify committed work.');
+      if (overCap(total, cap, all)) return defer(`${total} test files exceed the ${cap}-file local budget (${affected.length} Vitest + ${cliFiles.length} CLI).`);
+      console.log(`[test] Running ${total} test files (${affected.length} Vitest + ${cliFiles.length} CLI; budget ${cap}).`);
+      if (affected.length) {
+        // The selection runs on the same instance; the run's end sets process.exitCode on failed
+        // tests or unhandled errors exactly as the CLI does.
+        const previous = process.exitCode;
+        process.exitCode = undefined;
+        await vitest.standalone();
+        await vitest.runTestSpecifications(selection.specs, false);
+        status = Number(process.exitCode ?? 0);
+        process.exitCode = previous;
+      }
+    } finally { await vitest.close(); }
     if (status) return status;
-  }
+  } else if (dry) { console.log(JSON.stringify({ vitest: [], cli: cliFiles, total: cliFiles.length, cap }, null, 2)); return 0; }
+  else console.log(`[test] Running ${cliFiles.length} test files (0 Vitest + ${cliFiles.length} CLI; budget ${cap}).`);
   if (cliFiles.length) {
-    const status = run(process.execPath, ['--import', 'tsx', '--test', ...cliFiles.map(f => path.relative('services/cli', f))], { cwd: 'services/cli' });
-    if (status) return status;
+    const cliStatus = run(process.execPath, ['--import', 'tsx', '--test', ...cliFiles.map(f => path.relative('services/cli', f))], { cwd: 'services/cli' });
+    if (cliStatus) return cliStatus;
   }
-  console.log(`[test] Passed ${total} test files. Broad coverage remains on PR CI.`);
+  console.log(`[test] Passed ${affected.length + cliFiles.length} test files. Broad coverage remains on PR CI.`);
   return 0;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { process.exitCode = main(); }
+  try { process.exitCode = await main(); }
   catch (error) { console.error(`[test] ${error.message}\n[test] No successful verification recorded.`); process.exitCode = 1; }
+  // Vitest's pools and the Vite server can leave handles behind after close(); the verdict is final.
+  process.exit(process.exitCode);
 }
