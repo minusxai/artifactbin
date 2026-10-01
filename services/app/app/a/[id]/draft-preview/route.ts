@@ -28,15 +28,21 @@ function draftSession(request: Request): string {
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
   // The draft takes its place in its editor's session before anything is awaited (draft-compile-gate):
   // the session is this document under this request's credential, as it arrived.
-  const ticket = draftCompileGate().arrive(draftSession(request));
+  const gate = draftCompileGate();
+  const ticket = gate.arrive(draftSession(request));
+  // Overtaken while it waited for the thread: answered before its document and body are read and parsed.
+  const SUPERSEDED = () => json({ error: 'superseded' }, 409, NO_STORE);
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (gate.superseded(ticket)) return SUPERSEDED();
   const artifact = await getArtifactById(id);
   if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403, NO_STORE);
   if (!canEdit(await roleFor(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (gate.superseded(ticket)) return SUPERSEDED();
   const body = await readJson(request);
+  if (gate.superseded(ticket)) return SUPERSEDED();
   if (!body || typeof body.source !== 'string' || typeof body.editId !== 'string' || body.source.length > MAX_SOURCE_LENGTH) {
     return json({ error: 'invalid_draft' }, 400, NO_STORE);
   }
@@ -78,10 +84,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     });
   };
   try {
-    const result = await draftCompileGate().run(ticket, compile);
+    const result = await gate.run(ticket, compile);
     if (!result.ok) {
       return result.reason === 'superseded'
-        ? json({ error: 'superseded' }, 409, NO_STORE)
+        ? SUPERSEDED()
         : json({ error: 'draft_compile_busy' }, 429, { ...NO_STORE, 'Retry-After': '2' });
     }
     return json({ html: result.value }, 200, { ...NO_STORE, 'X-Content-Type-Options': 'nosniff' });

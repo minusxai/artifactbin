@@ -22,6 +22,8 @@ export interface DraftTicket { readonly session: string; readonly seq: number }
 export interface DraftCompileGate {
   /** Place a draft in its session as its request arrives; a later arrival supersedes it. */
   arrive(session: string): DraftTicket;
+  /** Whether a newer draft of the ticket's session has arrived since: the caller can stop preparing it. */
+  superseded(ticket: DraftTicket): boolean;
   /** Run `work` for an arrived draft under the gate; the promise settles as soon as its answer is known. */
   run<T>(ticket: DraftTicket, work: () => Promise<T>): Promise<GateResult<T>>;
 }
@@ -131,6 +133,7 @@ export function createDraftCompileGate(options: DraftCompileGateOptions): DraftC
       session.touched = now;
       return { session: key, seq: ++session.latest };
     },
+    superseded: (ticket) => ticket.seq < (sessions.get(ticket.session)?.latest ?? ticket.seq),
     run<T>(ticket: DraftTicket, work: () => Promise<T>): Promise<GateResult<T>> {
       const key = ticket.session;
       const known = sessions.get(key);
