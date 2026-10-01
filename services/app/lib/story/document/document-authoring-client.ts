@@ -8,6 +8,8 @@ import {graphSource} from '../graph/document-graph';
 import type {WorkerRequest,PrepareResponse} from './document-prepare-protocol';
 
 type Prepared={update:DocumentUpdate;context?:string};
+/** Graph nodes per message when a large graph crosses to the worker (one page-thread task each). */
+export const GRAPH_PART=400;
 /** The slice of a dedicated worker the preparer uses, so tests can hand it an in-process one. */
 export interface PrepareWorker {
  postMessage(message:WorkerRequest):void;
@@ -45,11 +47,40 @@ export function createDocumentPreparer(start:()=>PrepareWorker|null){
   waiting.set(message.id,settle);
   try {target.postMessage(message);after?.();} catch {waiting.delete(message.id);settle(null);}
  });
- const prepare=async(base:ClientDocumentSnapshot,change:ClientDocumentChange):Promise<Prepared>=>{
+ /**
+  * A report's graph is tens of thousands of nodes: cloned in one message it held the page thread for over half a
+  * second at the first save. It crosses in parts of GRAPH_PART nodes instead, one task each, and the preparation
+  * that follows adopts it.
+  */
+ const postGraph=async(target:PrepareWorker,document:DocumentGraph)=>{
+  const {nodes,claimedIds,...graph}=document;
+  const nodeKeys=Object.keys(nodes),claimedKeys=Object.keys(claimedIds);
+  const parts=Math.max(1,Math.ceil(nodeKeys.length/GRAPH_PART),Math.ceil(claimedKeys.length/GRAPH_PART));
+  const slice=<T,>(from:Record<string,T>,keys:string[],part:number)=>{
+   const out:Record<string,T>={};
+   for(const key of keys.slice(part*GRAPH_PART,(part+1)*GRAPH_PART))Object.defineProperty(out,key,{value:from[key],enumerable:true,writable:true,configurable:true});
+   return out;
+  };
+  for(let part=0;part<parts;part++){
+   if(part)await new Promise(resolve=>setTimeout(resolve,0));
+   target.postMessage({id:++sequence,kind:'graph-part',...(part===0?{graph}:{}),nodes:slice(nodes,nodeKeys,part),claimedIds:slice(claimedIds,claimedKeys,part)});
+  }
+ };
+ /** Preparations go out one at a time: a graph's parts must not interleave with another preparation's. */
+ let lane:Promise<unknown>=Promise.resolve();
+ const prepare=(base:ClientDocumentSnapshot,change:ClientDocumentChange):Promise<Prepared>=>{
+  const run=lane.then(()=>prepareNow(base,change));
+  lane=run.catch(()=>{});
+  return run;
+ };
+ const prepareNow=async(base:ClientDocumentSnapshot,change:ClientDocumentChange):Promise<Prepared>=>{
   const target=ready();
   if(target){
    const {document,...rest}=base;
-   const reply=await send(target,{id:++sequence,base:rest,change,...(document!==posted?{document}:{})},()=>{posted=document;});
+   const parted=document!==posted&&!!document&&Object.keys(document.nodes).length>GRAPH_PART;
+   if(parted){posted=null;await postGraph(target,document);}
+   if(worker!==target)return prepareClientDocument(base,change);
+   const reply=await send(target,{id:++sequence,base:rest,change,...(parted?{staged:true as const}:document!==posted?{document}:{})},()=>{posted=document;});
    if(reply){if(!reply.ok)throw new Error(reply.message);if('update' in reply)return {update:reply.update,...(reply.context!==undefined?{context:reply.context}:{})};}
   }
   return prepareClientDocument(base,change);
