@@ -4,7 +4,7 @@ import { mountCompiledEditRegions, runSlice, sameNodes, withRegionBreaks } from 
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
-import { flushFlowView } from '@/lib/editor-v2/flow-view';
+import { flushFlowView, repathFlowView } from '@/lib/editor-v2/flow-view';
 import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import { serializeJsx } from '@/lib/jsx';
 import { morphDraftDom } from '@/lib/islands/morph/engine';
@@ -437,6 +437,32 @@ describe('compiled DOM edit mounter', () => {
     expect(views[0]).toBe(first);
     expect(first.dom.isConnected).toBe(true);
     expect(first.dom.textContent).toBe('alpha restored');
+    mounted.dispose();
+    root.remove();
+  });
+});
+
+describe('a kept editor under a new path', () => {
+  it('redraws a table\'s AST paths only when its steps run, and then on the new path everywhere', async () => {
+    const rows = Array.from({ length: 60 }, (_, i) => `<tr id="r${i}"><td>a${i}</td><td>b${i}</td></tr>`).join('');
+    const nodes = parseJsxOrThrow(`<div id="d"><table id="t"><tbody>${rows}</tbody></table></div>`).nodes;
+    const root = document.createElement('div');
+    root.innerHTML = `<div data-mx-ast="0" id="d"><table data-mx-ast="0.0" id="t"><tbody data-mx-ast="0.0.0">${Array.from({ length: 60 }, (_, i) => `<tr data-mx-ast="0.0.0.${i}" id="r${i}"><td data-mx-ast="0.0.0.${i}.0">a${i}</td><td data-mx-ast="0.0.0.${i}.1">b${i}</td></tr>`).join('')}</tbody></table></div>`;
+    document.body.append(root);
+    let view: EditorView | null = null;
+    const mounted = mountCompiledEditRegions(root, nodes, { onFlow: vi.fn(), onView: (v) => { if (v) view = v; } });
+    await vi.waitFor(() => expect(view).not.toBeNull());
+    const cells = () => [...view!.dom.querySelectorAll('td')].map((td) => td.getAttribute('data-mx-ast'));
+    expect(cells()[0]).toBe('0.0.0.0.0');
+    const steps = repathFlowView(view!, '0.1');
+    expect(steps.length).toBeGreaterThan(0);
+    // A selection change before the steps run redraws nothing: the old paths stay until the redraw.
+    view!.dispatch(view!.state.tr.setSelection(TextSelection.create(view!.state.doc, 4)));
+    expect(cells()[0]).toBe('0.0.0.0.0');
+    for (const step of steps) step();
+    expect(cells().every((path) => path?.startsWith('0.1.0.'))).toBe(true);
+    expect(cells().at(-1)).toBe('0.1.0.0.59.1');
+    expect(view!.dom.querySelector('table')?.getAttribute('data-mx-ast')).toBe('0.1.0');
     mounted.dispose();
     root.remove();
   });

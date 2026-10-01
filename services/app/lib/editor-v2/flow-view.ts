@@ -35,6 +35,13 @@ export interface FlowView {
   composing(): boolean;
   /** Adopt the source the page now holds — a no-op (bar AST paths) when it is our own echo. */
   sync(nodes: JsxNode[]): void;
+  /**
+   * Redraw the AST-path decorations for `path` (the props carry it from now on), the prose unchanged, in steps the
+   * caller runs in order (idle slices, out of the redraw's own task): until then the view keeps its decorations.
+   */
+  repath(path: string): Array<() => void>;
+  /** A path change the caller redraws in steps (`repath`), not the adapter at once. */
+  repathing(path: string): boolean;
   destroy(): void;
 }
 
@@ -69,6 +76,9 @@ export const FLOW_IDLE_MS = 200;
 const flushers = new WeakMap<EditorView, () => void>();
 /** Hand a view's held typing to the page now: anything that reads or replaces the source first (commit, undo, a redraw). */
 export function flushFlowView(view: EditorView): void { flushers.get(view)?.(); }
+const repathers = new WeakMap<EditorView, (path: string) => Array<() => void>>();
+/** A mounted view's path redraw in steps (`FlowView.repath`); none for a view not mounted here. */
+export function repathFlowView(view: EditorView, path: string): Array<() => void> { return repathers.get(view)?.(path) ?? []; }
 
 /**
  * MARKDOWN BLOCK SHORTCUTS. A marker typed at the start of an ordinary paragraph, then a space, turns the
@@ -141,6 +151,43 @@ function keepPastedEdgeSpaces(tr: Transaction, from: number, plain: string) {
 }
 
 export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, onCompositionSettled: () => void): FlowView {
+  /** The AST-path decorations last drawn, and for what: recomputed only when the document, its source or its path moves. */
+  let memo: { doc: EditorState['doc']; nodes: JsxNode[]; path: string; list: Decoration[]; set: DecorationSet } | null = null;
+  /** A partial set while a path change is redrawn in slices (`repath`). */
+  let staged: { doc: EditorState['doc']; set: DecorationSet } | null = null;
+  let repathTo: string | null = null;
+  const pathDecorations = (doc: EditorState['doc'], nodes: JsxNode[], path: string): Decoration[] => {
+    const parts = path.split('.'),
+      first = Number(parts.pop()),
+      parent = parts.join('.');
+    const decorations: Decoration[] = [];
+    // Engine blocks omit source whitespace and introduce synthetic text
+    // wrappers. Walk the authored siblings alongside them; engine child
+    // ordinals are never AST paths. IDs also prevent a pending structural
+    // edit from pointing the toolbar at a different source node.
+    const visit = (container: typeof doc, source: JsxNode[], pos: number, parentPath: string, base = 0) => {
+      let cursor = 0;
+      container.forEach((node, offset) => {
+        if (node.isText || node.isInline || node.attrs.synthetic) return;
+        const original = node.attrs.source as JsxElement | null;
+        if (!original) return;
+        const id = original.attributes.find((a) => a.name === 'id')?.value;
+        const index = source.findIndex((candidate, i) => i >= cursor &&
+          candidate.type === 'element' && candidate.tag === original.tag &&
+          (!id?.static || candidate.attributes.some((a) => a.name === 'id' && a.value.static && a.value.json === id.json)));
+        if (index < 0) return;
+        cursor = index + 1;
+        const path = [parentPath, String(base + index)].filter(Boolean).join('.');
+        const position = pos + offset;
+        decorations.push(Decoration.node(position, position + node.nodeSize, { 'data-mx-ast': path }));
+        const authored = source[index];
+        if (authored.type === 'element' && !node.isTextblock)
+          visit(node, authored.children, position + 1, path);
+      });
+    };
+    visit(doc, nodes, 0, parent, first);
+    return decorations;
+  };
   const state = { composing: false };
   /** Typing ProseMirror has drawn but the page has not been handed yet: one undo step, one source edit. */
   let held: { group: string; before: ReturnType<typeof captureBookmark>; maps: ReturnType<typeof mergeIdentityMaps> } | null = null;
@@ -213,37 +260,20 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
           },
         ]),
     ) as import('prosemirror-view').EditorProps['nodeViews'],
-    decorations(state) {
-      const parts = props().path.split('.'),
-        first = Number(parts.pop()),
-        parent = parts.join('.');
-      const decorations: Decoration[] = [];
-      // Engine blocks omit source whitespace and introduce synthetic text
-      // wrappers. Walk the authored siblings alongside them; engine child
-      // ordinals are never AST paths. IDs also prevent a pending structural
-      // edit from pointing the toolbar at a different source node.
-      const visit = (container: typeof state.doc, source: JsxNode[], pos: number, parentPath: string, base = 0) => {
-        let cursor = 0;
-        container.forEach((node, offset) => {
-          if (node.isText || node.isInline || node.attrs.synthetic) return;
-          const original = node.attrs.source as JsxElement | null;
-          if (!original) return;
-          const id = original.attributes.find((a) => a.name === 'id')?.value;
-          const index = source.findIndex((candidate, i) => i >= cursor &&
-            candidate.type === 'element' && candidate.tag === original.tag &&
-            (!id?.static || candidate.attributes.some((a) => a.name === 'id' && a.value.static && a.value.json === id.json)));
-          if (index < 0) return;
-          cursor = index + 1;
-          const path = [parentPath, String(base + index)].filter(Boolean).join('.');
-          const position = pos + offset;
-          decorations.push(Decoration.node(position, position + node.nodeSize, { 'data-mx-ast': path }));
-          const authored = source[index];
-          if (authored.type === 'element' && !node.isTextblock)
-            visit(node, authored.children, position + 1, path);
-        });
-      };
-      visit(state.doc, props().nodes, 0, parent, first);
-      return DecorationSet.create(state.doc, decorations);
+    decorations(current) {
+      // Staged: a path change being redrawn in slices (repath) shows its partial set until the document changes.
+      if (staged && staged.doc === current.doc) return staged.set;
+      staged = null;
+      const { nodes } = props();
+      // A path `repath` moved to holds until the props carry it (its mounter sets them next) or another one.
+      if (repathTo !== null && props().path === repathTo) repathTo = null;
+      const path = repathTo ?? props().path;
+      // A selection or other doc-preserving transaction redraws nothing: the paths are the same as last time.
+      if (!memo || memo.doc !== current.doc || memo.nodes !== nodes || memo.path !== path) {
+        const list = pathDecorations(current.doc, nodes, path);
+        memo = { doc: current.doc, nodes, path, list, set: DecorationSet.create(current.doc, list) };
+      }
+      return memo.set;
     },
     attributes: {
       role: 'textbox',
@@ -381,10 +411,27 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
   const mountedCallback = props().onView;
   mountedCallback?.(view);
   flushers.set(view, flush);
-  return {
+  const flowView: FlowView = {
     view,
     flush,
     composing: () => state.composing,
+    repathing: (path) => repathTo === path,
+    repath(to) {
+      repathTo = to;
+      // The decorations on screen stay until the step runs (a selection change meanwhile redraws nothing).
+      const from = memo;
+      if (from && !staged) staged = { doc: from.doc, set: from.set };
+      return [() => {
+        if (view.isDestroyed) return;
+        // A composition, or a document changed meanwhile, takes the new path whole at its next update.
+        const doc = view.state.doc, { nodes } = props();
+        if (state.composing || !staged || staged.doc !== doc || !from || from.doc !== doc || from.nodes !== nodes) { staged = null; return; }
+        staged = null;
+        const list = pathDecorations(doc, nodes, to);
+        memo = { doc, nodes, path: to, list, set: DecorationSet.create(doc, list) };
+        view.updateState(view.state);
+      }];
+    },
     sync(nodes) {
       if (state.composing) return;
       // The page's source never replaces typing it has not been handed: hand it over first.
@@ -405,10 +452,13 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
       clearTimeout(compositionTimer);
       flush();
       flushers.delete(view);
+      repathers.delete(view);
       if (busy) props().onBusy?.(false);
       // Pair cleanup with the registration callback, even if the adapter replaced props.
       mountedCallback?.(null);
       view.destroy();
     },
   };
+  repathers.set(view, (path) => flowView.repath(path));
+  return flowView;
 }
