@@ -4,11 +4,25 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/dom';
 import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
-import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, type ArtifactFile } from '@/lib/offline/file-format';
+import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 import { draftKey, readDraft, writeDraft } from '@/lib/offline/local-state';
 import { suggestedFileName } from '@/lib/offline/save-file';
 import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from '@/lib/offline/solid-entry';
+import type { CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
+
+// The real mounter, with the callbacks the offline shell hands it kept for the flow-edit cases.
+const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null }));
+vi.mock('@/solid/editor/dom-mounter', async (real) => {
+  const actual = await real<typeof import('@/solid/editor/dom-mounter')>();
+  return {
+    ...actual,
+    mountCompiledEditRegions: (...args: Parameters<typeof actual.mountCompiledEditRegions>) => {
+      mounted.callbacks = args[2];
+      return actual.mountCompiledEditRegions(...args);
+    },
+  };
+});
 
 const FIXTURE = path.resolve(process.cwd(), '../../scripts/fixtures/offline-file/artifact-file.json');
 const fixture = (): ArtifactFile => {
@@ -27,7 +41,26 @@ function shell(file: ArtifactFile) {
   document.head.innerHTML = doc.head.innerHTML;
   document.body.innerHTML = doc.body.innerHTML;
 }
-beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; });
+beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; });
+
+/** A file whose source, as downloaded, has two identical paragraphs right after the description (body paths 1.5 and 1.7). */
+const TWICE = '<p>Same words.</p>';
+const withTwice = (file: ArtifactFile): ArtifactFile => {
+  const source = file.source.replace(/(<p className="text-muted-foreground"[^\n]*<\/p>)/, `$1\n  ${TWICE}\n  ${TWICE}`);
+  return { ...file, source, derivedFrom: sourceDigest(source) };
+};
+/** Open the file as a reader who has already given a name, and start editing on the page. */
+async function openAndEdit(file: ArtifactFile): Promise<CompiledEditCallbacks> {
+  localStorage.setItem('afbin-offline-name', 'Asha');
+  shell(file); await mountSolidOfflineFile();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  await waitFor(() => expect(mounted.callbacks).not.toBeNull());
+  return mounted.callbacks!;
+}
+const shownSource = (): string => {
+  fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+  return (screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement).value;
+};
 afterEach(() => { disposeSolidOfflineFile(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Solid offline file', () => {
@@ -91,6 +124,24 @@ describe('Solid offline file', () => {
     expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toMatch(/\$missing.*refers to nothing declared/);
     expect(screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('edits the paragraph at the edited path, not the first paragraph with the same words', async () => {
+    const file = withTwice(fixture());
+    expect(file.source.split(TWICE)).toHaveLength(3);
+    const callbacks = await openAndEdit(file);
+    callbacks.onFlow('1.7', TWICE, '<p>Other words.</p>');
+    expect(shownSource()).toContain(`${TWICE}\n  <p>Other words.</p>`);
+  });
+
+  it('leaves the source unchanged and says so when an edit is not prose', async () => {
+    const file = withTwice(fixture());
+    const callbacks = await openAndEdit(file);
+    callbacks.onFlow('1.7', TWICE, '<Button run="$add">Add a row</Button>');
+    expect(screen.getAllByRole('status').map((status) => status.textContent)).toContain('That change could not be applied to the source.');
+    const source = shownSource();
+    expect(source.split(TWICE)).toHaveLength(3);
+    expect(source).not.toContain('<Button run="$add">Add a row</Button>');
   });
 
   it('locates $query consumers by their AST path, not the one-tree island list', () => {

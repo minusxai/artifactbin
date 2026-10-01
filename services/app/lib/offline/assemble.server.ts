@@ -36,6 +36,7 @@ import type { JsxNode } from '@/lib/jsx';
 import { savedMentionStates } from '@/lib/membership';
 import { isCompileFailure } from '@/lib/compiled-page/contract';
 import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
+import { splitModuleData } from '@/lib/compiled-page/assembler';
 import { preparedPageFor } from '@/lib/story/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
@@ -102,26 +103,6 @@ class TooLarge extends Error {
 }
 
 const EMPTY_STATE: DataflowState = { values: {}, tables: {}, errors: {} };
-
-/**
- * The compiled module's own immutable browser carriers (lib/compiled-page's
- * `data-mx-island-literals` script tags): never visible story text, so a
- * fresh per-request SSR render (compiled-page/bundle.server) may omit them
- * even though the compiled module's boot code reads one by DOM lookup. They
- * may then exist only in the page's stored first render (assembleReaderPage
- * carries the same fallback online). Matches assembler.ts's own carrier shape.
- */
-const ISLAND_LITERALS_RE = /<script type="application\/json" data-mx-island-literals="[0-9a-f]{16}">[\s\S]*?<\/script>/g;
-const islandLiteralsOf = (html: string): string => [...html.matchAll(ISLAND_LITERALS_RE)].map((match) => match[0]).join('');
-
-/**
- * The compiled module's other DOM-read carrier: its "large constants" script
- * (assembler.ts's `data-mx-module-data`, trailing, singular), which
- * file-html.ts retags `id="mx-story-data"` for `document.getElementById`.
- * Same gap as island literals: a fresh SSR render may omit it.
- */
-const MODULE_DATA_RE = /<script type="application\/json" data-mx-module-data>[\s\S]*?<\/script>\s*$/;
-const moduleDataOf = (html: string): string => MODULE_DATA_RE.exec(html)?.[0] ?? '';
 
 /** The actor as the history and annotation scopes take it; null with no credential at all. */
 function tokenActorOf(actor: RoleActor): TokenActor | null {
@@ -398,14 +379,15 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
       values: state.values, state, results: state, mermaidImages: {}, drawings: {},
     });
     // A fresh per-request render never carries the compiled module's own island
-    // literals (never visible story text) and may drop its large-constants
-    // module-data carrier too; fall back to the stored render's, exactly as
-    // assembleReaderPage does online (assembler.ts splitModuleData).
-    const literals = islandLiteralsOf(ssrHtml) || islandLiteralsOf(compiled.html);
-    const moduleData = moduleDataOf(ssrHtml) || moduleDataOf(compiled.html);
+    // literals (never visible story text, read by DOM lookup) and may drop its
+    // large-constants module-data carrier too (which file-html.ts retags for
+    // `getElementById`); fall back to the stored render's, read by the parser
+    // assembleReaderPage uses online (assembler.ts splitModuleData).
+    const fresh = splitModuleData(ssrHtml);
+    const stored = splitModuleData(compiled.html);
     renderedCompiled = {
       ...compiled,
-      html: ssrHtml + (islandLiteralsOf(ssrHtml) ? '' : literals) + (moduleDataOf(ssrHtml) ? '' : moduleData),
+      html: ssrHtml + (fresh.literals ? '' : stored.literals) + (fresh.moduleDataTag ? '' : stored.moduleDataTag),
     };
   }
   const placement = ran ? placeDataflow(ran.flow, Object.keys(held)) : null;

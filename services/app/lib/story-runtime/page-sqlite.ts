@@ -5,7 +5,7 @@
  * hold) never downloads it (lib/__tests__/reader-bundle-hygiene pins this).
  * Its wasm is fetched once from this origin at a content-addressed URL the
  * island build records (StoryIslandData.sqliteWasm), cached `immutable`; the
- * offline file hands its embedded bytes in instead.
+ * offline file hands in a reader of its embedded bytes instead.
  *
  * `pageEngineFor` decides, once per document lifetime, whether the page runs
  * anything itself: only when the island says what this reader may hold AND the
@@ -16,11 +16,14 @@ import type { StoryIslandData } from './contract';
 import { createPageEngine, type PageCore, type PageEngine } from './page-engine';
 import type { QueryTransport } from './store';
 
-/** The core over wasm bytes: fetched from `wasm` (a URL) once, or given. */
-export function sqliteFrom(wasm: string | Uint8Array): () => Promise<PageCore> {
+/** Where the wasm comes from: a URL on this origin, or the bytes the page already carries (read on demand). */
+export type WasmSource = string | (() => Promise<Uint8Array>);
+
+/** The core over the wasm: fetched from a URL, or read from the page, once however often it is asked for. */
+export function sqliteFrom(wasm: WasmSource): () => Promise<PageCore> {
   let loading: Promise<PageCore> | null = null;
   const bytes = async (): Promise<Uint8Array | ArrayBuffer> => {
-    if (typeof wasm !== 'string') return wasm;
+    if (typeof wasm !== 'string') return wasm();
     const response = await fetch(wasm, { credentials: 'omit' });
     if (!response.ok) throw new Error(`the SQLite engine did not load (${response.status})`);
     return response.arrayBuffer();
@@ -40,7 +43,7 @@ export function pageEngineFor(
   island: Pick<StoryIslandData, 'dataflow' | 'sqliteWasm'>,
   transport: QueryTransport | null | undefined,
   userId: string | null,
-  wasm: string | Uint8Array | undefined = island.sqliteWasm,
+  wasm: WasmSource | undefined = island.sqliteWasm,
 ): { engine: PageEngine; userId: string | null } | null {
   const hold = transport?.hold;
   if (!wasm || !island.dataflow?.hold || !hold) return null;

@@ -145,24 +145,30 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
 
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
 
-/** The version's large constants travel with either stored HTML or snapshot SSR, then into the page's one JSON island. */
-function splitModuleData(story: string): { story: string; moduleData: unknown[] | null; literals: string } {
+/**
+ * The version's large constants travel with either stored HTML or snapshot SSR, then into the page's one
+ * JSON island. Also what the offline file reads (lib/offline/assemble.server): the story without its
+ * carriers, the trailing module-data carrier as parsed data and as its own tag, and the island-literals tags.
+ */
+export function splitModuleData(story: string): { story: string; moduleData: unknown[] | null; moduleDataTag: string; literals: string } {
   const open = '<script type="application/json" data-mx-module-data>';
   const start = story.lastIndexOf(open);
   let moduleData: unknown[] | null = null;
+  let moduleDataTag = '';
   if (start >= 0) {
     const tail = story.slice(start + open.length);
     if (tail.endsWith('</script>')) {
       const parsed: unknown = JSON.parse(tail.slice(0, -'</script>'.length));
       if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('assembler: invalid module data');
       moduleData = parsed.moduleData;
+      moduleDataTag = story.slice(start);
       story = story.slice(0, start);
     }
   }
   // Browser literals are immutable module data, never visible story text.
   const carrier = /<script type="application\/json" data-mx-island-literals="[0-9a-f]{16}">[\s\S]*?<\/script>/g;
   const literals = [...story.matchAll(carrier)].map((match) => match[0]).join('');
-  return { story: story.replace(carrier, ''), moduleData, literals };
+  return { story: story.replace(carrier, ''), moduleData, moduleDataTag, literals };
 }
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
