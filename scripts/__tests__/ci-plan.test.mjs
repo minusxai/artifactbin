@@ -7,8 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
-import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
-import { CI_GATE_SHARDS, ISOLATED_GATES, gateNamesOnDisk, shardWeight } from '../gates.manifest.mjs';
+import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
+import { CI_GATE_SHARDS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
 /** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
@@ -690,11 +690,11 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
     expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
   });
-  it('splits the node project into ten shards, and every shard runs its tenth', () => {
+  it('splits the node project into eight shards, and every shard runs its eighth', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/10)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/10');
+    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/8)');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci.mjs node')).run).toBe('node scripts/ci.mjs node ${{ matrix.shard }}/8');
   });
   it('builds the CLI only on the shard that runs its source suite', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -744,7 +744,7 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over sixteen runners and pulls Postgres only for its assigned shard', () => {
+  it('fans the gate set over ten runners and pulls Postgres only for its assigned shard', () => {
     const { jobs } = ci();
     expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: CI_GATE_SHARDS }, (_, index) => index + 1));
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
@@ -758,8 +758,23 @@ describe('CI job shape', () => {
     const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
-    expect(install.run).toContain('"$CACHE_HIT" != true');
     expect(install.run).toContain('npx playwright install "${deps[@]}" "${selected_engines[@]}"');
+    // Only Firefox/WebKit ever run apt, and from cached .debs; a Chromium cache miss is a download.
+    expect(install.run).not.toMatch(/CACHE_HIT" != true[^\n]*\n\s*deps\+=/);
+    const debs = jobs.gates.steps.find((step) => step.with?.path === '~/browser-debs');
+    expect(debs.if).toBe("steps.gate-browsers.outputs.browsers != 'chromium'");
+    expect(jobs.gates.steps.indexOf(debs)).toBeLessThan(jobs.gates.steps.indexOf(install));
+    for (const job of ['api', 'node']) {
+      for (const step of jobs[job].steps) expect(step.run ?? '', job).not.toContain('--with-deps');
+    }
+    // Main fills the caches PRs read, and nothing waits for it.
+    expect(jobs['warm-caches'].if).toBe("github.event_name != 'pull_request'");
+    expect(jobs['warm-caches'].needs).toBeUndefined();
+    expect(jobs.test.needs).not.toContain('warm-caches');
+    const warmKeys = jobs['warm-caches'].steps.filter((step) => step.uses?.startsWith('actions/cache@')).map((step) => step.with.key);
+    for (const restore of [debs, jobs.gates.steps.find((step) => step.id === 'playwright'), jobs.gates.steps.find((step) => step.id === 'build-cache')]) {
+      expect(warmKeys).toContain(restore.with.key);
+    }
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
@@ -767,8 +782,16 @@ describe('CI job shape', () => {
 
     const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
-      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: count === CI_GATE_SHARDS ? ISOLATED_GATES : [] }).reduce((sum, name) => sum + shardWeight(name), 0)));
+      shardOf(names, { index: offset + 1, total: count }, shardWeight).reduce((sum, name) => sum + shardWeight(name), 0)));
     expect(heaviest(CI_GATE_SHARDS)).toBeLessThanOrEqual(heaviest(CI_GATE_SHARDS - 1));
+    // Every shard fits its wall: two servers halve its summed seconds, but the clipboard group runs
+    // one gate at a time across both, so it is charged whole.
+    for (let index = 1; index <= CI_GATE_SHARDS; index++) {
+      const shard = shardOf(names, { index, total: CI_GATE_SHARDS }, shardWeight);
+      const seconds = shard.reduce((sum, name) => sum + specFor(name).seconds, 0);
+      const serial = shard.filter((name) => specFor(name).serialGroup === 'clipboard').reduce((sum, name) => sum + specFor(name).seconds, 0);
+      expect(Math.max(seconds / 2, serial), `shard ${index}: ${shard.join(',')}`).toBeLessThanOrEqual(75);
+    }
 
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
     const sessions = jobs.gates.steps.find((step) => step.name === 'Prepare isolated browser session workers');
@@ -826,7 +849,11 @@ describe('CI job shape', () => {
 
   it('reports every job duration, and on a pull request fails the run over budget', () => {
     const { jobs } = ci();
-    const named = Object.keys(jobs).filter((job) => job !== 'timings');
+    // Everything that does work; not the roll-up (`test`) or what waits on it, which only add their
+    // own length to the run's wall clock.
+    const named = Object.keys(jobs).filter((job) => !['timings', 'test', 'notify-consumer'].includes(job));
+    expect(jobs.timings.needs).not.toContain('test');
+    expect(jobs.timings.needs).not.toContain('notify-consumer');
     expect(jobs.timings.needs).toEqual(expect.arrayContaining(named));
     expect(jobs.timings.if).toBe('always()');
     // A summary on main, a gate on a pull request — where the branch can still be fixed.
@@ -890,4 +917,22 @@ it('never accepts an unproved Intel release binary',()=>{
   const results=Object.fromEntries(CI_JOBS.map(job=>[job,plan.jobs[job]?'success':'skipped']));
   for(const conclusion of ['failure','skipped'])expect(checkCiResults(plan,{...results,'cli-preview':conclusion})).toContain('cli-preview');
  }
+});
+
+describe('the build cache key covers every build input and nothing a build cannot read', () => {
+  it('leaves out tests, gates, workflows and prose, and keeps sources, skills and the lockfile', () => {
+    for (const path of ['services/app/lib/story-ui/parse.ts', 'services/cli/skills/artifactbin/SKILL.md', 'scripts/build-islands.mjs',
+      'scripts/build-server.mjs', 'package-lock.json', 'vite.config.mts', 'services/app/public/chat/install.sh']) {
+      expect(isBuildInput(path), path).toBe(true);
+    }
+    for (const path of ['services/app/__tests__/boot-env.test.ts', 'services/app/lib/islands/__tests__/one-tree.ui.test.ts',
+      'scripts/gate-editor-v2.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md']) {
+      expect(isBuildInput(path), path).toBe(false);
+    }
+  });
+  it('prints a key that only a build input moves', () => {
+    const key = () => /build key ([0-9a-f]{32})/.exec(execFileSync(process.execPath, [path.join(root, 'scripts/ci.mjs'), 'build-key'], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: '' } }))?.[1];
+    expect(key()).toMatch(/^[0-9a-f]{32}$/);
+    expect(key()).toBe(key());
+  });
 });

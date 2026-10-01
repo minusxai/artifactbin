@@ -17,6 +17,19 @@ const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
 // API exercises route handlers and persistence; Node covers libraries, services,
 // scripts and eval harnesses; UI uses jsdom; Islands is the Solid half of the reader (jsdom,
 // vite-plugin-solid). The CLI has its own Node test runner.
+/**
+ * Tests that spawn a real server or installer process (`tsx server.ts`, the dev runner, the shell
+ * installer under a pty): 35s, 28s, 16s and 13s in CI, more than every other file in their shards.
+ * They run in `integration` — once, in the node job's shard 1 — instead of in every affected
+ * `npm test` and in the api/node shards. Excluded from api and node so each runs exactly once.
+ */
+const SERVER_BOOT_TESTS = [
+  'services/app/__tests__/dev-app.test.ts',
+  'services/app/__tests__/boot-env.test.ts',
+  'scripts/__tests__/app-only-auth.test.mjs',
+  'scripts/__tests__/cli-install.test.mjs',
+];
+
 export default defineConfig({
   root: import.meta.dirname,
   plugins: [yaml()],
@@ -56,7 +69,7 @@ export default defineConfig({
           name: 'api',
           environment: 'node',
           include: ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'],
-          exclude: ['services/app/__tests__/**/*.ui.test.{ts,tsx}'],
+          exclude: ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
       },
@@ -81,6 +94,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
+            ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
           ],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
@@ -104,6 +118,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
+            ...SERVER_BOOT_TESTS,
           ],
           exclude: ['**/node_modules/**'],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
