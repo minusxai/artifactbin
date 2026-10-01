@@ -22,6 +22,9 @@
     "paths": {
       "@/*": [
         "./services/app/*"
+      ],
+      "lucide-solid": [
+        "./services/app/solid/lucide-solid.d.ts"
       ]
     },
     "types": [

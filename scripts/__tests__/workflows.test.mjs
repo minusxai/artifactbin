@@ -118,6 +118,30 @@ describe('ci.yml: one build, shared with the gates', () => {
     for (const command of ['npm run build', 'npm run build -w services/cli']) {
       expect(ci.jobs.gates.steps.map((step) => step.run), command).not.toContain(command);
     }
+    // A build of these exact sources already cached skips the wait and the download: the shard
+    // restores the entry `build` saved, under the same key and paths, and never writes one itself.
+    const save = ci.jobs.build.steps.find((step) => step.id === 'build-cache');
+    const restore = ci.jobs.gates.steps.find((step) => step.id === 'build-cache');
+    expect(save?.uses).toMatch(/^actions\/cache@/);
+    expect(restore?.uses).toMatch(/^actions\/cache\/restore@/);
+    expect(restore.with).toEqual(save.with);
+    expect(save.with['restore-keys']).toBeUndefined();
+    expect(save.with.key).toContain('steps.build-key.outputs.key');
+    for (const job of [ci.jobs.build, ci.jobs.gates]) {
+      expect(job.steps.find((step) => step.id === 'build-key')?.run).toBe('node scripts/ci.mjs build-key');
+    }
+    const miss = "steps.build-cache.outputs.cache-hit != 'true'";
+    expect(wait.if).toBe(miss);
+    expect(download.if).toBe(miss);
+    for (const command of ['npm run build -w services/cli', 'node scripts/build-server.mjs dist/server.mjs']) {
+      expect(ci.jobs.build.steps.find((step) => step.run === command)?.if, command).toBe(miss);
+    }
+    // Every Chromium cache keys on what pins the browser, never on the whole lockfile.
+    for (const [name, job] of Object.entries(ci.jobs)) {
+      for (const step of job.steps ?? []) {
+        if (step.with?.path === '~/.cache/ms-playwright') expect(step.with.key, name).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
+      }
+    }
     // The build the CLI job would repeat is still its own; only the gates read this artifact.
     expect(ci.jobs.build.steps.map((step) => step.run)).toContain('npm run build -w services/cli');
   });

@@ -8,7 +8,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  *  1. The story editor's bar is one non-wrapping flex row, so on a narrow
  *     screen it ran past the viewport and `done` — the only way out of edit
- *     mode, and the thing that saves your work on the way (gate-editor-v2 §5)
+ *     mode, and the thing that saves your work on the way (gate-editor-exits)
  *     — sat off-screen where no thumb can reach it.
  *  2. The theme popover is a fixed `w-[26rem]` two-column grid, wider than the
  *     screen it opens on: half the themes clipped, and the page grew a

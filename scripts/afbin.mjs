@@ -7,6 +7,6 @@ import { generateTeaching } from './lib/generate-teaching.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
 import { runAfbin } from './lib/afbin-run.mjs';
 
-generateTeaching();
+await generateTeaching();
 loadDotEnv();
 process.exit(await runAfbin({ argv: process.argv.slice(2) }));

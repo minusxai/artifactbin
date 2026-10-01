@@ -33,7 +33,7 @@ import { EXTERNALS } from './runtime-externals.mjs';
  */
 const BUNDLE_ONLY_EXTERNALS = ['@babel/preset-typescript'];
 
-generateTeaching();
+await generateTeaching();
 const out = process.argv[2] ?? 'dist/server.mjs';
 const entry = process.argv[3] ?? 'server.ts';
 mkdirSync(dirname(out), { recursive: true });
