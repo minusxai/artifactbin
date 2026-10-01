@@ -50,11 +50,17 @@ export interface EditorSourceOptions {
   initial: string;
   /** Persistence: the save-less protocol's queue (solid/editor/create-live-edits). */
   live: { queue(change: PendingChange): void };
-  /** Show a source in the document; `editId` names the head a remote document arrived at. */
-  draw: (source: string, editId?: string) => void;
+  /**
+   * Show a source in the document; `editId` names the head a remote document arrived at. `typing`: the
+   * change was typed into prose that has drawn itself already (its draft may wait for a pause).
+   */
+  draw: (source: string, editId?: string, how?: { typing: true }) => void;
   /** Collect anything typed but not yet committed (create-in-place-edit `commitPending`). */
   commitPending: () => Promise<void>;
 }
+
+/** How long typing rests before the `source` signal follows it. */
+export const SOURCE_REST_MS = 600;
 
 export function createEditorSource(o: EditorSourceOptions): EditorSource {
   let current = o.initial;
@@ -64,16 +70,29 @@ export function createEditorSource(o: EditorSourceOptions): EditorSource {
   const [canUndo, setCanUndo] = createSignal(false);
   const [canRedo, setCanRedo] = createSignal(false);
   const syncHistory = () => { setCanUndo(history.canUndo); setCanRedo(history.canRedo); };
-  const set = (next: string) => { current = next; setSource(next); };
+  /**
+   * Typing moves `current` at once (every edit composes against it) but the `source` signal only once typing
+   * rests: what reads it (title, tables, query cells, settings) parses the whole document, which is not the
+   * keystroke's work. Anything else publishes at once.
+   */
+  let resting: ReturnType<typeof setTimeout> | null = null;
+  const publish = () => { if (resting !== null) clearTimeout(resting); resting = null; setSource(current); };
+  const set = (next: string, typing = false) => {
+    current = next;
+    if (!typing) { publish(); return; }
+    if (resting !== null) clearTimeout(resting);
+    resting = setTimeout(publish, SOURCE_REST_MS);
+  };
 
   const apply: EditorSource['apply'] = (next, how) => {
     if (next === current) return;
     const annotationOps = how.selection?.annotationOperation ? [how.selection.annotationOperation] : undefined;
     history.record(current, next, { group: how.group, before: how.selection?.before, after: how.selection?.after, annotationOps });
     syncHistory();
-    set(next);
+    const typing = how.origin === 'local' && !!how.group?.startsWith('typing:');
+    set(next, typing);
     o.live.queue(annotationOps ? { source: next, annotationOps } : { source: next });
-    if (how.redraw) o.draw(next);
+    if (how.redraw) o.draw(next, undefined, typing ? { typing: true } : undefined);
   };
 
   const replaceFromRemote: EditorSource['replaceFromRemote'] = (next, editId) => {

@@ -206,10 +206,22 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const editorSource = createEditorSource({
     initial: art.markup ?? '',
     live: { queue: (change) => live.queue(change) },
-    draw: (next, editId) => { if (editId !== undefined) previewEditId = editId; showInDocument(next); },
+    draw: (next, editId, how) => { if (editId !== undefined) previewEditId = editId; showInDocument(next, how); },
     commitPending: async () => { await edit?.commitPending(); },
   });
   const source = editorSource.source;
+  // Held typing goes out when the caret leaves its text or a paragraph breaks; leaving drops it.
+  onMount(() => {
+    const flushSoon = () => { queueMicrotask(() => showInDocument.flush()); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Enter') setTimeout(() => showInDocument.flush(), 0); };
+    window.addEventListener('focusout', flushSoon, true);
+    window.addEventListener('keydown', onKey, true);
+    onCleanup(() => {
+      window.removeEventListener('focusout', flushSoon, true);
+      window.removeEventListener('keydown', onKey, true);
+      showInDocument.cancel();
+    });
+  });
   const commitStructural = (next: string) => editorSource.apply(next, { origin: 'structural', redraw: true });
 
   const live = createLiveEdits({
@@ -316,7 +328,6 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   });
 
   // ── draft data ──
-  const flowSignature = createMemo(() => storyUpdateParts(source())?.declarations ?? null);
   const initialFlowSignature = storyUpdateParts(art.markup ?? '')?.declarations ?? null;
   const hasDeclarations = (signature: string): boolean => {
     const groups = JSON.parse(signature) as Record<string, unknown>;
@@ -324,13 +335,16 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   };
   let ranSignature: string | null = art.dataflow?.state || (initialFlowSignature !== null && !hasDeclarations(initialFlowSignature)) ? initialFlowSignature : null;
   const queriesUnavailable = backend.unavailable('runQueries');
+  // The declarations are read once the source rests, not on every change: parsing the whole document is not
+  // the edit's work, and a typed sentence never changes them.
   createEffect(() => {
-    const signature = flowSignature();
-    if (signature === null || signature === ranSignature) return;
-    if (!hasDeclarations(signature)) { ranSignature = signature; return; }
+    void source();
     if (queriesUnavailable) return;
     let alive = true;
     const timer = window.setTimeout(() => {
+      const signature = storyUpdateParts(editorSource.current())?.declarations ?? null;
+      if (signature === null || signature === ranSignature) return;
+      if (!hasDeclarations(signature)) { ranSignature = signature; return; }
       ranSignature = signature;
       setDataflowPending(true);
       void backend.previewQueries(editorSource.current()).then((body) => {
@@ -611,13 +625,13 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       <ThemePicker value={theme()} colorMode={colorMode()} onPick={(t) => {
         setTheme(t);
         queue({ theme: t });
-        showInDocument(editorSource.current());
+        showInDocument(editorSource.current(), { redraw: true });
       }} />
       <TemplateChip template={art.template} />
       <ModeChip mode={colorMode()} themeDefault={storyThemeDefaultMode(theme()) ?? 'light'} onPick={(next) => {
         setColorMode(next);
         queue({ colorMode: next });
-        showInDocument(editorSource.current());
+        showInDocument(editorSource.current(), { redraw: true });
       }} />
     </section>
     <hr class="my-3 border-edge" />

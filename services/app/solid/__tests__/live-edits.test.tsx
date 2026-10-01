@@ -193,6 +193,26 @@ describe('adopting a remote document', () => {
     expect(adopted).toEqual([]);
   });
 
+  it('REFUSES at the instant a save starts: the "saving" announcement already counts the save as in flight', async () => {
+    // A remote frame waiting for the editor to be idle retries whenever the save state changes. Woken by the
+    // flush's own "saving…" before the save counted as in flight, it adopted the remote document under the save,
+    // which then rebased onto it and overwrote the remote edit.
+    const { hook, adopted } = setup();
+    const tries: boolean[] = [];
+    const watch = hook.result;
+    act(() => { watch.queue({ source: '<p>mine</p>' }); });
+    const { createEffect, createRoot } = await import('solid-js');
+    const dispose = createRoot((done) => {
+      createEffect(() => { if (watch.state.status === 'saving…') tries.push(watch.adoptRemote('edit-9', '<p>remote</p>')); });
+      return done;
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    dispose();
+    expect(tries).toContain(false);
+    expect(tries).not.toContain(true);
+    expect(adopted).not.toContain('<p>remote</p>');
+  });
+
   it('REFUSES while the user has typing the engine has not committed', () => {
     // The buffer is EMPTY here — the engine commits on blur — so this is
     // exactly the window where an "idle" editor would destroy real work.

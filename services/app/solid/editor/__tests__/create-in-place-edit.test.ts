@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { createSignal } from 'solid-js';
-import { STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_FLOW_EDIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
 import { createInPlaceEdit } from '../create-in-place-edit';
+import { createEditorSource } from '../create-editor-source';
 import { renderHook } from '@/solid/__tests__/helpers';
 
 const NONCE = 'n'.repeat(24);
@@ -140,4 +141,24 @@ it('pauses for a version preview and resumes after it', () => {
   setEditing(false);
   setEditing(true);
   expect(editModes(sent)).toEqual([true, false, true]);
+});
+
+it('carries typed prose into the source as typing, so its draft waits for a pause; a command is drawn at once', () => {
+  const { runtimeRef, emit } = fakeRuntime();
+  const drawn: Array<{ source: string; typing: boolean }> = [];
+  const { result: store } = renderHook(() => createEditorSource({
+    initial: '<p id="a">alpha</p>', live: { queue: () => {} }, commitPending: async () => {},
+    draw: (source, _editId, how) => drawn.push({ source, typing: !!how?.typing }),
+  }));
+  renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { get current() { return store.current(); } }, editing: true, sessionNonce: NONCE,
+    onSourceEdited: (next, render, group, selection) => store.apply(next, { origin: 'local', group, selection, redraw: render }),
+  }));
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: '<p id="a">alpha</p>', replacement: '<p id="a">alpha!</p>', group: 'typing:0' });
+  emit({ type: STORY_FLOW_EDIT_MESSAGE, path: '0', expected: '<p id="a">alpha!</p>', replacement: '<p id="a"><strong>alpha!</strong></p>' });
+  expect(store.current()).toBe('<p id="a"><strong>alpha!</strong></p>');
+  expect(drawn).toEqual([
+    { source: '<p id="a">alpha!</p>', typing: true },
+    { source: '<p id="a"><strong>alpha!</strong></p>', typing: false },
+  ]);
 });

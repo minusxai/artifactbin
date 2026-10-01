@@ -147,6 +147,8 @@ export interface IslandControllerInput {
 /** How often, and how far apart, a saved version still compiling is asked for again after Done (about 10 s in all). */
 const RESTORE_RETRIES = 12;
 const RESTORE_DELAY_MS = 250;
+/** A draft that must redraw the document waits until typing has paused this long: the typed region is never redrawn under the caret. */
+export const TYPING_QUIET_MS = 1000;
 
 export interface IslandStoryController extends StoryController {
   selectionReady(): void;
@@ -202,7 +204,22 @@ export function createIslandController({ win, root, islands, nodes: served, port
   let lastDrawn: JsxNode[] | null = null;
   /** What the last draw put on screen, hydrated and running: its compiled module and the source it was compiled from. */
   let shown: { module: string | null; source: string | null } | null = null;
+  /** A draft that must redraw waits for typing to pause (TYPING_QUIET_MS) or for a pending host commit. */
   let quietDraftTimer: number | null = null;
+  /** The last input inside the document (typing, composition, paste): what a redraw waits out. */
+  let lastInputAt = -Infinity;
+  /** One compile in flight; the newest draft that arrived meanwhile is sent when it answers (older ones never are). */
+  let compiling = false;
+  let nextCompile: (() => void) | null = null;
+  /**
+   * A draft since the last full draw carried more than typing (a panel, a paste, undo, a remote document, a
+   * theme): the next compile is drawn, never only reconciled into the editor.
+   */
+  let redrawOwed = false;
+  /** This editor session's name for its drafts' order (`X-Draft-Sequence`), and how many it has sent. */
+  const draftSession = runtimeId().replace(/[^\w-]/g, '').slice(0, 64) || 'editor';
+  let draftsSent = 0;
+  let updateParts: typeof import('@/lib/story/document/update-parts') | null = null;
   let pendingDraft: { document: Document; root: HTMLElement; sheet: HTMLStyleElement | null; nodes: JsxNode[]; source: string | null; sequence: number } | null = null;
   const componentIds = (source: JsxNode[]): Map<string, string> => {
     const found = new Map<string, string>();
@@ -234,10 +251,6 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const before = componentPaths(previous), after = componentPaths(next);
     return new Set([...after].filter(([path, text]) => before.get(path) === text).map(([path]) => path));
   };
-  const focusedRegion = () => {
-    const active = win.document.activeElement;
-    return active instanceof HTMLElement && root.contains(active) && !!active.closest('[data-mx-edit-region]');
-  };
   /**
    * One draft is drawn at a time. The draw spans awaits (the engine, the draft's island module), and a
    * second draw inside that window would hydrate the root twice and remount the editor over a half-
@@ -245,38 +258,58 @@ export function createIslandController({ win, root, islands, nodes: served, port
    */
   let drawing: Promise<void> | null = null;
   let drawAgain: boolean | null = null;
-  const applyDraft = (allowFocused = false): Promise<void> => {
-    if (drawing) { drawAgain = (drawAgain ?? false) || allowFocused; return drawing; }
-    drawing = drawDraft(allowFocused).finally(() => {
+  const applyDraft = (): Promise<void> => {
+    if (drawing) { drawAgain = true; return drawing; }
+    drawing = drawDraft().finally(() => {
       drawing = null;
       const again = drawAgain;
       drawAgain = null;
-      if (again !== null && !disposed) void applyDraft(again);
+      if (again && !disposed) void applyDraft();
     });
     return drawing;
   };
-  const drawDraft = async (allowFocused: boolean) => {
+  const retryDraw = (delay: number) => {
+    if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer);
+    quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(); }, Math.max(0, delay));
+  };
+  /** Why a full draw must wait now (and for how long), or null: never under typing, a pending host commit or a composition. */
+  const drawBlockedFor = (): number | null => {
+    if (!editRequested) return null;
+    const now = win.performance.now();
+    const quiet = now - lastInputAt;
+    if (quiet < TYPING_QUIET_MS) return TYPING_QUIET_MS - quiet;
+    if (edit && !edit.canApplyDraft()) return 250;
+    return null;
+  };
+  const drawDraft = async () => {
     const pending = pendingDraft;
-    if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !drafting() || pending.sequence !== draftSequence) return;
+    if (!pending || disposed || !drafting() || pending.sequence !== draftSequence) return;
     const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdateParts }] = await Promise.all([
       import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
+    // What stays is decided against the draft the page shows NOW. The served AST may carry resolved
+    // assets or generated properties, so compare two parses of the authored source for component
+    // identity; both use the same body-relative paths as the compiled DOM.
+    // A saved version drawn after Done has no source: its served nodes stand in (fewer components match, never a wrong one).
+    const before = shownTree((source) => storyUpdateParts(source)?.nodes);
+    const after = (pending.source !== null ? storyUpdateParts(pending.source)?.nodes : null) ?? pending.nodes;
+    // Anything else redraws: never while typing (the region would be rebuilt under the caret), never over a host
+    // commit or composition. It waits, and a newer draft that lands meanwhile replaces it.
+    const wait = drawBlockedFor();
+    if (wait !== null) { retryDraw(wait); return; }
     // Fetch the draft's module while the editor is still mounted. From here to the remount nothing
     // awaits: a keystroke typed during a slow module fetch otherwise lands on no editor, and the
     // caret comes back where it was when the fetch began (mid-word).
     const module = await loadDraftModule(win, root, pending.document);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
-    if (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) return;
+    const late = drawBlockedFor();
+    if (late !== null) { retryDraw(late); return; }
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
-    // What stays is decided against the draft the page shows NOW. The served AST may carry resolved
-    // assets or generated properties, so compare two parses of the authored source for component
-    // identity; both use the same body-relative paths as the compiled DOM.
-    // A saved version drawn after Done has no source: its served nodes stand in (fewer components match, never a wrong one).
-    const baseline = initialSource();
-    const before = lastDrawn ?? (baseline ? storyUpdateParts(baseline)?.nodes : null) ?? nodes;
-    const after = (pending.source !== null ? storyUpdateParts(pending.source)?.nodes : null) ?? pending.nodes;
+    redrawOwed = false;
+    shownSource = pending.source;
+    { const parts = pending.source !== null ? storyUpdateParts(pending.source) : null; shownParts = parts ? partsKey(parts) : null; }
     const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
     if (pending.sheet && sheet) sheet.textContent = pending.sheet.textContent;
@@ -292,6 +325,40 @@ export function createIslandController({ win, root, islands, nodes: served, port
     await edit?.mountCompiledDom();
     annotate?.setNodes(nodes);
     selection?.setNodes(nodes);
+  };
+  /** What the page shows now, as the authored tree: what a draft is drawn (or reconciled) against. */
+  const shownTree = (parse: (source: string) => JsxNode[] | undefined): JsxNode[] => {
+    const baseline = initialSource();
+    return lastDrawn ?? (baseline ? parse(baseline) : undefined) ?? nodes;
+  };
+  /** What the tree on screen was parsed from, and its non-body parts (queries, author CSS and script). */
+  let shownSource: string | null = null;
+  let shownParts: string | null = null;
+  const partsKey = (parts: { declarations: string; authorCss: string | null; authorScript: string | null }) =>
+    JSON.stringify([parts.declarations, parts.authorCss, parts.authorScript]);
+  /**
+   * A draft whose only differences from the page are prose, adopted by the live editors in place — typed prose
+   * they already show, or (`sync`) prose the source moved under them: an undo, a command, a remote document. No
+   * compile, no morph, no remount. False when anything else changed: it is compiled and drawn.
+   */
+  const reconcileLocal = (after: JsxNode[], afterSource: string, afterParts: string, next: JsxNode[], parse: (text: string) => { nodes: JsxNode[]; declarations: string; authorCss: string | null; authorScript: string | null } | null): boolean => {
+    if (!editRequested || redrawOwed || !edit) return false;
+    if (lastDrawn === null) {
+      const baseline = initialSource();
+      const parts = baseline ? parse(baseline) : null;
+      shownSource = baseline;
+      shownParts = parts ? partsKey(parts) : null;
+    }
+    if (shownParts !== afterParts) return false;
+    const before = lastDrawn ?? (shownSource ? parse(shownSource)?.nodes : undefined) ?? nodes;
+    if (!edit.reconcileDraft(before, after, next, null, { sync: edit.canApplyDraft(), beforeSource: shownSource ?? undefined, afterSource })) return false;
+    shownSource = afterSource;
+    nodes = next;
+    lastDrawn = after;
+    edit.setNodes(nodes);
+    annotate?.setNodes(nodes);
+    selection?.setNodes(nodes);
+    return true;
   };
   /** Parse a compiled page and queue it as the draft to draw (the newest wins). */
   const queueDraw = async (html: string, nodes: JsxNode[], source: string | null, sequence: number) => {
@@ -372,6 +439,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
   };
   const onFocusOut = () => { queueMicrotask(() => { void applyDraft(); }); };
   win.document.addEventListener('focusout', onFocusOut, true);
+  const onInput = () => { lastInputAt = win.performance.now(); };
+  for (const type of ['beforeinput', 'input', 'compositionupdate'] as const) root.addEventListener(type, onInput, true);
   // The module, the grant and the protected portal may arrive in any order (as in the inline runtime).
   const ensureSelection = () => {
     if (disposed || selection || !selectionFactory || !portal.current || !selectionCommand || (!selectionCommand.edit && !selectionCommand.annotate)) return;
@@ -409,7 +478,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
           edit?.dispose(); edit = null;
           // Editing paused to preview a version: that version draws on, and Done (`restored`) returns to the head.
           if (previewing) return;
-          draftSequence++; pendingDraft = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null;
+          draftSequence++; pendingDraft = null; nextCompile = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null;
           if (frozen) { restoreSource = latestSource ?? initialSource(); restoreRead(); }
           return;
         }
@@ -468,20 +537,54 @@ export function createIslandController({ win, root, islands, nodes: served, port
         previewing = !!command.preview;
         if (previewing && !frozen) { freezeIslandPaint(root, islands); frozen = true; }
         if (!previewing) latestSource = source;
-        void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
-          method: 'POST', credentials: 'same-origin', cache: 'no-store',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode, search: win.location.search }),
-        }).then(async (response) => {
-          // A failed or superseded compile leaves the last good preview in place.
-          if (response.status === 422 || disposed || sequence !== draftSequence) return;
-          if (!response.ok) throw new Error(`draft preview answered ${response.status}`);
-          const payload = await response.json() as { html: string };
-          await queueDraw(payload.html, command.nodes, source, sequence);
-          if (pendingDraft?.sequence === sequence && quietDraftTimer === null) {
-            quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(true); }, 500);
-          }
-        }).catch((error) => { if (!disposed) console.error('Failed to compile editor draft', error); });
+        // A new look (theme, colour mode) or a previewed version is a page the editors cannot show by themselves.
+        if (previewing || ('redraw' in command && command.redraw === true)) redrawOwed = true;
+        const compile = (retried = false) => {
+          compiling = true;
+          // The compile slot frees once the answer is read (before it is drawn): the newest draft that waited goes out.
+          const release = () => {
+            if (!compiling) return;
+            compiling = false;
+            const next = nextCompile;
+            nextCompile = null;
+            next?.();
+          };
+          void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
+            method: 'POST', credentials: 'same-origin', cache: 'no-store',
+            // The server compiles one draft per editor session and answers an older one `superseded` (409).
+            headers: { 'Content-Type': 'application/json', 'X-Draft-Sequence': `${draftSession}.${++draftsSent}` },
+            body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode, search: win.location.search }),
+          }).then(async (response) => {
+            // A failed or superseded compile leaves the last good preview in place: nothing to apply.
+            if (response.status === 422 || response.status === 409 || disposed || sequence !== draftSequence) return;
+            if (response.status === 429) {
+              // Every compiler is busy: the newest draft is sent once more after the server's pause, never a storm.
+              const wait = Math.min(10, Number(response.headers.get('Retry-After')) || 2) * 1000;
+              if (!retried) win.setTimeout(() => { if (!disposed && sequence === draftSequence) { if (compiling) nextCompile = () => compile(true); else compile(true); } }, wait);
+              return;
+            }
+            if (!response.ok) throw new Error(`draft preview answered ${response.status}`);
+            const payload = await response.json() as { html: string };
+            release();
+            await queueDraw(payload.html, command.nodes, source, sequence);
+          }).catch((error) => { if (!disposed) console.error('Failed to compile editor draft', error); }).finally(release);
+        };
+        // One compile at a time, newest wins: a draft that waits is replaced by any newer one.
+        const request = () => { if (compiling) nextCompile = compile; else compile(); };
+        if (redrawOwed || !edit) { request(); return; }
+        // Prose needs no compile at all: typed, it is on screen already; moved by the source (undo, a command, a
+        // remote document), the editor takes it in place. Only when the tree says otherwise (a component, a block
+        // ahead of one, a query) is it compiled and drawn.
+        const local = ({ storyUpdateParts }: typeof import('@/lib/story/document/update-parts')) => {
+          if (disposed || sequence !== draftSequence) return;
+          const parts = storyUpdateParts(source);
+          if (parts && reconcileLocal(parts.nodes, source, partsKey(parts), command.nodes, storyUpdateParts)) { pendingDraft = null; return; }
+          request();
+        };
+        // Once loaded, synchronously: an undo's caret, restored right after its source, lands on the adopted prose.
+        if (updateParts) { local(updateParts); return; }
+        void import('@/lib/story/document/update-parts').then((module) => { updateParts = module; local(module); })
+          .catch((error: unknown) => { if (!disposed) console.error('Failed to reconcile editor draft', error); });
         return;
       }
       previewing = false;
@@ -517,6 +620,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
       edit?.dispose(); edit = null;
       if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer);
       win.document.removeEventListener('focusout', onFocusOut, true);
+      for (const type of ['beforeinput', 'input', 'compositionupdate'] as const) root.removeEventListener(type, onInput, true);
+      nextCompile = null;
     },
   };
   return controller;
