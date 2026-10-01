@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { mountCompiledEditRegions, runSlice, withRegionBreaks } from '../dom-mounter';
+import { mountCompiledEditRegions, runSlice, sameNodes, withRegionBreaks } from '../dom-mounter';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
@@ -24,6 +24,18 @@ describe('an idle slice of editor work', () => {
     // The first item always runs, even when the last slice's says it is large.
     expect(slice([20, 20], 60)).toMatchObject({ ran: [0, 1], clock: 40 });
     expect(slice([])).toMatchObject({ ran: [], clock: 0 });
+  });
+});
+
+describe('a region the draft draws unchanged', () => {
+  it('is the same tree wherever it sits in the source, and any change of tag, attribute or text makes it another', () => {
+    const at = (prefix: string, markup: string) => parseJsxOrThrow(`${prefix}<div id="r">${markup}</div>`).nodes.at(-1)!;
+    const table = '<table id="t"><tbody><tr><td class="x">a <b>b</b></td></tr></tbody></table>';
+    // Moved by text above it: every offset differs, the content does not.
+    expect(sameNodes(at('', table), at('<p>a paragraph above</p>', table))).toBe(true);
+    expect(serializeJsx([at('', table)])).toBe(serializeJsx([at('<p>a paragraph above</p>', table)]));
+    for (const changed of [table.replace('a <b>', 'A <b>'), table.replace('class="x"', 'class="y"'), table.replace('<b>b</b>', '<i>b</i>'), table.replace('</tr>', '</tr><tr><td>c</td></tr>')])
+      expect(sameNodes(at('', table), at('', changed)), changed).toBe(false);
   });
 });
 
