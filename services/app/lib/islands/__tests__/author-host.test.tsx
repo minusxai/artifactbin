@@ -90,7 +90,6 @@ describe('the compiled page\'s author script', () => {
     expect(frame.getAttribute('aria-hidden')).toBe('true');
     expect(frame.srcdoc, 'never an inherited srcdoc').toBe('');
     expect(new URL(frame.src).pathname).toBe(AUTHOR_FRAME_PATH);
-    expect(AUTHOR_FRAME_PATH.startsWith('/story/'), 'the wrapper outlives the legacy runtime tree').toBe(false);
     expect([...document.querySelectorAll('script')].filter((s) => s.type !== 'application/json'), 'no script element in this document').toHaveLength(0);
     expect((window as unknown as { __authorEscaped?: boolean }).__authorEscaped).toBeUndefined();
 

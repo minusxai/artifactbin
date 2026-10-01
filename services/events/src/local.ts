@@ -101,4 +101,3 @@ export function createEvents(opts: EventsWriterOptions): EventsWriter {
   };
 }
 
-export { backfillSql, backfillAnalyticsEvents, type BackfillOptions } from './backfill';
