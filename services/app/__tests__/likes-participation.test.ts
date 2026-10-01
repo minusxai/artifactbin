@@ -6,7 +6,7 @@ import {mintToken} from '@/lib/tokens';
 import {claimToken,createUser} from '@/lib/users';
 import {count,has,link} from '@/lib/relations';
 import {accountProfile} from '@/lib/account-profile';
-import {loadDatasetRows} from '@/lib/story/dataset-store';
+import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {request,useAppHarness} from './harness';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});

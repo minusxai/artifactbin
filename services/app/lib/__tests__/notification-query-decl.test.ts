@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx } from '@/lib/jsx';
-import { dataflowOf, splitHelmet, validateHelmet } from '@/lib/story/helmet';
-import { storyUpdateParts } from '@/lib/story/update-parts';
-import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/compile-dataflow';
+import { dataflowOf, splitHelmet, validateHelmet } from '@/lib/story/document/helmet';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/data/compile-dataflow';
 
 const parse = (source: string) => {
   const parsed = parseJsx(source);

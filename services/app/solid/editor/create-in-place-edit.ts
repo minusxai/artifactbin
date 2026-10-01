@@ -40,7 +40,7 @@ import {
 import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
-import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compose';
+import { composeSource, type ComposableFormatEdit } from '@/lib/story/document/edit-compose';
 
 /**
  * Where a pasted/dropped image goes: `replace` names the image it replaces;

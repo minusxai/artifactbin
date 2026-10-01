@@ -50,13 +50,13 @@ import { holdableImports, type ArtifactRow, type RoleActor } from '@/lib/artifac
 import type { ArchivedRender } from '@/lib/archived-version';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
-import type { Scalar } from '@/lib/story/dataflow';
-import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
-import { recompilePage, type PreparedPage } from '@/lib/story/prepared-page.server';
-import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/served-results.server';
-import { readUrlValues } from '@/lib/story/url-values';
+import type { Scalar } from '@/lib/story/data';
+import type { ReaderChromeInput } from '@/lib/story/reader';
+import { recompilePage, type PreparedPage } from '@/lib/story/prepared/prepared-page.server';
+import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/prepared/served-results.server';
+import { readUrlValues } from '@/lib/story/data';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styles';
+import { DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT } from '@/lib/story/styles';
 import { assembleReaderPage } from './assembler';
 import { withStoredCarriers } from './carriers';
 import { loadCompilerBuild } from './build.server';
@@ -100,7 +100,7 @@ export interface CompiledReaderRequest {
   live: { id: string; editId: string } | null;
   /** Server-rendered reader chrome (the app page), or null (`/raw`, captures, a domain post). */
   chrome: ReaderChromeInput | null;
-  /** Extra first-screen font files the chrome paints with (lib/story/first-screen-fonts readerChromeFonts). */
+  /** Extra first-screen font files the chrome paints with (lib/story/styles/first-screen-fonts readerChromeFonts). */
   chromeFonts?: readonly string[];
   spa: AssembleInput['spa'];
   head: AssembleHead | null;
@@ -331,7 +331,7 @@ const sorted = (record: Readonly<Record<string, unknown>>): Array<[string, unkno
 
 interface StoryInput {
   values: Record<string, Scalar>;
-  state?: import('@/lib/story/dataflow').DataflowState;
+  state?: import('@/lib/story/data/dataflow').DataflowState;
   assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
@@ -406,7 +406,7 @@ const classOf = (node: Located): string | undefined => node.attrs?.find((a) => a
 /** The deck's framework-free behaviour chunk (the compiler's `DECK_BEHAVIOR`). */
 const DECK_BEHAVIOR = '@mx/deck';
 
-/** A DOMAIN POST's one line of attribution (its style: lib/story/document-styles DOMAIN_FOOTER_CSS). */
+/** A DOMAIN POST's one line of attribution (its style: lib/story/styles/document-styles DOMAIN_FOOTER_CSS). */
 export const domainFooter = (href: string): { html: string; css: string } => ({
   html: `<footer data-mx-domain-footer="">${DOMAIN_FOOTER_TEXT} <a href="${escapeHtml(href)}" rel="noopener">artifactbin</a></footer>`,
   css: DOMAIN_FOOTER_CSS,

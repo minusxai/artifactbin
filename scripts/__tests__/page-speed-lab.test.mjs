@@ -5,7 +5,7 @@ import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode } from '../lib/document-views.mjs';
 import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
-import { loadsSummary, reportMarkdown } from '../performance-report.mjs';
+import { loadsSummary, reportMarkdown } from '../ci/performance-report.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflowText = readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8');
@@ -15,7 +15,7 @@ const ci = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 
 describe('the page-speed workflow', () => {
   it('runs beside CI for app changes and main pushes, including changes to the lab itself', () => {
     for (const trigger of [workflow.on.pull_request, workflow.on.push]) {
-      expect(trigger.paths).toEqual(expect.arrayContaining(['services/app/**', 'scripts/performance-loads.mjs', 'scripts/lib/document-views.mjs', 'scripts/fixtures/page-speed/**', '.github/workflows/page-speed.yml']));
+      expect(trigger.paths).toEqual(expect.arrayContaining(['services/app/**', 'scripts/ci/performance-loads.mjs', 'scripts/lib/document-views.mjs', 'scripts/fixtures/page-speed/**', '.github/workflows/page-speed.yml']));
     }
     expect(workflow.on.push.branches).toEqual(['main']);
     expect(workflow.concurrency['cancel-in-progress']).toContain("github.event_name == 'pull_request'");
@@ -47,11 +47,11 @@ describe('the page-speed workflow', () => {
   it('measures base and head in parallel, then reports their artifacts', () => {
     expect(workflow.jobs.measure.strategy.matrix.revision).toEqual(['base', 'head']);
     const runs = workflow.jobs.measure.steps.map(step => step.run ?? '').join('\n');
-    expect(runs).toContain('node scripts/performance-loads.mjs');
+    expect(runs).toContain('node scripts/ci/performance-loads.mjs');
     expect(runs).toContain('--size-only');
     expect(workflow.jobs.report.needs).toEqual(['measure']);
     expect(workflow.jobs.report.steps.some(step => String(step.uses).startsWith('actions/download-artifact@'))).toBe(true);
-    expect(workflow.jobs.report.steps.map(step => step.run ?? '').join('\n')).toContain('node scripts/size-targets.mjs page-speed/head.json --markdown');
+    expect(workflow.jobs.report.steps.map(step => step.run ?? '').join('\n')).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown');
   });
 
   it('keeps full timing measurements on a manual run, while PRs use size only', () => {

@@ -23,7 +23,7 @@
  * viewport is a photograph of the 640px copy.
  */
 import { describe, expect, it } from 'vitest';
-import { assetUrlFor, mapExternalImageSources, type WebAssetBox } from '../asset-url';
+import { assetUrlFor, mapExternalImageSources, type WebAssetBox } from '../assets/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const URL_A = 'https://cdn.example/photo.png';

@@ -10,7 +10,7 @@ import { Script } from 'node:vm';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
-import { EXTERNALS } from '../../../../../scripts/runtime-externals.mjs';
+import { EXTERNALS } from '../../../../../scripts/build/runtime-externals.mjs';
 import { offlineBundle, offlineExtrasAsset, offlineExtrasRef } from '../bundle.server';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'lib/build-assets/offline/manifest.json'), 'utf8')) as {

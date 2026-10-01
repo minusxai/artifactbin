@@ -12,10 +12,10 @@ import { services } from '@/lib/services';
 import { objectStore } from '@/lib/object-store';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { mintExportKey } from '@/lib/export-key';
-import { storyBodyFor } from '@/lib/story/body';
+import { storyBodyFor } from '@/lib/story/document';
 import { getArtifactById } from '@/lib/artifacts';
 import { servedRow } from '@/lib/archived-version';
-import { warmPreparedPage } from '@/lib/story/prepared-page.server';
+import { warmPreparedPage } from '@/lib/story/prepared/prepared-page.server';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';
 import { sanitizeMermaidSvg, verifyEmbeddedMermaidSvg } from './sanitize';
@@ -180,7 +180,7 @@ export async function runNextMermaidHarvest(): Promise<boolean> {
   try {
     const images = await harvestVersion(claimed.artifact_id, claimed.version);
     await settle(images === null ? 'superseded' : 'done', images);
-    // The version's prepared reader page (lib/story/prepared-page.server) holds a render made
+    // The version's prepared reader page (lib/story/prepared/prepared-page.server) holds a render made
     // before these drawings existed: drop it, and prepare the head again with them.
     if (images?.inline && Object.keys(images.inline).length) {
       await db.query("DELETE FROM prepared_pages WHERE artifact_id=$1 AND slot='head'", [claimed.artifact_id]);

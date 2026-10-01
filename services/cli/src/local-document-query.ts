@@ -1,9 +1,9 @@
 import {join} from 'node:path';
 import type {Scalar} from '@artifactbin/contracts';
 import {inferColumns} from '@artifactbin/utils/shape';
-import {declarationsOf} from '../../app/lib/story/helmet';
-import {validateQueryValues} from '../../app/lib/story/query-values';
-import {selectQueries} from '../../app/lib/story/compiled-flow';
+import {declarationsOf} from '../../app/lib/story/document/helmet';
+import {validateQueryValues} from '../../app/lib/story/data/query-values';
+import {selectQueries} from '../../app/lib/story/data/compiled-flow';
 import {parseDocument} from './document';
 import {parseResourceFile,readResourceSource} from './resource-file';
 import {readOptional,digest} from './files';

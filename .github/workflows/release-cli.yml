@@ -69,7 +69,7 @@ jobs:
 
       # WHICH RUN HOLDS THE TESTED BYTES. Main's CI no longer always builds them itself: when the
       # merged tree was already tested on its pull request it selects no job at all and records, in a
-      # `tested-run` artifact, the id of the run that did the work (scripts/ci.mjs `record-tree`).
+      # `tested-run` artifact, the id of the run that did the work (scripts/ci/ci.mjs `record-tree`).
       # Reading it keeps this workflow publishing exactly what CI built and proved. Absent — an older
       # run, or a main build that did everything itself — the workflow_run's own id is still right.
       #

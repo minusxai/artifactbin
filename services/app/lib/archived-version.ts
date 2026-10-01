@@ -37,7 +37,7 @@ export const VERSION_PARAM = 'version';
 /**
  * What a refused write says to the person who pressed it. The chrome line that
  * says WHICH version this is lives with the chrome that draws it
- * (lib/story/reader-chrome archivedBanner) — this module stays off the reader's
+ * (lib/story/reader/reader-chrome archivedBanner) — this module stays off the reader's
  * bundle, and that one is already on it.
  */
 export const archivedReadOnly = (version: number): string => `Version ${version} is read-only`;
@@ -55,7 +55,7 @@ export interface ArchivedRender {
   /**
    * Written for the previous query engine, in a way the migration's converter
    * cannot carry over without a person: its queries answer PREVIOUS_ENGINE
-   * (lib/story/data-syntax) rather than failing on syntax this engine refuses.
+   * (lib/story/data/data-syntax) rather than failing on syntax this engine refuses.
    */
   previousEngine?: true;
 }

@@ -5,7 +5,7 @@
  */
 import { createRoot, createSignal } from 'solid-js';
 import { afterEach, expect, it, vi } from 'vitest';
-import { renderReaderChrome } from '@/lib/story/reader-chrome';
+import { renderReaderChrome } from '@/lib/story/reader/reader-chrome';
 import { PAGE_DATA_CHANGED } from '@/web/page-data-events';
 import { syncPanelTriggers, toggleReaction, wireReaderChrome, type ReaderPanel } from '../reader-chrome-adapter';
 

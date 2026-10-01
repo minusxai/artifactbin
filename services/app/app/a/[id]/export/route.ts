@@ -50,7 +50,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   void trackEvent('export', artifact.id, { userId: viewer?.userId ?? null });
 
   // `search` carries the reader's `<Value>` picks straight through to the page
-  // this shoots (lib/story/url-values) — the raw route is the one door that
+  // this shoots (lib/story/data/url-values) — the raw route is the one door that
   // validates them, so an export cannot disagree with what it photographs.
   // Installed older CLIs reject redirects. They keep the streaming binary
   // adapter until they advertise support; browser/OG URLs use redirects.

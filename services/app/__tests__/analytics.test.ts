@@ -28,7 +28,7 @@ import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
 import { trackEvent } from '@/lib/analytics';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace-analytics';
 import { mintExportKey } from '@/lib/export-key';
-import { resetLiveSubscriptions } from '@/lib/story/live';
+import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, listArtifactsByUser } from '@/lib/users';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';

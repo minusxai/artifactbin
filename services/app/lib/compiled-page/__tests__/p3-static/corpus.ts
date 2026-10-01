@@ -5,7 +5,7 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { kitchenSinkMarkup } from '@/lib/story/kitchen-sink';
+import { kitchenSinkMarkup } from '@/lib/story/fixtures/kitchen-sink';
 import { COMPILED_PARITY_FIXTURES } from '../../../../../../scripts/fixtures/compiled-parity/index.mjs';
 
 export interface CorpusDoc { key: string; group: 'page-speed' | 'compiled-parity' | 'kitchen' | 'tag'; markup: string; template: string | null }

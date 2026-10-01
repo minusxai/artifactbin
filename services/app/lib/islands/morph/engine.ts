@@ -29,15 +29,15 @@ import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-f
 import { LITERALS_ATTR } from '@/lib/compiled-page/carriers';
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
-import { writeUrlValues } from '@/lib/story/url-values';
+import { writeUrlValues } from '@/lib/story/data/url-values';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const HK = 'data-hk';
-/** Sheets that belong to one version and may be absent from the next (lib/story/document-styles, the assembler). */
+/** Sheets that belong to one version and may be absent from the next (lib/story/styles/document-styles, the assembler). */
 const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-webfonts', 'data-mx-font-vars', 'data-mx-author'];
 /** How often a version the server is still compiling is asked for again, and how long apart. */
 const NOT_READY_RETRIES = 6;

@@ -6,7 +6,7 @@ import { createAppServer } from '@/server/app';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/tokens';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { request, useAppHarness } from './harness';
 
 useAppHarness();

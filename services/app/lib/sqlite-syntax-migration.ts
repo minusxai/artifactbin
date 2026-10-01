@@ -1,7 +1,7 @@
 import { artifactQuery } from '@/lib/artifact-document';
 /**
  * App-owned, resumable migration of every stored document to the SQLite data
- * syntax (lib/story/data-syntax), in the shape of lib/node-identity-migration.
+ * syntax (lib/story/data/data-syntax), in the shape of lib/node-identity-migration.
  *
  * Server-side maintenance code passes its exclusively owned Db; this module
  * never calls getDb itself (the publish preparation it shares with ordinary
@@ -22,7 +22,7 @@ import { commitNormalizedMarkup, publishMarkupForArtifact, type ArtifactRow, typ
 import type { Db, Queryable } from './db';
 import { convertStoredDocument } from './migrate/sqlite/stored';
 import type { ConversionChange, ConversionManual } from './migrate/sqlite/convert';
-import { DATA_SYNTAX_META } from './story/data-syntax';
+import { DATA_SYNTAX_META } from './story/data/data-syntax';
 import { resolveStoredStoryDesign } from './data/story/story-themes';
 
 const SQLITE_SYNTAX_MIGRATION = 'sqlite-data-syntax';

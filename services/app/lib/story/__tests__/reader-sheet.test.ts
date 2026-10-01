@@ -1,14 +1,14 @@
 /**
- * THE READER'S SHEET (lib/story/reader-sheet.server): a version's compiled
+ * THE READER'S SHEET (lib/story/prepared/reader-sheet.server): a version's compiled
  * sheet minus the union recipes its story can never render and the other
  * themes' blocks — every kept rule byte-identical and in the full sheet's order.
  */
 import { describe, expect, it } from 'vitest';
-import * as cssTree from '../css-parser';
+import * as cssTree from '../styles/css-parser';
 import { compileStoryCss } from '@/lib/data/story/story-css.server';
 import { storyThemeCss } from '@/lib/data/story/story-themes';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { readerRecipes, readerStorySheet } from '../reader-sheet.server';
+import { readerRecipes, readerStorySheet } from '../prepared/reader-sheet.server';
 import { recipeReach } from '../../../scripts/generate-story-ui-classes';
 import { STORY_UI_RECIPE_BASE, STORY_UI_RECIPE_BY_TAG, STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
 

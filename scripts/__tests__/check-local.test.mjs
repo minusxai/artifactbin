@@ -19,12 +19,12 @@ async function fixture(test) {
 }
 describe('successful local check evidence', () => {
   it('invalidates the default --changed command when its Git baseline changes', () => fixture(async ({ root, put, opts, runs }) => {
-    put('scripts/test-changed.mjs', "import fs from 'node:fs'; fs.appendFileSync('.artifactbin/runs','x');");
+    put('scripts/ci/test-changed.mjs', "import fs from 'node:fs'; fs.appendFileSync('.artifactbin/runs','x');");
     const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
     git(['add', '.']);
     const commit = ['-c', 'user.name=Fixture', '-c', 'user.email=mxmx_test_evidence@example.com', 'commit', '--allow-empty', '-qm', 'baseline'];
     git(commit);
-    const script = new URL('../check-local.mjs', import.meta.url).pathname;
+    const script = new URL('../ci/check-local.mjs', import.meta.url).pathname;
     const run = () => spawnSync(process.execPath, [script, 'test', '--reuse'], { cwd: root, env: opts.env, encoding: 'utf8' });
     expect(run().status).toBe(0);
     expect(run().stdout).toContain('Reused test');

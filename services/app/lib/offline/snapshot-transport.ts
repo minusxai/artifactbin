@@ -12,9 +12,9 @@
  *    its existing cannot-save state) and no `importImage`.
  */
 import type { QueryTransport } from '@/lib/story-runtime/store';
-import type { DataflowState, Scalar, TableResult } from '@/lib/story/dataflow';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
-import { queriesReadingValues } from '@/lib/story/compiled-flow';
+import type { DataflowState, Scalar, TableResult } from '@/lib/story/data/dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import { queriesReadingValues } from '@/lib/story/data/compiled-flow';
 import { OFFLINE_FILTER_REASON, type ArtifactFileSnapshot } from './file-format';
 
 type Answer = { table: TableResult } | { error: string };

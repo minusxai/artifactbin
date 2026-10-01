@@ -13,7 +13,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * inlines the story this answer's runtime renders — without round-tripping
  * that render through the JSON.
  *
- * A DOCUMENT is served from its prepared page (lib/story/prepared-page.server):
+ * A DOCUMENT is served from its prepared page (lib/story/prepared/prepared-page.server):
  * the reader payload carries no source, no document graph and no raw
  * stylesheet. An owner or editor fetches those on the EDITOR door
  * (`?part=editor`) — prefetched on idle, so entering edit mode stays instant.
@@ -26,11 +26,11 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/export-key';
 import { baseUrl, json } from '@/lib/http';
-import { forkedFromCredit } from '@/lib/story/fork-credit.server';
+import { forkedFromCredit } from '@/lib/story/reader/fork-credit.server';
 import { ID_RE } from '@/lib/ids';
 import { count, has } from '@/lib/relations';
-import { loadDatasetRows } from '@/lib/story/dataset-store';
-import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/input';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/document/input';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { getUserById, ownerUsername } from '@/lib/users';
 import { avatarUrl } from '@/lib/avatars';
@@ -38,12 +38,12 @@ import { actorForArtifacts, browserSessionKind, roleFor, sessionActor } from '@/
 import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate, canEdit } from '@/lib/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
-import { preparedPageFor, servedPage } from '@/lib/story/prepared-page.server';
+import { preparedPageFor, servedPage } from '@/lib/story/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { lazyCodeOf } from '@/lib/story/lazy-code';
-import { firstHeadingTitle } from '@/lib/story/title';
+import { lazyCodeOf } from '@/lib/story/document';
+import { firstHeadingTitle } from '@/lib/story/document';
 import { isStartPlaceholder } from '@/lib/start-placeholder';
-import type { LazyCode } from '@/lib/story/lazy-code';
+import type { LazyCode } from '@/lib/story/document';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { VIEWER_OVERLAY_PATH, type AssembleInput } from '@/lib/compiled-page/contract';
@@ -53,12 +53,12 @@ import { CompiledPageFailed, compiledPageFor } from '@/lib/compiled-page/serve.s
 import { agentDiscovery } from '@/lib/agent-discovery';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
-import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
-import { declaresMutations } from '@/lib/story/helmet';
-import { assetsPath, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { readerChromeFonts } from '@/lib/story/styles';
+import { declaresMutations } from '@/lib/story/document';
+import { assetsPath, mutatePath, queryPath } from '@/lib/story/styles';
 import { archivedReadOnly } from '@/lib/archived-version';
-import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
-import { displayTitle } from '@/lib/story/title';
+import type { ReaderChromeInput } from '@/lib/story/reader';
+import { displayTitle } from '@/lib/story/document';
 
 /** The story the app page inlines for this answer (server/app withInitialStory). */
 export interface InitialStory {
@@ -187,7 +187,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
 
   // Everything below reads THIS row: the artifact wearing that version's bytes
   // when one was asked for, the artifact itself otherwise. A document's comes
-  // with its prepared page (lib/story/prepared-page.server) — a stored entry on
+  // with its prepared page (lib/story/prepared/prepared-page.server) — a stored entry on
   // a hit, a compile on a miss — while the reads that need neither run beside it.
   const viewerId = actor.viewer?.userId ?? null;
   // Independent reads begin only after ACL admission. These values belong to
@@ -310,7 +310,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     ...(served ? {
       runtime: served.runtime,
       // What the reader's chrome derived from the source: the document's own
-      // name (lib/story/title) and whether it is still the starter placeholder.
+      // name (lib/story/document/title) and whether it is still the starter placeholder.
       heading: firstHeadingTitle(row.source), starter,
     } : {
       // The data tiers: their source is their content (a dataset's only for those who may edit it).
@@ -391,7 +391,7 @@ export async function artifactPageResponse(request: Request, id: string): Promis
 }
 
 /**
- * THE READER CHROME the HTML-first page draws on the server (lib/story/reader-chrome): the same
+ * THE READER CHROME the HTML-first page draws on the server (lib/story/reader/reader-chrome): the same
  * input the app's own chrome builds from this
  * answer once it adopts the page, so the takeover changes no pixel of it. Its Edit control is what the
  * page's loader reads a writer by (web/idle-boot `capabilityOf`).

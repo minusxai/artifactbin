@@ -1,6 +1,6 @@
-import {createDocumentGraph} from '../../app/lib/story/document-graph';
+import {createDocumentGraph} from '../../app/lib/story/graph/document-graph';
 import {documentOutcomePresent} from './document-recovery';
-import {prepareClientDocumentPublication} from '../../app/lib/story/document-update-client';
+import {prepareClientDocumentPublication} from '../../app/lib/story/graph/document-update-client';
 import type {DocumentGraph,DocumentUpdate,DocumentAssetWarning} from '@artifactbin/contracts';
 import {localIdentities} from './identities';
 import {referenceIds} from './preview/graph';
@@ -10,9 +10,9 @@ import type {DatasetAccessPolicy as DatasetPolicy} from '@artifactbin/contracts'
 import {readConflicts,persistConflict,clearConflict} from './conflict-state';
 import {isDeepStrictEqual} from 'node:util';
 import {extname,resolve} from 'node:path';
-import {canonicalizeMarkup} from '../../app/lib/story/canonical-source';
+import {canonicalizeMarkup} from '../../app/lib/story/document/canonical-source';
 import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
-import {stampNodeIds} from '../../app/lib/story/node-ids';
+import {stampNodeIds} from '../../app/lib/story/document/node-ids';
 import {CliError} from './commands';
 import {digest,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles} from './journal';

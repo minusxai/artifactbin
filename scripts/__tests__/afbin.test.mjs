@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 import { afbinPort, cliBuildStale, devHome, healthRefusal, runAfbin, serverFlag } from '../lib/afbin-run.mjs';
-import { containmentExpectation, containmentObserved } from '../lib/session-containment.mjs';
+import { containmentExpectation, containmentObserved } from '../gates/lib/session-containment.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../..');
 

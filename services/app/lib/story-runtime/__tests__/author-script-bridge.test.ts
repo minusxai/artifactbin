@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDataflowStore } from '../store';
 import { createAuthorScriptBridge } from '../author-script-bridge';
-import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/data/compiled-dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const flow = await compiledOf('<Value name="count" type="number" default={0} />');

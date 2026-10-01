@@ -11,12 +11,12 @@
  * query inside its database through `sourceQuery`.
  */
 import { DISPLAY_ROWS, isQueryFailure, MEMBER_COLUMNS, type ColumnType, type QueryOutcome, type QueryPage, type RunInput, type SqlService, type TableResult } from '@artifactbin/contracts';
-import { BUILTIN_TABLES, platformValues } from '@/lib/story/builtins';
-import type { CompiledDataflow, CompiledQuery } from '@/lib/story/compiled-dataflow';
-import { bindParams, bindTypes, initialValues, selectQueries, typedResult, valueTypes, type ImportTables } from '@/lib/story/compiled-flow';
-import type { DataflowState, Row, Scalar } from '@/lib/story/dataflow';
-import type { DatasetColumn } from '@/lib/story/dataset-shape';
-import { localTableOverrides } from '@/lib/story/local-tables';
+import { BUILTIN_TABLES, platformValues } from '@/lib/story/data/builtins';
+import type { CompiledDataflow, CompiledQuery } from '@/lib/story/data/compiled-dataflow';
+import { bindParams, bindTypes, initialValues, selectQueries, typedResult, valueTypes, type ImportTables } from '@/lib/story/data/compiled-flow';
+import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
+import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
+import { localTableOverrides } from '@/lib/story/datasets/local-tables';
 
 export class DataflowResultError extends Error {
   constructor(readonly reason: 'capacity' | 'timeout' | 'query') { super(`Document query ${reason}: complete results required`); }
@@ -25,7 +25,7 @@ export class DataflowResultError extends Error {
 /** `runMany` loads imports once for many runs; an engine without it (the CLI's) runs them one at a time. */
 interface DataflowEngine { run: SqlService['run']; runMany?: SqlService['runMany'] }
 
-export type { ImportTables } from '@/lib/story/compiled-flow';
+export type { ImportTables } from '@/lib/story/data/compiled-flow';
 
 export interface RunDataflowOptions {
   /** Accepted members supplied by the saved document's server context. */

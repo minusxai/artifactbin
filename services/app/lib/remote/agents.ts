@@ -3,7 +3,7 @@ import {getArtifactById,canReadArtifact} from '../artifacts';
 import {createHash,randomUUID} from 'node:crypto';
 import {getDb,type Queryable} from '../db';
 import {sessionMentions} from '../session-mentions';
-import {channelForAnnotations} from '../story/live';
+import {channelForAnnotations} from '../story/realtime/live';
 import {RemoteRegistry,RemoteError,remoteSessions,type Registration} from './registry';
 import {REMOTE_WORK_LIMIT,REMOTE_WORK_BYTES,remoteColor} from '../../../contracts/src/remote';
 import type {RemoteSessionInfo,RemoteExchange,RemoteWork,RemoteWorkPhase} from '../../../contracts/src/remote';

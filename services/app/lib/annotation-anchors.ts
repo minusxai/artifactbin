@@ -1,7 +1,7 @@
 /**
  * THE ANNOTATION ANCHOR AS IT LIVES IN THE MARKUP — pure, parser only, no DB.
  *
- * A thread is pinned to the node's own `id` (lib/story/node-ids stamps one on
+ * A thread is pinned to the node's own `id` (lib/story/document/node-ids stamps one on
  * every element through the ordinary edit protocol), and
  * `data-annotation-anchor="<key>"` is the RETIRED spelling stored rows may
  * still name — lib/annotations reads `id` first and falls back to it.

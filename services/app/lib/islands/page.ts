@@ -32,7 +32,7 @@ import { ISLANDS_READY_EVENT, ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR,
 import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
 
 /**
- * lib/story/reader-chrome READER_CHROME_HIDDEN_CLASS, restated: that module is the chrome's server
+ * lib/story/reader/reader-chrome READER_CHROME_HIDDEN_CLASS, restated: that module is the chrome's server
  * renderer and has no place in a reader chunk (page.test pins the two equal).
  */
 export const CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';

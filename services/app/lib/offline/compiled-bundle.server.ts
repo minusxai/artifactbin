@@ -1,6 +1,6 @@
 /** Pack one stored compiled browser module into a classic script for file://.
  * The compiler remains the sole owner of document code, and nothing is bundled at download: the
- * shared runtime is the island build's OFFLINE HALF (scripts/build-islands.mjs buildOfflineHalf — every
+ * shared runtime is the island build's OFFLINE HALF (scripts/build/build-islands.mjs buildOfflineHalf — every
  * chunk a CommonJS factory, `@mx/boot` the snapshot-only file boot), and the document's own module is
  * turned into a function of its imports by the same Babel pass that evaluates SSR modules. The file
  * carries a tiny loader, the factories of the closure the module needs, and the module.
@@ -17,7 +17,7 @@ import { createModuleStore, createTemplateResourceStore } from '@/lib/compiled-p
 const TEMPLATE = /["']\/islands\/t\/([0-9a-f]{16})\.json["']/g;
 const OFFLINE_HALF = /^\/islands\/(offline-[0-9a-f]{16}\.json\.gzip)$/;
 
-/** The island build's offline half, as scripts/build-islands.mjs writes it. */
+/** The island build's offline half, as scripts/build/build-islands.mjs writes it. */
 export interface OfflineHalf {
   /** Import specifier → module id. */
   entries: Record<string, string>;

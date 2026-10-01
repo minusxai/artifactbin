@@ -26,8 +26,8 @@ import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/config';
 import { canReadArtifact, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts';
-import { urlHash } from '@/lib/story/asset-url';
-import { collectExternalAssetUrls } from '@/lib/story/external-images';
+import { urlHash } from '@/lib/story/assets';
+import { collectExternalAssetUrls } from '@/lib/story/assets';
 import { getDb } from '@/lib/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
@@ -373,7 +373,7 @@ export function servesDocument(ownerId: string, row: Pick<ArtifactRow, 'user_id'
   return row.user_id === ownerId && row.visibility === 'public' && row.format === 'markup' && !row.deleted_at;
 }
 
-/** The ref kinds a post embeds by bytes (lib/story/ref-data): `<img src="ref:…">`, a `<File>` card, a PDF. */
+/** The ref kinds a post embeds by bytes (lib/story/data/ref-data): `<img src="ref:…">`, a `<File>` card, a PDF. */
 const EMBEDDED_FORMATS = new Set(['image', 'file', 'pdf']);
 /** The owner's public, live markup documents, as the SQL both embed rules below scope to. */
 const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}`;
@@ -396,7 +396,7 @@ export async function servesEmbeddedArtifact(ownerId: string, row: ArtifactRow):
 }
 
 /**
- * Our copy of a web image (`/assets/<sha of its url>`, lib/story/asset-url)
+ * Our copy of a web image (`/assets/<sha of its url>`, lib/story/assets/asset-url)
  * the host may serve: one of the owner's public documents names that URL —
  * the same URLs the serving path maps to our copies (webAssetsForSource).
  */

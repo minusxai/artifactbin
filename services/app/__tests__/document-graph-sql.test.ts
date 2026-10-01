@@ -2,10 +2,10 @@ import {expect,it} from 'vitest';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/db';
-import {createDocumentGraph,graphNodes,graphSource,type DocumentGraph} from '@/lib/story/document-graph';
-import {prepareGraphPatch,applyGraphPatch,type GraphPatch} from '@/lib/story/document-graph-patch';
-import {graphPatchSql,graphSourceSql,graphReferencesSql} from '@/lib/story/document-graph-sql';
-import {applyOperationsToNodes} from '@/lib/story/document-operation';
+import {createDocumentGraph,graphNodes,graphSource,type DocumentGraph} from '@/lib/story/graph/document-graph';
+import {prepareGraphPatch,applyGraphPatch,type GraphPatch} from '@/lib/story/graph/document-graph-patch';
+import {graphPatchSql,graphSourceSql,graphReferencesSql} from '@/lib/story/graph/document-graph-sql';
+import {applyOperationsToNodes} from '@/lib/story/graph/document-operation';
 useAppHarness();
 async function setup(){
  const db=await getDb(),graph=createDocumentGraph('<main id="root"><p id="a">Alpha β</p><p id="b">Beta 👩</p></main>',1);

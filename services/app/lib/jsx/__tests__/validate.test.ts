@@ -149,7 +149,7 @@ describe('validateJsx — unknown-component error guidance', () => {
 
 /**
  * `<title>` names the DOCUMENT, and a markup document has exactly one place for
- * that: `<Helmet><title>` (lib/story/helmet.ts). A bare `<title>` in the body
+ * that: `<Helmet><title>` (lib/story/document/helmet.ts). A bare `<title>` in the body
  * is not a second opinion, it is a hijack — the HTML parser processes a body
  * `<title>` under the in-head rules, and React hoists it too, so on a hydrating
  * document it lands in `<head>` and BEATS the Helmet title. Measured: a

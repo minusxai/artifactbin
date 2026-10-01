@@ -12,10 +12,10 @@ import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/story/dataset-store';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
 
 const sessionUser = { id: '', email: '' };

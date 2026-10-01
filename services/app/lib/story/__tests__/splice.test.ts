@@ -19,7 +19,7 @@ import {
   touchedSpanFor,
   type EditRecord,
   type Splice,
-} from '@/lib/story/splice';
+} from '@/lib/story/document/splice';
 
 const DOC =
   '<section className="wrap"><p>alpha text</p><p>beta text</p><div><span>gamma</span></div></section>';

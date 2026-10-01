@@ -259,7 +259,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const pending = pendingDraft;
     if (!pending || (focusedRegion() && (!allowFocused || !edit?.canApplyDraft())) || disposed || !drafting() || pending.sequence !== draftSequence) return;
     const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdateParts }] = await Promise.all([
-      import('@/lib/islands/morph/engine'), import('@/lib/story/update-parts'),
+      import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
     // Fetch the draft's module while the editor is still mounted. From here to the remount nothing

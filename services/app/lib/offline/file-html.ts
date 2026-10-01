@@ -47,7 +47,7 @@ function cspOrigin(origin: string): string | null {
  * exactly one thing more — compiling WebAssembly — because the file runs its
  * queries on the embedded SQLite engine; Chromium, Firefox and WebKit all
  * refuse `WebAssembly.instantiate` from file:// without it (probed 2026-09-26). Measured by
- * scripts/gate-offline-file.mjs, which counts `securitypolicyviolation`
+ * scripts/gates/gate-offline-file.mjs, which counts `securitypolicyviolation`
  * events in Chromium, Firefox and WebKit (zero with this policy).
  */
 export function artifactFileCsp(origin: string, sqlite = true): string {

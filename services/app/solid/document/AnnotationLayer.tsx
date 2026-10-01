@@ -33,7 +33,7 @@ import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
 import { loginHref } from '@/lib/login-href';
 import { hasReplyText, remoteMention } from '@/lib/remote-reply';
-import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/reader/edit-bar';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import {
   isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,

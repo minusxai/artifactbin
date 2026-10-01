@@ -1,5 +1,5 @@
 import {resolveToken} from './tokens';
-import {validateQueryValues} from './story/query-values';
+import {validateQueryValues} from './story/data';
 import {createHash} from 'node:crypto';
 import {readableArtifact} from './artifact-read';
 import {artifactState} from './artifact-state';
@@ -8,7 +8,7 @@ import {catalogOf} from './datasets/catalog';
 import {executeCatalog} from './datasets/execute';
 import {DatasetError} from './datasets/errors';
 import {json} from './http';
-import {parseQueryRequest} from './story/query-request';
+import {parseQueryRequest} from './story/data/query-request';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 

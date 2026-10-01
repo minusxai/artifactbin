@@ -23,10 +23,10 @@
  * retried a few times with backoff; a 4xx is an answer (no access any more), not a failure to retry.
  */
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
-import type { Scalar } from '@/lib/story/dataflow';
-import { selectQueries } from '@/lib/story/compiled-flow';
-import { writeUrlValues } from '@/lib/story/url-values';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { Scalar } from '@/lib/story/data/dataflow';
+import { selectQueries } from '@/lib/story/data/compiled-flow';
+import { writeUrlValues } from '@/lib/story/data/url-values';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { IslandContext, IslandPageData, IslandViewer } from './contract';
@@ -69,7 +69,7 @@ export function wantsViewerOverlay(data: IslandPageData, flow: CompiledDataflow 
   return !!data.viewerUrl && (data.signedIn || hasViewerScope(flow, data.results));
 }
 
-/** The overlay URL at these values: the page's `$` params, as the route reads them (lib/story/url-values). */
+/** The overlay URL at these values: the page's `$` params, as the route reads them (lib/story/data/url-values). */
 export function viewerOverlayUrl(viewerUrl: string, flow: CompiledDataflow | null, values: Record<string, Scalar>): string {
   const at = viewerUrl.indexOf('?');
   const path = at < 0 ? viewerUrl : viewerUrl.slice(0, at);

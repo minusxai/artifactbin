@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {executeDocumentQueries} from '../sql/document-queries';
-import type {CompiledDataflow} from '../story/compiled-dataflow';
+import type {CompiledDataflow} from '../story/data/compiled-dataflow';
 import type {DatasetCatalog} from '../datasets/types';
 const execute=vi.hoisted(()=>vi.fn());
 vi.mock('../datasets/execute',()=>({executeCatalog:execute}));

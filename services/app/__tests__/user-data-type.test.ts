@@ -9,7 +9,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/db';
 import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/story/dataset-store';
+import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {mintToken} from '@/lib/tokens';
 import {claimToken, createUser} from '@/lib/users';
 import {people} from '@/lib/datasets/user-fields';

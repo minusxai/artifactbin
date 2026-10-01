@@ -19,10 +19,10 @@ import { shapeOf, diffShapes, reactRender } from '@/lib/islands/__tests__/kit-pa
 import { loadCompilerBuild } from '../build.server';
 import { malformedTagDocument, namedHazardsDocument, structureIndependent } from '../codegen-safety';
 import { CHART_SLOT_ATTR, type CompileInput } from '../contract';
-import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
-import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/compile-dataflow';
-import { dataflowOf, splitHelmet } from '@/lib/story/helmet';
-import type { Dataflow } from '@/lib/story/dataflow';
+import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/story/data/compile-dataflow';
+import { dataflowOf, splitHelmet } from '@/lib/story/document/helmet';
+import type { Dataflow } from '@/lib/story/data/dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { parseJsx } from '@/lib/jsx';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
@@ -291,7 +291,7 @@ describe('compilePage', () => {
     const map = html.querySelector('#map')!;
     expect(map.getAttribute('data-mx-ast')).toBe('0.1');
     expect(shapeOf(map.outerHTML)).toEqual(shapeOf('<div id="map"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>'));
-    // The frame's author content reaches the island only as data: compiled at publish (lib/story/managed-iframe), never as markup.
+    // The frame's author content reaches the island only as data: compiled at publish (lib/story/reader/managed-iframe), never as markup.
     expect(dom(page.html).querySelector('#f')?.textContent).not.toContain('Hello');
   });
 

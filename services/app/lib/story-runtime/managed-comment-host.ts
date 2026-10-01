@@ -1,7 +1,7 @@
 import { runtimeId } from './runtime-id';
 import type { ManagedCommentEvent, ManagedCommentState } from './managed-comment-contract';
-import { parseCommentTarget } from '@/lib/story/comment-target';
-import { canonicalQuote, parseAnnotationRange, isTargetRange, type AnnotationRect } from '@/lib/story/annotation-range';
+import { parseCommentTarget } from '@/lib/story/annotations/comment-target';
+import { canonicalQuote, parseAnnotationRange, isTargetRange, type AnnotationRect } from '@/lib/story/annotations/annotation-range';
 
 type Host = { element: HTMLElement; generation: string; send(state: ManagedCommentState): void; state: ManagedCommentState };
 type Consumer = { state(host: HTMLElement): Omit<ManagedCommentState, 'generation' | 'type'>; receive(host: HTMLElement, event: ManagedCommentEvent): void };

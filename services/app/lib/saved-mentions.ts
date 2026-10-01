@@ -3,7 +3,7 @@ import type {Queryable} from '@artifactbin/contracts';
 import type {ArtifactRow,RoleActor} from './artifacts';
 import {invitePeople} from './membership';
 import {isPersonMentionHref} from './person-mentions';
-import {nodeIndex} from './story/node-ids';
+import { nodeIndex } from './story/document/node-ids';
 export async function commentMentions(tx:Queryable,row:ArtifactRow,actor:RoleActor,body:string,id:string){
  const ids:string[]=[];
  const inline=(nodes:MdInline[])=>{for(const n of nodes){if(n.kind==='link'&&isPersonMentionHref(n.href))ids.push(n.href.slice('/people/'.length));else if(n.kind==='strong'||n.kind==='em')inline(n.children);}};

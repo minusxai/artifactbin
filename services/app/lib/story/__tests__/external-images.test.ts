@@ -7,11 +7,11 @@
  * validator says it is.
  *
  * There is no rewrite half any more: the URL an author wrote STAYS in the
- * stored document (lib/web-assets imports the bytes, lib/story/asset-url points
+ * stored document (lib/web-assets imports the bytes, lib/story/assets/asset-url points
  * the served copy at ours).
  */
 import { describe, expect, it } from 'vitest';
-import { collectExternalAssetUrls, collectExternalFontUrls, collectExternalImageUrls } from '../external-images';
+import { collectExternalAssetUrls, collectExternalFontUrls, collectExternalImageUrls } from '../assets/external-images';
 
 describe('collectExternalImageUrls', () => {
   it('finds https URLs on img src and Video poster, deduplicated, in order', () => {

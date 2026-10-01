@@ -90,7 +90,7 @@ describe('a stored blur reaches the reader', () => {
  * so a 390px phone was being handed roughly five times the pixels it can show,
  * on the worse of the two connections. Publish now stores a 640-wide copy
  * beside it (lib/images/optimise) and the markup offers both — the same rule,
- * and the same `sizes` hint, as a URL-kept image (lib/story/asset-url), because
+ * and the same `sizes` hint, as a URL-kept image (lib/story/assets/asset-url), because
  * it is the same picture in the same column.
  */
 describe('an upload wide enough to be worth it is stored at two widths', () => {

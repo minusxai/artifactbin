@@ -1,4 +1,4 @@
-import type {ImageAssetAnswer} from '@/lib/story/ref-data';
+import type {ImageAssetAnswer} from '@/lib/story/data/ref-data';
 /**
  * The served document's QueryTransport INSIDE A PARENT: a postMessage relay
  * to the page (lib/story-runtime/contract.ts STORY_QUERY_MESSAGE). The page
@@ -14,7 +14,7 @@ import type {ImageAssetAnswer} from '@/lib/story/ref-data';
  * the message on the affected queries rather than spinning forever).
  * Framework-free; installed by the entry.
  */
-import { localZone } from '@/lib/story/builtins';
+import { localZone } from '@/lib/story/data/builtins';
 import {
   STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE,
   STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE,

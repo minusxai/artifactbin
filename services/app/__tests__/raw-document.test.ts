@@ -6,8 +6,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/tokens';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { markupCsp } from '@/lib/story/markup-csp';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { markupCsp } from '@/lib/story/styles/markup-csp';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();

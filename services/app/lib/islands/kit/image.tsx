@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { boundImageValue, imageReferenceId } from '@/lib/story/image-source';
+import { boundImageValue, imageReferenceId } from '@/lib/story/assets/image-source';
 import { useIsland } from '../context';
 
 /** A reader-chosen image source goes through this document's scoped import door. */

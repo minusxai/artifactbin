@@ -13,7 +13,7 @@ export { parseJsx } from './parse';
 export { repairJsxSource } from './repair';
 export { serializeJsx } from './serialize';
 // Node-level validation for callers that split the tree before validating
-// (lib/story/helmet.ts excludes the Helmet subtree while keeping exact spans).
+// (lib/story/document/helmet.ts excludes the Helmet subtree while keeping exact spans).
 export { validateJsx } from './validate';
 
 /**

@@ -1,9 +1,9 @@
-import {createDocumentGraph} from './story/document-graph';
+import {createDocumentGraph} from './story/graph/document-graph';
 /** Controls outside the live editor load an authoring snapshot, validate locally,
  * then submit one permission-scoped JSONB commit. Non-document metadata retains
  * its existing conditional protocol. */
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
-import {prepareBrowserDocumentUpdate} from './story/document-authoring-client';
+import {prepareBrowserDocumentUpdate} from './story/document/document-authoring-client';
 import {artifactRequests,createHttpBackend} from './artifact-backend/http';
 import type {ArtifactBackend} from './artifact-backend/types';
 /** Listings, folders and the social preview: an online write whose caller reads the Response itself. */
@@ -35,7 +35,7 @@ export async function restoreBrowserArtifact(backend:ArtifactBackend,version:num
  const target=await backend.version(version);if(!target)return null;
  if(target.format!=='markup'){const reverted=await backend.revert({version,expectedVersion:head.version,expectedState:head.state as string});return reverted.ok?reverted.body.version:null;}
  if(typeof target.markup!=='string')return null;
- // Written for the previous query engine and not convertible without a person: the server says why (lib/story/data-syntax).
+ // Written for the previous query engine and not convertible without a person: the server says why (lib/story/data/data-syntax).
  if(target.previous_engine)throw new Error(target.previous_engine);
  const document=head.document?.kind==='graph'?head.document:createDocumentGraph('',head.version);
  const update=await prepareBrowserDocumentUpdate(backend,{...head,document,meta:{...head}},{source:target.markup,whole:true,metadata:{title:target.title??null,description:target.description??null,theme:target.meta.theme??null,template:target.meta.template??null,colorMode:target.meta.colorMode??null}});

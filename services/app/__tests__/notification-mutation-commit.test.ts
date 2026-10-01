@@ -13,7 +13,7 @@ import {mintToken} from '@/lib/tokens';
 import {notificationJobStore} from '@/lib/notification-runtime';
 import {evaluateNotificationQuery} from '@/lib/notification-query';
 import {createNotificationWorker} from '@/lib/notification-worker';
-import {loadDatasetRows} from '@/lib/story/dataset-store';
+import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 
 useAppHarness();
 

@@ -6,7 +6,7 @@
  * export key) because every other hash is server-only. The URL-kept asset
  * address is not: `assetUrlFor` maps `<img src="https://…">` to
  * `/assets/<sha256 of the canonical url>`, and that mapping is applied by
- * `lib/story/update-parts.ts`, which `components/InPlaceEditor.tsx` imports —
+ * `lib/story/document/update-parts.ts`, which `components/InPlaceEditor.tsx` imports —
  * so it lands in the SPA bundle. A `crypto` import there is the same class of
  * failure as the `process.env` read that once killed the whole SPA
  * (`process is not defined`); Web Crypto is asynchronous, and the mapping is a

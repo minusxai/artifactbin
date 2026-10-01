@@ -7,7 +7,7 @@ import AssetPageHeader from '../components/AssetPageHeader';
 import ModelPreview from '../components/ModelPreview';
 import { LINK } from '../components/ui';
 import { formatFileSize } from '@/lib/file-display';
-import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@/lib/story/file-types';
+import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@/lib/story/assets/file-types';
 import { useSession } from '../lib/session';
 import { copyText } from '../lib/copy-text';
 

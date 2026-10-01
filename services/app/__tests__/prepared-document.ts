@@ -4,8 +4,8 @@ import {request} from './harness';
 /** Test authoring client: compile before calling the real service/route. Keeping
  * this explicit prevents fixture preparation reads from hiding commit queries. */
 import {getArtifactById,type ArtifactRow,type EditInput} from '@/lib/artifacts';
-import {prepareDocumentAuthoringContext} from '@/lib/story/document-authoring-context';
-import {prepareClientDocumentUpdate,prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/story/document-update-client';
+import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
+import {prepareClientDocumentUpdate,prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/story/graph/document-update-client';
 export function documentEdit(row:ArtifactRow,change:ClientDocumentChange):EditInput {
  if(row.document?.kind!=='graph')throw new Error('Read the authoring snapshot before editing');
  return {baseEditId:row.edit_id,documentUpdate:prepareClientDocumentUpdate({...row,document:row.document},change)};

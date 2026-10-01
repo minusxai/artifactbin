@@ -24,10 +24,10 @@ import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/arti
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { setDatasetRowCap } from '@/lib/story/dataset-mutate';
+import { setDatasetRowCap } from '@/lib/story/datasets/dataset-mutate';
 
 
-import { loadDatasetRows } from '@/lib/story/dataset-store';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 import { agentCookie, useAppHarness, request, type RequestOptions } from '@/__tests__/harness';

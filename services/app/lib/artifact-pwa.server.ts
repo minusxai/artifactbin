@@ -1,7 +1,7 @@
 import sharp from 'sharp';
-import { graphNodes } from './story/document-graph';
-import { readPwaSettings, type PwaSettings } from './story/pwa-settings';
-import { loadImage } from './story/image-store';
+import { graphNodes } from './story/graph';
+import { readPwaSettings, type PwaSettings } from './story/reader';
+import { loadImage } from './story/assets/image-store';
 import { canReadArtifact, getArtifactById, referencedArtifactForRow, type ArtifactRow } from './artifacts';
 import { sessionActor } from './viewer';
 import { ID_RE } from './ids-shape';

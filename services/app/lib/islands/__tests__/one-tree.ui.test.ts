@@ -5,12 +5,12 @@ import { readFileSync } from 'node:fs';
 import * as rt from '../rt';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import type { Component } from 'solid-js';
 import { brotliCompressSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { kitchenSinkMarkup } from '@/lib/story/kitchen-sink';
+import { kitchenSinkMarkup } from '@/lib/story/fixtures/kitchen-sink';
 import { morphDraftDom } from '../morph/engine';
 import { delegateEvents, hydrate } from 'solid-js/web';
 

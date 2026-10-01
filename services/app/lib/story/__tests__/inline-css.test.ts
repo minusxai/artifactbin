@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isolateStoryCss, isolateStoryNodes } from '../inline-css';
-import { applyStyleOverrides, styleOverrides } from '../style-overrides';
+import { isolateStoryCss, isolateStoryNodes } from '../styles/inline-css';
+import { applyStyleOverrides, styleOverrides } from '../styles/style-overrides';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 describe('inline document CSS isolation', () => {

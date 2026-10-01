@@ -38,7 +38,7 @@ import {diffCommand,remoteStatus} from './comparison';
 import {localStatus} from './local';
 import {helpDocument,writeHelp,helpBundle} from './teaching';
 import {withTeachingOrigin} from './teaching-origin';
-import {validateMarkupStructure} from '../../app/lib/story/local-validation';
+import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';

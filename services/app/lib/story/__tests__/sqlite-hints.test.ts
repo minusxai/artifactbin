@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DatasetColumn } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx';
-import { dataflowOf, splitHelmet } from '../helmet';
-import { compileDataflow, prepareCompile, type ImportSource } from '../compile-dataflow';
+import { dataflowOf, splitHelmet } from '../document/helmet';
+import { compileDataflow, prepareCompile, type ImportSource } from '../data/compile-dataflow';
 
 const SALES: DatasetColumn[] = [{ name: 'day', type: 'date' }, { name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }];
 const SOURCES: Record<string, ImportSource> = {

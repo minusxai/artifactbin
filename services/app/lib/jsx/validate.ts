@@ -7,9 +7,9 @@
  */
 import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { validateDeckMap } from '@/lib/viz/deck-spec';
-import { parseRowRef } from '@/lib/story/row-scope';
+import { parseRowRef } from '@/lib/story/data/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
-import { compileManagedIframe } from '@/lib/story/managed-iframe';
+import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
@@ -156,7 +156,7 @@ const SVG_TAGS: ReadonlySet<string> = new Set(STORY_SVG_TAGS.map((t) => t.toLowe
  * What a `<For>` inside `<svg>` would draw that is not SVG. The interpreter
  * wraps those rows in a `<g>`, so they parse back as written only while they
  * are SVG too: an HTML tag — or a component, which renders HTML — breaks out
- * of the drawing and fails hydration (lib/story/nesting.ts). Conditions and
+ * of the drawing and fails hydration (lib/story/document/nesting.ts). Conditions and
  * fragments render their children in place, so the search looks through them.
  */
 function nonSvgTemplateElements(nodes: JsxNode[]): JsxElement[] {
@@ -175,7 +175,7 @@ function validateElement(
 ): void {
   const lower = el.isComponent ? '' : el.tag.toLowerCase();
   /*
-   * Document-level tags have ONE home: `<Helmet>` (lib/story/helmet.ts). In the
+   * Document-level tags have ONE home: `<Helmet>` (lib/story/document/helmet.ts). In the
    * body they are not a second opinion, they are a second door —
    *
    *  - `<title>`: the HTML parser processes a body `<title>` under the in-head
@@ -202,7 +202,7 @@ function validateElement(
 
   /**
    * The document's DATA declarations are Helmet children, never body nodes
-   * (lib/story/dataflow.ts). Named here so an author who writes one in the body
+   * (lib/story/data/dataflow.ts). Named here so an author who writes one in the body
    * is told where it goes instead of only that it is unknown.
    */
   const HELMET_ONLY_COMPONENTS: Record<string, string> = {
@@ -255,7 +255,7 @@ function validateElement(
     // The message stays SHORT on purpose. The model still needs the set to
     // recover, but repeating ~130 tokens of vocabulary per offending tag bloats
     // a response that may carry many — so the door attaches it ONCE
-    // (`allowed_html_tags`, lib/story/jsx-tier.ts), as `unknown_theme` does.
+    // (`allowed_html_tags`, lib/story/document/jsx-tier.ts), as `unknown_theme` does.
     errors.push({
       message: `Tag <${el.tag}> is not in the allowed HTML tag list — see allowed_html_tags`,
       tag: el.tag, start: el.start, end: el.end,

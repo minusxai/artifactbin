@@ -4,7 +4,7 @@
  * verbatim rather than approximately.
  */
 import { describe, expect, it } from 'vitest';
-import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader/reader-chrome';
 import { personFaceBackground } from '@/lib/person-face';
 
 const chrome = (over: Partial<ReaderChromeInput> = {}): string =>

@@ -1,4 +1,4 @@
-import type {ContentObjects} from '@/lib/story/prepared-objects';
+import type {ContentObjects} from '@/lib/story/prepared';
 /**
  * URL → stored image content: the guarded fetcher composed with the SAME
  * storeImageContent every upload path runs, so the size cap and the type
@@ -8,8 +8,8 @@ import type {ContentObjects} from '@/lib/story/prepared-objects';
  */
 import { MAX_IMAGE_BYTES } from '@/lib/config';
 import { json } from '@/lib/http';
-import { storeImageContent } from '@/lib/story/data-tiers';
-import type { StoredContent } from '@/lib/story/input';
+import { storeImageContent } from '@/lib/story/data/data-tiers';
+import type { StoredContent } from '@/lib/story/document/input';
 import { fetchWebResource } from './fetch';
 import { WebIngestError } from './guard';
 import { sniffImageType } from './sniff';

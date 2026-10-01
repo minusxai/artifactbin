@@ -5,7 +5,7 @@ import { createAuthorScriptBridge } from './author-script-bridge';
 import { AUTHOR_SCRIPT_DOCUMENT } from './author-script-bootstrap';
 import { AUTHOR_SCRIPT_FRAME_TITLE, AUTHOR_SCRIPT_INIT } from './author-script-contract';
 import { AUTHOR_FRAME_PATH } from './author-frame';
-import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
+import type {ManagedIframeContent} from '@/lib/story/reader/managed-iframe';
 import {createManagedAssetResolver,type ManagedAssetsConfig,type ManagedAssetRelay} from './managed-assets';
 
 /** Changed code revokes its old realm; unchanged code keeps its subscriptions. */

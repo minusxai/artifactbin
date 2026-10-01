@@ -46,7 +46,7 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createListingPreloader, createSpaEntry, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory } from '@/lib/artifact-page';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { enableSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
@@ -57,7 +57,7 @@ import { linkedStylesheets } from '@/lib/custom-domain-home';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
 import { canonicalDocumentUrl } from '@/lib/custom-domains';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
-import { fontPreloadTags } from '@/lib/story/first-screen-fonts';
+import { fontPreloadTags } from '@/lib/story/styles';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
@@ -291,7 +291,7 @@ function archiveLiveBuild(): void {
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
-  // A serving process prepares each new head for its readers after the write commits (lib/story/prepared-page.server).
+  // A serving process prepares each new head for its readers after the write commits (lib/story/prepared/prepared-page.server).
   enablePreparedPageWarmups();
   // …and revalidates the guest snapshots a write made stale (lib/compiled-page/snapshots.server).
   enableSnapshotRevalidations();

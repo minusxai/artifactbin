@@ -176,7 +176,7 @@ const ARTIFACTS: Table = {
     { name: 'ancestor_ids', type: 'TEXT[]', notNull: true, default: "'{}'" },
     { name: 'title', type: 'TEXT' },
     { name: 'description', type: 'TEXT' },
-    { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/input.ts); no CHECK on purpose
+    { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/document/input.ts); no CHECK on purpose
     { name: 'source', type: 'TEXT' }, // legacy markup and non-markup formats; cleared after document conversion
     { name: 'document', type: 'JSONB' }, // canonical markup AST; old TEXT rows migrate lazily
     { name: 'document_archived_at', type: 'TIMESTAMPTZ' }, // coalescing guard carried on the locked head
@@ -184,7 +184,7 @@ const ARTIFACTS: Table = {
     { name: 'version', type: 'INTEGER', notNull: true, default: '1' },
     // Head pointer of the edit protocol: unguessable, regenerated on every
     // accepted write. The volatile DEFAULT backfills pre-protocol rows on the
-    // additive ALTER; app writes always set it explicitly (lib/story/splice
+    // additive ALTER; app writes always set it explicitly (lib/story/document/splice
     // newEditId). Possession proves the caller read the version it bases on.
     { name: 'edit_id', type: 'TEXT', notNull: true, default: 'md5(random()::text)' },
     // WHO made the head — the last accepted writer (an account, or the token
@@ -383,7 +383,7 @@ const ANNOTATIONS: Table = {
     // snippet above is the node's CURRENT text; these are what was selected
     // then). APPENDED LAST, like every additive column: existing databases
     // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
-    { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/story/annotation-range)
+    { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/story/annotations/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
     // The same soft-delete stamp `artifacts` carries, and the same gate: a row
     // with it set is nonexistent to every reader in lib/annotations.
@@ -479,7 +479,7 @@ const WEBFONTS: Table = {
 /**
  * THE GLOBAL URL → OBJECT CACHE for URL-kept external assets (lib/web-assets).
  *
- * Keyed by sha256 of the CANONICAL url (lib/story/asset-url), so the same URL
+ * Keyed by sha256 of the CANONICAL url (lib/story/assets/asset-url), so the same URL
  * is ONE object for everyone and the first importer pays the fetch — a second
  * document naming it stores nothing. The row is the INDEX (the db is the only
  * index); the bytes live in the object store under `object_key`.
@@ -594,7 +594,7 @@ const DATASET_RESULT_CACHE: Table = {
 
 /**
  * THE PREPARED PAGE — each document version compiled ONCE for the reader
- * (lib/story/prepared-page.server): its isolated stylesheet, its node tree and
+ * (lib/story/prepared/prepared-page.server): its isolated stylesheet, its node tree and
  * the style values the CSS policy rewrote, its glyphs, fonts and lazy-code
  * manifest, its declared dataflow, and the anonymous server render. Derived and
  * disposable: one slot per head or archived version, overwritten whenever the

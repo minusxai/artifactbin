@@ -1,5 +1,5 @@
 import {basename,extname} from 'node:path';
-import {assetFormatOf,fileContentType} from '../../app/lib/story/file-types';
+import {assetFormatOf,fileContentType} from '../../app/lib/story/assets/file-types';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {datasetFileRows,isDatasetFile} from './dataset-file';
 import {CliError} from './commands';

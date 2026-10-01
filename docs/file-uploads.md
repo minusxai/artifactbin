@@ -14,7 +14,7 @@ body and a `Content-Type` matching the extension. The session equivalent is
 `{ "file": { "filename": "note.txt", "contentType": "text/plain", "base64": "SGVsbG8K" } }`.
 JSON PUT uses the same file envelope to replace an existing file.
 
-Accepted extensions are defined in `services/app/lib/story/file-types.ts`:
+Accepted extensions are defined in `services/app/lib/story/assets/file-types.ts`:
 
 | Category | Extensions |
 |---|---|

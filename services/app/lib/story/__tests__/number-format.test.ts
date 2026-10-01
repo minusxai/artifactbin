@@ -7,7 +7,7 @@
  * door and "format this number" for every renderer, so the two cannot drift.
  */
 import { describe, expect, it } from 'vitest';
-import { isNumberFormat, numberFormatter, NUMBER_FORMAT_HINT } from '../number-format';
+import { isNumberFormat, numberFormatter, NUMBER_FORMAT_HINT } from '../data/number-format';
 
 describe('isNumberFormat', () => {
   it('accepts d3-format specs', () => {

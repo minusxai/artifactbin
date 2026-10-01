@@ -1,5 +1,5 @@
 /**
- * THE SERVED RAIL, DRIVEN BY THE APP — one adapter for the reader chrome (lib/story/reader-chrome) wherever
+ * THE SERVED RAIL, DRIVEN BY THE APP — one adapter for the reader chrome (lib/story/reader/reader-chrome) wherever
  * the app holds it: solid/pages/Document adopts the served chrome, solid/pages/Starter draws it.
  *
  *  - `wireReaderChrome` delegates the rail's presses (controls/menu toggle their panel here; every other
@@ -10,8 +10,8 @@
  */
 import { createEffect, type Accessor } from 'solid-js';
 import { loginHref } from '@/lib/login-href';
-import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
-import { refusedForSignIn } from '@/lib/story/sign-in-required';
+import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader/reader-chrome';
+import { refusedForSignIn } from '@/lib/story/reader/sign-in-required';
 import { pageDataChanged } from '@/web/page-data-events';
 import { apiFetch } from '../lib/api';
 import { closeOnEscape } from '../lib/close-on-escape';
@@ -102,7 +102,7 @@ export async function toggleReaction(chrome: HTMLElement, name: 'like' | 'follow
   const answer = await sendReaction<{ liked?: boolean; following?: boolean; count: number }>(href, control?.getAttribute(flag) === 'true', name, navigate);
   if (!answer || !control) return;
   const now = (name === 'like' ? answer.liked : answer.following) === true;
-  // Drawn as lib/story/reader-chrome draws the new state: label and tip agree, follow says so in words.
+  // Drawn as lib/story/reader/reader-chrome draws the new state: label and tip agree, follow says so in words.
   const label = name === 'like' ? now ? 'Unlike' : 'Like' : `${now ? 'Unfollow' : 'Follow'} @${control.getAttribute('data-mx-author') ?? ''}`;
   control.setAttribute(flag, String(now));
   control.setAttribute('aria-label', label);
