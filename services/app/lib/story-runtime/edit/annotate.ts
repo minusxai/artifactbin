@@ -400,8 +400,13 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   const paintsInChild = (pin: StoryAnnotationsMessage['pins'][number]): boolean =>
     isTargetRange(pin.range) && pin.range.target.kind === 'iframe' && managedRects.has(pin.id);
 
+  /** Whether the layer may have stamped, highlighted or banded anything since its last sweep. */
+  let dirty = true;
   /** Stamp idempotent state: all annotate-mode outlines, or only the transient view-mode hover. */
   const applyState = () => {
+    // Nothing painted since the last sweep and nothing to paint (edit mode, typing): no query over the page per key.
+    if ((!state || state.mode === 'off') && !dirty) return;
+    dirty = !!state && state.mode !== 'off';
     for (const el of scope.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}], [${ANNOTATION_RANGED_ATTR}]`)) {
       el.removeAttribute(ANNOTATED_ATTR);
       el.removeAttribute(ANNOTATION_OPEN_ATTR);

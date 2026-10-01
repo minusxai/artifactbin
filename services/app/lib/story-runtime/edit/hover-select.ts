@@ -111,11 +111,15 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     (el) => selectBlock(el),
   );
 
-  const clearStamps = () => {
-    for (const el of root.querySelectorAll(`[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}]`)) {
+  /** The elements this layer stamped: a caret move unstamps them, not a query over a page of tables per key. */
+  const stamped = new Set<Element>();
+  const clearStamps = (sweep = false) => {
+    const all = sweep ? [...stamped, ...root.querySelectorAll(`[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}]`)] : stamped;
+    for (const el of all) {
       el.removeAttribute(EDIT_SELECTED_ATTR);
       el.removeAttribute(EDIT_EMBED_SELECTED_ATTR);
     }
+    stamped.clear();
   };
 
   const stampSelection = () => {
@@ -131,6 +135,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     if (!el) return deselect();
     const kind = describeSelection(el, nodes())?.kind;
     el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, blockMode ? 'block' : 'text');
+    stamped.add(el);
     if (!blockMode) return deselect();
     const node = resolveJsxNodeAtPath(nodes(), selectedPath);
     const parent = resolveJsxNodeAtPath(nodes(), selectedPath.split('.').slice(0, -1).join('.'));
@@ -398,7 +403,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
       doc.removeEventListener('pointerout', onPointerOut, true);
       win.removeEventListener('scroll', onScroll);
       win.removeEventListener('resize', onScroll);
-      clearStamps();
+      clearStamps(true);
       setHovered(null);
       setSpotlight([]);
       selectedPath = null;

@@ -47,11 +47,25 @@ export function prepareGraphPatch(before:DocumentGraph,after:DocumentGraph,baseV
   for(const dependency of options.reads??[])read(dependency.key,dependency.facet);
   const activeIds=(graph:DocumentGraph)=>new Set(Object.values(graph.nodes).flatMap(node=>node.selectors.filter(selector=>selector.startsWith('id:')).map(selector=>selector.slice(3))));
   const beforeIds=activeIds(before),claims=[...activeIds(after)].filter(id=>!beforeIds.has(id)).map(id=>({id,version:Object.hasOwn(before.claimedIds,id)?before.claimedIds[id]!:null}));
-  const selections=[...new Set(options.selectors??[])].map(selector=>({selector,keys:selectGraphKeys(before,selector)}));
+  const select=graphKeySelector(before);
+  const selections=[...new Set(options.selectors??[])].map(selector=>({selector,keys:select(selector)}));
   return {baseVersion,claims,reads:[...reads.values()],selections,inserted,removed,updated,touched:[...touched].filter(key=>!!after.nodes[key]),byteDelta:after.bytes-before.bytes,unitDeltas:Object.fromEntries(Object.entries(after.nodes).filter(([key,node])=>before.nodes[key]&&before.nodes[key]!.subtreeUnits!==node.subtreeUnits).map(([key,node])=>[key,node.subtreeUnits-before.nodes[key]!.subtreeUnits]))};
 }
 
 export const selectGraphKeys=(graph:DocumentGraph,selector:string):string[]=>Object.entries(graph.nodes).filter(([,node])=>node.selectors.includes(selector)).map(([key])=>key).sort();
+/** `selectGraphKeys` for many selectors over one unchanging graph: indexed once, so planning a change that touches
+ * every node (a document gaining its ids) is linear, not a scan of the whole graph per changed node. */
+export function graphKeySelector(graph:DocumentGraph):(selector:string)=>string[] {
+ let index:Map<string,string[]>|null=null;
+ return selector=>{
+  if(!index){
+   index=new Map();
+   for(const [key,node] of Object.entries(graph.nodes))for(const fact of new Set(node.selectors)){const keys=index.get(fact);if(keys)keys.push(key);else index.set(fact,[key]);}
+   for(const keys of index.values())keys.sort();
+  }
+  return [...(index.get(selector)??[])];
+ };
+}
 
 /** Reference model. This performs no revalidation or replanning: current values
  * outside the operation's write set are retained exactly, including revisions. */

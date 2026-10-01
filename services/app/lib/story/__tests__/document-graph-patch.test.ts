@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {applyOperationsToNodes} from '../graph/document-operation';
 import {createDocumentGraph,graphNodes,graphSource,graphIntegrity,type DocumentGraph} from '../graph/document-graph';
-import {prepareGraphPatch,applyGraphPatch} from '../graph/document-graph-patch';
+import {prepareGraphPatch,applyGraphPatch,graphKeySelector,selectGraphKeys} from '../graph/document-graph-patch';
 const source='<main id="root"><section id="left"><p id="a">Alpha</p></section><section id="right"><p id="b">Beta</p></section></main>';
 const setup=()=>createDocumentGraph(source,1);
 const plan=(base:DocumentGraph,operations:DocumentOperation[])=>prepareGraphPatch(base,createDocumentGraph(applyOperationsToNodes(graphNodes(base),operations),2),1);
@@ -81,4 +81,15 @@ it('preserves concurrent descendant lengths when a dense child-list edit exceeds
  const result=applyGraphPatch(current,2,dense);
  expect(result).not.toBeNull();expect(graphIntegrity(result!)).toEqual([]);
  expect(graphSource(result!)).toContain('Concurrent much longer Unicode 👩 text');
+});
+
+it('indexes selectors once with the same answer as a scan, for every selector and an absent one', () => {
+  const indexed = graphKeySelector, scan = selectGraphKeys;
+  const graph = createDocumentGraph('<Helmet><Value name="n" type="number" default={1} /></Helmet><main id="m"><p id="a">{$n}</p><p>{$n}</p><table><tbody><tr><td>x</td></tr></tbody></table></main>', 1);
+  const select = indexed(graph);
+  const selectors = [...new Set(Object.values(graph.nodes).flatMap((node) => node.selectors))];
+  expect(selectors.length).toBeGreaterThan(3);
+  for (const selector of [...selectors, 'id:absent']) expect(select(selector)).toEqual(scan(graph, selector));
+  select('use:n').push('mutated');
+  expect(select('use:n')).toEqual(scan(graph, 'use:n'));
 });
