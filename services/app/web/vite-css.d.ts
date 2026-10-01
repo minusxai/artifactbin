@@ -6,3 +6,5 @@ declare module '*.css?url' {
   const url: string;
   export default url;
 }
+// A bare stylesheet import (`import 'x.css'`) is bundled for its side effect and exports nothing.
+declare module '*.css' {}
