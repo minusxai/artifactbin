@@ -2,12 +2,12 @@
  * The document module and kit chunks stay exactly the published compiled code;
  * only the boundary to network doors and page engines changes here.
  */
-import type { Component } from 'solid-js';
 import { createDataflowStore } from '@/lib/story-runtime/store';
-import type { PageEngine } from '@/lib/story-runtime/page-engine';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
 import type { JsxNode } from '@/lib/jsx';
 import { createIslandRuntime, hydrateIsland } from '@/lib/islands/rt';
+import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from '@/lib/islands/module';
+import { ISLANDS_READY_EVENT } from '@/lib/islands/contract';
+import { READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { createSnapshotTransport } from './snapshot-transport';
 import { snapshotStateFor, unranQueriesOf } from './snapshot-current';
 import { OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, sourceDigest, type ArtifactFile } from './file-format';
@@ -20,37 +20,6 @@ declare global {
     __afbinOfflineStore?: ReturnType<typeof createDataflowStore> | null;
     __afbinOfflineDispose?: () => void;
   }
-}
-
-export interface OfflineIslandModule {
-  ISLANDS: readonly (readonly [string, Component, string?])[];
-  /** Single-tree modules (the compiler's one-Solid-tree shape) hand this instead of ISLANDS. */
-  TREE?: Component;
-  FLOW?: CompiledDataflow | null;
-}
-
-/** Delay the engine's import until the store first asks it to prepare. */
-function lazyEngine(load: () => Promise<PageEngine>): PageEngine {
-  let engine: PageEngine | null = null;
-  let loading: Promise<void> | null = null;
-  const pending: Array<Parameters<PageEngine['prepare']>> = [];
-  return {
-    prepare(flow, imports) {
-      if (engine) return engine.prepare(flow, imports);
-      pending.push([flow, imports]);
-      loading ??= load().then((made) => {
-        engine = made;
-        for (const [nextFlow, nextImports] of pending.splice(0)) made.prepare(nextFlow, nextImports);
-      });
-    },
-    ready: (flow, imports) => !!engine && engine.ready(flow, imports),
-    invalidate: (refs) => engine?.invalidate(refs),
-    run: (...args) => engine!.run(...args),
-    page: (...args) => engine!.page(...args),
-    write: (...args) => engine!.write(...args),
-    apply: (...args) => engine?.apply(...args) ?? null,
-    close: () => engine?.close(),
-  };
 }
 
 /** Frozen snapshot values have no server answer for another input. Keep the
@@ -118,14 +87,11 @@ function explainWrites(root: HTMLElement, nodes: JsxNode[]): () => void {
   return () => { for (const stop of stops) stop(); };
 }
 
-export function boot(input: OfflineIslandModule | { TREE: Component; FLOW?: CompiledDataflow | null } | OfflineIslandModule['ISLANDS']): void {
+export function boot(input: IslandModuleInput): void {
   const file = window.__afbinOfflineFile;
   if (!file) throw new Error('offline: document snapshot is unavailable');
-  // Same normalization as the online boot (lib/islands/boot.ts): a one-tree module hands
-  // { TREE, FLOW } instead of ISLANDS, wrapped here as this document's one island.
-  const module: OfflineIslandModule = Array.isArray(input) ? { ISLANDS: input }
-    : 'TREE' in input && input.TREE ? { ISLANDS: [['d-', input.TREE]], TREE: input.TREE, FLOW: input.FLOW }
-      : input as OfflineIslandModule;
+  // The online boot's own normalization (lib/islands/module): a one-tree module is this document's one island.
+  const module = normalizeIslandModule(input);
   const root = document.querySelector<HTMLElement>('[data-mx-inline-story]');
   if (!root) throw new Error('offline: compiled story is unavailable');
   const flow = module.FLOW ?? file.island.dataflow?.flow ?? null;
@@ -167,6 +133,6 @@ export function boot(input: OfflineIslandModule | { TREE: Component; FLOW?: Comp
   window.__afbinOfflineStore = runtime.store;
   window.__afbinOfflineDispose = () => { unfreeze(); stopWriteTips(); for (const stop of disposers) stop(); runtime.dispose(); };
   runtime.store?.start();
-  document.documentElement.setAttribute('data-mx-ready', '');
-  document.dispatchEvent(new Event('mx:ready'));
+  document.documentElement.setAttribute(READER_READY_ATTR, '');
+  document.dispatchEvent(new Event(ISLANDS_READY_EVENT));
 }

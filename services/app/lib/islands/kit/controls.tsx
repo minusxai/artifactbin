@@ -31,7 +31,7 @@ function TextField(p: Props & { multiline?: boolean }) {
   const label = str(p['aria-label']) ?? str(p.label);
   const field = { 'aria-label': label, placeholder: str(p.placeholder), required: p.required === true || undefined, autofocus: p.autoFocus === true || undefined,
     disabled: !active(p), readOnly: !nameOf(p) || undefined };
-  const input = (e: InputEvent) => { const n = nameOf(p); if (n) island.setValue(n, (e.target as HTMLInputElement).value, { debounce: 250 }); };
+  const input = (e: InputEvent) => { const n = nameOf(p); if (n) island.setValue(n, (e.target as HTMLInputElement).value, { debounce: true }); };
   return <Shell authored={p} extra={['type','required','autoFocus','rows','readOnly','name','run','aria-label','multiline']}>
     {/* A textarea's value is its content, as React serves it (no `value` attribute); the live value is the property. */}
     {p.multiline ? <textarea {...field} {...({ 'prop:value': v() } as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)} textContent={untrack(v)} on:input={input} rows={typeof p.rows === 'number' ? p.rows : 3} class={join(fieldClass,'min-w-64 resize-y py-2 leading-normal')} /> :
@@ -46,8 +46,7 @@ function normalize(raw: unknown, table?: TableResult): Option[] {
   return Array.isArray(raw) ? raw.map(x => typeof x === 'object' && x !== null ? { value: String(x.value ?? ''), label: String(x.label ?? x.value ?? '') } : { value: String(x), label: String(x) }) : [];
 }
 function options(p: Props) { const n = nameOf(p,'options'); return normalize(p.options, n ? useIsland().table(n) : undefined); }
-const nullable = (p: Props) => { const name = nameOf(p); const flow = useIsland().store()?.flow; if (!name) return false; if (!flow) return true;
-  const decl = flow.values.find((v) => v.kind === 'scalar' && v.name === name); return (decl?.default ?? null) === null; };
+const nullable = (p: Props) => { const name = nameOf(p); return !!name && useIsland().nullable(name); };
 const choiceValue = (p: Props) => nameOf(p) ? valueOf(p) == null ? null : String(valueOf(p)) : lit(p.value);
 export function Segmented(p: Props) {
   // "All" only when the bound Value's declared default is null (StoryRuntimeApp useScalarControl `nullable`);
@@ -110,13 +109,13 @@ export function BoundNative(p: Props & { tag: 'input' | 'select' | 'textarea'; b
   const island = useIsland(); const { tag,bind,children,...attrs } = p; const name = bind?.value ?? bind?.checked; const value = () => name ? island.value(name) : p.value;
   // Today's NativeBoundControl coerces to the bound Value's declared type: an empty choice is null (how
   // `$region is null` means "all"), a number field a number.
-  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; const type = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === name)?.type;
-    island.setValue(name,bind?.checked ? el.checked : coerceScalarInput(type, el.value),tag === 'select' || bind?.checked ? undefined : { debounce: 250 }); };
+  const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; const type = island.valueType(name);
+    island.setValue(name,bind?.checked ? el.checked : coerceScalarInput(type, el.value),tag === 'select' || bind?.checked ? undefined : { debounce: true }); };
   if (tag === 'select') {
     // Today's NativeBoundControl: a query-bound select lists its rows (first column the value, second the
     // label), after an "All" entry when the bound Value may be null; authored options follow.
     const table = () => bind?.options ? island.table(bind.options) : undefined;
-    const nullable = () => { const n = bind?.value; if (!n) return false; const decl = island.store()?.flow.values.find(v => v.kind === 'scalar' && v.name === n); return (decl?.default ?? null) === null; };
+    const nullable = () => { const n = bind?.value; return !!n && island.nullable(n); };
     const rows = () => { const t = table(); const [valueCol, labelCol] = t?.columns ?? []; return t && valueCol ? t.rows.map(row => { const v = String(row[valueCol.name] ?? ''); return { value: v, label: labelCol ? String(row[labelCol.name] ?? v) : v }; }) : []; };
     let select!: HTMLSelectElement; createEffect(() => { rows(); select.value = String(value() ?? ''); });
     return <select ref={select} {...attrs as JSX.SelectHTMLAttributes<HTMLSelectElement>} onChange={update}>

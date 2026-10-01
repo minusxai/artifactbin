@@ -29,19 +29,16 @@
  */
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
-import type { PageEngine } from '@/lib/story-runtime/page-engine';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
-import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
+import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer, type PublicMxHost } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
+import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './module';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
-
-/** Page behaviour installs a cleanup here; boot owns its lifetime. */
-const PUBLIC_MX_KEY = '__mxPublicApi';
 
 /**
  * One island of the per-document module: its hydration key prefix (`IslandRef.renderId`), its component,
@@ -81,12 +78,6 @@ export interface IslandMorphSeam {
 }
 export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
 
-/** The story element the islands live in (the assembler's `inlineStoryElement`). */
-const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
-/** The document's live identity on `<body>` (lib/story/document's convention, read as anchor-entry reads it). */
-const LIVE_ID_ATTR = 'data-mx-live-id';
-const LIVE_EDIT_ATTR = 'data-mx-live-edit';
-
 const EMPTY_PAGE: IslandPageData = { values: {}, results: null, appPage: false, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
 
 /** The page data island, or the empty page when it is absent or unreadable (the islands still hydrate). */
@@ -107,46 +98,11 @@ const appOrigin = (): string => {
 };
 
 /**
- * The page's own engine (./sqlite-engine), LAZILY: what the store holds from the start is this stand-in,
- * never ready until the engine module has loaded and `identified()` says the page knows whom `$_me` names.
- * What the store asked it to prepare before then is prepared once it has loaded; a module that will not
- * load is final for this document (its queries run on the server, as today's page engine's core is).
- */
-function lazyEngine(load: () => Promise<PageEngine>, identified: () => boolean): PageEngine {
-  let engine: PageEngine | null = null;
-  let loading: Promise<void> | null = null;
-  let closed = false;
-  const asked: Array<Parameters<PageEngine['prepare']>> = [];
-  const loaded = () => engine!;
-  return {
-    prepare(flow, imports) {
-      if (closed) return;
-      if (engine) return engine.prepare(flow, imports);
-      asked.push([flow, imports]);
-      loading ??= load().then((made) => {
-        if (closed) return made.close();
-        engine = made;
-        for (const [f, i] of asked.splice(0)) made.prepare(f, i);
-      }, () => {});
-    },
-    ready: (flow, imports) => !!engine && identified() && engine.ready(flow, imports),
-    invalidate: (refs) => engine?.invalidate(refs),
-    run: (...args) => loaded().run(...args),
-    page: (...args) => loaded().page(...args),
-    write: (...args) => loaded().write(...args),
-    apply: (...args) => engine?.apply(...args) ?? null,
-    close: () => { closed = true; engine?.close(); },
-  };
-}
-
-/**
  * `ISLANDS` alone is accepted for a module whose islands read no data (the compiler's first shape);
  * a module with data passes `{ ISLANDS, FLOW }`.
  */
-export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDataflow | null } | readonly IslandEntry[], win: Window = window): IslandDocument {
-  const module: IslandModule = Array.isArray(input) ? { ISLANDS: input as readonly IslandEntry[] }
-    : 'TREE' in input && input.TREE ? { ISLANDS: [['d-', input.TREE]], TREE: input.TREE, FLOW: input.FLOW }
-      : (input as IslandModule);
+export function boot(input: IslandModuleInput, win: Window = window): IslandDocument {
+  const module = normalizeIslandModule(input);
   const doc = win.document;
   const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR) ?? doc.body;
   // A newer version's module, imported by the morph engine: handed to the running document, never booted twice.
@@ -233,7 +189,7 @@ export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDat
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
-  const uninstallMx = () => (root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void })[PUBLIC_MX_KEY]?.();
+  const uninstallMx = () => (root as PublicMxHost)[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
@@ -259,13 +215,8 @@ export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDat
          */
         mode = 'read';
         openLive(data.results?.since ?? null);
-        if (store && win.parent === win) void import('./mx-host').then(({ publicMxFor }) => {
-          if (disposed || mode !== 'read') return;
-          uninstallMx();
-          const api = publicMxFor(store);
-          const host = root as HTMLElement & { [PUBLIC_MX_KEY]?: () => void };
-          host[PUBLIC_MX_KEY] = () => { if (win.mx === api) delete win.mx; delete host[PUBLIC_MX_KEY]; };
-          win.mx = api;
+        if (store && win.parent === win) void import('./mx-host').then(({ installPublicMx }) => {
+          installPublicMx(root, store, win, () => !disposed && mode === 'read');
         }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
         const script = readPageData(doc).authorScript;
         void restartAuthor(typeof script === 'string' && script ? script : null).catch((error: unknown) => console.error('[islands] author host failed', error));

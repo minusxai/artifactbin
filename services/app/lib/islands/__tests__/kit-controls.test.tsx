@@ -51,7 +51,7 @@ describe('controls', () => {
     const { host } = mount(island, () => <><Input label="Name" value="$name" id="in" /><Switch label="On" checked="$on" id="sw" /></>);
     const input = host.querySelector('input#in, #in input') as HTMLInputElement;
     input.value = 'Ada'; input.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(island.setValue).toHaveBeenCalledWith('name', 'Ada', expect.objectContaining({ debounce: expect.any(Number) }));
+    expect(island.setValue).toHaveBeenCalledWith('name', 'Ada', { debounce: true });
     (host.querySelector('[role="switch"]') as HTMLButtonElement).click();
     expect(island.setValue).toHaveBeenCalledWith('on', true, undefined);
   });
