@@ -172,6 +172,54 @@ const jsxLiteral = (value: string): string => escapeHtml(value).replace(/\{/g, '
 
 const isElement = (node: JsxNode): node is JsxElement => node.type === 'element';
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * Static chunks: plain HTML rendered here, not by Babel and Solid
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A static subtree of plain HTML elements is rendered to its server HTML at compile time and carried by the
+ * SSR module as one string (`$mxH[i]`, a `JSON.parse(<lit>)` constant), inside the same `<rt.NoHydration>`
+ * boundary its JSX would sit in: the hydration tree, the browser module and the served bytes are unchanged,
+ * and the module Babel transforms no longer grows with the document's static markup.
+ *
+ * The bytes are Solid's own for that JSX (babel-plugin-jsx-dom-expressions SSR, `hydratable`, under
+ * `NoHydration`): a static attribute's name lowercased and its value escaped for `"` and `&`, `class` and
+ * `style` whitespace-trimmed, a boolean attribute bare; a child run of two or more boxed in `<!--$-->…<!--/-->`;
+ * text escaped for `&` and `<`, a JSX text child's whitespace runs collapsed. Anything outside those rules —
+ * a component, a namespaced or camelCased attribute name, a fragment — keeps its JSX (`static-html.test.ts`
+ * holds the two equal over the corpora).
+ */
+const SOLID_BOOLEAN = new Set(['allowfullscreen', 'async', 'alpha', 'autofocus', 'autoplay', 'checked', 'controls', 'default', 'disabled', 'formnovalidate', 'hidden', 'indeterminate', 'inert', 'ismap', 'loop', 'multiple', 'muted', 'nomodule', 'novalidate', 'open', 'playsinline', 'readonly', 'required', 'reversed', 'seamless', 'selected', 'adauctionheaders', 'browsingtopics', 'credentialless', 'defaultchecked', 'defaultmuted', 'defaultselected', 'defer', 'disablepictureinpicture', 'disableremoteplayback', 'preservespitch', 'shadowrootclonable', 'shadowrootcustomelementregistry', 'shadowrootdelegatesfocus', 'shadowrootserializable', 'sharedstoragewritable']);
+/** Tags whose Solid server template differs from a plain element's (or that the generator never closes as Solid does). */
+const SOLID_SPECIAL_TAGS = new Set(['head', 'param', 'keygen', 'menuitem']);
+/** Attribute names Solid does not write as a plain attribute. */
+const SOLID_SPECIAL_ATTRS = new Set(['children', 'ref']);
+const BOOLEAN_JSX = /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i;
+const solidText = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const solidAttrValue = (value: string): string => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+/** babel-plugin-jsx-dom-expressions `trimWhitespace`. */
+const solidTrim = (text: string): string => {
+  let out = text.replace(/\r/g, '');
+  if (/\n/.test(out)) out = out.split('\n').map((line, i) => (i ? line.replace(/^\s*/g, '') : line)).filter((line) => !/^\s*$/.test(line)).join(' ');
+  return out.replace(/\s+/g, ' ');
+};
+/** One element's attributes as Solid's server template writes them; null when one is outside the plain rules. */
+function solidAttrs(attrs: Attr[]): string | null {
+  let out = '';
+  for (const [name, value] of attrs) {
+    safeAttr(name);
+    if (/[A-Z:]/.test(name) || SOLID_SPECIAL_ATTRS.has(name)) return null;
+    if (SOLID_BOOLEAN.has(name) || (value === '' && BOOLEAN_JSX.test(name))) { out += ` ${name}`; continue; }
+    let text = value;
+    if (name === 'style' || name === 'class') {
+      text = solidTrim(text);
+      if (name === 'style') text = text.replace(/; /g, ';').replace(/: /g, ':');
+    }
+    out += text === '' ? ` ${name}` : ` ${name}="${solidAttrValue(text)}"`;
+  }
+  return out;
+}
+
 /** Does this node itself need the browser? */
 function selfDynamic(node: JsxNode): boolean {
   if (node.type === 'text') return false;
@@ -231,6 +279,8 @@ export interface Generated extends GeneratedSources {
   browserIslands: string;
   moduleData: string[];
   staticTexts: Record<string, string>;
+  /** The skeleton's pre-rendered static chunks: `$mxH[i]` in the skeleton is `staticHtml[i]` (bundle.server `ssrModuleCode`). */
+  staticHtml: string[];
   islandRefs: IslandRef[];
   kit: { skeleton: string[]; islands: string[] };
   reactStatic: string[];
@@ -240,7 +290,11 @@ export interface Generated extends GeneratedSources {
 }
 
 /** One version's facts the generator reads (CompileInput without the build). */
-type GenerateInput = Omit<CompileInput, 'build'> & { glyphCatalogUrl?: string };
+type GenerateInput = Omit<CompileInput, 'build'> & {
+  glyphCatalogUrl?: string;
+  /** Render static plain-HTML subtrees here (the default); `false` keeps every one as JSX (the parity tests' reference). */
+  staticHtml?: boolean;
+};
 
 export function generate(input: GenerateInput): Generated {
   const elementAttrs = reactAttrs;
@@ -251,6 +305,7 @@ export function generate(input: GenerateInput): Generated {
   const unported = new Set<string>();
   const kitUsed = { skeleton: new Set<string>(), islands: new Set<string>() };
   const staticTexts: Record<string, string> = {};
+  const staticHtml: string[] = [];
   const staticText = (value: string, noHydration = false): string => {
     if (value.length <= 1024) return jsxLiteral(value);
     const marker = `${noHydration ? 'MXSTATICTEXT' : 'MXSTATIC'}${contentSha(value)}${Object.keys(staticTexts).length}END`;
@@ -345,11 +400,87 @@ export function generate(input: GenerateInput): Generated {
     // server markup only; the browser emits an empty boundary at the same position.
     // A live control is emitted as a sibling of these boundaries, never inside one.
     // A branch absent from SSR must carry its static descendants in the browser to appear later.
-    if (!ctx.preview && !ctx.row && !ctx.branch && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag]))
-      return mode === 'browser' ? '<rt.NoHydration />' : `<rt.NoHydration>${emitElement(node, path, mode, ctx)}</rt.NoHydration>`;
+    if (!ctx.preview && !ctx.row && !ctx.branch && !needsBrowser(node) && !(ctx.liveKit && !!KIT[node.tag])) {
+      if (mode === 'browser') return '<rt.NoHydration />';
+      const html = input.staticHtml === false ? null : htmlOf(node, path, ctx);
+      // An index, never the content: a draft that edits static text leaves the module Babel sees unchanged.
+      if (html !== null) return `<rt.NoHydration>{{ t: $mxH[${staticHtml.push(html) - 1}] }}</rt.NoHydration>`;
+      return `<rt.NoHydration>${emitElement(node, path, mode, ctx)}</rt.NoHydration>`;
+    }
     const live = selfDynamic(node) || !!ctx.liveKit && !!KIT[node.tag];
     const element = emitElement(node, path, mode, { ...ctx, liveKit: ctx.liveKit || !!KIT[node.tag] && live });
     return element;
+  }
+
+  /**
+   * What `emit` would render for a child of a static plain element, as Solid renders it under `NoHydration`:
+   * `{ html, counts }` (`counts`: it is a JSX child, so it takes part in the child-run boxing), or null when
+   * it keeps its JSX. Mirrors `emit` for the static branch only.
+   */
+  function childHtmlOf(node: JsxNode, path: string, ctx: Ctx): { html: string; counts: boolean } | null {
+    if (node.type === 'text') {
+      if (!node.value) return { html: '', counts: false };
+      // `{lit}` and the long-text marker reach Solid verbatim; a short JSX text has its whitespace runs collapsed
+      // (jsxLiteral encodes U+2028/U+2029 as entities, so those survive the collapse).
+      const verbatim = node.value.length > 1024 || /\r|\n/.test(node.value);
+      return { html: solidText(verbatim ? node.value : node.value.replace(/[^\S\u2028\u2029]+/g, ' ')), counts: true };
+    }
+    if (node.type === 'expression') {
+      if (!node.value.static) return null;
+      const v = node.value.json;
+      return typeof v === 'string' || typeof v === 'number' ? { html: solidText(String(v)), counts: true } : { html: '', counts: false };
+    }
+    if (node.control) return null;
+    if (INERT.has(node.tag)) return { html: '', counts: false };
+    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return { html: '', counts: false };
+    if (needsBrowser(node)) return null;
+    const html = htmlOf(node, path, ctx);
+    return html === null ? null : { html, counts: true };
+  }
+
+  /** A static plain element's server HTML (see SOLID_BOOLEAN), or null when it keeps its JSX. Memoized: a JSX fallback re-asks its children. */
+  const htmlMemo = new WeakMap<JsxElement, string | null>();
+  function htmlOf(node: JsxElement, path: string, ctx: Ctx): string | null {
+    if (htmlMemo.has(node)) return htmlMemo.get(node)!;
+    const html = renderHtml(node, path, ctx);
+    htmlMemo.set(node, html);
+    return html;
+  }
+  function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
+    if (node.isComponent || node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    const lower = node.tag.toLowerCase();
+    if (SOLID_SPECIAL_TAGS.has(lower)) return null;
+    const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
+    if (node.attributes.some((a) => !a.value.static)) return null;
+    const source = lower === 'img' ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
+    if (source?.value.static && typeof source.value.json === 'string' && (refName(source.value.json) || parseRowRef(source.value.json) || carriesRef(source.value.json))) return null;
+    const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
+    if (boundTable && node.attributes.some((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json))) return null;
+    let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, {});
+    const patch = resolveRefProps(node, props, refData);
+    if (patch) props = { ...props, ...patch };
+    const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
+    const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
+    const attrs = elementAttrs(tag, props);
+    if (lower === 'option' && ctx.selectValue !== undefined) {
+      const value = props.value ?? node.children.map((child) => child.type === 'text' ? child.value : '').join('');
+      const i = attrs.findIndex(([name]) => name === 'selected');
+      if (i >= 0) attrs.splice(i, 1);
+      if (String(value) === ctx.selectValue) attrs.push(['selected', '']);
+    }
+    const attrHtml = solidAttrs(attrs);
+    if (attrHtml === null) return null;
+    const open = `<${tag}${attrHtml}>`;
+    if (VOID.test(lower)) return open;
+    if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return `${open}${solidText(String(props.defaultValue ?? props.value))}</${tag}>`;
+    const parts: string[] = [];
+    for (let i = 0; i < node.children.length; i++) {
+      const child = childHtmlOf(node.children[i]!, `${path}.${i}`, inner);
+      if (child === null) return null;
+      if (child.counts) parts.push(child.html);
+    }
+    const body = parts.length > 1 ? parts.map((part) => `<!--$-->${part}<!--/-->`).join('') : parts.join('');
+    return `${open}${body}</${tag}>`;
   }
 
   function emitElement(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
@@ -665,6 +796,7 @@ export function generate(input: GenerateInput): Generated {
     partial: [...partial].sort(),
     behaviors: deck ? [DECK_BEHAVIOR] : [],
     staticTexts,
+    staticHtml,
   };
 }
 
