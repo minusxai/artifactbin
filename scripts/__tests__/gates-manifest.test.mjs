@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { CI_GATE_SHARDS, GATE_RUNNERS, GATE_SPECS, ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
@@ -21,7 +21,7 @@ const onDisk = readdirSync(SCRIPTS).filter((f) => f.startsWith('gate-') && f.end
   .filter((name) => !GATE_RUNNERS.includes(name)).sort();
 const source = (name) => readFileSync(path.join(SCRIPTS, `gate-${name}.mjs`), 'utf8');
 const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode|becomeAccountOwner/;
-const ALLOWED_FIELDS = new Set(['name', 'needsMail', 'serialGroup', 'timeoutMs', 'browsers']);
+const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'serialGroup', 'timeoutMs', 'browsers']);
 
 describe('the manifest and the disk are one set', () => {
   it('1. every gate file has a row and every row has a file', () => {
@@ -106,7 +106,7 @@ describe('the rows tell the truth about their sources', () => {
 });
 
 /**
- * SHARDING reads the same rows: `timeoutMs` is the weight CI's shards are
+ * SHARDING reads the same rows: measured `seconds` is the weight CI's shards are
  * balanced on, so the split lives or dies by the measurements above.
  */
 describe('the shards are cut from those rows', () => {
@@ -164,15 +164,22 @@ describe('the shards are cut from those rows', () => {
  });
 
 it('balances the extra cross-browser setup without extending any test timeout', () => {
-  expect(shardWeight('annotations')).toBe(specFor('annotations').timeoutMs);
-  expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').timeoutMs + 270_000);
+  expect(shardWeight('annotations')).toBe(specFor('annotations').seconds);
+  expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').seconds + CROSS_BROWSER_SETUP_SECONDS);
+});
+
+it('weighs every gate by a measured duration that fits inside its own timeout', () => {
+  for (const spec of GATE_SPECS) {
+    expect(Number.isInteger(spec.seconds) && spec.seconds > 0, spec.name).toBe(true);
+    expect(spec.seconds * 1000, spec.name).toBeLessThan(spec.timeoutMs);
+  }
 });
 
 
 it('prints the same browser plan used by the CI shards without starting servers', () => {
   const set = onDisk;
   for (let index = 1; index <= CI_GATE_SHARDS; index++) {
-    const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight, { isolated: ISOLATED_GATES });
+    const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight);
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
     const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
