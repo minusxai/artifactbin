@@ -605,13 +605,14 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     </section>;
   };
   const formatBackend = { mentionsUnavailable: backend.unavailable('mentions'), members: (query: string, opts: { signal: AbortSignal }) => backend.members(query, opts).then((r) => (r ? { people: r.people ?? [] } : null)) };
-  const formatControls = () => {
-    const s = selection();
-    if (!s || mode() !== 'design' || preview() || contentView() !== null) return null;
-    return <StoryFormatToolbar layout="panel" artifactId={art.id} selection={s} onApply={inPlace.applyFormat} onApplyLink={inPlace.applyLink} onApplyInline={inPlace.applyInline}
-      onAutoHeight={() => commitStructural(editBlock(editorSource.current(), { kind: 'auto-height', path: s.path }))}
-      onSelect={inPlace.select} onDelete={deleteSelected} onComment={props.onComment} image={imageControls()} backend={formatBackend} />;
-  };
+  // The toolbar is built once per selection session and follows the selection reactively: every caret move while
+  // typing is a new selection, and rebuilding the toolbar for each one cost a keystroke its frame.
+  const formatShown = createMemo(() => !!selection() && mode() === 'design' && !preview() && contentView() === null);
+  const formatControls = () => <Show when={formatShown()}>
+    <StoryFormatToolbar layout="panel" artifactId={art.id} selection={selection()} onApply={inPlace.applyFormat} onApplyLink={inPlace.applyLink} onApplyInline={inPlace.applyInline}
+      onAutoHeight={() => { const s = selection(); if (s) commitStructural(editBlock(editorSource.current(), { kind: 'auto-height', path: s.path })); }}
+      onSelect={inPlace.select} onDelete={deleteSelected} onComment={props.onComment} image={imageControls()} backend={formatBackend} />
+  </Show>;
   const titleEditor = () => (
     <input aria-label="Title" value={shownTitle()} placeholder="untitled"
       onInput={(e) => { setTitle(e.currentTarget.value); queue({ title: e.currentTarget.value }); }}
@@ -636,7 +637,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     </section>
     <hr class="my-3 border-edge" />
     {formatControls()}
-    <Show when={inspectorBody()} fallback={<Show when={!formatControls()}><p class="px-1 py-2 font-sans text-xs text-muted">{SELECTION_HINT}</p></Show>}>
+    <Show when={inspectorBody()} fallback={<Show when={!formatShown()}><p class="px-1 py-2 font-sans text-xs text-muted">{SELECTION_HINT}</p></Show>}>
       {(body) => <div class="mt-3">{body()}</div>}
     </Show>
   </>;

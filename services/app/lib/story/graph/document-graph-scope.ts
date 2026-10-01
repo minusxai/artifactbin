@@ -4,7 +4,7 @@ import type {JsxNode} from '../../jsx/types';
 import {serializeJsx} from '../../jsx/serialize';
 import {decodeDocumentNodes} from '../document/document-node-codec';
 import {GRAPH_ROOT,graphAncestors,graphNodes,type DocumentGraph,type GraphAstNode} from './document-graph';
-import {prepareGraphPatch,selectGraphKeys,type GraphFacet} from './document-graph-patch';
+import {prepareGraphPatch,graphKeySelector,type GraphFacet} from './document-graph-patch';
 
 export interface GraphValidationScope {
  source:string;
@@ -44,7 +44,8 @@ export function graphValidationScope(before:DocumentGraph,after:DocumentGraph):G
   if(full.has(key))return;
   full.add(key);read(key,'subtreeVersion');pending.push({key,whole:true});
  };
- const select=(selector:string):string[]=>{selectors.add(selector);return selectGraphKeys(after,selector);};
+ const keysFor=graphKeySelector(after);
+ const select=(selector:string):string[]=>{selectors.add(selector);return keysFor(selector);};
  const reference=(name:string)=>{for(const key of select(`declaration:${name}`))include(key);};
  const reversed=new Set<string>();
  const reverse=(name:string)=>{
