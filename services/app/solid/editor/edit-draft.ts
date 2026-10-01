@@ -17,21 +17,18 @@ export interface EditDraftState {
   colorMode(): 'light' | 'dark';
 }
 
-/** Overrides for one draft: a version preview sends that version's own theme and mode. */
-export type EditDraftOverrides = Partial<Pick<EditDraft, 'theme' | 'colorMode' | 'preview'>>;
-
 /** Every literal web URL in a stored document was imported by the write that stored it. */
 const HELD_ASSETS = isWebUrl;
 
 export function createEditDraftSender(runtimeRef: DocumentRuntimeRef, state: EditDraftState) {
-  return (source: string, over: EditDraftOverrides = {}): void => {
+  /** `preview`: a saved version shown with editing paused (version history), in the page's current design. */
+  return (source: string, options: { preview?: true } = {}): void => {
     const parts = storyUpdateParts(source, HELD_ASSETS);
     if (!parts) return;
     const draft: EditDraft = {
       type: STORY_DOCUMENT_MESSAGE, nodes: parts.nodes, source, editId: state.editId(),
-      theme: over.theme !== undefined ? over.theme : state.theme(),
-      colorMode: over.colorMode ?? state.colorMode(),
-      ...(over.preview ? { preview: true } : {}),
+      theme: state.theme(), colorMode: state.colorMode(),
+      ...(options.preview ? { preview: true } : {}),
     };
     sendDocument({ runtimeRef }, draft);
   };

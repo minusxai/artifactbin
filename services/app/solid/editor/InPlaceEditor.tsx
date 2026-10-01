@@ -563,11 +563,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     const snapshot = await history.fetchVersion(v);
     if (!snapshot) return;
     // The version first, then editing pauses: the controller draws it instead of returning to the saved head.
-    showInDocument(snapshot.markup ?? '', {
-      preview: true,
-      ...(snapshot.meta.theme !== undefined ? { theme: snapshot.meta.theme as StoryThemeName | null } : {}),
-      ...(snapshot.meta.colorMode ? { colorMode: snapshot.meta.colorMode } : {}),
-    });
+    // The version's content in the page's current design: the page around it keeps its theme and mode.
+    showInDocument(snapshot.markup ?? '', { preview: true });
     setPreview(snapshot);
     inPlace.select(null);
   };
