@@ -149,10 +149,20 @@ export function createFrameEditSession({
   const views: EditViews = { all: new Set(), last: null };
   let compiledMount: CompiledEditMount | null = null;
   let pendingBookmark: EditorBookmark | undefined;
+  /*
+   * The Undo/Redo target, held for the redraw the history step always causes. The painted draft may still
+   * hold the same block (same id) in its old shape — a heading the undo turns back into its literal `### `
+   * paragraph — so restoring there alone is not enough: the redraw would capture that stale caret and put
+   * it back. Typing first lets the person's own caret win.
+   */
+  let historyBookmark: EditorBookmark | undefined;
+  /** Where that target landed in the stale draft: moving the caret from there afterwards is the person's own choice. */
+  let historyLanded: string | undefined;
   const restorePending = () => {
     if (pendingBookmark)
       for (const view of views.all)
         if (restoreBookmark(view, pendingBookmark)) {
+          if (historyBookmark) historyLanded = JSON.stringify(captureBookmark(view.state));
           pendingBookmark = undefined;
           break;
         }
@@ -303,7 +313,10 @@ export function createFrameEditSession({
       const focused = [...views.all].find((view) => view.hasFocus()) ?? (toolbarFocus ? views.last : null);
       // An explicit Undo/Redo target may name blocks that do not exist in the
       // currently painted draft. Keep it until the replacement DOM is mounted.
-      if (focused && !pendingBookmark) pendingBookmark = captureBookmark(focused.state);
+      const caret = focused ? captureBookmark(focused.state) : undefined;
+      if (historyBookmark && (historyLanded === undefined || historyLanded === JSON.stringify(caret))) pendingBookmark = historyBookmark;
+      else if (caret && !pendingBookmark) pendingBookmark = caret;
+      historyBookmark = historyLanded = undefined;
       compiledMount?.dispose(); compiledMount = null;
       views.all.clear();
     },
@@ -313,6 +326,7 @@ export function createFrameEditSession({
       compiledMount?.dispose();
       compiledMount = mountCompiled(root, nodes, {
         onFlow(path, expected, replacement, group, change) {
+          historyBookmark = historyLanded = undefined;
           post({ type: STORY_FLOW_EDIT_MESSAGE, path, expected, replacement, group, selection: change });
         },
         onLayout(rects) { post({ type: STORY_LAYOUT_EDIT_MESSAGE, rects }); },
@@ -386,7 +400,7 @@ export function createFrameEditSession({
           break;
         case STORY_COMMIT_MESSAGE:
           if (message.restore) {
-            pendingBookmark = message.restore;
+            pendingBookmark = historyBookmark = message.restore;
             win.requestAnimationFrame(restorePending);
             break;
           }
