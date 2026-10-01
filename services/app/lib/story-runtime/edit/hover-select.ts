@@ -263,7 +263,11 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     views.last = viewHolding(event.target as Node) ?? views.last;
   };
   const onSelectionChange = () => {
-    const target = win.getSelection()?.anchorNode?.parentElement;
+    // A selection anchored on an ELEMENT (a block's whole contents, as select-all or a script selects it) is inside
+    // that element; only a text anchor stands for its parent. Taking the parent of an element anchor named the
+    // region's container, never the block, so the toolbar lost the block it was formatting.
+    const anchor = win.getSelection()?.anchorNode;
+    const target = anchor?.nodeType === 1 ? anchor as Element : anchor?.parentElement;
     if (!target?.closest('.ProseMirror') || !root.contains(target)) return;
     views.last = viewHolding(target) ?? views.last;
     const el = target.closest(`[${AST_PATH_ATTR}]`);

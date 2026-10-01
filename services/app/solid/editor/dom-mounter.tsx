@@ -68,6 +68,31 @@ function regionEnd(siblings: JsxNode[], start: number): number {
   return index;
 }
 
+const isBreak = (node: JsxNode | undefined): boolean => node?.type === 'text' && !node.value.trim();
+/**
+ * The editor's blocks, laid out with the line breaks the region had between and after its blocks. Breaks are child
+ * nodes, and every path after the region counts them: written compactly, the first pause would move every later
+ * block's path, so the draft no longer matched the page and went to the compiler for a full redraw. A block the
+ * editor added takes the region's usual break.
+ */
+export function withRegionBreaks(previous: JsxNode[], replacement: JsxNode[]): JsxNode[] {
+  if (!previous.some(isBreak)) return replacement;
+  // A region starts at a block; the breaks after block i are gaps[i], the last block's are the region's trailing ones.
+  const gaps: JsxNode[][] = [];
+  for (const node of previous) {
+    if (!isBreak(node)) gaps.push([]);
+    else gaps.at(-1)?.push(node);
+  }
+  const trailing = gaps.pop() ?? [];
+  const usual = gaps.find((gap) => gap.length) ?? trailing;
+  const out: JsxNode[] = [];
+  replacement.forEach((node, index) => {
+    out.push(node);
+    if (index < replacement.length - 1) out.push(...(gaps[index] ?? usual));
+  });
+  return [...out, ...trailing];
+}
+
 /** The prose runs the mounter gives one editor each, by the same walk as `visit` (without the DOM). */
 export function proseRegions(nodes: JsxNode[]): ProseRegion[] {
   const regions: ProseRegion[] = [];
@@ -284,7 +309,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       const disposeSolid = render(() => <FlowEditor nodes={current()} path={path}
         onError={callbacks.onError} onBusy={callbacks.onBusy}
         onView={(view) => { if (view) liveView = view; callbacks.onView?.(view); }}
-        onChange={(replacement, group, selection) => {
+        onChange={(blocks, group, selection) => {
+          const replacement = withRegionBreaks(previous, blocks);
           callbacks.onFlow(path, serializeJsx(previous), serializeJsx(replacement), group, selection);
           previous = replacement;
         }} />, mount);
