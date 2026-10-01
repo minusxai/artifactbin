@@ -95,11 +95,14 @@ it('Ctrl-Z after typing restores the source, draws it, and queues it once', asyn
 });
 
 it('Ctrl-Z inside a text field is left to the field', async () => {
-  const { emit, view } = mountEditor();
+  const { emit, sent, view } = mountEditor();
   emit({ type: STORY_TEXT_EDIT_MESSAGE, path: '0', innerHtml: 'Hello world' });
   queued.length = 0;
+  sent.length = 0;
   fireEvent.keyDown(view.getByRole('textbox', { name: 'Title' }), { key: 'z', ctrlKey: true });
-  await Promise.resolve();
+  // A document undo asks the document to commit its typing first, synchronously; the field's own undo does not.
+  expect(sent.filter((m) => m.type === STORY_COMMIT_MESSAGE)).toEqual([]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
   expect(queued).toEqual([]);
   expect(view.getByRole('button', { name: 'Undo' })).not.toBeDisabled();
 });
