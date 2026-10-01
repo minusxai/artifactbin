@@ -1,5 +1,5 @@
 /** Select document versions by recorded build metadata, then ask the running app to recompile them. */
-import { READER_FALLBACK_HEADER, READER_MODE_HEADER } from './contract';
+import { READER_MODE_HEADER } from './contract';
 
 export interface BackfillDb { query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> }
 export type BackfillColumn = 'compiler_version' | 'island_build' | 'css_version' | 'ssr_bundle' | 'page_format' | 'handover_contract';
@@ -23,7 +23,6 @@ export interface BackfillReport {
   done: number;
   warmed: number;
   compiled: number;
-  fallbacks: Record<string, number>;
   errors: Array<BackfillTarget & { error: string }>;
   build: string | null;
   suffix: string | null;
@@ -71,7 +70,7 @@ export function matchesBackfillFilters(row: StoredState | undefined, filters: re
     return actual === null || Number(actual) < Number(value);
   });
 }
-type Outcome = { kind: 'compiled' } | { kind: 'fallback'; reason: string } | { kind: 'error'; error: string };
+type Outcome = { kind: 'compiled' } | { kind: 'error'; error: string };
 async function warm(options: BackfillOptions, target: BackfillTarget, recompile: boolean): Promise<Outcome> {
   const url = new URL(`/a/${encodeURIComponent(target.id)}/raw`, options.base);
   if (!target.head) url.searchParams.set('version', String(target.version));
@@ -83,8 +82,6 @@ async function warm(options: BackfillOptions, target: BackfillTarget, recompile:
     });
     await response.arrayBuffer();
     if (response.status !== 200) return { kind: 'error', error: `HTTP ${response.status}` };
-    const reason = response.headers.get(READER_FALLBACK_HEADER);
-    if (reason) return { kind: 'fallback', reason };
     return response.headers.get(READER_MODE_HEADER) === 'compiled' ? { kind: 'compiled' } : { kind: 'error', error: 'unexpected reader mode' };
   } catch (error) { return { kind: 'error', error: error instanceof Error ? error.message : String(error) }; }
 }
@@ -93,7 +90,7 @@ export async function backfillCompiledPages(options: BackfillOptions): Promise<B
   const before = await storedState(options.db);
   const filters = options.filters ?? [];
   const selected = all.filter((target) => matchesBackfillFilters(before.get(keyOf(target.id, slotOf(target))), filters));
-  const report: BackfillReport = { considered: selected.length, done: all.length - selected.length, warmed: 0, compiled: 0, fallbacks: {}, errors: [], build: null, suffix: null, census: null };
+  const report: BackfillReport = { considered: selected.length, done: all.length - selected.length, warmed: 0, compiled: 0, errors: [], build: null, suffix: null, census: null };
   options.log?.(`${selected.length} version(s) selected; ${report.done} skipped`);
   if (options.dryRun) return report;
   let next = 0;
@@ -103,7 +100,6 @@ export async function backfillCompiledPages(options: BackfillOptions): Promise<B
       const outcome = await warm(options, target, !!before.get(keyOf(target.id, slotOf(target)))?.compiled);
       report.warmed++;
       if (outcome.kind === 'compiled') report.compiled++;
-      else if (outcome.kind === 'fallback') report.fallbacks[outcome.reason] = (report.fallbacks[outcome.reason] ?? 0) + 1;
       else report.errors.push({ ...target, error: outcome.error });
       if (report.warmed % 100 === 0) options.log?.(`${report.warmed} warmed (${report.compiled} compiled, ${report.errors.length} errors)`);
     }

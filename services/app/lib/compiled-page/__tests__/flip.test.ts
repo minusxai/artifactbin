@@ -6,14 +6,12 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { compiledReaderForView } from '../reader-mode';
 
 const APP = path.resolve(process.cwd());
 const ROOT = path.resolve(APP, '../..');
 
 describe('the default', () => {
   it('serves compiled pages without a deployment switch or reader query override', () => {
-    expect(compiledReaderForView()).toBe(true);
     expect(readFileSync(path.join(ROOT, '.env.example'), 'utf8')).not.toContain('FLAG__COMPILED_READER');
     expect(readFileSync(path.join(APP, 'lib/config.ts'), 'utf8')).not.toContain('FLAG__COMPILED_READER');
   });
@@ -23,6 +21,7 @@ describe('what the compiled reader replaced is deleted', () => {
   const gone = [
     'lib/story/document.ts', 'lib/story/inline-story-html.ts', 'lib/story-runtime/entry.tsx', 'lib/story-runtime/InlineStoryRuntime.tsx',
     'lib/story-runtime/live-entry.ts', 'lib/story-runtime/inline-sheet.ts', 'lib/story/runtime-asset.ts', 'scripts/build-story-runtime.mjs',
+    'lib/compiled-page/reader-mode.ts',
   ];
   for (const file of gone) it(`${file} no longer exists`, () => expect(existsSync(path.join(APP, file))).toBe(false));
   it('the story runtime build is gone from the package scripts and the ignore list; the island build took its place', () => {
