@@ -16,6 +16,7 @@ import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-
 import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import { openLiveStream } from '@/lib/live-stream';
 import { BackendRequestError } from './errors';
 import type {
   ArtifactBackend,
@@ -162,17 +163,23 @@ export function createHttpBackend(id: string): ArtifactBackend {
       return answer(await artifactRequests(id).revert(input));
     },
     live(handlers, options) {
-      const source = new EventSource(`/a/${id}/events${options?.since ? `?since=${encodeURIComponent(options.since)}` : ''}`);
-      source.onmessage = (event) => {
-        let ping: ArtifactVersionPing;
-        try { ping = JSON.parse(event.data) as ArtifactVersionPing; } catch { return; }
-        handlers.onPing(ping);
-      };
-      source.addEventListener(STORY_DATA_EVENT, (event: MessageEvent) => {
-        try { handlers.onData(JSON.parse(event.data) as ArtifactDataEvent); } catch { /* a malformed frame is a dropped wakeup, nothing more */ }
+      // Reconnecting, with a heartbeat watchdog and a catch-up on wake (lib/live-stream).
+      const stream = openLiveStream({
+        url: `/a/${id}/events${options?.since ? `?since=${encodeURIComponent(options.since)}` : ''}`,
+        onMessage: (data) => {
+          let ping: ArtifactVersionPing;
+          try { ping = JSON.parse(data) as ArtifactVersionPing; } catch { return; }
+          handlers.onPing(ping);
+        },
+        events: {
+          [STORY_DATA_EVENT]: (data) => {
+            try { handlers.onData(JSON.parse(data) as ArtifactDataEvent); } catch { /* a malformed frame is a dropped wakeup, nothing more */ }
+          },
+          [STORY_ANNOTATIONS_EVENT]: () => handlers.onAnnotations(),
+        },
+        onWake: handlers.onWake,
       });
-      source.addEventListener(STORY_ANNOTATIONS_EVENT, () => handlers.onAnnotations());
-      return () => source.close();
+      return () => stream.close();
     },
     async liveFrame() {
       const r = await fetch(`/a/${id}/events/frame`, { credentials: 'same-origin' });

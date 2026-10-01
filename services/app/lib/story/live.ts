@@ -111,6 +111,8 @@ type LiveHandler = (editId: string) => void;
 
 interface ChannelSub {
   handlers: Set<LiveHandler>;
+  /** Each subscriber's "your subscription died" callback, keyed by its handler. */
+  lost: Map<LiveHandler, () => void>;
   /** The adapter-level LISTEN teardown, resolved once. */
   unlisten: () => Promise<void>;
 }
@@ -150,41 +152,75 @@ export const channelForAnnotations = (artifactId: string) => `annotations_${arti
 /**
  * Subscribe to an artifact's wakeups. The first subscriber opens the DB
  * LISTEN; the last to leave closes it. Returns an async unsubscribe.
+ * `onLost` fires when the LISTEN connection is gone: the subscription will
+ * never hear again, so the caller ends its stream (its client reconnects and
+ * catches up) — see `subscribeChannel`.
  */
-export function subscribeToArtifact(artifactId: string, handler: LiveHandler): Promise<() => Promise<void>> {
-  return subscribeChannel(channelFor(artifactId), handler);
+export function subscribeToArtifact(artifactId: string, handler: LiveHandler, onLost?: () => void): Promise<() => Promise<void>> {
+  return subscribeChannel(channelFor(artifactId), handler, onLost);
 }
 
 /** Same machinery, the annotations channel — owner connections only (the route decides that). */
-export function subscribeToAnnotations(artifactId: string, handler: LiveHandler): Promise<() => Promise<void>> {
-  return subscribeChannel(channelForAnnotations(artifactId), handler);
+export function subscribeToAnnotations(artifactId: string, handler: LiveHandler, onLost?: () => void): Promise<() => Promise<void>> {
+  return subscribeChannel(channelForAnnotations(artifactId), handler, onLost);
 }
 
-export async function subscribeChannel(channel: string, handler: LiveHandler): Promise<() => Promise<void>> {
+/**
+ * One shared LISTEN per channel, fanned out in memory.
+ *
+ * WHEN THE LISTEN CONNECTION IS LOST the channel's entry is removed AT ONCE
+ * and every subscriber is told: otherwise the stale entry would stay, a new
+ * subscriber (a reload while another tab holds the document) would join it
+ * and never issue a new LISTEN, and every stream on it would keep sending
+ * keepalives while no wakeup could ever arrive.
+ */
+export async function subscribeChannel(channel: string, handler: LiveHandler, onLost?: () => void): Promise<() => Promise<void>> {
   let sub = channels.get(channel);
   if (!sub) {
     // Only a NEW channel can push us over: extra watchers of a document we
     // already follow are just entries in an in-memory Set.
     if (channels.size >= MAX_LIVE_CHANNELS) throw new TooManyLiveChannels();
     const handlers = new Set<LiveHandler>();
-    const unlisten = await wakeups().subscribe(channel, (payload) => {
-      // Snapshot: a handler may unsubscribe while we iterate.
-      for (const h of [...handlers]) {
-        try { h(payload); } catch { /* one dead reader must not break the others */ }
-      }
-    });
-    sub = { handlers, unlisten };
-    channels.set(channel, sub);
+    const lost = new Map<LiveHandler, () => void>();
+    let created: ChannelSub | undefined;
+    const unlisten = await wakeups().subscribe(
+      channel,
+      (payload) => {
+        // Snapshot: a handler may unsubscribe while we iterate.
+        for (const h of [...handlers]) {
+          try { h(payload); } catch { /* one dead reader must not break the others */ }
+        }
+      },
+      () => {
+        if (created && channels.get(channel) === created) channels.delete(channel);
+        const told = [...lost.values()];
+        handlers.clear();
+        lost.clear();
+        for (const tell of told) {
+          try { tell(); } catch { /* one dead reader must not break the others */ }
+        }
+      },
+    );
+    // Another subscriber may have created the entry while this one awaited its LISTEN.
+    const raced = channels.get(channel);
+    if (raced) {
+      try { await unlisten(); } catch { /* ignore */ }
+      sub = raced;
+    } else {
+      sub = created = { handlers, lost, unlisten };
+      channels.set(channel, sub);
+    }
   }
-  sub.handlers.add(handler);
+  const mine = sub;
+  mine.handlers.add(handler);
+  if (onLost) mine.lost.set(handler, onLost);
 
   return async () => {
-    const current = channels.get(channel);
-    if (!current) return;
-    current.handlers.delete(handler);
-    if (current.handlers.size === 0) {
-      channels.delete(channel);
-      try { await current.unlisten(); } catch { /* connection already gone */ }
+    if (!mine.handlers.delete(handler)) return;
+    mine.lost.delete(handler);
+    if (mine.handlers.size === 0) {
+      if (channels.get(channel) === mine) channels.delete(channel);
+      try { await mine.unlisten(); } catch { /* connection already gone */ }
     }
   };
 }

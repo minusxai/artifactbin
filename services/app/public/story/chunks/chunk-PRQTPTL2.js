@@ -1,0 +1,1 @@
+function r(t){return typeof t!="string"||!t.trim()?"Mermaid requires a nonempty static code string.":t.length>2e4?"Mermaid code exceeds 20000 characters.":/^\s*---(?:\s|$)/.test(t)||/%%\s*\{/.test(t)?"Mermaid configuration directives and frontmatter are not supported; the document theme controls presentation.":null}export{r as a};

@@ -3,6 +3,7 @@
 import { createContext, createEffect, createSignal, onCleanup, useContext, type Accessor, type JSX } from 'solid-js';
 import type { InboxState } from '@/lib/notification-inbox';
 import { useSession } from './session';
+import { openLiveStream } from '@/lib/live-stream';
 
 interface InboxContext {
   state: Accessor<InboxState | null>;
@@ -48,9 +49,8 @@ export function InboxProvider(props: { children: JSX.Element }): JSX.Element {
     if (!user) return;
     void load();
     if (typeof EventSource === 'undefined') return;
-    const source = new EventSource('/api/my/people/events');
-    source.onmessage = refreshSoon;
-    source.onerror = () => setError('Connection interrupted. Retrying…');
+    // Reconnecting with backoff and a heartbeat watchdog (lib/live-stream); its first frame after a reopen re-reads.
+    const source = openLiveStream({ url: '/api/my/people/events', onMessage: refreshSoon, onError: () => setError('Connection interrupted. Retrying…') });
     const refresh = () => { if (document.visibilityState === 'visible') refreshSoon(); };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);

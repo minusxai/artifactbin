@@ -16,6 +16,7 @@ import type { IslandDocument } from '../contract';
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
   onmessage: ((e: MessageEvent) => void) | null = null;
+  onerror: ((e: Event) => void) | null = null;
   closed = false;
   constructor(public url: string) { super(); FakeEventSource.made.push(this); }
   close() { this.closed = true; }
@@ -88,6 +89,25 @@ describe('the island live stream', () => {
     expect(reload).not.toHaveBeenCalled();
     expect(updateCompiledStory, 'the app calls the update path itself (solid/document/create-island-story)').not.toHaveBeenCalled();
     stop();
+  });
+
+  it('reopens after an error (a 502 while the server restarts) and draws the version it missed', () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('EventSource', FakeEventSource);
+      const win = new Proxy(window, { get: (target, key) => (key === 'location' ? { reload: vi.fn() } : Reflect.get(target, key, target)) });
+      const stop = startIslandLive(win, 'abc', 'e1');
+      FakeEventSource.made[0]!.onerror!(new Event('error'));
+      expect(FakeEventSource.made[0]!.closed).toBe(true);
+      vi.advanceTimersByTime(1_000);
+      expect(FakeEventSource.made).toHaveLength(2);
+      expect(FakeEventSource.made[1]!.url).toBe('/a/abc/events');
+      FakeEventSource.made[1]!.onmessage!(new MessageEvent('message', { data: JSON.stringify({ editId: 'e2', version: 2 }) }));
+      expect(updateCompiledStory).toHaveBeenCalledTimes(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps one stream per page: a second starter (boot, once a version brings islands) reuses the open one', () => {

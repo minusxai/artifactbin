@@ -63,8 +63,13 @@ export interface Db extends Queryable {
    * unsubscribe. NOTIFY is only a wakeup pointer:
    * a missed delivery is harmless because subscribers catch-up SELECT.
    * Emitting needs no API — writes chain `pg_notify` into their own statement.
+   *
+   * `onLost` fires when the connection holding the LISTEN is gone: no further
+   * notification will arrive on this subscription, so the subscriber must
+   * drop it and subscribe again (live streams end, and their clients
+   * reconnect and catch up). PGLite's embedded connection is never lost.
    */
-  listen(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>>;
+  listen(channel: string, onNotify: (payload: string) => void, onLost?: () => void): Promise<() => Promise<void>>;
   close(): Promise<void>;
   /**
    * The driver handle, for the ONE other owner of this database in the
@@ -167,13 +172,17 @@ class PgliteDb implements Db {
   }
 }
 
-class PostgresDb implements Db {
+/** One LISTEN subscriber on the shared Postgres listener connection. */
+interface ChannelListener { notify: (payload: string) => void; lost?: () => void }
+
+export class PostgresDb implements Db {
   private pool: {
     query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }>;
     connect(): Promise<{
       query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }>;
       on(event: string, cb: (arg: { channel: string; payload?: string }) => void): void;
-      release(): void;
+      /** `true` destroys the connection instead of returning it to the pool. */
+      release(destroy?: boolean): void;
     }>;
     end(): Promise<void>;
   };
@@ -183,7 +192,7 @@ class PostgresDb implements Db {
   // subscriber, so the pool stays free.
   private listenClient: Awaited<ReturnType<PostgresDb['pool']['connect']>> | null = null;
   private listenSetup: Promise<Awaited<ReturnType<PostgresDb['pool']['connect']>>> | null = null;
-  private channelHandlers = new Map<string, Set<(payload: string) => void>>();
+  private channelHandlers = new Map<string, Set<ChannelListener>>();
 
   constructor(pool: PostgresDb['pool']) {
     this.pool = pool;
@@ -221,46 +230,75 @@ class PostgresDb implements Db {
     }
   }
 
-  /** Lazily acquire the shared listener client and wire its notification dispatch. */
+  /**
+   * Lazily acquire the shared listener client and wire its notification dispatch.
+   *
+   * RE-ESTABLISHED ON DEMAND: when the connection is lost (a Postgres restart
+   * or failover, an idle-connection reaper, a network blip) every subscriber
+   * is told (`onLost`) and the registry is emptied, so the next `listen()`
+   * acquires a fresh client and re-issues LISTEN. The live streams end on that
+   * signal and their clients reconnect with backoff, which paces the relisten;
+   * a failed acquire is not cached, so the next attempt tries again.
+   */
   private getListenClient(): Promise<Awaited<ReturnType<PostgresDb['pool']['connect']>>> {
     if (this.listenClient) return Promise.resolve(this.listenClient);
     if (this.listenSetup) return this.listenSetup;
-    this.listenSetup = (async () => {
+    const setup = (async () => {
       const client = await this.pool.connect();
       client.on('notification', (msg) => {
-        for (const h of this.channelHandlers.get(msg.channel) ?? []) h(msg.payload ?? '');
+        if (this.listenClient !== client) return;
+        for (const h of [...(this.channelHandlers.get(msg.channel) ?? [])]) h.notify(msg.payload ?? '');
       });
-      // On connection loss drop it, so the next listen() acquires a fresh
-      // client and re-issues LISTEN. Subscribers re-sync by catch-up SELECT.
+      let lost = false;
       const reset = () => {
-        if (this.listenClient === client) { this.listenClient = null; this.listenSetup = null; }
+        if (lost) return;
+        lost = true;
+        if (this.listenClient !== client) return;
+        this.listenClient = null;
+        this.listenSetup = null;
+        const orphaned = [...this.channelHandlers.values()].flatMap((set) => [...set]);
         this.channelHandlers.clear();
+        // Destroy rather than return it: a broken client must not go back to the pool, and a leaked
+        // checked-out one would cost a pool slot on every loss.
+        try { client.release(true); } catch { /* already released */ }
+        for (const listener of orphaned) {
+          try { listener.lost?.(); } catch { /* one subscriber must not stop the others hearing */ }
+        }
       };
       client.on('error', reset);
       client.on('end', reset);
       this.listenClient = client;
       return client;
     })();
-    return this.listenSetup;
+    this.listenSetup = setup;
+    setup.catch(() => { if (this.listenSetup === setup) this.listenSetup = null; });
+    return setup;
   }
 
   raw() { return { kind: 'pg' as const, pool: this.pool }; }
 
-  async listen(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>> {
+  async listen(channel: string, onNotify: (payload: string) => void, onLost?: () => void): Promise<() => Promise<void>> {
     assertSafeChannel(channel);
     const client = await this.getListenClient();
+    const listener: ChannelListener = { notify: onNotify, lost: onLost };
     let handlers = this.channelHandlers.get(channel);
     if (!handlers) {
       handlers = new Set();
       this.channelHandlers.set(channel, handlers);
-      await client.query(`LISTEN "${channel}"`);
+      try {
+        await client.query(`LISTEN "${channel}"`);
+      } catch (error) {
+        if (this.channelHandlers.get(channel) === handlers && handlers.size === 0) this.channelHandlers.delete(channel);
+        throw error;
+      }
     }
-    handlers.add(onNotify);
+    // Lost between acquiring the client and registering: refuse, rather than hold a subscription that never hears.
+    if (this.listenClient !== client) throw new Error('listener connection lost');
+    handlers.add(listener);
 
     return async () => {
       const set = this.channelHandlers.get(channel);
-      if (!set) return;
-      set.delete(onNotify);
+      if (!set || !set.delete(listener)) return;
       if (set.size === 0) {
         this.channelHandlers.delete(channel);
         try { await this.listenClient?.query(`UNLISTEN "${channel}"`); } catch { /* connection gone */ }

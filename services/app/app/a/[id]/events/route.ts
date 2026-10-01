@@ -22,9 +22,15 @@ import { ID_RE } from '@/lib/ids';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { changedSince } from '@/lib/story/served-results.server';
+import { LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS } from '@/lib/live-stream';
 
-/** Browsers reconnect an idle EventSource; a comment frame keeps proxies from closing it. */
-const KEEPALIVE_MS = 15_000;
+/**
+ * The heartbeat: keeps proxies from closing an idle stream AND tells the
+ * client the stream is alive. A NAMED event, not a `: comment` line — a
+ * comment never reaches script, and the client (lib/live-stream) treats
+ * LIVE_SILENCE_MS without any event as a dead stream and reopens it.
+ */
+const KEEPALIVE_FRAME = `event: ${LIVE_KEEPALIVE_EVENT}\ndata: {}\n\n`;
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -109,8 +115,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   let annotationsUnsub: (() => Promise<void>) | undefined;
 
   const keepalive = setInterval(() => {
-    writer.write(encoder.encode(': ping\n\n')).catch(() => { /* client gone */ });
-  }, KEEPALIVE_MS);
+    writer.write(encoder.encode(KEEPALIVE_FRAME)).catch(() => { /* client gone */ });
+  }, LIVE_KEEPALIVE_MS);
+
+  /**
+   * THE DATABASE LISTENER WENT AWAY (lib/db PostgresDb): no wakeup can reach
+   * this stream any more, though its keepalive would go on saying it is fine.
+   * End it: the client reconnects, the new connection LISTENs afresh, and its
+   * opening frame is a catch-up read, so nothing written meanwhile is lost.
+   */
+  const listenerLost = () => void close();
 
   const close = async () => {
     if (closed) return;
@@ -164,7 +178,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Reserve the slot before awaiting, so two frames arriving together
         // cannot open two subscriptions to the same channel.
         datasetUnsubs.set(datasetId, async () => {});
-        const drop = await subscribeToArtifact(datasetId, () => void wakeDataset(datasetId));
+        const drop = await subscribeToArtifact(datasetId, () => void wakeDataset(datasetId), listenerLost);
         if (closed) { await drop().catch(() => {}); datasetUnsubs.delete(datasetId); return; }
         datasetUnsubs.set(datasetId, drop);
       } catch (error) {
@@ -230,7 +244,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   };
 
   try {
-    unsubscribe = await subscribeToArtifact(artifactId, payload => void pushCurrent(payload));
+    unsubscribe = await subscribeToArtifact(artifactId, payload => void pushCurrent(payload), listenerLost);
     // The document's DATA dependencies are subscribed at CONNECT, from the row
     // this handler opened with — not from the first frame. The opening frame is
     // queued rather than awaited (see below), so waiting for it would leave a
@@ -239,7 +253,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     await followDatasets(initial);
     if (annotatorConnection) {
       try {
-        annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations());
+        annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);
       } catch (error) {
         // At capacity: the document still streams; annotation changes then
         // arrive with the next document frame instead of on their own.
