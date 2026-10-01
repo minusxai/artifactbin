@@ -11,9 +11,20 @@ import { STORY_THEMES } from '@/lib/data/story/story-themes';
 interface Built { css: string; assets: Map<string, Uint8Array> }
 let built: Promise<Built> | undefined;
 
-/** Build without writing and return the emitted stylesheet, font faces included, and every emitted asset's bytes. */
+/**
+ * Build THE STYLESHEET without writing and return it, font faces included, and every emitted asset's
+ * bytes. Only web/shell.css is built — the app's real Vite config, plugins and font-face injection,
+ * with the entry narrowed by a config hook — because the SPA's script graph contributes no font face:
+ * measured, the whole-app build emitted this same shell sheet (identical content hash) plus one
+ * face-less chunk sheet, in 2.6s locally and ~12s on CI against 0.6s for the sheet alone.
+ */
+const SHELL_ONLY = { name: 'app-fonts-shell-only', enforce: 'post' as const, config(config: { build?: { rolldownOptions?: { input?: unknown } } }) {
+  config.build!.rolldownOptions!.input = { shell: path.resolve(process.cwd(), 'web/shell.css') };
+} };
 const appBuild = () => (built ??= build({
   configFile: path.resolve(process.cwd(), '../../vite.config.mts'),
+  logLevel: 'warn',
+  plugins: [SHELL_ONLY],
   build: { write: false },
 }).then((result) => {
   // No `watch` option is supplied, so Vite cannot return its watcher variant.

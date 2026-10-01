@@ -26,7 +26,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CI_GATE_SHARDS, GATE_SPECS, ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -74,7 +74,7 @@ const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
 // those two" rather than "whichever of them fell in shard 1 of the whole set".
 const selected = shard
   ? (() => {
-      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, { isolated: shard.total === CI_GATE_SHARDS ? ISOLATED_GATES : [] });
+      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight);
       return chosen.filter((g) => names.includes(g.name));
     })()
   : chosen;
@@ -284,7 +284,8 @@ async function runSet(gates, workers) {
    * three-minute set into half an hour and looks exactly like a slow machine.
    */
   console.log(`gates: ${workers.length} server(s), ${gates.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
-  const queue = [...gates];
+  // Heaviest first: a long gate pulled last leaves its worker running alone while the other idles.
+  const queue = [...gates].sort((a, b) => specFor(b.name).seconds - specFor(a.name).seconds || a.name.localeCompare(b.name));
   const setFailed = [];
   /** One worker per server, each pulling the next gate — so a slow gate delays
    *  only its own worker and the set finishes when the last one does. */
