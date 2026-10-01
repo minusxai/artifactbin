@@ -43,6 +43,24 @@ BEGIN
 END $$`;
 }
 
+/**
+ * A DECLARED TOAST compression (Column.compression): set only while the column
+ * still has another, so a boot that finds it set takes no table lock; a server
+ * without the method (PGLite has no lz4) keeps its default.
+ */
+function renderCompression(qualified: string, col: Column): string {
+  return `DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_attribute
+     WHERE attrelid = to_regclass('${qualified}') AND attname = '${col.name}' AND attcompression IS DISTINCT FROM '${col.compression === 'lz4' ? 'l' : 'p'}'
+  ) THEN
+    ALTER TABLE ${qualified} ALTER COLUMN ${col.name} SET COMPRESSION ${col.compression};
+  END IF;
+EXCEPTION WHEN feature_not_supported THEN NULL;
+END $$`;
+}
+
 function renderTable(table: Table, qualified: (name: string) => string, schemaExpr: string): string[] {
   const name = qualified(table.name);
   const body = table.columns.map((c) => `  ${renderColumn(c)}`);
@@ -60,6 +78,9 @@ function renderTable(table: Table, qualified: (name: string) => string, schemaEx
     ...table.columns
       .filter((c) => c.renamedFrom)
       .map((c) => renderRename(name, table.name, schemaExpr, c)),
+    ...table.columns
+      .filter((c) => c.compression)
+      .map((c) => renderCompression(name, c)),
     // Relax constraints an older declaration applied — see Column.retired.
     ...table.columns
       .filter((c) => c.retired || c.relaxNotNull)
