@@ -1,6 +1,6 @@
 /** Source/engine adapter. Only this module knows both static JSX and ProseMirror. */
 import { Schema, Fragment, Slice, type Node as EditorNode, type Mark, type NodeSpec } from 'prosemirror-model';
-import { TextSelection, type EditorState, type Transaction } from 'prosemirror-state';
+import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Root } from 'mdast';
 import { validateClipboardAst } from './clipboard-ast';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
@@ -407,24 +407,6 @@ export function pasteFragment(root: Root): Slice {
   };
   return Slice.maxOpen(Fragment.from(blocks(root.children.flatMap((n) => convert(n)))));
 }
-/** No geometrical redistribution: remove text per column, then insert at range start. */
-export function replaceColumnText(state: EditorState, text: string): Transaction {
-  const { from, to } = state.selection;
-  const ranges: Array<{ from: number; to: number }> = [];
-  state.doc.nodesBetween(from, to, (node, pos) => {
-    if (node.isTextblock) {
-      const start = Math.max(from, pos + 1),
-        end = Math.min(to, pos + 1 + node.content.size);
-      if (end > start) ranges.push({ from: start, to: end });
-      return false;
-    }
-  });
-  const tr = state.tr;
-  for (const r of ranges.reverse()) tr.delete(r.from, r.to);
-  tr.insertText(text, from);
-  return tr.setSelection(TextSelection.create(tr.doc, from + text.length));
-}
-
 /** Toggle one semantic mark without removing other marks of the generic source-backed type. */
 export function toggleInline(state: EditorState, tag: 'strong' | 'em' | 'u'): Transaction {
   const { from, to, empty } = state.selection;

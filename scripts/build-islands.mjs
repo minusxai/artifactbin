@@ -110,7 +110,7 @@ const STANDALONE_LAZY = [
   { request: './morph/engine', name: 'morph-engine', file: () => path.join(ISLANDS_SRC, 'morph/engine.ts') },
   // The page's own SQLite engine (today's page engine and the SQLite core), loaded by boot behind the first paint.
   { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
-  // The link following the reader (today's url-values-sync), loaded by boot after hydration.
+  // The link following the reader, loaded by boot after hydration.
   { request: './url-sync', name: 'url-sync', file: () => path.join(ISLANDS_SRC, 'url-sync.ts') },
   // Browser sessions need the public mx API, but its dataflow grammar stays outside rt+boot.
   { request: './mx-host', name: 'mx-host', file: () => path.join(ISLANDS_SRC, 'mx-host.ts') },
@@ -453,8 +453,7 @@ function cacheHit(outDir) {
     // A source added under lib/islands since the last build is a miss too.
     const now = sourceHashes(trackedSources(Object.keys(marker.sources)));
     if (JSON.stringify(now) !== JSON.stringify(marker.sources)) return false;
-    const { manifest, files, ssr } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
-    const { offline } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
+    const { manifest, files, ssr, offline } = JSON.parse(fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
     return [...Object.keys(files), ssr?.url ?? '/missing-server-half', offline ?? '/missing-offline-half'].every((u) => fs.existsSync(path.join(outDir, u.slice(ISLANDS_PATH.length + 1)))) && ISLAND_SPECIFIERS.every((s) => manifest[s]);
   } catch {
     return false;

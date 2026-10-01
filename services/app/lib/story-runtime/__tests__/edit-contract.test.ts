@@ -7,11 +7,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  isEditFrameMessage, isEditParentMessage, isSessionMessage,
+  isEditFrameMessage, isEditParentMessage,
   STORY_TEXT_EDIT_MESSAGE, STORY_TYPING_MESSAGE, STORY_SELECTION_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE,
   STORY_EDIT_KEY_MESSAGE, STORY_EDIT_READY_MESSAGE,
   STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,
-  STORY_SESSION_MESSAGE, STORY_DOCUMENT_MESSAGE,
+  STORY_DOCUMENT_MESSAGE,
   STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
 } from '../contract';
 
@@ -73,17 +73,5 @@ describe('annotation messages route like every other edit message', () => {
     expect(isEditFrameMessage({ type: STORY_ANNOTATION_PIN_MESSAGE, id: 'ann_x', rect: { x: 0, y: 0, width: 1, height: 1 } }, NONCE)).toBe(false);
     expect(isEditParentMessage({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [] })).toBe(false);
     expect(isEditFrameMessage({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [] }, NONCE)).toBe(false);
-  });
-});
-
-describe('isSessionMessage', () => {
-  it('accepts a session announcement with a long enough nonce', () => {
-    expect(isSessionMessage({ type: STORY_SESSION_MESSAGE, nonce: NONCE })).toBe(true);
-  });
-  it('rejects a short, missing or non-string nonce — and anything else', () => {
-    expect(isSessionMessage({ type: STORY_SESSION_MESSAGE, nonce: 'short' })).toBe(false);
-    expect(isSessionMessage({ type: STORY_SESSION_MESSAGE })).toBe(false);
-    expect(isSessionMessage({ type: STORY_SESSION_MESSAGE, nonce: 123 })).toBe(false);
-    expect(isSessionMessage({ type: 'mx:hello', nonce: NONCE })).toBe(false);
   });
 });

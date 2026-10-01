@@ -25,7 +25,7 @@ import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput,
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
-import { wireFaceFallback } from '@/lib/story-runtime/reader-chrome-actions';
+import { wireFaceFallback } from '@/lib/story-runtime/reader-actions';
 import { wireGithubStar } from '@/lib/github-star';
 import { displayTitle } from '@/lib/story/title';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';

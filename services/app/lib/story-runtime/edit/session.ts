@@ -60,15 +60,15 @@ import { nodeName } from '@/lib/story-ui/node-names';
 import type { CompiledEditMount, CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
 
 /** Marks the selected node so the reader can see what the toolbar is pointed at. Value: 'block' when block-selected, else 'text' (typing). */
-export const EDIT_SELECTED_ATTR = 'data-mx-selected';
+const EDIT_SELECTED_ATTR = 'data-mx-selected';
 /** Marks the selected COMPONENT. Its own attribute: two writers on one attribute take turns clearing each other. */
-export const EDIT_EMBED_SELECTED_ATTR = 'data-mx-embed-selected';
+const EDIT_EMBED_SELECTED_ATTR = 'data-mx-embed-selected';
 /** Marks the selectable node under the pointer while edit mode is live. Value: its edit-chrome kind (drives the cursor only). */
-export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
+const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
 /** Marks nodes the page pointed at (STORY_SPOTLIGHT_MESSAGE) — outlined, never selected. */
-export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
+const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
 /** Marks the image a dragged file would REPLACE if dropped now. */
-export const EDIT_DROP_REPLACE_ATTR = 'data-mx-drop-replace';
+const EDIT_DROP_REPLACE_ATTR = 'data-mx-drop-replace';
 /** The "Drop to replace" label drawn over that image — chrome, never document. */
 const DROP_REPLACE_LABEL_ATTR = 'data-mx-drop-replace-label';
 /** That image's mark: a dashed neutral line and a faint veil, so "drop here" never reads as selected. */
@@ -163,7 +163,6 @@ export function createFrameEditSession({
   let blockMode = false;
   let hovered: Element | null = null;
   let typingReported = false;
-  let bodyEpoch = 0;
   let disposed = false;
   const restoreScroll = (position: { x: number; y: number }) => {
     if (win.scrollX !== position.x || win.scrollY !== position.y) win.scrollTo(position.x, position.y);
@@ -885,7 +884,6 @@ export function createFrameEditSession({
       chrome.cancel();
       blockSelection.clear();
       nodes = next;
-      bodyEpoch += 1; // a different document: focused hosts must reconcile
       // The selected node may not exist in the new document.
       if (
         selectedPath &&
