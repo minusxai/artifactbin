@@ -102,7 +102,7 @@ describe('runtime dependency closure', () => {
     };
     const documented = read('.env.example');
     it('the app config', () => {
-      const undocumented = [...readNames('services/app/lib/config.ts')]
+      const undocumented = [...readNames('services/app/lib/platform/config.ts')]
         .filter((n) => !intentionallyOmitted.has(n))
         .filter((n) => !new RegExp(`^#?\\s*${n}=`, 'm').test(documented) && !documented.includes(n));
       expect(undocumented).toEqual([]);

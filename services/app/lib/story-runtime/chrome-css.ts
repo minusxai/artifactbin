@@ -1,4 +1,4 @@
-import { CHROME_IDENTITY } from '../chrome-identity';
+import { CHROME_IDENTITY } from '../accounts/chrome-identity';
 
 /**
  * The document's own navigation chrome, as CSS — react-free so the builder

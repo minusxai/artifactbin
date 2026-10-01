@@ -1,4 +1,4 @@
-import {artifactQuery} from '@/lib/artifact-document';
+import {artifactQuery} from '@/lib/artifacts';
 import {beforeEach,expect,it,vi} from 'vitest';
 vi.mock('@/lib/datasets/execute',()=>({executeCatalog:vi.fn(async()=>({columns:[{name:'id',type:'number'}],rows:[{id:1}]}))}));
 vi.mock('@/lib/datasets/postgres',()=>({discoverPostgres:vi.fn(async()=>[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}]}])}));
@@ -7,8 +7,8 @@ import {POST as forkRoute} from '@/app/api/my/artifacts/[id]/fork/route';
 import {POST as tables} from '@/app/a/[id]/tables/route';
 import {forkDatasetPreview,type ArtifactRow} from '@/lib/artifacts';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
-import {mintToken} from '@/lib/tokens';
-import {claimToken,createUser} from '@/lib/users';
+import {mintToken} from '@/lib/accounts';
+import {claimToken,createUser} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 const harness=useAppHarness();const current={id:'',email:''};
 vi.mock('@/auth',()=>({auth:async()=>current.id?{user:{id:current.id,email:current.email}}:null}));

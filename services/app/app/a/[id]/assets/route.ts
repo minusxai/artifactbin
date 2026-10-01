@@ -27,12 +27,12 @@
  * the import bounds belong with the importer.
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { verifyExportKey } from '@/lib/export-key';
-import { requestOrSessionActor } from '@/lib/viewer';
-import {resolveImageReference} from '@/lib/image-references';
-import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/web-assets';
-import { ASSETS_ORIGIN } from '@/lib/config';
-import {publicRefAsset} from '@/lib/public-ref-assets';
+import { verifyExportKey } from '@/lib/serving';
+import { requestOrSessionActor } from '@/lib/accounts';
+import {resolveImageReference} from '@/lib/artifacts';
+import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/serving';
+import { ASSETS_ORIGIN } from '@/lib/platform';
+import {publicRefAsset} from '@/lib/serving';
 import { json } from '@/lib/http';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {

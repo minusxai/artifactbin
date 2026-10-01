@@ -1,7 +1,7 @@
 import { canReadArtifact, compiledForRow, dataflowForRow, getArtifactById, holdableImports, viewerIdentityFor, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
-import { ID_RE } from '@/lib/ids';
+import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
-import { sessionActor } from '@/lib/viewer';
+import { sessionActor } from '@/lib/accounts';
 import { planOf } from '@/lib/compiled-page/plan';
 import { anonymousAccessFacts } from '@/lib/compiled-page/snapshots.server';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';

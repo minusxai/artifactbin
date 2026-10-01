@@ -1,4 +1,4 @@
-import {withTokenAuth} from '@/lib/auth';
+import {withTokenAuth} from '@/lib/accounts';
 import {json,readJson} from '@/lib/http';
 import {runOperation} from '@/lib/operations/http';
 

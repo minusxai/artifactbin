@@ -11,7 +11,7 @@
  * way: the app module must re-export the shared one rather than grow its own again.
  */
 import { describe, expect, it } from 'vitest';
-import { withToken, withoutToken } from '@/lib/agent-session';
+import { withToken, withoutToken } from '@/lib/accounts';
 import { withToken as utilsWith, withoutToken as utilsWithout } from '../../../utils/src/agent-session';
 
 describe('the app module', () => {

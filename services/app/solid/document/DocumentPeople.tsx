@@ -4,7 +4,7 @@ import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
 import { Button, Input } from '../components/ui';
 import { apiFetch } from '../lib/api';
-import { primeShared, sharedRequest } from '@/lib/shared-request';
+import { primeShared, sharedRequest } from '@/lib/http/shared-request';
 type Person = { user_id: string; username: string; name: string | null };
 
 /** The document controls' people panel; membership and sharing remain separate grants. */

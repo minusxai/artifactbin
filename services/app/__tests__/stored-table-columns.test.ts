@@ -9,10 +9,10 @@ import { expect, it } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { artifactState } from '@/lib/artifact-state';
+import { artifactState } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { executeCatalog } from '@/lib/datasets/execute';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 useAppHarness();
 

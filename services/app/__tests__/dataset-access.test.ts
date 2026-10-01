@@ -15,8 +15,8 @@ import { GET as sharingGet, PUT as sharingPut } from '@/app/api/my/artifacts/[id
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

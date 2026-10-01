@@ -4,15 +4,15 @@
  */
 
 import { expect, it, vi } from 'vitest';
-import {setMutationInvocation,type MutationInvocation} from '@/lib/mutation-invocation';
-import { getDb } from '@/lib/db';
+import {setMutationInvocation,type MutationInvocation} from '@/lib/artifacts';
+import { getDb } from '@/lib/platform';
 import { request, useAppHarness } from './harness';
 import { cliWorkspace } from './cli-harness';
 import { POST as reserve } from '@/app/api/artifacts/reservations/route';
 import { POST as create, GET as list } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as read, PUT as replace, PATCH as metadata, PATCH as patch } from '@/app/api/artifacts/[id]/route';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { getArtifactById } from '@/lib/artifacts';

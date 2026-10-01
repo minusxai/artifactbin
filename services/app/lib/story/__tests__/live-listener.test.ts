@@ -7,7 +7,7 @@
  */
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PostgresDb } from '@/lib/db';
+import { PostgresDb } from '@/lib/platform';
 import { liveChannelCount, resetLiveSubscriptions, subscribeChannel } from '../realtime/live';
 
 class FakeClient extends EventEmitter {
@@ -35,7 +35,7 @@ function fakePool() {
 }
 
 const pg = vi.hoisted(() => ({ db: null as unknown }));
-vi.mock('@/lib/db', async (original) => ({ ...(await original<typeof import('@/lib/db')>()), getDb: async () => pg.db }));
+vi.mock('@/lib/platform/db', async (original) => ({ ...(await original<typeof import('@/lib/platform/db')>()), getDb: async () => pg.db }));
 
 afterEach(async () => { await resetLiveSubscriptions(); });
 

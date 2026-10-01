@@ -26,13 +26,13 @@ import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-pointer';
 import X from 'lucide-solid/icons/x';
-import type { AnnotationWire } from '@/lib/annotations';
+import type { AnnotationWire } from '@/lib/annotations/store';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
-import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
-import { loginHref } from '@/lib/login-href';
-import { hasReplyText, remoteMention } from '@/lib/remote-reply';
+import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/annotations/comment-folds';
+import { loginHref } from '@/lib/http/login-href';
+import { hasReplyText, remoteMention } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/reader/edit-bar';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import {

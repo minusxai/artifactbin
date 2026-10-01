@@ -24,10 +24,10 @@
  * with no ref-mirroring needed, since a live getter already reads the latest.
  */
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
-import type { AnnotationWire } from '@/lib/annotations';
+import type { AnnotationWire } from '@/lib/annotations/store';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/realtime/live';
-import { liveBackoffDelay } from '@/lib/live-stream';
+import { liveBackoffDelay } from '@/lib/http/live-stream';
 
 export interface LiveArtifactOptions {
   /** Where the stream comes from; a backend without `live` is simply never subscribed. */

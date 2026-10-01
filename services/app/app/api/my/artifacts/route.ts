@@ -8,11 +8,11 @@
  * That is what lets the app's own UI stop holding a bearer secret and still
  * show an anonymous owner their document.
  */
-import { browserActor } from '@/lib/auth';
-import { listOwnedArtifacts } from '@/lib/users';
-import { artifactSummaryToWire } from '@/lib/artifact-wire';
-import { actorForArtifacts } from '@/lib/viewer';
-import { ensureUserToken } from '@/lib/tokens';
+import { browserActor } from '@/lib/accounts';
+import { listOwnedArtifacts } from '@/lib/accounts';
+import { artifactSummaryToWire } from '@/lib/artifacts';
+import { actorForArtifacts } from '@/lib/accounts';
+import { ensureUserToken } from '@/lib/accounts';
 import { createArtifactFromRequest } from '@/app/api/artifacts/route';
 import { baseUrl, json, unauthorized } from '@/lib/http';
 

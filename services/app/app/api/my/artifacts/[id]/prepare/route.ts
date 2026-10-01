@@ -1,5 +1,5 @@
-import {browserActor} from '@/lib/auth';
-import {actorForArtifacts} from '@/lib/viewer';
+import {browserActor} from '@/lib/accounts';
+import {actorForArtifacts} from '@/lib/accounts';
 import {readJson,json,unauthorized} from '@/lib/http';
 import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
 export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){

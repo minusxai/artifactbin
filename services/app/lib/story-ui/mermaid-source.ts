@@ -1,4 +1,4 @@
-import { sha256Hex } from '@/lib/sha256';
+import { sha256Hex } from '@/lib/platform/sha256';
 
 /** Shared publish/read boundary; Mermaid configuration is owned by the app. */
 const MERMAID_MAX_SOURCE = 20_000;

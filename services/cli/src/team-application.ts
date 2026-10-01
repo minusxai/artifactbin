@@ -7,8 +7,8 @@ import {createSql} from '@artifactbin/sql/local';
 import {createBrowser,sessionProcessPaths} from '@artifactbin/browser/local';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
 import {createAppHost,type AppHost} from '../../app/server/host';
-import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '../../app/lib/config';
-import {setServices} from '../../app/lib/services';
+import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '../../app/lib/platform/config';
+import {setServices} from '../../app/lib/platform/services';
 import {chromiumExecutable} from './standalone-browser';
 
 export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string):Promise<AppHost>{

@@ -27,7 +27,7 @@
  * body: the app is the reader's second screen, and its bytes must never race
  * the ones the first screen paints with.
  */
-import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/agent-discovery';
+import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
 import type { IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
@@ -37,7 +37,7 @@ import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { renderReaderChrome } from '@/lib/story/reader';
 import { APP_BAR_H } from '@/lib/story/reader';
-import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
+import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/serving/app-fonts';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,

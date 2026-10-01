@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest';
 import type { EventPayload, EventVerb, ObjectKind } from '@artifactbin/contracts';
 import { EVENT_VERBS, eventName } from '@artifactbin/contracts';
 import { fakeEvents } from '@artifactbin/utils';
-import { emit, envelope } from '@/lib/events';
-import { services, setServices } from '@/lib/services';
+import { emit, envelope } from '@/lib/platform';
+import { services, setServices } from '@/lib/platform';
 
 type Fixtures = { [K in ObjectKind]: { [V in EventVerb<K>]: EventPayload<K, V> } };
 /** One payload per verb, the values an operator would want in a channel: ids and names, never content. */

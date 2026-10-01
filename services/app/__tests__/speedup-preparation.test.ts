@@ -2,15 +2,15 @@ import { expect, it, vi } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import * as css from '@/lib/data/story/story-css.server';
-import * as assets from '@/lib/web-assets';
+import * as assets from '@/lib/serving/web-assets';
 import * as artifacts from '@/lib/artifacts';
-import * as relations from '@/lib/relations';
-import * as tokens from '@/lib/tokens';
+import * as relations from '@/lib/accounts/relations';
+import * as tokens from '@/lib/accounts/tokens';
 import { createAppServer } from '@/server/app';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform';
 
 useAppHarness();
 // One row fetch and one access check per view (docs/phase2-architecture.md §2.2): the page's admission

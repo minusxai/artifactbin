@@ -22,9 +22,9 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintExportKey } from '@/lib/export-key';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
+import { mintExportKey } from '@/lib/serving';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';

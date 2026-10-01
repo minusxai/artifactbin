@@ -1,6 +1,6 @@
 /** Agent discovery in the compiled reader's assembled document. */
 import { describe, expect, it } from 'vitest';
-import { AGENT_HELP_TITLE } from '@/lib/agent-discovery';
+import { AGENT_HELP_TITLE } from '@/lib/serving';
 import { assembleReaderPage } from '@/lib/compiled-page/assembler';
 import type { AssembleHead, AssembleInput, CompiledPage } from '@/lib/compiled-page/contract';
 

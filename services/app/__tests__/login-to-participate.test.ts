@@ -23,9 +23,9 @@ import { useAppHarness } from './harness';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact, updateSharingFor, type ArtifactRow, type Visibility } from '@/lib/artifacts';
 import { renderReaderChrome } from '@/lib/story/reader/reader-chrome';
-import { roleBehindLogin, type ShareRole } from '@/lib/share-roles';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { roleBehindLogin, type ShareRole } from '@/lib/artifacts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 const sessionUser: { id: string; email: string } = { id: '', email: '' };
 vi.mock('@/auth', () => ({

@@ -3,8 +3,8 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { POST as query } from '@/app/a/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
-import { createUser, claimToken } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 
 useAppHarness();

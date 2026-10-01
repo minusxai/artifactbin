@@ -6,8 +6,8 @@
  * the endpoint does not exist for anyone without the secret.
  */
 import { json } from '@/lib/http';
-import { revokeToken } from '@/lib/tokens';
-import { hasAdminCredential } from '@/lib/admin-auth';
+import { revokeToken } from '@/lib/accounts';
+import { hasAdminCredential } from '@/lib/accounts';
 
 export async function DELETE(request: Request, ctx: { params: Promise<Record<string, string>> }) {
   if (!hasAdminCredential(request)) return json({ error: 'not_found' }, 404);

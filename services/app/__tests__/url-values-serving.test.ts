@@ -22,11 +22,11 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import {exportImage as exportRoute} from './export-helpers';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { resetExportRenderer } from '@/lib/export';
-import { setServices } from '@/lib/services';
+import { setServices } from '@/lib/platform';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '@/lib/islands/contract';
-import { mintExportKey } from '@/lib/export-key';
-import { mintToken } from '@/lib/tokens';
+import { mintExportKey } from '@/lib/serving';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

@@ -1,4 +1,4 @@
-import {durableMutation,type MutationReceipt} from '@/lib/mutation-receipt';
+import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
  * The BROWSER's annotation door — where a person's selection becomes a thread
@@ -16,11 +16,11 @@ import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
 import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/story/annotations';
-import { browserActor } from '@/lib/auth';
-import { capabilityGuard } from '@/lib/capabilities';
+import { browserActor } from '@/lib/accounts';
+import { capabilityGuard } from '@/lib/artifacts';
 import { json, readJson, unauthorized } from '@/lib/http';
-import { ownerUsername } from '@/lib/users';
-import { actorForArtifacts } from '@/lib/viewer';
+import { ownerUsername } from '@/lib/accounts';
+import { actorForArtifacts } from '@/lib/accounts';
 
 /** The caller as an artifact scope, or the Response that refuses them. */
 async function scopeFor(request: Request) {

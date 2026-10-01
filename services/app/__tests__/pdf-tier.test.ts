@@ -17,11 +17,11 @@ import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as preview } from '@/app/api/preview/route';
 import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
-import { setAssetByteQuotaForTests } from '@/lib/asset-quota';
-import { LOCAL_OBJECT_DIR } from '@/lib/config';
+import { setAssetByteQuotaForTests } from '@/lib/serving';
+import { LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { request, useAppHarness } from '@/__tests__/harness';

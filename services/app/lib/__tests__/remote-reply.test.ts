@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {replyMentionPrefix,hasReplyText,remoteWorkLabel} from '../remote-reply';
+import {replyMentionPrefix,hasReplyText,remoteWorkLabel} from '@/lib/annotations';
 const mention=(name:string,id:string)=>`[@${name}](/chat?session=${id.repeat(64)})`;
 it('uses the latest human explicit targets, preserves them across agent replies and untagged humans, and deduplicates',()=>{
  const a=mention('claude','a'),b=mention('pi','b');

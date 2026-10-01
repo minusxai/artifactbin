@@ -1,6 +1,6 @@
 /** The shelf policy: documents, folders, and assets stay separate and rank by recency. */
 import { describe, expect, it } from 'vitest';
-import { buildShelf, groupShelfByRecency, type ShelfItem } from '@/lib/shelf';
+import { buildShelf, groupShelfByRecency, type ShelfItem } from '@/lib/workspace';
 
 const docs = (n: number) =>
   Array.from({ length: n }, (_, i) => ({

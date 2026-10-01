@@ -9,7 +9,7 @@
  * and because a document the previous engine stored is served converted
  * (lib/migrate/sqlite/stored) before the migration has compiled it.
  */
-import { artifactQuery } from '@/lib/artifact-document';
+import { artifactQuery } from '@/lib/artifacts';
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
@@ -17,9 +17,9 @@ import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { liveFrameFor } from '@/lib/story/data/frame';
-import { queryResourceForRequest } from '@/lib/resource-query';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { queryResourceForRequest } from '@/lib/http';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });

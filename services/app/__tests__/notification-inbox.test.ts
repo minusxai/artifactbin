@@ -1,15 +1,15 @@
-import {seedOwnerJoin} from '@/lib/relation-state';
-import {notificationArtifactAuthority,notificationSourceSchema} from '@/lib/notification-authority';
+import {seedOwnerJoin} from '@/lib/accounts';
+import {notificationArtifactAuthority,notificationSourceSchema} from '@/lib/notifications';
 import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
-import {createUser} from '@/lib/users';
-import {mintToken} from '@/lib/tokens';
-import {getDb} from '@/lib/db';
-import {membershipInbox,updateMembershipInbox} from '@/lib/membership-inbox';
+import {createUser} from '@/lib/accounts';
+import {mintToken} from '@/lib/accounts';
+import {getDb} from '@/lib/platform';
+import {membershipInbox,updateMembershipInbox} from '@/lib/accounts';
 import {POST as delivery} from '@/app/api/internal/notifications/route';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
-vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),INTERNAL_SERVICE_SECRET:'notification-test-service'}));
+vi.mock('@/lib/platform/config',async original=>({...await original<typeof import('@/lib/platform/config')>(),INTERNAL_SERVICE_SECRET:'notification-test-service'}));
 useAppHarness();
 async function fixture(){
  const sender=await createUser({email:'sender@example.com'}),recipient=await createUser({email:'recipient@example.com'}),token=await mintToken('test',sender.id);

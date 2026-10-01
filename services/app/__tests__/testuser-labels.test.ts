@@ -12,8 +12,8 @@ import { POST as newTestUser } from '@/app/api/testusers/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { POST as query } from '@/app/a/[id]/query/route';
 import { observedRequest } from '@/__tests__/conditional-request';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { viewersWritePolicy } from '@artifactbin/utils';
 import { getArtifactById } from '@/lib/artifacts';
 import { readFileSync } from 'node:fs';
@@ -43,9 +43,9 @@ it('labels a test user for the account viewing the sandbox copy', async () => {
   const forked = await forkOpRoute(request(`/api/artifacts/${doc}/fork`, { method: 'POST', token: t.token, json: { as: { testuser: tuId } } }), ctx(doc));
   const copy = ((await forked.json()) as { id: string }).id;
   // The test user joins its copy (through the app's own door, as a session would).
-  const { createTestUser } = await import('@/lib/testusers');
+  const { createTestUser } = await import('@/lib/accounts/testusers');
   void createTestUser;
-  const { resolveTestUser } = await import('@/lib/testusers');
+  const { resolveTestUser } = await import('@/lib/accounts/testusers');
   const resolved = await resolveTestUser(me.id, tuId);
   if (typeof resolved === 'string') throw new Error(`test user not resolvable: ${resolved}`);
   const tuCookie = await agentCookie([resolved.tokenId]);

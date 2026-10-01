@@ -20,7 +20,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createAppServer } from '@/server/app';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';

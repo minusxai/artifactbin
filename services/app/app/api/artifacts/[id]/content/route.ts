@@ -1,9 +1,9 @@
-import {tokenActorForRequest} from '@/lib/viewer';
-import {readableArtifact} from '@/lib/artifact-read';
+import {tokenActorForRequest} from '@/lib/accounts';
+import {readableArtifact} from '@/lib/artifacts';
 /** Authenticated immutable content reads never use public serving/import paths. */
-import {withTokenAuth} from '@/lib/auth';
+import {withTokenAuth} from '@/lib/accounts';
 import {getVersionFor} from '@/lib/artifacts';
-import {canEdit} from '@/lib/share-roles';
+import {canEdit} from '@/lib/artifacts';
 import {serveStoredFile} from '@/lib/story/assets/file-store';
 import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
 import {serializeDatasetDefinition} from '@/lib/datasets/definition';

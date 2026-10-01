@@ -17,7 +17,7 @@ import { DELETE as deleteRoute, GET as getArtifactRoute, PUT as putArtifact } fr
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
-import { resetRateLimit } from '@/lib/auth';
+import { resetRateLimit } from '@/lib/accounts';
 import { MAX_STALE_EDITS } from '@/lib/artifacts';
 
 const SECRET = 'test-secret';

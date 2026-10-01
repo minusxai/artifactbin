@@ -19,7 +19,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { createAppServer } from '@/server/app';
 
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setWebFontSourcesForTests } from '@/lib/webfonts';
 import { useAppHarness, request } from '@/__tests__/harness';

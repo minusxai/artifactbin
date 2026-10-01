@@ -1,0 +1,305 @@
+/**
+ * The auth() → Viewer bridge, in its own module ON PURPOSE: the serving
+ * routes need "who is looking" but lib/artifacts must stay importable
+ * without dragging account authentication into every test and client bundle that touches
+ * artifact SQL. This is the only non-route file that imports @/auth.
+ */
+import { currentRequest } from '../platform/request-context';
+import { actorOf } from '@artifactbin/utils';
+import { mergeGuestUsers } from './guest-owner';
+import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts';
+import { DuplicateProfileEmail, syncProfile } from './profiles';
+import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRow, type RoleActor, type TokenActor, type Viewer } from '../artifacts/access';
+import { type ArtifactRole } from '../artifacts/share-roles';
+import { liveAgentSession } from './agent-session';
+import { resolveToken, resolveTokenById, touchToken } from './tokens';
+
+/**
+ * The account behind the request, if any. Behind the proxy that is the signed
+ * actor header; without one (a direct handler call in a test) it is whatever
+ * the test mocked `@/auth` to say. Fail-safe: never a crash.
+ */
+export async function sessionViewer(request?: Request): Promise<Viewer> {
+  try {
+    const fromProxy = await proxyActor(request);
+    if (fromProxy) return fromProxy.credential === 'session' ? fromProxy.viewer : null;
+    const { auth } = await import('@/auth');
+    const session = await auth();
+    return session?.user?.id ? { userId: session.user.id, email: session.user.email ?? null } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Who is asking. A presented bearer token wins (its user, if claimed, becomes
+ * the viewer; its id lets the caller honor direct token ownership), else the
+ * browser's credentials — see requestOrSessionActor; routes that hand-roll a
+ * bearer check fall back to sessionActor.
+ */
+export interface RequestActor {
+  viewer: Viewer;
+  /** The presented token's id, for token-scope ownership checks. Null without a valid bearer. */
+  tokenId: string | null;
+  /**
+   * HOW the caller was authenticated (`services/contracts` Credential). Load-
+   * bearing for the same-site guard: a cookie-borne write must be same-site,
+   * a bearer one never is (agents send no Origin). Keying that guard on
+   * `tokenId` instead would wave the logged-in browser through, because a
+   * `session` credential yields tokenId null.
+   */
+  credential: Credential;
+  /** Token ids the browser's agent cookie holds (proxy-provided) — what a sign-up may claim. */
+  heldTokenIds?: string[];
+}
+
+const NO_ACTOR: RequestActor = { viewer: null, tokenId: null, credential: 'none' };
+
+/** A cookie authorized this request — the only case a same-site guard applies to. */
+export const isCookieCredential = (actor: Pick<RequestActor, 'credential'>): boolean =>
+  actor.credential === 'session' || actor.credential === 'agent-cookie';
+
+/**
+ * The proxy's verdict rides ON the Request the proxy handed us
+ * (`attachActor` uses a WeakMap, so there is no forgeable header to inspect).
+ */
+function attachedActor(request: Request | undefined): RequestActor | null {
+  const carrying = request ?? currentRequest();
+  const actor = carrying ? actorOf(carrying) : null;
+  if (!actor) return null;
+  return {
+    viewer: actor.userId ? { userId: actor.userId, email: actor.email ?? null, ...((actor.credential === 'session' || actor.credential === 'bearer') && !carrying?.headers.has(BROWSER_SESSION_HEADER) ? {emailVerified:actor.emailVerified === true} : {}) } : null,
+    tokenId: actor.tokenId ?? null,
+    credential: actor.credential,
+    ...(actor.heldTokenIds ? { heldTokenIds: actor.heldTokenIds } : {}),
+  };
+}
+
+/**
+ * The proxy's verdict, when there is a proxy. No attached actor means direct
+ * mode, where the app resolves its own bearer/session/agent-cookie credential.
+ */
+async function proxyActor(request: Request | undefined): Promise<RequestActor | null> {
+  const attached = attachedActor(request);
+  if (attached) {
+    if ((request ?? currentRequest())?.headers.get(BROWSER_SESSION_HEADER) === '1') {
+      const token = attached.tokenId ? await resolveTokenById(attached.tokenId) : null;
+      if (!token || token.userId !== (attached.viewer?.userId ?? null)) return NO_ACTOR;
+    }
+    // The app's own row for this person follows the claims (lib/profiles) — created on first sight, updated on change.
+    if (attached.credential === 'session' && attached.viewer?.userId) {
+      await syncProfile({ userId: attached.viewer.userId, email: attached.viewer.email ?? undefined });
+      if (attached.viewer.emailVerified) await mergeGuestUsers(attached.viewer.userId, attached.heldTokenIds ?? []);
+    }
+    return attached;
+  }
+  return null;
+}
+
+
+/**
+ * Who is asking, for a request that carries BROWSER credentials.
+ *
+ * Two envelopes, one answer. A account authentication session is an ACCOUNT (userId, and
+ * account-wide reach). The agent-session cookie is a browser holding token ids
+ * — an anonymous owner, whose reach is exactly what its token created. An
+ * account wins when both are present: it is the wider, named identity, and it
+ * is what the user sees themselves as while signed in.
+ *
+ * The token is re-resolved here on EVERY request (resolveTokenById keeps the
+ * revoked check), so revoking a token ends the browser's session on the next
+ * call rather than at cookie expiry.
+ *
+ * This is the ONE ownership seam: the page (ArtifactDocument), the API routes
+ * and the reader/owner proxy all ask it, so they cannot drift apart on who
+ * owns a document.
+ */
+export async function sessionActor(request?: Request, opts: { headerOnly?: boolean } = {}): Promise<RequestActor> {
+  const fromProxy = await proxyActor(request);
+  if (fromProxy) {
+    if (fromProxy.tokenId && (fromProxy.credential === 'bearer' || fromProxy.credential === 'agent-cookie')) {
+      await touchToken(fromProxy.tokenId);
+    }
+    return fromProxy;
+  }
+  if (opts.headerOnly) return NO_ACTOR;
+  const viewer = await sessionViewer(request);
+  if (viewer) return { viewer, tokenId: null, credential: 'session' };
+
+  // Fail CLOSED, like sessionViewer above: `cookies()` throws synchronously
+  // outside a request scope (direct handler calls in tests, build-time
+  // rendering), and a credential lookup that cannot run is no credential —
+  // never a crash.
+  // The request in hand, or the one the server is holding for this call
+  // (lib/request-context). Off-request there is no cookie and no credential.
+  const carrying = request ?? currentRequest();
+  const session = carrying ? await liveAgentSession(carrying) : null;
+  if (!session) return NO_ACTOR;
+
+  // The LAST id is the primary — the token a write acts as. Earlier ids are
+  // still held (they are what a sign-up may claim), but they do not authorize.
+  const primary = session.tokenIds[session.tokenIds.length - 1];
+  const token = await resolveTokenById(primary);
+  if (!token) return NO_ACTOR;
+  await touchToken(token.id);
+  return { viewer: token.userId ? { userId: token.userId, email: null } : null, tokenId: token.id, credential: 'agent-cookie' };
+}
+
+/**
+ * A request-scoped actor, bearer first (agents), then browser credentials.
+ *
+ * THE OTHER BEARER DOOR. Export, mutate, tables, raw, the dataset endpoints and the remote routes
+ * admit a token here rather than through `withTokenAuth`, so the app's own row for the caller has to
+ * follow the claims here too — otherwise whose first call landed on one of these routes still met the
+ * uniform 404 from every scope that reads a share through `users` (lib/artifacts SHARE_PREDICATE).
+ * Both doors call the SAME `syncProfileForToken`, so "do these claims belong to this credential"
+ * stays one rule in one place.
+ *
+ * The dry-run suppression that `withTokenAuth` applies is deliberately NOT repeated here: this door
+ * has no dry-run notion at all — `touchToken` above is ungated too — and the client that sets the
+ * header most (preview-entry, which marks its whole session read-only) reaches exactly these routes,
+ * so honouring it here would leave the invitee rowless on the paths this fix is for.
+ */
+export async function requestOrSessionActor(request: Request): Promise<RequestActor> {
+  const offered = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  const token = offered ? await resolveToken(offered) : null;
+  if (token) {
+    await touchToken(token.id);
+    await syncProfileForToken(request, {userId: token.userId, tokenId: token.id});
+    const {tokenId, ...viewer} = tokenActorForRequest(request, {userId: token.userId, tokenId: token.id});
+    return { viewer: token.userId ? {...viewer, userId: token.userId, email: viewer.email ?? null} : null, tokenId, credential: 'bearer' };
+  }
+  return offered ? NO_ACTOR : sessionActor(request);
+}
+
+/**
+ * The actor as an artifact-SQL scope, or null when the request carries no
+ * credential at all. `TokenActor` needs a tokenId, so an account session
+ * borrows its own id slot: `actorScope` reads `userId` first and only falls
+ * back to the token, so the empty string is never consulted for a user.
+ */
+export function actorForArtifacts(actor: RequestActor): TokenActor | null {
+  if (actor.viewer?.userId) return { ...actor.viewer, tokenId: actor.tokenId ?? '' };
+  return actor.tokenId ? { tokenId: actor.tokenId, userId: null } : null;
+}
+
+/** A request's credentials as the ids and address the role decision reads. */
+const roleActor = (actor: RequestActor): RoleActor => ({ ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId });
+
+/** Does this actor OWN the row — pure (lib/artifacts ownsArtifact), for the places that need only that. */
+export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: RequestActor): boolean {
+  return ownsArtifact(row, roleActor(actor));
+}
+
+/**
+ * This actor's ROLE on the row — the one definition, used by page and app
+ * server alike: the MAX of ownership, the share list and what the link grants
+ * (lib/artifacts effectiveRole). Both halves of the reader/owner split ask
+ * this, so they cannot disagree on who gets the shell; `none` is the miss that
+ * every serving path answers as the uniform 404.
+ */
+export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>, actor: RequestActor): Promise<ArtifactRole> {
+  return artifactRole(row, roleActor(actor));
+}
+
+/**
+ * How a browser is authenticated, for the top bar's session control. Three
+ * outcomes, because there are three ways to hold (or not hold) a credential:
+ *
+ *  - 'account' — a account authentication session. Offers "Sign out".
+ *  - 'anon'    — no account, but the agent-session cookie resolves to a live
+ *                token (lib/agent-session). Offers "Disconnect this browser".
+ *  - 'none'    — neither. Offers "Log in".
+ *
+ * A CLAIMED token held only in the cookie is 'anon', not 'account': there is
+ * no account authentication session to sign out of, and the thing to clear is the cookie.
+ * Fails to 'none' if resolution throws off-request (same as sessionActor).
+ */
+export async function browserSessionKind(request?: Request, admitted?: RequestActor): Promise<'account' | 'anon' | 'none'> {
+  // A page already resolved this exact request for admission. This optional
+  // snapshot is display-only; live authorization always resolves afresh.
+  if (admitted) return admitted.credential === 'session' ? 'account' : admitted.tokenId ? 'anon' : 'none';
+  if (await sessionViewer()) return 'account';
+  const actor = await sessionActor(request);
+  return actor.tokenId ? 'anon' : 'none';
+}
+
+/**
+ * The app's own `users` row for a BEARER caller, from the proxy's claims.
+ *
+ * The row is what every SQL share predicate reads an invitation through:
+ * `artifact_shares` holds the invited ADDRESS, and while the share is still
+ * unresolved `lib/artifacts` matches it as `(SELECT email FROM users WHERE
+ * id = $actor)`. Written on the first COOKIE session alone, that subselect was
+ * NULL for someone who had only ever used the CLI — so an invited account's
+ * listing was empty, a named editor's pull was the uniform 404 and a commenter
+ * could not comment, until one browser visit created the row. The claims ride
+ * on a bearer request too (the proxy attaches the account's address to it), so
+ * the row follows them here, at the one door every token-authenticated route
+ * comes through.
+ *
+ * Reuses `tokenActorForRequest` rather than re-deriving "do these claims belong
+ * to this credential": that rule is load-bearing and is pinned in one place.
+ * Cheap on the hot path — `syncProfile` keeps an LRU of what it has written, so
+ * a claimed token's every later call is a map lookup and no query.
+ *
+ * EXACTLY ONE failure is absorbed, and it is not "anything went wrong". See below.
+ */
+export async function syncProfileForToken(request: Request, scope: TokenActor): Promise<void> {
+  const claimed = tokenActorForRequest(request, scope);
+  if (!claimed.userId || !claimed.email) return;
+  try {
+    await syncProfile({ userId: claimed.userId, email: claimed.email });
+  } catch (error) {
+    /*
+     * A SECOND identity for one address is a provisioning fault the lazy upsert
+     * cannot absorb (lib/profiles diagnoses it by name), and it is PERMANENT
+     * until a human resolves it: rethrowing would turn every one of that
+     * person's CLI calls into a 500 forever, for a row they can live without —
+     * they keep exactly the reach they had the day the row was missing. But it
+     * must not be silent, or an operator whose invitee never gains access has
+     * nothing at all to read; once per user id is enough to say it without
+     * making a log line out of every request.
+     */
+    if (!(error instanceof DuplicateProfileEmail)) {
+      /*
+       * ANYTHING ELSE PROPAGATES, as it did before this sync existed. Two
+       * reasons to prefer that over a blanket swallow. First, the cookie door
+       * (proxyActor, above) has always called `syncProfile` unguarded, so this
+       * keeps one contract for one function rather than two. Second, the fear
+       * — "a GET now 500s on a database blip" — does not survive contact with
+       * the call site: every route that gets here goes on to query the same
+       * database for the artifact itself, so a broken database fails the
+       * request either way; this only surfaces it one step earlier, with the
+       * real error instead of an empty listing that looks like a permission
+       * problem. (`touchToken` swallows everything, but usage bookkeeping is
+       * not the request's business; an identity row the ACL reads is.)
+       */
+      throw error;
+    }
+    warnDuplicateOnce(claimed.userId, error.message);
+  }
+}
+
+/**
+ * User ids already reported as duplicate-address faults: the warning is per person, not per call, and
+ * it is PROCESS-LIFETIME, exactly like lib/profiles' `seen` — a restart says it again, and a test that
+ * reuses an id across cases sees it once in total. Bounded the same way, so a long-lived process with
+ * a long-lived fault cannot grow a set out of it.
+ */
+const WARNED_MAX = 5000;
+const warnedDuplicateProfile = new Set<string>();
+function warnDuplicateOnce(userId: string, message: string): void {
+  if (warnedDuplicateProfile.has(userId)) return;
+  warnedDuplicateProfile.add(userId);
+  if (warnedDuplicateProfile.size > WARNED_MAX) warnedDuplicateProfile.delete(warnedDuplicateProfile.keys().next().value!);
+  console.warn(message);
+}
+
+/** Enrich an authenticated token scope only from matching proxy claims. */
+export function tokenActorForRequest(request: Request, scope: TokenActor): TokenActor {
+  const actor = actorOf(request);
+  if (request.headers.has(BROWSER_SESSION_HEADER) || actor?.credential !== 'bearer'
+    || !scope.userId || actor.userId !== scope.userId || actor.tokenId !== scope.tokenId) return scope;
+  return {...scope, email: actor.email ?? null, emailVerified: actor.emailVerified === true};
+}

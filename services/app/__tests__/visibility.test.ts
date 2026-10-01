@@ -19,8 +19,8 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 

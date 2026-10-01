@@ -16,7 +16,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox';
 // @ts-expect-error The CSP build ships no typings of its own; it is the default build's twin.
 import maplibregl from 'maplibre-gl/dist/maplibre-gl-csp';
 import { loadGeoFeatures } from '@/lib/viz/geo-assets';
-import { basemapStyleUrl, basemapTransformRequest, BASEMAP_WORKER_URL } from '@/lib/basemap';
+import { basemapStyleUrl, basemapTransformRequest, BASEMAP_WORKER_URL } from '@/lib/serving/basemap';
 import { createVegaTooltipHandler, hideVegaTooltip } from '@/lib/viz/vega-tooltip-handler';
 import {
   ATTRIBUTION, MAP_CLASSES, basemapStyleOf, boundaryKeyOf, buildLayers, compactNumber, extentOf, fittedView, layerSpecs, legendScales, paletteFor, rgbCss, tooltipRecord,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PERSON_FACE_LIGHTNESS, PERSON_FACE_SATURATION, personFaceBackground, personHue, personInitial } from '../person-face';
+import { PERSON_FACE_LIGHTNESS, PERSON_FACE_SATURATION, personFaceBackground, personHue, personInitial } from '@/lib/accounts';
 
 /** WCAG relative luminance of an sRGB colour given as 0..255 channels. */
 const luminance = (rgb: number[]): number => {

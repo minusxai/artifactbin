@@ -16,9 +16,9 @@ import {
   liveAgentSession,
   encodeAgentSession,
   withToken,
-} from '@/lib/agent-session';
+} from '@/lib/accounts';
 import { readJson, unauthorized } from '@/lib/http';
-import { resolveToken } from '@/lib/tokens';
+import { resolveToken } from '@/lib/accounts';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 

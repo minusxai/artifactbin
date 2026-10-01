@@ -12,8 +12,8 @@ import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import type { IslandPageData } from '@/lib/islands/contract';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();

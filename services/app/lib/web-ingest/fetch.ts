@@ -19,7 +19,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { lookup as dnsLookup } from 'node:dns';
 import type { LookupFunction } from 'node:net';
-import { WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_TIMEOUT_MS } from '@/lib/config';
+import { WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_TIMEOUT_MS } from '@/lib/platform/config';
 import { isForbiddenIp, parseWebUrl, WebIngestError, type WebIngestPolicy } from './guard';
 
 interface WebResource {

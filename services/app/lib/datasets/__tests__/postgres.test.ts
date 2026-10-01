@@ -8,7 +8,7 @@ import type { DatasetCatalog, PostgresConfig } from '../types';
 import type { Scalar } from '@/lib/story/data/dataflow';
 import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
 
-vi.mock('@/lib/config',async original=>({...await original<object>(),DATASET_ALLOW_PRIVATE_NETWORKS:true}));
+vi.mock('@/lib/platform/config',async original=>({...await original<object>(),DATASET_ALLOW_PRIVATE_NETWORKS:true}));
 
 const catalog: DatasetCatalog = { kind: 'postgres', defaultSchema: 'analytics', refreshSeconds: 60, tables: [
   { schema: 'analytics', name: 'people', source: { schema: 'private_data', table: 'people' }, columns: [{ name: 'id', type: 'number' }, { name: 'name', type: 'string' }] },

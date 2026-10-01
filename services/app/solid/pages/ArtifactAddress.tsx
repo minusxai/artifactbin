@@ -15,9 +15,9 @@
  */
 import { createEffect, lazy, Match, Show, Switch, type JSX } from 'solid-js';
 import { useLocation, useParams } from '@solidjs/router';
-import type { FolderPage as FolderData } from '@/lib/folders';
-import type { ArtifactRole } from '@/lib/share-roles';
-import type { AccountWorkspace } from '@/lib/workspace';
+import type { FolderPage as FolderData } from '@/lib/workspace/folders';
+import type { ArtifactRole } from '@/lib/artifacts/share-roles';
+import type { AccountWorkspace } from '@/lib/workspace/dashboard';
 import { takeBootstrap } from '@/web/bootstrap';
 import { replaceDocument } from '../lib/document-navigation';
 import { PAGE_COLUMN } from '../components/ui';

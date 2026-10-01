@@ -18,7 +18,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { exportCacheKey, resetExportRenderer } from '@/lib/export';
-import { setServices } from '@/lib/services';
+import { setServices } from '@/lib/platform';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { EXPORT_PNG } from '@/__tests__/export-helpers';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
@@ -26,7 +26,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import {documentEditBody} from '@/__tests__/prepared-document';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

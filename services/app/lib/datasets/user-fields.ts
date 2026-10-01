@@ -1,7 +1,7 @@
-import {JOIN_RELATIONS} from '../relation-state';
+import {JOIN_RELATIONS} from '../accounts/relation-state';
 import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
 import type {DatasetColumn, PersonCard, Queryable, Row, UserOption} from '@artifactbin/contracts';
-import {avatarUrl} from '@/lib/avatars';
+import {avatarUrl} from '@/lib/accounts/avatars';
 import {DatasetError} from './errors';
 
 /** Accepted membership plus legacy sharing/ownership; never public-link readership alone. */

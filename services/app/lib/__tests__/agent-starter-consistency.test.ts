@@ -19,13 +19,13 @@
 import { describe, expect, it } from 'vitest';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
-import { agentContract } from '@/lib/agent-contract';
-import { existingPaste } from '@/lib/agent-copy';
-import { agentDiscovery, llmsText } from '@/lib/agent-discovery';
+import { agentContract } from '@/lib/serving';
+import { existingPaste } from '@/lib/serving';
+import { agentDiscovery, llmsText } from '@/lib/serving';
 import { createArtifact } from '@/lib/artifacts';
 import { unauthorized } from '@/lib/http';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
-import { createUser } from '@/lib/users';
+import { createUser } from '@/lib/accounts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

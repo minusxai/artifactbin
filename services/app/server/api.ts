@@ -6,8 +6,8 @@
  * generated from the filesystem (scripts/generate-routes).
  */
 import type { Hono } from 'hono';
-import { emit } from '@/lib/events';
-import { runWithRequest } from '@/lib/request-context';
+import { emit } from '@/lib/platform';
+import { runWithRequest } from '@/lib/platform';
 import { ROUTES, type RouteEntry } from './routes.generated';
 
 type Handler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response> | Response;

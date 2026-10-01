@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
-import { AGENT_COOKIE, decodeAgentSessionEnvelope } from '@/lib/agent-session';
-import { mintToken } from '@/lib/tokens';
+import { AGENT_COOKIE, decodeAgentSessionEnvelope } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
 import { agentCookie, cookieValue, request, useAppHarness } from './harness';
 
 useAppHarness();

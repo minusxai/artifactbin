@@ -9,12 +9,12 @@
  */
 import { expect, it } from 'vitest';
 import { useAppHarness } from './harness';
-import { can } from '@/lib/capabilities';
-import { createTestUser } from '@/lib/testusers';
-import { createGuestOwner } from '@/lib/guest-owner';
+import { can } from '@/lib/artifacts';
+import { createTestUser } from '@/lib/accounts';
+import { createGuestOwner } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 

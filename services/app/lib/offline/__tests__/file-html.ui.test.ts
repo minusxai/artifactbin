@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AGENT_HELP_TITLE } from '@/lib/agent-discovery-tags';
+import { AGENT_HELP_TITLE } from '@/lib/serving/agent-discovery-tags';
 import { artifactFileCsp, readArtifactFileParts, renderArtifactFileHtml } from '../file-html';
 import { artifactFile } from './fixture';
 

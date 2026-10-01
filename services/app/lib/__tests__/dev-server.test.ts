@@ -7,8 +7,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { resolveHmrPort } from '@/lib/config';
-import { developmentViteOptions } from '../dev-vite';
+import { resolveHmrPort } from '@/lib/platform';
+import { developmentViteOptions } from '@/lib/runtime';
 import { resolvePort, DEFAULT_DEV_PORT } from '../../../../scripts/lib/dev-env.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');

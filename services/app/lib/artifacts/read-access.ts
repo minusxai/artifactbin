@@ -1,0 +1,34 @@
+import {grantsOf,grantsPermitRead} from '../datasets/policy/grants';
+import { effectiveRole, type TokenActor } from './access';
+import { getArtifactById, getEditableArtifactFor } from './store';
+import {inCurrentSyntax} from '../migrate/sqlite/stored';
+import {canRead,canEdit,canAnnotate} from './share-roles';
+import {artifactToWireWithAnnotations} from './wire';
+import {publicCatalogOf} from '../datasets/catalog';
+
+/** Read access never implies access to the editable governance or connection definition. */
+export async function readableArtifact(actor:TokenActor,id:string){
+ const row=await getArtifactById(id);
+ if(!row)return null;
+ const role=await effectiveRole(row,actor);
+ if(grantsOf(row))return await grantsPermitRead(row,actor)?{row,role:role==='none'?'viewer' as const:role}:null;
+ return canRead(role)?{row,role}:null;
+}
+
+export async function readArtifactSnapshot(actor:TokenActor,id:string,base:string){
+ const readable=await readableArtifact(actor,id);if(!readable)return null;
+ const {row,role}=readable;const editable=canEdit(role);
+ // Recheck the edit predicate in the query that reads the invitation snapshot.
+ // An editor reads the head it will edit, converted for real; anyone else the head as served (lib/migrate/sqlite/stored).
+ const snapshot=editable?await getEditableArtifactFor(actor,id):row.format==='markup'?await inCurrentSyntax(row):row;
+ if(!snapshot)return null;
+ const wire:Record<string,unknown>=await artifactToWireWithAnnotations(snapshot,base);
+ if(!editable){
+  for(const field of ['shares','dataset_policy','policy_revision','sharing_revision','actor_user_id','actor_token_id'])delete wire[field];
+  if(row.format==='dataset'){
+   wire.markup=null;
+   wire.meta={catalog:publicCatalogOf(row)};
+  }
+ }
+ return {...wire,capabilities:{comment_receipts:true,mutation_receipts:true,read:true,edit:editable,comment:canAnnotate(role),sharing:editable,delete:role==='owner',restore:role==='owner'}};
+}

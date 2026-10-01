@@ -5,7 +5,7 @@
  */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { LINK } from '../components/ui';
-import { loginHref } from '@/lib/login-href';
+import { loginHref } from '@/lib/http/login-href';
 import { useSession } from '../lib/session';
 import { useChromeVisibility } from '../components/PageChrome';
 

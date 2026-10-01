@@ -12,7 +12,7 @@
 import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { IS_DEV } from '@/lib/config';
+import { IS_DEV } from '@/lib/platform/config';
 import { createDraftCompileGate, type DraftCompileGate } from './draft-compile-gate';
 import { createDraftCompilePool, type DraftCompilePool } from './draft-compile-pool';
 import { renderDraftPreview } from './draft-preview.server';

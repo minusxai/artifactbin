@@ -14,10 +14,10 @@ import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/ap
 import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { people } from '@/lib/datasets/user-fields';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();
 const sessionUser = { id: '', email: '' };

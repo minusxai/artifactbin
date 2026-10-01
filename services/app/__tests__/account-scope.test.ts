@@ -22,8 +22,8 @@ import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/rout
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

@@ -23,9 +23,9 @@ import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as readRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
-import { resetRateLimit } from '@/lib/auth';
-import { getDb, resetDb } from '@/lib/db';
-import { SCHEMA_STATEMENTS } from '@/lib/schema';
+import { resetRateLimit } from '@/lib/accounts';
+import { getDb, resetDb } from '@/lib/platform';
+import { SCHEMA_STATEMENTS } from '@/lib/platform';
 import { request } from '@/__tests__/harness';
 
 // harness-exempt: reset builds fresh PGlite databases to test schema replay and upgrade behavior

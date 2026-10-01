@@ -16,8 +16,8 @@ import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const settings = vi.hoisted(() => ({ target: 'domains.example.test' as string | null, session: '' }));
-vi.mock('@/lib/config', async (original) => ({
-  ...(await original<typeof import('@/lib/config')>()),
+vi.mock('@/lib/platform/config', async (original) => ({
+  ...(await original<typeof import('@/lib/platform/config')>()),
   get CUSTOM_DOMAINS_TARGET() { return settings.target; },
   get PUBLIC_BASE_URL() { return 'https://app.example.test'; },
 }));
@@ -27,16 +27,16 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { fakeBrowser } from '@artifactbin/utils';
 import { getArtifactById } from '@/lib/artifacts';
-import { setAvatar } from '@/lib/avatars';
+import { setAvatar } from '@/lib/accounts';
 import { resetExportRenderer } from '@/lib/export';
-import { setServices } from '@/lib/services';
-import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
-import { mintToken } from '@/lib/tokens';
-import { getDb } from '@/lib/db';
+import { setServices } from '@/lib/platform';
+import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/serving';
+import { mintToken } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/story/assets/asset-url';
-import { claimToken, createUser, setUsername } from '@/lib/users';
+import { claimToken, createUser, setUsername } from '@/lib/accounts';
 import { createAppServer } from '../app';
 
 useAppHarness();

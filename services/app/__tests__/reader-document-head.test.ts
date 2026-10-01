@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
-import { mintToken } from '@/lib/tokens';
-import { mintExportKey } from '@/lib/export-key';
+import { mintToken } from '@/lib/accounts';
+import { mintExportKey } from '@/lib/serving';
 import { useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();

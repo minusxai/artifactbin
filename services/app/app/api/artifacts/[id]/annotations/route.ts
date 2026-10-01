@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
-import {durableMutation,type MutationReceipt} from '@/lib/mutation-receipt';
-import {readableArtifact} from '@/lib/artifact-read';
-import {canAnnotate} from '@/lib/share-roles';
+import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
+import {readableArtifact} from '@/lib/artifacts';
+import {canAnnotate} from '@/lib/artifacts';
 /**
  * GET /api/artifacts/:id/annotations — the annotation list, anchors in
  * CURRENT coordinates. `?status=open` (default) | `resolved` | `all`.
@@ -12,10 +12,10 @@ import {canAnnotate} from '@/lib/share-roles';
  * read.
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
-import {decodePage, encodeCursor} from '@/lib/pagination';
-import { withTokenAuth } from '@/lib/auth';
-import { capabilityGuard } from '@/lib/capabilities';
-import { annotationAuthorForRequest } from '@/lib/annotation-author';
+import {decodePage, encodeCursor} from '@/lib/http';
+import { withTokenAuth } from '@/lib/accounts';
+import { capabilityGuard } from '@/lib/artifacts';
+import { annotationAuthorForRequest } from '@/lib/annotations';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { json, readJson } from '@/lib/http';
 import type { TokenActor } from '@/lib/artifacts';

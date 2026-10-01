@@ -10,7 +10,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { BASEMAP_ALLOWED, BASEMAP_UPSTREAM } from '@/lib/basemap';
+import { BASEMAP_ALLOWED, BASEMAP_UPSTREAM } from '@/lib/serving';
 
 export async function GET(_request: Request, ctx: { params: Promise<{ path: string | string[] }> }) {
   const { path: raw } = await ctx.params;

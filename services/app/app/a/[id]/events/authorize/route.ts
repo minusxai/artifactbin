@@ -8,9 +8,9 @@
  * lowercased, ids are not), and the annotations channel is granted beside them.
  */
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
-import { ID_RE } from '@/lib/ids';
+import { ID_RE } from '@/lib/platform';
 import { channelFor, channelForAnnotations } from '@/lib/story/realtime/live';
-import { sessionActor } from '@/lib/viewer';
+import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;

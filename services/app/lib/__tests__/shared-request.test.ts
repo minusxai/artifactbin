@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { forgetShared, primeShared, sharedRequest } from '../shared-request';
+import { forgetShared, primeShared, sharedRequest } from '@/lib/http';
 
 it('shares one request between concurrent askers, honours the ttl, and refetches after a forget or force', async () => {
   const run = vi.fn(async () => ({ n: run.mock.calls.length }));

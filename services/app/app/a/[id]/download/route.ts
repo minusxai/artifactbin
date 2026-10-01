@@ -4,9 +4,9 @@
  * (the same read rule as viewing); this door only answers in HTTP. A refusal
  * the caller may not learn about is the uniform 404 every read door gives.
  */
-import { requestOrSessionActor } from '@/lib/viewer';
+import { requestOrSessionActor } from '@/lib/accounts';
 import { baseUrl, json } from '@/lib/http';
-import { ID_RE } from '@/lib/ids';
+import { ID_RE } from '@/lib/platform';
 import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES, serverTiming, timed, type PhaseTimings } from '@/lib/offline/assemble.server';
 import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';

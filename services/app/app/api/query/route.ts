@@ -1,11 +1,11 @@
 import { datasetResolverForActor, refLoaderForActor, runDocumentDataflow } from '@/lib/artifacts';
-import { actorForArtifacts, sessionActor } from '@/lib/viewer';
+import { actorForArtifacts, sessionActor } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
 import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
 import { validateHelmet } from '@/lib/story/document';
 import { parseQueryRequest } from '@/lib/story/data/query-request';
-import { resolveToken } from '@/lib/tokens';
+import { resolveToken } from '@/lib/accounts';
 import {DatasetError} from '@/lib/datasets/errors';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 

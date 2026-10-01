@@ -10,13 +10,13 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
-import { syncProfile } from '@/lib/profiles';
-import { claimToken, createUser, getUserById } from '@/lib/users';
-import { avatarUrl, setAvatar } from '@/lib/avatars';
+import { syncProfile } from '@/lib/accounts';
+import { claimToken, createUser, getUserById } from '@/lib/accounts';
+import { avatarUrl, setAvatar } from '@/lib/accounts';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
-import { createTestUser, eraseTestUser } from '@/lib/testusers';
-import { mintToken } from '@/lib/tokens';
-import { getDb } from '@/lib/db';
+import { createTestUser, eraseTestUser } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 import sharp from 'sharp';
 

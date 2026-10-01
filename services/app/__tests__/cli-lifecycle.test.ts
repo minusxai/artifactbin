@@ -7,10 +7,10 @@ import {documentPublicationBody,documentEditBody,restoreDocument} from './prepar
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { cliWorkspace } from './cli-harness';
-import { mintToken } from '@/lib/tokens';
-import { createUser, claimToken } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser, claimToken } from '@/lib/accounts';
 import { getArtifactById, updateSharingFor, createArtifact } from '@/lib/artifacts';
-import { ownedArtifactState } from '@/lib/trash';
+import { ownedArtifactState } from '@/lib/workspace';
 import { POST as create, GET as list } from '@/app/api/artifacts/route';
 import { GET as read, DELETE as remove, PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { POST as restore } from '@/app/api/artifacts/[id]/restore/route';

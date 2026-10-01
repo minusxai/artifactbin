@@ -14,8 +14,8 @@
  * rather than being spelled out twice.
  */
 import { describe, expect, it } from 'vitest';
-import { forwardedFor } from '@/lib/client-identity';
-import { TRUSTED_PROXY_HOPS } from '@/lib/config';
+import { forwardedFor } from '@/lib/platform';
+import { TRUSTED_PROXY_HOPS } from '@/lib/platform';
 
 const h = (headers: Record<string, string>) => new Headers(headers);
 

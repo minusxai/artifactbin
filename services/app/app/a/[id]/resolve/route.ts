@@ -1,5 +1,5 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { ID_RE } from '@/lib/ids';
+import { ID_RE } from '@/lib/platform';
 import { serveStoredFile } from '@/lib/story/assets/file-store';
 
 /**

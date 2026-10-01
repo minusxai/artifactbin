@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader/reader-chrome';
-import { personFaceBackground } from '@/lib/person-face';
+import { personFaceBackground } from '@/lib/accounts';
 
 const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   renderReaderChrome({

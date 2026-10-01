@@ -15,11 +15,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { exportImageResponse, resetExportRenderer } from '@/lib/export';
-import { setServices } from '@/lib/services';
+import { setServices } from '@/lib/platform';
 import {useAppHarness} from '@/__tests__/harness';
 import {EXPORT_PNG} from '@/__tests__/export-helpers';
-import {getDb} from '@/lib/db';
-import {ASSETS_ORIGIN} from '@/lib/config';
+import {getDb} from '@/lib/platform';
+import {ASSETS_ORIGIN} from '@/lib/platform';
 
 useAppHarness();
 

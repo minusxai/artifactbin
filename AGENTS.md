@@ -101,9 +101,9 @@ Run these from the repository root. Keep this list current.
   Teaching is generated before install/check/dev/build consumers; never commit `services/cli/src/generated/teaching.json`.
   Successful main CI publishes the tested assets; deploys must advance their source pin and verify
   the release before serving its installer.
-- Schema changes update `services/app/lib/schema.ts`, schema ownership tests, and generated SQL via
+- Schema changes update `services/app/lib/platform/schema.ts`, schema ownership tests, and generated SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
-  setup planner's `.env.example` snapshot via `npm run generate:env-snapshot` (its test fails when it has drifted).
+  setup planner's `.env.example` snapshot via `npm run generate:env-snapshot` (its test fails on drift).
 - PGLite owns one serialized connection per process. Do not enqueue an out-of-transaction query from
   inside a transaction callback. Send notifications/telemetry after commit; preserve atomic edits.
 - Preserve access checks on reads, writes, exports, live streams and dataset mutations. Public/unlisted

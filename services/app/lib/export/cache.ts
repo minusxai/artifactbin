@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import type { Db } from '@/lib/db';
+import type { Db } from '@/lib/platform';
 
 export interface ExportImage {
   id:string; artifact_id:string; object_key:string; mime:'image/png'|'image/jpeg';

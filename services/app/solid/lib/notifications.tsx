@@ -1,9 +1,9 @@
 /* @jsxImportSource solid-js */
 /** One live inbox for the bell, panel and notification page. */
 import { createContext, createEffect, createSignal, onCleanup, useContext, type Accessor, type JSX } from 'solid-js';
-import type { InboxState } from '@/lib/notification-inbox';
+import type { InboxState } from '@/lib/notifications/inbox';
 import { useSession } from './session';
-import { openLiveStream } from '@/lib/live-stream';
+import { openLiveStream } from '@/lib/http/live-stream';
 
 interface InboxContext {
   state: Accessor<InboxState | null>;

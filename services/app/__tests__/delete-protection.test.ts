@@ -10,7 +10,7 @@ import { DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

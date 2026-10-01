@@ -9,7 +9,7 @@
  * the engine so both shapes and both statements get it from one place.
  */
 import { describe, expect, it } from 'vitest';
-import { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } from '@/lib/config';
+import { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } from '@/lib/platform';
 import { queryBounds } from '../engine';
 
 describe('queryBounds', () => {

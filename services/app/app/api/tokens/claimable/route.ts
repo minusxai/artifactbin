@@ -12,9 +12,9 @@
  * window) lives in lib/users.
  */
 import { auth } from '@/auth';
-import { liveAgentSession } from '@/lib/agent-session';
+import { liveAgentSession } from '@/lib/accounts';
 import { isCrossSiteRequest, json, unauthorized } from '@/lib/http';
-import { claimableTokensById } from '@/lib/users';
+import { claimableTokensById } from '@/lib/accounts';
 
 /** A browser cannot plausibly hold more than a handful; the cap bounds the query. */
 const MAX_TOKENS = 20;

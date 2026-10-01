@@ -8,11 +8,11 @@ import {useAppHarness,request,agentCookie} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as queryDocument,POST as queryPrivateDocument} from '@/app/a/[id]/query/route';
 import {attachActor,createTokenReader} from '@artifactbin/utils';
-import {AUTH_SECRET} from '@/lib/config';
+import {AUTH_SECRET} from '@/lib/platform';
 import {createAuthHost} from '@artifactbin/auth';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
-import {mintToken} from '@/lib/tokens';
-import {createUser,claimToken} from '@/lib/users';
+import {mintToken} from '@/lib/accounts';
+import {createUser,claimToken} from '@/lib/accounts';
 const harness=useAppHarness();
 const deferred=<T,>()=>{let resolve!:(x:T)=>void;const promise=new Promise<T>(r=>{resolve=r;});return {resolve,promise};};
 

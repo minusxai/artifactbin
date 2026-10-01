@@ -8,7 +8,7 @@
  * that is not this account's; 403 disabled while the flag is off.
  */
 import { auth } from '@/auth';
-import { domainResolver, verifyDomain } from '@/lib/custom-domains';
+import { domainResolver, verifyDomain } from '@/lib/serving';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };

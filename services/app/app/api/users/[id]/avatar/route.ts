@@ -17,9 +17,9 @@
  * breaking. A replaced picture is therefore asked for at an address no browser
  * has seen.
  */
-import { avatarVersion } from '@/lib/avatars';
+import { avatarVersion } from '@/lib/accounts';
 import { objectStore } from '@/lib/object-store';
-import { getUserById } from '@/lib/users';
+import { getUserById } from '@/lib/accounts';
 
 const notFound = () => new Response('not found', { status: 404 });
 

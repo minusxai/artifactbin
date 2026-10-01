@@ -12,8 +12,8 @@
  * document seen by a browser holding some other token.
  */
 import { describe, expect, it } from 'vitest';
-import { actorForArtifacts, isOwner } from '@/lib/viewer';
-import type { RequestActor } from '@/lib/viewer';
+import { actorForArtifacts, isOwner } from '@/lib/accounts';
+import type { RequestActor } from '@/lib/accounts';
 
 const account = (userId: string, tokenId: string | null = null): RequestActor =>
   ({ viewer: { userId, email: null }, tokenId, credential: 'session' });

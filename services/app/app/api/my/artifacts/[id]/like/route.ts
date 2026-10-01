@@ -23,11 +23,11 @@
  * exists.
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { can, capabilityRefusal, type CapabilityActor } from '@/lib/capabilities';
-import { refusesCrossSite } from '@/lib/auth';
+import { can, capabilityRefusal, type CapabilityActor } from '@/lib/artifacts';
+import { refusesCrossSite } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
-import { count, has, link, unlink } from '@/lib/relations';
-import { sessionActor } from '@/lib/viewer';
+import { count, has, link, unlink } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 type Ctx = { params: Promise<{ id: string }> };
 

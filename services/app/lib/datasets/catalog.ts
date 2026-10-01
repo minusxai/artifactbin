@@ -1,7 +1,7 @@
 import type {ContentObjects} from '@/lib/story/prepared';
 import type {ArtifactRow,TokenActor} from '@/lib/artifacts';
 import type {StoredContent} from '@/lib/story/document/input';
-import {json} from '@/lib/http';
+import {json} from '@/lib/http/http';
 import {publishDataset} from '@/lib/story/data/data-tiers';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import type {DatasetCatalog,DatasetTable} from './types';

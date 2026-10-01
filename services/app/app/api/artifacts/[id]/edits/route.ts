@@ -1,6 +1,6 @@
 /** Client-prepared JSONB operations. The shared authoring compiler validates
  * candidates; the commit owns permission, dependency and history atomicity. */
-import { withTokenAuth } from '@/lib/auth';
+import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { json, readJson } from '@/lib/http';
 

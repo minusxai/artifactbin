@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import {createDocumentGraph,graphNodes,graphSource,type DocumentGraph} from '@/lib/story/graph/document-graph';
 import {prepareGraphPatch,applyGraphPatch,type GraphPatch} from '@/lib/story/graph/document-graph-patch';
 import {graphPatchSql,graphSourceSql,graphReferencesSql} from '@/lib/story/graph/document-graph-sql';

@@ -17,13 +17,13 @@
  */
 import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
-import { existingPaste } from '@/lib/agent-copy';
+import { existingPaste } from '@/lib/serving';
 import { baseUrl, json } from '@/lib/http';
-import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
-import { resolveToken } from '@/lib/tokens';
-import { sessionActor } from '@/lib/viewer';
+import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@/lib/serving';
+import { resolveToken } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/story/document/input';
-import { createGuestOwner } from '@/lib/guest-owner';
+import { createGuestOwner } from '@/lib/accounts';
 
 export async function POST(request: Request) {
   // If no account session resolves, use browser guest ownership below.

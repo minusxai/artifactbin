@@ -5,7 +5,7 @@ import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import X from 'lucide-solid/icons/x';
-import { writeBrowserArtifact } from '@/lib/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifacts/browser-artifact-write';
 import {
   DEFAULT_SOCIAL_PREVIEW_CROP,
   SOCIAL_PREVIEW_HEIGHT,

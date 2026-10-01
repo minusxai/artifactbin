@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
-import type { AnnotationWire } from '@/lib/annotations';
+import type { AnnotationWire } from '@/lib/annotations/store';
 import { STORY_ANNOTATION_LAYOUT_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentMarkdown } from '../CommentMarkdown';

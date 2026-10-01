@@ -4,10 +4,10 @@
  * scope differs (account instead of creating token), so a signed-in human
  * editing in the browser and an agent holding a token speak the same wire.
  */
-import { respondToEdit } from '@/lib/artifact-wire';
+import { respondToEdit } from '@/lib/artifacts';
 import { applyEditFor } from '@/lib/artifacts';
-import { browserActor } from '@/lib/auth';
-import { actorForArtifacts } from '@/lib/viewer';
+import { browserActor } from '@/lib/accounts';
+import { actorForArtifacts } from '@/lib/accounts';
 import { baseUrl, readJson, unauthorized } from '@/lib/http';
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {

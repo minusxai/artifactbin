@@ -276,7 +276,7 @@ export async function shareForScoring(opts: ShareForScoringOptions): Promise<str
     const res = await call(`${opts.base}/api/my/artifacts/${id}/sharing`, {
       method: 'PUT',
       // No `origin`: the door refuses a CROSS-SITE cookie mutation, and a request that states no origin
-      // is not one (`services/app/lib/http.ts isCrossSiteRequest`). Stating the proxy's would be a claim
+      // is not one (`services/app/lib/http/http.ts isCrossSiteRequest`). Stating the proxy's would be a claim
       // about a host this call does not need to make.
       headers: { 'content-type': 'application/json', cookie: opts.cookie, ...opts.headers },
       body: JSON.stringify({ visibility: 'unlisted' }),

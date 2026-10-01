@@ -7,8 +7,8 @@
  * giving it its own address keeps that exception in one place.
  */
 import { json, unauthorized } from '@/lib/http';
-import { listTrashFor } from '@/lib/trash';
-import { actorForArtifacts, sessionActor } from '@/lib/viewer';
+import { listTrashFor } from '@/lib/workspace';
+import { actorForArtifacts, sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

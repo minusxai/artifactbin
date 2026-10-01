@@ -6,7 +6,7 @@
  * cannot reach what is mounted inside. As an overlay the root is a manual popover in the top layer,
  * ordered by `layer` (selection < discussion < navigation < modal).
  */
-import { currentTrustedCss, installedStyles, openOverlay, overlays } from '@/lib/trusted-ui-styles';
+import { currentTrustedCss, installedStyles, openOverlay, overlays } from '@/lib/serving/trusted-ui-styles';
 
 export type TrustedLayer = 'selection' | 'discussion' | 'navigation' | 'modal';
 const PRIORITY: Record<TrustedLayer, number> = { selection: 0, discussion: 1, navigation: 2, modal: 4 };

@@ -1,5 +1,5 @@
-import {createUser,claimToken} from '@/lib/users';
-import {changeMembership} from '@/lib/membership';
+import {createUser,claimToken} from '@/lib/accounts';
+import {changeMembership} from '@/lib/accounts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * A document's live stream hears its DATASETS, not only itself. Every write to
@@ -17,7 +17,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { readEvents } from '@/__tests__/sse';
 

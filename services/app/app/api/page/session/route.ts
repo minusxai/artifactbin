@@ -16,11 +16,11 @@
  * Together with the row read these are two lookups on a payload that is
  * already `no-store`; the welcome rule stays in lib/profiles.
  */
-import { avatarUrl } from '@/lib/avatars';
+import { avatarUrl } from '@/lib/accounts';
 import { json } from '@/lib/http';
-import { welcomePending } from '@/lib/profiles';
-import { getUserById } from '@/lib/users';
-import { browserSessionKind, sessionActor } from '@/lib/viewer';
+import { welcomePending } from '@/lib/accounts';
+import { getUserById } from '@/lib/accounts';
+import { browserSessionKind, sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

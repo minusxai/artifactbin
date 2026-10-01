@@ -6,8 +6,8 @@
  * package (services/sql/CONTRACT.md).
  */
 import type { SqlService } from '@artifactbin/contracts';
-import { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } from '@/lib/config';
-import { services } from '@/lib/services';
+import { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } from '@/lib/platform/config';
+import { services } from '@/lib/platform/services';
 import { queryBounds as bounds } from '@artifactbin/utils';
 
 export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, QueryFailure, QueryOutcome, QueryPage, RunInput, RunManyInput, SqlQuery } from '@artifactbin/contracts';

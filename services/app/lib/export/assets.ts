@@ -1,7 +1,7 @@
 import {Readable} from 'node:stream';
-import {ASSETS_ORIGIN} from '@/lib/config';
-import {getDb} from '@/lib/db';
-import {mintExportKey,verifyExportKey} from '@/lib/export-key';
+import {ASSETS_ORIGIN} from '@/lib/platform/config';
+import {getDb} from '@/lib/platform/db';
+import {mintExportKey,verifyExportKey} from '@/lib/serving/export-read-key';
 import {objectStore} from '@/lib/object-store';
 import type {ExportImage} from './cache';
 

@@ -9,7 +9,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { dataflowForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

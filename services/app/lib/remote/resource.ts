@@ -1,6 +1,6 @@
 import type { SessionResource } from "../../../contracts/src/account-resource";
 import type { RemoteSessionInfo } from "../../../contracts/src/remote";
-import type { TokenActor } from "../artifacts";
+import type { TokenActor } from "@/lib/artifacts";
 import { remoteAgents } from "./agents";
 
 /**

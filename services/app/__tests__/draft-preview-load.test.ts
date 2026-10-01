@@ -6,8 +6,8 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as preview } from '@/app/a/[id]/draft-preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { documentPublicationBody } from './prepared-document';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 /** A CPU-bound compile on the request thread, as a heavy document's draft compile is: nothing else runs while it does. */
 const COMPILE_MS = 120;

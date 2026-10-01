@@ -1,12 +1,12 @@
 import {documentEditBody,restoreDocument} from './prepared-document';
-import {artifactQuery} from '@/lib/artifact-document';
+import {artifactQuery} from '@/lib/artifacts';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 /** Integrated acceptance for identity, atomic batches and relation-only comments. */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, agentCookie } from './harness';
-import { mintToken } from '@/lib/tokens';
-import { getDb } from '@/lib/db';
+import { mintToken } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute } from '@/app/api/artifacts/[id]/route';

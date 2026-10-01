@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { useAppHarness, request, agentCookie } from "./harness";
-import { mintToken } from "@/lib/tokens";
-import { createUser, claimToken } from "@/lib/users";
+import { mintToken } from "@/lib/accounts";
+import { createUser, claimToken } from "@/lib/accounts";
 import { remoteRoute } from "@/lib/remote/route";
 import { RemoteRegistry, remoteSessions } from "@/lib/remote/registry";
 useAppHarness();

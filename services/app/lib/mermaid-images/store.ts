@@ -41,7 +41,7 @@ import { createHash } from 'node:crypto';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoredMermaidImage } from '@/lib/story-runtime/contract';
 import { mermaidImageKey } from '@/lib/story-ui/mermaid-source';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform/db';
 import { objectStore } from '@/lib/object-store';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
 import { mermaidCodesOf } from './codes';

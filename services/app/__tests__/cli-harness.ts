@@ -1,5 +1,5 @@
 import {POST as reserveIdentities} from '@/app/api/artifacts/reservations/route';
-import {createUser} from '@/lib/users';
+import {createUser} from '@/lib/accounts/users';
 import {randomUUID} from 'node:crypto';
 /**
  * THE CLI boot harness — the one way an app test drives the REAL `afbin` against the REAL route
@@ -20,7 +20,7 @@ import { expect } from 'vitest';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts/tokens';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { GET as readArtifact, PUT as replaceArtifact, PATCH as patchArtifact, DELETE as deleteArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as readContent } from '@/app/api/artifacts/[id]/content/route';

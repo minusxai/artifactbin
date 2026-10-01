@@ -1,7 +1,7 @@
 /** App-owned LISTEN/NOTIFY subscriptions. A notification carries a channel and
  * a small payload; subscribers fetch current state rather than treating it as content.
  */
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform/db';
 
 type WakeupHandler = (payload: string) => void;
 

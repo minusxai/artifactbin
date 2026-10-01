@@ -8,11 +8,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { avatarUrl } from '@/lib/avatars';
-import { getDb } from '@/lib/db';
-import { personFaceBackground } from '@/lib/person-face';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername, getUserById } from '@/lib/users';
+import { avatarUrl } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
+import { personFaceBackground } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, getUserById } from '@/lib/accounts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
