@@ -18,7 +18,7 @@
  * Every type here is the shape the call site already read before the move.
  * The module is types only: importing it adds nothing to a bundle.
  */
-import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate, MembershipStatus } from '@artifactbin/contracts';
+import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/story/data/dataflow';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/realtime/live';
@@ -74,11 +74,14 @@ export interface LoadedArtifact extends ArtifactHead {
 
 /** The body of an /edits (or /revert) answer, as use-live-edits reads it. */
 export interface FlushResponse {
+  /** The whole graph: a whole replacement, or a patch that landed on a newer head than it was prepared against. */
   document?: DocumentGraph;
+  /** Otherwise the patch itself, applied at `version - 1`; the editor advances the graph it prepared against. */
+  patch?: GraphPatch;
   title?: string | null; theme?: string | null; template?: string | null; colorMode?: string | null;
   edit_id: string;
   version: number;
-  markup: string | null;
+  markup?: string | null;
   error?: string;
   /** The validator's own diagnostics — precise enough for the author to act on. */
   details?: Array<{ message?: string }>;

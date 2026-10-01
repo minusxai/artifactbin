@@ -12,6 +12,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentGraph, DocumentUpdate } from '@artifactbin/contracts';
 import { graphSource } from '@/lib/story/graph/document-graph';
+import { advanceGraph } from '@/lib/story/graph/document-graph-patch';
 import { prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
 import { documentAfterOperation } from '@/lib/story/graph/document-update-history';
 import { storyUpdateParts } from '@/lib/story/document/update-parts';
@@ -121,14 +122,16 @@ describe('commitEdit — applied exactly as the server applies it', () => {
     expect(answer.ok).toBe(true);
     expect(answer.status).toBe(200);
     const expected = serverResult(head.document!, head.version, update);
-    expect(answer.body.markup).toBe(graphSource(expected));
-    expect(answer.body.markup).toContain('>Q3 sales</h1>');
-    expect(graphSource(answer.body.document!)).toBe(graphSource(expected));
+    // The server's answer: the patch it applied at the version it was prepared against, not the whole graph.
+    expect(answer.body.document).toBeUndefined();
+    expect(answer.body.patch).toEqual(update.patch);
+    expect(graphSource(advanceGraph(head.document!, head.version, answer.body.patch!)!)).toBe(graphSource(expected));
+    expect(graphSource(expected)).toContain('>Q3 sales</h1>');
     expect(answer.body.version).toBe(head.version + 1);
     expect(answer.body.edit_id).not.toBe(head.edit_id);
     expect(onChange).toHaveBeenCalledOnce();
     const file = latest();
-    expect(file.source).toBe(answer.body.markup);
+    expect(file.source).toBe(graphSource(expected));
     expect(file.base.source).toBe(fixture().base.source);
     expect(JSON.stringify(file.island.nodes)).toContain('Q3 sales');
     expect(file.journal).toEqual([{ at: expect.any(String), by: 'Asha', summary: "Edited text in 'Q3 sales'" }]);
@@ -140,8 +143,9 @@ describe('commitEdit — applied exactly as the server applies it', () => {
     const { backend, latest } = open();
     const inserted = await edit(backend, (s) => s.replace('<h1 ', '<p className="text-red-600">A new line</p>\n  <h1 '));
     expect(inserted.answer.ok).toBe(true);
-    expect(inserted.answer.body.markup).toBe(graphSource(serverResult(inserted.head.document!, inserted.head.version, inserted.update)));
-    expect(inserted.answer.body.markup).toContain('A new line');
+    expect(inserted.answer.body.patch).toEqual(inserted.update.patch);
+    expect(latest().source).toBe(graphSource(serverResult(inserted.head.document!, inserted.head.version, inserted.update)));
+    expect(latest().source).toContain('A new line');
     // A new utility class recompiles the file's compiled sheet.
     expect(inserted.update.effects.css).toBe(true);
     expect(latest().css.compiled).toContain('text-red-600');
@@ -150,8 +154,9 @@ describe('commitEdit — applied exactly as the server applies it', () => {
 
     const removed = await edit(backend, (s) => s.replace(/\s*<p className="text-red-600"[^>]*>A new line<\/p>/, ''));
     expect(removed.answer.ok).toBe(true);
-    expect(removed.answer.body.markup).toBe(graphSource(serverResult(removed.head.document!, removed.head.version, removed.update)));
-    expect(removed.answer.body.markup).not.toContain('A new line');
+    expect(removed.answer.body.patch).toEqual(removed.update.patch);
+    expect(latest().source).toBe(graphSource(serverResult(removed.head.document!, removed.head.version, removed.update)));
+    expect(latest().source).not.toContain('A new line');
     expect(latest().journal).toHaveLength(2);
     expect(latest().journal[1]).toMatchObject({ summary: expect.stringMatching(/^Removed content/) });
   });

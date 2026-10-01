@@ -1,4 +1,6 @@
-import {documentPublicationBody} from './prepared-document';
+import {documentPublicationBody,documentEditBody} from './prepared-document';
+import {advanceGraph} from '@/lib/story/graph/document-graph-patch';
+import {graphSource} from '@/lib/story/graph/document-graph';
 import {request} from './harness';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -576,5 +578,42 @@ describe('an invited account that has only ever presented a bearer token', () =>
     expect((await getArtifactRoute(await stranger(`/api/artifacts/${id}`), params({ id }))).status).toBe(404);
     expect((await putArtifactRoute(await stranger(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
     expect((await annotateBearerRoute(await stranger(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'no' }), params({ id }))).status).toBe(404);
+  });
+});
+
+describe('the browser edit answer', () => {
+  it('is the patch when it landed where it was prepared: advancing the editor graph by it gives exactly the stored document', async () => {
+    const w = await world('<div id="d"><p id="a">one</p><p id="b">two</p></div>');
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const id = w.doc.id;
+    const base = await head(id);
+    const sent = documentEditBody(base, { source: '<div id="d"><p id="a">one, typed</p><p id="b">two</p></div>' });
+    const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: sent }), params({ id }));
+    expect(res.status, await res.clone().text()).toBe(200);
+    const answer = await res.json();
+    expect(answer.document).toBeUndefined();
+    expect(answer.markup).toBeUndefined();
+    expect(answer).toMatchObject({ version: base.version + 1, patch: sent.document_update.patch });
+    const read = await (await getMineRoute(await request(`/api/my/artifacts/${id}`, {}), params({ id }))).json();
+    const advanced = advanceGraph(base.document as never, base.version, answer.patch)!;
+    expect(advanced).toEqual(read.document);
+    expect(graphSource(advanced)).toBe(read.markup);
+    expect(answer.edit_id).toBe(read.edit_id);
+
+    // An edit prepared on the older head lands on a newer one: the editor's graph is not that head, so it gets the whole document.
+    const stale = documentEditBody(base, { source: '<div id="d"><p id="a">one</p><p id="b">two, typed</p></div>' });
+    const late = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: stale }), params({ id }));
+    expect(late.status, await late.clone().text()).toBe(200);
+    const full = await late.json();
+    expect(full.patch).toBeUndefined();
+    expect(full.markup).toContain('two, typed');
+    expect(full.markup).toContain('one, typed');
+    expect(full.document.kind).toBe('graph');
+
+    // ?echo=full keeps the bearer route's answer for any caller that wants the document.
+    const now = await head(id);
+    const echoed = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits?echo=full`, { method: 'POST', json: documentEditBody(now, { source: (full.markup as string).replace('one, typed', 'one') }) }), params({ id }));
+    expect(echoed.status).toBe(200);
+    expect((await echoed.json()).document.kind).toBe('graph');
   });
 });

@@ -18,7 +18,7 @@
  * props proxy. The `initial*` fields are read once, at creation, as the hook's `useRef(initial)` did.
  */
 import type { DocumentGraph, DocumentAssetWarning } from '@artifactbin/contracts';
-import { prepareBrowserDocumentUpdate } from '@/lib/story/document/document-authoring-client';
+import { advanceBrowserDocument, prepareBrowserDocumentUpdate } from '@/lib/story/document/document-authoring-client';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/document/edit-batch';
@@ -156,15 +156,20 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
         const body = res.body;
 
         if (res.ok) {
+          // The answer is the patch when it landed on the graph it was prepared against: advance that graph (off the
+          // page thread). The whole document comes back only when it landed on a newer head; read it then.
+          let next: { document?: DocumentGraph; source?: string | null } = { document: body.document, source: body.markup };
+          if (!body.document && body.patch && body.version === current.version + 1) next = await advanceBrowserDocument(current.document, current.version, body.patch) ?? {};
+          if (!next.document && body.patch) { const head = await backend.load().catch(() => null); next = { document: head?.document?.kind === 'graph' ? head.document : undefined, source: head?.markup }; }
           // Composition owns the DOM until commit. Keep this response in flight so subsequent typing
           // stays pending, then rebase the complete local draft.
           while (alive && isUserEditing()) await new Promise<void>((resolve) => window.setTimeout(resolve, 30));
           if (!alive) return;
           failedChange = null;
           editId = body.edit_id;
-          snapshot = { document: body.document, version: body.version, meta: { title: body.title, theme: body.theme, template: body.template, colorMode: body.colorMode } };
+          snapshot = { document: next.document, version: body.version, meta: { title: body.title, theme: body.theme, template: body.template, colorMode: body.colorMode } };
           if (baseSource !== undefined && change.source !== undefined) {
-            const accepted = body.markup ?? change.source;
+            const accepted = next.source ?? change.source;
             const queued = pending as PendingChange | null;
             if (accepted !== change.source) {
               if (queued?.source !== undefined) {

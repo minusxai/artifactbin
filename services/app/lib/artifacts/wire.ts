@@ -694,6 +694,13 @@ export async function respondToEdit(
   base: string,
   body: Record<string, unknown> | null,
   apply: (input: EditInput) => Promise<EditOutcome | Response | null>,
+  /**
+   * 'patch': the browser editor's answer. It already holds the graph it prepared the patch against, so when the
+   * patch landed on exactly that version the answer is the patch itself, not the whole document graph (megabytes
+   * of JSON on a table-heavy document, parsed and cloned on the page thread at every save). A patch that landed
+   * on a newer head (a concurrent edit to other nodes), or a whole replacement, still answers in full.
+   */
+  echo: 'full' | 'patch' = 'full',
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   if (['meta','title','theme','colorMode','template','description','visibility','linkRole','parent_id','access'].some(key=>Object.hasOwn(body,key))) return json({error:'metadata_requires_patch',hint:'Use PATCH with expectedState for metadata only, or PUT with expectedVersion and expectedState for mixed content and metadata.'},400);
@@ -705,7 +712,15 @@ export async function respondToEdit(
   if (!outcome) return json({ error: 'not_found' }, 404);
   // The edit path runs the SAME publish door, so it answers the same way: a URL
   // it could not import is news wherever the write came in from.
-  if (outcome.applied) return json({ ...await artifactToWire(outcome.row, base), ...assetWarningsEcho(outcome.warnings) });
+  if (outcome.applied) {
+    const wire = await artifactToWire(outcome.row, base);
+    const update = input.documentUpdate;
+    if (echo === 'patch' && update && !update.whole && outcome.row.version === update.patch.baseVersion + 1) {
+      const { document: _document, markup: _markup, ...head } = wire as typeof wire & { document?: unknown };
+      return json({ ...head, patch: update.patch, ...assetWarningsEcho(outcome.warnings) });
+    }
+    return json({ ...wire, ...assetWarningsEcho(outcome.warnings) });
+  }
   switch (outcome.reason) {
     case 'stale_edit_id':
     case 'doc_changed':
