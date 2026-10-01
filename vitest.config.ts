@@ -33,13 +33,15 @@ const SERVER_BOOT_TESTS = [
 const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];
 const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))];
 /**
- * The api files that replace modules (`vi.mock`/`vi.doMock`). A module mock lives in the worker's
- * module graph, so without isolation it would leak into every later file on that worker; these run
- * in `api-isolated`, one fresh graph per file. Every other api file shares one graph per worker
- * (`api`, isolate: false). Found by reading the files, so a new mock moves its file by itself.
+ * The api files that replace modules (`vi.mock`/`vi.doMock`/`vi.resetModules`) or rewrite the
+ * process environment. Both outlive the file in a worker's module graph and environment, so without
+ * isolation they would leak into every later file on that worker; these run in `api-isolated`, one
+ * fresh graph per file. Every other api file shares one graph per worker (`api`, isolate: false).
+ * Found by reading the files, so a new mock or env write moves its file by itself.
  */
+const LEAKS_PAST_ITS_FILE = /\bvi\.(?:mock|doMock|resetModules|stubEnv)\(|process\.env(?:\.\w+|\[[^\]]+\])\s*(?:=[^=]|\?\?=)|delete process\.env/;
 const API_MOCKING = globSync(API_INCLUDE, { cwd: import.meta.dirname, exclude: API_EXCLUDE })
-  .filter((file) => /\bvi\.(?:mock|doMock)\(/.test(readFileSync(path.join(import.meta.dirname, file), 'utf8')))
+  .filter((file) => LEAKS_PAST_ITS_FILE.test(readFileSync(path.join(import.meta.dirname, file), 'utf8')))
   .map((file) => file.split(path.sep).join('/'));
 
 export default defineConfig({
