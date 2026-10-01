@@ -118,6 +118,8 @@ it('warms the worker ahead of the first save: the graph crosses and one preparat
  expect(saved.update).toEqual(prepareClientDocumentUpdate(base,change));
  // No worker: nothing is warmed in the page (that is the main-thread work the worker keeps off it).
  const inPage=vi.fn(()=>null);
- await createDocumentPreparer(inPage).warm(base);
- expect(inPage).toHaveBeenCalledTimes(1);
+ const none=createDocumentPreparer(inPage);
+ await none.warm(base);
+ expect(none.offThread()).toBe(false);
+ expect(createDocumentPreparer(()=>worker).offThread()).toBe(true);
 });

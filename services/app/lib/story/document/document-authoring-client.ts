@@ -105,13 +105,19 @@ export function createDocumentPreparer(start:()=>PrepareWorker|null){
   * main-thread work the worker exists to keep off it.
   */
  const warm=(base:ClientDocumentSnapshot):Promise<void>=>ready()?prepare(base,{}).then(()=>{},()=>{}):Promise.resolve();
- return Object.assign(prepare,{advance,warm});
+ /** True when preparations run in a worker (never on the page thread). */
+ const offThread=():boolean=>!!ready();
+ return Object.assign(prepare,{advance,warm,offThread});
 }
 const startWorker=():PrepareWorker|null=>typeof Worker==='undefined'?null:new Worker(new URL('./document-prepare.worker.ts',import.meta.url),{type:'module',name:'document-prepare'}) as unknown as PrepareWorker;
 const prepareInWorker=createDocumentPreparer(startWorker);
 /** Advance the editor's graph by an accepted save's patch (see `advance` above). */
 export function advanceBrowserDocument(document:DocumentGraph,version:number,patch:GraphPatch){
  return prepareInWorker.advance(document,version,patch);
+}
+/** True when this page prepares saves in a worker: only then is a save prepared ahead of its flush (live-edits-core). */
+export function preparesOffThread():boolean{
+ return prepareInWorker.offThread();
 }
 /** Post the editor's graph to the save worker and run one preparation there, ahead of the first save (see `warm`). */
 export function warmBrowserPreparer(base:ClientDocumentSnapshot):Promise<void>{

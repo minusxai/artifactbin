@@ -18,7 +18,7 @@
  * props proxy. The `initial*` fields are read once, at creation, as the hook's `useRef(initial)` did.
  */
 import type { DocumentGraph, DocumentAssetWarning } from '@artifactbin/contracts';
-import { advanceBrowserDocument, prepareBrowserDocumentUpdate, warmBrowserPreparer } from '@/lib/story/document/document-authoring-client';
+import { advanceBrowserDocument, prepareBrowserDocumentUpdate, preparesOffThread, warmBrowserPreparer } from '@/lib/story/document/document-authoring-client';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/document/edit-batch';
@@ -145,7 +145,8 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
    * THE SAVE IS PREPARED WHILE THE DEBOUNCE RUNS. A queued change starts its preparation (in the worker, with its
    * authoring context) at once; the flush that follows the debounce sends that preparation when the change and the
    * snapshot it was prepared against are still the ones it is flushing, and prepares again otherwise. One runs at a
-   * time: a change queued meanwhile is prepared when it finishes, the ones between are skipped.
+   * time: a change queued meanwhile is prepared when it finishes, the ones between are skipped. Only off the page
+   * thread: without a worker a preparation is the page's own work, done once, at the flush.
    */
   let early: { change: PendingChange; snapshot: Snapshot; backend: ArtifactBackend; result: Promise<Prepared> } | null = null;
   let earlyRunning = false;
@@ -154,7 +155,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
     const change = pending;
     const current = snapshot;
     const backend = options().backend;
-    if (!alive || !change || !current.document || inFlight || failed) return;
+    if (!alive || !change || !current.document || inFlight || failed || !preparesOffThread()) return;
     if (early && early.change === change && early.snapshot === current && early.backend === backend) return;
     if (change.source !== undefined && baseSource !== undefined && change.source === baseSource && change.title === undefined && change.theme === undefined && change.colorMode === undefined && !change.annotationOps?.length) return;
     if (earlyRunning) { earlyAgain = true; return; }

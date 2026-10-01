@@ -25,6 +25,8 @@ import * as updateClient from '@/lib/story/graph/document-update-client';
 
 /** Every save preparation (no worker under test: the authoring client prepares in place), with the source it prepared. */
 const preparations = vi.hoisted(() => [] as Array<string | undefined>);
+// As in a browser with the save worker (the preparation itself still runs in place here): saves are prepared early.
+vi.mock('@/lib/story/document/document-authoring-client', async (original) => ({ ...(await original<object>()), preparesOffThread: () => true }));
 vi.mock('@/lib/story/graph/document-update-client', async (original) => {
   const actual = await original<typeof updateClient>();
   return { ...actual, prepareClientDocument: (...args: Parameters<typeof actual.prepareClientDocument>) => { preparations.push(args[1].source); return actual.prepareClientDocument(...args); } };
