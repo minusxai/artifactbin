@@ -8,10 +8,8 @@ import { spawn } from 'node:child_process';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { containmentExpectation, containmentObserved } from './lib/session-containment.mjs';
-import { compiledReader } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
-const readerQuery = compiledReader ? '?reader=compiled' : '';
 const token = (await connectAgent(base)).token;
 const scratch = await mkdtemp(path.join(tmpdir(), 'afbin-sessions-gate-'));
 const headers = { Authorization: `Bearer ${token}`, 'content-type': 'application/json' };
@@ -51,7 +49,7 @@ try {
   }
   const first = await cli(['script', 'new'], `
     const opened = await Promise.all(${JSON.stringify(artifacts)}.map(async id => {
-      const page = await context.newPage(); await page.goto('/a/'+id+${JSON.stringify(readerQuery)});
+      const page = await context.newPage(); await page.goto('/a/'+id);
       const widget = page.frameLocator('iframe[title="Counter widget"]').frameLocator('iframe');
       await widget.locator('#value').filter({hasText:/^[0-9]+$/}).waitFor();
       return page;

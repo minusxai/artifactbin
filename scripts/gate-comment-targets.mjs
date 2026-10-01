@@ -1,6 +1,5 @@
 /** Real app acceptance for durable targets across managed and declarative content. */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { expect } from 'playwright/test';
@@ -29,7 +28,7 @@ try {
   await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined});});
   page.on('response',async response=>{if(response.status()>=400&&response.url().includes('/annotations'))console.error('Annotation request failed:',response.status(),await response.text());});
   await becomeOwner(page,base,seed.token);
-  await page.goto(readerUrl(`${base}/a/${seed.id}`));
+  await page.goto(`${base}/a/${seed.id}`);
   const realm=page.frameLocator('iframe[title="Dynamic comment playground"]').frameLocator('iframe');
   const alice=realm.locator('[data-comment-key="order-101"] [data-comment-key="customer"]');
   await alice.waitFor();
@@ -264,7 +263,7 @@ try {
   await context.close();
 
   const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  const phone=await mobile.newPage();await becomeOwner(phone,base,seed.token);await phone.goto(readerUrl(`${base}/a/${seed.id}`));
+  const phone=await mobile.newPage();await becomeOwner(phone,base,seed.token);await phone.goto(`${base}/a/${seed.id}`);
   const phoneRealm=phone.frameLocator('iframe[title="Dynamic comment playground"]').frameLocator('iframe');
   const heading=phoneRealm.locator('#static-iframe-heading');await heading.waitFor();
   await openArtifactControls(phone);await phone.getByRole('button',{name:'Toggle comments',exact:true}).tap();

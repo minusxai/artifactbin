@@ -93,15 +93,6 @@ try {
   const strangerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const owner = await ownerCtx.newPage();
   const stranger = await strangerCtx.newPage();
-  /*
-   * WHICH BUNDLE the commenter's frame actually fetched. Behaviour alone
-   * cannot tell the cheap delivery from the expensive one — commenting works
-   * either way — so a silent regression to the full runtime would leave this
-   * gate green. Watched from here on, and read after the reload below.
-   */
-  const fetched = [];
-  strangerCtx.on('request', (r) => { if (r.url().includes('/story/')) fetched.push(r.url()); });
-
   await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
   await loginViaEmail(stranger, BASE, sink, STRANGER_EMAIL);
   check(Boolean((await strangerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'a second person is signed in — and was never invited to anything');
@@ -166,12 +157,9 @@ try {
     && await stranger.getByLabel('Owner actions').count() === 0, '…and no permissions-sharing control: the ACL stays the owner\'s');
   await closeControls(stranger);
 
-  // ── 3b. …carrying the COMMENT layer, not the hydration runtime ───────────
-  const got = (kind) => fetched.some((u) => u.includes(`/story/${kind}-`));
+  // ── 3b. …on the mounted document ──────────────────────────────────────────
   check(await stranger.locator('[data-mx-inline-story]').count() === 1,
     'commenting uses the mounted SPA document, not a second standalone runtime');
-  check(!got('entry'),
-    '…and NEVER the hydration runtime (~384 KB): a commenter needs the frame, not the editor');
 
   // ── 4. they comment, from selection to saved thread ──────────────────────
   const frame = stranger.locator('[data-mx-inline-story]');

@@ -47,5 +47,3 @@ export interface ServedStoryRuntime {
   title: string;
   fontPreloads?: string[];
 }
-
-export const isServedRuntime = (runtime: PreparedStoryRuntime | ServedStoryRuntime): runtime is ServedStoryRuntime => 'base' in runtime;

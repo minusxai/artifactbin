@@ -34,7 +34,6 @@ import { chromium } from 'playwright';
 import { startMailSink } from './lib/mail-login.mjs';
 import { becomeAccountOwner } from './lib/start-doc.mjs';
 import { revealReaderChrome } from './lib/reveal-chrome.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const PHONE = { width: 390, height: 844 };
@@ -121,7 +120,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   const page = await ctx.newPage();
   const logs = [];
   page.on('console', (msg) => logs.push(msg.text()));
-  await page.goto(readerUrl(`${BASE}/a/${long.id}`), { waitUntil: 'load' });
+  await page.goto(`${BASE}/a/${long.id}`, { waitUntil: 'load' });
   await page.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
   await settle(page);
 
@@ -178,7 +177,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
     await page.waitForLoadState('networkidle');
     const at = page.url();
     check(at.includes('/login?callbackUrl=') && at.includes(`intent%3D${intent}`), `${name}: ${label} goes through login carrying intent=${intent} (${at})`);
-    await page.goto(readerUrl(`${BASE}/a/${long.id}`), { waitUntil: 'load' });
+    await page.goto(`${BASE}/a/${long.id}`, { waitUntil: 'load' });
     await page.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
   };
   await door('Like', 'like');
@@ -258,7 +257,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
 
   // 8b. the COPY names where it came from, inside the same panel
   const copyPage = await ctx.newPage();
-  await copyPage.goto(readerUrl(`${BASE}/a/${copy.id}`), { waitUntil: 'load' });
+  await copyPage.goto(`${BASE}/a/${copy.id}`, { waitUntil: 'load' });
   await copyPage.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
   await revealReaderChrome(copyPage);
   await copyPage.locator('[data-mx-reader-trigger="controls"]').click();
@@ -272,7 +271,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
 
   // 7. a document that cannot scroll shows the chrome outright
   const shortPage = await ctx.newPage();
-  await shortPage.goto(readerUrl(`${BASE}/a/${short.id}`), { waitUntil: 'load' });
+  await shortPage.goto(`${BASE}/a/${short.id}`, { waitUntil: 'load' });
   await shortPage.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
   await settle(shortPage);
   const shortState = await chromeState(shortPage);
@@ -291,7 +290,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
    */
   const trip = await ctx.newPage();
   await trip.goto(`${BASE}/`, { waitUntil: 'load' });
-  await trip.goto(readerUrl(`${BASE}/a/${long.id}`), { waitUntil: 'load' });
+  await trip.goto(`${BASE}/a/${long.id}`, { waitUntil: 'load' });
   await trip.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
   await revealReaderChrome(trip);
   await Promise.all([

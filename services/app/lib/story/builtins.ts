@@ -84,10 +84,6 @@ export interface PlatformInputs { userId: string | null; now: string; tz: string
 export const platformValues = (p: PlatformInputs): Record<'_me.id' | '_now' | '_tz', string | null> =>
   ({ '_me.id': p.userId, _now: p.now, _tz: p.tz });
 
-/** The built-in tables as rows. */
-export const builtinTableRows = (p: { userId: string | null; members: Array<Record<string, unknown>> }): Record<BuiltinTable, Array<Record<string, unknown>>> =>
-  ({ _me: [{ id: p.userId }], _members: p.members });
-
 /** A reader's zone as the platform accepts it: a real IANA name, else UTC. */
 export function readerZone(tz: unknown): string {
   if (typeof tz !== 'string' || !tz || tz.length > 64) return 'UTC';

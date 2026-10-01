@@ -10,7 +10,7 @@
  * This module owns the walk. The non-vacuity proof belongs to the caller — but it is now ONE
  * assertion over a table of scans rather than one per file.
  */
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
 /** `services/app`. */
@@ -59,9 +59,4 @@ export function codeOf(text: string): string {
     .split('\n')
     .map((line) => (/^\s*[*#]/.test(line) ? '' : line.replace(/\/\/.*$/, '')))
     .join('\n');
-}
-
-/** Each line of code (comments removed) with its 1-based line number. */
-export function codeLines(file: string): Array<[number, string]> {
-  return codeOf(readFileSync(file, 'utf8')).split('\n').map((line, i) => [i + 1, line]);
 }

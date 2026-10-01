@@ -67,11 +67,6 @@ export function readIntent(search: string): Intent | null {
   return (INTENTS as readonly string[]).includes(value ?? '') ? (value as Intent) : null;
 }
 
-/** The same query string with every `intent` removed and nothing else touched. */
-export function stripIntent(search: string): string {
-  return join(pairs(search).filter((p) => p.key !== INTENT_KEY).map((p) => p.raw));
-}
-
 /**
  * The same query string carrying THIS intent — the return address for a door
  * that leads out of the document (login) and has to lead back into it doing

@@ -2,8 +2,7 @@
 const STYLE_ID = 'mx-viz-tooltip-styles';
 
 const TOOLTIP_CSS = `
-#vg-tooltip-element,
-#mx-shared-tooltip {
+#vg-tooltip-element {
   z-index: 100002 !important;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
@@ -13,15 +12,13 @@ const TOOLTIP_CSS = `
   padding: 9px 12px;
   color: inherit;
 }
-#vg-tooltip-element.dark-theme,
-#mx-shared-tooltip.dark-theme {
+#vg-tooltip-element.dark-theme {
   background: rgba(22, 27, 34, 0.96);
   color: #e6edf3;
   box-shadow: 0 8px 28px -8px rgba(0, 0, 0, 0.65), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(3px);
 }
-#vg-tooltip-element:not(.dark-theme),
-#mx-shared-tooltip:not(.dark-theme) {
+#vg-tooltip-element:not(.dark-theme) {
   background: rgba(255, 255, 255, 0.98);
   color: #1f2328;
   box-shadow: 0 8px 28px -8px rgba(20, 27, 45, 0.22), inset 0 0 0 0.5px rgba(20, 27, 45, 0.08);
@@ -48,7 +45,6 @@ const TOOLTIP_CSS = `
   font-weight: 600;
   text-align: left;
 }
-#mx-shared-tooltip { min-width: 132px; }
 
 /*
  * The close button a touch-opened card carries (lib/viz/tooltip-dismiss). The CARD stays
@@ -61,8 +57,7 @@ const TOOLTIP_CSS = `
  * Apple's HIG and Material both ask for. It is absolutely positioned inside an absolutely
  * positioned button, so it adds the target without moving anything: no layout, no paint.
  */
-#vg-tooltip-element .mx-tt-close,
-#mx-shared-tooltip .mx-tt-close {
+#vg-tooltip-element .mx-tt-close {
   pointer-events: auto;
   position: absolute;
   top: -10px;
@@ -83,8 +78,7 @@ const TOOLTIP_CSS = `
   background: inherit;
   box-shadow: 0 2px 10px -2px rgba(20, 27, 45, 0.35), inset 0 0 0 0.5px rgba(127, 140, 160, 0.35);
 }
-#vg-tooltip-element .mx-tt-close::before,
-#mx-shared-tooltip .mx-tt-close::before {
+#vg-tooltip-element .mx-tt-close::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -93,16 +87,10 @@ const TOOLTIP_CSS = `
   height: 44px;
   transform: translate(-50%, -50%);
 }
-#vg-tooltip-element:has(.mx-tt-close),
-#mx-shared-tooltip:has(.mx-tt-close) {
+#vg-tooltip-element:has(.mx-tt-close) {
   position: fixed; /* the button anchors to the card; the card is already fixed */
   overflow: visible;
 }
-.mx-tt-shared .mx-tt-head { opacity: 0.5; font-size: 10.5px; margin-bottom: 5px; letter-spacing: 0.2px; }
-.mx-tt-shared .mx-tt-row { display: flex; align-items: center; padding: 1.5px 0; }
-.mx-tt-shared .mx-tt-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; margin-right: 8px; }
-.mx-tt-shared .mx-tt-name { opacity: 0.82; }
-.mx-tt-shared .mx-tt-val { margin-left: auto; padding-left: 20px; font-weight: 600; }
 `;
 
 export function ensureTooltipStyles(doc: Document): void {

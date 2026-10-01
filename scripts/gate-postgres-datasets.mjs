@@ -13,7 +13,6 @@ import pg from 'pg';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
-import { compiledReader } from './lib/gate-reader.mjs';
 import { notificationDocumentPayload, notificationMutationPayload } from './fixtures/postgres-notifications.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
@@ -158,7 +157,7 @@ try {
   await guest.goto(`${base}/a/${start.id}`, { waitUntil: 'load' });
   await previewContains(guest, '120', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
-  if (compiledReader) await guest.locator('html[data-mx-ready]').waitFor();
+  await guest.locator('html[data-mx-ready]').waitFor();
   await guest.getByLabel('Region', { exact: true }).fill('east');
   await previewContains(guest, '90', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));
