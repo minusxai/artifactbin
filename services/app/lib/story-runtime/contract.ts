@@ -497,13 +497,6 @@ export const STORY_VALUES_HOOK = '__mxValues';
  */
 export const STORY_VALUES_MESSAGE = 'mx:values';
 
-export interface StoryValuesMessage {
-  type: typeof STORY_VALUES_MESSAGE;
-  nonce: string;
-  /** Every scalar the document declares, at its current value. */
-  values: Record<string, Scalar>;
-}
-
 /**
  * The SSE event name a DATA wakeup carries on `/a/<id>/events` (the default,
  * unnamed frame stays the document). It lives HERE rather than beside the

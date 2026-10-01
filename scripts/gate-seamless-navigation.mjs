@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const first = await startDocument(base);
@@ -28,7 +27,7 @@ try {
   const viewReport = (id) => page.waitForResponse(response =>
     new URL(response.url()).pathname === `/api/page/artifact/${id}/view` && response.request().method() === 'POST');
   const initialView = viewReport(first.id);
-  await page.goto(readerUrl(`${base}/a/${first.id}`));
+  await page.goto(`${base}/a/${first.id}`);
   await heading('Artifact A').waitFor();
   assert.equal((await initialView).status(), 204, 'initial compiled reader records a view');
   assert.equal(await page.locator('[data-mx-inline-story]').count(), 1, 'compiled reader is in the top-level DOM');
@@ -61,7 +60,7 @@ try {
   // A served document's own head sheets (data-mx-story-css chief among them) must leave with it: left
   // behind on an SPA hop to a non-document route, they collide with the app bar's own Tailwind classes
   // and its GitHub Star button stops picking one of its two (mobile/desktop) spans.
-  await page.goto(readerUrl(`${base}/a/${first.id}`));
+  await page.goto(`${base}/a/${first.id}`);
   await heading('Artifact A').waitFor();
   await page.getByLabel('Open menu', { exact: true }).click();
   await page.getByRole('link', { name: 'Account', exact: true }).click();

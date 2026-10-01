@@ -176,10 +176,3 @@ export function createMx(store: DataflowStore): MxApi {
   instances.set(store, { key, api });
   return api;
 }
-
-/** The owner must uninstall on disposal and reinstall after replacing declarations. */
-export function installMx(store: DataflowStore): MxApi {
-  const api = createMx(store);
-  if (typeof window !== 'undefined') window.mx = api;
-  return api;
-}

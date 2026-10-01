@@ -3,7 +3,6 @@ import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
-import { compiledReader, legacyOnly } from './lib/gate-reader.mjs';
 /**
  * Gate: reactive JSX, document-local SQL, and Dialog over both document
  * transports. Local state belongs to one loaded document: once the page's
@@ -65,7 +64,6 @@ const exercise = async (page, framed, documentId) => {
       try { routeBodies.push({url:request.url(), body:request.postDataJSON()}); } catch {}
     }
   });
-  const engine = compiledReader ? null : page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), {timeout:20_000}).then(() => true, () => false);
   await page.goto(`${B}/a/${documentId}?$choice=b`, {waitUntil:'load'});
   const frame = framed ? await artifactDocument(page) : page.mainFrame();
   const root = framed ? '#root ' : '';
@@ -73,11 +71,8 @@ const exercise = async (page, framed, documentId) => {
   await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '1', root, {timeout:20_000}).catch(async error => {
     throw new Error(`${error.message}; page=${(await frame.locator('body').innerText()).slice(0, 1000)}`);
   });
-  if (compiledReader) await frame.waitForFunction(() => document.documentElement.hasAttribute('data-mx-ready'));
+  await frame.waitForFunction(() => document.documentElement.hasAttribute('data-mx-ready'));
   check((await frame.textContent(named('Branch'))) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
-  // The first paint is the server's; the page's engine loads behind it.
-  const loadedEngine = engine ? await engine : false;
-  legacyOnly(check, 'the compiled page loads its SQLite engine in a lazy chunk; local edits without route calls below prove the visible behavior', () => check(loadedEngine, `${framed ? 'framed' : 'top-level'} page loaded its SQLite engine`));
   await page.waitForTimeout(500);
   await frame.click(named('Add draft'));
   await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '2', root);
