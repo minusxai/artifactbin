@@ -485,4 +485,34 @@ describe('island controller editor drafts', () => {
     expect(root.textContent).toBe('v3');
     controller.dispose();
   });
+
+  it('names every draft in order (X-Draft-Sequence); 409 applies nothing; 429 resends the newest draft once', async () => {
+    editSession.reconcile = false;
+    const answers: Array<() => Response> = [
+      () => new Response(JSON.stringify({ error: 'superseded' }), { status: 409 }),
+      () => new Response(JSON.stringify({ error: 'draft_compile_busy' }), { status: 429, headers: { 'Retry-After': '1' } }),
+      () => new Response(JSON.stringify({ error: 'draft_compile_busy' }), { status: 429, headers: { 'Retry-After': '1' } }),
+    ];
+    const { root, controller, fetch } = await editingController(async (url, init) => (answers.shift() ?? (() => null))() ?? compiled(url, init));
+    const unmounts = editSession.unmounts;
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
+    await settle(() => fetch.mock.calls.length === 1);
+    await tick(); await tick();
+    expect(editSession.unmounts, '409: nothing drawn').toBe(unmounts);
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v2</p>', editId: 'e1', theme: null, colorMode: 'light' });
+    await settle(() => fetch.mock.calls.length === 2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(fetch, 'no resend before Retry-After').toHaveBeenCalledTimes(2);
+    await settle(() => fetch.mock.calls.length === 3);
+    // The resend was refused again: no third try, no storm.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const sequences = fetch.mock.calls.map(([, init]) => new Headers(init.headers).get('X-Draft-Sequence')!);
+    expect(sequences.every((value) => /^[\w-]{1,64}\.\d+$/.test(value))).toBe(true);
+    expect(new Set(sequences.map((value) => value.split('.')[0])).size).toBe(1);
+    expect(sequences.map((value) => Number(value.split('.')[1]))).toEqual([1, 2, 3]);
+    expect(JSON.parse(String(fetch.mock.calls[2]![1].body)).source).toBe('<p>v2</p>');
+    expect(root.textContent).toBe('v0');
+    controller.dispose();
+  });
 });

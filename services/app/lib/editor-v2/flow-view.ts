@@ -281,10 +281,19 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         emit(undefined, before, maps);
         return;
       }
+      // A paragraph broken or joined (Enter, Backspace at a block's edge) is handed over at once: the page's tree
+      // moves, and the draft that follows should not wait for typing to pause.
+      const structural = tr.steps.some((step) => {
+        const json = step.toJSON() as { stepType?: string; from?: number; to?: number; slice?: { openStart?: number; openEnd?: number; content?: Array<{ type: string }> } };
+        if (json.stepType !== 'replace') return true;
+        if (json.slice && (json.slice.openStart || json.slice.openEnd || json.slice.content?.some((node) => node.type !== 'text'))) return true;
+        return json.from !== json.to && tr.before.resolve(json.from!).parent !== tr.before.resolve(json.to!).parent;
+      });
       // Typing is held: drawn already, handed over once it pauses, as ONE edit.
       if (held) held.maps.push(...maps);
       else held = { group, before, maps };
       clearTimeout(heldTimer);
+      if (structural) { flush(); return; }
       heldTimer = setTimeout(flush, FLOW_IDLE_MS);
       syncBusy();
     },

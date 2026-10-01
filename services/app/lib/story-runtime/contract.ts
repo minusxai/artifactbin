@@ -253,6 +253,8 @@ export interface EditDraft {
    * may only reconcile the editor, never redraw it (lib/story-runtime/island-controller).
    */
   typing?: true;
+  /** A new look (theme, colour mode): drawn by the compiler, never only reconciled into the editors. */
+  redraw?: true;
 }
 
 /**

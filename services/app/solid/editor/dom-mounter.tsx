@@ -36,7 +36,18 @@ export interface CompiledEditMount {
    * compiled story root (null: not compiled — the editors' own blocks stand in for it on leaving).
    * False, and nothing changed, when anything else differs: the caller draws it.
    */
-  reconcile(before: JsxNode[], after: JsxNode[], next: JsxNode[], draft: HTMLElement | null): boolean;
+  reconcile(before: JsxNode[], after: JsxNode[], next: JsxNode[], draft: HTMLElement | null, options?: ReconcileOptions): boolean;
+}
+
+export interface ReconcileOptions {
+  /**
+   * The draft is the page's own source NOW (an undo, a remote document, a command): an editor whose prose
+   * differs takes the draft's, in place, instead of the page being redrawn. Never while an editor holds typing.
+   */
+  sync?: boolean;
+  /** The sources `before` and `after` were parsed from: an unchanged region is recognised by its text alone. */
+  beforeSource?: string;
+  afterSource?: string;
 }
 
 interface ProseRegion { path: string; parentPath: string; start: number; nodes: JsxNode[] }
@@ -44,6 +55,18 @@ interface ProseRegion { path: string; parentPath: string; start: number; nodes: 
 const isBlock = (node: JsxNode): boolean => node.type === 'element'
   && !['thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u'].includes(node.tag)
   && isProseTree(node);
+
+const isTable = (node: JsxNode | undefined): boolean => node?.type === 'element' && node.tag === 'table';
+/**
+ * Where the prose run starting at `start` ends. A table is a region of its own: typing in a paragraph never
+ * re-serializes the tables around it (a data report holds dozens), and a cell edit serializes only its table.
+ */
+function regionEnd(siblings: JsxNode[], start: number): number {
+  if (isTable(siblings[start])) return start + 1;
+  let index = start + 1;
+  while (index < siblings.length && ((isBlock(siblings[index]!) && !isTable(siblings[index])) || (siblings[index]!.type === 'text' && !(siblings[index] as { value: string }).value.trim()))) index++;
+  return index;
+}
 
 /** The prose runs the mounter gives one editor each, by the same walk as `visit` (without the DOM). */
 export function proseRegions(nodes: JsxNode[]): ProseRegion[] {
@@ -57,7 +80,7 @@ export function proseRegions(nodes: JsxNode[]): ProseRegion[] {
         continue;
       }
       const start = index++;
-      while (index < siblings.length && (isBlock(siblings[index]!) || (siblings[index]!.type === 'text' && !(siblings[index] as { value: string }).value.trim()))) index++;
+      index = regionEnd(siblings, start);
       regions.push({ path: [parentPath, String(start)].filter(Boolean).join('.'), parentPath, start, nodes: siblings.slice(start, index) });
     }
   };
@@ -100,7 +123,7 @@ const PLACEMENT = ['grid-column-start', 'grid-column-end', 'grid-row-start', 'gr
 export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks): CompiledEditMount {
   const cleanups: Array<() => void> = [];
   /** Every mounted prose editor, by its region's path: what `reconcile` keeps alive. */
-  const mounted = new Map<string, { view: () => EditorView | null; adopt(region: JsxNode[], elements: HTMLElement[]): void }>();
+  const mounted = new Map<string, { view: () => EditorView | null; adopt(region: JsxNode[], elements: () => HTMLElement[]): void }>();
   // GridEdit's grip/resize affordances (STORY_GRID_EDIT_CSS's [data-mx-grid-tile]/.mx-grid-resize
   // rules) are structural, not authored content — same reasoning as the React adapter's own
   // `<style data-mx-grid-css>`, injected inside the story surface rather than the app's <head>.
@@ -231,7 +254,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         continue;
       }
       const start = index++;
-      while (index < siblings.length && (isBlock(siblings[index]!) || (siblings[index]!.type === 'text' && !(siblings[index] as { value: string }).value.trim()))) index++;
+      index = regionEnd(siblings, start);
       const region = siblings.slice(start, index);
       const elements = Array.from({ length: index - start }, (_, offset) => at([parentPath, String(start + offset)].filter(Boolean).join('.')))
         .filter((el): el is HTMLElement => !!el);
@@ -266,8 +289,9 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         view: () => liveView,
         adopt(next, compiled) {
           previous = next;
-          if (compiled.length) restore = compiled;
           setCurrent(() => next);
+          const blocks = compiled();
+          if (blocks.length) restore = blocks;
         },
       });
       // The editor root replaces the region's blocks as ONE child of their parent; under a flex or
@@ -290,27 +314,43 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   visit(nodes, '');
   return {
     dispose() { for (const cleanup of cleanups.reverse()) cleanup(); },
-    reconcile(before, after, next, draft) {
+    reconcile(before, after, next, draft, options = {}) {
       const was = proseRegions(before), now = proseRegions(after), into = proseRegions(next);
       if (was.length !== now.length || now.length !== into.length || now.some((region, i) => region.path !== was[i]!.path || region.path !== into[i]!.path)) return false;
       if (!sameMaps(outsideProse(before, was), outsideProse(after, now))) return false;
+      const text = (region: ProseRegion, source: string | undefined): string | null => {
+        const first = region.nodes[0] as { start?: unknown } | undefined, last = region.nodes.at(-1) as { end?: unknown } | undefined;
+        return source !== undefined && typeof first?.start === 'number' && typeof last?.end === 'number' ? source.slice(first.start, last.end) : null;
+      };
+      const changed = new Set<string>();
       for (const [i, region] of now.entries()) {
+        const old = was[i]!;
+        // Unchanged text since the tree on screen: nothing to compare (the editors show it).
+        const a = text(old, options.beforeSource), b = text(region, options.afterSource);
+        if (a !== null && a === b) continue;
         const editor = mounted.get(region.path);
         const view = editor?.view();
-        // A mounted editor already shows the draft's prose (it typed it); any other region is unchanged.
-        if (editor ? !view || serializeJsx(sourceNodes(view.state.doc)) !== proseKey(region.nodes) : proseKey(region.nodes) !== proseKey(was[i]!.nodes)) return false;
+        if (!editor) { if (proseKey(region.nodes) !== proseKey(old.nodes)) return false; continue; }
+        if (!view) return false;
+        // A mounted editor shows the draft's prose already (it typed it), or — the source moved under it (an
+        // undo, a remote document) — takes it in place when the caller says the draft is the source now.
+        if (serializeJsx(sourceNodes(view.state.doc)) !== proseKey(region.nodes)) {
+          if (!options.sync) return false;
+          changed.add(region.path);
+        }
       }
       const doc = root.ownerDocument;
-      for (const region of into) {
+      for (const [i, region] of into.entries()) {
         const editor = mounted.get(region.path);
         if (!editor) continue;
-        const compiled = draft
+        const a = text(was[i]!, options.beforeSource), b = text(now[i]!, options.afterSource);
+        if (a !== null && a === b && !changed.has(region.path)) continue;
+        editor.adopt(region.nodes, () => draft
           ? region.nodes.flatMap((_, offset) => {
             const el = draft.querySelector<HTMLElement>(`[data-mx-ast="${CSS.escape([region.parentPath, String(region.start + offset)].filter(Boolean).join('.'))}"]`);
             return el ? [doc.importNode(el, true) as HTMLElement] : [];
           })
-          : [...(editor.view()?.dom.children ?? [])].map((el) => el.cloneNode(true) as HTMLElement);
-        editor.adopt(region.nodes, compiled);
+          : [...(editor.view()?.dom.children ?? [])].map((el) => el.cloneNode(true) as HTMLElement));
       }
       return true;
     },

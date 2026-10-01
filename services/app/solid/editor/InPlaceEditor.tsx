@@ -623,13 +623,13 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       <ThemePicker value={theme()} colorMode={colorMode()} onPick={(t) => {
         setTheme(t);
         queue({ theme: t });
-        showInDocument(editorSource.current());
+        showInDocument(editorSource.current(), { redraw: true });
       }} />
       <TemplateChip template={art.template} />
       <ModeChip mode={colorMode()} themeDefault={storyThemeDefaultMode(theme()) ?? 'light'} onPick={(next) => {
         setColorMode(next);
         queue({ colorMode: next });
-        showInDocument(editorSource.current());
+        showInDocument(editorSource.current(), { redraw: true });
       }} />
     </section>
     <hr class="my-3 border-edge" />

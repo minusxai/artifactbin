@@ -117,6 +117,18 @@ describe('typing is handed to the page once it pauses', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('hands a broken paragraph over at once (Enter), with the typing before it', () => {
+    let engine: import('prosemirror-view').EditorView | null = null;
+    const onChange = vi.fn();
+    render(() => <FlowEditor nodes={nodes('<p id="a">alpha</p>')} path="0" onChange={onChange} onView={(v) => { engine = v; }} />);
+    const v = engine!;
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, 6)).insertText('!'));
+    expect(onChange).not.toHaveBeenCalled();
+    v.dispatch(v.state.tr.split(v.state.selection.from));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(serializeJsx(onChange.mock.calls[0]![0])).toMatch(/alpha!<\/p><p/);
+  });
+
   it('hands held typing over before a paste, and at once when asked (commit, undo, blur)', () => {
     let engine: import('prosemirror-view').EditorView | null = null;
     const onChange = vi.fn();

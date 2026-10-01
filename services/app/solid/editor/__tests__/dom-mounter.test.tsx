@@ -207,4 +207,25 @@ describe('compiled DOM edit mounter', () => {
     expect(root.querySelector('#first')?.textContent).toBe('alphaXY');
     root.remove();
   });
+
+  it('takes prose the source moved under it (undo, remote) in place when told the draft is the source now', () => {
+    const tree = (text: string) => storyUpdateParts(text)!.nodes;
+    const source = '<div><p id="first">alpha</p><table><tbody><tr><td><p id="cell">cell</p></td></tr></tbody></table><p id="last">omega</p><Chart id="c" type="bar" /></div>';
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0"><p id="first" data-mx-ast="0.0">alpha</p><table data-mx-ast="0.1"><tbody><tr><td><p id="cell">cell</p></td></tr></tbody></table><p id="last" data-mx-ast="0.2">omega</p><div id="c" data-mx-ast="0.3"></div></div>';
+    document.body.append(root);
+    const views: EditorView[] = [];
+    const mounted = mountCompiledEditRegions(root, tree(source), { onView(next) { if (next && !views.includes(next)) views.push(next); }, onFlow() {} });
+    // A table is a region of its own: typing beside it never serializes it.
+    expect(views).toHaveLength(3);
+    const first = views[0]!;
+    const undone = source.replace('>alpha<', '>alpha restored<');
+    expect(mounted.reconcile(tree(source), tree(undone), tree(undone), null, { beforeSource: source, afterSource: undone })).toBe(false);
+    expect(mounted.reconcile(tree(source), tree(undone), tree(undone), null, { sync: true, beforeSource: source, afterSource: undone })).toBe(true);
+    expect(views[0]).toBe(first);
+    expect(first.dom.isConnected).toBe(true);
+    expect(first.dom.textContent).toBe('alpha restored');
+    mounted.dispose();
+    root.remove();
+  });
 });

@@ -28,7 +28,7 @@ export interface EditDraftSender {
    * `preview`: a saved version shown with editing paused (version history), in the page's current design.
    * `typing`: text typed into prose the editor already shows: held until typing pauses, newest wins.
    */
-  (source: string, options?: { preview?: true; typing?: true }): void;
+  (source: string, options?: { preview?: true; typing?: true; redraw?: true }): void;
   /** Send held typing now (blur, Enter). */
   flush(): void;
   /** Drop held typing (the editor is leaving). */
@@ -39,7 +39,7 @@ export function createEditDraftSender(runtimeRef: DocumentRuntimeRef, state: Edi
   let held: string | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const cancel = () => { if (timer !== null) clearTimeout(timer); timer = null; held = null; };
-  const post = (source: string, options: { preview?: true; typing?: true }) => {
+  const post = (source: string, options: { preview?: true; typing?: true; redraw?: true }) => {
     // Parsed at send time, not per keystroke: typing pays for no parse of the whole document.
     const parts = storyUpdateParts(source, HELD_ASSETS);
     if (!parts) return;
@@ -48,6 +48,7 @@ export function createEditDraftSender(runtimeRef: DocumentRuntimeRef, state: Edi
       theme: state.theme(), colorMode: state.colorMode(),
       ...(options.preview ? { preview: true } : {}),
       ...(options.typing ? { typing: true } : {}),
+      ...(options.redraw ? { redraw: true } : {}),
     };
     sendDocument({ runtimeRef }, draft);
   };
@@ -56,7 +57,7 @@ export function createEditDraftSender(runtimeRef: DocumentRuntimeRef, state: Edi
     cancel();
     if (source !== null) post(source, { typing: true });
   };
-  const send = (source: string, options: { preview?: true; typing?: true } = {}) => {
+  const send = (source: string, options: { preview?: true; typing?: true; redraw?: true } = {}) => {
     if (options.typing && !options.preview) {
       held = source;
       if (timer !== null) clearTimeout(timer);
