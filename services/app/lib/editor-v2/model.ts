@@ -175,12 +175,13 @@ function proseTreeOf(node: JsxElement): boolean {
     !blockTags.has(node.tag) &&
     !containerTags.has(node.tag) &&
     !inlineTags.has(node.tag) &&
-    !['br', 'hr'].includes(node.tag)
+    node.tag !== 'br' && node.tag !== 'hr'
   )
     return false;
   // Table structure and grandfathered inline styles remain renderer-owned.
   // Cells expose their own text regions; a text command never absorbs a cell.
-  if (node.attributes.some((a) => !a.value.static || a.name.toLowerCase() === 'style')) return false;
+  // (No lower-casing of every attribute name: a report's cells are thousands of ids.)
+  if (node.attributes.some((a) => !a.value.static || (a.name.length === 5 && a.name.toLowerCase() === 'style'))) return false;
   return node.children.every(isProseTree);
 }
 function inline(nodes: JsxNode[], marks: Mark[] = []): EditorNode[] {
