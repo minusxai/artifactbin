@@ -73,7 +73,8 @@ Run these from the repository root. Keep this list current.
 - `npm run eval -- --tasks <name>` — the agent eval against this checkout's dev server
   (`--deployment` to point elsewhere).
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
-- `npm run validate` — name guard and incremental TypeScript, including unused declarations;
+- `npm run validate` — name guard and incremental TypeScript (native `tsgo` where its platform binary is
+  installed, here and in CI; tsc otherwise), including unused declarations;
   shared utils/contracts also use `noUncheckedIndexedAccess` for downstream compatibility.
 - `npm test` — affected api/node/ui + CLI tests, at most 50 files combined. Exit 2: use PR CI,
   never widen. `-- <ref>` selects branch changes; `-- --files <paths>` selects TDD tests;
