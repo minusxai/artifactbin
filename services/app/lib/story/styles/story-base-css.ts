@@ -32,7 +32,7 @@ export interface StoryBaseCssRecipe {
 
 export function storyBaseCss(recipe: StoryBaseCssRecipe): string {
   return [
-    ':root { --mx-vh: 100vh; } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
+    ':root { --mx-vh: 100vh; color: var(--foreground, CanvasText); background-color: var(--background, Canvas); } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
     recipe.chrome ? STORY_CHROME_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
     getStoryFontCss(recipe.theme ?? undefined), storyFontFaceCss(recipe.faces), documentFontCss(recipe.fonts),
   ].join('\n');

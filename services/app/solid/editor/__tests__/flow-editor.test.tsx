@@ -140,3 +140,16 @@ describe('line-boundary keys', () => {
     spy.mockRestore();
   });
 });
+
+it('keeps the leading space of a one-line plain-text paste, as typing it would', () => {
+  let engine: import('prosemirror-view').EditorView | null = null;
+  const onChange = vi.fn();
+  const view = render(() => <FlowEditor nodes={nodes('<p id="a">alpha</p>')} path="0" onChange={onChange} onView={(v) => { if (v) engine = v; }} />);
+  const editor = view.getByRole('textbox');
+  fireEvent.focus(editor);
+  const end = engine!.state.doc.resolve(1 + 'alpha'.length);
+  engine!.dispatch(engine!.state.tr.setSelection(TextSelection.near(end)));
+  fireEvent.paste(editor, { clipboardData: { files: [], getData: (type: string) => (type === 'text/plain' ? ' pasted words' : '') } });
+  expect(view.container.querySelector('#a')!.textContent).toBe('alpha pasted words');
+  expect(serializeJsx(onChange.mock.calls.at(-1)![0])).toContain('alpha pasted words');
+});

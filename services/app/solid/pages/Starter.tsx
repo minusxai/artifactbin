@@ -46,6 +46,7 @@ import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { syncPanelTriggers, toggleReaction, wireReaderChrome, type ReaderPanel } from '../document/reader-chrome-adapter';
+import { prepareBlankReport } from '../lib/blank-report';
 
 export interface StarterAnswer {
   role: ArtifactRole;
@@ -75,6 +76,22 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   const annotatable = canAnnotateRole(answer.role);
   const phone = createIsPhoneViewport();
   const [panel, setPanel] = createSignal<ReaderPanel | null>(null);
+  const [converting, setConverting] = createSignal(false);
+  const [conversionError, setConversionError] = createSignal('');
+  const continueBlank = async () => {
+    if (!editable || converting()) return;
+    setConverting(true); setConversionError('');
+    try {
+      const backend = createHttpBackend(id);
+      const head = await backend.load();
+      if (!head) throw new Error('Could not open this artifact.');
+      const result = await backend.commitEdit(prepareBlankReport(head, surface.editId));
+      if (!result.ok) throw new Error(result.status === 409 ? 'This artifact has changed. Reload to see the latest version.' : 'Could not create the blank report. Please try again.');
+      reloading = true; // The committed live frame must not race the editor navigation.
+      openEditor();
+    } catch (error) { setConversionError(error instanceof Error ? error.message : 'Could not create the blank report.'); }
+    finally { setConverting(false); }
+  };
   const [fork, setFork] = createSignal(false);
   const [sharingOpen, setSharingOpen] = createSignal(false);
   const [membershipRevision, setMembershipRevision] = createSignal(0);
@@ -114,7 +131,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   let reloading = false;
   createEffect(() => {
     const frame = live();
-    if (!frame || reloading || frame.format !== 'markup' || isStartPlaceholder(frame.source, frame.version)) return;
+    if (converting() || !frame || reloading || frame.format !== 'markup' || isStartPlaceholder(frame.source, frame.version)) return;
     reloading = true;
     reloadKeepingPlace(window);
   });
@@ -218,7 +235,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     </TrustedUi>
     {/* The starter sits on the app's own dotted page, under the chrome's bar. */}
     <div aria-label="Artifact viewport" class="relative min-h-screen" style={{ 'padding-top': `${phone() ? 0 : APP_BAR_H}px` }}>
-      <StarterInstructions id={id} />
+      <StarterInstructions id={id} onContinueBlank={editable ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
     </div>
   </>;
 }

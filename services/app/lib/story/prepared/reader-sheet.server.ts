@@ -60,7 +60,8 @@ export function readerStorySheet(compiled: string | null, story: { source: strin
   if (!compiled || !compiled.endsWith(themes)) return compiled;
   const kept = readerRecipes(story.nodes);
   for (const candidate of extractClassCandidates(story.source)) kept.add(candidate);
-  const dropped = new Set(STORY_RECIPE_UNION.filter((token) => !kept.has(token)));
+  // Mode belongs to the document runtime, independent of authored utilities.
+  const dropped = new Set(STORY_RECIPE_UNION.filter((token) => token !== 'dark' && !kept.has(token)));
   let ast: cssTree.CssNode;
   try { ast = cssTree.parse(compiled.slice(0, compiled.length - themes.length)); } catch { return compiled; }
   cssTree.walk(ast, {

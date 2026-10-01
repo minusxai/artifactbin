@@ -113,3 +113,12 @@ it('reports the open once', async () => {
   open();
   await waitFor(() => expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url, init]) => url === '/api/page/artifact/sta001/view' && init?.method === 'POST')).toHaveLength(1));
 });
+
+
+it('offers a blank report transition only to writers', () => {
+  open();
+  expect(screen.getByRole('button', { name: 'Continue with blank report' })).toBeInTheDocument();
+  cleanup(); document.body.replaceChildren();
+  open(answer('viewer'));
+  expect(screen.queryByRole('button', { name: 'Continue with blank report' })).toBeNull();
+});

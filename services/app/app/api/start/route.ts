@@ -1,7 +1,8 @@
 /**
  * POST /api/start — the zero-to-live-document button.
  *
- * Creates an empty markup artifact and hands back the ONE agent starter
+ * Creates a markup artifact (a blank report with ?mode=blank, otherwise the
+ * existing agent placeholder) and hands back the ONE agent starter
  * (lib/agent-copy `existingPaste`), so the home page can give the user a paste
  * for a real, watchable document: they paste it to an agent, and the page they
  * are looking at fills in over the live stream.
@@ -18,7 +19,7 @@ import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json } from '@/lib/http';
-import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
+import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
 import { resolveToken } from '@/lib/tokens';
 import { sessionActor } from '@/lib/viewer';
 import { parseContentInput } from '@/lib/story/document/input';
@@ -44,8 +45,8 @@ export async function POST(request: Request) {
   const existingTokenId = bearer?.id ?? actor?.tokenId ?? '';
   const guest = !ownerId && !existingTokenId ? await createGuestOwner() : null;
   const tokenId = existingTokenId || guest?.tokenId || '';
-  const parsed = await parseContentInput({ markup: START_PLACEHOLDER_MARKUP }, {});
-  if (parsed instanceof Response) return parsed; // unreachable: the placeholder is fixed and valid
+  const parsed = await parseContentInput({ markup: new URL(request.url).searchParams.get('mode') === 'blank' ? BLANK_REPORT_MARKUP : START_PLACEHOLDER_MARKUP }, {});
+  if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
 
   const row = await createArtifact(tokenId, ownerId ?? guest?.userId ?? null, {
     ...parsed,

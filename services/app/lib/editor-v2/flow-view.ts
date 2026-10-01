@@ -228,6 +228,18 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         return true;
       }
       const markup = data.getData('text/html');
+      const plain = data.getData('text/plain');
+      if (!markup && plain && !/[\r\n]/.test(plain)) {
+        // One line of plain text is literal text, exactly as typing it: parsed as a paragraph, its edge spaces
+        // would collapse like source whitespace (" world" after "hello" became "helloworld").
+        try {
+          clipboardAst('text', plain);
+          view.dispatch(view.state.tr.insertText(plain).setMeta('uiEvent', 'paste').scrollIntoView());
+        } catch (error) {
+          props().onError?.(error instanceof Error ? error.message : 'Paste could not be inserted.');
+        }
+        return true;
+      }
       const kind: ClipboardKind = markup ? 'html' : 'text';
       const value = markup || data.getData('text/plain');
       try {
