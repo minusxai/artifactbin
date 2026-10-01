@@ -315,7 +315,9 @@ export function createIslandController({ win, root, islands, nodes: served, port
     shownParts = afterParts ? partsKey(afterParts) : null;
     const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
-    if (pending.sheet && sheet) sheet.textContent = pending.sheet.textContent;
+    // Written only when it changed: rewriting the same sheet re-styles the whole page, which the editors' removal
+    // below then paid at once (most of a reply's apply on a table-heavy page).
+    if (pending.sheet && sheet && sheet.textContent !== pending.sheet.textContent) sheet.textContent = pending.sheet.textContent;
     // Editors whose region this draft draws exactly as it is stay mounted (focus, caret and history with them) and
     // the morph puts them where the draft has them; only the regions it changed are rebuilt.
     const keptEditors = edit?.holdUnchanged(pending.nodes, pending.root) ?? new Map<string, HTMLElement>();

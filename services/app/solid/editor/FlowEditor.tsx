@@ -19,7 +19,8 @@ export function FlowEditor(props: FlowEditorProps) {
   // React's dependency list [incoming, nodes, compositionEpoch], as explicit sources.
   createEffect(on([() => serializeJsx(props.nodes), () => props.nodes, compositionEpoch], () => flow?.sync(props.nodes), { defer: true }));
   // A path alone (an editor kept across a redraw, blocks added above it) redraws only the AST-path decorations: the
-  // prose is the same, so it is neither rebuilt nor compared. A composition in progress takes it when it settles.
-  createEffect(on(() => props.path, () => { if (flow && !flow.composing()) flow.view.updateState(flow.view.state); }, { defer: true }));
+  // prose is the same, so it is neither rebuilt nor compared. A composition in progress takes it when it settles; a
+  // mounter that redraws it in steps (lib/editor-v2/flow-view repathFlowView) runs them itself.
+  createEffect(on(() => props.path, (path) => { if (flow && !flow.composing() && !flow.repathing(path)) flow.view.updateState(flow.view.state); }, { defer: true }));
   return <div ref={mount} class="mx-prose-region" style={{ display: 'contents' }} />;
 }

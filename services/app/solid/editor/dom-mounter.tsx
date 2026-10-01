@@ -11,6 +11,7 @@ import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layou
 import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
 import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
 import { FlowEditor } from '@/solid/editor/FlowEditor';
+import { repathFlowView } from '@/lib/editor-v2/flow-view';
 import { GridEdit, type GridTile } from '@/solid/editor/GridEdit';
 import { discoverSlides } from '@/lib/story-runtime/slides';
 import { AST_PATH_ATTR as AST_PATH } from '@/lib/story-ui/ast-path';
@@ -70,10 +71,10 @@ interface RegionEditor {
   adopt(region: JsxNode[], elements: () => HTMLElement[]): void;
   /**
    * The same editor at a new path (blocks added or removed ahead of it); its prose is the region's already. Its edits
-   * carry the new path at once; the returned redraw (null: the path did not move) brings its AST-path decorations up
-   * to date — every cell of a table, so it is the caller's to run now or in an idle slice.
+   * carry the new path at once; the returned steps (none: the path did not move) bring its AST-path decorations up
+   * to date — every cell of a table, a few rows a step — for the caller to run in order, in idle slices.
    */
-  repath(path: string): (() => void) | null;
+  repath(path: string): Array<() => void>;
   dispose(): void;
 }
 
@@ -471,10 +472,12 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       repath(nextPath) {
         // Held for showing exactly this prose: its nodes stand as they are (the same source), only its path moves —
         // and with it the AST-path decorations, redrawn without rebuilding or re-comparing the prose.
-        if (nextPath === path) return null;
+        if (nextPath === path) return [];
         path = nextPath;
         mount.dataset.mxEditRegion = nextPath;
-        return () => setCurrentPath(path);
+        const steps = liveView ? repathFlowView(liveView, nextPath) : [];
+        setCurrentPath(path);
+        return steps;
       },
       dispose() {
         if (mount.isConnected && mount.parentNode) {
@@ -497,20 +500,16 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   };
   visit(nodes, '');
   for (const host of hosts) host();
-  // Held editors stay as they are: only their path moves to this draft's. The decorations carrying it are redrawn now
-  // for the editors on screen (read first, in one pass) and in idle slices for the rest, as off-screen regions mount.
-  const keptOnScreen = adopted.map(([, , editor]) => {
-    const box = editor.view()?.dom.getBoundingClientRect();
-    return !!box && box.bottom >= 0 && box.top <= viewportHeight;
-  });
+  // Held editors stay as they are: only their path moves to this draft's (their edits carry it at once). The
+  // decorations carrying it are redrawn in idle slices, a few table rows a step, ahead of the off-screen mounts: in
+  // the draw's own task, one table's redraw was a 50 ms task at slow CPUs, and every kept table on screen added one.
   const redraws: Array<() => void> = [];
-  adopted.forEach(([path, , editor], index) => {
-    const redraw = editor.repath(path);
+  for (const [path, , editor] of adopted) {
+    redraws.push(...editor.repath(path));
     mounted.set(path, editor);
     const live = editor.view();
     if (live) callbacks.onView?.(live);
-    if (redraw) { if (keptOnScreen[index]) redraw(); else redraws.push(redraw); }
-  });
+  }
   held?.dispose();
   cleanups.push(() => {
     for (const editor of mounted.values()) if (!holding.has(editor)) editor.dispose();
@@ -553,8 +552,16 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         .filter((editor) => editor.mount.isConnected && !editor.mount.hasAttribute('data-mx-parent-layout') && !holding.has(editor))
         .sort((a, b) => (a.mount.compareDocumentPosition(b.mount) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
       const doc = root.ownerDocument;
+      const regions = proseRegions(next);
+      // The draft's region blocks by path, in one pass over the draft (a query per block scanned it once each).
+      const wanted = new Set(regions.flatMap((region) => region.nodes.map((_, offset) => [region.parentPath, String(region.start + offset)].filter(Boolean).join('.'))));
+      const byPath = new Map<string, HTMLElement>();
+      for (const el of draft.querySelectorAll<HTMLElement>(`[${AST_PATH}]`)) {
+        const path = el.getAttribute(AST_PATH)!;
+        if (wanted.has(path) && !byPath.has(path)) byPath.set(path, el);
+      }
       let from = 0;
-      for (const region of proseRegions(next)) {
+      for (const region of regions) {
         let found = -1;
         // Compared as trees, offsets aside, stopping at the first difference: serializing every region of the draft
         // and every editor to compare them was most of a reply's apply on a table-heavy page. The editor in the
@@ -567,7 +574,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         if (found < 0) continue;
         const editor = live[found]!;
         const blocks = region.nodes.flatMap((_, offset) => {
-          const el = draft.querySelector<HTMLElement>(`[${AST_PATH}="${CSS.escape([region.parentPath, String(region.start + offset)].filter(Boolean).join('.'))}"]`);
+          const el = byPath.get([region.parentPath, String(region.start + offset)].filter(Boolean).join('.'));
           return el ? [el] : [];
         });
         // The draft must draw exactly what the editor stands in for: the same blocks, in one parent, compiled alike.
