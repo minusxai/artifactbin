@@ -10,9 +10,13 @@
  * carries it.
  */
 import { createPageEngine, type PageEngine, type PageEngineSource } from '@/lib/story-runtime/page-engine';
-import { sqliteFrom } from '@/lib/story-runtime/page-sqlite';
+import { sqliteFrom, type WasmSource } from '@/lib/story-runtime/page-sqlite';
 
-/** The engine over the wasm at `wasm` (fetched once, credential-free), holding each dataset through `hold` (the transport's scoped POST). */
-export function pageEngine(wasm: string, hold: PageEngineSource['fetch']): PageEngine {
+/**
+ * The engine over `wasm` — a URL (fetched once, credential-free) or the bytes the page already has
+ * (the offline file's embedded copy, read once) — holding each dataset through `hold` (the transport's
+ * scoped POST, or the offline file's snapshot).
+ */
+export function pageEngine(wasm: WasmSource, hold: PageEngineSource['fetch']): PageEngine {
   return createPageEngine({ load: sqliteFrom(wasm), fetch: hold });
 }

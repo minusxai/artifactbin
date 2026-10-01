@@ -29,13 +29,13 @@
  */
 import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
-import type { PageEngine } from '@/lib/story-runtime/page-engine';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer, type PublicMxHost } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
+import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './module';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
@@ -98,46 +98,11 @@ const appOrigin = (): string => {
 };
 
 /**
- * The page's own engine (./sqlite-engine), LAZILY: what the store holds from the start is this stand-in,
- * never ready until the engine module has loaded and `identified()` says the page knows whom `$_me` names.
- * What the store asked it to prepare before then is prepared once it has loaded; a module that will not
- * load is final for this document (its queries run on the server, as today's page engine's core is).
- */
-function lazyEngine(load: () => Promise<PageEngine>, identified: () => boolean): PageEngine {
-  let engine: PageEngine | null = null;
-  let loading: Promise<void> | null = null;
-  let closed = false;
-  const asked: Array<Parameters<PageEngine['prepare']>> = [];
-  const loaded = () => engine!;
-  return {
-    prepare(flow, imports) {
-      if (closed) return;
-      if (engine) return engine.prepare(flow, imports);
-      asked.push([flow, imports]);
-      loading ??= load().then((made) => {
-        if (closed) return made.close();
-        engine = made;
-        for (const [f, i] of asked.splice(0)) made.prepare(f, i);
-      }, () => {});
-    },
-    ready: (flow, imports) => !!engine && identified() && engine.ready(flow, imports),
-    invalidate: (refs) => engine?.invalidate(refs),
-    run: (...args) => loaded().run(...args),
-    page: (...args) => loaded().page(...args),
-    write: (...args) => loaded().write(...args),
-    apply: (...args) => engine?.apply(...args) ?? null,
-    close: () => { closed = true; engine?.close(); },
-  };
-}
-
-/**
  * `ISLANDS` alone is accepted for a module whose islands read no data (the compiler's first shape);
  * a module with data passes `{ ISLANDS, FLOW }`.
  */
-export function boot(input: IslandModule | { TREE: Component; FLOW?: CompiledDataflow | null } | readonly IslandEntry[], win: Window = window): IslandDocument {
-  const module: IslandModule = Array.isArray(input) ? { ISLANDS: input as readonly IslandEntry[] }
-    : 'TREE' in input && input.TREE ? { ISLANDS: [['d-', input.TREE]], TREE: input.TREE, FLOW: input.FLOW }
-      : (input as IslandModule);
+export function boot(input: IslandModuleInput, win: Window = window): IslandDocument {
+  const module = normalizeIslandModule(input);
   const doc = win.document;
   const root = doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR) ?? doc.body;
   // A newer version's module, imported by the morph engine: handed to the running document, never booted twice.
