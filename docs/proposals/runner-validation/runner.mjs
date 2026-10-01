@@ -3,8 +3,18 @@ import {randomUUID,createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {StringDecoder} from 'node:string_decoder';
 import {build} from 'esbuild';
+import {readFile} from 'node:fs/promises';
 const worker=fileURLToPath(new URL('./worker.mjs',import.meta.url));
-export async function bundleProgram(filename){const out=await build({entryPoints:[filename],bundle:true,write:false,platform:'browser',format:'iife',globalName:'Program',logLevel:'silent'});return out.outputFiles[0].text;}
+const imports=new Set(['@earendil-works/pi-agent-core','@earendil-works/pi-ai/utils/event-stream','abort-controller/dist/abort-controller.mjs','fast-text-encoding','core-js/web/url','core-js/web/structured-clone']);
+export async function bundleSource(source){
+ if(Buffer.byteLength(source)>256*1024)throw Error('source_limit');
+ const out=await build({entryPoints:['program:entry'],bundle:true,write:false,platform:'browser',format:'iife',globalName:'Program',logLevel:'silent',plugins:[{name:'fixed-imports',setup(b){
+ b.onResolve({filter:/^program:entry$/},()=>({path:'entry',namespace:'user-program'}));
+ b.onLoad({filter:/.*/,namespace:'user-program'},()=>({contents:source,loader:'ts'}));
+ b.onResolve({filter:/.*/,namespace:'user-program'},args=>imports.has(args.path)?{path:fileURLToPath(import.meta.resolve(args.path.startsWith('core-js/')?args.path+'.js':args.path))}:{errors:[{text:'import_not_allowed: '+args.path}]});
+ }}]});return out.outputFiles[0].text;
+}
+export async function bundleProgram(filename){return bundleSource(await readFile(filename,'utf8'));}
 export class DesignRunner{
  constructor(db,capabilities){this.db=db;this.capabilities=capabilities;this.active=new Map();}
  async initialize(){for(const statement of `CREATE TABLE IF NOT EXISTS design_runs(id text PRIMARY KEY,owner text NOT NULL,request_key text NOT NULL,fingerprint text NOT NULL,status text NOT NULL,data jsonb NOT NULL,receipt jsonb,output jsonb,UNIQUE(owner,request_key));CREATE TABLE IF NOT EXISTS design_events(run_id text NOT NULL,sequence integer NOT NULL,event jsonb NOT NULL,PRIMARY KEY(run_id,sequence));CREATE TABLE IF NOT EXISTS design_conversations(id text PRIMARY KEY,revision integer NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS design_branches(id text PRIMARY KEY,conversation_id text NOT NULL,run_id text NOT NULL UNIQUE,checkpoint jsonb,checkpoint_sequence integer NOT NULL DEFAULT 0,final jsonb);`.split(";").filter(Boolean)) await this.db.query(statement);}
@@ -13,7 +23,7 @@ export class DesignRunner{
  const fingerprint=createHash('sha256').update(JSON.stringify(request)).digest('hex'),id=randomUUID();
  const rows=await this.db.query("INSERT INTO design_runs(id,owner,request_key,fingerprint,status,data) VALUES($1,$2,$3,$4,'queued',$5) ON CONFLICT(owner,request_key) DO NOTHING RETURNING id",[id,request.userId,request.requestId,fingerprint,JSON.stringify(request)]);
  if(!rows.rows.length){const r=(await this.db.query('SELECT id,fingerprint FROM design_runs WHERE owner=$1 AND request_key=$2',[request.userId,request.requestId])).rows[0];if(r.fingerprint!==fingerprint)throw Error('start_conflict');return {runId:r.id};}
- let resolve;const finished=new Promise(r=>resolve=r);this.active.set(id,{request,resolve,finished,revoked:false,controllers:new Set(),sequence:0,requests:0,usage:[],eventTail:Promise.resolve()});
+ let resolve;const finished=new Promise(r=>resolve=r);this.active.set(id,{request,resolve,finished,revoked:false,controllers:new Set(),sequence:0,requests:0,usage:[],network:[],eventTail:Promise.resolve()});
  void this.launch(id).catch(error=>this.finish(id,"failed",null,{error:error.message}));return {runId:id};
  }
  async launch(id){const run=this.active.get(id);const docker=process.env.RUNNER_VALIDATION_DOCKER;
@@ -25,7 +35,7 @@ export class DesignRunner{
  child.on('exit',()=>{if(!run.revoked)void this.finish(id,'interrupted',null);});child.on('error',()=>void this.finish(id,'interrupted',null));
  }
  async message(id,msg){const run=this.active.get(id);if(!run||run.revoked)return;
- if(msg.type==='ready'){run.child.stdin.write(JSON.stringify({type:'run',bundle:run.request.bundle,input:run.request.input,memoryMiB:run.request.memoryMiB??64,cpuMs:run.request.cpuMs??200})+'\n');return;}
+ if(msg.type==='ready'){run.child.stdin.write(JSON.stringify({type:'run',bundle:run.request.bundle,input:run.request.input,env:run.request.env??{},memoryMiB:run.request.memoryMiB??64,cpuMs:run.request.cpuMs??200})+'\n');return;}
  if(msg.type==='result' && Buffer.byteLength(JSON.stringify(msg.result))>(run.request.maxOutputBytes??1024*1024)){await this.finish(id,'failed',null,{error:'output_limit'});return;}
  if(msg.type==='result'){await this.finish(id,'completed',msg.result,{cpuMs:msg.cpuMs});return;}
  if(msg.type==='error'){await this.finish(id,'failed',null,{error:msg.error});return;}
@@ -38,7 +48,7 @@ export class DesignRunner{
  }catch(error){if(!run.revoked)run.child.stdin.write(JSON.stringify({type:'response',id:msg.id,error:error.message})+'\n');}
  }
  async event(id,event){const run=this.active.get(id);const sequence=++run.sequence;const append=run.eventTail.then(async()=>{await this.db.query('INSERT INTO design_events VALUES($1,$2,$3)',[id,sequence,JSON.stringify(event)]);if(event.type==='checkpoint')await this.db.query('UPDATE design_branches SET checkpoint=$2,checkpoint_sequence=$3 WHERE run_id=$1 AND checkpoint_sequence<$3',[id,JSON.stringify(event.messages),sequence]);return {sequence};});run.eventTail=append;return append;}
- async finish(id,status,result,extra={}){const run=this.active.get(id);if(!run||run.revoked)return;run.revoked=true;clearTimeout(run.timer);for(const c of run.controllers)c.abort();run.child?.kill('SIGKILL');if(process.env.RUNNER_VALIDATION_DOCKER)await new Promise(resolve=>{const rm=spawn('docker',['rm','-f',`runner-validation-${id}`],{stdio:'ignore'});rm.on('close',resolve);rm.on('error',resolve);});await run.eventTail;const receipt={runId:id,status,durationMs:Date.now()-run.started,requests:run.requests,usage:run.usage,...extra};await this.db.query('UPDATE design_runs SET status=$2,receipt=$3,output=$4 WHERE id=$1',[id,status,JSON.stringify(receipt),JSON.stringify(result)]);run.resolve({status,result,receipt});}
+ async finish(id,status,result,extra={}){const run=this.active.get(id);if(!run||run.revoked)return;run.revoked=true;clearTimeout(run.timer);for(const c of run.controllers)c.abort();run.child?.kill('SIGKILL');if(process.env.RUNNER_VALIDATION_DOCKER)await new Promise(resolve=>{const rm=spawn('docker',['rm','-f',`runner-validation-${id}`],{stdio:'ignore'});rm.on('close',resolve);rm.on('error',resolve);});await run.eventTail;const receipt={runId:id,status,durationMs:Date.now()-run.started,requests:run.requests,observedRequests:run.network,usage:run.usage,dollars:null,pricingVersion:null,...extra};await this.db.query('UPDATE design_runs SET status=$2,receipt=$3,output=$4 WHERE id=$1',[id,status,JSON.stringify(receipt),JSON.stringify(result)]);run.resolve({status,result,receipt});}
  async stop(id,reason='cancelled'){await this.finish(id,reason,null);}
  async wait(id){if(this.active.has(id))return this.active.get(id).finished;const row=(await this.db.query('SELECT status,output,receipt FROM design_runs WHERE id=$1',[id])).rows[0];if(!row)throw Error('not_found');return {status:row.status,result:row.output,receipt:row.receipt};}
  async inspect(id,owner){const row=(await this.db.query('SELECT id,status,output,receipt FROM design_runs WHERE id=$1 AND owner=$2',[id,owner])).rows[0];if(!row)throw Error('not_found');return row;}

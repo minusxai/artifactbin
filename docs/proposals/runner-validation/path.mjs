@@ -4,6 +4,7 @@ import {serve} from '@hono/node-server';
 import {actorReceiver,overHttp} from '@artifactbin/utils';
 import {fileURLToPath} from 'node:url';
 import {bundleProgram,DesignRunner} from './runner.mjs';
+import {runnerHttp} from './http.mjs';
 
 const listen=server=>new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(`http://127.0.0.1:${server.address().port}`)));
 const close=server=>new Promise(resolve=>{server.closeAllConnections?.();server.close(resolve);});
@@ -15,6 +16,7 @@ export async function fixtureModel(mode='normal'){
  const server=createServer(async(req,res)=>{
  let raw='';for await(const bytes of req)raw+=bytes;const body=JSON.parse(raw);requests.push({body,authorized:req.headers.authorization==='Bearer fixture-key'});
  if(req.headers.authorization!=='Bearer fixture-key'){res.writeHead(401);res.end();return;}
+ if(mode==='redirect'){res.writeHead(302,{location:'/credentials-must-not-reach-here'});res.end();return;}
  res.writeHead(200,{'content-type':'text/event-stream'});
  if(mode==='hang')return;
  const latestUser=body.messages.findLastIndex(m=>m.role==='user');const count=body.messages.slice(latestUser+1).filter(m=>m.role==='tool').length;
@@ -57,25 +59,28 @@ export async function runDesignPath({db,actor,routes,artifactId,threadId,work,se
  const path=operation==='read'?`/api/artifacts/${artifactId}`:`/api/artifacts/${artifactId}/annotations/${threadId}`;
  const headers={'content-type':'application/json'};if(operation==='reply')Object.assign(headers,{'X-Artifactbin-Remote-Session':session.id,'X-Artifactbin-Remote-Proof':session.runnerKey,'Idempotency-Key':`${work.id}-${args.phase}`});
  const request=new Request(base+path,{method:operation==='read'?'GET':'POST',headers,signal:controller.signal,...(operation==='reply'?{body:JSON.stringify({reply:args.body,request_id:work.id,phase:args.phase})}:{})});
- const retry=request.clone();const response=await forward(request,actor);if(retryReplies&&operation==='reply'){const again=await forward(retry,actor);if(again.status!==response.status)throw Error('reply_replay_failed');await again.arrayBuffer();}observed.push({operation,status:response.status});if(!response.ok)throw Error(`artifactbin_http_${response.status}`);return response.json();
+ const retry=request.clone();const started=Date.now();const response=await forward(request,actor);run.network.push({kind:'artifactbin',operation,status:response.status,durationMs:Date.now()-started});if(retryReplies&&operation==='reply'){const again=await forward(retry,actor);run.network.push({kind:'artifactbin',operation,status:again.status,replay:true});if(again.status!==response.status)throw Error('reply_replay_failed');await again.arrayBuffer();}observed.push({operation,status:response.status});if(!response.ok)throw Error(`artifactbin_http_${response.status}`);return response.json();
  }
  if(operation==='ai.open'){
- const response=await fetch(model.url+'/v1/chat/completions',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer fixture-key'},body:JSON.stringify({model:'fixture',stream:true,messages:openaiMessages(args.context),tools:args.context.tools.map(t=>({type:'function',function:{name:t.name,parameters:t.parameters}}))}),signal:controller.signal});
- const message=await readModel(response);run.usage.push(message.usage);const streamId=`${id}:${streams.size}`;streams.set(streamId,[{type:'done',reason:message.stopReason,message},null]);return {streamId};
+ const started=Date.now();const response=await fetch(model.url+'/v1/chat/completions',{redirect:'manual',method:'POST',headers:{'content-type':'application/json',authorization:'Bearer fixture-key'},body:JSON.stringify({model:'fixture',stream:true,messages:openaiMessages(args.context),tools:args.context.tools.map(t=>({type:'function',function:{name:t.name,parameters:t.parameters}}))}),signal:controller.signal});
+ run.network.push({kind:'ai',status:response.status,requestId:response.headers.get('x-request-id'),durationToHeadersMs:Date.now()-started});const message=await readModel(response);run.usage.push({...message.usage,dollars:null,pricingVersion:null});const streamId=`${id}:${streams.size}`;streams.set(streamId,[{type:'done',reason:message.stopReason,message},null]);return {streamId};
  }
  if(operation==='ai.next'){if(!args.streamId.startsWith(id+':'))throw Error('foreign_stream');return streams.get(args.streamId).shift();}
  throw Error('unknown_capability');
  }finally{run.controllers.delete(controller);}
  });
- const conversationId=`${actor.userId}:${artifactId}`;await runner.initialize();await db.query('INSERT INTO design_conversations(id) VALUES($1) ON CONFLICT DO NOTHING',[conversationId]);
+ const conversationId=`${actor.userId}:${artifactId}`;await runner.initialize();
+ const runnerServer=serve({fetch:runnerHttp(runner,secret).fetch,hostname:'127.0.0.1',port:0});await new Promise(r=>runnerServer.listening?r():runnerServer.once('listening',r));
+ const runnerBase=`http://127.0.0.1:${runnerServer.address().port}`,send=overHttp(runnerBase,secret);
+ const submit=async body=>{const response=await send(new Request(runnerBase+'/v1/runs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),actor);if(response.status!==202)throw Error('admission_http_'+response.status);return response.json();};await db.query('INSERT INTO design_conversations(id) VALUES($1) ON CONFLICT DO NOTHING',[conversationId]);
  try{
  const bundle=await bundleProgram(fileURLToPath(new URL('./agent.ts',import.meta.url)));
  const request={requestId:work.id,userId:actor.userId,bundle,input:{artifactId,message:'Please review',history},timeoutMs:15000};
- const {runId}=await runner.start(request);
+ const {runId}=await submit(request);
  await db.query('INSERT INTO design_branches(id,conversation_id,run_id) VALUES($1,$2,$3)',[work.id,conversationId,runId]);
- const duplicate=await runner.start(request);if(duplicate.runId!==runId)throw Error('retry_not_deduplicated');
+ const duplicate=await submit(request);if(duplicate.runId!==runId)throw Error('retry_not_deduplicated');
  const result=await runner.wait(runId);if(result.status==='completed'){await runner.commit(runId,result.result);await runner.commit(runId,result.result);}
  const branch=(await db.query('SELECT * FROM design_branches WHERE run_id=$1',[runId])).rows[0];
  return {...result,completed:result.status==='completed',observed,modelRequests:model.requests,branch,revision:(await db.query('SELECT revision FROM design_conversations WHERE id=$1',[conversationId])).rows[0].revision};
- }finally{await runner.close();await close(server);await model.close();}
+ }finally{await runner.close();await close(runnerServer);await close(server);await model.close();}
 }

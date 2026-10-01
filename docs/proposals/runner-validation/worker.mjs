@@ -16,8 +16,8 @@ readline.createInterface({input:process.stdin}).on('close',()=>process.exit(0)).
    const invoke=(op,args)=>$0.apply(undefined,[op,args],{arguments:{copy:true},result:{promise:true,copy:true}});
    return Object.freeze({ artifactbin:Object.freeze({read:args=>invoke('read',args),reply:args=>invoke('reply',args)}),
      ai:Object.freeze({open:args=>invoke('ai.open',args),next:args=>invoke('ai.next',args)}),
-     emit:event=>invoke('emit',event)});
- })();`,[reference]);
+     emit:event=>invoke('emit',event),env:Object.freeze($1)});
+ })();`,[reference,new ivm.ExternalCopy(msg.env??{}).copyInto()]);
  context.evalSync(msg.bundle,{timeout:msg.cpuMs??1000});
  const result=await context.evalClosure('return Program.default($0,globalThis.__capabilities)',[msg.input],{arguments:{copy:true},result:{promise:true,copy:true},timeout:msg.cpuMs??1000});
  send({type:'result',result,cpuMs:Number(isolate.cpuTime)/1e6,wallMs:Number(isolate.wallTime)/1e6});
