@@ -13,7 +13,7 @@
  *          `mx:document`, which the controller previews through the server compiler.
  */
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, For, Show, untrack, type JSX } from 'solid-js';
-import { firstHeadingTitle } from '@/lib/story/title';
+import { firstHeadingTitle } from '@/lib/story/document/title';
 import { Portal } from 'solid-js/web';
 import { useBeforeLeave } from '@solidjs/router';
 import ChartColumn from 'lucide-solid/icons/chart-column';
@@ -21,7 +21,7 @@ import Check from 'lucide-solid/icons/check';
 import Code from 'lucide-solid/icons/code';
 import Database from 'lucide-solid/icons/database';
 import Smartphone from 'lucide-solid/icons/smartphone';
-import { readPwaSettings } from '@/lib/story/pwa-settings';
+import { readPwaSettings } from '@/lib/story/reader/pwa-settings';
 import { PwaSettingsPanel, PwaSharingSetting } from './PwaSettingsPanel';
 import Files from 'lucide-solid/icons/files';
 import Share2 from 'lucide-solid/icons/share-2';
@@ -38,9 +38,9 @@ import type { DocumentGraph } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { editBlock } from '@/lib/editor-v2/block-edit';
-import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/edit-bar';
-import { storyUpdateParts } from '@/lib/story/update-parts';
-import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
+import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/reader/edit-bar';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
 import {
   freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath,
   replaceImageSrcInJsx, setImageAltInJsx, type JsxImageTarget, type JsxInsertAnchor,
@@ -49,10 +49,10 @@ import { readQuestionChart, updateQuestionChartInJsx, updateQuestionTitleInJsx, 
 import { readNumberEmbed, updateNumberEmbedInJsx, type NumberEmbedEdit } from '@/lib/data/story/story-number';
 import { readMermaidEmbed, updateMermaidEmbedInJsx, type MermaidEmbedEdit } from '@/lib/data/story/story-mermaid';
 import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
-import { tableChoices } from '@/lib/story/table-catalog';
-import { queryCells, updateQuerySqlInJsx } from '@/lib/story/query-notebook';
+import { tableChoices } from '@/lib/story/data/table-catalog';
+import { queryCells, updateQuerySqlInJsx } from '@/lib/story/data/query-notebook';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
-import type { DataflowState } from '@/lib/story/dataflow';
+import type { DataflowState } from '@/lib/story/data/dataflow';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { ArtifactVersionSnapshot } from '@/lib/artifact-backend/types';
@@ -142,7 +142,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const runtimeRef = props.runtimeRef;
   /**
    * The title someone TYPED (null until they do, when the document has none): what the field saves. The field
-   * shows what the reader's breadcrumb shows (lib/story/title `displayTitle`) — the typed title, else the
+   * shows what the reader's breadcrumb shows (lib/story/document/title `displayTitle`) — the typed title, else the
    * document's first heading, following it as it is edited — so edit mode names the document as reading did.
    */
   const [title, setTitle] = createSignal<string | null>(art.title?.trim() ? art.title : null);

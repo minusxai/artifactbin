@@ -16,7 +16,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { compiledPageFailures } from '@/lib/compiled-page/serve.server';
 

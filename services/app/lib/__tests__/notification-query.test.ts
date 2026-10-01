@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput,TableResult} from '@artifactbin/contracts';
 import {evaluateNotificationQuery,normalizeNotificationResult,type NotificationQueryDependencies} from '../notification-query';
 import {notificationContextSnapshot,notificationRuleSourceIds} from '../notification-context';
-import {readerDataflow,type CompiledDataflow} from '../story/compiled-dataflow';
+import {readerDataflow,type CompiledDataflow} from '../story/data/compiled-dataflow';
 const rule={name:'first',on:'save',engine:'sqlite' as const,sql:'select $recipient as "to", $_now || $_tz as message',params:['recipient','_now','_tz'],reads:{imports:[],queries:[],values:[],builtins:['_now' as const,'_tz' as const]},columns:[{name:'to',type:'user' as const},{name:'message',type:'string' as const}],start:0,end:1};
 const flow:CompiledDataflow={imports:[],values:[],queries:[],mutations:[],notifications:[rule]};
 const input=(compiled=flow):MutationNotificationJobInput=>({origin:{mutationRunId:'run',mutationName:'save',documentId:'Doc001',documentEditId:'edit',documentVersion:1},initiator:{principal:{kind:'user',id:'usr_actor'},execution:'human',agentLabel:null},rules:compiled.notifications!.map(({name,on,sql,source})=>({name,on,sql,...(source?{source}:{})})),bindings:{values:{recipient:'usr_recipient'},types:{recipient:'user'},userId:'usr_actor',now:'2026-01-01T00:00:00.000Z',tz:'Asia/Kolkata'},...notificationContextSnapshot(compiled)});

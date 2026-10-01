@@ -1,5 +1,5 @@
-import type { DatasetColumn } from '@/lib/story/dataset-shape';
-import type { Row } from '@/lib/story/dataflow';
+import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
+import type { Row } from '@/lib/story/data/dataflow';
 
 /** Public, versioned catalog. Credentials never appear here. */
 export interface DatasetTable {

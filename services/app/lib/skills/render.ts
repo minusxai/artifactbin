@@ -26,11 +26,11 @@ import { STORY_THEMES } from '@/lib/data/story/story-themes';
 import { STORY_TEMPLATES } from '@/lib/data/story/story-templates';
 import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
-import { MAX_CONTENT_BYTES } from '@/lib/story/input';
+import { MAX_CONTENT_BYTES } from '@/lib/story/document/input';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { COMPUTED_FIGURE_RULE } from '@/lib/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
-import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/story/builtins';
+import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/story/data';
 import { DISPLAY_ROWS, SQL_FUNCTIONS } from '@artifactbin/contracts';
 import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
 import type { SkillFile } from './tree';
@@ -121,7 +121,7 @@ const REGISTRY_GLOBALS = {
   displayRows: DISPLAY_ROWS.toLocaleString('en-US'),
   /** SQLite's own functions an author may call, as the engine's guard admits them, less those the library replaces. */
   sqliteFunctions: [...CORE_FUNCTIONS].filter((name) => /^[a-z]\w*$/.test(name) && !SQL_FUNCTIONS.some((f) => f.name === name)).map((name) => `\`${name}\``).join(', '),
-  /** The built-in `$` values and tables, as the compiler and the server supply them (lib/story/builtins). */
+  /** The built-in `$` values and tables, as the compiler and the server supply them (lib/story/data/builtins). */
   builtinTable: [
     '| Name | What it is | Where it comes from | Read by |', '|---|---|---|---|',
     ...BUILTIN_INPUTS.map((b) => `| \`$${b.name === '_row' ? '_row.<column>' : b.name}\` | ${b.summary} | ${b.source === 'platform' ? 'the platform, on every run' : 'the control that runs the mutation'} | ${b.query ? 'queries and mutations' : 'mutations only'} |`),

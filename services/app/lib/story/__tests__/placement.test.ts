@@ -1,14 +1,14 @@
 /**
  * WHERE EACH NODE RUNS, decided from the compiled graph and the one serve-time
  * fact the island carries: which imports this reader may hold in full. Every
- * rule of lib/story/placement, one at a time, over documents the real compiler
+ * rule of lib/story/data/placement, one at a time, over documents the real compiler
  * compiled.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { compiledOf, compiledSource, type TestSource } from '@/test/helpers/compiled';
-import { placeDataflow } from '../placement';
+import { placeDataflow } from '../data/placement';
 
 const ROWS = [{ name: 'id', type: 'string' as const }, { name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }];
 const SOURCES: Record<string, TestSource> = {

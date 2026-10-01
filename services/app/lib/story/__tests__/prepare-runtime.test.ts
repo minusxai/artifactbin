@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { prepareStoryRuntime, readerIslandData, type PrepareStoryInput } from '../prepare-runtime.server';
+import { prepareStoryRuntime, readerIslandData, type PrepareStoryInput } from '../prepared/prepare-runtime.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { EMPTY_COMPILED_DATAFLOW } from '../compiled-dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '../data/compiled-dataflow';
 
 const input = (source: string): PrepareStoryInput => ({ source, compiledCss: null, theme: null, colorMode: 'light', refData: {}, title: 'Stored title' });
 

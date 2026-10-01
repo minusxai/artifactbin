@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { datasetCreateFields } from '../dataset-usage';
+import { datasetCreateFields } from '../datasets/dataset-usage';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 
 const catalog: DatasetCatalog = {

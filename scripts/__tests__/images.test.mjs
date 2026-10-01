@@ -149,7 +149,7 @@ describe('lean-imports', () => {
 
   describe('the service packages', () => {
     // The one exception is the SQLite core (the official wasm build, no native code, no threads):
-    // the publish compiler analyses statements with it (lib/story/compile-dataflow). Running SQL
+    // the publish compiler analyses statements with it (lib/story/data/compile-dataflow). Running SQL
     // still goes through the SqlService registry — never `./local`, `./sqlite` or the HTTP shell.
     const ALLOWED = new Set(['@artifactbin/sql/core']);
     it('are not imported by the app tree, apart from the SQLite core — the clients live in utils', () => {

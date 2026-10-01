@@ -1,5 +1,5 @@
 /**
- * A LOST POSTGRES LISTENER (lib/db PostgresDb → lib/story/wakeup → lib/story/live): when the one
+ * A LOST POSTGRES LISTENER (lib/db PostgresDb → lib/story/realtime/wakeup → lib/story/realtime/live): when the one
  * connection holding every LISTEN ends or errors, every subscription on it is told, the per-channel
  * registry is emptied, and the next subscriber LISTENs afresh on a new connection. Before, the stale
  * entry stayed: open streams kept their keepalives with no wakeup able to arrive, and a reload while
@@ -8,7 +8,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PostgresDb } from '@/lib/db';
-import { liveChannelCount, resetLiveSubscriptions, subscribeChannel } from '../live';
+import { liveChannelCount, resetLiveSubscriptions, subscribeChannel } from '../realtime/live';
 
 class FakeClient extends EventEmitter {
   queries: string[] = [];

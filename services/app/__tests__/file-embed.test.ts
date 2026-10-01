@@ -20,8 +20,8 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
-import { assetUrlFor } from '@/lib/story/asset-url';
-import { collectExternalAssetUrls } from '@/lib/story/external-images';
+import { assetUrlFor } from '@/lib/story/assets/asset-url';
+import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
 import { lookupWebAssets } from '@/lib/web-assets';
 import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
@@ -140,7 +140,7 @@ describe('a web URL in the same position', () => {
     const url = `${web}/report.pdf`;
     const source = `<div data-design="tw" className="p-8"><File src="${url}" title="The report" /></div>`;
 
-    // 1. the pure collector sees it (lib/story/external-images)
+    // 1. the pure collector sees it (lib/story/assets/external-images)
     expect(collectExternalAssetUrls(source).pdfs).toEqual([url]);
 
     const res = await create(t.token, { markup: source, visibility: 'public' });
@@ -157,7 +157,7 @@ describe('a web URL in the same position', () => {
     expect((await getArtifactById(id))!.source).toContain(url);
 
     /*
-     * 4. …and the reader is served OUR copy (lib/story/asset-url), at the
+     * 4. …and the reader is served OUR copy (lib/story/assets/asset-url), at the
      * VERSIONED address: a refreshed PDF is as cached as a refreshed picture,
      * so the `?v=` the row's object key produces rides on this href too. The
      * bare form is what a caller with no row would emit.

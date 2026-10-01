@@ -20,13 +20,13 @@ import { canAnnotate, canEdit, canRead } from '@/lib/share-roles';
 // row-loading seam, so every one of them names the trash gate: a trashed
 // folder is not somewhere to file into, and a trashed child is not listed.
 import { effectiveRole, roleWithoutLink, LIVE_ARTIFACT_SQL, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
-import type { ArtifactFormat } from '@/lib/story/input';
-import { channelFor } from '@/lib/story/live';
+import type { ArtifactFormat } from '@/lib/story/document/input';
+import { channelFor } from '@/lib/story/realtime/live';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose
 // one: these columns are registered into the engine, so their types are the
 // engine's vocabulary.
-import type { DatasetColumn } from '@/lib/story/dataset-shape';
+import type { DatasetColumn } from '@/lib/story/datasets';
 import type { ShelfRow } from '@/lib/shelf';
 
 /**

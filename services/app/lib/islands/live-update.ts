@@ -21,7 +21,7 @@
  * this module: the app's bundle holds a second copy of this module over the same page.
  */
 import { currentAnchor } from '@/lib/story-runtime/anchor';
-import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
+import type { ScrollAnchor } from '@/lib/story/reader/scroll-anchor';
 import { writeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 
 export interface StoryUpdateOptions {

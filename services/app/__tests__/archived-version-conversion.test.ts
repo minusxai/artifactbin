@@ -13,7 +13,7 @@ import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { documentEditBody } from './prepared-document';
 import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import { archivedVersionForActor, servedRow } from '@/lib/archived-version';
-import { PREVIOUS_ENGINE } from '@/lib/story/data-syntax';
+import { PREVIOUS_ENGINE } from '@/lib/story/data/data-syntax';
 import { mintToken } from '@/lib/tokens';
 
 const harness = useAppHarness();

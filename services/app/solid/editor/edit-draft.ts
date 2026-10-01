@@ -5,8 +5,8 @@
  * theme and colour mode the editor shows NOW. The theme is read at send time, never left out: a draft
  * without it compiles in the stored theme, which lags a pick until the debounced metadata save lands.
  */
-import { isWebUrl } from '@/lib/story/asset-url';
-import { storyUpdateParts } from '@/lib/story/update-parts';
+import { isWebUrl } from '@/lib/story/assets/asset-url';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { STORY_DOCUMENT_MESSAGE, type EditDraft } from '@/lib/story-runtime/contract';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';

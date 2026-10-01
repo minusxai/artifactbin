@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { Show, createContext, createEffect, createSignal, splitProps, onCleanup, onMount, useContext, type JSX } from 'solid-js';
-import { refName, resolveBindings, type BindingSource } from '@/lib/story/dataflow';
-import { refusalText } from '@/lib/story/sign-in-required';
+import { refName, resolveBindings, type BindingSource } from '@/lib/story/data/dataflow';
+import { refusalText } from '@/lib/story/reader/sign-in-required';
 import { useIsland } from '../context';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
 

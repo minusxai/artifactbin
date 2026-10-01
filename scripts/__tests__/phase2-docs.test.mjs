@@ -27,7 +27,7 @@ describe('documentation', () => {
     expect(agents).toContain('gate-container.mjs hydration');
   });
   it('the size targets block the lab once Phase 2 is on', () => {
-    expect(read('.github/workflows/page-speed.yml')).toContain('node scripts/size-targets.mjs page-speed/head.json --markdown --strict');
+    expect(read('.github/workflows/page-speed.yml')).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict');
   });
   it('the architecture spec records the shipped state, not a plan', () => {
     const spec = read('docs/phase2-architecture.md');

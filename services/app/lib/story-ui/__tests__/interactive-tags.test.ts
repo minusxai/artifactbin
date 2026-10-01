@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
-import { findExternalSubresources } from '@/lib/story/refs';
+import { findExternalSubresources } from '@/lib/story/data/refs';
 
 const validate = (src: string) =>
   validateJsxSource(src, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style');
@@ -45,7 +45,7 @@ describe('interactive elements a script can drive', () => {
    */
   it('refuses media it cannot serve self-contained — the URL gate, not the tag list', () => {
     expect(validate('<video src="data:video/mp4;base64,AAAA"></video>').length).toBeGreaterThan(0);
-    // An <img src> URL is IMPORTED at the door now (lib/story/external-images)
+    // An <img src> URL is IMPORTED at the door now (lib/story/assets/external-images)
     // rather than refused, so the stored document is still self-contained —
     // by owning a copy instead of by rejecting the author. Every OTHER
     // subresource position keeps the hard refusal:

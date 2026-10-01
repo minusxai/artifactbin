@@ -14,7 +14,7 @@
  * remounted canvas must never corrupt a story body.
  */
 import type { JsonValue } from '@/lib/jsx/types';
-import { refName } from '@/lib/story/dataflow';
+import { refName } from '@/lib/story/data/dataflow';
 import { parseJsx } from '@/lib/jsx';
 import { resolveJsxNodeAtPath, setStaticJsxAttr, updateJsxElementAtPath } from './jsx-edit';
 
@@ -43,7 +43,7 @@ export function updateQuestionVizInJsx(
 
 /**
  * Point the `<Question>` at `astPath` to a different declared table (a
- * <Query> or table <Value> name — lib/story/dataflow.ts).
+ * <Query> or table <Value> name — lib/story/data/dataflow.ts).
  *
  * The `$` is added here rather than expected from the caller: a bare name in
  * `data` resolves to nothing and renders an empty chart, and that is exactly

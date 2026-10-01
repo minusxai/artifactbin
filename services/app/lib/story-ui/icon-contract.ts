@@ -3,7 +3,7 @@
  *
  * `<Icon name>` may name any of lucide's ~1600 glyphs, and the two halves that make
  * that work live on opposite sides of a bundle boundary: the RESOLVER pulls in the
- * whole icon set and runs on the server (lib/story/icon-glyphs), the RENDERER ships
+ * whole icon set and runs on the server (lib/story/assets/icon-glyphs), the RENDERER ships
  * to every reader and must never reach it (components/kit/icon,
  * lib/__tests__/reader-bundle-hygiene). This module is what they may share — so it
  * imports NOTHING, and holds only the shape and the naming rule they must agree on.

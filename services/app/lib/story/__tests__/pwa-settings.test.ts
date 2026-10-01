@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
-import { readPwaSettings, writePwaSettings } from '../pwa-settings';
+import { readPwaSettings, writePwaSettings } from '../reader/pwa-settings';
 import { parseJsx } from '@/lib/jsx';
-import { collectRefUses } from '../refs';
+import { collectRefUses } from '../data/refs';
 
 it('round trips settings without altering the document or its social image', () => {
   const source = '<Helmet><meta name="artifactbin:og-image" content="ref:Social1" /></Helmet><p id="kept">Hello</p>';

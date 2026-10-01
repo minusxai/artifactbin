@@ -10,8 +10,11 @@ import { createSignal } from 'solid-js';
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@/solid/__tests__/helpers';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
+import type { EditorView } from 'prosemirror-view';
+import { editorDocument, sourceNodes } from '@/lib/editor-v2/model';
 import { FlowEditor } from '../FlowEditor';
 import { FLOW_IDLE_MS, flushFlowView } from '@/lib/editor-v2/flow-view';
+import { createEditorSource } from '../create-editor-source';
 
 function nodes(source: string) {
   const p = parseJsx(source);
@@ -201,4 +204,136 @@ it('keeps the leading space of a one-line plain-text paste, as typing it would',
   fireEvent.paste(editor, { clipboardData: { files: [], getData: (type: string) => (type === 'text/plain' ? ' pasted words' : '') } });
   expect(view.container.querySelector('#a')!.textContent).toBe('alpha pasted words');
   expect(serializeJsx(onChange.mock.calls.at(-1)![0])).toContain('alpha pasted words');
+});
+
+it('keeps the first line\'s leading and the last line\'s trailing spaces of a multi-line plain-text paste', () => {
+  let engine: EditorView | null = null;
+  const onChange = vi.fn();
+  const view = render(() => <FlowEditor nodes={nodes('<p id="a">alphaomega</p>')} path="0" onChange={onChange} onView={(v) => { if (v) engine = v; }} />);
+  const editor = view.getByRole('textbox');
+  fireEvent.focus(editor);
+  engine!.dispatch(engine!.state.tr.setSelection(TextSelection.create(engine!.state.doc, 1 + 'alpha'.length)));
+  fireEvent.paste(editor, { clipboardData: { files: [], getData: (type: string) => (type === 'text/plain' ? ' first\nmiddle\nlast ' : '') } });
+  const blocks = [...editor.querySelectorAll('p')].map((p) => p.textContent);
+  expect(blocks).toEqual(['alpha first', 'middle', 'last omega']);
+  expect(serializeJsx(onChange.mock.calls.at(-1)![0])).toMatch(/alpha first<\/p>.*>last omega<\/p>$/);
+});
+
+/**
+ * Markdown block shortcuts, typed through ProseMirror's own text-input path (handleTextInput, then the
+ * default insertion), with every change recorded by the real source store, as the page records it.
+ */
+describe('markdown block shortcuts', () => {
+  function editor(source: string) {
+    let engine: EditorView | null = null;
+    const initial = serializeJsx(nodes(source));
+    const store = createEditorSource({ initial, live: { queue: () => {} }, draw: () => {}, commitPending: async () => {} });
+    const view = render(() => <FlowEditor nodes={nodes(initial)} path="0" onChange={(next, group, selection) => store.apply(serializeJsx(next), { origin: 'local', group, selection })} onView={(v) => { if (v) engine = v; }} />);
+    const v = () => engine!;
+    const type = (text: string) => {
+      for (const ch of text) {
+        const { from, to } = v().state.selection;
+        const typing = () => v().state.tr.insertText(ch, from, to);
+        if (!v().someProp('handleTextInput', (f) => f(v(), from, to, ch, typing))) v().dispatch(typing());
+      }
+      // Typing pauses: ProseMirror hands what it drew to the page (FLOW_IDLE_MS).
+      flushFlowView(v());
+    };
+    const enter = () => { v().someProp('handleKeyDown', (f) => f(v(), new KeyboardEvent('keydown', { key: 'Enter' }))); flushFlowView(v()); };
+    const caret = (position: 'start' | 'end') => v().dispatch(v().state.tr.setSelection(position === 'start' ? TextSelection.atStart(v().state.doc) : TextSelection.atEnd(v().state.doc)));
+    return { view, store, type, enter, caret, v };
+  }
+  const ID = 'e[0-9a-f]{32}';
+
+  it.each([1, 2, 3, 4, 5, 6])('turns %i hash marks and a space at the start of a paragraph into that heading level', (level) => {
+    const e = editor('<p id="a" className="mt-6 text-lg">Title</p>');
+    e.caret('start');
+    e.type(`${'#'.repeat(level)} `);
+    expect(e.store.source()).toBe(`<h${level} id="a">Title</h${level}>`);
+    expect(e.view.container.querySelector(`h${level}#a`)!.textContent).toBe('Title');
+    e.type('New ');
+    expect(e.store.source()).toBe(`<h${level} id="a">New Title</h${level}>`);
+  });
+
+  it.each([['* ', 'ul'], ['- ', 'ul'], ['1. ', 'ol']])('turns "%s" at the start of a paragraph into a %s item, keeping the paragraph\'s identity', (prefix, list) => {
+    const e = editor('<p id="a" className="mt-6">item</p>');
+    e.caret('start');
+    e.type(prefix);
+    expect(e.store.source()).toMatch(new RegExp(`^<${list} id="${ID}"><li id="${ID}"><p id="a">item</p></li></${list}>$`));
+    expect(e.view.container.querySelector(`${list} > li > p#a`)!.textContent).toBe('item');
+  });
+
+  it('restores the literal prefix with one undo, then redoes the conversion', async () => {
+    const e = editor('<p id="a" className="lead"></p>');
+    e.type('## ');
+    expect(e.store.source()).toBe('<h2 id="a"></h2>');
+    expect((await e.store.undo()).ok).toBe(true);
+    expect(e.store.source()).toBe('<p id="a" className="lead">## </p>');
+    expect((await e.store.redo()).ok).toBe(true);
+    expect(e.store.source()).toBe('<h2 id="a"></h2>');
+    const e2 = editor('<p id="b"></p>');
+    e2.type('- ');
+    await e2.store.undo();
+    expect(e2.store.source()).toBe('<p id="b">- </p>');
+  });
+
+  it('continues a list on Enter and leaves it on Enter in an empty item', () => {
+    const e = editor('<p id="a"></p>');
+    e.type('- one');
+    e.enter();
+    e.type('two');
+    e.enter();
+    expect(e.view.container.querySelectorAll('ul > li')).toHaveLength(3);
+    e.enter();
+    e.type('after');
+    const source = e.store.source();
+    expect(source).toMatch(new RegExp(`^<ul id="${ID}"><li id="${ID}"><p id="a">one</p></li><li id="${ID}"><p id="${ID}">two</p></li></ul><p id="${ID}">after</p>$`));
+    expect(new Set(source.match(/id="[^"]+"/g)).size).toBe(source.match(/id="[^"]+"/g)!.length);
+    const items = e.view.container.querySelectorAll('ul > li');
+    expect(items).toHaveLength(2);
+    expect(e.view.container.querySelector('ul + p')!.textContent).toBe('after');
+  });
+
+  it('numbers continued items in a numbered list', () => {
+    const e = editor('<p id="a"></p>');
+    e.type('1. first');
+    e.enter();
+    e.type('second');
+    expect(e.store.source()).toMatch(new RegExp(`^<ol id="${ID}"><li id="${ID}"><p id="a">first</p></li><li id="${ID}"><p id="${ID}">second</p></li></ol>$`));
+  });
+
+  it('keeps the converted source through save and reload', () => {
+    const e = editor('<p id="a">intro</p><p id="b"></p><p id="c"></p>');
+    e.v().dispatch(e.v().state.tr.setSelection(TextSelection.create(e.v().state.doc, 'intro'.length + 3)));
+    e.type('### Results');
+    e.v().dispatch(e.v().state.tr.setSelection(TextSelection.atEnd(e.v().state.doc)));
+    e.type('* point');
+    const saved = e.store.source();
+    const parsed = nodes(saved);
+    expect(serializeJsx(sourceNodes(editorDocument(parsed)))).toBe(saved);
+    const reloaded = render(() => <FlowEditor nodes={parsed} path="0" onChange={() => {}} />);
+    expect(reloaded.container.querySelector('h3#b')!.textContent).toBe('Results');
+    expect(reloaded.container.querySelector('ul > li > p#c')!.textContent).toBe('point');
+    expect(reloaded.container.querySelector('p#a')!.textContent).toBe('intro');
+  });
+
+  it('types the marker literally inside code, mid-prose, inside lists, for other markers and while composing', () => {
+    const code = editor('<pre id="c"></pre>');
+    code.type('# x');
+    expect(code.store.source()).toBe('<pre id="c"># x</pre>');
+    const prose = editor('<p id="a">hello</p>');
+    prose.caret('end');
+    prose.type(' # - 1. x');
+    expect(prose.store.source()).toBe('<p id="a">hello # - 1. x</p>');
+    const listed = editor('<ul id="u"><li id="l"><p id="a"></p></li></ul>');
+    listed.type('# x');
+    expect(listed.store.source()).toBe('<ul id="u"><li id="l"><p id="a"># x</p></li></ul>');
+    const other = editor('<p id="a"></p>');
+    other.type('#tag 2. ####### +');
+    expect(other.store.source()).toBe('<p id="a">#tag 2. ####### +</p>');
+    const composing = editor('<p id="a"></p>');
+    fireEvent.compositionStart(composing.view.getByRole('textbox'));
+    composing.type('# ');
+    expect(composing.store.source()).toBe('<p id="a"># </p>');
+  });
 });

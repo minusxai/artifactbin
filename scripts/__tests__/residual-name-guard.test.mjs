@@ -24,7 +24,7 @@ import yaml from 'yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const GUARD = path.join(ROOT, 'scripts', 'check-residual-names.mjs');
+const GUARD = path.join(ROOT, 'scripts', 'ci', 'check-residual-names.mjs');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 const temporary = [];
 
@@ -97,7 +97,7 @@ describe('residual-name guard', () => {
  * strings SHOULD still appear, so the scan reads shipping sources only.
  */
 const RETIRED_TOKEN_SURFACES = ['/tokens/new', '/api/tokens/anonymous', 'tokens/anonymous', '/settings/tokens'];
-const NOT_SHIPPED = /(^|\/)(__tests__|test|tests|fixtures)(\/|$)|\.jsonl$|^scripts\/gate-/;
+const NOT_SHIPPED = /(^|\/)(__tests__|test|tests|fixtures)(\/|$)|\.jsonl$|^scripts\/gates\//;
 
 /**
  * A variable NAME must not be spelled like a key. CodeQL's credential heuristic treats such an
@@ -153,7 +153,7 @@ describe('retired surfaces', () => {
     const elsewhere = [
       ['services/proxy/__tests__/doors.test.ts', "expect(text).not.toContain('/tokens/new');"],
       ['evals/__tests__/fixtures/codex.deck.jsonl', '{"output":"https://example.test/tokens/new"}'],
-      ['scripts/gate-simpler-start.mjs', "await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })"],
+      ['scripts/gates/gate-simpler-start.mjs', "await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })"],
       ['evals/lib/run.ts', '// apiKeyEnv was renamed; see the guard'],
     ];
     expect(retiredSurfaces(elsewhere)).toEqual([]);

@@ -313,7 +313,7 @@ export function placeImageInJsx(
   return { source: serializeJsx(roots), path: String(roots.length - 1) };
 }
 
-/** The server's node-id shape (lib/story/node-ids): a letter, then three letters or digits. */
+/** The server's node-id shape (lib/story/document/node-ids): a letter, then three letters or digits. */
 const NODE_ID_RE = /^[A-Za-z][A-Za-z0-9]{3}$/;
 const ID_FIRST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const ID_REST = `${ID_FIRST}0123456789`;

@@ -8,8 +8,8 @@
  * A browser gate found it; this pins it.
  */
 import { describe, expect, it } from 'vitest';
-import { documentFonts, documentFontCss, invalidFontFamilies } from '../document-fonts';
-import { EMPTY_HELMET_CONTENT } from '../helmet';
+import { documentFonts, documentFontCss, invalidFontFamilies } from '../styles/document-fonts';
+import { EMPTY_HELMET_CONTENT } from '../document/helmet';
 
 const helmet = (meta: Array<{ name: string; content: string }>) => ({ ...EMPTY_HELMET_CONTENT, meta });
 

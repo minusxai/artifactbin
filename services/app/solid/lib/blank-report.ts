@@ -1,6 +1,6 @@
 import type { ArtifactHead } from '@/lib/artifact-backend/types';
 import { BLANK_REPORT_MARKUP, isStartPlaceholder } from '@/lib/start-placeholder';
-import { prepareClientDocumentUpdate } from '@/lib/story/document-update-client';
+import { prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
 
 /** Convert only the starter the person observed; the existing commit protocol
  * also rejects a concurrent update between this read and the write. */

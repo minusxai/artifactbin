@@ -1,7 +1,7 @@
 /**
  * THE SERVER'S VIEW OF THE SHARED ISLAND BUILD (contract CompilerBuild; spec §3, §6).
  *
- * `scripts/build-islands.mjs` writes `public/islands/manifest.json` once per
+ * `scripts/build/build-islands.mjs` writes `public/islands/manifest.json` once per
  * deploy: `{ build, manifest, files }`, where `build` is the compiler build id
  * a stored compile is keyed by and `manifest` maps each import specifier
  * (`solid-js/web`, `@mx/rt`, `@mx/kit/tabs`) to its content-addressed chunk
@@ -47,7 +47,7 @@ export function parseCompilerBuild(text: string, file: string): CompilerBuild {
     ...(ssr ? { ssr: { url: ssr.url as string, exports: ssr.exports as Record<string, string> } } : {}) });
 }
 
-/** The shared island build this server serves with. Throws when the build has not been run (`node scripts/build-islands.mjs`). */
+/** The shared island build this server serves with. Throws when the build has not been run (`node scripts/build/build-islands.mjs`). */
 export function loadCompilerBuild(): CompilerBuild {
   if (cached && !IS_DEV) return cached.build;
   const text = readFileSync(islandFile('manifest.json'), 'utf8');

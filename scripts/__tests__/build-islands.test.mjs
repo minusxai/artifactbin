@@ -1,6 +1,6 @@
 // DESTINATION: scripts/__tests__/build-islands.test.mjs
 /**
- * The shared island build (scripts/build-islands.mjs): once per deploy, Solid 1.9, the runtime and
+ * The shared island build (scripts/build/build-islands.mjs): once per deploy, Solid 1.9, the runtime and
  * every kit family become content-addressed chunks under services/app/public/islands with a
  * manifest and a build id (docs/phase2-architecture.md §1, §3; lib/compiled-page/contract CompilerBuild).
  */
@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { buildIslands, ISLAND_SPECIFIERS } from '../build-islands.mjs';
+import { buildIslands, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
@@ -153,7 +153,7 @@ describe('buildIslands', () => {
     // Internal sub-budget. esbuild tree-shakes across the whole build but splits by file, so the Solid
     // helpers any kit family uses land in the shared chunk that rt's closure includes; they load on every
     // interactive page anyway. The owner's target 2 (≤ 85 KB before ready on interactive pages) is the
-    // real check, in scripts/size-targets.mjs.
+    // real check, in scripts/build/size-targets.mjs.
     expect(bytes).toBeLessThanOrEqual(27_979);
   });
 

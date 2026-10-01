@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { pack, weigher } from '../lib/timed-sequencer.mjs';
-import { parseTimings } from '../test-timings.mjs';
+import { parseTimings } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
 const load = (shard, weights) => shard.reduce((sum, key) => sum + weights[key], 0);

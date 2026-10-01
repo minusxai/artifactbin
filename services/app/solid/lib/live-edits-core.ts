@@ -18,10 +18,10 @@
  * props proxy. The `initial*` fields are read once, at creation, as the hook's `useRef(initial)` did.
  */
 import type { DocumentGraph, DocumentAssetWarning } from '@artifactbin/contracts';
-import { prepareBrowserDocumentUpdate } from '@/lib/story/document-authoring-client';
+import { prepareBrowserDocumentUpdate } from '@/lib/story/document/document-authoring-client';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
-import { rebaseEditBatch } from '@/lib/story/edit-batch';
+import { rebaseEditBatch } from '@/lib/story/document/edit-batch';
 import { sourceChanges } from '@/lib/editor-v2/history';
 import { sourceEdits } from '@/lib/editor-v2/source-edits';
 

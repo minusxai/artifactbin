@@ -8,7 +8,7 @@
  * picker is offered with the file's own name, so the reader can overwrite the
  * copy they opened; the handle is kept, and later saves write to it again.
  * Elsewhere the file is downloaded through a Blob URL anchor. Probed from
- * file:// by scripts/gate-offline-file.mjs, which prints the scheme each
+ * file:// by scripts/gates/gate-offline-file.mjs, which prints the scheme each
  * engine's download came from: Chromium, Firefox and WebKit all download the
  * Blob (the page's CSP governs fetches, not a download). The `data:` URL is
  * the fallback for a browser where creating the Blob URL itself throws.

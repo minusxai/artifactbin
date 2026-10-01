@@ -1,6 +1,6 @@
 /** Embedded SQLite for held imports. The file never asks a URL for wasm or data. */
 import type { PageEngine } from '@/lib/story-runtime/page-engine';
-import type { ImportTables } from '@/lib/story/compiled-flow';
+import type { ImportTables } from '@/lib/story/data/compiled-flow';
 import { pageEngine } from '@/lib/islands/sqlite-engine';
 
 /** The page's own engine (the online one), over the wasm this file carries in `#afbin-wasm`, decoded once. */

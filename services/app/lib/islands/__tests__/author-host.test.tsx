@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boot } from '../boot';
 import { useIsland } from '../context';
 import type { IslandDocument } from '../contract';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { AUTHOR_SCRIPT_DOCUMENT } from '@/lib/story-runtime/author-script-bootstrap';
 import { AUTHOR_SCRIPT_FRAME_TITLE } from '@/lib/story-runtime/author-script-contract';

@@ -86,7 +86,7 @@ exit status is the gates', and the container is removed afterwards, also when th
 - The worktree must be under `$HOME`, which Colima shares. The gates run as root in the container:
   the Colima VM restricts unprivileged user namespaces, and root there is what lets bubblewrap build
   the session sandbox without changing a VM-wide setting.
-- Host runs (`node scripts/gate-*.mjs`, `node scripts/gates.mjs`) are discouraged: they compete with
+- Host runs (`node scripts/gates/gate-*.mjs`, `node scripts/gates.mjs`) are discouraged: they compete with
   every container for the same CPUs. If one is unavoidable, hold the old single lock
   (`mkdir /tmp/afbin-gate-lock`, `rmdir` after) so two host runs never overlap.
 

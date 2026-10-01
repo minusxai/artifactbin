@@ -4,8 +4,8 @@
  * composition handling. components adapt it — lib/editor-v2/flow-editor (React) owns its boundary
  * with two layout effects; a Solid adapter (P3 probe) with onMount + one effect.
  */
-import { DOMSerializer } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { DOMSerializer, type ResolvedPos } from 'prosemirror-model';
+import { EditorState, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
 import { splitListItem, sinkListItem, liftListItem } from 'prosemirror-schema-list';
 import { baseKeymap, chainCommands } from 'prosemirror-commands';
@@ -70,6 +70,76 @@ const flushers = new WeakMap<EditorView, () => void>();
 /** Hand a view's held typing to the page now: anything that reads or replaces the source first (commit, undo, a redraw). */
 export function flushFlowView(view: EditorView): void { flushers.get(view)?.(); }
 
+/**
+ * MARKDOWN BLOCK SHORTCUTS. A marker typed at the start of an ordinary paragraph, then a space, turns the
+ * paragraph into the structure it names: `# `..`###### ` a heading, `* `/`- ` a bullet item, `1. ` a
+ * numbered item. The space is typed first, as ordinary typing (it joins the marker's undo step), and the
+ * conversion is its own structural transaction — so one undo, through the source history, puts the literal
+ * marker back. Never inside code, a list, a table cell or a synthetic run, never mid-prose, never while
+ * composing.
+ */
+const BLOCK_SHORTCUT = /^(#{1,6}|[*-]|1\.)[ \u00a0]$/;
+
+/** The block a shortcut may convert: an authored `<p>`, outside lists, cells and code. */
+function ordinaryParagraph($at: ResolvedPos): boolean {
+  const block = $at.parent;
+  if (block.type !== editorSchema.nodes.paragraph || block.attrs.tag !== 'p' || block.attrs.synthetic) return false;
+  for (let depth = $at.depth - 1; depth > 0; depth--)
+    if (['list_item', 'table_cell'].includes($at.node(depth).type.name)) return false;
+  return !$at.marks().some((mark) => mark.attrs.tag === 'code');
+}
+
+/** The paragraph's identity survives the conversion (comments anchor to it); its paragraph styling does not. */
+function identityOnly(source: JsxElement | null): JsxElement | null {
+  if (!source) return null;
+  return { ...source, attributes: source.attributes.filter((a) => ['id', 'data-annotation-anchor', 'dir', 'lang'].includes(a.name)) };
+}
+
+/** The structural transaction for a marker already typed (with its space) before the caret, or null. */
+function blockShortcut(state: EditorState): Transaction | null {
+  const { $from, empty } = state.selection;
+  if (!empty || !ordinaryParagraph($from)) return null;
+  const typed = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
+  const marker = BLOCK_SHORTCUT.exec(typed)?.[1];
+  if (!marker) return null;
+  const start = $from.start();
+  const tr = state.tr.delete(start, start + typed.length);
+  const paragraph = { ...$from.parent.attrs, source: identityOnly($from.parent.attrs.source as JsxElement | null) };
+  if (marker.startsWith('#')) return tr.setNodeMarkup($from.before(), undefined, { ...paragraph, tag: `h${marker.length}` });
+  const range = tr.doc.resolve(start).blockRange();
+  if (!range) return null;
+  const list = marker === '1.' ? editorSchema.nodes.ordered_list : editorSchema.nodes.bullet_list;
+  tr.setNodeMarkup($from.before(), undefined, paragraph);
+  return tr.wrap(range, [{ type: list }, { type: editorSchema.nodes.list_item }]);
+}
+
+/** Enter on an empty item of a top-level list leaves the list (splitListItem only nests out of inner lists). */
+const exitEmptyListItem: Command = (state, dispatch) => {
+  const { $from, empty } = state.selection;
+  if (!empty || $from.parent.content.size || $from.parent.attrs.synthetic || $from.depth < 2) return false;
+  if ($from.node(-1).type !== editorSchema.nodes.list_item) return false;
+  return liftListItem(editorSchema.nodes.list_item)(state, dispatch);
+};
+
+/**
+ * Several lines of plain text become one paragraph per line, and parsing collapses each line's edge
+ * spaces like source whitespace. The text is literal: put back the first line's leading spaces (where it
+ * joins the text before the caret) and the last line's trailing spaces (where it joins the text after).
+ */
+function keepPastedEdgeSpaces(tr: Transaction, from: number, plain: string) {
+  const lines = plain.split(/\r\n|\r|\n/);
+  const first = lines[0] ?? '', last = lines.at(-1) ?? '';
+  const insert = (spaces: string, at: number) => {
+    if (spaces && tr.doc.resolve(at).parent.isTextblock) tr.insertText(spaces, at);
+  };
+  if (last.trim()) {
+    const $end = tr.doc.resolve(tr.selection.from);
+    const kept = /[ \t]*$/.exec($end.parent.textBetween(0, $end.parentOffset))![0].length;
+    insert(/[ \t]*$/.exec(last)![0].slice(kept), tr.selection.from);
+  }
+  if (first.trim()) insert(/^[ \t]*/.exec(first)![0], tr.mapping.map(from, -1));
+}
+
 export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, onCompositionSettled: () => void): FlowView {
   const state = { composing: false };
   /** Typing ProseMirror has drawn but the page has not been handed yet: one undo step, one source edit. */
@@ -118,6 +188,7 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
               return true;
             },
             splitListItem(editorSchema.nodes.list_item),
+            exitEmptyListItem,
             baseKeymap.Enter,
           ),
           Tab: sinkListItem(editorSchema.nodes.list_item),
@@ -242,6 +313,15 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         return false;
       },
     },
+    handleTextInput(view, from, to, text, typing) {
+      if (from !== to || !/^[ \u00a0]$/.test(text) || state.composing || view.composing || props().canEdit?.() === false) return false;
+      const $from = view.state.doc.resolve(from);
+      if (!ordinaryParagraph($from) || !BLOCK_SHORTCUT.test($from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc') + text)) return false;
+      view.dispatch(typing());
+      const convert = blockShortcut(view.state);
+      if (convert) view.dispatch(convert.setMeta('mx-command', true).scrollIntoView());
+      return true;
+    },
     handleKeyDown(view, event) {
       if (moveToLineBoundary(view, event)) return true;
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') plainPaste = true;
@@ -279,12 +359,10 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
       const kind: ClipboardKind = markup ? 'html' : 'text';
       const value = markup || data.getData('text/plain');
       try {
-        view.dispatch(
-          view.state.tr
-            .replaceSelection(pasteFragment(clipboardAst(kind, value)))
-            .setMeta('uiEvent', 'paste')
-            .scrollIntoView(),
-        );
+        const from = view.state.selection.from;
+        const tr = view.state.tr.replaceSelection(pasteFragment(clipboardAst(kind, value)));
+        if (kind === 'text') keepPastedEdgeSpaces(tr, from, value);
+        view.dispatch(tr.setMeta('uiEvent', 'paste').scrollIntoView());
       } catch (error) {
         props().onError?.(error instanceof Error ? error.message : 'Paste could not be inserted.');
       }

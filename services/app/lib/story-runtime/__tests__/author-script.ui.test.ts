@@ -1,5 +1,5 @@
 import {bindManagedComments} from '../managed-comment-host';
-import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/compiled-dataflow';
+import { EMPTY_COMPILED_DATAFLOW } from '@/lib/story/data/compiled-dataflow';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';

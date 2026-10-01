@@ -13,8 +13,8 @@
  * And the compiled sheet carries `!important` utilities, so Tailwind
  * classes always beat authored CSS — the instructable cascade contract.
  */
-import { publishJsx } from '../jsx-tier';
-import type { StoredContent } from '../input';
+import { publishJsx } from '../document/jsx-tier';
+import type { StoredContent } from '../document/input';
 
 const publish = async (markup: string) =>
   publishJsx({}, markup) as Promise<StoredContent | Response>;

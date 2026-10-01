@@ -23,7 +23,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Grid', 'GridItem',
   // The bound-control kit: themed two-way
   // controls over Helmet `<Value>`s — the fancy siblings of the bindable
-  // native `input`/`select`/`textarea` (lib/story/dataflow.ts REF_ATTRS).
+  // native `input`/`select`/`textarea` (lib/story/data/dataflow.ts REF_ATTRS).
   // `Input`/`Textarea` are the TEXT members: a bare `<input>` keeps binding,
   // but preflight leaves it without a border or padding, so a form written
   // from the native tags alone has no visual family at all.
@@ -48,7 +48,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
 /**
  * The tags whose `id` names a PERSON rather than an element — the seam
  * lib/story-ui/interpreter takes `id` out at, and the set lib/artifacts
- * `drawsPeople` and lib/story/dataflow REF_ATTRS answer for. Names only, so
+ * `drawsPeople` and lib/story/data/dataflow REF_ATTRS answer for. Names only, so
  * server-side validation still pulls in no React.
  */
 export const PERSON_TAGS: ReadonlySet<string> = new Set(['User', 'UserImage', 'UserHandle']);
@@ -91,7 +91,7 @@ export const STORY_HTML_TAGS = [
   'section', 'article', 'aside', 'header', 'footer', 'main', 'nav', 'address',
   'hr', 'br', 'wbr', 'time', 'data', 'details', 'summary',
   // The INTERACTIVE vocabulary. A document may carry its own <script>
-  // (lib/story/helmet.ts), and a script with nothing to drive is not a
+  // (lib/story/document/helmet.ts), and a script with nothing to drive is not a
   // feature — these are the elements it acts on. `form`, `iframe`, `object`
   // and `embed` stay denied (lib/jsx/dangerous-tags.ts): navigation hijacks
   // and nested browsing contexts, which no author document needs.

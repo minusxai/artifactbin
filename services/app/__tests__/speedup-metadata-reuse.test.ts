@@ -1,8 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import { useAppHarness } from './harness';
 import { dataflowForRow, datasetsForDocument, type ArtifactRow } from '@/lib/artifacts';
-import { COMPILED_DATAFLOW, finalizeArtifactMetadata } from '@/lib/story/parsed-artifact-metadata';
-import { DATA_SYNTAX_META } from '@/lib/story/data-syntax';
+import { COMPILED_DATAFLOW, finalizeArtifactMetadata } from '@/lib/story/data/parsed-artifact-metadata';
+import { DATA_SYNTAX_META } from '@/lib/story/data/data-syntax';
 import { compiledSource, type TestSource } from '@/test/helpers/compiled';
 
 /** A stored document's meta, as the publish door leaves it: compiled, and in the current data syntax. */

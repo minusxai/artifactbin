@@ -199,6 +199,10 @@ function inline(nodes: JsxNode[], marks: Mark[] = []): EditorNode[] {
 function collapseWhitespace(nodes: EditorNode[]): EditorNode[] {
   const out: EditorNode[] = [];
   let atLineStart = true;
+  // One literal space typed at the end of the block (`### ` restored by an undo) is content, not
+  // layout: dropping it would let the next keystroke join the word before it. Source formatting
+  // (a line break or indentation before the closing tag) still collapses away.
+  let typedTrailingSpace = false;
   const trimEnd = () => {
     const last = out.at(-1);
     if (!last?.isText || !last.text!.endsWith(' ')) return;
@@ -207,6 +211,7 @@ function collapseWhitespace(nodes: EditorNode[]): EditorNode[] {
     else out.pop();
   };
   for (const node of nodes) {
+    typedTrailingSpace = node.isText && /[^ \t\n\r\f] $/.test(node.text!);
     if (!node.isText) {
       if (node.type === editorSchema.nodes.hard_break) trimEnd();
       out.push(node);
@@ -219,7 +224,7 @@ function collapseWhitespace(nodes: EditorNode[]): EditorNode[] {
     out.push(editorSchema.text(text, node.marks));
     atLineStart = false;
   }
-  trimEnd();
+  if (!typedTrailingSpace) trimEnd();
   return out;
 }
 function textblock(tag: string, children: JsxNode[]): EditorNode[] {

@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
-import {collectRefUses,validateRefs} from '../refs';
-import {resolveRefProps,type RefDataMap} from '../ref-data';
+import {collectRefUses,validateRefs} from '../data/refs';
+import {resolveRefProps,type RefDataMap} from '../data/ref-data';
 it('collects and resolves attachment links and native media through the same ref syntax',async()=>{
  const source='<a href="ref:abc123">Download</a><video src="ref:def456" poster="ref:ghi789" /><audio src="ref:jkl012" />';
  expect(collectRefUses(source)?.map(use=>use.id).sort()).toEqual(['abc123','def456','ghi789','jkl012']);

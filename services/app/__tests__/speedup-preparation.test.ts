@@ -9,7 +9,7 @@ import * as artifacts from '@/lib/artifacts';
 import * as relations from '@/lib/relations';
 import * as tokens from '@/lib/tokens';
 import { createAppServer } from '@/server/app';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { getDb } from '@/lib/db';
 
 useAppHarness();

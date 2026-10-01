@@ -12,8 +12,8 @@
  * only allowed to fix this one because the change is named on the way out.
  */
 import { describe, expect, it } from 'vitest';
-import { publishJsx } from '../jsx-tier';
-import type { StoredContent } from '../input';
+import { publishJsx } from '../document/jsx-tier';
+import type { StoredContent } from '../document/input';
 
 const publish = async (markup: string) => publishJsx({}, markup) as Promise<StoredContent | Response>;
 

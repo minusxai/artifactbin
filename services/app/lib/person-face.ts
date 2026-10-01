@@ -4,7 +4,7 @@
  * A face is drawn by three renderers that cannot share a component: the app's
  * React chrome (`solid/components/Avatar`), the document kit (`components/kit/
  * user-image`, rendered on the server and hydrated inside a document) and the
- * reader rail (`lib/story/reader-chrome`, an HTML string). They share THIS
+ * reader rail (`lib/story/reader/reader-chrome`, an HTML string). They share THIS
  * module instead, so the same person is the same colour, the same letter and
  * the same fallback wherever they appear.
  *

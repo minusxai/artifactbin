@@ -16,7 +16,7 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/live';
+import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { mintToken } from '@/lib/tokens';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { readEvents } from '@/__tests__/sse';

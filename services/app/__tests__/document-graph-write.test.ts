@@ -5,9 +5,9 @@ import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
-import {createDocumentGraph} from '@/lib/story/document-graph';
-import {prepareGraphOperation} from '@/lib/story/document-graph-admission';
-import {commitGraphOperation} from '@/lib/story/document-graph-write';
+import {createDocumentGraph} from '@/lib/story/graph/document-graph';
+import {prepareGraphOperation} from '@/lib/story/graph/document-graph-admission';
+import {commitGraphOperation} from '@/lib/story/graph/document-graph-write';
 useAppHarness();
 async function setup(){
  const token=await mintToken('mxmx_test_graph_write'),actor={tokenId:token.id,userId:null};

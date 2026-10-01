@@ -16,10 +16,10 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } f
 import type { ArtifactRole } from '@/lib/share-roles';
 import { canEdit as canEditRole, canGovern } from '@/lib/share-roles';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
+import { datasetQuerySnippet } from '@/lib/story/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/file-display';
-import { displayTitle } from '@/lib/story/title';
-import type { ReaderForkedFrom } from '@/lib/story/reader-chrome';
+import { displayTitle } from '@/lib/story/document/title';
+import type { ReaderForkedFrom } from '@/lib/story/reader/reader-chrome';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { pageDataChanged } from '@/web/page-data-events';
 import { PageChrome, useChromeVisibility } from '../components/PageChrome';

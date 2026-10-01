@@ -18,7 +18,7 @@ import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
-import { resetLiveSubscriptions } from '@/lib/story/live';
+import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 

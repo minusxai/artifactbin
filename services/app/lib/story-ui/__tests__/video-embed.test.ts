@@ -12,8 +12,8 @@ import { videoEmbedUrl, videoWatchUrl } from '@/lib/story-ui/video-embed';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
-import { collectRefUses, findExternalSubresources, findBrokenEmbeds } from '@/lib/story/refs';
-import { collectExternalImageUrls } from '@/lib/story/external-images';
+import { collectRefUses, findExternalSubresources, findBrokenEmbeds } from '@/lib/story/data/refs';
+import { collectExternalImageUrls } from '@/lib/story/assets/external-images';
 
 describe('videoEmbedUrl — YouTube', () => {
   it('normalizes an /embed/ URL to the privacy-enhanced host, dropping tracking params', () => {
@@ -166,7 +166,7 @@ describe('the validator boundary', () => {
   });
 });
 
-describe('the publish gate (lib/story/refs)', () => {
+describe('the publish gate (lib/story/data/refs)', () => {
   // findExternalSubresources rejects every external src — artifacts are
   // self-contained. <Video src> is the sanctioned exception: an embed is
   // external by definition, and the allowlist (videoEmbedUrl) is its leash.

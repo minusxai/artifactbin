@@ -1,26 +1,26 @@
 import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from './sql/document-queries';
 import type {DocumentUpdate} from '@artifactbin/contracts';
-import {commitDocumentUpdate} from './story/document-update-write';
+import {commitDocumentUpdate} from './story/graph/document-update-write';
 import {queueMermaidHarvest} from './mermaid-images/store';
-import type {ProseOperation} from './story/document-prose';
+import type {ProseOperation} from './story/graph';
 import type {DocumentOperation} from '@artifactbin/contracts';
-import type {StoredDocument} from './story/document-codec';
-import {createDocumentGraph} from './story/document-graph';
-import {prepareClientDocumentPublication} from './story/document-update-client';
-import {prepareDocumentAuthoringContext} from './story/document-authoring-context';
+import type {StoredDocument} from './story/document';
+import { createDocumentGraph } from './story/graph/document-graph';
+import { prepareClientDocumentPublication } from './story/graph/document-update-client';
+import {prepareDocumentAuthoringContext} from './story/document/document-authoring-context';
 import {artifactQuery,loadArtifactDocument,sourceStorage} from './artifact-document';
 import {JOIN_RELATIONS,seedOwnerJoin} from './relation-state';
 import {documentMentions} from './saved-mentions';
 import { grantContext, grantsOf, grantsPermitRead, grantsPermitWrite, type GrantDocument } from './datasets/policy/grants';
 import {storedMediaReferences} from './datasets/media-references';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
-import {collectRefUses} from '@/lib/story/refs';
+import { collectRefUses } from '@/lib/story/data/refs';
 import {hasDocumentEditorAccess,type VerifiedAccount} from './document-policy';
 import {isQueryFailure, type PersonCard} from '@artifactbin/contracts';
-import type {DataflowState} from '@/lib/story/dataflow';
+import type {DataflowState} from '@/lib/story/data';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
 import {validateUserContent,validateUserWrites,userOptions,people,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
-import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
+import { SIGN_IN_REQUIRED } from '@/lib/story/reader/sign-in-required';
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/user-kinds';
 // A CYCLE, deliberately: the capability table reads `effectiveRole` from here
 // and this file asks it who may act. Both sides use the other only at call
@@ -30,11 +30,11 @@ import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from '@
 import {pinMutationContext, type MutationReceipt} from './mutation-receipt';
 import {notificationContextSnapshot} from './notification-context';
 import type {MutationNotificationJobInput,MutationInitiator} from '@artifactbin/contracts';
-import {sourceChanges} from './story/source-changes';
+import { sourceChanges } from './story/document/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
 import {artifactState} from './artifact-state';
-import {channelFor} from './story/live';
-import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from './story/annotation-edits';
+import {channelFor} from './story/realtime/live';
+import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from './story/annotations/annotation-edits';
 import type { AnnotationOperation } from './editor-v2/annotation-map';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
@@ -57,45 +57,45 @@ import {defaultDatasetGrants,remapDatasetGrants,parseDatasetAccessPolicy} from '
 import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
-import { parseContentInput, type ArtifactFormat } from './story/input';
-import { imageRawUrl, imageRefData, pdfRawUrl } from './story/ref-data';
-import { displayTitle } from './story/title';
+import { parseContentInput, type ArtifactFormat } from './story/document/input';
+import { imageRawUrl, imageRefData, pdfRawUrl } from './story/data/ref-data';
+import { displayTitle } from './story/document/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
 import { json } from './http';
-import { loadDatasetRows } from './story/dataset-store';
-import {newEditId} from './story/splice';
-import type {StringEdit} from './story/edit-batch';
-import { nodeIndex, stampNodeIds } from './story/node-ids';
-import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/parsed-artifact-metadata';
-import { warmPreparedPage } from './story/prepared-page.server';
-import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE, previousEngineRestore } from './story/data-syntax';
+import { loadDatasetRows } from './story/datasets/dataset-store';
+import { newEditId } from './story/document/splice';
+import type {StringEdit} from './story/document';
+import { nodeIndex, stampNodeIds } from './story/document/node-ids';
+import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from './story/data/parsed-artifact-metadata';
+import { warmPreparedPage } from './story/prepared/prepared-page.server';
+import { DATA_SYNTAX_META, hasCurrentDataSyntax, PREVIOUS_ENGINE, previousEngineRestore } from './story/data/data-syntax';
 import { inCurrentSyntax } from './migrate/sqlite/stored';
 import { convertArtifactNow } from './sqlite-syntax-migration';
-import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/story/dataflow';
-import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/compiled-dataflow';
-import { compileWithLoader, type CompileResult } from '@/lib/story/compile-dataflow';
-import { declarationsOf } from '@/lib/story/helmet';
+import { EMPTY_DATAFLOW, isEmptyDataflow, type QueryDecl, type Row, type Scalar } from '@/lib/story/data/dataflow';
+import { EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation } from '@/lib/story/data/compiled-dataflow';
+import { compileWithLoader, type CompileResult } from '@/lib/story/data/compile-dataflow';
+import { declarationsOf } from '@/lib/story/document/helmet';
 import type { ValidationError } from '@/lib/jsx';
-import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/compiled-flow';
-import { bindMutationRequest } from '@/lib/story/mutation-request';
-import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/story/placement';
-import { readerZone, VIEWER, VIEWER_ID } from '@/lib/story/builtins';
-import type { MutationRequest } from '@/lib/story/mutation-request';
-import { schemaLoaderFor } from '@/lib/story/data-checks';
+import { bindParams, bindTypes, dataRefs, importRef, initialTables, initialValues, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables } from '@/lib/story/data/compiled-flow';
+import { bindMutationRequest } from '@/lib/story/datasets/mutation-request';
+import { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from '@/lib/story/data/placement';
+import { readerZone, VIEWER, VIEWER_ID } from '@/lib/story/data/builtins';
+import type { MutationRequest } from '@/lib/story/datasets';
+import { schemaLoaderFor } from '@/lib/story/data/data-checks';
 import { canUseDataPolicy, mutationPolicy } from '@/lib/datasets/policy';
-import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
+import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
 import { runMutation } from '@/lib/sql/engine';
-import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
-import { localTableOverrides } from '@/lib/story/local-tables';
+import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/datasets/local-state';
+import { localTableOverrides } from '@/lib/story/datasets/local-tables';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
-import { storedRowStats } from '@/lib/story/dataset-store';
+import { storedRowStats } from '@/lib/story/datasets/dataset-store';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
 import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
-import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
-import type { DatasetColumn } from '@/lib/story/data-tiers';
-import { checkDocumentData } from '@/lib/story/data-checks';
+import type { RefLoader, ResolvedRef } from '@/lib/story/data';
+import type { DatasetColumn } from '@/lib/story/data/data-tiers';
+import { checkDocumentData } from '@/lib/story/data/data-checks';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 
@@ -465,7 +465,7 @@ export async function createArtifact(
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
-  // A document is born in the current data syntax (lib/story/data-syntax).
+  // A document is born in the current data syntax (lib/story/data/data-syntax).
   input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
@@ -496,7 +496,7 @@ export async function createArtifact(
 /** What a creation says to the rest of the system, AFTER its transaction committed. */
 async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
-  // The first reader of a new document finds it prepared (lib/story/prepared-page.server).
+  // The first reader of a new document finds it prepared (lib/story/prepared/prepared-page.server).
   if (row.format === 'markup') warmPreparedPage(row.id);
   // Its diagrams are drawn to stored SVG in the background; nothing waits on it.
   void queueMermaidHarvest(row);
@@ -635,7 +635,7 @@ export interface ForkOverrides {
  * title would be a second write, rotating the `edit_id` the create reply just handed back.
  *
  * FORKING AN APP. A page that WRITES a dataset may only be published by someone who owns that
- * dataset (lib/story/refs `validateRefs`), so a fork that kept the original's `ref:` was refused
+ * dataset (lib/story/data/refs `validateRefs`), so a fork that kept the original's `ref:` was refused
  * for everyone but its owner — an app could not be forked at all. So the fork COPIES each dataset
  * the page writes and cannot write as the forker, under the forker's account, and repoints every
  * `ref:` to the copy (`writtenDatasetForkPlan`). Datasets the page only READS keep their id: a read
@@ -1110,7 +1110,7 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
      VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7, $8::jsonb)`,
     [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, changes?JSON.stringify(changes):null],
   );
-  // Lowercased to match channelFor (lib/story/live.ts) — see the note there.
+  // Lowercased to match channelFor (lib/story/realtime/live.ts) — see the note there.
   await tx.query('SELECT pg_notify($1, $2)', [`artifact_${after.id.toLowerCase()}`, after.edit_id]);
 }
 
@@ -1571,7 +1571,7 @@ const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source 
 
 /**
  * AN EDIT NEVER MIXES DATA SYNTAXES. A document the migration has not reached
- * (lib/story/data-syntax) refuses the edit's commit, and is converted first,
+ * (lib/story/data/data-syntax) refuses the edit's commit, and is converted first,
  * as its own version by no actor (lib/sqlite-syntax-migration
  * convertArtifactNow); the edit then meets the ordinary stale head, and the
  * client re-reads the converted document and prepares again. A document with
@@ -1770,7 +1770,7 @@ async function getLinkReadableArtifact(id: string): Promise<ArtifactRow | null> 
 function refLoaderFor(tokenId: string): RefLoader {
   return async (id: string): Promise<ResolvedRef | null> => {
     // `owned` records WHICH branch answered: a read is happy either way, a
-    // <Mutation> is admitted only for the caller's own (lib/story/refs).
+    // <Mutation> is admitted only for the caller's own (lib/story/data/refs).
     const own = await getArtifact(tokenId, id);
     const row = own ?? (await getLinkReadableArtifact(id));
     if (!row) return null;
@@ -1821,7 +1821,7 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
 /**
  * The byte quota as the publish door asks it: "is this caller already over?"
  *
- * A closure over the identity, so lib/story/input can guard a tier without
+ * A closure over the identity, so lib/story/document/input can guard a tier without
  * knowing who is publishing (the shape assetImporterFor established). The
  * subject is the ACCOUNT when the token has one — a cap keyed on the token
  * alone is bypassed by minting a second one — which lib/asset-quota decides,
@@ -1830,7 +1830,7 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
  * Its ABSENCE is also what tells the byte tiers they are being previewed:
  * every other ctx member degrades to "do less", and storing the bytes IS what
  * publishing an image or a PDF is, so those two refuse by name instead of
- * quietly working for free (lib/story/input).
+ * quietly working for free (lib/story/document/input).
  */
 export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
   return () => assetByteQuotaExceeded(tokenId);
@@ -2100,7 +2100,7 @@ type DocumentMutationOutcome =
       ok: false;
       reason: 'operation_key_required' | 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row';
       detail?: string;
-      /** The machine-readable half of the one refusal a reader can act on (lib/story/sign-in-required). */
+      /** The machine-readable half of the one refusal a reader can act on (lib/story/reader/sign-in-required). */
       code?: typeof SIGN_IN_REQUIRED;
       /**
        * The KIND was refused, not the statement: a guest or a test user that
@@ -2136,7 +2136,7 @@ export async function runDocumentMutation(
    * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
    *
    * A statement that reads the viewer has one honest answer for a signed-out
-   * caller, and it is a door (lib/story/sign-in-required). A ROW action that
+   * caller, and it is a door (lib/story/reader/sign-in-required). A ROW action that
    * reads it — a membership button a `<For>` draws for exactly the people who
    * have not joined — used to be told its row was missing instead: true,
    * useless, and about the wrong problem. Deciding sign-in here makes the
@@ -2624,7 +2624,7 @@ const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<Artifa
 
 /**
  * WHAT A READER MAY HOLD: every row of one import, for a page that runs the
- * queries over it itself (lib/story/placement) — or null.
+ * queries over it itself (lib/story/data/placement) — or null.
  *
  * Two readers are asked about, and both must agree. The DOCUMENT must read the
  * import (the same resolver its runs use), and the VIEWER must be allowed the
@@ -2816,9 +2816,9 @@ export async function referencedArtifactForRow(row: ArtifactRow, id: string): Pr
 export async function refDataForRow(
   row: ArtifactRow,
   opts: { capture?: boolean } = {},
-): Promise<import('@/lib/story/ref-data').RefDataMap> {
+): Promise<import('@/lib/story/data/ref-data').RefDataMap> {
   const meta = row.meta as { refs?: Array<{ id: string; kind: string }> };
-  const out: import('@/lib/story/ref-data').RefDataMap = {};
+  const out: import('@/lib/story/data/ref-data').RefDataMap = {};
   // A dataset a <Query> reads is a ref (ownership, dependents) but NOT page
   // data: its rows go through the engine (dataflowForRow) and only the query's
   // RESULT reaches the document.

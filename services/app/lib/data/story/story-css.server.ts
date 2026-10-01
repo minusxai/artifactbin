@@ -2,7 +2,7 @@
  * Story design-system CSS — server-side Tailwind compile (see story-css.ts for the contract).
  *
  * Compiles the Tailwind v4 utilities a story actually uses into a per-story CSS string, in
- * process (no build step, no network). Called from the publish path (lib/story/jsx-tier.ts)
+ * process (no build step, no network). Called from the publish path (lib/story/document/jsx-tier.ts)
  * for every story so `compiledCss` can never drift from the markup, whichever door the write
  * came through (agent edit, WYSIWYG browser save, raw API).
  */

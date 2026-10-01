@@ -15,10 +15,10 @@ import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { applyEditFor, getArtifactById, type ArtifactRow, type EditOutcome } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/story/dataset-store';
-import { PREVIOUS_ENGINE } from '@/lib/story/data-syntax';
-import { prepareClientDocumentReplacement, prepareClientDocumentUpdate } from '@/lib/story/document-update-client';
-import type { DocumentGraph } from '@/lib/story/document-graph';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { PREVIOUS_ENGINE } from '@/lib/story/data/data-syntax';
+import { prepareClientDocumentReplacement, prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
+import type { DocumentGraph } from '@/lib/story/graph/document-graph';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 

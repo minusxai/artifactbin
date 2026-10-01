@@ -19,7 +19,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { mintToken } from '@/lib/tokens';
 import { webAssetByHash } from '@/lib/web-assets';
-import { urlHash } from '@/lib/story/asset-url';
+import { urlHash } from '@/lib/story/assets/asset-url';
 import { agentCookie } from '@/__tests__/harness';
 
 useAppHarness();

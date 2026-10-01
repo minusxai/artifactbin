@@ -1,10 +1,10 @@
 /**
  * THE READER ACTIONS the Solid pages share, over the REAL chrome markup the server renders
- * (lib/story/reader-chrome): a face whose picture fails shows its initial, and a light/dark choice
+ * (lib/story/reader/reader-chrome): a face whose picture fails shows its initial, and a light/dark choice
  * flips the document and the choice buttons together.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader/reader-chrome';
 import { STORY_MODE_HOOK } from '@/lib/story-runtime/contract';
 import { applyReaderChoice, wireFaceFallback } from '@/lib/story-runtime/reader-actions';
 

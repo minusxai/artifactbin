@@ -56,7 +56,7 @@ services/app/public/libraries/
 .claude/worktrees/
 .agent/
 
-# The install cache key CI derives from the lockfile (`node scripts/ci.mjs lock-fingerprint`).
+# The install cache key CI derives from the lockfile (`node scripts/ci/ci.mjs lock-fingerprint`).
 .ci-cache-key/
 
 # Finder metadata is never a project asset.
@@ -66,5 +66,5 @@ services/app/public/libraries/
 /services/cli/src/generated/teaching.json
 /services/cli/src/generated/teaching.json.*.tmp
 
-# the shared island build (scripts/build-islands.mjs) — content-addressed chunks + manifest
+# the shared island build (scripts/build/build-islands.mjs) — content-addressed chunks + manifest
 **/public/islands/

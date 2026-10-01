@@ -280,7 +280,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const pending = pendingDraft;
     if (!pending || disposed || !drafting() || pending.sequence !== draftSequence) return;
     const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdateParts }] = await Promise.all([
-      import('@/lib/islands/morph/engine'), import('@/lib/story/update-parts'),
+      import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
     // What stays is decided against the draft the page shows NOW. The served AST may carry resolved
@@ -544,7 +544,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         if (!typing || redrawOwed || !edit) { request(); return; }
         // Typed prose needs no compile at all: the editors drew it, and nothing else changed. Only when the
         // tree says otherwise (a block moved a component, a legacy host's text) is it compiled and drawn.
-        void import('@/lib/story/update-parts').then(({ storyUpdateParts }) => {
+        void import('@/lib/story/document/update-parts').then(({ storyUpdateParts }) => {
           if (disposed || sequence !== draftSequence) return;
           const parse = (text: string) => storyUpdateParts(text)?.nodes;
           const after = parse(source);

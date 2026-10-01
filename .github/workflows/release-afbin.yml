@@ -69,7 +69,7 @@ jobs:
           git add -A
           git commit -m "Release afbin $VERSION"
           # The diff is the version and nothing else, so main's CI selects the release jobs only
-          # (scripts/ci.mjs plan). Never forced: a main that moved since checkout refuses the push
+          # (scripts/ci/ci.mjs plan). Never forced: a main that moved since checkout refuses the push
           # and the dispatch is simply run again.
           git push origin HEAD:main
           echo "Released afbin $VERSION as $(git rev-parse HEAD) on main; its CI builds and publishes the binaries." >> "$GITHUB_STEP_SUMMARY"

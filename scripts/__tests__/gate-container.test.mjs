@@ -21,7 +21,7 @@ describe('parseArgs', () => {
   });
 
   it('reads both flag spellings, derives servers from CPUs, and accepts gate file names', () => {
-    expect(parseArgs(['--cpus', '6', '--memory=12g', 'scripts/gate-fonts.mjs', 'gate-web-assets', 'fonts']))
+    expect(parseArgs(['--cpus', '6', '--memory=12g', 'scripts/gates/gate-fonts.mjs', 'gate-web-assets', 'fonts']))
       .toMatchObject({ cpus: 6, memory: '12g', servers: 3, gates: ['fonts', 'web-assets'] });
     expect(parseArgs(['--cpus=1', 'a']).servers).toBe(1);
     expect(parseArgs(['--servers', '4', 'a']).servers).toBe(4);
@@ -39,7 +39,7 @@ describe('parseArgs', () => {
 });
 
 describe('checkGates', () => {
-  const known = gateNamesOnDisk(readdirSync(SCRIPTS));
+  const known = gateNamesOnDisk(readdirSync(path.join(SCRIPTS, 'gates')));
 
   it('accepts real gates and names every unknown one at once', () => {
     expect(() => checkGates(['hydration', 'full-kit'], known)).not.toThrow();

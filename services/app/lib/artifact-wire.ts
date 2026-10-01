@@ -10,8 +10,8 @@ import type {MutationReceipt} from './mutation-receipt';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {creationOperation,lookupCreation,CreationReplay} from '@/lib/creation-ledger';
 import {artifactState} from '@/lib/artifact-state';
-import {prepareContentInput,applyPreparedContent,type PreparedContent} from '@/lib/story/prepare-content';
-import {parseAnnotationOperations} from './story/annotation-edits';
+import {prepareContentInput,applyPreparedContent,type PreparedContent} from '@/lib/story/prepared/prepare-content';
+import { parseAnnotationOperations } from './story/annotations/annotation-edits';
 import { notifyRemoteComment } from './remote/mentions';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -32,24 +32,24 @@ import {
   declarationsForRow, runDocumentMutation,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
-import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/node-ids';
-import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
+import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/document/node-ids';
+import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
-import type { Scalar } from '@/lib/story/dataflow';
-import { parseMutationRequest } from '@/lib/story/mutation-request';
-import { bindParams, bindTypes, mutationTargetRef } from '@/lib/story/compiled-flow';
-import { platformValues, rowField } from '@/lib/story/builtins';
-import { rewriteBuiltinFields } from '@/lib/story/compile-dataflow';
-import { datasetCreateFields } from '@/lib/story/dataset-usage';
-import { imageRawUrl, pdfRawUrl } from '@/lib/story/ref-data';
+import type { Scalar } from '@/lib/story/data';
+import { parseMutationRequest } from '@/lib/story/datasets/mutation-request';
+import { bindParams, bindTypes, mutationTargetRef } from '@/lib/story/data/compiled-flow';
+import { platformValues, rowField } from '@/lib/story/data/builtins';
+import { rewriteBuiltinFields } from '@/lib/story/data/compile-dataflow';
+import { datasetCreateFields } from '@/lib/story/datasets/dataset-usage';
+import { imageRawUrl, pdfRawUrl } from '@/lib/story/data/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/config';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids-shape';
 import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
-import { loadDatasetRows } from '@/lib/story/dataset-store';
-import { CONTENT_FIELDS } from '@/lib/story/input';
-import { collectExternalAssetUrls } from '@/lib/story/external-images';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
+import { CONTENT_FIELDS } from '@/lib/story/document/input';
+import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
 import type { AssetWarning } from '@/lib/web-assets';
 import { refreshWebAssets, type WebAssetImporter } from '@/lib/web-assets';
 import { getDb } from '@/lib/db';
@@ -656,7 +656,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     ...(row.format === 'dataset' ? datasetCreateFields(row.id, meta.columns, meta.rowCount, meta as { totalRows?: number; truncated?: boolean }, row.access) : {}),
     ...(row.format === 'viz' ? { slots: meta.slots } : {}),
     // Where the BYTES are, for a caller that must render the image before it
-    // has re-read the document (lib/story/ref-data owns the shape, so this
+    // has re-read the document (lib/story/data/ref-data owns the shape, so this
     // cannot drift from the render path).
     ...(row.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
     // Same for a PDF, plus the two facts a <File> card shows: an agent that has

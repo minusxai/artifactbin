@@ -7,7 +7,7 @@
  * querying a document that no longer exists.
  */
 import { describe, expect, it } from 'vitest';
-import { storyUpdateParts } from '../update-parts';
+import { storyUpdateParts } from '../document/update-parts';
 
 const doc = (helmet: string, body: string) => `<Helmet>${helmet}</Helmet>${body}`;
 const VALUE = '<Value name="region" type="string" />';

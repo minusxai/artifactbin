@@ -185,7 +185,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
      const nextRoot=next.querySelector<HTMLElement>('[data-mx-inline-story]');
      if(!nextRoot)throw new Error('draft preview carried no story');
      const baseline=lastDraftSource??sourceRef.current;
-     const {storyUpdateParts}=await import('../../../app/lib/story/update-parts');
+     const {storyUpdateParts}=await import('../../../app/lib/story/document/update-parts');
      const before=baseline?storyUpdateParts(baseline)?.nodes??nodes:nodes;
      const after=storyUpdateParts(source)?.nodes??command.nodes;
      pendingDraft={document:next,root:nextRoot,sheet:next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'),nodes:command.nodes,source,

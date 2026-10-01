@@ -1,8 +1,8 @@
 import { runtimeId } from './runtime-id';
 /** One capability implementation for the public page and the managed iframe transport. */
 import type { MxApi, MxSnapshot, MxReadOptions } from '@artifactbin/contracts';
-import { DECL_NAME_RE, scalarMatches, type Scalar } from '@/lib/story/dataflow';
-import type { CompiledMutation } from '@/lib/story/compiled-dataflow';
+import { DECL_NAME_RE, scalarMatches, type Scalar } from '@/lib/story/data/dataflow';
+import type { CompiledMutation } from '@/lib/story/data/compiled-dataflow';
 import { ACCESS_PENDING, type DataflowStore } from './store';
 
 export type { MxApi } from '@artifactbin/contracts';

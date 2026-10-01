@@ -8,7 +8,7 @@
  * silently, which is the worst way to lose it.
  */
 import { describe, it, expect } from 'vitest';
-import { bodyPathToSourcePath, composeSource, hasPendingEdits, helmetOffset, NO_PENDING_EDITS, type PendingEdits } from '../edit-compose';
+import { bodyPathToSourcePath, composeSource, hasPendingEdits, helmetOffset, NO_PENDING_EDITS, type PendingEdits } from '../document/edit-compose';
 import { parseJsx } from '@/lib/jsx';
 
 const SRC = '<div className="p-4"><h1 className="t">Title</h1><p className="lede">hello</p></div>';

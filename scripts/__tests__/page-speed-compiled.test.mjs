@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
-import { SIZE_TARGETS } from '../size-targets.mjs';
+import { SIZE_TARGETS } from '../build/size-targets.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 
@@ -35,12 +35,12 @@ describe('the fixtures', () => {
 });
 
 describe('the lab run', () => {
-  const loads = readFileSync(path.join(root, 'scripts/performance-loads.mjs'), 'utf8');
+  const loads = readFileSync(path.join(root, 'scripts/ci/performance-loads.mjs'), 'utf8');
   it('boots the measured server without a legacy reader switch, so the head measures Phase 2', () => {
     expect(loads).not.toContain('FLAG__COMPILED_READER');
   });
   it('the workflow judges the size targets on the head', () => {
     const workflow = readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8');
-    expect(workflow).toContain('node scripts/size-targets.mjs page-speed/head.json --markdown --strict');
+    expect(workflow).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict');
   });
 });

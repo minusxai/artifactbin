@@ -1,13 +1,13 @@
 /**
- * A LOCAL WRITE, executed (lib/story/local-state): the compiled mutation over
+ * A LOCAL WRITE, executed (lib/story/datasets/local-state): the compiled mutation over
  * the reader's current rows of its table Value, typed by the declaration, in
  * this thread and over HTTP — the same engine, the same answer.
  */
 import { afterAll, describe, expect, it } from 'vitest';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { serveSql, sqlClient } from '@artifactbin/sql';
-import { runLocalStateMutation } from '../local-state';
-import { bindParams, bindTypes, initialTables, mutationParams, valueTypes } from '../compiled-flow';
+import { runLocalStateMutation } from '../datasets/local-state';
+import { bindParams, bindTypes, initialTables, mutationParams, valueTypes } from '../data/compiled-flow';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const service = createSqliteSql({ maxRows: 10, timeoutMs: 2000 });

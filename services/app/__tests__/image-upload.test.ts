@@ -10,12 +10,12 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as sessionCreate, GET as sessionList } from '@/app/api/my/artifacts/route';
 import { createArtifact, getArtifactById, refDataForRow } from '@/lib/artifacts';
-import { storeImageContent } from '@/lib/story/data-tiers';
+import { storeImageContent } from '@/lib/story/data/data-tiers';
 
 
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
-import type { StoredContent } from '@/lib/story/input';
+import type { StoredContent } from '@/lib/story/document/input';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as previewRoute } from '@/app/api/preview/route';
 import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';

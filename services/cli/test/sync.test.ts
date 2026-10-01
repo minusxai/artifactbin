@@ -1,5 +1,5 @@
-import {createDocumentGraph,graphSource} from '../../app/lib/story/document-graph';
-import {applyGraphPatch} from '../../app/lib/story/document-graph-patch';
+import {createDocumentGraph,graphSource} from '../../app/lib/story/graph/document-graph';
+import {applyGraphPatch} from '../../app/lib/story/graph/document-graph-patch';
 import {hostDirectory} from '../src/config';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';

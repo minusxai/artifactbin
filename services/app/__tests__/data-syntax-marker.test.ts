@@ -1,5 +1,5 @@
 /**
- * THE DATA-SYNTAX MARKER on the publish path (lib/story/data-syntax): every
+ * THE DATA-SYNTAX MARKER on the publish path (lib/story/data/data-syntax): every
  * creation and every whole-document write carries `meta.dataSyntax = 2`; a
  * partial edit keeps whatever the document had, so an unmigrated document is
  * never marked as converted by an edit that validated only part of it.
@@ -9,9 +9,9 @@ import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/tokens';
 import {editorScope,getArtifactById} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
-import {prepareClientDocumentReplacement,prepareClientDocumentUpdate} from '@/lib/story/document-update-client';
-import {commitDocumentUpdate} from '@/lib/story/document-update-write';
-import type {DocumentGraph} from '@/lib/story/document-graph';
+import {prepareClientDocumentReplacement,prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
+import {commitDocumentUpdate} from '@/lib/story/graph/document-update-write';
+import type {DocumentGraph} from '@/lib/story/graph/document-graph';
 
 const harness=useAppHarness();
 

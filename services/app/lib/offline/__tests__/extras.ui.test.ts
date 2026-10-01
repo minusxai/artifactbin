@@ -2,7 +2,7 @@
  * Code view's extras, loaded on demand (lib/offline/extras): one SRI-pinned
  * script from the file's own origin, only when asked, and a retry after a
  * failure. The real load, under the file's CSP, runs in
- * scripts/gate-offline-file.mjs.
+ * scripts/gates/gate-offline-file.mjs.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { createExtrasLoader, extrasScriptUrl, type OfflineExtras } from '../extras';

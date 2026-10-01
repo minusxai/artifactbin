@@ -13,8 +13,8 @@
 import type { AnnotationWire } from '@/lib/annotations';
 import { readAnnotationPages } from '@/lib/annotation-pages';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
-import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/live';
+import { SIGN_IN_REQUIRED } from '@/lib/story/reader/sign-in-required';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { openLiveStream } from '@/lib/live-stream';
 import { BackendRequestError } from './errors';

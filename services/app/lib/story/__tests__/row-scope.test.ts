@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRowScopes } from '../row-scope';
-import { rewriteBuiltinFields } from '../compile-dataflow';
+import { analyzeRowScopes } from '../data/row-scope';
+import { rewriteBuiltinFields } from '../data/compile-dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 describe('row scope', () => {
   // Which row fields a statement reads is the compiler's answer (rewriteBuiltinFields), not a scan here.

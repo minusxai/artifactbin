@@ -5,7 +5,7 @@ import {expect,it,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/tokens';
 import {getDb} from '@/lib/db';
-import {encodeDocument,decodeDocumentNodes,encodeDocumentNodes} from '@/lib/story/document-codec';
+import {encodeDocument,decodeDocumentNodes,encodeDocumentNodes} from '@/lib/story/document/document-codec';
 import {getArtifactById,applyEditScoped,getVersionFor,forkArtifact} from '@/lib/artifacts';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();

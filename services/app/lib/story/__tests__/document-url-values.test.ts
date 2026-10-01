@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { compiledDocument } from '@/lib/compiled-page/__tests__/document-helper';
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { compiledSource } from '@/test/helpers/compiled';
-import type { Scalar } from '@/lib/story/dataflow';
+import type { Scalar } from '@/lib/story/data/dataflow';
 
 const SOURCE = `<Helmet><Value name="region" type="string" default="north" />
 <Value name="regions" type="table" value={[{"region":"north"},{"region":"west"}]} />

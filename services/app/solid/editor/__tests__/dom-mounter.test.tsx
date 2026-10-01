@@ -5,7 +5,7 @@ import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import { flushFlowView } from '@/lib/editor-v2/flow-view';
-import { storyUpdateParts } from '@/lib/story/update-parts';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
 
 describe('compiled DOM edit mounter', () => {
   it('renames a compiled deck slide through the rail edit control', () => {

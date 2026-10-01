@@ -1,8 +1,8 @@
 import { serializeJsx, validateJsx } from '@/lib/jsx';
 import {renderDoc} from '@/lib/skills';
-import { publishJsx } from '../jsx-tier';
-import {splitHelmet} from '../helmet';
-import type {StoredContent} from '../input';
+import { publishJsx } from '../document/jsx-tier';
+import {splitHelmet} from '../document/helmet';
+import type {StoredContent} from '../document/input';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 const inner='<Iframe id="10" title="Canvas" height={320}><style id="11">{`canvas {position:fixed;height:100vh}`}</style><canvas id="12"/><script id="13" src="https://cdn.example/bundle.js"/><script id="14">{`document.querySelector("canvas")`}</script></Iframe>';
 describe('managed Iframe publish boundary',()=>{

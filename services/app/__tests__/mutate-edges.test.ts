@@ -18,7 +18,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/live';
+import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { mintToken } from '@/lib/tokens';
 import { useAppHarness, request } from '@/__tests__/harness';
 

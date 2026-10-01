@@ -94,7 +94,7 @@ it('names the listing page only from what the server inlined', () => {
  * PER DOCUMENT. The reader page above warms what EVERY document needs; the
  * lazy code only some documents run — the chart module, a Mermaid kind's
  * engine, diagram and layout — is named per document, from what its body
- * draws (lib/story/lazy-code), so it downloads beside the runtime instead of
+ * draws (lib/story/document/lazy-code), so it downloads beside the runtime instead of
  * three imports later. Never for a document that will not run it.
  */
 const MERMAID = '../../../node_modules/mermaid/dist/chunks/mermaid.core';

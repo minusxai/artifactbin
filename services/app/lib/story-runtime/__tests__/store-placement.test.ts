@@ -1,6 +1,6 @@
 /**
  * ONE SCHEDULING STEP, TWO PLACES. The store splits the core's "compute these
- * nodes at these versions" by placement (lib/story/placement): what the page
+ * nodes at these versions" by placement (lib/story/data/placement): what the page
  * holds runs in the page engine (lib/story-runtime/page-engine), everything
  * else through the existing transport — and until the page holds its imports,
  * everything goes to the server, so the first paint never waits on the engine.
@@ -11,8 +11,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadSqlite, SqliteDatabase } from '@artifactbin/sql/core';
 import { compiledOf } from '@/test/helpers/compiled';
-import type { Row, Scalar } from '@/lib/story/dataflow';
-import type { MutationRequest } from '@/lib/story/mutation-request';
+import type { Row, Scalar } from '@/lib/story/data/dataflow';
+import type { MutationRequest } from '@/lib/story/datasets/mutation-request';
 import { createPageEngine } from '../page-engine';
 import { createDataflowStore, type DataflowStore, type MutationAnswer, type QueryTransport } from '../store';
 

@@ -11,7 +11,7 @@ the author-script sandbox boundary in [serving and security](../../../../docs/se
 - Keep publish validation (`lib/jsx/validate.ts`) and renderer filtering (`interpreter-primitives.ts`, the compiler's `rawBuildProps`) independent.
   Stored content may predate current validation. Update both sides when changing denied attributes,
   URL schemes or component vocabulary; account for authored HTML spellings versus compiled JSX prop names.
-- The publish path (`lib/story/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
+- The publish path (`lib/story/document/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
   Inline style policy and authored style blocks have different rules. Do not relax one because another
   layer also sanitizes. Managed HTML/iframes and author scripts use their own explicit contracts.
 - `lib/jsx/serialize.ts` must preserve entity escaping and static template-literal children: SQL and

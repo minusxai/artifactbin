@@ -10,7 +10,7 @@ import {GET as jobs} from '@/app/api/notification-runs/[runId]/jobs/route';
 import {GET as inbox} from '@/app/api/my/people/route';
 import {notificationDemoDataset,notificationDemoDocument} from '../../../scripts/fixtures/mutation-notifications.mjs';
 import {getArtifactById} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/story/dataset-store';
+import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {createUser} from '@/lib/users';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {notificationJobStore} from '@/lib/notification-runtime';

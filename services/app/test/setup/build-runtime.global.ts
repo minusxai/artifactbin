@@ -5,7 +5,7 @@
  * inputs against a marker beside it and skips the esbuild pass when nothing changed; that marker is
  * checked HERE first, in-process, so a hit costs no build process (and none of the builders' imports).
  *
- * The shared island build (scripts/build-islands.mjs) is the same kind of input — the compiler and
+ * The shared island build (scripts/build/build-islands.mjs) is the same kind of input — the compiler and
  * the assembler read public/islands/manifest.json — so every test process gets it the same way. So is
  * the CLI's generated teaching, which source consumers import: its content-verified cache makes the
  * call free when `npm test` already generated it (scripts/lib/generate-teaching.mjs).
@@ -23,7 +23,7 @@ export default async function buildStoryRuntime(): Promise<void> {
     cwd: appRoot,
     stdio: 'inherit',
   });
-  execFileSync(process.execPath, [path.resolve(appRoot, '../../scripts/build-islands.mjs'), '--cache'], {
+  execFileSync(process.execPath, [path.resolve(appRoot, '../../scripts/build/build-islands.mjs'), '--cache'], {
     cwd: appRoot,
     stdio: 'inherit',
   });

@@ -1,8 +1,8 @@
 import {stat} from 'node:fs/promises';
 import {join} from 'node:path';
-import {validateMarkupStructure} from '../../app/lib/story/local-validation';
+import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import {repairJsxSource} from '../../app/lib/jsx';
-import {formatMarkupSource} from '../../app/lib/story/format-source';
+import {formatMarkupSource} from '../../app/lib/story/document/format-source';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
 import {inspectWorkspace,type Workspace} from './workspace';
 import {assetInput} from './upload-input';

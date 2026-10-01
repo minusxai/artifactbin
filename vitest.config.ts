@@ -11,7 +11,7 @@ import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs
 // matches `lib/**/__tests__` too, so they exclude this glob.
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
-// islands project because scripts/test-changed.mjs discovers only api/node/ui/islands.
+// islands project because scripts/ci/test-changed.mjs discovers only api/node/ui/islands.
 const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
 
 // API exercises route handlers and persistence; Node covers libraries, services,
@@ -73,7 +73,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    // `--shard` packs files by measured CI time (scripts/test-timings.json), not by count.
+    // `--shard` packs files by measured CI time (scripts/ci/test-timings.json), not by count.
     sequence: { sequencer: TimedSequencer },
     testTimeout: 45_000,
     hookTimeout: 45_000,
