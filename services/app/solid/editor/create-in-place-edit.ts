@@ -234,33 +234,24 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     ),
   );
 
-  // ── entering and leaving ──────────────────────────────────────────────────
-  createEffect(
-    on([() => options.editing, () => options.sessionNonce], ([editing]) => {
-      postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: editing });
-      if (!editing) {
-        setReady(false);
-        setSelection(null);
-        typing = false;
-      }
-      onCleanup(() => {
-        // Leaving disposes this; the document must not stay editable.
-        if (editing) postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: false });
-      });
-    }),
-  );
-
+  // ── entering, and pausing for a version preview ─────────────────────────
   /*
-   * A frame that has only just painted has not heard the request to enter edit
-   * mode — its listener does not exist yet. Repeat briefly rather than assume:
-   * the cost of asking twice is nothing, and the cost of being early is an
-   * editor that never becomes editable.
+   * One ask per entry: the controller runs in this realm and hears it at once, and `ready` follows from its
+   * `mx:edit-ready` (the listener above). Ending the session is NOT this module's: the page's edit lifecycle
+   * (solid/document/create-edit-lifecycle) sends the one edit-mode off on Done or Back, so unmounting sends nothing.
+   * `editing` going false while mounted is a PAUSE (a version preview draws instead), so the document stops editing.
    */
-  createEffect(() => {
-    if (!options.editing || ready()) return;
-    const timer = window.setInterval(() => postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: true }), 250);
-    onCleanup(() => window.clearInterval(timer));
-  });
+  let asked = false;
+  createEffect(on(() => options.editing, (editing) => {
+    if (editing === asked) return;
+    asked = editing;
+    postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: editing });
+    if (!editing) {
+      setReady(false);
+      setSelection(null);
+      typing = false;
+    }
+  }));
 
   const applyFormat = (path: string, edit: ComposableFormatEdit) => {
     // The engine publishes its checked source transaction. Legacy hosts still

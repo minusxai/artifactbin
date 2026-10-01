@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { STORY_COMMITTED_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
+import { createSignal } from 'solid-js';
+import { STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
 import { createInPlaceEdit } from '../create-in-place-edit';
 import { renderHook } from '@/solid/__tests__/helpers';
 
@@ -105,4 +106,38 @@ it('redraws the draft after a grid layout edit so the compiled tiles follow the 
   expect(edited).toHaveLength(1);
   expect(edited[0]![0]).toContain('w={4}');
   expect(edited[0]![1]).toBe(true);
+});
+
+const editModes = (sent: Array<Record<string, unknown>>) => sent.filter((m) => m.type === STORY_EDIT_MODE_MESSAGE).map((m) => m.on);
+
+it('asks for edit mode once on entry and waits for edit-ready instead of polling', async () => {
+  vi.useFakeTimers();
+  const { runtimeRef, sent, emit } = fakeRuntime();
+  const { result: edit } = renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: '<p>draft</p>' }, editing: true, sessionNonce: NONCE, onSourceEdited: () => {},
+  }));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(editModes(sent)).toEqual([true]);
+  emit({ type: STORY_EDIT_READY_MESSAGE });
+  expect(edit.ready()).toBe(true);
+});
+
+it('never ends the session itself: unmounting sends no edit-mode off (the edit lifecycle sends the one)', () => {
+  const { runtimeRef, sent } = fakeRuntime();
+  const { cleanup } = renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: '<p>draft</p>' }, editing: true, sessionNonce: NONCE, onSourceEdited: () => {},
+  }));
+  cleanup();
+  expect(editModes(sent)).toEqual([true]);
+});
+
+it('pauses for a version preview and resumes after it', () => {
+  const { runtimeRef, sent } = fakeRuntime();
+  const [editing, setEditing] = createSignal(true);
+  renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: '<p>draft</p>' }, get editing() { return editing(); }, sessionNonce: NONCE, onSourceEdited: () => {},
+  }));
+  setEditing(false);
+  setEditing(true);
+  expect(editModes(sent)).toEqual([true, false, true]);
 });
