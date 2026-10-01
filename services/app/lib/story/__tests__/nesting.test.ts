@@ -144,8 +144,8 @@ describe('canonicalizeMarkup applies it', () => {
 
 describe('the invariants other code rests on', () => {
   /**
-   * AST paths are POSITIONAL. The editor holds a `<Question>` selection as one
-   * (components/ArtifactEditor → VizEditorPanel), `updateQuestionChartInJsx`
+   * AST paths are POSITIONAL. The editor holds a `<Question>` selection as one,
+   * `updateQuestionChartInJsx`
    * writes back through one, and the interpreter stamps them as `data-mx-ast`.
    * A transform that inserted, removed or reordered a node would silently
    * repoint every held path at a DIFFERENT element, which no tag guard

@@ -208,7 +208,7 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
  * posts embeds it, through the app's own handler, to a guest.
  *
  * And the home page's two images: a public post's card thumbnail
- * (components/Shelf, `/a/<id>/export?format=jpg&mode=card`) and the owner's
+ * and the owner's
  * picture (lib/avatars). Same rule: the app's handler, a guest, this owner's
  * public posts and nobody else's.
  */

@@ -1,5 +1,5 @@
 /**
- * A TRUSTED UI ROOT without a framework — the shape components/TrustedUi draws: a `[data-trusted-ui]`
+ * A TRUSTED UI ROOT without a framework — the shape solid/components/TrustedUi draws: a `[data-trusted-ui]`
  * host whose open shadow root holds the app's own sheet (lib/trusted-ui-styles) and
  * `[data-trusted-ui-root]` with exactly two children, the content and then the PORTAL destination
  * (what lib/islands/trusted-portal hands popovers, tooltips and kit overlays). Author CSS selectors

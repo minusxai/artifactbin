@@ -5,7 +5,7 @@
  * assembles a compiled document version imports its shape from here, and no
  * two of them may agree privately on a second one. Framework-free on purpose:
  * `solid-js` is a dependency of the island build, never of the server's type
- * graph, and the reader runtime is typed against the existing react-free store
+ * graph, and the reader runtime is typed against the existing framework-free store
  * (lib/story-runtime/store), not against Solid.
  *
  * Owners (one per module; see the parallel plan):
@@ -494,7 +494,7 @@ export interface AssembleInput {
   /** Reader chrome to render on the server (`/a/:id`, a domain post); null for `/raw`, captures, the offline file. */
   chrome: ReaderChromeInput | null;
   /**
-   * Load the React app on idle (or first chrome interaction) and hand it the
+   * Load the Solid app on idle (or first chrome interaction) and hand it the
    * island document (§7): the SPA's entry and the chunks to `modulepreload`
    * (server/reader-preloads). Null for `/raw` and every path without the SPA.
    */

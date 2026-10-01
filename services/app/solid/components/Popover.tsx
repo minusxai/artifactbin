@@ -2,7 +2,7 @@
 /**
  * A click-toggle popover anchored to its trigger and portalled out of the document flow — the Solid
  * equivalent of this app's @radix-ui/react-popover usage (components/views/story/StoryToolbarMenu,
- * components/SelectMenu). A scrolling toolbar or a clipped rail must not clip the panel (the same
+ * solid/components/SelectMenu). A scrolling toolbar or a clipped rail must not clip the panel (the same
  * reason AnchoredPanel gives for its own portal), so it is placed with the framework-free Radix popper
  * model the islands and solid/components/Tooltip already use, and portalled to the trusted UI host
  * when the page has one, else <body>.

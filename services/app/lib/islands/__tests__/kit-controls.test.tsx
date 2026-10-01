@@ -128,7 +128,7 @@ describe('people and files', () => {
 
 describe('mermaid', () => {
   // A stored drawing is a StoredMermaidImage (story-runtime/contract: an image `src`, never inline SVG), shown as
-  // today's React Mermaid shows it: an <img>, `ready` once it has loaded (kit-mermaid.test.tsx holds the full parity).
+  // the retired React Mermaid shows it: an <img>, `ready` once it has loaded (kit-mermaid.test.tsx holds the full parity).
   it('draws from the stored drawing when one exists and marks itself ready once it loads, without loading the engine', () => {
     const island = fakeIsland();
     island.drawings = () => ({ 'k:light': { src: '/assets/mermaid/k.svg', type: 'flowchart-v2', width: 100, height: 50, palette: 'p' } });

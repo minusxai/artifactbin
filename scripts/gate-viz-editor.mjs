@@ -133,7 +133,7 @@ await openEditor();
 check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'the inspector stays shut until a chart is clicked');
 /*
  * THE DOCUMENT DOES NOT MOVE inside an edit session. The inspector fills the
- * edit panel, which has been there since entry (components/EditPanel): select,
+ * edit panel, which has been there since entry: select,
  * close and select-something-else all leave the text column exactly where it
  * was — it used to jump sideways under the pointer on every one of them.
  */

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/MobileSheet in SOLID — the bottom sheet a phone gets where desktop gets an anchored
+ * The bottom sheet a phone gets where desktop gets an anchored
  * panel. The caller decides when it is used; the sheet owns the backdrop, Escape, the grab handle,
  * the scroll cap and swipe-to-close. It portals to <body> so a fixed ancestor cannot re-anchor it.
  *

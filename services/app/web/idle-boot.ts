@@ -148,7 +148,7 @@ export const capabilityOf = (doc: Document): SpaCapability =>
  * created HIDDEN while the compiled story is still the body's, so nothing the app draws before it
  * adopts the story (a loading skeleton) can push the document down; web/initial-story reveals it
  * as it adopts — and the app's own stylesheet, loaded before the app runs, because
- * components/TrustedUi reads the shell's stylesheet links from `<head>` when web/main is evaluated.
+ * solid/components/TrustedUi reads the shell's stylesheet links from `<head>` when web/main is evaluated.
  */
 async function prepareAppShell(doc: Document, stylesheet: string | null): Promise<void> {
   if (!doc.getElementById('root')) {

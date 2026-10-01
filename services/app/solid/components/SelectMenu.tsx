@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/SelectMenu.tsx in SOLID: the house dropdown, terminal-graphite chrome for what a native
+ * The house dropdown, terminal-graphite chrome for what a native
  * <select> draws with OS widgets. Same contract — a trigger button over an anchored, portalled panel
  * (solid/components/Popover) — and the same anatomy: a listbox, not a menu, so `aria-selected` and the
  * check mark always mean something, and a caller that needs "no value" passes it as an explicit option.

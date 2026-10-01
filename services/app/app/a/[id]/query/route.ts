@@ -27,8 +27,8 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
  * credential arriving here would change nothing.
  *
  * POST is the READER path inside the owner's shell: the PAGE (which holds the
- * session) calls it on the frame's behalf and posts the result back
- * (components/ArtifactSurface). Same read ACL as the page and `raw` — a
+ * session) calls it on the frame's behalf and posts the result back.
+ * Same read ACL as the page and `raw` — a
  * document you cannot read, you cannot query: uniform 404. This is the only
  * way a PRIVATE document's queries run for its readers.
  */

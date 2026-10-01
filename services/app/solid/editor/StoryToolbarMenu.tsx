@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/StoryToolbarMenu.tsx in SOLID — editor menus that escape the scrolling
+ * Editor menus that escape the scrolling
  * toolbar (solid/components/Popover, the framework-free Radix popper placement) while staying
  * reachable: pointer actions preserve the document range (onMouseDown prevented on the trigger), and
  * the panel does not steal focus on open.

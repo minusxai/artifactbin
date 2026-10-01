@@ -9,7 +9,7 @@
  *
  * So the set is resolved HERE, where its weight is free, down to the handful of
  * glyphs a document actually uses; those travel in the island beside `refData` and
- * the client renders them from data (components/kit/icon).
+ * the client renders them from data.
  *
  * Lucide's path data is extracted at build time (scripts/lucide-icons.mjs, written by
  * scripts/build-server-reader.mjs to lib/build-assets/lucide-icons.json): the icon

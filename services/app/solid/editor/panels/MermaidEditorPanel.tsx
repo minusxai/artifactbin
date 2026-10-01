@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/views/story/MermaidEditorPanel.tsx in SOLID — edit a `<Mermaid>` diagram's
+ * Edit a `<Mermaid>` diagram's
  * source and title, the chart inspector's sibling for the drawn block. The document
  * renders the diagram as an image, so the source has no in-place editor; this panel is
  * where it is written.

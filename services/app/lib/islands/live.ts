@@ -15,7 +15,7 @@
  *  - a version ping (a new `editId`) → the new version drawn IN PLACE by the one update path
  *    (./live-update: the story fragment fetched and morphed, islands kept or re-hydrated, the store
  *    surviving), falling back to a reload that keeps the reader's place. Once the app has adopted the
- *    page (components/IslandStory installs `STORY_ADOPT_HOOK`) the app holds the document's stream and
+ *    page the app holds the document's stream and
  *    calls the same path itself.
  *
  * ONE stream per page: `page` opens it on a page with no island module, `boot` on a page with one; a

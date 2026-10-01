@@ -12,7 +12,7 @@ import type {ImageAssetAnswer} from '@/lib/story/ref-data';
  * lie. Requests are matched by id,
  * and an unanswered request rejects after `timeoutMs` (the store then reports
  * the message on the affected queries rather than spinning forever).
- * React-free; installed by the entry.
+ * Framework-free; installed by the entry.
  */
 import { localZone } from '@/lib/story/builtins';
 import {

@@ -12,7 +12,7 @@
  * read the backend from ArtifactBackendProvider (./context.tsx). Hooks take
  * the backend as a parameter (the page calls some of them above the provider
  * it renders). A control whose feature is unavailable renders disabled with
- * the returned reason (components/FeatureUnavailable.tsx), never hidden
+ * the returned reason, never hidden
  * without saying why and never enabled only to fail.
  *
  * Every type here is the shape the call site already read before the move.

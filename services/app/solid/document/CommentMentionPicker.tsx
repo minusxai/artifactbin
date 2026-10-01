@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/RemoteMentionPicker in SOLID: the people and agents a comment draft can @mention.
+ * The people and agents a comment draft can @mention.
  * Both are looked up on the server; without either, its section says why. The textarea keeps the
  * keyboard — this list answers ArrowUp/ArrowDown/Enter/Tab through `onReady`'s handle.
  */

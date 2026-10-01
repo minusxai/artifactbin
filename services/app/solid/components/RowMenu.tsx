@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * THE OVERFLOW MENU BEHIND A ROW'S "…" (components/RowMenu.tsx in Solid). Same interface — a list of
+ * THE OVERFLOW MENU BEHIND A ROW'S "…". Same interface — a list of
  * items — with one change a port must make: `icon` is a FUNCTION returning the element. In React an
  * element is a description that can be rendered anywhere; in Solid, JSX evaluates to a real DOM node,
  * and a prop getter that builds one would build a fresh node on every read (or, read once, a single

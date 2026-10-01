@@ -2,7 +2,7 @@
  * THE ISLAND RUNTIME — Phase 2's browser-side contracts (docs/phase2-architecture.md §4, §7).
  *
  * Types and constants only, browser-safe and framework-free: an island is
- * typed against the existing react-free document store (lib/story-runtime/store),
+ * typed against the existing framework-free document store (lib/story-runtime/store),
  * and the Solid bridge that feeds it is an implementation detail of rt.ts.
  * The SPA (React) and the islands (Solid) share ONE store and ONE document
  * element; this file is where they agree on the handle.
@@ -85,9 +85,9 @@ export interface IslandContext extends IslandData, IslandWrites {
   store(): DataflowStore | null;
   /**
    * Where an island's overlay (Dialog, Popover, Tooltip content) portals: the first-party trusted
-   * UI container (components/TrustedUi) when the page has one — the same destination today's React
+   * UI container when the page has one — the same destination today's React
    * kit uses — else null. With null, Dialog and Popover content render in place; Tooltip content
-   * portals to `document.body`, as today's story tooltip (components/Tooltip, Radix's Portal) does.
+   * portals to `document.body`, as today's story tooltip does.
    * Read when the overlay opens.
    */
   trustedPortal(): HTMLElement | null;
@@ -154,7 +154,7 @@ export const WRITE_STATUS_ATTR = 'data-mx-write-status';
 export type IslandDocumentMode = 'read' | 'edit';
 
 /**
- * The live island document, as the React app adopts it WITHOUT re-rendering:
+ * The live island document, as the Solid app adopts it WITHOUT re-rendering:
  * the app moves `root` into its tree and renders chrome around it; the islands
  * keep running on the same store. `setMode('edit')` disposes every island and
  * the editor mounts today's interpreter over the source in the same element.

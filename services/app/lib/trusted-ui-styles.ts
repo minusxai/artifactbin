@@ -1,7 +1,7 @@
 /**
  * THE TRUSTED UI BOUNDARY, framework-free: the app's own stylesheet re-scoped into a shadow root, and
- * the top-layer paint order of the protected overlays. components/TrustedUi (React) and
- * solid/components/TrustedUi (Solid) both draw their shadow roots from this one sheet.
+ * the top-layer paint order of the protected overlays. solid/components/TrustedUi and the island trusted portal (lib/islands/trusted-portal)
+ * both draw their shadow roots from this one sheet.
  */
 const ROOT = '[data-trusted-ui-root]';
 const BOUNDARY_CSS = `

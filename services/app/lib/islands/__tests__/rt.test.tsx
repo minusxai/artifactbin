@@ -2,7 +2,7 @@
 // DESTINATION: services/app/lib/islands/__tests__/rt.test.tsx
 /**
  * THE ISLAND RUNTIME (docs/phase2-architecture.md §2.3, §4.1; lib/islands/contract IslandContext):
- * the existing react-free store bridged into Solid, reactive markup evaluated as data, `<For>` and
+ * the existing framework-free store bridged into Solid, reactive markup evaluated as data, `<For>` and
  * conditionals as `Repeat`/`When`, row attributes filtered per row, and in-place hydration that
  * leaves static siblings untouched.
  */

@@ -1,6 +1,6 @@
 /**
  * THE KIT'S CLASS RECIPES. Each kit family (lib/islands/contract `KIT_FAMILIES`) owns one module here
- * exporting `RECIPES: Record<tag, (props) => string>` — the class string today's React component renders
+ * exporting `RECIPES: Record<tag, (props) => string>` — the class string the retired React component renders
  * for those props. The compiler evaluates them AT COMPILE TIME (with `cn`), so readers never download
  * cva, clsx or tailwind-merge. This index merges the families into one table keyed by component tag;
  * a tag two families both claim is a build error, never a silent override.

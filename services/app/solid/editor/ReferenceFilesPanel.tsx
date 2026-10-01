@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-/** components/views/story/ReferenceFilesPanel.tsx in SOLID — a read-only index of referenced files. */
+/** A read-only index of referenced files. */
 import { For, Show, type JSX } from 'solid-js';
 
 const LABELS: Record<string, string> = { image: 'Image', pdf: 'PDF', file: 'File', asset: 'Asset', viz: 'Visualization' };

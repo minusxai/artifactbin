@@ -73,7 +73,7 @@ try {
     response=userPage.waitForResponse(r=>r.url().endsWith(`/a/${doc.id}/mutate`)&&r.request().method()==='POST');
     await page.getByRole('button',{name:'Finish user task',exact:true}).click();
     assert.equal((await response).status(),200);
-    // The user cell draws the PERSON now (components/kit/user.tsx): their
+    // The user cell draws the PERSON now: their
     // picture, then the handle they chose — `@name`, linked to the profile —
     // falling back to the display name for somebody with no handle. Either
     // spelling is the person; the raw account id is the thing it may never be.

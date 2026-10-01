@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * components/ThemePicker in SOLID — the theme control for artifact chrome: one trigger naming the
+ * The theme control for artifact chrome: one trigger naming the
  * current theme, opening a grid of the REAL preview images (`public/story-themes/<name>.png`), and the
  * author's default color mode beside it. Deliberately dumb: it reports a pick and closes; the editor
  * turns a pick into an edit. On a phone the panel is a bottom sheet (solid/components/MobileSheet).
