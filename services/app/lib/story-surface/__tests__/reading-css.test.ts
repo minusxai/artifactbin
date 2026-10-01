@@ -14,6 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
+import { storyBaseCss } from '@/lib/story/styles/story-base-css';
 
 describe('tables', () => {
   it('every table is its own horizontal scroll box, capped at its column', () => {
@@ -57,5 +58,14 @@ describe('the bare typography floor on a phone', () => {
   it('touches only the bare elements — a styled document is unaffected', () => {
     const phone = /@media \(max-width:\s*639px\)\{([^@]*)\}/.exec(STORY_BARE_TYPOGRAPHY_CSS)?.[1] ?? '';
     for (const rule of phone.split('}').filter(Boolean)) expect(rule).toContain(':not([class])');
+  });
+});
+
+describe('the served base sheet', () => {
+  it('tests no subtree from the story root: a class change anywhere never restyles the whole page', () => {
+    // `[data-mx-story-root]:not(:has([class]))` cost a 123 ms style pass per class change on a 28-table page.
+    const sheet = storyBaseCss({ chrome: true, theme: null, faces: [], fonts: { families: [], slots: {} } });
+    expect(sheet).not.toMatch(/\[data-mx-story-root\][^{]*:has\(/);
+    expect(sheet).toContain(':where([data-mx-story-root]:not([data-mx-styled]))');
   });
 });

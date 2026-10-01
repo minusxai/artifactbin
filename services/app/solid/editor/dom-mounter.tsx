@@ -68,6 +68,8 @@ function regionEnd(siblings: JsxNode[], start: number): number {
   return index;
 }
 
+/** The measured height of a region's compiled blocks, on its mount: the edit-mode CSS's off-screen placeholder size. */
+export const REGION_HEIGHT_VAR = '--mx-region-h';
 /** How many recent hand-overs an editor remembers: drafts in flight are one or two behind it. */
 const HANDED_KEPT = 8;
 /**
@@ -265,7 +267,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     cleanups.push(() => { disposeSolid(); overlay.remove(); grid.style.position = oldPosition; });
   };
   /** A prose region found by the read pass: everything its mount needs, measured before any region is mounted. */
-  interface RegionMount { path: string; region: JsxNode[]; elements: HTMLElement[]; parent: HTMLElement; layout: 'grid' | 'flex' | null; placement: string[] | null; visible: boolean }
+  interface RegionMount { path: string; region: JsxNode[]; elements: HTMLElement[]; parent: HTMLElement; layout: 'grid' | 'flex' | null; placement: string[] | null; visible: boolean; height: number }
   const view = root.ownerDocument.defaultView ?? window;
   const regions: RegionMount[] = [];
   const hosts: Array<() => void> = [];
@@ -320,15 +322,18 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       let placement: string[] | null = null;
       if (layout && elements.length === 1) { const own = view.getComputedStyle(elements[0]!); placement = PLACEMENT.map((name) => own.getPropertyValue(name)); }
       const first = elements[0]!.getBoundingClientRect(), last = elements.at(-1)!.getBoundingClientRect();
-      regions.push({ path, region, elements, parent, layout, placement, visible: last.bottom >= 0 && first.top <= viewportHeight });
+      regions.push({ path, region, elements, parent, layout, placement, visible: last.bottom >= 0 && first.top <= viewportHeight, height: Math.max(0, Math.round(last.bottom - first.top)) });
     }
   };
   /** THE WRITE PASS for one region: its blocks leave, one editor stands in for them. */
-  const mountRegion = ({ path, region, elements, parent, layout, placement }: RegionMount) => {
+  const mountRegion = ({ path, region, elements, parent, layout, placement, height }: RegionMount) => {
     if (!elements.every((el) => el.isConnected && el.parentElement === parent)) return;
     const mount = root.ownerDocument.createElement('div');
     mount.dataset.mxEditRegion = path;
     mount.style.display = 'contents';
+    // The height its blocks had as read: what the editor holds off screen (edit-mode CSS `content-visibility`)
+    // until it has rendered once, so a region mounted below the fold moves nothing.
+    if (height) mount.style.setProperty(REGION_HEIGHT_VAR, `${height}px`);
     if (placement) PLACEMENT.forEach((name, i) => mount.style.setProperty(`--mx-place-${name}`, placement[i]!));
     let previous = region;
     /** What this editor handed over at its recent pauses: a draft of one of them is this editor's own, passed. */

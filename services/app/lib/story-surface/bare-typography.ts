@@ -30,6 +30,9 @@ const TEXT_ELEMENTS = 'h1,h2,h3,h4,h5,h6,p,ul,ol,li,blockquote,figcaption,table,
 /** `:not([class])` is the whole guarantee — see the header. */
 const bare = (selector: string) => `:where([data-mx-story-root]) :where(${selector}):not([class])`;
 
+/** The story root of a document none of whose elements carries a class (STORY_STYLED_ATTR absent). */
+const unstyledRoot = ':where([data-mx-story-root]:not([data-mx-styled]))';
+
 export const STORY_BARE_TYPOGRAPHY_CSS = [
   // A measure and rhythm, so a bare document reads as a document.
   `${bare('p,ul,ol,blockquote,table,pre')}{margin-block:0.75em;max-width:68ch;line-height:1.65}`,
@@ -52,9 +55,13 @@ export const STORY_BARE_TYPOGRAPHY_CSS = [
   `${bare('hr')}{margin-block:2em;border:0;border-top:1px solid currentColor;opacity:0.25}`,
   // The document itself needs breathing room, or bare text starts at the edge.
   // Padding only — no colour, no font — so it cannot fight a theme.
-  `:where([data-mx-story-root]:not(:has([class])))>*{padding-inline:clamp(1rem,5vw,3rem)}`,
-  `:where([data-mx-story-root]:not(:has([class])))>*:first-child{padding-block-start:2.5rem}`,
-  `:where([data-mx-story-root]:not(:has([class])))>*:last-child{padding-block-end:3rem}`,
+  // "Nothing in the document is styled" is the served root's `data-mx-styled` flag (lib/compiled-page/story-element),
+  // decided once from the HTML it wraps — never a `:has([class])` test. That selector made EVERY class change anywhere
+  // in the document re-match the root, a whole-page style pass per change (123 ms on a 28-table page), and in edit
+  // mode the editor's own classes flipped it.
+  `${unstyledRoot}>*{padding-inline:clamp(1rem,5vw,3rem)}`,
+  `${unstyledRoot}>*:first-child{padding-block-start:2.5rem}`,
+  `${unstyledRoot}>*:last-child{padding-block-end:3rem}`,
   // On a phone the display sizes step down: a 2.5rem h1 is a headline on a
   // laptop and a wall on a 390px screen. Bare elements only, like everything
   // here — a styled document chose its own sizes and keeps them.

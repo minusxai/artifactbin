@@ -35,6 +35,10 @@ describe('compiled DOM edit mounter', () => {
     for (let i = 0; i < 20 && root.querySelector('#r > table#t5'); i++) await new Promise((resolve) => setTimeout(resolve, 20));
     expect(editors()).toBeGreaterThan(onScreen);
     expect(root.querySelector('#r > table#t5')).toBeNull();
+    // Each editor holds its blocks' measured height for the edit-mode CSS's off-screen placeholder.
+    const height = (path: string) => root.querySelector<HTMLElement>(`[data-mx-edit-region="${path}"]`)?.style.getPropertyValue('--mx-region-h');
+    expect(height('0.1')).toBe('30px');
+    expect(height('0.2')).toBe('100px');
     mounted.dispose();
     expect(root.querySelectorAll('[data-mx-edit-region]').length).toBe(0);
     expect(root.querySelector('#t5')).not.toBeNull();

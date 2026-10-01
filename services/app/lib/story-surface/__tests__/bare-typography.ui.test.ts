@@ -9,16 +9,19 @@
  */
 import { describe, it, expect } from 'vitest';
 import { STORY_BARE_TYPOGRAPHY_CSS, BARE_TYPOGRAPHY_ELEMENTS } from '../bare-typography';
-import { STORY_ROOT_ATTR } from '@/lib/story-surface';
+import { STORY_ROOT_ATTR, STORY_STYLED_ATTR } from '@/lib/story-surface';
+import { htmlCarriesClass } from '@/lib/compiled-page/story-element';
 
 /** Every selector the sheet declares. */
 const selectors = STORY_BARE_TYPOGRAPHY_CSS.split('}')
   .map((block) => block.split('{')[0])
   .filter(Boolean);
 
+/** A story root as served: flagged styled when its HTML carries a class (lib/compiled-page/story-element). */
 function rootWith(html: string): HTMLElement {
   const root = document.createElement('div');
   root.setAttribute(STORY_ROOT_ATTR, '');
+  if (htmlCarriesClass(html)) root.setAttribute(STORY_STYLED_ATTR, '');
   root.innerHTML = html;
   document.body.appendChild(root);
   return root;
@@ -54,13 +57,27 @@ describe('a styled element is never touched', () => {
   });
 
   it('the document padding fires ONLY when nothing in the document is styled', () => {
-    const padding = selectors.filter((s) => s.includes(':has('));
+    const padding = selectors.filter((s) => s.includes(STORY_STYLED_ATTR));
     expect(padding.length).toBeGreaterThan(0);
-    // One styled element anywhere disables it for the whole document…
-    const mixed = rootWith('<div>bare wrapper</div><p class="mt-4">styled</p>');
+    // One styled element anywhere disables it for the whole document: the served root says so…
+    const mixedHtml = '<div>bare wrapper</div><p class="mt-4">styled</p>';
+    expect(htmlCarriesClass(mixedHtml)).toBe(true);
+    const mixed = rootWith(mixedHtml);
+    expect(mixed.hasAttribute(STORY_STYLED_ATTR)).toBe(true);
     expect(padding.some((s) => mixed.querySelector('div')!.matches(s))).toBe(false);
     // …and a wholly bare document gets it, which is the point.
+    expect(htmlCarriesClass('<div>bare wrapper</div>')).toBe(false);
     const bareDoc = rootWith('<div>bare wrapper</div>');
+    expect(padding.some((s) => bareDoc.querySelector('div')!.matches(s))).toBe(true);
+  });
+
+  it('decides "styled" from the root flag, never by testing the subtree, so a class change re-matches nothing', () => {
+    // `:has([class])` on the root re-matched it at every class change anywhere below: a whole-page style pass each.
+    expect(STORY_BARE_TYPOGRAPHY_CSS).not.toContain(':has(');
+    // A class the editor (or anything else) adds later does not flip a bare document's padding.
+    const bareDoc = rootWith('<div>bare wrapper</div>');
+    const padding = selectors.filter((s) => s.includes(STORY_STYLED_ATTR));
+    bareDoc.querySelector('div')!.className = 'ProseMirror';
     expect(padding.some((s) => bareDoc.querySelector('div')!.matches(s))).toBe(true);
   });
 
