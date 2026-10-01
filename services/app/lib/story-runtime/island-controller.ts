@@ -183,6 +183,12 @@ export function createIslandController({ win, root, islands, nodes: served, port
   let previewing = false;
   let editLoading = false;
   let draftSequence = 0;
+  /**
+   * The draft compile in flight. A newer draft supersedes it the moment it is sent (its answer would be
+   * dropped by the sequence check anyway), so it is cancelled: typing keeps ONE compile in flight instead of
+   * one per keystroke queueing on the server, and every draft still compiles at once, in order.
+   */
+  let draftRequest: AbortController | null = null;
   /** The last draw that completed, by sequence: a restore waits for ITS draw, not an earlier one. */
   let drawnSequence = -1;
   /** The newest source the editor sent: after Done, what the saved version was written from. */
@@ -468,8 +474,10 @@ export function createIslandController({ win, root, islands, nodes: served, port
         previewing = !!command.preview;
         if (previewing && !frozen) { freezeIslandPaint(root, islands); frozen = true; }
         if (!previewing) latestSource = source;
+        draftRequest?.abort();
+        const request = draftRequest = new AbortController();
         void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
-          method: 'POST', credentials: 'same-origin', cache: 'no-store',
+          method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: request.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode, search: win.location.search }),
         }).then(async (response) => {
@@ -481,7 +489,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
           if (pendingDraft?.sequence === sequence && quietDraftTimer === null) {
             quietDraftTimer = win.setTimeout(() => { quietDraftTimer = null; void applyDraft(true); }, 500);
           }
-        }).catch((error) => { if (!disposed) console.error('Failed to compile editor draft', error); });
+        }).catch((error) => { if (!disposed && !request.signal.aborted) console.error('Failed to compile editor draft', error); })
+          .finally(() => { if (draftRequest === request) draftRequest = null; });
         return;
       }
       previewing = false;
@@ -511,6 +520,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     dispose() {
       if (disposed) return;
       disposed = true;
+      draftRequest?.abort();
       listeners.clear();
       annotate?.dispose(); annotate = null;
       selection?.dispose(); selection = null;

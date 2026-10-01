@@ -30,6 +30,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!body || typeof body.source !== 'string' || typeof body.editId !== 'string' || body.source.length > MAX_SOURCE_LENGTH) {
     return json({ error: 'invalid_draft' }, 400, NO_STORE);
   }
+  // The editor cancels a draft as soon as a newer one is sent: compiling it would only be thrown away.
+  if (request.signal.aborted) return json({ error: 'superseded' }, 409, NO_STORE);
   // No head check: the preview writes nothing, and the editor's draft is ahead of the head it last saw
   // for as long as a save is in flight. Refusing the old `editId` blanked the preview on every such race.
   const meta = (artifact.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
@@ -54,6 +56,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       refDataForRow(draft),
       lookupWebAssets(collectExternalAssetUrls(body.source).all),
     ]);
+    if (request.signal.aborted) return json({ error: 'superseded' }, 409, NO_STORE);
     const html = await renderDraftPreview({
       source: body.source,
       title: artifact.title,

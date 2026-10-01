@@ -35,6 +35,20 @@ describe('the editor draft preview door', () => {
     expect(document.querySelector('img')?.getAttribute('src')).toContain(`/a/${imageId}/raw`);
     expect((await getArtifactById(id))?.source).not.toContain(imageId);
   });
+  it('compiles nothing for a draft the editor already cancelled', async () => {
+    const { token } = await mintToken('draft-preview-cancelled');
+    const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_cancel_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    await claimToken(user.id, token);
+    const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: { title: 'Draft', markup: '<div><p>Before</p></div>', visibility: 'private' } }));
+    const id = ((await made.json()) as { id: string }).id;
+    const row = (await getArtifactById(id))!;
+    const cancelled = new AbortController();
+    cancelled.abort();
+    const sent = request(`/a/${id}/draft-preview`, { method: 'POST', token, json: { editId: row.edit_id, source: '<div><p>After</p></div>' } });
+    const answer = await preview(new Request(sent, { signal: cancelled.signal, duplex: 'half' } as RequestInit), params(id));
+    expect(answer.status).toBe(409);
+    expect(await answer.json()).toEqual({ error: 'superseded' });
+  });
   it('renders a query document through its matching server island build', async () => {
     const { token } = await mintToken('draft-preview-query');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_query_${Math.random().toString(36).slice(2, 8)}@example.com` }));

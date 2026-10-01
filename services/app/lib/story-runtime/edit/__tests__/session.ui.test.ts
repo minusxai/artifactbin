@@ -173,4 +173,25 @@ describe('edit session', () => {
     at('0.1').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     expect(posted.slice(from)).toEqual([]);
   });
+
+  it('puts the Undo/Redo caret on the redrawn block, not where the stale draft still held the same block', async () => {
+    const frame = () => new Promise((r) => setTimeout(r, 40));
+    const { root } = await open('<div><h3 id="x"></h3></div>', '<div data-mx-ast="0"><h3 id="x" data-mx-ast="0.0"></h3></div>');
+    const editor = root.querySelector<HTMLElement>('.ProseMirror')!;
+    editor.focus();
+    await frame();
+    // The undo of a `### ` shortcut: the history target is the end of the literal prefix, in block x.
+    session!.onParentMessage({ type: STORY_COMMIT_MESSAGE, restore: { anchor: { id: 'x', offset: 4 }, head: { id: 'x', offset: 4 } } });
+    await frame();
+    // The undo's draft lands: block x is a paragraph again.
+    session!.unmountCompiledDom();
+    root.innerHTML = '<div data-mx-ast="0"><p id="x" data-mx-ast="0.0">### </p></div>';
+    session!.setNodes(parseJsxOrThrow('<div><p id="x">### </p></div>').nodes);
+    await session!.mountCompiledDom();
+    await frame();
+    const native = window.getSelection()!;
+    expect(native.anchorNode?.textContent).toBe('### ');
+    expect(native.anchorOffset).toBe(4);
+  });
 });
+
