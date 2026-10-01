@@ -36,7 +36,7 @@ import type { JsxNode } from '@/lib/jsx';
 import { savedMentionStates } from '@/lib/membership';
 import { isCompileFailure } from '@/lib/compiled-page/contract';
 import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
-import { splitModuleData } from '@/lib/compiled-page/assembler';
+import { withStoredCarriers } from '@/lib/compiled-page/carriers';
 import { preparedPageFor } from '@/lib/story/prepared-page.server';
 import { objectStore } from '@/lib/object-store';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
@@ -379,16 +379,10 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
       values: state.values, state, results: state, mermaidImages: {}, drawings: {},
     });
     // A fresh per-request render never carries the compiled module's own island
-    // literals (never visible story text, read by DOM lookup) and may drop its
-    // large-constants module-data carrier too (which file-html.ts retags for
-    // `getElementById`); fall back to the stored render's, read by the parser
-    // assembleReaderPage uses online (assembler.ts splitModuleData).
-    const fresh = splitModuleData(ssrHtml);
-    const stored = splitModuleData(compiled.html);
-    renderedCompiled = {
-      ...compiled,
-      html: ssrHtml + (fresh.literals ? '' : stored.literals) + (fresh.moduleDataTag ? '' : stored.moduleDataTag),
-    };
+    // literals (read by DOM lookup) or its large-constants module-data carrier
+    // (which file-html.ts retags for `getElementById`): the stored render's, as
+    // assembleReaderPage takes them online.
+    renderedCompiled = { ...compiled, html: withStoredCarriers(ssrHtml, compiled.html) };
   }
   const placement = ran ? placeDataflow(ran.flow, Object.keys(held)) : null;
   const serverQueries = new Set(Object.entries(placement?.queries ?? {}).filter(([, where]) => where === 'server').map(([name]) => name));

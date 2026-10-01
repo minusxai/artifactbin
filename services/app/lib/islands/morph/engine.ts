@@ -26,6 +26,7 @@
  */
 import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH } from '@/lib/compiled-page/contract';
 import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
+import { LITERALS_ATTR } from '@/lib/compiled-page/carriers';
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/story/url-values';
@@ -109,7 +110,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   if (seam && newModuleHref && newModule !== oldModule) {
     // Generated modules read their literal carrier at evaluation. Lend the next version's
     // carrier before importing; the current story stays untouched until import succeeds.
-    const nextLiterals = next.querySelector<HTMLScriptElement>('script[data-mx-island-literals]');
+    const nextLiterals = next.querySelector<HTMLScriptElement>(`script[${LITERALS_ATTR}]`);
     const temporaryLiterals = nextLiterals ? doc.importNode(nextLiterals, true) : null;
     if (temporaryLiterals) doc.body.append(temporaryLiterals);
     try { incoming = await takeModule(seam, newModuleHref, importModule); }
@@ -518,7 +519,7 @@ export async function loadDraftModule(
   const script = moduleScript(preview);
   if (!seam || !script) return null;
   const url = new URL(script.getAttribute('src')!, win.document.baseURI).href;
-  const literals = preview.querySelector<HTMLScriptElement>('script[data-mx-island-literals]');
+  const literals = preview.querySelector<HTMLScriptElement>(`script[${LITERALS_ATTR}]`);
   const carrier = literals ? win.document.importNode(literals, true) : null;
   if (carrier) win.document.body.append(carrier);
   try { return await takeModule(seam, url, importModule); }

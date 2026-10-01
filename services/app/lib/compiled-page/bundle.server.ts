@@ -44,6 +44,7 @@ import { preloadClosure } from './runtime-binding';
 import { objectStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
 import { createModuleStore } from './modules.server';
 import { contentSha } from './speculation';
+import { emitCarriers, literalsReadCode, MODULE_DATA_READ_CODE } from './carriers';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The Solid transform
@@ -89,9 +90,6 @@ function escapeLiterals(): PluginObj {
     },
   };
 }
-
-const literalsHtml = (key: string, literals: readonly string[]): string =>
-  literals.length ? `<script type="application/json" data-mx-island-literals="${key}">${escapeRaw(JSON.stringify(literals)).replace(/&/g, '\\u0026')}</script>` : '';
 
 /** A Babel plugin: every static import's specifier through `rewrite` (which throws on one it does not know). */
 function rewriteImports(rewrite: (specifier: string) => string): () => PluginObj {
@@ -407,12 +405,9 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   const moduleData = [...(sources.moduleData ?? [])];
   const flowJson = options.flow ? JSON.stringify(readerDataflow(options.flow)) : null;
   const flowIndex = flowJson && flowJson.length > 1024 ? moduleData.push(flowJson) - 1 : undefined;
-  const moduleDataTag = moduleData.length
-    ? `<script type="application/json" data-mx-module-data>${escapeRaw(JSON.stringify({ moduleData: moduleData.map((value) => JSON.parse(value) as unknown) }))}</script>`
-    : '';
   const browserIslands = sources.browserIslands ?? sources.islands;
   const browserWithData = flowIndex !== undefined && !sources.moduleData?.length
-    ? `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${browserIslands}`
+    ? `${MODULE_DATA_READ_CODE}${browserIslands}`
     : browserIslands;
   const ssrCode = await ssrModuleCode(sources.skeleton, options.flow, sources.staticTexts);
   const loaded = await ssrModuleOf(ssrCode, contentSha(ssrCode), options.imports);
@@ -420,7 +415,7 @@ export async function buildDocumentModules(sources: GeneratedSources & { islandR
   if (!sources.islandRefs.length && !options.boot) return { html: rendered.replace(/\sdata-hk="[^"]*"/g, ''), module: null, ssr: null, templateBrBytes: null };
   const store = options.store ?? createModuleStore();
   const browser = await browserModuleCode(browserWithData, options.build, options.flow, flowIndex);
-  const html = rendered + literalsHtml(browser.literalKey, browser.literals) + moduleDataTag;
+  const html = rendered + emitCarriers({ literals: browser.literals, key: browser.literalKey }, moduleData.map((value) => JSON.parse(value) as unknown));
   if (!sources.islandRefs.length) return { html, module: await store.put(new TextEncoder().encode(browser.code), browser.imports, browser.specifiers), ssr: null, templateBrBytes: null };
   const ssrStore = options.ssrStore ?? createSsrModuleStore();
   const [module, ssr] = await Promise.all([
@@ -482,7 +477,7 @@ async function externalizeLiterals(source: string): Promise<{ code: string; lite
   });
   if (!out?.code) throw new Error('compile: document extraction produced nothing');
   const key = contentSha(JSON.stringify(literals));
-  return { code: literals.length ? `const $mxL=JSON.parse(document.querySelector('script[data-mx-island-literals="${key}"]').textContent);\n${out.code}` : out.code, literals, key };
+  return { code: literals.length ? `${literalsReadCode(key)}${out.code}` : out.code, literals, key };
 }
 
 /** The per-document SSR module renders the same generated tree as the browser. */
