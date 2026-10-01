@@ -15,14 +15,6 @@ export const APP_BAR_H = 44;
 export const RIGHT_RAIL_W = 320;
 
 /**
- * The QUERY NOTEBOOK's width. Wider than the rail it borrows, because SQL and
- * result tables are column-shaped where the inspectors are form-shaped. It
- * OVERLAYS rather than reserves (the inspector rule: the page does not narrow
- * the document for it), so it shares the rail's edge and layer, not its number.
- */
-export const QUERY_RAIL_W = 480;
-
-/**
  * THE EDIT PANEL — one right panel for the whole edit session (components/
  * EditPanel): Selection, History and Comments as tabs of RIGHT_RAIL_W, or a
  * strip of their icons this wide when the viewer collapsed it.

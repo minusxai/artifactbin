@@ -15,9 +15,6 @@ export interface GraphCommitOptions {historyChanges?:{source:string;changes:Batc
 export async function commitGraphOperation(db:Queryable,actor:TokenActor|null,scope:Scope,token:GraphAdmission,options:GraphCommitOptions={}):Promise<ArtifactRow|null>{
  return commitGraphMutation(db,actor,scope,graphAdmissionPlan(token),options);
 }
-export async function commitGraphProseOperation(db:Queryable,actor:TokenActor,id:string,baseEditId:string,op:ProseOperation,scope:Scope):Promise<ArtifactRow|null>{
- return commitGraphMutation(db,actor,scope,{id,fields:{},expectedFields:{},references:[],aliases:[]},{},{baseEditId,op});
-}
 async function commitGraphMutation(db:Queryable,actor:TokenActor|null,scope:Scope,plan:Pick<GraphAdmissionPlan,'id'|'fields'|'expectedFields'|'references'|'aliases'>&Partial<Pick<GraphAdmissionPlan,'patch'>>,options:GraphCommitOptions,prose?:{baseEditId:string;op:ProseOperation}):Promise<ArtifactRow|null>{
  const editId=newEditId();
  const effective=options.initialize?'$6::jsonb':'l.document';

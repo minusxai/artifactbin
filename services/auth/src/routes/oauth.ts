@@ -1,4 +1,5 @@
 import { renderConnectionPage } from '@artifactbin/utils';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, INTERNAL_ARTIFACT_APPROVAL_PATH, ARTIFACT_APPROVAL_PATH} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
@@ -24,7 +25,6 @@ import type { AuthApp } from '../parts';
 
 type App = AuthApp;
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
 const NO_STORE = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
 
@@ -143,15 +143,15 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     if (pending.target) {
       const permission = await artifactPermission(o, c.req.raw, actor, pending.target.artifactId);
       const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
-      const login = `<form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${esc(callback)}"><button type="submit">Log in and continue</button></form>`;
+      const login = `<form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${escapeHtml(callback)}"><button type="submit">Log in and continue</button></form>`;
       if (!permission.canApprove) return page('Use the owning browser', `<h1>Open this approval in the browser that created the artifact</h1><p>The artifact link does not grant edit access. Use its owning browser, or log in to the owning account.</p>${login}`, 403);
-      return page('Approve artifact access', `<h1>Connect your agent</h1><p><strong>${esc(permission.title ?? 'Untitled')}</strong> · ${esc(pending.target.artifactId)}</p><p>Approve only if your agent displays <strong>${esc(userCode)}</strong>. This connects the CLI to this browser’s identity, including its existing and future artifacts. It replaces any saved CLI connection to this server.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><button type="submit" name="decision" value="approve">${actor.credential === 'session' ? 'Approve access' : 'Continue as guest'}</button><button type="submit" name="decision" value="deny">Deny</button></form>${actor.credential === 'session' ? '' : login}`);
+      return page('Approve artifact access', `<h1>Connect your agent</h1><p><strong>${escapeHtml(permission.title ?? 'Untitled')}</strong> · ${escapeHtml(pending.target.artifactId)}</p><p>Approve only if your agent displays <strong>${escapeHtml(userCode)}</strong>. This connects the CLI to this browser’s identity, including its existing and future artifacts. It replaces any saved CLI connection to this server.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><button type="submit" name="decision" value="approve">${actor.credential === 'session' ? 'Approve access' : 'Continue as guest'}</button><button type="submit" name="decision" value="deny">Deny</button></form>${actor.credential === 'session' ? '' : login}`);
     }
     if (actor.credential !== 'session' || !actor.userId) {
       const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
-      return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${esc(userCode)}</strong>. Log in to connect this agent to your account, or continue anonymously — an anonymous connection publishes without an account, and you can claim what it creates later by signing in.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><input type="hidden" name="decision" value="anonymous"><button type="submit">Continue anonymously</button></form><form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${esc(callback)}"><button type="submit">Log in to connect</button></form>`);
+      return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${escapeHtml(userCode)}</strong>. Log in to connect this agent to your account, or continue anonymously — an anonymous connection publishes without an account, and you can claim what it creates later by signing in.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><input type="hidden" name="decision" value="anonymous"><button type="submit">Continue anonymously</button></form><form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${escapeHtml(callback)}"><button type="submit">Log in to connect</button></form>`);
     }
-    return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${esc(userCode)}</strong>. This gives the CLI access to your artifacts as <strong>${esc(actor.email ?? 'your account')}</strong>.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><button type="submit">Approve connection</button><button type="submit" name="decision" value="deny">Deny connection</button></form>`);
+    return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${escapeHtml(userCode)}</strong>. This gives the CLI access to your artifacts as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><button type="submit">Approve connection</button><button type="submit" name="decision" value="deny">Deny connection</button></form>`);
   });
   app.post('/oauth/device/approve', async (c) => {
     if (c.req.header('origin') !== base(c.req.raw)) return c.json({ error: 'invalid_origin' }, 403);
@@ -249,18 +249,18 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       : requestedResource !== expectedResource ? 'Invalid API resource.'
       : scope !== ARTIFACT_SCOPE ? 'Unsupported scope.'
       : null;
-    if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${esc(problem)}</p>`, 400);
+    if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${escapeHtml(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
-    const fields = `<input type="hidden" name="client_id" value="${esc(clientId)}"><input type="hidden" name="redirect_uri" value="${esc(redirectUri)}"><input type="hidden" name="code_challenge" value="${esc(codeChallenge)}"><input type="hidden" name="resource" value="${esc(requestedResource)}"><input type="hidden" name="scope" value="${esc(scope)}"><input type="hidden" name="state" value="${esc(state)}">`;
+    const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope)}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
     if (actor.credential === 'session' && actor.userId) {
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
-      <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${esc(actor.email ?? 'your account')}</strong>.</p>
+      <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" name="action" value="approve" aria-label="Approve connection">Approve</button><button type="submit" name="action" value="deny">Deny</button></form>`, 200, redirectUri);
     }
     const retryPath = `/oauth/authorize?${q.toString()}`;
     return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
     <p>Your coding agent wants to publish artifacts — shareable pages it creates and updates. Log in with your email to connect it; artifacts will belong to your account.</p>
-    <form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${esc(retryPath)}"><button type="submit" aria-label="Log in to connect">Log in with email</button></form>
+    <form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${escapeHtml(retryPath)}"><button type="submit" aria-label="Log in to connect">Log in with email</button></form>
     <p class="alt">No password needed — we email you a code.</p>`, 200, redirectUri);
   });
 

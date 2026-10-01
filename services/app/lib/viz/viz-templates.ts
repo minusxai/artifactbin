@@ -180,7 +180,6 @@ const funnel: VizTemplate = {
 // semantic). Increases use the theme palette; decreases use the danger red —
 // matching the classic ECharts waterfall. Value labels ride each bar.
 
-// Exported for the shared tooltip (tooltip-plan), whose waterfall rows mirror the bars.
 const WATERFALL_COLOR_DOMAIN = ['Increase', 'Decrease', 'Total'];
 
 const waterfall: VizTemplate = {
