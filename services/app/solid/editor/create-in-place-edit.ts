@@ -35,12 +35,9 @@ import {
   STORY_SELECT_MESSAGE,
   STORY_SPOTLIGHT_MESSAGE,
   STORY_COMMIT_MESSAGE,
-  STORY_DOCUMENT_MESSAGE,
   type StoryEditSelection,
-  type StoryIslandDataflow,
 } from '@/lib/story-runtime/contract';
 import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-v2/bookmark';
-import type { JsxNode } from '@/lib/jsx';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compose';
@@ -122,15 +119,6 @@ export interface InPlaceEditController {
    * somebody asks for it.
    */
   commitPending: (requireAcknowledgement?: boolean) => Promise<void>;
-  /** Show a new version of the document in the frame, without replacing it. */
-  pushDocument: (update: {
-    nodes: JsxNode[];
-    authorCss?: string | null;
-    compiledCss?: string | null;
-    dataflow?: StoryIslandDataflow;
-    colorMode?: 'light' | 'dark';
-    theme?: string | null;
-  }) => void;
 }
 
 export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditController {
@@ -341,10 +329,6 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     if (requireAcknowledgement && !acknowledged) throw new Error('editor commit timed out');
   };
 
-  const pushDocument = (update: Parameters<InPlaceEditController['pushDocument']>[0]) => {
-    postToFrame({ type: STORY_DOCUMENT_MESSAGE, ...update });
-  };
-
   return {
     selection,
     ready,
@@ -357,7 +341,6 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
     select,
     spotlight: (paths: string[]) => postToFrame({ type: STORY_SPOTLIGHT_MESSAGE, paths }),
     commitPending,
-    pushDocument,
     restoreSelection: (restore: EditorBookmark) => postToFrame({ type: STORY_COMMIT_MESSAGE, restore }),
   };
 }

@@ -36,14 +36,12 @@ import Workflow from 'lucide-solid/icons/workflow';
 import X from 'lucide-solid/icons/x';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
 import { APP_BAR_H, EDIT_BAR_H } from '@/lib/story/edit-bar';
 import { storyUpdateParts } from '@/lib/story/update-parts';
-import { isWebUrl } from '@/lib/story/asset-url';
-import { imageRawUrl, type RefDataMap } from '@/lib/story/ref-data';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
 import {
   freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, removeJsxNodeAtPath,
@@ -62,6 +60,7 @@ import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtim
 import type { ArtifactVersionSnapshot } from '@/lib/artifact-backend/types';
 import { createInPlaceEdit, type ImageDropPlacement, type InPlaceEditController } from './create-in-place-edit';
 import { createLiveEdits } from './create-live-edits';
+import { createEditDraftSender } from './edit-draft';
 import { createLiveArtifact } from './create-live-artifact';
 import { createArtifactVersions } from './create-versions';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed, writeEditPanelCollapsed } from './create-edit-panel';
@@ -95,9 +94,6 @@ const narrowTabClass = (active: boolean) =>
 const viewTabClass = (active: boolean) => `inline-flex h-11 cursor-pointer items-center gap-2 border-b-2 px-2 font-mono text-sm font-semibold transition-colors sm:px-4 ${
   active ? 'border-accent text-accent' : 'border-transparent text-muted hover:bg-raised hover:text-fg'}`;
 
-/** Every literal web URL in a stored document was imported by the write that stored it (see the React editor). */
-const HELD_ASSETS = isWebUrl;
-
 export interface EditorArtifact {
   document?: DocumentGraph;
   id: string;
@@ -112,10 +108,6 @@ export interface EditorArtifact {
   refs?: Array<{ id: string; kind: string; title?: string | null }>;
   dataflow?: StoryIslandDataflow | null;
 }
-
-const refDataFor = (created: { id: string; rawUrl?: string }): { refData: RefDataMap } => ({
-  refData: { [created.id]: { kind: 'image', url: created.rawUrl ?? imageRawUrl(created.id, 1) } },
-});
 
 export interface InPlaceEditorProps {
   art: EditorArtifact;
@@ -166,7 +158,6 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     if (!pwaEnabled() && contentView() === 'pwa') setContentView('sharing');
   });
   let previewEditId = art.edit_id;
-  const [css, setCss] = createSignal<string | null>(art.compiledCss ?? null);
   const viewKey = `artifactbin:editor-view:${art.id}`;
   const [mode, setMode] = createSignal<'design' | 'code'>((() => {
     try { return window.location.hash === '#edit' && window.sessionStorage.getItem(viewKey) === 'code' ? 'code' : 'design'; }
@@ -208,40 +199,22 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const barTop = () => (phone() ? 0 : APP_BAR_H);
   const barH = EDIT_BAR_H;
   let compiledFlow = art.dataflow?.flow ?? null;
-  let dataflowNow: DataflowState | null = art.dataflow?.state ?? null;
   const surfaceMode = () => colorMode() ?? storyThemeDefaultMode(theme()) ?? 'light';
-  let pushedDeclarations: string | null = storyUpdateParts(art.markup ?? '')?.declarations ?? null;
   const record = (...args: Parameters<SourceHistory['record']>) => { sourceHistory.record(...args); setHistoryTick((n) => n + 1); };
 
-  /** Show a version of the document in the adopted runtime WITHOUT replacing it. */
-  const showInDocument = (next: string, over?: { compiledCss?: string | null; colorMode?: 'light' | 'dark'; refData?: RefDataMap }) => {
-    const parts = storyUpdateParts(next, HELD_ASSETS);
-    if (!parts) return;
-    const declarationsChanged = parts.declarations !== pushedDeclarations;
-    const sheet = over?.compiledCss ?? untrack(css);
-    sendDocument({ runtimeRef }, {
-      type: 'mx:document',
-      nodes: parts.nodes,
-      source: next,
-      editId: previewEditId,
-      ...(parts.authorCss !== null ? { authorCss: parts.authorCss } : {}),
-      ...(typeof sheet === 'string' ? { compiledCss: sheet } : {}),
-      colorMode: over?.colorMode ?? untrack(surfaceMode),
-      ...(over?.refData ? { refData: over.refData } : {}),
-      ...(dataflowNow && compiledFlow && declarationsChanged
-        ? { dataflow: { flow: compiledFlow, state: dataflowNow } satisfies StoryIslandDataflow } : {}),
-    });
-    pushedDeclarations = parts.declarations;
-  };
+  /** Show a version of the document in the adopted runtime WITHOUT replacing it, in the theme and mode shown now. */
+  const showInDocument = createEditDraftSender(runtimeRef, {
+    editId: () => previewEditId, theme: () => untrack(theme), colorMode: () => untrack(surfaceMode),
+  });
 
   let queue: (change: Parameters<ReturnType<typeof createLiveEdits>['queue']>[0]) => void = () => {};
-  const commitStructural = (next: string, over?: { refData?: RefDataMap }) => {
+  const commitStructural = (next: string) => {
     if (next === sourceRef.current) return;
     record(sourceRef.current, next);
     sourceRef.current = next;
     setSource(next);
     queue({ source: next });
-    showInDocument(next, over);
+    showInDocument(next);
   };
 
   const [sourceRevision, setSourceRevision] = createSignal(0);
@@ -362,36 +335,11 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       if (timer !== null) window.clearInterval(timer);
       timer = null;
       inPlace.select(null);
-      if (frame.compiledCss !== undefined) setCss(frame.compiledCss);
     };
     untrack(attempt);
     if (!adopted) timer = window.setInterval(attempt, 250);
     onCleanup(() => { if (timer !== null) window.clearInterval(timer); });
   });
-
-  // ── draft compile ──
-  const cssCache = new Map<string, string>();
-  let lastCompiled: string | null = art.markup ?? '';
-  createEffect(on(source, (key) => {
-    if (lastCompiled === key) return;
-    const cached = cssCache.get(key);
-    if (cached !== undefined) {
-      if (cached !== untrack(css)) { setCss(cached); showInDocument(key, { compiledCss: cached }); }
-      return;
-    }
-    const run = async () => {
-      const body = await backend.previewCss(key).catch(() => null);
-      if (!body) return;
-      lastCompiled = key;
-      cssCache.set(key, body.css);
-      if (cssCache.size > 20) { const first = cssCache.keys().next().value; if (first !== undefined) cssCache.delete(first); }
-      const changed = body.css !== untrack(css);
-      if (changed) setCss(body.css);
-      if (changed && sourceRef.current === key) showInDocument(key, { compiledCss: body.css });
-    };
-    const timer = window.setTimeout(() => { void run(); }, 300);
-    onCleanup(() => window.clearTimeout(timer));
-  }, { defer: true }));
 
   // ── draft data ──
   const flowSignature = createMemo(() => storyUpdateParts(source())?.declarations ?? null);
@@ -416,10 +364,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
         setDataflowPending(false);
         if (!body) return;
         const next = { values: {}, tables: body.tables, errors: body.errors };
-        dataflowNow = next;
         compiledFlow = body.flow ?? null;
         setDataflowState(next);
-        if (signature !== initialFlowSignature) showInDocument(sourceRef.current);
       }).catch(() => { if (alive) setDataflowPending(false); });
     }, 400);
     onCleanup(() => { alive = false; window.clearTimeout(timer); });
@@ -560,7 +506,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     const nodeId = freshNodeId(sourceRef.current);
     const placed = placeImageInJsx(sourceRef.current, image.id, anchor, { nodeId });
     if (placed.source === sourceRef.current || !placed.path) return;
-    commitStructural(placed.source, refDataFor(image));
+    commitStructural(placed.source);
     const bodyPath = sourcePathToBodyPath(placed.source, placed.path);
     if (bodyPath) inPlace.select(bodyPath, { reveal: true, nodeId });
   };
@@ -568,7 +514,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     if (!(await drainTyping())) return;
     const next = replaceImageSrcInJsx(sourceRef.current, target, image.id);
     if (next === sourceRef.current) { setImageError('That image changed while the new one was uploading. Select it and try again.'); return; }
-    commitStructural(next, refDataFor(image));
+    commitStructural(next);
   };
   const imageTargetAt = (bodyPath: string) => imageTargetInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, bodyPath));
   const uploadOrSay = async (file: File): Promise<ChosenImage | null> => {
@@ -616,12 +562,14 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const previewVersion = async (v: number) => {
     const snapshot = await history.fetchVersion(v);
     if (!snapshot) return;
+    // The version first, then editing pauses: the controller draws it instead of returning to the saved head.
+    showInDocument(snapshot.markup ?? '', {
+      preview: true,
+      ...(snapshot.meta.theme !== undefined ? { theme: snapshot.meta.theme as StoryThemeName | null } : {}),
+      ...(snapshot.meta.colorMode ? { colorMode: snapshot.meta.colorMode } : {}),
+    });
     setPreview(snapshot);
     inPlace.select(null);
-    showInDocument(snapshot.markup ?? '', {
-      compiledCss: snapshot.meta.compiledCss ?? untrack(css),
-      colorMode: (snapshot.meta.colorMode as 'light' | 'dark' | undefined) ?? untrack(surfaceMode),
-    });
   };
   const backToCurrent = () => { setPreview(null); showInDocument(sourceRef.current); };
   const restoreVersion = async (v: number) => {
@@ -694,17 +642,13 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       <ThemePicker value={theme()} colorMode={colorMode()} onPick={(t) => {
         setTheme(t);
         queue({ theme: t });
-        sendDocument({ runtimeRef }, {
-          type: 'mx:document', nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [], source: sourceRef.current,
-          theme: t, colorMode: colorMode() ?? storyThemeDefaultMode(t) ?? 'light',
-        });
+        showInDocument(sourceRef.current);
       }} />
       <TemplateChip template={art.template} />
       <ModeChip mode={colorMode()} themeDefault={storyThemeDefaultMode(theme()) ?? 'light'} onPick={(next) => {
         setColorMode(next);
-        const effective = next ?? storyThemeDefaultMode(theme()) ?? 'light';
         queue({ colorMode: next });
-        showInDocument(sourceRef.current, { colorMode: effective });
+        showInDocument(sourceRef.current);
       }} />
     </section>
     <hr class="my-3 border-edge" />
