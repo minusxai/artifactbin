@@ -181,7 +181,8 @@ export class PostgresDb implements Db {
     connect(): Promise<{
       query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }>;
       on(event: string, cb: (arg: { channel: string; payload?: string }) => void): void;
-      release(): void;
+      /** `true` destroys the connection instead of returning it to the pool. */
+      release(destroy?: boolean): void;
     }>;
     end(): Promise<void>;
   };
