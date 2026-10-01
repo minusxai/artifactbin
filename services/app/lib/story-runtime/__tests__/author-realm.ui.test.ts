@@ -38,8 +38,9 @@ const page = () => {
     + '</div><p id="outside">outside</p>';
   return document.getElementById('mx-story-root') as HTMLElement;
 };
-async function run(source: string): Promise<AuthorRealm> {
+async function run(source: string, before?: () => void): Promise<AuthorRealm> {
   const root = page();
+  before?.();
   errors = [];
   store = createDataflowStore({ flow });
   realm = createAuthorRealm({ module: await newRealmModule(wasm), source, store, root, doc: document, onError: (m) => errors.push(m), console: fakeConsole });
@@ -91,7 +92,8 @@ describe('the author realm', () => {
     expect(errors).toEqual([]);
   });
 
-  it('refuses what the attribute policy refuses, attributes on the page\'s own elements, and text an island owns', async () => {
+  it('refuses what the attribute policy refuses and attributes on the page\'s own elements, and writes bound text into its node', async () => {
+    let islandText: ChildNode | null = null;
     await run(`
       const codes = [];
       const attempt = (fn) => { try { fn(); codes.push('ok'); } catch (e) { codes.push(e.code); } };
@@ -109,9 +111,11 @@ describe('the author realm', () => {
       attempt(() => dom.on(dom.query('#heading'), 'mouseover', () => {}));
       attempt(() => dom.remove(dom.query('#heading')));
       dom.setText(dom.query('#lede'), codes.join(' '));
-    `);
-    expect(document.getElementById('lede')!.textContent).toBe('INVALID_ATTRIBUTE INVALID_ATTRIBUTE INVALID_ATTRIBUTE INVALID_ATTRIBUTE ok PAGE_OWNED INVALID_CLASS ISLAND_OWNED INVALID_TAG INVALID_TAG INVALID_EVENT PAGE_OWNED');
-    expect(document.getElementById('island-text')!.textContent).toBe('West');
+    `, () => { islandText = document.getElementById('island-text')!.firstChild; });
+    expect(document.getElementById('lede')!.textContent).toBe('INVALID_ATTRIBUTE INVALID_ATTRIBUTE INVALID_ATTRIBUTE INVALID_ATTRIBUTE ok PAGE_OWNED INVALID_CLASS ok INVALID_TAG INVALID_TAG INVALID_EVENT PAGE_OWNED');
+    // The island's text node is the SAME node, so the binding's next write lands where the reader looks.
+    expect(document.getElementById('island-text')!.textContent).toBe('East');
+    expect(document.getElementById('island-text')!.firstChild).toBe(islandText);
     expect(document.getElementById('heading')!.isConnected).toBe(true);
   });
 

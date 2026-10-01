@@ -50,7 +50,7 @@ Handles are integers; a handle for an element that left the page is refused
 app chrome, a managed Iframe's inside, or anything outside the document.
 
 - `dom.query('#id')`, `dom.queryAll('.row')` — CSS selectors under the story root; `null` or `[]` for none.
-- `dom.text(h)`, `dom.setText(h, 'Total: 5')` — text content. An element drawn from data (inside a component bound to `$values`) refuses `setText` with `ISLAND_OWNED`: change it with `mx.set`.
+- `dom.text(h)`, `dom.setText(h, 'Total: 5')` — text content. On an element whose text is a binding (`{$value}`) the binding wins again at its next change; change bound text with `mx.set`.
 - `dom.value(h)`, `dom.setValue(h, 'b')` — `input`, `textarea`, `select` (checkbox/radio take a boolean). `setValue` fires `input` and `change`, so a bound control writes its `$value`.
 - `dom.addClass(h, 'hidden')`, `dom.removeClass(h, 'hidden')`, `dom.toggleClass(h, 'open', force?)`, `dom.hasClass(h, 'open')` — Tailwind tokens allowed; the runtime's `mx-*` classes are not.
 - `dom.on(h, 'click', event => { ... }, {prevent?: true})` — `click`, `dblclick`, `input`, `change`, `keydown`, `keyup`, `focus`, `blur`, `pointerdown`, `pointerup`, `toggle`. The handler receives `{type, target, value?, checked?, key?, clientX?, clientY?, altKey, ctrlKey, metaKey, shiftKey}`, never the browser event. Returns a function that removes the listener.
@@ -58,7 +58,7 @@ app chrome, a managed Iframe's inside, or anything outside the document.
 - `dom.attr(h, 'name')`, `dom.setAttr(h, 'name', value)`, `dom.removeAttr(h, 'name')` — attributes can be set only on elements the script created, and go through the same policy as stored markup: no `on*`, no `style`, no `id`/`class`/`data-mx-*`, no `javascript:` or `data:` URLs.
 
 Each refusal throws an Error with a `code`: `UNKNOWN_NODE`, `STALE_NODE`,
-`PAGE_OWNED`, `ISLAND_OWNED`, `INVALID_ATTRIBUTE`, `INVALID_CLASS`,
+`PAGE_OWNED`, `INVALID_ATTRIBUTE`, `INVALID_CLASS`,
 `INVALID_SELECTOR`, `INVALID_TAG`, `INVALID_EVENT`, `NOT_A_CONTROL`, `LIMIT`.
 
 ## Example

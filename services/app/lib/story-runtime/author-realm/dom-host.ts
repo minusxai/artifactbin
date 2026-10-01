@@ -1,6 +1,7 @@
 /**
- * THE PAGE AS A SCRIPT SEES IT: integer handles for elements under the story root, text and form
- * values on any of them, attributes only on elements the script made, classes checked token by token,
+ * THE PAGE AS A SCRIPT SEES IT: integer handles for elements under the story root, text (written into
+ * the node a binding holds, so the data keeps winning) and form values on any of them, attributes only
+ * on elements the script made, classes checked token by token,
  * listeners for a fixed set of events, and elements it creates marked `data-mx-author` so the live
  * morph and the serializer never mistake them for authored markup. Every string is bounded and every
  * attribute goes through lib/jsx/attribute-policy. Nothing here touches the interpreter: it answers
@@ -14,8 +15,6 @@ export const AUTHOR_NODE_ATTR = 'data-mx-author';
 export const AUTHOR_EVENT_TYPES: ReadonlySet<string> = new Set(['click', 'dblclick', 'input', 'change', 'keydown', 'keyup', 'focus', 'blur', 'pointerdown', 'pointerup', 'toggle']);
 const CONTROL_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 const EXCLUDED_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'TEMPLATE', 'OBJECT', 'EMBED']);
-/** A Solid island owns its text nodes; replacing them desyncs it. The store is how an island's text changes. */
-const ISLAND_SELECTOR = '[data-hk]';
 const FRAME_SELECTOR = '[data-mx-managed-frame]';
 
 export interface DomHostOptions {
@@ -94,8 +93,11 @@ export function createDomHost({ root, doc, fire }: DomHostOptions): DomHost {
     text: ([node]) => (elementOf(node).textContent ?? '').slice(0, L.textChars),
     setText: ([node, value]) => {
       const el = elementOf(node);
-      if (!el.hasAttribute(AUTHOR_NODE_ATTR) && el.closest(ISLAND_SELECTOR)) refuse('ISLAND_OWNED', 'This element is drawn from the document\'s data; change it with mx.set');
-      el.textContent = str(value, 'text', L.textChars);
+      const text = str(value, 'text', L.textChars);
+      // Keep a lone text node's identity: a binding Solid holds (`{$value}`) keeps writing to that node,
+      // so the document's data wins again on its next change instead of updating a detached node.
+      const only = el.childNodes.length === 1 && el.firstChild?.nodeType === 3 ? el.firstChild as Text : null;
+      if (only) only.data = text; else el.textContent = text;
     },
     value: ([node]) => {
       const el = elementOf(node);
