@@ -19,7 +19,7 @@ export interface Env {
  * WHAT COUNTS AS ONE OF OUR NAMES. The module half admits an UNDERSCORE, and that is not cosmetic:
  * without it no name in a multi-word module is auditable at all, so a knob left behind by a retired
  * vocabulary sits on a box looking live and the boot notice says nothing about it. The app's own
- * audit (`services/app/lib/config.ts`) uses the same wider shape; the two have to agree.
+ * audit (`services/app/lib/platform/config.ts`) uses the same wider shape; the two have to agree.
  */
 const OURS = /^[A-Z][A-Z0-9_]*__[A-Z0-9_]+$/;
 

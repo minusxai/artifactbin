@@ -1,5 +1,5 @@
 import type { ArtifactHead } from '@/lib/artifact-backend/types';
-import { BLANK_REPORT_MARKUP, isStartPlaceholder } from '@/lib/start-placeholder';
+import { BLANK_REPORT_MARKUP, isStartPlaceholder } from '@/lib/serving/start-placeholder';
 import { prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
 
 /** Convert only the starter the person observed; the existing commit protocol

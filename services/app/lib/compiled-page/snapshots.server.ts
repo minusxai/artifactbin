@@ -48,17 +48,19 @@
  * forgotten, never re-run.
  */
 import { createHash } from 'node:crypto';
-import { canReadArtifact, compiledForRow, dataflowForRow, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts/access';
+import { compiledForRow, dataflowForRow } from '@/lib/artifacts/dataflow';
+import { getArtifactById } from '@/lib/artifacts/store';
 import { grantsOf, grantsPermitRead } from '@/lib/datasets/policy/grants';
 import type { CompiledDataflow } from '@/lib/story/data';
 import { dataRefs } from '@/lib/story/data/compiled-flow';
 import { planOf } from './plan';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform/db';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { Scalar } from '@/lib/story/data';
 import { marksOf } from '@/lib/story/prepared/served-results.server';
 import { preparedPageFor } from '@/lib/story/prepared/prepared-page.server';
-import { PUBLIC_BASE_URL } from '@/lib/config';
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { drawSnapshotCharts } from './charts.server';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import {

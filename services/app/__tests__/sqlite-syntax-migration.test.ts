@@ -3,14 +3,14 @@
  * (lib/sqlite-syntax-migration), over synthetic documents inserted as they
  * stood before the marker existed.
  */
-import { artifactQuery } from '@/lib/artifact-document';
+import { artifactQuery } from '@/lib/artifacts';
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { commitNormalizedMarkup, getArtifactById, publishMarkupForArtifact } from '@/lib/artifacts';
 import { convertStoredDocument } from '@/lib/migrate/sqlite/stored';
-import { runSqliteSyntaxMigrationBatch } from '@/lib/sqlite-syntax-migration';
-import { mintToken } from '@/lib/tokens';
+import { runSqliteSyntaxMigrationBatch } from '@/lib/artifacts';
+import { mintToken } from '@/lib/accounts';
 
 const harness = useAppHarness();
 

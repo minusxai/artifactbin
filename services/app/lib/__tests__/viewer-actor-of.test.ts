@@ -5,8 +5,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
 import { ACTOR_HEADER, BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
-import { sessionActor, tokenActorForRequest } from '@/lib/viewer';
-import { mintToken, revokeToken } from '@/lib/tokens';
+import { sessionActor, tokenActorForRequest } from '@/lib/accounts';
+import { mintToken, revokeToken } from '@/lib/accounts';
 
 describe('sessionActor', () => {
   it('prefers the actor attached to the Request over any header', async () => {
@@ -40,7 +40,7 @@ describe('sessionActor', () => {
   it('a correctly signed header alone is nobody: the fallback is gone', async () => {
     const secret = 's'.repeat(32);
     vi.stubEnv('CONTRACT__ACTOR_SECRET', secret); vi.resetModules();
-    const { sessionActor: fresh } = await import('@/lib/viewer');
+    const { sessionActor: fresh } = await import('@/lib/accounts/viewer');
     const req = new Request('http://x/api/page/session', {
       headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: 'usr_header', email: 'h@example.com', emailVerified: true }, secret) },
     });

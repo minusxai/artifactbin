@@ -1,8 +1,8 @@
 import {z} from 'zod';
-import {browserActor} from '@/lib/auth';
-import {sessionActor,actorForArtifacts} from '@/lib/viewer';
+import {browserActor} from '@/lib/accounts';
+import {sessionActor,actorForArtifacts} from '@/lib/accounts';
 import {json,unauthorized,readJson} from '@/lib/http';
-import {notificationDelivery} from '@/lib/notification-delivery';
+import {notificationDelivery} from '@/lib/notifications';
 const preferences=z.object({invitations:z.boolean(),comments:z.boolean(),activity:z.boolean()}).strict();
 export async function GET(request:Request){
  const actor=actorForArtifacts(await sessionActor(request));if(!actor?.userId)return unauthorized(request);

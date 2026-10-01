@@ -10,11 +10,11 @@ import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { BOOTSTRAP_ID, createAppServer, withBootstrap } from '../app';
 import { STORY_FONT_THEMES } from '@/lib/data/story/story-fonts';
-import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
+import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

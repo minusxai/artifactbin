@@ -9,7 +9,7 @@
  *    as the controls panel's LikeAction (both send through `sendReaction`).
  */
 import { createEffect, type Accessor } from 'solid-js';
-import { loginHref } from '@/lib/login-href';
+import { loginHref } from '@/lib/http/login-href';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader/reader-chrome';
 import { refusedForSignIn } from '@/lib/story/reader/sign-in-required';
 import { pageDataChanged } from '@/web/page-data-events';

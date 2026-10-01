@@ -24,8 +24,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { resetExportRenderer } from '@/lib/export';
-import { setServices } from '@/lib/services';
-import { mintToken } from '@/lib/tokens';
+import { setServices } from '@/lib/platform';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

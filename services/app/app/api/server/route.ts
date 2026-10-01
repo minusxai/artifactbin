@@ -12,7 +12,7 @@
  * whichever hostname a client happened to use declare itself canonical, which
  * is the whole thing this document exists to settle.
  */
-import { ALIAS_ORIGINS, PUBLIC_BASE_URL } from '@/lib/config';
+import { ALIAS_ORIGINS, PUBLIC_BASE_URL } from '@/lib/platform';
 import { normalizeOrigin, type ServerIdentityDocument } from '@artifactbin/contracts';
 
 export async function GET(_request: Request): Promise<Response> {

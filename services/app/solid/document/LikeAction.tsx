@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
-import { loginHref } from '@/lib/login-href';
+import { loginHref } from '@/lib/http/login-href';
 import { Tooltip } from '../components/Tooltip';
 import { sendReaction } from './reader-chrome-adapter';
 

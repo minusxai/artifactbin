@@ -9,9 +9,9 @@
  * right now. Failures are a uniform 404: for anyone without the secret, the
  * endpoint does not exist. Unset ⇒ it does not exist for anyone.
  */
-import { hasAdminCredential } from '@/lib/admin-auth';
+import { hasAdminCredential } from '@/lib/accounts';
 import { json } from '@/lib/http';
-import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken } from '@/lib/tokens';
+import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken } from '@/lib/accounts';
 
 export async function POST(request: Request) {
   if (!hasAdminCredential(request)) return json({ error: 'not_found' }, 404);

@@ -1,11 +1,11 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
-import { writeBrowserArtifact } from '@/lib/browser-artifact-write';
-import type { FolderPage as FolderData } from '@/lib/folders';
-import type { ArtifactRole } from '@/lib/share-roles';
-import { canEdit } from '@/lib/share-roles';
-import type { AccountWorkspace } from '@/lib/workspace';
+import { writeBrowserArtifact } from '@/lib/artifacts/browser-artifact-write';
+import type { FolderPage as FolderData } from '@/lib/workspace/folders';
+import type { ArtifactRole } from '@/lib/artifacts/share-roles';
+import { canEdit } from '@/lib/artifacts/share-roles';
+import type { AccountWorkspace } from '@/lib/workspace/dashboard';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { pageDataChanged } from '@/web/page-data-events';
 import { PAGE_COLUMN } from '../components/ui';

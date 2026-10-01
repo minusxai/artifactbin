@@ -2,7 +2,7 @@ import {getArtifactById} from '@/lib/artifacts';
 import {documentEditBody} from './prepared-document';
 import {expect,it,vi} from 'vitest';
 import {request,useAppHarness} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {objectStore} from '@/lib/object-store';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';

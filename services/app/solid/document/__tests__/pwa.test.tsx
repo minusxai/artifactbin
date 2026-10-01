@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { InstallArtifact, InstallArtifactLink } from '../InstallArtifact';
-import { captureInstallPrompt, currentInstall } from '@/lib/pwa-install';
+import { captureInstallPrompt, currentInstall } from '@/lib/serving/pwa-install';
 import { PwaSettingsPanel, PwaSharingSetting } from '../../editor/PwaSettingsPanel';
 import { readPwaSettings } from '@/lib/story/reader/pwa-settings';
 

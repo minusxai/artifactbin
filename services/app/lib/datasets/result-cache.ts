@@ -1,4 +1,4 @@
-import type { Db } from '@/lib/db';
+import type { Db } from '@/lib/platform';
 import type { CatalogResult } from './execute';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';

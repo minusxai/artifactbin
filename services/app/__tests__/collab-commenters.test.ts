@@ -15,13 +15,13 @@ import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { actOnAnnotationFor, createAnnotationFor, listAnnotationsFor } from '@/lib/annotations';
-import { parseShareEntries } from '@/lib/artifact-wire';
+import { parseShareEntries } from '@/lib/artifacts';
 import { canReadArtifact, effectiveRole as roleFor, getArtifactById } from '@/lib/artifacts';
 
 
-import { SHARE_ROLES, SHARE_ROLE_LABEL } from '@/lib/share-roles';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { SHARE_ROLES, SHARE_ROLE_LABEL } from '@/lib/artifacts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

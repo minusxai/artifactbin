@@ -2,7 +2,7 @@ import { coerceRows } from './coerce';
 import { parseCsv } from './csv';
 import { fetchSheetCsv } from './sheets';
 import { fetchCsvFromUrl } from './csv-url';
-import { MAX_ROWS_LIMIT } from '@/lib/config';
+import { MAX_ROWS_LIMIT } from '@/lib/platform/config';
 import { IngestError, MAX_DATASET_BYTES, type DatasetSource, type DeclaredColumn, type IngestResult } from './types';
 
 export * from './types';

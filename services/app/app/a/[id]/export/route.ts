@@ -1,13 +1,13 @@
 /** Authorize and resolve an image, then redirect to a scoped persistent asset.
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
-import { trackEvent } from '@/lib/analytics';
-import { archivedVersionFor, servedRow } from '@/lib/archived-version';
+import { trackEvent } from '@/lib/platform';
+import { archivedVersionFor, servedRow } from '@/lib/serving';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { requestOrSessionActor, roleFor } from '@/lib/viewer';
+import { requestOrSessionActor, roleFor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';
-import { ID_RE } from '@/lib/ids';
-import { canEdit } from '@/lib/share-roles';
+import { ID_RE } from '@/lib/platform';
+import { canEdit } from '@/lib/artifacts';
 
 /**
  * `delivery: 'bytes'` is for a caller that cannot follow the redirect to the

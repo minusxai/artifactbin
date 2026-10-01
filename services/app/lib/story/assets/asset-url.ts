@@ -24,7 +24,7 @@
  * against the `ref:` path, which has carried width/height/blur since the store
  * began measuring images.
  */
-import { sha256Hex } from '@/lib/sha256';
+import { sha256Hex } from '@/lib/platform/sha256';
 import { IMAGE_SIZES } from '@/lib/story/data/ref-data';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import {imageReferenceId} from './image-source';

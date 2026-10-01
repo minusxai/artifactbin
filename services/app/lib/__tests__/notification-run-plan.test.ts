@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import type {MutationNotificationPlan,NotificationSource} from '@artifactbin/contracts';
-import {notificationRecipients} from '../notification-run-plan';
+import {notificationRecipients} from '@/lib/notifications';
 const source=(artifactId:string):NotificationSource=>({artifactId,authorityRevision:'a',schemaRevision:'s'});
 const plan:MutationNotificationPlan={executionFence:{principalRevision:'p',documentRevision:'d',contextRevision:'c'},rules:[
  {ruleName:'first',rows:[{recipientIds:['u1','u1'],message:'one'},{recipientIds:['u1'],message:'two'}],sources:[source('private1')]},

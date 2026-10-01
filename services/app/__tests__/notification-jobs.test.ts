@@ -1,11 +1,11 @@
 import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {useAppHarness} from './harness';
-import {eraseTestUser} from '@/lib/testusers';
-import {getDb} from '@/lib/db';
-import {notificationAuthority} from '@/lib/notification-authority';
-import {seedOwnerJoin} from '@/lib/relation-state';
-import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notification-jobs';
+import {eraseTestUser} from '@/lib/accounts';
+import {getDb} from '@/lib/platform';
+import {notificationAuthority} from '@/lib/notifications';
+import {seedOwnerJoin} from '@/lib/accounts';
+import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notifications';
 useAppHarness();
 const input:MutationNotificationJobInput={
  origin:{mutationRunId:'run1',documentId:'doc',documentEditId:'edit',documentVersion:1,mutationName:'change'},

@@ -19,7 +19,7 @@ import { getArtifactById } from '@/lib/artifacts';
 
 
 import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();

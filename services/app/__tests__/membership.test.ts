@@ -1,16 +1,16 @@
-import {hasExplicitNotificationMembership} from '@/lib/notification-membership';
-import {setRelationState} from '@/lib/relation-state';
-import {has,count,linked} from '@/lib/relations';
+import {hasExplicitNotificationMembership} from '@/lib/notifications';
+import {setRelationState} from '@/lib/accounts';
+import {has,count,linked} from '@/lib/accounts';
 import {createAnnotationFor} from '@/lib/annotations';
-import {membershipInbox,updateMembershipInbox} from '@/lib/membership-inbox';
+import {membershipInbox,updateMembershipInbox} from '@/lib/accounts';
 import { expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 import { effectiveRole, getArtifactById } from '@/lib/artifacts';
-import { createUser } from '@/lib/users';
-import { link } from '@/lib/relations';
-import { changeMembership, membershipState, mentionCandidates, invitePeople } from '@/lib/membership';
-import { getDb } from '@/lib/db';
+import { createUser } from '@/lib/accounts';
+import { link } from '@/lib/accounts';
+import { changeMembership, membershipState, mentionCandidates, invitePeople } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
 
 useAppHarness();
 async function world() {

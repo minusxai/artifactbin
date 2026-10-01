@@ -2,8 +2,8 @@
 import {documentPublicationBody,documentPublicationWithResources} from './prepared-document';
 import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {PATCH} from '@/app/api/artifacts/[id]/route';
-import {getArtifactById} from '@/lib/artifacts';
-import {artifactState} from '@/lib/artifact-state';
+import { getArtifactById } from '@/lib/artifacts/store';
+import {artifactState} from '@/lib/artifacts/state';
 import {request,type RequestOptions} from './harness';
 export async function observedRequest(path:string,options:RequestOptions):Promise<Request>{
  const match=path.match(/^\/api\/(?:my\/)?artifacts\/([^/?]+)(?:\/revert)?(?:\?.*)?$/);

@@ -1,19 +1,19 @@
 import {documentPublicationWithResources} from './prepared-document';
 import {patchMetadata} from './conditional-request';
-import {changeMembership} from '@/lib/membership';
+import {changeMembership} from '@/lib/accounts';
 import {POST as documentMutation} from '@/app/a/[id]/mutate/route';
 import {describe, expect, it} from 'vitest';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import {getArtifactById,dataflowForRow,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
-import {mintToken} from '@/lib/tokens';
-import {claimToken, createUser} from '@/lib/users';
+import {mintToken} from '@/lib/accounts';
+import {claimToken, createUser} from '@/lib/accounts';
 import {people} from '@/lib/datasets/user-fields';
-import {avatarUrl} from '@/lib/avatars';
+import {avatarUrl} from '@/lib/accounts';
 import {useAppHarness, request} from '@/__tests__/harness';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 

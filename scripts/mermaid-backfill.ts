@@ -19,7 +19,7 @@ async function main() {
   if (!values.db) throw new Error('usage: mermaid-backfill.ts --db <url> [--limit 1000] [--retry-failed] [--dry-run]');
   process.env.DATABASE_URL = values.db;
   // After the environment is set: lib/config reads it on first import.
-  const [{ getDb }, { queueMermaidBackfill }] = await Promise.all([import('@/lib/db'), import('@/lib/mermaid-images/store')]);
+  const [{ getDb }, { queueMermaidBackfill }] = await Promise.all([import('@/lib/platform/db'), import('@/lib/mermaid-images/store')]);
   const db = await getDb();
   try {
     const dryRun = !!values['dry-run'];

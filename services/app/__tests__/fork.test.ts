@@ -18,9 +18,9 @@ import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
 import { getArtifactById, getSharingFor } from '@/lib/artifacts';
-import { getDb } from '@/lib/db';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { getDb } from '@/lib/platform';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();

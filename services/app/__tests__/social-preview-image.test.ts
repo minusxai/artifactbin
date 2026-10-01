@@ -3,11 +3,11 @@ import sharp from 'sharp';
 import { useAppHarness, request } from './harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import {exportImage,EXPORT_PNG} from './export-helpers';
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
-import { getDb } from '@/lib/db';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
 import { getArtifactById } from '@/lib/artifacts';
-import { setServices } from '@/lib/services';
+import { setServices } from '@/lib/platform';
 import { fakeBrowser } from '@artifactbin/utils';
 import { resetExportRenderer } from '@/lib/export';
 

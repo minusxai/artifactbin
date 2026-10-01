@@ -19,11 +19,11 @@ import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
 import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
-import { lookupWebAssets } from '@/lib/web-assets';
-import { mintToken } from '@/lib/tokens';
+import { lookupWebAssets } from '@/lib/serving';
+import { mintToken } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';

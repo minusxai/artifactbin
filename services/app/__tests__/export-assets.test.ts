@@ -1,15 +1,15 @@
 import {describe,it,expect,vi} from 'vitest';
 import * as assetDelivery from '@/lib/export/assets';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import {objectStore,createS3Store, cachedReads} from '@/lib/object-store';
 import {exportAssetResponse,exportAssetUrl} from '@/lib/export/assets';
 import {GET as exportImage} from '@/app/a/[id]/export/route';
 import {createArtifact} from '@/lib/artifacts';
-import {mintToken} from '@/lib/tokens';
-import {setServices} from '@/lib/services';
+import {mintToken} from '@/lib/accounts';
+import {setServices} from '@/lib/platform';
 import {resetExportRenderer} from '@/lib/export';
-import {mintExportKey} from '@/lib/export-key';
+import {mintExportKey} from '@/lib/serving';
 
 useAppHarness();
 const id='11111111-1111-4111-8111-111111111111';

@@ -1,15 +1,15 @@
-import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notification-delivery';
-export type {NotificationDelivery} from '@/lib/notification-delivery';
-import {startAppBackgroundTasks} from '@/lib/app-background-tasks';
-import {startDomainRecheck} from '@/lib/custom-domains';
+import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
+export type {NotificationDelivery} from '@/lib/notifications';
+import {startAppBackgroundTasks} from '@/lib/runtime';
+import {startDomainRecheck} from '@/lib/serving';
 import {startMermaidHarvester} from '@/lib/mermaid-images/harvester';
-import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/document-policy';
-import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/mutation-invocation';
+import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/artifacts';
+import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql/extensions';
 import type {Actor,Upstream} from '@artifactbin/contracts';
-import {getDb,type Db} from '@/lib/db';
+import {getDb,type Db} from '@/lib/platform';
 import {inProcess} from '@artifactbin/utils';
-import {setServices,services,type Services} from '@/lib/services';
+import {setServices,services,type Services} from '@/lib/platform';
 import {createAppServer,type AppServerOptions} from './app';
 export interface AppHostOptions extends AppServerOptions {
  services?:Partial<Services>;

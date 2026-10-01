@@ -14,8 +14,8 @@ import { getArtifactById } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { readCompiledDataflow, storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 
 useAppHarness();

@@ -2,10 +2,10 @@
  * affected semantic neighborhood; SQL consumes its exact node and membership
  * witnesses. Rendering caches are deliberately absent from the write contract. */
 import type {DocumentOperation} from '@artifactbin/contracts';
-import {json} from '../../http';
+import {json} from '../../http/http';
 import {repairJsxSource} from '../../jsx/repair';
 import {sanitizeStoryMarkupCss} from '../../data/story/banned-css';
-import {MAX_EXTERNAL_IMAGES_PER_PUBLISH} from '../../config';
+import {MAX_EXTERNAL_IMAGES_PER_PUBLISH} from '../../platform/config';
 import {canonicalizeMarkup} from '../document/canonical-source';
 import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from '../reader/managed-iframe-source';
 import {createDocumentGraph,graphNodes,graphSource,graphReferences,type DocumentGraph} from './document-graph';

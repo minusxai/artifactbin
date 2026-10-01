@@ -13,8 +13,8 @@ import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
 

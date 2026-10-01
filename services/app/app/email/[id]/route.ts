@@ -1,4 +1,4 @@
-import {notificationDelivery} from '@/lib/notification-delivery';
+import {notificationDelivery} from '@/lib/notifications';
 /** Opaque tracking IDs never authorize reading or accepting the destination. */
 export async function GET(_request:Request,ctx:{params:Promise<{id:string}>}){
  const {id}=await ctx.params;const destination=await notificationDelivery()?.click(id);

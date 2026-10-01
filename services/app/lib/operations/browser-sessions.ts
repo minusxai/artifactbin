@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { services } from '@/lib/services';
+import { services } from '@/lib/platform/services';
 import type { Actor, BrowserSessionRequest, ViewerChoice } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS } from '@artifactbin/contracts';
-import { resolveTestUser, sweepTestUsers } from '@/lib/testusers';
-import { forgetTestUserSession, noteTestUserSession } from '@/lib/testuser-sessions';
+import { resolveTestUser, sweepTestUsers } from '@/lib/accounts/testusers';
+import { forgetTestUserSession, noteTestUserSession } from '@/lib/accounts/testuser-sessions';
 import type { Operation } from './registry';
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/);

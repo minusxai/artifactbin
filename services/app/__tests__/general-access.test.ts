@@ -1,5 +1,5 @@
 import {documentEdit} from './prepared-document';
-import {artifactQuery} from '@/lib/artifact-document';
+import {artifactQuery} from '@/lib/artifacts';
 /**
  * GENERAL ACCESS — the link carries a ROLE, not merely read-or-not.
  *
@@ -24,9 +24,9 @@ import {
   type ArtifactRow, type Visibility,
 } from '@/lib/artifacts';
 import { createAnnotationFor, listAnnotationsFor } from '@/lib/annotations';
-import { ANONYMOUS_CEILING, capRole, type ShareRole } from '@/lib/share-roles';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { ANONYMOUS_CEILING, capRole, type ShareRole } from '@/lib/artifacts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 const SOURCE = '<div><p>hello</p></div>';
 

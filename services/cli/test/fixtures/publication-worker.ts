@@ -1,6 +1,6 @@
 // Isolated process fixture: the test supplies private database/object-store paths.
-import {getDb} from '../../../app/lib/db';
-import {mintToken} from '../../../app/lib/tokens';
+import {getDb} from '../../../app/lib/platform/db';
+import {mintToken} from '../../../app/lib/accounts/tokens';
 import {POST} from '../../../app/app/api/artifacts/route';
 import {DELETE} from '../../../app/app/api/artifacts/[id]/route';
 process.on('message',async(message:{action:string;token?:string;key?:string;id?:string})=>{

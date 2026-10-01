@@ -8,7 +8,7 @@
  * ambiguous by construction. There is nothing left for those cases to assert.
  */
 import { describe, expect, it } from 'vitest';
-import { canonicalArtifactPath, parsePrettyPath, titleSlug } from '@/lib/urls';
+import { canonicalArtifactPath, parsePrettyPath, titleSlug } from '@/lib/http';
 
 describe('titleSlug', () => {
   it('lowercases, hyphenates, trims, clamps', () => {

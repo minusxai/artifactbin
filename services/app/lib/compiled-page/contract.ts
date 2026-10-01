@@ -25,7 +25,7 @@ import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ReaderChromeInput } from '@/lib/story/reader/reader-chrome';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
-import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
+import type { AgentDiscovery } from '@/lib/serving';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * How a response names its reader path

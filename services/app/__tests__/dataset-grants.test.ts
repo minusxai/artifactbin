@@ -1,14 +1,14 @@
 import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
-import { createUser, claimToken } from '@/lib/users';
-import { mintToken } from '@/lib/tokens';
+import { createUser, claimToken } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
-import { changeMembership } from '@/lib/membership';
+import { changeMembership } from '@/lib/accounts';
 import { defaultDatasetGrants } from '@artifactbin/utils';
-import { readableArtifact } from '@/lib/artifact-read';
+import { readableArtifact } from '@/lib/artifacts';
 import { getArtifactById, forkArtifact, dataflowForRow } from '@/lib/artifacts';
 useAppHarness();
 it('allows a recipient through a saved owner artifact only after approval',async()=>{

@@ -21,16 +21,16 @@ import sharp from 'sharp';
 import { useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
-import { getDb } from '@/lib/db';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
-import { setAssetByteQuotaForTests } from '@/lib/asset-quota';
-import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/web-assets';
-import { assetBytesForToken } from '@/lib/asset-quota';
+import { setAssetByteQuotaForTests } from '@/lib/serving';
+import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/serving';
+import { assetBytesForToken } from '@/lib/serving';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
-import { webIngestRateLimited } from '@/lib/auth';
-import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/config';
+import { webIngestRateLimited } from '@/lib/accounts';
+import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/platform';
 
 useAppHarness();
 

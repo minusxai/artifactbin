@@ -1,4 +1,4 @@
-import {getUserById} from '@/lib/users';
+import {getUserById} from '@/lib/accounts';
 import {json} from '@/lib/http';
 export async function GET(_request:Request,ctx:{params:Promise<{id:string}>}){
  const user=await getUserById((await ctx.params).id);

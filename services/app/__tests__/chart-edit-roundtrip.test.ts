@@ -29,7 +29,7 @@ import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 
 import { canonicalizeMarkup } from '@/lib/story/document/jsx-tier';
 import { readQuestionChart, updateQuestionChartInJsx } from '@/lib/data/story/story-viz';

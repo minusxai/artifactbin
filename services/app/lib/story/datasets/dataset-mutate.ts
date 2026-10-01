@@ -1,13 +1,13 @@
-import {NotificationExecutionError} from '@/lib/notification-error';
-import {artifactQuery} from '@/lib/artifact-document';
+import {NotificationExecutionError} from '@/lib/notifications/errors';
+import {artifactQuery} from '@/lib/artifacts/document';
 import { grantsOf, assertGrantCommit } from '@/lib/datasets/policy/grants';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
-import {artifactState} from '@/lib/artifact-state';
-import {completeMutationReceipt,type MutationReceipt} from '@/lib/mutation-receipt';
-import {completeDocumentMutationReceipt} from '@/lib/mutation-operation';
-import {notificationJobStore} from '@/lib/notification-runtime';
-import {lockNotificationExecution} from '@/lib/notification-authority';
+import {artifactState} from '@/lib/artifacts/state';
+import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts/mutation-receipt';
+import {completeDocumentMutationReceipt} from '@/lib/artifacts/mutation-operation';
+import {notificationJobStore} from '@/lib/notifications/runtime';
+import {lockNotificationExecution} from '@/lib/notifications/authority';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
@@ -43,15 +43,15 @@ import {paramSqlName} from '@artifactbin/contracts';
  * use (so `revert` works on data), and the row's own channel is NOTIFYed, so
  * every open document reading this dataset re-queries (lib/story/realtime/live).
  */
-import { trackEvent } from '@/lib/analytics';
-import { MAX_QUERY_ROWS } from '@/lib/config';
-import { getDb } from '@/lib/db';
+import { trackEvent } from '@/lib/platform/analytics';
+import { MAX_QUERY_ROWS } from '@/lib/platform/config';
+import { getDb } from '@/lib/platform/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
-import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts/access';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
 import type {Scalar} from '../data/dataflow';
 import { newEditId } from '../document/splice';
-import {mutationInvocation} from '@/lib/mutation-invocation';
+import {mutationInvocation} from '@/lib/artifacts/mutation-invocation';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
 import { snapshotStore } from '@/lib/compiled-page/snapshots.server';
 

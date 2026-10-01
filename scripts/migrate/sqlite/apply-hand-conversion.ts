@@ -23,7 +23,7 @@ async function main() {
   await useLocalServices({ db: values.db, objects: values.objects, liveObjects: !!values['live-objects'] });
   // After the environment is set: lib/config reads it on first import.
   const [{ getDb }, artifacts, { artifactQuery }, { hasCurrentDataSyntax }, { servedDesign }] = await Promise.all([
-    import('@/lib/db'), import('@/lib/artifacts'), import('@/lib/artifact-document'), import('@/lib/story/data/data-syntax'), import('@/lib/sqlite-syntax-migration'),
+    import('@/lib/platform/db'), import('@/lib/artifacts'), import('@/lib/artifacts/document'), import('@/lib/story/data/data-syntax'), import('@/lib/artifacts/sqlite-syntax-migration'),
   ]);
   const db = await getDb();
   try {

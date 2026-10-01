@@ -5,8 +5,8 @@
  * own GET (`?q=`), the page relay's POST and the editor's draft path, so the
  * three cannot drift.
  */
-import { json } from '@/lib/http';
-import { MAX_QUERY_ROWS } from '@/lib/config';
+import { json } from '@/lib/http/http';
+import { MAX_QUERY_ROWS } from '@/lib/platform/config';
 import type { Scalar, Row } from './dataflow';
 import { parseLocalTables } from '../datasets/local-tables';
 import { MAX_PEOPLE_IDS } from '@/lib/story-runtime/contract';

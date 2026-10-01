@@ -5,9 +5,9 @@
  * document (opaque origin) fetches it directly.
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { ID_RE } from '@/lib/ids';
+import { ID_RE } from '@/lib/platform';
 import { liveFrameFor } from '@/lib/story/data/frame';
-import { sessionActor } from '@/lib/viewer';
+import { sessionActor } from '@/lib/accounts';
 
 /**
  * A FRESH object per response, never this one. The Node server writes the

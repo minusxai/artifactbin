@@ -4,8 +4,8 @@
  * the assets table.
  */
 import { json, unauthorized } from '@/lib/http';
-import { workspaceAssetsFor } from '@/lib/workspace-inventory';
-import { sessionActor } from '@/lib/viewer';
+import { workspaceAssetsFor } from '@/lib/workspace';
+import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

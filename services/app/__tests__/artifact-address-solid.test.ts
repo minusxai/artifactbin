@@ -9,10 +9,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { artifactPageAnswer } from '@/lib/artifact-page';
-import { mintToken } from '@/lib/tokens';
-import { mintExportKey } from '@/lib/export-key';
-import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
+import { artifactPageAnswer } from '@/lib/serving';
+import { mintToken } from '@/lib/accounts';
+import { mintExportKey } from '@/lib/serving';
+import { START_PLACEHOLDER_MARKUP } from '@/lib/serving';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { CompiledPageFailed } from '@/lib/compiled-page/serve.server';
 

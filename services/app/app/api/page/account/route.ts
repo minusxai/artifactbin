@@ -1,8 +1,8 @@
 /** The account page's data: the handle, assigned on sight if missing, and the picture's address. */
-import { avatarUrl } from '@/lib/avatars';
+import { avatarUrl } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
-import { ensureUsername, getUserById } from '@/lib/users';
-import { sessionActor } from '@/lib/viewer';
+import { ensureUsername, getUserById } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

@@ -10,8 +10,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { offlineBundle, offlineExtrasRef } from '@/lib/offline/bundle.server';
 import { parseArtifactFile, sourceDigest } from '@/lib/offline/file-format';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 

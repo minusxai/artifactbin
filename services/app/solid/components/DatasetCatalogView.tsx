@@ -2,7 +2,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack, type JSX } from 'solid-js';
 import { ChevronDown } from 'lucide-solid';
 import { Button } from './ui';
-import { artifactEditPath } from '@/lib/urls';
+import { artifactEditPath } from '@/lib/http/urls';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
 import type { Row } from '@/lib/story/data/dataflow';

@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {POST as create} from '@/app/api/artifacts/route';
 import {DELETE as remove} from '@/app/api/artifacts/[id]/route';
 const harness=useAppHarness();

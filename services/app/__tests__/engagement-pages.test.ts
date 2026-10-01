@@ -5,11 +5,11 @@ import { request, useAppHarness } from '@/__tests__/harness';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { createArtifact } from '@/lib/artifacts';
-import { EVENTS_SCHEMA } from '@/lib/config';
-import { link } from '@/lib/relations';
-import { setServices } from '@/lib/services';
-import { mintToken } from '@/lib/tokens';
-import { createUser, type UserRow } from '@/lib/users';
+import { EVENTS_SCHEMA } from '@/lib/platform';
+import { link } from '@/lib/accounts';
+import { setServices } from '@/lib/platform';
+import { mintToken } from '@/lib/accounts';
+import { createUser, type UserRow } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const session = (user: { id: string; email: string | null }) => ({ credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true });

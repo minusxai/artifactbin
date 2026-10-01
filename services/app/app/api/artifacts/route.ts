@@ -1,5 +1,5 @@
-import { createArtifactFromBody } from '@/lib/artifact-wire';
-import { withTokenAuth } from '@/lib/auth';
+import { createArtifactFromBody } from '@/lib/artifacts';
+import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { baseUrl, json, readJson } from '@/lib/http';
 import { readFileUpload } from '@/lib/story/assets/file-store';

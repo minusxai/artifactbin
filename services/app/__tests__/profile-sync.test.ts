@@ -10,11 +10,11 @@
 import type { Actor } from '@artifactbin/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import { withTokenAuth } from '@/lib/auth';
-import { profileWrites, syncProfile } from '@/lib/profiles';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
-import { sessionActor } from '@/lib/viewer';
+import { withTokenAuth } from '@/lib/accounts';
+import { profileWrites, syncProfile } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as createSecretRoute } from '@/app/api/my/secrets/route';
 import { request, useAppHarness } from '@/__tests__/harness';

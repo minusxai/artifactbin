@@ -12,7 +12,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as internalMintRoute } from '@/app/api/internal/tokens/route';
 
 
-import { claimToken, createUser, getUserByEmail, listArtifactsByUser } from '@/lib/users';
+import { claimToken, createUser, getUserByEmail, listArtifactsByUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();

@@ -1,8 +1,8 @@
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {GET} from '@/app/people/[id]/route';
-import {createUser} from '@/lib/users';
-import {getDb} from '@/lib/db';
+import {createUser} from '@/lib/accounts';
+import {getDb} from '@/lib/platform';
 useAppHarness();
 it('keeps stable profile links on the public origin behind a reverse proxy',async()=>{
  const user=await createUser({email:'mxmx_test_profile_redirect@example.com'});

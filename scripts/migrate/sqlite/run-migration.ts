@@ -18,11 +18,11 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import type { Db } from '@/lib/db';
-import type { SqliteSyntaxMigrationOutcome } from '@/lib/sqlite-syntax-migration';
+import type { Db } from '@/lib/platform';
+import type { SqliteSyntaxMigrationOutcome } from '@/lib/artifacts';
 import { useLocalServices } from './local-services';
 
-type Migration = typeof import('@/lib/sqlite-syntax-migration');
+type Migration = typeof import('@/lib/artifacts/sqlite-syntax-migration');
 
 /** Batches until done, handing each batch's outcomes to `record`. */
 export async function runMigration(
@@ -67,7 +67,7 @@ async function main() {
   const out = values.out ?? (dryRun ? 'sqlite-syntax-migration.dry-run.jsonl' : 'sqlite-syntax-migration.jsonl');
   await useLocalServices({ db: values.db, objects: values.objects, liveObjects: !!values['live-objects'] });
   // After the environment is set: lib/config reads it on first import.
-  const [{ getDb }, { runSqliteSyntaxMigrationBatch }] = await Promise.all([import('@/lib/db'), import('@/lib/sqlite-syntax-migration')]);
+  const [{ getDb }, { runSqliteSyntaxMigrationBatch }] = await Promise.all([import('@/lib/platform/db'), import('@/lib/artifacts/sqlite-syntax-migration')]);
   const db = await getDb();
   if (dryRun || !existsSync(out)) writeFileSync(out, '');
   const summary = await runMigration(db, runSqliteSyntaxMigrationBatch, { batchSize: Number(values.batch ?? 100), dryRun }, (outcomes) => {

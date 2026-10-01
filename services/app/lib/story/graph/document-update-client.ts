@@ -1,4 +1,4 @@
-import {isPersonMentionHref} from '../../person-mentions';
+import {isPersonMentionHref} from '../../annotations/person-mentions';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../validation/atlas-schemas';
 import {parseJsx} from '../../jsx/parse';
 import {collectExternalAssetUrls} from '../assets/external-images';

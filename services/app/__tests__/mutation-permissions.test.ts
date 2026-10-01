@@ -1,13 +1,13 @@
 import {expect,it,vi} from 'vitest';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
 import {APP_CSP,createAppServer} from '@/server/app';
-import {mintToken} from '@/lib/tokens';
-import {claimToken,createUser} from '@/lib/users';
+import {mintToken} from '@/lib/accounts';
+import {claimToken,createUser} from '@/lib/accounts';
 import {agentCookie,request,useAppHarness} from './harness';
 import {PATCH as patchArtifact} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';

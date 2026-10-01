@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
-import {mintToken} from '@/lib/tokens';
+import {mintToken} from '@/lib/accounts';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as browserMutate} from '@/app/a/[id]/mutate/route';

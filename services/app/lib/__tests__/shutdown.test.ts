@@ -4,7 +4,7 @@
  */
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { installShutdown } from '@/lib/shutdown';
+import { installShutdown } from '@/lib/runtime';
 
 const fakeProcess = () => {
   const emitter = new EventEmitter();

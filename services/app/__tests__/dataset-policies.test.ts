@@ -1,9 +1,9 @@
-import { getDb } from '@/lib/db';
-import { createUser, claimToken } from '@/lib/users';
+import { getDb } from '@/lib/platform';
+import { createUser, claimToken } from '@/lib/accounts';
 import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
-import { artifactState } from '@/lib/artifact-state';
+import { artifactState } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { GET as query } from '@/app/a/[id]/query/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
@@ -15,7 +15,7 @@ import {
 } from '@/lib/artifacts';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness } from './harness';
 useAppHarness();
 async function fixture() {

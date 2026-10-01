@@ -8,11 +8,11 @@ import { expect, it } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { artifactState } from '@/lib/artifact-state';
+import { artifactState } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { publishDataset } from '@/lib/story/data/data-tiers';
 import type { StoredContent } from '@/lib/story/document/input';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 useAppHarness();
 

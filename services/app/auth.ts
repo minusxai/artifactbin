@@ -5,7 +5,7 @@
  * and no cookie decoded here. Off a request (a build, a direct handler call in
  * a test) there is no header and therefore no session.
  */
-import { sessionActor } from '@/lib/viewer';
+import { sessionActor } from '@/lib/accounts/viewer';
 
 export interface Session {
   user: { id: string; email?: string | null; name?: string | null };

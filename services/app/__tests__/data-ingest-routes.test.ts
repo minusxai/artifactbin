@@ -10,10 +10,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { MAX_ROWS_LIMIT } from '@/lib/config';
+import { MAX_ROWS_LIMIT } from '@/lib/platform';
 import { useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();

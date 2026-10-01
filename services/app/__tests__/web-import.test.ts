@@ -28,10 +28,10 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { GET as listArtifacts, POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
-import { getDb } from '@/lib/db';
+import { getDb } from '@/lib/platform';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);

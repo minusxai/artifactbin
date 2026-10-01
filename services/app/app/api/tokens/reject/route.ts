@@ -16,10 +16,10 @@ import {
   liveAgentSession,
   encodeAgentSession,
   withoutToken,
-} from '@/lib/agent-session';
+} from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson } from '@/lib/http';
-import { revokeHeldToken } from '@/lib/tokens';
-import { sessionActor } from '@/lib/viewer';
+import { revokeHeldToken } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 export async function POST(request: Request): Promise<Response> {
   if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);

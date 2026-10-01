@@ -27,7 +27,7 @@ const buildThemesDoc = files('artifactbin/references/themes.md');
 const buildTemplatesDoc = files('artifactbin/references/templates.md');
 const buildThemeDoc = (name: string, base: string) => renderDoc(`artifactbin/references/themes-${name}.md`, base);
 const buildTemplateDoc = (name: string, base: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
-import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '../agent-guidance';
+import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/serving';
 import { parseJsx } from '../jsx';
 import { validateJsx } from '../jsx/validate';
 import { STORY_HTML_TAGS } from '../story-ui/component-names';

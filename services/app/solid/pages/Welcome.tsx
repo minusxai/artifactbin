@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
-import { internalRedirectTarget } from '@/lib/safe-redirect';
+import { internalRedirectTarget } from '@/lib/http/safe-redirect';
 import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 import { AvatarCircle } from '../components/AvatarCircle';
 import { replaceDocument } from '../lib/document-navigation';

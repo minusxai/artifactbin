@@ -1,11 +1,11 @@
-import {recordEvent} from '@/lib/notification-events';
-import {link} from '@/lib/relations';
+import {recordEvent} from '@/lib/notifications';
+import {link} from '@/lib/accounts';
 import {actOnAnnotationFor,deleteAnnotationFor} from '@/lib/annotations';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {getDb} from '@/lib/db';
-import {createUser} from '@/lib/users';
-import {membershipInbox,updateMembershipInbox} from '@/lib/membership-inbox';
+import {getDb} from '@/lib/platform';
+import {createUser} from '@/lib/accounts';
+import {membershipInbox,updateMembershipInbox} from '@/lib/accounts';
 import {recordNotification} from '@/lib/notifications';
 useAppHarness();
 it('keeps newer activity unread when an older rendered revision is acknowledged',async()=>{

@@ -1,6 +1,6 @@
-import {withTokenAuth} from '@/lib/auth';
+import {withTokenAuth} from '@/lib/accounts';
 import {readJson,json} from '@/lib/http';
-import {preflightPublication} from '@/lib/publication-preflight';
+import {preflightPublication} from '@/lib/artifacts';
 export const POST=withTokenAuth(async(request,{tokenId,userId})=>{
  const body=await readJson(request);
  return body?preflightPublication(request,{tokenId,userId},body):json({error:'invalid_json'},400);

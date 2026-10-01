@@ -8,7 +8,7 @@
  * the `/` rewrite changes meaning on a second pass (lib/story/data/data-syntax).
  */
 import { catalogOf } from '@/lib/datasets/catalog';
-import { getDb, type Queryable } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/platform/db';
 import { DATA_SYNTAX_META, hasCurrentDataSyntax } from '@/lib/story/data/data-syntax';
 import { convertDocument, type ConvertLookups, type DocumentConversion } from './convert';
 

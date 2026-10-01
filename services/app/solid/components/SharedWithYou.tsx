@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
-import type { WorkspaceSharedItem } from '@/lib/workspace';
-import { SHARE_ROLE_LABEL, SHARE_ROLES } from '@/lib/share-roles';
+import type { WorkspaceSharedItem } from '@/lib/workspace/dashboard';
+import { SHARE_ROLE_LABEL, SHARE_ROLES } from '@/lib/artifacts/share-roles';
 import { FormatBadge, formatLabel, LINK, MicroLabel, PANEL, TABLE_ROW, timeAgo } from './ui';
 
 const FORMAT_ORDER = ['markup', 'dataset', 'viz', 'image', 'pdf'];

@@ -1,6 +1,6 @@
 /** Production annotation wires over local state; anchors are resolved against today's file on every read. */
 import {randomUUID} from 'node:crypto';
-import type {AnnotationWire} from '../../../app/lib/annotations';
+import type {AnnotationWire} from '../../../app/lib/annotations/store';
 import {nodeIndex} from '../../../app/lib/story/document/node-ids';
 import {sourcePathToBodyPath} from '../../../app/lib/story/document/edit-compose';
 import {canonicalQuote,parseAnnotationRange} from '../../../app/lib/story/annotations/annotation-range';

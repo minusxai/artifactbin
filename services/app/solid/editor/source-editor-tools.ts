@@ -18,7 +18,7 @@ export interface SourceEditorTools {
 
 export const SITE_SOURCE_EDITOR_TOOLS: SourceEditorTools = {
   editor: () => import('./SourceEditor'),
-  formatter: () => import('@/lib/format-jsx-preview'),
+  formatter: () => import('@/lib/workspace/format-jsx-preview'),
   formatterUnavailable: null,
 };
 

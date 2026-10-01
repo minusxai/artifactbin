@@ -26,10 +26,10 @@ import { GET as queryGet } from '@/app/a/[id]/query/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
-import { childrenTableFor } from '@/lib/folders';
+import { childrenTableFor } from '@/lib/workspace';
 import { subscribeToArtifact } from '@/lib/story/realtime/live';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

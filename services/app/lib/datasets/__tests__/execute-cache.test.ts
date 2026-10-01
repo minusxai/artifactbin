@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 import type { DatasetCatalog } from '../types';
 const fixture = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('../postgres', () => ({ queryPostgres: fixture.query }));

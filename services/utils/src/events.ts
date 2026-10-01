@@ -1,6 +1,6 @@
 /**
  * THE ONE BUILDER of a log sentence. Two processes say things about the same
- * world — the app (`services/app/lib/events.ts`) and authentication
+ * world — the app (`services/app/lib/platform/events.ts`) and authentication
  * (`services/auth/src/events.ts`) — and a row shape written twice is a row
  * shape that drifts: one side stamps `at` in a different format, one side
  * forgets that a missing subject is TWO nulls rather than two absent columns,

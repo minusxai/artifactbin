@@ -12,7 +12,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const SERVER_MODULES = ['@/lib/artifacts', '@/lib/db', '@/lib/users', '@/lib/auth', '@/lib/viewer', '@/lib/analytics', '@/lib/tokens'];
+const SERVER_MODULES = ['@/lib/artifacts', '@/lib/platform/db', '@/lib/accounts/users', '@/lib/accounts/auth', '@/lib/accounts/viewer', '@/lib/platform/analytics', '@/lib/accounts/tokens'];
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

@@ -6,11 +6,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { existingPaste } from '@/lib/agent-copy';
+import { existingPaste } from '@/lib/serving';
 
 
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();

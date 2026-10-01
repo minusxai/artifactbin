@@ -1,13 +1,13 @@
 import {prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from './harness';
-import { mintToken, resolveToken, revokeToken } from '@/lib/tokens';
+import { mintToken, resolveToken, revokeToken } from '@/lib/accounts';
 import { createArtifact, getArtifactFor } from '@/lib/artifacts';
-import { createUser, listDraftsByTokenIds } from '@/lib/users';
+import { createUser, listDraftsByTokenIds } from '@/lib/accounts';
 import { createTeamApplication } from '../../cli/src/team-application';
-import { AUTH_SECRET } from '@/lib/config';
+import { AUTH_SECRET } from '@/lib/platform';
 import { getArtifactById } from '@/lib/artifacts';
-import { createGuestOwner, mergeGuestUsers } from '@/lib/guest-owner';
+import { createGuestOwner, mergeGuestUsers } from '@/lib/accounts';
 import { request } from './harness';
 import { GET as homePage } from '@/app/api/page/home/route';
 import { effectiveRole } from '@/lib/artifacts';

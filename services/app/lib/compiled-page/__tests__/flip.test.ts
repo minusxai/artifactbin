@@ -13,7 +13,7 @@ const ROOT = path.resolve(APP, '../..');
 describe('the default', () => {
   it('serves compiled pages without a deployment switch or reader query override', () => {
     expect(readFileSync(path.join(ROOT, '.env.example'), 'utf8')).not.toContain('FLAG__COMPILED_READER');
-    expect(readFileSync(path.join(APP, 'lib/config.ts'), 'utf8')).not.toContain('FLAG__COMPILED_READER');
+    expect(readFileSync(path.join(APP, 'lib/platform/config.ts'), 'utf8')).not.toContain('FLAG__COMPILED_READER');
   });
 });
 

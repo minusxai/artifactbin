@@ -1,5 +1,5 @@
-import { sessionMentions } from "../session-mentions";
-import type { AnnotationCommentWire } from "../annotations";
+import { sessionMentions } from "../annotations/session-mentions";
+import type { AnnotationCommentWire } from "@/lib/annotations";
 import { remoteSessions, RemoteError, type RemoteRegistry } from "./registry";
 /** Explicit session links are stable mentions. A bare @claude never picks an arbitrary machine. */
 export function notifyRemoteComment(

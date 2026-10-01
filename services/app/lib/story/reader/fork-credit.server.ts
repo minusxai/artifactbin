@@ -1,6 +1,6 @@
-import { getArtifactById } from '@/lib/artifacts';
-import { canonicalArtifactPath } from '@/lib/urls';
-import { ownerUsername } from '@/lib/users';
+import { getArtifactById } from '@/lib/artifacts/store';
+import { canonicalArtifactPath } from '@/lib/http/urls';
+import { ownerUsername } from '@/lib/accounts/users';
 import type { ReaderForkedFrom } from './reader-chrome';
 
 /**

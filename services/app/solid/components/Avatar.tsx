@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
-import { personFaceBackground, personInitial } from '@/lib/person-face';
+import { personFaceBackground, personInitial } from '@/lib/accounts/person-face';
 
 /** Decorative identity face shared with the Solid app and reader chrome. */
 export function Avatar(props: { image: string | null; initial: string; userId: string; size?: number }): JSX.Element {

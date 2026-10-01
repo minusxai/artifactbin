@@ -1,6 +1,6 @@
-import { artifactAppPath } from '@/lib/artifact-pwa';
-import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/artifact-pwa.server';
-import { loginRedirectTarget } from '@/lib/safe-redirect';
+import { artifactAppPath } from '@/lib/serving';
+import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
+import { loginRedirectTarget } from '@/lib/http';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
  *
@@ -16,7 +16,7 @@ import { loginRedirectTarget } from '@/lib/safe-redirect';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryTail} from '@/lib/agent-discovery';
+import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryTail} from '@/lib/serving';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -26,25 +26,25 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { verifyExportKey } from '@/lib/export-key';
-import { ID_RE } from '@/lib/ids';
-import { runWithRequest } from '@/lib/request-context';
-import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
-import { ownerUsername } from '@/lib/users';
-import { canEdit } from '@/lib/share-roles';
-import { roleFor, sessionActor } from '@/lib/viewer';
+import { verifyExportKey } from '@/lib/serving';
+import { ID_RE } from '@/lib/platform';
+import { runWithRequest } from '@/lib/platform';
+import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
+import { ownerUsername } from '@/lib/accounts';
+import { canEdit } from '@/lib/artifacts';
+import { roleFor, sessionActor } from '@/lib/accounts';
 import { baseUrl, json } from '@/lib/http';
-import { ASSETS_ORIGIN } from '@/lib/config';
+import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
 import { exportAssetResponse } from '@/lib/export/assets';
-import { publicRefAssetResponse } from '@/lib/public-ref-assets';
+import { publicRefAssetResponse } from '@/lib/serving';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
-import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
+import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, createSpaEntry, listingPage } from './reader-preloads';
-import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory } from '@/lib/artifact-page';
+import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory } from '@/lib/serving';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { enableSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
@@ -53,10 +53,10 @@ import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse,
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { customHostBoundary } from './custom-host';
-import { linkedStylesheets } from '@/lib/custom-domain-home';
-import { THEME_BOOTSTRAP_HASH } from '@/lib/theme-bootstrap';
-import { canonicalDocumentUrl } from '@/lib/custom-domains';
-import { APP_SHELL_FONT_PRELOADS } from '@/lib/app-fonts';
+import { linkedStylesheets } from '@/lib/serving';
+import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
+import { canonicalDocumentUrl } from '@/lib/serving';
+import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
 import { fontPreloadTags } from '@/lib/story/styles';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { createModuleStore, createSpeculationRulesStore, createTemplateResourceStore, TEMPLATE_RESOURCE_PATH } from '@/lib/compiled-page/modules.server';

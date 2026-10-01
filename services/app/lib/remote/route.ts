@@ -1,6 +1,6 @@
 import {remoteAgents} from './agents';
-import { requestOrSessionActor } from "../viewer";
-import { refusesCrossSite } from "../auth";
+import { requestOrSessionActor } from "../accounts/viewer";
+import { refusesCrossSite } from "../accounts/auth";
 import { remoteSessions, RemoteError } from "./registry";
 const json = (value: unknown, status = 200) =>
   Response.json(value, { status, headers: { "Cache-Control": "no-store" } });

@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { artifactMetadata } from '@/test/helpers/pages';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { mintToken } from '@/lib/tokens';
+import { mintToken } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

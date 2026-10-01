@@ -12,10 +12,10 @@ import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { createEvents } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
-import { EVENTS_SCHEMA } from '@/lib/config';
-import { setServices } from '@/lib/services';
-import { mintToken, revokeHeldToken, revokeToken } from '@/lib/tokens';
-import { claimToken, claimTokenById, createUser, revokeUserToken } from '@/lib/users';
+import { EVENTS_SCHEMA } from '@/lib/platform';
+import { setServices } from '@/lib/platform';
+import { mintToken, revokeHeldToken, revokeToken } from '@/lib/accounts';
+import { claimToken, claimTokenById, createUser, revokeUserToken } from '@/lib/accounts';
 import { mountRoutes } from '@/server/api';
 
 const harness = useAppHarness();

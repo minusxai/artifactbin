@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { Show, createSignal, onMount, type JSX } from 'solid-js';
-import { personFaceBackground, personInitial } from '@/lib/person-face';
+import { personFaceBackground, personInitial } from '@/lib/accounts/person-face';
 import { refName } from '@/lib/story/data/dataflow';
 import { useIsland } from '../context';
 import type { PersonCard } from '@artifactbin/contracts';

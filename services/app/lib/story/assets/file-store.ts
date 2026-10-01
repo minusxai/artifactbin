@@ -2,8 +2,8 @@
 import type {ContentObjects} from '../prepared/prepared-objects';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { MAX_FILE_BYTES } from '@/lib/config';
-import { json } from '@/lib/http';
+import { MAX_FILE_BYTES } from '@/lib/platform/config';
+import { json } from '@/lib/http/http';
 import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
 import type { StoredContent } from '../document/input';
 import { fileContentType, FILE_EXTENSIONS } from './file-types';

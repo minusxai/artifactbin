@@ -18,8 +18,8 @@
 import { createEffect, createSignal, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import Sun from 'lucide-solid/icons/sun';
 import Moon from 'lucide-solid/icons/moon';
-import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/share-roles';
-import { isStartPlaceholder } from '@/lib/start-placeholder';
+import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/artifacts/share-roles';
+import { isStartPlaceholder } from '@/lib/serving/start-placeholder';
 import { reloadKeepingPlace } from '@/lib/islands/live-update';
 import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput, type ReaderForkedFrom } from '@/lib/story/reader/reader-chrome';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
@@ -27,14 +27,14 @@ import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
 import { wireFaceFallback } from '@/lib/story-runtime/reader-actions';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
-import { wireGithubStar } from '@/lib/github-star';
+import { wireGithubStar } from '@/lib/serving/github-star';
 import { displayTitle } from '@/lib/story/document/title';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { APP_BAR_H } from '@/lib/story/reader/edit-bar';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { initialViewWasReported } from '@/web/artifact-view-report';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
-import { loginHref } from '@/lib/login-href';
+import { loginHref } from '@/lib/http/login-href';
 import { replaceDocument } from '../lib/document-navigation';
 import { useSession } from '../lib/session';
 import { TrustedUi } from '../components/TrustedUi';

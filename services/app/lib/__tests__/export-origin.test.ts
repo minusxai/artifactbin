@@ -20,7 +20,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 async function origin(env: Record<string, string>): Promise<string | undefined> {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
-  return (await import('@/lib/config')).EXPORT_INTERNAL_ORIGIN;
+  return (await import('@/lib/platform/config')).EXPORT_INTERNAL_ORIGIN;
 }
 
 describe('where the export browser is sent', () => {

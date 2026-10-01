@@ -9,10 +9,10 @@
  * reading column.
  */
 import { createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type JSX } from 'solid-js';
-import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
+import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations/store';
 import type { StoryEditRect } from '@/lib/story-runtime/contract';
-import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
-import { remoteWorkLabel } from '@/lib/remote-reply';
+import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
+import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { REMOTE_COLOR_CSS, remoteColor } from '../../../contracts/src/remote';
 import { Avatar } from '../components/Avatar';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '../components/brand-icons';

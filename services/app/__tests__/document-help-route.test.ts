@@ -6,10 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
 import { createArtifact } from '@/lib/artifacts';
-import { agentBlurb } from '@/lib/agent-discovery';
+import { agentBlurb } from '@/lib/serving';
 
-import { mintToken } from '@/lib/tokens';
-import { createUser, ensureUsername } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

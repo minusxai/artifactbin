@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, skillExample, skillTree } from '../skills';
-import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, llmsText } from '../agent-discovery';
+import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, llmsText } from '@/lib/serving';
 
 const BASE = 'https://artifactbin.dev';
 

@@ -1,12 +1,12 @@
 import {documentEditBody} from './prepared-document';
 import {afterEach,beforeEach,expect,it} from 'vitest';
-import {setDocumentEditorPolicy} from '@/lib/document-policy';
+import {setDocumentEditorPolicy} from '@/lib/artifacts';
 import type {Actor} from '@artifactbin/contracts';
 import {GET,PUT,DELETE} from '@/app/api/my/artifacts/[id]/route';
 import {POST as edit} from '@/app/api/my/artifacts/[id]/edits/route';
 import {GET as page} from '@/app/api/page/artifact/[id]/route';
 import {canReadArtifact,getArtifactById} from '@/lib/artifacts';
-import {roleFor,sessionActor} from '@/lib/viewer';
+import {roleFor,sessionActor} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 import {observedRequest} from './conditional-request';
 

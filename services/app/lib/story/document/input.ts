@@ -18,12 +18,12 @@ import type {ContentObjects} from '../prepared/prepared-objects';
  *
  * Returns the stored fields or the error Response the route should send.
  */
-import { json } from '../../http';
+import { json } from '../../http/http';
 import { publishJsx } from './jsx-tier';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/web-ingest/image';
 import { ingestPdfFromUrl } from '@/lib/web-ingest/pdf';
-import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
+import type { AssetWarning, WebAssetKind } from '@/lib/serving';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '../data/data-tiers';
 import { publishFile } from '../assets/file-store';
 

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { useAppHarness } from './harness';
-import { getDb, type Db } from '@/lib/db';
+import { getDb, type Db } from '@/lib/platform';
 import { createDatasetResultCache } from '@/lib/datasets/result-cache';
 import type { CatalogResult } from '@/lib/datasets/execute';
 useAppHarness();

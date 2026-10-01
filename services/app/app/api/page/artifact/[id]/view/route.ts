@@ -1,4 +1,4 @@
-import { recordArtifactView } from '@/lib/artifact-views';
+import { recordArtifactView } from '@/lib/artifacts';
 import { json } from '@/lib/http';
 
 /** The inline browser reader reports an open independently of page-data reads. */

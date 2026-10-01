@@ -1,5 +1,5 @@
 import type {EventEnvelope} from '@artifactbin/contracts';
-import {getDb} from '@/lib/db';
+import {getDb} from '@/lib/platform';
 /** Annotation facts are committed with their notification projections.
  * Reply plus resolution is one fact; standalone resolution, reopening and
  * deletion each record their own transition. */
@@ -8,9 +8,9 @@ import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { useAppHarness } from '@/__tests__/harness';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor, type AnnotationAuthor } from '@/lib/annotations';
 import { createArtifact, type TokenActor } from '@/lib/artifacts';
-import { setServices } from '@/lib/services';
-import { mintToken } from '@/lib/tokens';
-import { createUser } from '@/lib/users';
+import { setServices } from '@/lib/platform';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 
 useAppHarness();
 

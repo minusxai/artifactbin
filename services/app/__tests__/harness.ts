@@ -6,16 +6,16 @@
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
-import { AGENT_COOKIE, encodeAgentSession } from '@/lib/agent-session';
-import { resetRateLimit } from '@/lib/auth';
-import { EVENTS_SCHEMA } from '@/lib/config';
-import { AUTH_SECRET } from '@/lib/config';
-import { getDb, resetDb } from '@/lib/db';
-import { resetExportRenderer } from '@/lib/export';
-import { services } from '@/lib/services';
+import { AGENT_COOKIE, encodeAgentSession } from '@/lib/accounts/agent-session';
+import { resetRateLimit } from '@/lib/accounts/auth';
+import { EVENTS_SCHEMA } from '@/lib/platform/config';
+import { AUTH_SECRET } from '@/lib/platform/config';
+import { getDb, resetDb } from '@/lib/platform/db';
+import { resetExportRenderer } from '@/lib/export/exporter';
+import { services } from '@/lib/platform/services';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { drainSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
-import { SCHEMA_STATEMENTS } from '@/lib/schema';
+import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash } from 'node:crypto';
 
 const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {

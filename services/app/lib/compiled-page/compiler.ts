@@ -38,7 +38,7 @@ import { substituteRow } from '@/lib/story/data/row-scope';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
-import { PUBLIC_BASE_URL } from '@/lib/config';
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';

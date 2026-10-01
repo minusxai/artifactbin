@@ -9,7 +9,7 @@
  * to a fixed color and vanish on one of the two backgrounds.
  */
 
-import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
+import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/serving/github-mark';
 
 interface IconProps {
   size?: number;

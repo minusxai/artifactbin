@@ -1,5 +1,5 @@
 import { objectStore } from '@/lib/object-store';
-import { json } from '@/lib/http';
+import { json } from '@/lib/http/http';
 import { parseContentInput, type ContentInputCtx, type StoredContent } from '../document/input';
 import { applyPreparedJsx, prepareJsx, type PreparedMarkup } from '../document/jsx-tier';
 import { prepareObjects, type PreparedObject } from './prepared-objects';

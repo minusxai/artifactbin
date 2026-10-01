@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatJsxPreview } from '../format-jsx-preview';
+import { formatJsxPreview } from '@/lib/workspace';
 import { parseJsx } from '../jsx/parse';
 
 describe('formatted JSX preview', () => {

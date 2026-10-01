@@ -4,9 +4,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {useAppHarness} from './harness';
 import {createTeamApplication} from '../../cli/src/team-application';
-import {getDb} from '@/lib/db';
-import {mintToken} from '@/lib/tokens';
-import {AUTH_SECRET} from '@/lib/config';
+import {getDb} from '@/lib/platform';
+import {mintToken} from '@/lib/accounts';
+import {AUTH_SECRET} from '@/lib/platform';
 useAppHarness();
 it('team host composes real public auth and preserves separate owners and anonymous denial',async()=>{
  const origin='http://localhost:3000',directory=await mkdtemp(join(tmpdir(),'afbin-team-auth-'));

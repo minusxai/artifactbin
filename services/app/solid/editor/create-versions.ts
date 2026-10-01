@@ -18,7 +18,7 @@
  * step — the whole point, since an editor keeps saving under this.
  */
 import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
-import { restoreBrowserArtifact } from '@/lib/browser-artifact-write';
+import { restoreBrowserArtifact } from '@/lib/artifacts/browser-artifact-write';
 import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary } from '@/lib/artifact-backend/types';
 
 export type { ArtifactVersionSnapshot, ArtifactVersionSummary };

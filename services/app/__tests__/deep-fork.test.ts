@@ -12,8 +12,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
-import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { mintToken } from '@/lib/accounts';
+import { claimToken, createUser } from '@/lib/accounts';
 import { viewersWritePolicy } from '@artifactbin/utils';
 
 const BASE = 'http://localhost:3000';
@@ -29,8 +29,8 @@ vi.mock('@/auth', () => ({
  * dataset copy's. Inert (0) for every other test in this file.
  */
 const fault = vi.hoisted(() => ({ onClaim: 0, claims: 0 }));
-vi.mock('@/lib/artifact-identities', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/lib/artifact-identities')>();
+vi.mock('@/lib/artifacts/identities', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/artifacts/identities')>();
   return {
     ...real,
     claimArtifactId: async (...args: Parameters<typeof real.claimArtifactId>) => {
