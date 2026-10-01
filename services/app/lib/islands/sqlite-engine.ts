@@ -4,7 +4,7 @@
  * dataflow evaluator, the optimistic overlay) over today's wasm loader (lib/story-runtime/page-sqlite
  * `sqliteFrom`), unchanged.
  *
- * Bundled ALONE by the island build (scripts/build-islands.mjs STANDALONE_LAZY): framework-free, its
+ * Bundled ALONE by the island build (scripts/build/build-islands.mjs STANDALONE_LAZY): framework-free, its
  * shared code and the SQLite core copied in, loaded by boot only when the page may hold something
  * (IslandPageData `hold` and `sqliteWasm`), behind the first paint. The shared runtime's closure never
  * carries it.

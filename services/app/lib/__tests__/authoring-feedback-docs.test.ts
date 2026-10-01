@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
 import { renderDoc } from '../skills';
-import { validateMarkupStructure } from '../story/local-validation';
+import { validateMarkupStructure } from '../story/document/local-validation';
 
 const doc = (name: string) => renderDoc(`artifactbin/references/${name}.md`, 'https://example.test');
 const blocks = (text: string, language: string) => [...text.matchAll(new RegExp('```' + language + '\\n([\\s\\S]*?)```', 'g'))].map(match => match[1]);

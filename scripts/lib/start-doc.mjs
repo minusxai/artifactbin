@@ -12,7 +12,7 @@
  * the owner-focused gates make their browser the owner, which is what
  * `becomeOwner` does.
  */
-import { connectAgent, connectionBrowserCookie } from './cli-connection.mjs';
+import { connectAgent, connectionBrowserCookie } from '../gates/lib/cli-connection.mjs';
 import { loginViaEmail } from './mail-login.mjs';
 
 /**

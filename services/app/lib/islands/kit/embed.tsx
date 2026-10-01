@@ -11,11 +11,11 @@
  *   the loading stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
  */
 import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import { refName } from '@/lib/story/dataflow';
-import { managedFrameLayout } from '@/lib/story/managed-frame-layout';
+import { refName } from '@/lib/story/data/dataflow';
+import { managedFrameLayout } from '@/lib/story/reader/managed-frame-layout';
 import { deckGlHeight } from '@/lib/viz/deck-height';
 import { MAP_CLASSES } from '@/lib/viz/deck-chrome';
-import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
+import type { ManagedIframeContent } from '@/lib/story/reader/managed-iframe';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import type { DeckEngineProps } from './embed/deck-engine';

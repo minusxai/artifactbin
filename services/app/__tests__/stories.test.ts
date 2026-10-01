@@ -15,7 +15,7 @@ import { POST as previewRoute } from '@/app/api/preview/route';
 import { applyEditFor,getArtifactById } from '@/lib/artifacts';
 
 
-import { parseContentInput } from '@/lib/story/input';
+import { parseContentInput } from '@/lib/story/document/input';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
 import { useAppHarness, request } from '@/__tests__/harness';

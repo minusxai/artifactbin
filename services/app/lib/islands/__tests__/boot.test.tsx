@@ -17,7 +17,7 @@ import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
 import { DataTable, Question } from '../kit/data';
 import { PUBLIC_MX_KEY, type IslandDocument, type IslandEvent, type PublicMxHost } from '../contract';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const reads = (imports: string[]) => ({ imports, queries: [], values: [], builtins: [] });
 const flow: CompiledDataflow = {

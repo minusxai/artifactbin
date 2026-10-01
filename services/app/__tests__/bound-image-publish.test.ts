@@ -15,7 +15,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { assetUrlFor } from '@/lib/story/asset-url';
+import { assetUrlFor } from '@/lib/story/assets/asset-url';
 import { mintExportKey } from '@/lib/export-key';
 import { getDb } from '@/lib/db';
 

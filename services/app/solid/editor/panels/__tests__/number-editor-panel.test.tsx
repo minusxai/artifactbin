@@ -10,7 +10,7 @@ import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import NumberEditorPanel from '../NumberEditorPanel';
 import type { NumberEmbedBinding, NumberEmbedEdit } from '@/lib/data/story/story-number';
-import type { TableChoice } from '@/lib/story/table-catalog';
+import type { TableChoice } from '@/lib/story/data/table-catalog';
 
 const COLUMNS = [
   { name: 'region', type: 'string' as const },

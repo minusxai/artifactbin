@@ -20,7 +20,7 @@ import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/ap
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 
 
-import { resetLiveSubscriptions } from '@/lib/story/live';
+import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { ID_RE } from '@/lib/ids';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';

@@ -1,7 +1,7 @@
 import type { CommentPresentation } from './comment-presentation';
 import type { ManagedCommentEvent, ManagedCommentState, ManagedCommentSelection } from './managed-comment-contract';
-import type { IframeNodeTarget } from '@/lib/story/comment-target';
-import type { AnnotationRect } from '@/lib/story/annotation-range';
+import type { IframeNodeTarget } from '@/lib/story/annotations/comment-target';
+import type { AnnotationRect } from '@/lib/story/annotations/annotation-range';
 
 /** Self-contained child-realm installer. Keep all runtime dependencies inside this function:
  * its source is embedded in the opaque frame's classic bootstrap, never executed in the host. */

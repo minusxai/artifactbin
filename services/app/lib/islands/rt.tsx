@@ -23,10 +23,10 @@ import { createStore, reconcile } from 'solid-js/store';
 import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import type { ReactiveExpression } from '@/lib/jsx/reactive';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
-import { substituteRow } from '@/lib/story/row-scope';
-import { keyedRowsError } from '@/lib/story/row-key';
-import type { CompiledDataflow } from '@/lib/story/compiled-dataflow';
-import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/dataflow';
+import { substituteRow } from '@/lib/story/data/row-scope';
+import { keyedRowsError } from '@/lib/story/data/row-key';
+import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
+import type { DataflowState, Row, Scalar, TableResult } from '@/lib/story/data/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/story-runtime/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { PersonCard } from '@artifactbin/contracts';
@@ -280,7 +280,7 @@ export const text = (e: ReactiveExpression, row?: Record<string, unknown>, islan
   const v = expr(e, row, island ?? useIsland());
   return typeof v === 'string' || typeof v === 'number' ? v : null;
 };
-/** A static value with `$_row.f` references filled from `row` (lib/story/row-scope). */
+/** A static value with `$_row.f` references filled from `row` (lib/story/data/row-scope). */
 export const sub = <T,>(value: T, row: Record<string, unknown>): T => substituteRow(value, row);
 
 export interface RepeatProps {

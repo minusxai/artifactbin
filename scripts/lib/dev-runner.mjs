@@ -131,12 +131,12 @@ function watchServerSources() {
 }
 
 /**
- * The compiled reader's shared island build (scripts/build-islands.mjs → public/islands): the island
+ * The compiled reader's shared island build (scripts/build/build-islands.mjs → public/islands): the island
  * runtime, the Solid kit and the behaviour chunks. A change under their sources rebuilds it, debounced
  * and serialised like the runtime above; the new manifest (a new compiler build id, so every stored
  * compile recompiles) restarts the server through tsx's watch list.
  */
-const ISLANDS_BUILD = path.join(ROOT, 'scripts/build-islands.mjs');
+const ISLANDS_BUILD = path.join(ROOT, 'scripts/build/build-islands.mjs');
 const ISLAND_SOURCES = ['lib/islands'];
 
 function watchIslandSources() {

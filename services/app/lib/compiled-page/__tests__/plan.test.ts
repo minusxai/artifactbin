@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { planOf } from '../plan';
-import type { CompiledDataflow, CompiledQuery, CompiledReads } from '@/lib/story/compiled-dataflow';
+import type { CompiledDataflow, CompiledQuery, CompiledReads } from '@/lib/story/data/compiled-dataflow';
 
 const reads = (over: Partial<CompiledReads> = {}): CompiledReads => ({ imports: [], queries: [], values: [], builtins: [], ...over });
 const query = (name: string, r: Partial<CompiledReads>, over: Partial<CompiledQuery> = {}): CompiledQuery => ({ name, engine: 'sqlite', sql: 'select 1', params: [], reads: reads(r), columns: [], start: 0, end: 0, ...over });

@@ -19,7 +19,7 @@ const REPO = join(APP, '../..');
 // keys them the same way), so a build after a test run, or CI's restored test builds, reuses them.
 const steps = [
   { cwd: APP, args: ['scripts/build-server-reader.mjs', '--cache'] },
-  { cwd: REPO, args: ['scripts/build-islands.mjs', '--cache'] },
+  { cwd: REPO, args: ['scripts/build/build-islands.mjs', '--cache'] },
   { cwd: APP, args: ['scripts/generate-routes.mjs'] },
 ];
 

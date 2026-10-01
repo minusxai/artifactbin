@@ -5,7 +5,7 @@
  * `<Value>` has no query, so this renders nothing.
  */
 import { Show, type JSX } from 'solid-js';
-import type { TableChoice } from '@/lib/story/table-catalog';
+import type { TableChoice } from '@/lib/story/data/table-catalog';
 
 export interface BoundQueryProps {
   /** The table the embed is bound to, as the catalog lists it — null when unbound or undeclared. */

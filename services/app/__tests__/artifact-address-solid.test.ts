@@ -13,7 +13,7 @@ import { artifactPageAnswer } from '@/lib/artifact-page';
 import { mintToken } from '@/lib/tokens';
 import { mintExportKey } from '@/lib/export-key';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { CompiledPageFailed } from '@/lib/compiled-page/serve.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));

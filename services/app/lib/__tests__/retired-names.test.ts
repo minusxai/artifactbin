@@ -93,8 +93,8 @@ const SCANS: Scan[] = [
       /FormatBadge format="(html|markdown)"/, /\bhtml:\s*(row|artifact)\.content/,
       /^\s*html:\s*(content|row\.content|artifact\.content)/, /^\s*(html|markdown):\s*['"]/,
     ].map((r) => r.source).join('|'), 'm'),
-    allow: [`${APP}/lib/story/input.ts`],
-    proof: { atLeast: 50, contains: `${APP}/lib/story/input.ts` },
+    allow: [`${APP}/lib/story/document/input.ts`],
+    proof: { atLeast: 50, contains: `${APP}/lib/story/document/input.ts` },
   },
   {
     // The mint has one address and it is internal. `/api/tokens/anonymous` is gone: no public route
@@ -176,12 +176,12 @@ describe('the surviving vocabulary', () => {
   it('is exactly the surviving artifact formats', async () => {
     // The VALUE, not a regex over the declaration: the runtime list and the type are one
     // declaration now, so asserting the list asserts both.
-    const { ARTIFACT_FORMATS } = await import('@/lib/story/input');
+    const { ARTIFACT_FORMATS } = await import('@/lib/story/document/input');
     expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'file', 'folder', 'image', 'markup', 'pdf', 'viz']);
   });
 
   it('points every human link at /docs-human', () => {
-    for (const file of ['solid/components/PageChrome.tsx', 'solid/App.tsx', 'lib/story/reader-chrome.ts']) {
+    for (const file of ['solid/components/PageChrome.tsx', 'solid/App.tsx', 'lib/story/reader/reader-chrome.ts']) {
       expect(codeOf(readFileSync(path.join(APP_ROOT, file), 'utf8')), file).toContain('/docs-human');
     }
   });

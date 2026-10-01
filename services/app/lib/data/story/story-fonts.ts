@@ -99,4 +99,4 @@ export function getStoryFontCss(theme = 'neutral'): string {
 }
 
 // What a document's first screen paints, and so what its head preloads, is
-// lib/story/first-screen-fonts: read from the document's nodes, not the theme alone.
+// lib/story/styles/first-screen-fonts: read from the document's nodes, not the theme alone.

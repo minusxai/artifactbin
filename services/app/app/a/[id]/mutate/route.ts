@@ -4,7 +4,7 @@ import { canReadArtifact, getArtifactById, runDocumentMutation } from '@/lib/art
 import { refusesCrossSite } from '@/lib/auth';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
-import { parseMutationRequest } from '@/lib/story/mutation-request';
+import { parseMutationRequest } from '@/lib/story/datasets';
 import { requestOrSessionActor } from '@/lib/viewer';
 
 const CORS = {
@@ -13,7 +13,7 @@ const CORS = {
 };
 
 /**
- * A reader supplies a declared mutation name and its arguments (lib/story/mutation-request); SQL comes from the
+ * A reader supplies a declared mutation name and its arguments (lib/story/datasets/mutation-request); SQL comes from the
  * stored document. Dataset edit permission belongs to the requesting actor,
  * independently of the document's role. Check it on every write.
  * Cookie credentials require same-site requests; bearers do not carry CSRF.
@@ -60,7 +60,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         if (result.capability) return json(result.capability.body, result.capability.status, CORS);
         // Otherwise: same status, same `error`. `code` is the machine-readable
         // half, and today it has exactly one value: an anonymous reader pressed
-        // a write that binds `$_me` (lib/story/sign-in-required).
+        // a write that binds `$_me` (lib/story/reader/sign-in-required).
         return json({error:'policy_denied',...(result.code?{code:result.code}:{}),detail:result.detail},403,CORS);
       case 'invalid_sql':
         return json({ error: 'mutation_failed', detail: result.detail }, 400, CORS);

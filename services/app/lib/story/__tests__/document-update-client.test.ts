@@ -1,7 +1,7 @@
 import {expect,it,vi} from 'vitest';
-import {createDocumentGraph,graphIntegrity,graphSource} from '../document-graph';
-import {prepareClientDocumentUpdate,prepareClientDocumentPublication} from '../document-update-client';
-import {applyGraphPatch} from '../document-graph-patch';
+import {createDocumentGraph,graphIntegrity,graphSource} from '../graph/document-graph';
+import {prepareClientDocumentUpdate,prepareClientDocumentPublication} from '../graph/document-update-client';
+import {applyGraphPatch} from '../graph/document-graph-patch';
 const source='<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>';
 it('prepares composable client operations without server publication or unrelated cache work',()=>{
  const base=createDocumentGraph(source,1);

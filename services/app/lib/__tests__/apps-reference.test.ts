@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildQuickSheet } from '../skills';
-import { validateMarkupStructure } from '@/lib/story/local-validation';
+import { validateMarkupStructure } from '@/lib/story/document/local-validation';
 
 const sheet = buildQuickSheet('https://artifactbin.dev');
 const REFERENCE = path.resolve(process.cwd(), 'skills/artifactbin/references/apps.md');

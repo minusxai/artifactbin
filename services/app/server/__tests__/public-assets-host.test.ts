@@ -11,7 +11,7 @@ import {objectStore,objectKey} from '@/lib/object-store';
 import {createAppServer} from '../app';
 import {mintToken} from '@/lib/tokens';
 import {createArtifact} from '@/lib/artifacts';
-import {storeFileContent} from '@/lib/story/file-store';
+import {storeFileContent} from '@/lib/story/assets/file-store';
 import {internalAssetResponse} from '../../../browser/src/internal-assets';
 import {withHttpServer} from '@artifactbin/test-support/net';
 import {loadCompilerBuild} from '@/lib/compiled-page/build.server';

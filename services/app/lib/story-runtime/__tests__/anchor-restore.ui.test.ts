@@ -2,7 +2,7 @@
  * THE RESTORE LOOP MUST YIELD TO THE READER.
  *
  * A document with no runtime reloads to show a live update, and its reading
- * position is carried across (lib/story/scroll-anchor). Restoring it once is
+ * position is carried across (lib/story/reader/scroll-anchor). Restoring it once is
  * not enough — fonts, images and embeds all land after the parse and each one
  * moves everything below it — so the position is re-applied for a few seconds.
  *

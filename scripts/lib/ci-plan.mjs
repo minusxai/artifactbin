@@ -155,7 +155,7 @@ export function checkCiResults(plan, results) {
 
 /**
  * WHETHER A TRACKED PATH CAN CHANGE WHAT `build` PRODUCES. The build's output is cached under a hash of
- * every path this accepts (scripts/ci.mjs `build-key`), so a PR whose push changed only tests, gates,
+ * every path this accepts (scripts/ci/ci.mjs `build-key`), so a PR whose push changed only tests, gates,
  * workflows or prose restores the last build of the same sources instead of spending ~75s rebuilding
  * them — and the gate shards start their gates without waiting for the build job at all. Narrow on
  * purpose: anything not provably outside the bundle stays in, because a stale hit serves old bytes.
@@ -163,9 +163,9 @@ export function checkCiResults(plan, results) {
 export function isBuildInput(path) {
   if (/(^|\/)__tests__\//.test(path) || /\.test\.[cm]?[jt]sx?$/.test(path)) return false;
   if (/^(\.github|\.agent|docs|evals)\//.test(path)) return false;
-  if (/^scripts\/gates?[-.][^/]*\.mjs$/.test(path)) return false;
+  if (/^scripts\/(gates\/|gates?[-.][^/]*\.mjs$)/.test(path)) return false;
   // How the test shards are packed (scripts/lib/timed-sequencer.mjs) never reaches the bundle.
-  if (/^scripts\/(test-timings\.(json|mjs)|lib\/timed-sequencer\.mjs)$/.test(path)) return false;
+  if (/^scripts\/(ci\/test-timings\.(json|mjs)|lib\/timed-sequencer\.mjs)$/.test(path)) return false;
   if (/^[^/]+\.md$/.test(path)) return false;
   return true;
 }

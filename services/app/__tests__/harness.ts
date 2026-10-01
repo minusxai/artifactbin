@@ -13,7 +13,7 @@ import { AUTH_SECRET } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
 import { resetExportRenderer } from '@/lib/export';
 import { services } from '@/lib/services';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { drainSnapshotRevalidations } from '@/lib/compiled-page/snapshots.server';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
 import { createHash } from 'node:crypto';
@@ -141,7 +141,7 @@ export function useAppHarness(): AppHarness {
 
   beforeEach(async () => {
     const db = await database!;
-    // A publish prepares its page after the response (lib/story/prepared-page.server): let the last
+    // A publish prepares its page after the response (lib/story/prepared/prepared-page.server): let the last
     // test's finish before its rows go, so no warm-up writes into the next test's database.
     await drainPreparedPageWarmups();
     // Likewise a guest-snapshot revalidation a write queued (server/app enables them).

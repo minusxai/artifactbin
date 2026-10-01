@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Manifest } from 'vite';
-import type { LazyCode } from '@/lib/story/lazy-code';
+import type { LazyCode } from '@/lib/story/document';
 
 /** Build-owned reader discovery. Hints never execute code or change access. */
 type ReaderPreloader = (html: string) => string;
@@ -124,7 +124,7 @@ function readDocumentHints(webDir: string, mermaidModulesFile: string): Document
 }
 
 /**
- * Per DOCUMENT: the lazy code this document will run (lib/story/lazy-code) —
+ * Per DOCUMENT: the lazy code this document will run (lib/story/document/lazy-code) —
  * the chart module when it draws a chart, each Mermaid kind's engine, diagram
  * and layout closure for the kinds it draws — and never code it will not run.
  * Resolved once per server from the Vite manifest; a document with none gets

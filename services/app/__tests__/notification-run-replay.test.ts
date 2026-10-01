@@ -8,13 +8,13 @@ import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {POST as apiMutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as browserMutate} from '@/app/a/[id]/mutate/route';
 import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
-import {liveFrameFor} from '@/lib/story/frame';
-import {readerIslandData} from '@/lib/story/prepare-runtime.server';
+import {liveFrameFor} from '@/lib/story/data/frame';
+import {readerIslandData} from '@/lib/story/prepared/prepare-runtime.server';
 import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
 import {services,setServices} from '@/lib/services';
-import {loadDatasetRows} from '@/lib/story/dataset-store';
-import {newEditId} from '@/lib/story/splice';
+import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
+import {newEditId} from '@/lib/story/document/splice';
 
 useAppHarness();
 async function fixture(predicate='',readerQuery=false){

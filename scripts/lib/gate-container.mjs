@@ -40,7 +40,7 @@ export function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('-')) throw new Error(`unknown option ${arg}\n${usage}`);
-    options.gates.push(arg.replace(/^(?:scripts\/)?gate-/, '').replace(/\.mjs$/, ''));
+    options.gates.push(arg.replace(/^(?:scripts\/(?:gates\/)?)?gate-/, '').replace(/\.mjs$/, ''));
   }
   const cpus = Number(options.cpus);
   if (!(cpus > 0)) throw new Error(`--cpus must be a positive number (got ${JSON.stringify(options.cpus)})`);

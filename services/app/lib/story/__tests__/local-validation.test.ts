@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {validateMarkupStructure} from '../local-validation';
+import {validateMarkupStructure} from '../document/local-validation';
 it('shares structural validation without publication capabilities',()=>{
  expect(validateMarkupStructure('<p>hello</p>').errors).toEqual([]);
  expect(validateMarkupStructure('<p onClick="bad">hello</p>').errors.length).toBeGreaterThan(0);

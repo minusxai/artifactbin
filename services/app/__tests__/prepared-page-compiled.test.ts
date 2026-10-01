@@ -1,5 +1,5 @@
 /**
- * THE COMPILE BESIDE THE PREPARED PAGE (docs/phase2-architecture.md §2.1, §6; lib/story/prepared-page.server
+ * THE COMPILE BESIDE THE PREPARED PAGE (docs/phase2-architecture.md §2.1, §6; lib/story/prepared/prepared-page.server
  * `PreparedPage.compiled`): every deployment stores the version's compiled page or its recorded
  * failure in the same row as the prepared page, keyed with the compiler build. Real publish handler on the harness's
  * isolated database.
@@ -11,7 +11,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { drainPreparedPageWarmups, enablePreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups, enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { DOCUMENT_MODULE_PATH, type CompiledPage, type StoredCompile } from '@/lib/compiled-page/contract';
 import { createAppServer } from '@/server/app';

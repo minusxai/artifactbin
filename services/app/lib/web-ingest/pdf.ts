@@ -1,4 +1,4 @@
-import type {ContentObjects} from '@/lib/story/prepared-objects';
+import type {ContentObjects} from '@/lib/story/prepared';
 /**
  * URL → stored PDF content: the guarded fetcher composed with the SAME
  * storePdfContent the upload door runs, exactly as lib/web-ingest/image.ts
@@ -7,8 +7,8 @@ import type {ContentObjects} from '@/lib/story/prepared-objects';
  */
 import { MAX_PDF_BYTES } from '@/lib/config';
 import { json } from '@/lib/http';
-import { storePdfContent } from '@/lib/story/data-tiers';
-import type { StoredContent } from '@/lib/story/input';
+import { storePdfContent } from '@/lib/story/data/data-tiers';
+import type { StoredContent } from '@/lib/story/document/input';
 import { fetchWebResource } from './fetch';
 import { WebIngestError } from './guard';
 

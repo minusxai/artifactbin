@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/helmet';
+import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/document/helmet';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
@@ -198,7 +198,7 @@ describe('hoistHelmet', () => {
   });
 });
 
-// ── data declarations: <Value> and <Query> (lib/story/dataflow.ts) ──────────
+// ── data declarations: <Value> and <Query> (lib/story/data/dataflow.ts) ──────────
 
 const VALUE = '<Value name="region" type="string" />';
 const QUERY = '<Import name="sales_data" src="ref:abc123" /><Query name="sales">{`select * from sales_data.rows where region = $region`}</Query>';
@@ -240,7 +240,7 @@ describe('splitHelmet — data declarations', () => {
     const { content } = splitHelmet(nodes('<Helmet>' + QUERY + VALUE + '</Helmet><p>x</p>'));
     expect(content.values.map((v) => v.name)).toEqual(['region']);
     expect(content.queries.map((q) => q.name)).toEqual(['sales']);
-    // Parse only: what a statement binds and reads is the compiler's (lib/story/compile-dataflow).
+    // Parse only: what a statement binds and reads is the compiler's (lib/story/data/compile-dataflow).
     expect(Object.keys(content.queries[0]!).sort()).toEqual(['end', 'name', 'sql', 'start']);
   });
 

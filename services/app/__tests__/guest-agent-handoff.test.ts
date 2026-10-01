@@ -1,4 +1,4 @@
-import {prepareClientDocumentUpdate} from '@/lib/story/document-update-client';
+import {prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from './harness';
 import { mintToken, resolveToken, revokeToken } from '@/lib/tokens';

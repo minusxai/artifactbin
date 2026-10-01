@@ -1,6 +1,6 @@
 /** A downloaded answer is valid only for the query text it was taken over. */
-import { EMPTY_DATAFLOW, type Dataflow, type DataflowState, type QueryDecl } from '@/lib/story/dataflow';
-import { declarationsOf } from '@/lib/story/helmet';
+import { EMPTY_DATAFLOW, type Dataflow, type DataflowState, type QueryDecl } from '@/lib/story/data/dataflow';
+import { declarationsOf } from '@/lib/story/document/helmet';
 import { OFFLINE_QUERY_REASON, type ArtifactFile } from './file-format';
 
 const sameQuery = (a: QueryDecl | undefined, b: QueryDecl) => !!a && a.sql === b.sql && (a.source ?? null) === (b.source ?? null);

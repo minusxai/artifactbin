@@ -5,8 +5,8 @@ import {checkServerIdentity, type PeerCertificate} from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import pg from 'pg';
 import Cursor from 'pg-cursor';
-import type { DatasetColumn } from '@/lib/story/dataset-shape';
-import type { Scalar, TableResult } from '@/lib/story/dataflow';
+import type { DatasetColumn } from '@/lib/story/datasets';
+import type { Scalar, TableResult } from '@/lib/story/data';
 import type { DiscoveredTable, PostgresConfig } from './types';
 
 const MAX_ROWS = 10_000;

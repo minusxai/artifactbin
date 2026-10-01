@@ -3,8 +3,8 @@
  * composition root declares ONE module (`AppHostOptions.sqlExtensions`) — the
  * specifier its SQL pool receives (`createSql(caps, { extensions })`) — and its
  * default export (`SqlExtensions`) is installed wherever the app prepares a
- * <Mutation> in this process: the publish checks (lib/story/compile-dataflow)
- * and the owner's direct write (lib/story/dataset-mutate). Reads never see it.
+ * <Mutation> in this process: the publish checks (lib/story/data/compile-dataflow)
+ * and the owner's direct write (lib/story/datasets/dataset-mutate). Reads never see it.
  *
  * Kept on `globalThis`, like the services registry: a root registers once per
  * process, and a module reload in a test must not silently drop it.

@@ -1,6 +1,6 @@
 import {documentPublicationWithResources} from './prepared-document';
-import {prepareDocumentAuthoringContext} from '@/lib/story/document-authoring-context';
-import {prepareClientDocumentPublication} from '@/lib/story/document-update-client';
+import {prepareDocumentAuthoringContext} from '@/lib/story/document/document-authoring-context';
+import {prepareClientDocumentPublication} from '@/lib/story/graph/document-update-client';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Importing assets FROM THE WEB, through the real doors: ingest-and-own.
@@ -13,7 +13,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  *   2. `<img src="https://…">` (and `<Video poster>`, and an `@font-face`
  *      `src` url) in markup — the agent door: imported into the global URL
  *      cache while the URL STAYS in the stored document, and mapped to our
- *      copy on the way out (lib/web-assets, lib/story/asset-url),
+ *      copy on the way out (lib/web-assets, lib/story/assets/asset-url),
  *   3. `csvUrl` on create — a dataset from any public CSV, not only Sheets.
  *
  * All of it under lib/web-ingest's guard, whose refusals must surface as
@@ -30,7 +30,7 @@ import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { assetUrlFor } from '@/lib/story/asset-url';
+import { assetUrlFor } from '@/lib/story/assets/asset-url';
 import { getDb } from '@/lib/db';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);

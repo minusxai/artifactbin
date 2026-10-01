@@ -1,4 +1,4 @@
-import { displayTitle, firstHeadingTitle, UNTITLED } from '../title';
+import { displayTitle, firstHeadingTitle, UNTITLED } from '../document/title';
 
 describe('firstHeadingTitle', () => {
   it('reads the first heading of a story-JSX source', () => {

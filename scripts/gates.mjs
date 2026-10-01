@@ -4,7 +4,7 @@
  *
  *   node scripts/gates.mjs [base-url ...] [--only=a,b] [--list] [--servers=N] [--shard=i/n]
  *
- * The set is DISCOVERED from disk — a new `scripts/gate-*.mjs` joins by
+ * The set is DISCOVERED from disk — a new `scripts/gates/gate-*.mjs` joins by
  * existing — and every gate must have a row in gates.manifest.mjs, which says
  * what it needs and how long it may take.
  *
@@ -55,7 +55,8 @@ try {
 }
 
 /** Every gate on disk, by short name (`gate-visibility.mjs` → `visibility`). */
-const GATES = gateNamesOnDisk(readdirSync(HERE)).map((name) => ({ name, file: `gate-${name}.mjs` }));
+const GATES_DIR = path.join(HERE, 'gates');
+const GATES = gateNamesOnDisk(readdirSync(GATES_DIR)).map((name) => ({ name, file: `gate-${name}.mjs` }));
 
 try {
   checkManifest(GATES.map((gate) => gate.name), GATE_SPECS);
@@ -233,7 +234,7 @@ if (servers === 0 && bases.length === 0) {
  */
 const run = (gate, base, timeoutMs) => new Promise((resolve) => {
   const started_at = Date.now();
-  const child = spawn(process.execPath, [path.join(HERE, gate.file), base], {
+  const child = spawn(process.execPath, [path.join(GATES_DIR, gate.file), base], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) },
   });

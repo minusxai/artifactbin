@@ -22,7 +22,7 @@ import { baseUrl, json } from '@/lib/http';
 import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
 import { resolveToken } from '@/lib/tokens';
 import { sessionActor } from '@/lib/viewer';
-import { parseContentInput } from '@/lib/story/input';
+import { parseContentInput } from '@/lib/story/document/input';
 import { createGuestOwner } from '@/lib/guest-owner';
 
 export async function POST(request: Request) {
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   const row = await createArtifact(tokenId, ownerId ?? guest?.userId ?? null, {
     ...parsed,
     // NULL, not 'Untitled': unnamed must stay distinguishable from named-that,
-    // because an unnamed document follows its own heading (lib/story/title.ts)
+    // because an unnamed document follows its own heading (lib/story/document/title.ts)
     // and an explicit title never does.
     title: null,
     description: null,

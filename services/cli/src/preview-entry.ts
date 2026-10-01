@@ -1,5 +1,5 @@
-import {renderSocialPreviewImage} from '../../app/lib/story/social-preview-image.server';
-import {socialPreviewCrop,socialPreviewImage} from '../../app/lib/story/social-preview';
+import {renderSocialPreviewImage} from '../../app/lib/story/assets/social-preview-image.server';
+import {socialPreviewCrop,socialPreviewImage} from '../../app/lib/story/assets/social-preview';
 import {CARD_WIDTH,CARD_HEIGHT} from '../../app/lib/export-card';
 import {createBrowser} from '@artifactbin/browser/local';
 import {chromiumExecutable} from './standalone-browser';

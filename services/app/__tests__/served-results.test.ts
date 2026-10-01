@@ -1,5 +1,5 @@
 /**
- * THE FIRST RESULTS IN THE HTML (lib/story/served-results.server): a data
+ * THE FIRST RESULTS IN THE HTML (lib/story/prepared/served-results.server): a data
  * document's reader page carries the rows its queries answer at the values
  * this request starts from, so the first paint is the numbers, not a skeleton.
  *
@@ -21,15 +21,15 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { readEvents } from '@/__tests__/sse';
-import { resetLiveSubscriptions } from '@/lib/story/live';
+import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { createAppServer } from '@/server/app';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { services, setServices } from '@/lib/services';
-import { SERVED_RESULTS_BUDGET_MS } from '@/lib/story/served-results.server';
+import { SERVED_RESULTS_BUDGET_MS } from '@/lib/story/prepared/served-results.server';
 import { ISLAND_DATA_ID, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 
 const sessionUser = { id: '', email: '' };

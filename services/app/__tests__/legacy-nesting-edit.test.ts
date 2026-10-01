@@ -3,7 +3,7 @@ import {observedSourceBody,observedTextBody} from './prepared-document';
  * The documents that were already published when canonical form changed.
  *
  * `canonicalizeMarkup` now also rewrites a `<p>` holding block content into a
- * `<div>` (lib/story/nesting.ts). Documents written before that are stored the
+ * `<div>` (lib/story/document/nesting.ts). Documents written before that are stored the
  * old way, and the read path fixes them at serve time — but their FIRST edit is
  * the interesting case, because the edit protocol derives a splice by diffing
  * the canonical form of what the agent sends against a base reconstructed from

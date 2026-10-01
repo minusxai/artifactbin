@@ -13,7 +13,7 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { createAppServer } from '@/server/app';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { mintExportKey } from '@/lib/export-key';
 import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions } from '@/lib/compiled-page/backfill.server';

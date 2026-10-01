@@ -3,7 +3,7 @@
  * the top, change the top-level "source" string inside the `#afbin-file` JSON
  * (a JSON round-trip, or a regex on the first "source"), leave everything else
  * alone. Opening it rebuilds the rest (lib/offline/file-backend's
- * rebuildArtifactFile); scripts/gate-offline-file.mjs opens the same kind of
+ * rebuildArtifactFile); scripts/gates/gate-offline-file.mjs opens the same kind of
  * edited file in three engines.
  */
 import { readFileSync } from 'node:fs';

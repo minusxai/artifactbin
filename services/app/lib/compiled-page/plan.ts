@@ -21,9 +21,9 @@
  *
  * Pure and deterministic: no I/O, no clock, output order follows the flow.
  */
-import type { CompiledDataflow, CompiledQuery, CompiledReads } from '@/lib/story/compiled-dataflow';
-import { importRef, mutationTargetRef } from '@/lib/story/compiled-flow';
-import { placeDataflow } from '@/lib/story/placement';
+import type { CompiledDataflow, CompiledQuery, CompiledReads } from '@/lib/story/data/compiled-dataflow';
+import { importRef, mutationTargetRef } from '@/lib/story/data/compiled-flow';
+import { placeDataflow } from '@/lib/story/data/placement';
 import type { DataPlan, DatasetAccessFacts, PlannedMutation, PlannedQuery, PlannedValue, QueryScope } from './contract';
 
 /** Built-ins whose value is the same for every reader of one version (§4.2: `_members` is covered by the snapshot's marks, `_now` by its age bound). */
@@ -106,7 +106,7 @@ export function planOf(flow: CompiledDataflow, facts: DatasetAccessFacts): DataP
     .map((v) => ({ name: v.name, default: v.default, keysSnapshot: keyed.has(v.name) }));
 
   // No reader holds anything at compile: a local write the page can compute is
-  // optimistic, a dataset write waits for the server (lib/story/placement).
+  // optimistic, a dataset write waits for the server (lib/story/data/placement).
   const placement = placeDataflow(flow, []);
   const mutations: PlannedMutation[] = flow.mutations.map((m) => ({
     name: m.name,

@@ -28,18 +28,18 @@ import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpr
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
-import { buildGlyphMap } from '@/lib/story/icon-glyphs';
+import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
-import { parseRowRef } from '@/lib/story/row-scope';
+import { parseRowRef } from '@/lib/story/data/row-scope';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/dataflow';
-import { resolveRefProps } from '@/lib/story/ref-data';
-import { substituteRow } from '@/lib/story/row-scope';
+import { REF_ATTRS, carriesRef, refName, type Scalar } from '@/lib/story/data/dataflow';
+import { resolveRefProps } from '@/lib/story/data/ref-data';
+import { substituteRow } from '@/lib/story/data/row-scope';
 import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides';
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/config';
-import { compileManagedIframe } from '@/lib/story/managed-iframe';
+import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
 import type { GeneratedSources } from './codegen-safety';
@@ -198,7 +198,7 @@ function readsDataNode(node: JsxNode): boolean {
 
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
 
-/** The managed frame's author content compiled as inert data (lib/story/managed-iframe), or null when it is refused. */
+/** The managed frame's author content compiled as inert data (lib/story/reader/managed-iframe), or null when it is refused. */
 const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe(node); } catch { return null; } };
 
 /* ────────────────────────────────────────────────────────────────────────────

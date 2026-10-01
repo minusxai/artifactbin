@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
-import {applyDocumentOperations} from '../document-operation';
-import {publishJsx} from '../jsx-tier';
+import {applyDocumentOperations} from '../graph/document-operation';
+import {publishJsx} from '../document/jsx-tier';
 const source='<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>';
 describe('document operation algebra',()=>{
  it('composes text, attributes, insertion, movement and deletion in order',()=>{

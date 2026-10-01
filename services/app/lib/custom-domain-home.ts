@@ -19,7 +19,7 @@
  * domain page cannot run).
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { DOMAIN_FOOTER_TEXT } from '@/lib/story/document-styles';
+import { DOMAIN_FOOTER_TEXT } from '@/lib/story/styles/document-styles';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
 import { personFaceBackground, personInitial } from '@/lib/person-face';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';

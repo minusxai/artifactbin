@@ -21,7 +21,7 @@ import { artifactQuotaExceeded, getArtifactById, setArtifactQuotaForTests } from
 import { createGuestOwner } from '@/lib/guest-owner';
 import { backfillUserKinds, createTestUser, listTestUsers, sweepTestUsers, TESTUSER_LABEL } from '@/lib/testusers';
 import { noteTestUserSession, testUserSessionCount } from '@/lib/testuser-sessions';
-import { loadDatasetRows } from '@/lib/story/dataset-store';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { mintToken, resolveTokenById } from '@/lib/tokens';
 import { claimToken, createUser, getUserById } from '@/lib/users';
 import { count, has, link } from '@/lib/relations';

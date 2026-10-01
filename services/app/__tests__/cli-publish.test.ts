@@ -14,7 +14,7 @@ import { POST as create } from '@/app/api/artifacts/route';
 import { GET as read } from '@/app/api/artifacts/[id]/route';
 import { tracking } from '../../cli/test/tracking';
 import { parseDocument, writeDocument } from '../../cli/src/document';
-import { publishJsx } from '@/lib/story/jsx-tier';
+import { publishJsx } from '@/lib/story/document/jsx-tier';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 import { createUser } from '@/lib/users';
 import { getArtifactById } from '@/lib/artifacts';

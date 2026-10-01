@@ -2,8 +2,8 @@
 
 import { COMMENT_PRESENTATION } from '../comment-presentation';
 
-import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
-import { isTargetRange } from '@/lib/story/annotation-range';
+import { COMMENT_TARGET_ATTR } from '@/lib/story/annotations/comment-target';
+import { isTargetRange } from '@/lib/story/annotations/annotation-range';
 
 /**
  * THE VIEW-MODE TEXT-SELECTION BUBBLE, inside the sandboxed document.

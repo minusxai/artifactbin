@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startPage, CHROME_HIDDEN_CLASS } from '../page';
-import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
+import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader/reader-chrome';
 import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
 import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
 import { LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';

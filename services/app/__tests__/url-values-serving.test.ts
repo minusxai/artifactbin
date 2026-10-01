@@ -1,7 +1,7 @@
 /**
  * THE SERVING HALF: a shared link's `?$name=value` reaches the document.
  *
- * Three doors, one grammar (lib/story/url-values):
+ * Three doors, one grammar (lib/story/data/url-values):
  *  - the READER's document (`/a/<id>/raw`) is seeded through the island's
  *    value field alongside the first results, so paint-first is complete and
  *    the control the server paints already shows the reader's pick;

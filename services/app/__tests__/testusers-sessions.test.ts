@@ -24,7 +24,7 @@ import { observedRequest } from '@/__tests__/conditional-request';
 import { viewersWritePolicy } from '@artifactbin/utils';
 import { accountProfile } from '@/lib/account-profile';
 import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/story/dataset-store';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { getDb } from '@/lib/db';
 import { createGuestOwner } from '@/lib/guest-owner';

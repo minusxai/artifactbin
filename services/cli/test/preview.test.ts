@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {serializeJsx} from '../../app/lib/jsx';
 import {runCli} from '../src/dispatch';
 import {startPreview} from '../src/preview/session';
-import {prepareClientDocumentUpdate} from '../../app/lib/story/document-update-client';
+import {prepareClientDocumentUpdate} from '../../app/lib/story/graph/document-update-client';
 import {buildPreview} from '../scripts/build-preview.mjs';
 import {readdir} from 'node:fs/promises';
 

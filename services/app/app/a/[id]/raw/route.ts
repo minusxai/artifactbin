@@ -25,27 +25,27 @@ import { count, has } from '@/lib/relations';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { roleFor, type RequestActor } from '@/lib/viewer';
 import { canAnnotate, canEdit, roleBehindLogin } from '@/lib/share-roles';
-import { forkedFromCredit } from '@/lib/story/fork-credit.server';
+import { forkedFromCredit } from '@/lib/story/reader/fork-credit.server';
 import { trackEvent } from '@/lib/analytics';
 import { requestOrSessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
-import { loadDatasetRows } from '@/lib/story/dataset-store';
+import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { ObjectUnavailable } from '@/lib/object-store';
 import { Readable } from 'node:stream';
-import { loadImage } from '@/lib/story/image-store';
-import { serveStoredFile } from '@/lib/story/file-store';
-import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
+import { loadImage } from '@/lib/story/assets/image-store';
+import { serveStoredFile } from '@/lib/story/assets/file-store';
+import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/assets/pdf-store';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
-import { declaresMutations } from '@/lib/story/helmet';
-import { assetsPath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
-import { readUrlValues } from '@/lib/story/url-values';
+import { declaresMutations } from '@/lib/story/document';
+import { assetsPath, markupCsp, mutatePath, queryPath } from '@/lib/story/styles';
+import { readUrlValues } from '@/lib/story/data';
 import { getUserById } from '@/lib/users';
 import { avatarUrl } from '@/lib/avatars';
-import { displayTitle } from '@/lib/story/title';
+import { displayTitle } from '@/lib/story/document';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
@@ -54,12 +54,12 @@ import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/custo
 import { READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page/contract';
 import type { StorySurface } from '@/lib/compiled-page/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
-import { preparedPageFor, recompilePage } from '@/lib/story/prepared-page.server';
-import { documentStyleSheets } from '@/lib/story/document-styles';
-import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
-import { readerChromeFonts } from '@/lib/story/first-screen-fonts';
+import { preparedPageFor, recompilePage } from '@/lib/story/prepared/prepared-page.server';
+import { documentStyleSheets } from '@/lib/story/styles';
+import type { ReaderChromeInput } from '@/lib/story/reader';
+import { readerChromeFonts } from '@/lib/story/styles';
 
-// The markup document's policy — per document, built in lib/story/markup-csp:
+// The markup document's policy — per document, built in lib/story/styles/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
 // document's own query endpoint (the top-level reader's transport).
 
@@ -200,7 +200,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       let img: Awaited<ReturnType<typeof loadImage>>;
       try {
         // `w=` is the width a `srcset` asked for — one of the widths publish
-        // stored, never a resize (lib/story/image-store).
+        // stored, never a resize (lib/story/assets/image-store).
         img = await loadImage(artifact, { width: new URL(request.url).searchParams.get('w') });
       } catch (error) {
         // The row promises bytes the store will not give: corruption or broken
@@ -410,7 +410,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
           // Its style rides in the sheets, where today's document has it.
           footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
-          // Today's standalone document's stylesheets, byte for byte (lib/story/document-styles); the app
+          // Today's standalone document's stylesheets, byte for byte (lib/story/styles/document-styles); the app
           // page's story carries its one isolated sheet instead (the assembler's `css`).
           sheets: appStory ? null : documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,

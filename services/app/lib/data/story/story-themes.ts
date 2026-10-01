@@ -610,7 +610,7 @@ export function storyThemeCss(only?: string | null): string {
     `${descendantScope} :is(code, pre, kbd, samp) {\n  font-family: var(--font-mono);\n}`,
   ];
   // `only` (a document's own theme, or null for none): the reader's sheet
-  // (lib/story/reader-sheet.server) keeps the blocks its story root can match
+  // (lib/story/prepared/reader-sheet.server) keeps the blocks its story root can match
   // and drops every other theme's — byte-identical otherwise, so the kept
   // blocks keep their order and specificity.
   for (const t of STORY_THEMES) {

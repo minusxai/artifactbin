@@ -1,7 +1,7 @@
 /** Runtime transactions address a checked sibling region, never arbitrary DOM HTML. */
 import { parseJsx, serializeJsx } from '@/lib/jsx';
 import { validateJsx } from '@/lib/jsx/validate';
-import { bodyPathToSourcePath } from '@/lib/story/edit-compose';
+import { bodyPathToSourcePath } from '@/lib/story/document/edit-compose';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { isProseTree } from './model';
 

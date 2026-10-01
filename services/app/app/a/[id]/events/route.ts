@@ -14,14 +14,14 @@
  */
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
-import { isDocumentFormat } from '@/lib/story/input';
+import { isDocumentFormat } from '@/lib/story/document/input';
 import { isOwner, roleFor, sessionActor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { authorHandle } from '@/lib/users';
 import { ID_RE } from '@/lib/ids';
-import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story/live';
+import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
-import { changedSince } from '@/lib/story/served-results.server';
+import { changedSince } from '@/lib/story/prepared/served-results.server';
 import { LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS } from '@/lib/live-stream';
 
 /**
@@ -58,12 +58,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * THE DOCUMENT'S DATASETS, WATCHED BESIDE THE DOCUMENT ITSELF.
    *
    * A dataset write is a version on the DATASET's row and a NOTIFY on the
-   * DATASET's channel (lib/story/dataset-mutate) — nothing about the document
+   * DATASET's channel (lib/story/datasets/dataset-mutate) — nothing about the document
    * changes, so the stream above would never mention it and every chart built
    * on that data would sit stale until someone reloaded. So this stream also
    * listens on each dataset the document reads or writes, and forwards a small
    * `data` frame naming it; the runtime re-runs exactly the queries that read
-   * it (lib/story/dataflow queriesReadingDatasets).
+   * it (lib/story/data/dataflow queriesReadingDatasets).
    *
    * A separate SSE EVENT NAME, deliberately: the default `message` frame is
    * the whole document and is guarded by `editId`/`version` at both ends, and
@@ -196,7 +196,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   /*
    * A PING, not a frame. The document itself is `GET ./events/frame` — built
-   * once per (id, edit_id) and cached (lib/story/frame), fetched by whoever
+   * once per (id, edit_id) and cached (lib/story/data/frame), fetched by whoever
    * wants it under the same ACL. This stream therefore carries nothing a relay
    * would have to understand, which is what lets a proxy blind to content
    * hold it.
@@ -288,7 +288,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // same ordered `queueRow` path (version-guarded) as every later frame.
   void pushCurrent();
   /*
-   * WHERE A SERVED PAGE LEFT OFF (`?since=`, lib/story/served-results.server):
+   * WHERE A SERVED PAGE LEFT OFF (`?since=`, lib/story/prepared/served-results.server):
    * a page whose first rows came with its HTML names the datasets they were
    * computed from and a mark of each. Every one that has moved since is sent
    * the ordinary `data` frame NOW — after the subscriptions above, so nothing

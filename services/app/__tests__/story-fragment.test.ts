@@ -16,7 +16,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as storyRoute } from '@/app/a/[id]/story/route';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 

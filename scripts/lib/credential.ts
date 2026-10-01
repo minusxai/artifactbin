@@ -17,7 +17,7 @@ import { slug } from './slug';
 
 /**
  * This module lives in the PRODUCT (scripts/lib) because the CLI conformance gate logs in the same
- * way an eval leg does (`scripts/gate-cli-conformance.mjs`), and the evals themselves are a private
+ * way an eval leg does (`scripts/gates/gate-cli-conformance.mjs`), and the evals themselves are a private
  * repository checked out at `evals/` — which re-exports it. The two names below are the evals'
  * vocabulary, kept as plain strings here so this file depends on nothing of theirs.
  */
@@ -64,7 +64,7 @@ const RESEND_API = 'https://api.resend.com';
 const OTP_POLL_MS = 2_000;
 /** Measured: the same mailbox delivered in 3 s and in 50 s on two consecutive runs. */
 const OTP_CAP_MS = 120_000;
-/** Mirrors `scripts/gate-oauth-browser.mjs` — a loopback URI the product accepts. Nothing ever listens on it. */
+/** Mirrors `scripts/gates/gate-oauth-browser.mjs` — a loopback URI the product accepts. Nothing ever listens on it. */
 const REDIRECT_URI = 'http://127.0.0.1:9987/cb';
 const CLIENT_NAME = 'artifactbin eval driver';
 

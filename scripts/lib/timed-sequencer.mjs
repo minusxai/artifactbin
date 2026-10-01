@@ -2,7 +2,7 @@
  * CI shards packed by measured time, not by file count. Vitest's own `--shard` hashes paths into
  * equal-COUNT slices, so one api shard drew 197 s while another drew 95 s: a few 30 s files landing
  * together decided the wall clock. This packs the selected files longest-first onto the least-loaded
- * shard (LPT) using the per-file CI times in scripts/test-timings.json, so every shard job computes
+ * shard (LPT) using the per-file CI times in scripts/ci/test-timings.json, so every shard job computes
  * the same assignment from the same checkout and each file runs exactly once.
  *
  * A shard that also runs work outside Vitest (the node job's integration project on shard 1, the CLI

@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows,
-} from '@/lib/story/data-table';
-import type { DatasetColumn } from '@/lib/story/dataset-shape';
+} from '@/lib/story/data/data-table';
+import type { DatasetColumn } from '@/lib/story/datasets/dataset-shape';
 
 const COLUMNS: DatasetColumn[] = [
   { name: 'region', type: 'string' },

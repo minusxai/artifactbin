@@ -3,7 +3,7 @@
  * document surface makes, answered from the ArtifactFile it was opened with.
  *
  * Edits are checked against the server's own reference model for a committed
- * DocumentUpdate (lib/story/document-update-history documentAfterOperation —
+ * DocumentUpdate (lib/story/graph/document-update-history documentAfterOperation —
  * "the executable reference model for SQL tests"), so the file applies an edit
  * exactly as /edits would.
  */
@@ -11,11 +11,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentGraph, DocumentUpdate } from '@artifactbin/contracts';
-import { graphSource } from '@/lib/story/document-graph';
-import { prepareClientDocumentUpdate } from '@/lib/story/document-update-client';
-import { documentAfterOperation } from '@/lib/story/document-update-history';
-import { storyUpdateParts } from '@/lib/story/update-parts';
-import { isWebUrl } from '@/lib/story/asset-url';
+import { graphSource } from '@/lib/story/graph/document-graph';
+import { prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
+import { documentAfterOperation } from '@/lib/story/graph/document-update-history';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
+import { isWebUrl } from '@/lib/story/assets/asset-url';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend, BackendFeature } from '@/lib/artifact-backend/types';
 import {

@@ -80,7 +80,7 @@ async function build() {
   /*
    * The editor compiles a draft's stylesheet IN the file (lib/offline/file-backend
    * → compileStoryCss) against the Tailwind sheets embedded here, exactly as the
-   * server bundle embeds them (scripts/build-server.mjs); the node builtins that
+   * server bundle embeds them (scripts/build/build-server.mjs); the node builtins that
    * module reaches only when the sheets are NOT embedded are stubbed.
    */
   const tailwindDir = path.dirname(createRequire(import.meta.url).resolve('tailwindcss/index.css'));

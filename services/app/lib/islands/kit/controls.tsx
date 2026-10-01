@@ -3,8 +3,8 @@ import { For, Show, createEffect, createSignal, untrack, type JSX } from 'solid-
 import { format as d3format } from 'd3-format';
 import { Portal } from 'solid-js/web';
 import { popupDismiss } from './popup-dismiss';
-import { refName, type Scalar, type TableResult } from '@/lib/story/dataflow';
-import { coerceScalarInput } from '@/lib/story/scalar-input';
+import { refName, type Scalar, type TableResult } from '@/lib/story/data/dataflow';
+import { coerceScalarInput } from '@/lib/story/data/scalar-input';
 import { useIsland } from '../context';
 
 type Props = Record<string, unknown>;

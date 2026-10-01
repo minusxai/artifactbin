@@ -18,11 +18,11 @@
  *   links.ts            linkHintsOf            w1-planners
  */
 import type { JsxNode } from '@/lib/jsx';
-import type { CompiledDataflow, CompiledReads } from '@/lib/story/compiled-dataflow';
-import type { Scalar } from '@/lib/story/dataflow';
-import type { RefDataMap } from '@/lib/story/ref-data';
+import type { CompiledDataflow, CompiledReads } from '@/lib/story/data/compiled-dataflow';
+import type { Scalar } from '@/lib/story/data/dataflow';
+import type { RefDataMap } from '@/lib/story/data/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { ReaderChromeInput } from '@/lib/story/reader-chrome';
+import type { ReaderChromeInput } from '@/lib/story/reader/reader-chrome';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { AgentDiscovery } from '@/lib/agent-discovery-tags';
@@ -228,7 +228,7 @@ export const isCompileFailure = (stored: StoredCompile): stored is CompileFailur
 export interface IslandRenderData {
   colorMode?: 'light' | 'dark';
   values: Record<string, Scalar>;
-  state?: import('@/lib/story/dataflow').DataflowState;
+  state?: import('@/lib/story/data/dataflow').DataflowState;
   assetsUrl?: string;
   results: ServedResults | null;
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
@@ -297,7 +297,7 @@ export interface PlannedMutation {
   name: string;
   /** The dataset artifact it writes, or null for a local table. */
   dataset: string | null;
-  /** `optimistic`: applied to a held copy before the server answers; `server`: waits for the server (lib/story/placement). */
+  /** `optimistic`: applied to a held copy before the server answers; `server`: waits for the server (lib/story/data/placement). */
   placement: 'optimistic' | 'server';
 }
 
@@ -442,14 +442,14 @@ export type LinkHintsOf = (nodes: JsxNode[], deployment: { origins: readonly str
 
 /** What one request decides, over the stored version. */
 export interface AssembleOverlay {
-  /** The reader's URL `$` values (lib/story/url-values), already parsed against the flow. */
+  /** The reader's URL `$` values (lib/story/data/url-values), already parsed against the flow. */
   values: Record<string, Scalar>;
-  state?: import('@/lib/story/dataflow').DataflowState;
+  state?: import('@/lib/story/data/dataflow').DataflowState;
   /** The version's stored Mermaid drawings for this surface (lib/mermaid-images), or none. */
   mermaidImages: Readonly<Record<string, StoredMermaidImage>>;
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
   signedIn: boolean;
-  /** Where the page queries, writes and fetches its overlay (lib/story/markup-csp paths); absent on a capture. */
+  /** Where the page queries, writes and fetches its overlay (lib/story/styles/markup-csp paths); absent on a capture. */
   doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
   /** A capture's verified image import door, even though it has no query or mutation door. */
   assetsUrl?: string;
@@ -519,7 +519,7 @@ export interface AssembleInput {
   footer?: { html: string; css: string } | null;
   /**
    * A document served BY ITSELF (`/raw`, a domain post, a capture) carries today's standalone
-   * document's stylesheets, byte for byte (lib/story/document-styles), in place of `css`: the story is
+   * document's stylesheets, byte for byte (lib/story/styles/document-styles), in place of `css`: the story is
    * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
    */
   sheets?: ReadonlyArray<{ attr: string; css: string }> | null;

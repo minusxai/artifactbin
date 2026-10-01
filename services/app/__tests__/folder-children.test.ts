@@ -27,7 +27,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { childrenTableFor } from '@/lib/folders';
-import { subscribeToArtifact } from '@/lib/story/live';
+import { subscribeToArtifact } from '@/lib/story/realtime/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 

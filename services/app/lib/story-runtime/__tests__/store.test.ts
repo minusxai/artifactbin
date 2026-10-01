@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
-import type { DataflowState, Scalar } from '@/lib/story/dataflow';
+import type { DataflowState, Scalar } from '@/lib/story/data/dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 
 const SALES = { abc123: [{ name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }] };

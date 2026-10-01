@@ -4,8 +4,8 @@
  * declaration alone.
  */
 import { describe, expect, it } from 'vitest';
-import { queryCells, updateQuerySqlInJsx } from '@/lib/story/query-notebook';
-import type { DataflowState } from '@/lib/story/dataflow';
+import { queryCells, updateQuerySqlInJsx } from '@/lib/story/data/query-notebook';
+import type { DataflowState } from '@/lib/story/data/dataflow';
 import { compiledSource } from '@/test/helpers/compiled';
 
 const SALES_SQL = 'select region, sum(revenue) as revenue from "public"."rows" where region = $region group by 1';

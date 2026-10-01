@@ -4,7 +4,7 @@ Status: shipped. This describes the compiled reader as it runs: a publish-time c
 document version into static HTML with small Solid islands, served the same way to every reader path.
 Its three size targets are checked by the page-speed lab.
 
-Targets (brotli/wire bytes, checked by `scripts/size-targets.mjs` against the page-speed lab):
+Targets (brotli/wire bytes, checked by `scripts/build/size-targets.mjs` against the page-speed lab):
 
 | # | Target | Before Phase 2 | Target |
 |---|--------|----------------|--------|
@@ -30,16 +30,16 @@ is typed against the framework-free store (`lib/story-runtime/store`), never aga
 |--------|------|----------------|
 | Compiler | `lib/compiled-page/compiler.ts` | `compilePage(input) → CompiledPage`: the parsed version → static HTML with islands spliced in, one per-document module source, island refs, data plan, link hints. Pure and deterministic for one compiler build. Static elements' attributes come from `lib/compiled-page/static-solid/attrs.ts`. |
 | Codegen safety harness | `lib/compiled-page/codegen-safety.ts` | `shapeOf` (AST with every literal blanked), the hostile string set, `hostileDocument` and `structureIndependent` — the harness the compiler is proven with. |
-| Shared island build | `scripts/build-islands.mjs` → `public/islands/` | Once per deploy: `solid-js`, the runtime and each kit module as content-addressed browser chunks, `public/islands/manifest.json` (specifier → URL, chunk graph) and the compiler build id. |
+| Shared island build | `scripts/build/build-islands.mjs` → `public/islands/` | Once per deploy: `solid-js`, the runtime and each kit module as content-addressed browser chunks, `public/islands/manifest.json` (specifier → URL, chunk graph) and the compiler build id. |
 | Build reader | `lib/compiled-page/build.server.ts`, `shared-builds.server.ts` | One reader of the manifest (`loadCompilerBuild`, `parseCompilerBuild`); every build's immutable files and manifest are retained in the object store so an older build can still be bound (§3). |
 | Runtime binding | `lib/compiled-page/runtime-binding.ts` | Binds a stored module's `@mx/*` specifiers to a build's chunk URLs at serve time; `preloadClosure` computes the `modulepreload` set (§3). |
 | Carriers | `lib/compiled-page/carriers.ts` | The wire format of the inert data blocks at the tail of a stored compiled page (§3). |
 | Module store | `lib/compiled-page/modules.server.ts` + `GET /islands/d/:sha.js` | The per-document module's bytes, content-addressed in the object store (`lib/object-store`), served immutable under `script-src 'self'`. |
-| Compiled page store | `lib/story/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored with the prepared page, keyed by document version. |
+| Compiled page store | `lib/story/prepared/prepared-page.server.ts` (`PreparedPage.compiled`) | The compiled artifact is stored with the prepared page, keyed by document version. |
 | Serve | `lib/compiled-page/serve.server.ts` | `compiledPageFor`: stored compile → data (snapshot or cold path) → story → assembler. Returns `CompiledReaderAnswer` (`compiled` or `failed`), never a `Response`. |
 | Data plan | `lib/compiled-page/plan.ts` | `planOf(flow, access) → DataPlan`: every query classified `shared` / `viewer` / `page` from the compiled dataflow's reads and the datasets' access facts; the datasets a snapshot depends on; the values that key a snapshot. Pure. |
 | Snapshot store | `lib/compiled-page/snapshots.server.ts` + `app.data_snapshots` | Guest snapshots keyed by version + plan + inputs; marks of every dataset read; freshness decided on read by comparing marks (the correctness rule) and eagerly by the dataset write hook (the optimisation); background revalidation; server-drawn charts stored with the snapshot. |
-| Served results | `lib/story/served-results.server.ts` | `SERVED_RESULTS_BUDGET_MS` and `marksOf`, shared by snapshots, the cold path and the plan. |
+| Served results | `lib/story/prepared/served-results.server.ts` | `SERVED_RESULTS_BUDGET_MS` and `marksOf`, shared by snapshots, the cold path and the plan. |
 | Server chart drawing | `lib/compiled-page/charts.server.ts` | A `<Question>` drawn to SVG from a snapshot with vega on the server; Vega loads in the browser only on interaction. |
 | Reader page assembler | `lib/compiled-page/assembler.ts` | `assembleReaderPage(input) → string`: ONE function for `/a/:id` (server-rendered chrome, app loaded on idle or on intent) and `/raw` (no chrome, no app loader), custom domains, exports, the offline file and the CLI preview. |
 | Island runtime | `lib/islands/rt.tsx`, `lib/islands/boot.ts` | What every island receives (`IslandContext`): data accessors, values, `mutate`, viewer overlay, write status feed, revalidation patching. Bridges the framework-free store into Solid's store. |
@@ -47,8 +47,8 @@ is typed against the framework-free store (`lib/story-runtime/store`), never aga
 | Viewer overlay door | `GET /a/:id/viewer` | After paint: the viewer's identity, the `viewer`-scope results, mutation access, holdable imports — the same admission as `POST /a/:id/query`. |
 | App handover | `web/initial-story.ts`, `solid/document/create-island-story.ts`, `solid/pages/Document.tsx`, `lib/islands/handover.ts` | The Solid app adopts the live island document without re-rendering it (`IslandDocument`, in `lib/islands/contract.ts`) (§7). |
 | Link hints | `lib/compiled-page/links.ts`, `speculation.ts` | `<a href>` to same-deployment artifacts, collected at compile → `<link rel=prefetch>` and speculation rules emitted by the assembler. |
-| Handover gate | `scripts/gate-hydration.mjs` | Checks that the compiled story survives island hydration and app adoption, then yields to the editor. |
-| Size targets | `scripts/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The three targets, pass/fail per target from a lab result JSON; `--strict` fails the page-speed workflow (not `ci.yml`). |
+| Handover gate | `scripts/gates/gate-hydration.mjs` | Checks that the compiled story survives island hydration and app adoption, then yields to the editor. |
+| Size targets | `scripts/build/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The three targets, pass/fail per target from a lab result JSON; `--strict` fails the page-speed workflow (not `ci.yml`). |
 
 Routes translate results to HTTP; every module above returns data or a string and never a `Response`.
 
@@ -97,7 +97,7 @@ is a 0.6 KB framework-free behaviour chunk from the shared build).
 ### 2.2 Serve
 
 The assembler takes `AssembleInput` (contract) and returns the whole HTML document. Chrome is an
-input (`ReaderChromeInput` rendered by `renderReaderChrome` (`lib/story/reader-chrome.ts`), or null for `/raw`, exports and
+input (`ReaderChromeInput` rendered by `renderReaderChrome` (`lib/story/reader/reader-chrome.ts`), or null for `/raw`, exports and
 the offline file). The story HTML (`AssembleInput.story`) is produced by the serve path, never by the assembler: when the
 request has a snapshot, the compiled page's SSR module (`CompiledPage.ssr`, the `generate: 'ssr'` build of
 the same islands, imported once per build) renders the islands WITH the snapshot's rows and drawings —
@@ -378,9 +378,9 @@ parameter selects another runtime.
 
 ## 11. Gates and the size targets
 
-- `scripts/gate-hydration.mjs`: checks the compiled story's served elements, island hydration,
+- `scripts/gates/gate-hydration.mjs`: checks the compiled story's served elements, island hydration,
   app adoption and edit handover. `x-mx-reader` confirms the compiled response.
-- `scripts/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (view route),
+- `scripts/build/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (view route),
   target 2 from `jsBeforeReady` on kit, dashboard and kitchen (view route), target 3 from the total
   wire bytes of prose (view route); one line per target, `pass`/`fail`/`no data`; `--strict` fails on
   a missed target. `page-speed.yml` runs it on the head result into the job summary with `--strict`;

@@ -21,13 +21,13 @@ import Link2 from 'lucide-solid/icons/link-2';
 import X from 'lucide-solid/icons/x';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { FeatureGate } from '@/solid/components/FeatureGate';
-import { imageRawUrl } from '@/lib/story/ref-data';
+import { imageRawUrl } from '@/lib/story/data/ref-data';
 import type { ChosenImage, ImageChoice } from '@/lib/artifact-backend/types';
 import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
 
 export type { ChosenImage, ImageChoice };
 
-/** What the upload door takes (lib/story/data-tiers). */
+/** What the upload door takes (lib/story/data/data-tiers). */
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
 const LIMIT_MB = Math.round(DEFAULT_UPLOAD_MAX_BYTES / 1_000_000);
 export const IMAGE_HINT = `PNG, JPEG, WebP, GIF or SVG · up to ${LIMIT_MB} MB`;

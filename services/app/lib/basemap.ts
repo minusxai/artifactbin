@@ -1,7 +1,7 @@
 /**
  * The `<DeckGL>` street basemap: OpenFreeMap vector tiles, reached through the
  * same-origin `/basemap/` proxy (app/basemap). A served document may only fetch
- * from 'self' (lib/story/markup-csp), so the browser rewrites every upstream URL
+ * from 'self' (lib/story/styles/markup-csp), so the browser rewrites every upstream URL
  * the style names onto the proxy, and the proxy forwards only this allowlist.
  */
 export const BASEMAP_UPSTREAM = 'https://tiles.openfreemap.org';

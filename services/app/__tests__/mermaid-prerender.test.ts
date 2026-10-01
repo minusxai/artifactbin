@@ -25,7 +25,7 @@ import { runNextMermaidHarvest, startMermaidHarvester } from '@/lib/mermaid-imag
 import { MERMAID_RENDER_ENGINE } from '@/lib/mermaid-images/engine';
 import { queueMermaidBackfill } from '@/lib/mermaid-images/store';
 import { documentEditBody } from './prepared-document';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared-page.server';
+import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

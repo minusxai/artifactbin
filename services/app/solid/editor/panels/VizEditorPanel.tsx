@@ -22,7 +22,7 @@
 import { createEffect, createSignal, For, on, Show, type JSX } from 'solid-js';
 import { SelectMenu } from '@/solid/components/SelectMenu';
 import BoundQuery from '../BoundQuery';
-import type { TableChoice } from '@/lib/story/table-catalog';
+import type { TableChoice } from '@/lib/story/data/table-catalog';
 import {
   getChannelField, setChannelField, getVizType, setVizType, zonesForVizType, isBlankSpec,
   type EditableChannel,
@@ -44,7 +44,7 @@ export interface VizEditorPanelProps {
   /** The declared table it is bound to (`data="$name"` → "name"), if any. */
   table: string | null;
   /**
-   * The tables the document declares (lib/story/table-catalog.ts). A query's
+   * The tables the document declares (lib/story/data/table-catalog.ts). A query's
    * columns are known once it has run; until then its entry lists none, and
    * the field pickers stay empty rather than wrong.
    */
