@@ -3,7 +3,7 @@
  * applying a light/dark choice, and showing a face's initial when its picture fails.
  */
 import { STORY_MODE_HOOK } from './contract';
-import { applyReaderMode, persistReaderMode } from './reader-mode';
+import { applyColorMode, persistReaderMode } from './reader-mode';
 
 /**
  * Apply a reading choice from the local settings panel or the trusted parent's
@@ -11,7 +11,7 @@ import { applyReaderMode, persistReaderMode } from './reader-mode';
  * through the runtime's private hook.
  */
 export function applyReaderChoice(win: Window, doc: Document, mode: 'light' | 'dark'): void {
-  applyReaderMode(doc, mode);
+  applyColorMode(doc.documentElement, mode);
   persistReaderMode(win, mode);
   for (const choice of Array.from(doc.querySelectorAll<HTMLElement>('[data-mx-mode-choice]'))) {
     choice.setAttribute('aria-pressed', String(choice.dataset.mxModeChoice === mode));

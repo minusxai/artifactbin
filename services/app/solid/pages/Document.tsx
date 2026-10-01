@@ -6,6 +6,7 @@ import { startIslandLive } from '@/lib/islands/live';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
 import { applyReaderChoice } from '@/lib/story-runtime/reader-actions';
+import { applyColorMode, chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
@@ -169,12 +170,9 @@ export function DocumentPage(): JSX.Element {
 
   const chooseMode = (next: 'light' | 'dark') => {
     // One reader choice, two surfaces: the app shell (its stored preference) and the document.
-    if (next === 'dark') document.documentElement.dataset.theme = 'dark';
-    else delete document.documentElement.dataset.theme;
-    try { localStorage.setItem('mx_theme', next); } catch { /* private mode */ }
+    chooseTheme(next);
     applyReaderChoice(window, document, next);
-    adoptedStory?.classList.toggle('dark', next === 'dark');
-    adoptedStory?.classList.toggle('light', next !== 'dark');
+    applyColorMode(adoptedStory, next);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: next });
     setMode(next);
   };
