@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { generateTeaching } from './lib/generate-teaching.mjs';
 import { runCheck } from './lib/check-evidence.mjs';
+import { nativeCompiler, typeCheckCommands } from './lib/type-check.mjs';
 
 const [label, ...raw] = process.argv.slice(2);
 const reuse = raw.includes('--reuse');
@@ -9,8 +10,7 @@ const args = raw.filter(arg => arg !== '--reuse');
 const node = process.execPath;
 const commands = label === 'validate' && !args.length ? [
   [node, 'scripts/check-residual-names.mjs'],
-  [node, 'node_modules/typescript/bin/tsc', '--noEmit', '-p', 'tsconfig.json'],
-  [node, 'node_modules/typescript/bin/tsc', '--noEmit', '-p', 'services/utils/tsconfig.strict.json'],
+  ...typeCheckCommands({ root: path.resolve('.'), node }),
 ] : label === 'test' ? [[node, 'scripts/test-changed.mjs', ...args]] : null;
 try {
   if (!commands) throw new Error('Expected validate [--reuse] or test [--reuse] [test options].');
@@ -28,6 +28,8 @@ try {
   if (label === 'test' && !refs.length && !args.includes('--files')) refs.push('HEAD');
   // A preview is not verification and must not produce a reusable pass.
   if (args.includes('--dry')) throw new Error('Agents should run npm test directly; discovery is already budgeted.');
+  if (label === 'validate' && !nativeCompiler({ root: path.resolve('.') }))
+    console.log(`[check] No native TypeScript compiler for ${process.platform}-${process.arch}; type-checking with tsc.`);
   await generateTeaching();
   process.exitCode = await runCheck({ root: path.resolve('.'), label, commands, env, refs, reuse });
 } catch (error) { console.error(`[check] ${error.message}`); process.exitCode = 1; }

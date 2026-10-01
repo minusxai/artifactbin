@@ -32,7 +32,8 @@
       "node"
     ],
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "noUncheckedSideEffectImports": true
   },
   "include": [
     "**/*.ts",
