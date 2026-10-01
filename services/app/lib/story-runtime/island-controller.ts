@@ -314,10 +314,13 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
     if (pending.sheet && sheet) sheet.textContent = pending.sheet.textContent;
+    // Editors whose region this draft draws exactly as it is stay mounted (focus, caret and history with them) and
+    // the morph puts them where the draft has them; only the regions it changed are rebuilt.
+    const keptEditors = edit?.holdUnchanged(pending.nodes, pending.root) ?? new Map<string, HTMLElement>();
     edit?.unmountCompiledDom();
     disposeChangedDraftIslands(root, stableIds, stablePaths);
-    morphDraftDom(root, pending.root, stableIds, stablePaths);
-    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module);
+    morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
+    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors);
     nodes = pending.nodes;
     lastDrawn = after;
     shown = { module: versionModuleUrl(pending.document), source: pending.source };

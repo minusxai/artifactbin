@@ -336,7 +336,12 @@ interface MorphContext {
   /** Unchanged authored components whose painted root survives a draft compile. */
   stableElementIds?: ReadonlySet<string>;
   stableElementPaths?: ReadonlySet<string>;
+  /** Live editor roots kept across a draft, placed where the draft has their stand-in (`[data-mx-edit-region]`). */
+  editRegions?: ReadonlyMap<string, Element>;
 }
+
+/** A held editor's stand-in in a draft (solid/editor/dom-mounter EDIT_REGION_ATTR; not imported: no editor code here). */
+const EDIT_REGION_ATTR = 'data-mx-edit-region';
 
 type Movable = Element & { moveBefore?: (node: Node, child: Node | null) => void };
 
@@ -371,6 +376,9 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
   for (const node of to.childNodes) if (node.nodeType === 1 && (node as Element).id) nextIds.add((node as Element).id);
 
   for (const next of [...to.childNodes]) {
+    // A kept editor, as it is: never compared, synced or rebuilt.
+    const editor = ctx.editRegions?.size && next.nodeType === 1 ? ctx.editRegions.get((next as Element).getAttribute(EDIT_REGION_ATTR) ?? '') : undefined;
+    if (editor) { place(editor); continue; }
     const rid = renderIdOf(next);
     if (rid) {
       const oldRid = ctx.keep.get(rid);
@@ -447,7 +455,7 @@ function adoptHydrationKeys(kept: Element, next: Element): void {
 
 /** Morph an unsaved editor compile in the adopted root. Only caller-approved component IDs keep
  * their hydrated DOM; a changed component takes the compiler's fresh static preview instead. */
-export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableComponentIds: ReadonlySet<string>, stableComponentPaths: ReadonlySet<string> = new Set()): void {
+export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableComponentIds: ReadonlySet<string>, stableComponentPaths: ReadonlySet<string> = new Set(), editRegions: ReadonlyMap<string, Element> = new Map()): void {
   const renderIds = (tree: ParentNode) => [...new Set([...tree.querySelectorAll(`[${HK}]`)].map(renderIdOf).filter((id): id is string => !!id))];
   const oldUnits = unitsOf(root, renderIds(root));
   const nextUnits = unitsOf(next, renderIds(next));
@@ -458,9 +466,9 @@ export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableCompon
     const oldRid = id && stableComponentIds.has(id) ? oldById.get(id) : undefined;
     if (oldRid && ![...keep.values()].includes(oldRid)) keep.set(rid, oldRid);
   }
-  const kept = new Set<Node>([...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? []));
+  const kept = new Set<Node>([...[...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? []), ...editRegions.values()]);
   syncAttributes(root, next, null);
-  morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds, stableElementPaths: stableComponentPaths });
+  morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds, stableElementPaths: stableComponentPaths, editRegions });
 }
 
 /**
@@ -539,6 +547,8 @@ export async function hydrateDraftIslands(
   stablePaths: ReadonlySet<string>,
   importModule: NonNullable<MorphDependencies['importModule']> = defaultImport,
   loaded?: IslandModule | null,
+  /** Editors kept across the draft (morphDraftDom): the whole-document tree's restoring morph places them too. */
+  editRegions: ReadonlyMap<string, Element> = new Map(),
 ): Promise<void> {
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   const seam = running?.morph;
@@ -559,7 +569,7 @@ export async function hydrateDraftIslands(
       const live = draft.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}][${HK}]`);
       const ids = new Set([...stableIds, ...[...live].map((node) => node.id).filter(Boolean)]);
       const paths = new Set([...stablePaths, ...[...live].map((node) => node.getAttribute(AST_PATH_ATTR)).filter((path): path is string => !!path)]);
-      morphDraftDom(root, draft, ids, paths);
+      morphDraftDom(root, draft, ids, paths, editRegions);
     }
   }
 }
