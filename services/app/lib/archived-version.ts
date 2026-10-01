@@ -35,14 +35,6 @@ import { actorForArtifacts, requestOrSessionActor } from '@/lib/viewer';
 export const VERSION_PARAM = 'version';
 
 /**
- * The reason a `<Mutation>` is unavailable on an archived render — a CODE
- * rather than prose for the same reason `sign_in_required` is one: a script
- * reading `mx.describe()` wants a name, not a sentence. The sentence a person
- * reads is {@link archivedReadOnly}.
- */
-export const ARCHIVED_VERSION = 'archived_version';
-
-/**
  * What a refused write says to the person who pressed it. The chrome line that
  * says WHICH version this is lives with the chrome that draws it
  * (lib/story/reader-chrome archivedBanner) — this module stays off the reader's

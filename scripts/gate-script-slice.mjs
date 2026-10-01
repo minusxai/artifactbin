@@ -29,7 +29,6 @@ import { connectAgent } from './lib/cli-connection.mjs';
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const check = createChecker('script-slice');
 /** The compiled reader is the only reader. */
-const readerUrl = (url) => url;
 /** The path that answered a navigation (`x-mx-reader`), or null. */
 const readerOf = (response) => response?.headers()['x-mx-reader'] ?? null;
 
@@ -75,7 +74,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 // The shell (and its frame) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
-await page.goto(readerUrl(`${BASE}/a/${doc.id}`));
+await page.goto(`${BASE}/a/${doc.id}`);
 
 const frameEl = await inlineStory(page, { timeout: 15000 });
 const frame = page.mainFrame();
@@ -176,7 +175,7 @@ const interactive = await api('/api/artifacts', {
 {
   const p2 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await becomeOwner(p2, BASE, mint.token); // a fresh context owns nothing
-  await p2.goto(readerUrl(`${BASE}/a/${interactive.id}`));
+  await p2.goto(`${BASE}/a/${interactive.id}`);
   const f2 = await artifactDocument(p2, { timeout: 20000 });
   const interactiveRealm = await managedRealm(f2, 'Interactive script');
   await interactiveRealm.waitForSelector('#tick', { timeout: 20000 });
@@ -207,7 +206,7 @@ const broken = await api('/api/artifacts', {
 {
   const p3 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await becomeOwner(p3, BASE, mint.token); // a fresh context owns nothing
-  const brokenPage = await p3.goto(readerUrl(`${BASE}/a/${broken.id}`));
+  const brokenPage = await p3.goto(`${BASE}/a/${broken.id}`);
   check(readerOf(brokenPage) === 'compiled', `a document with a throwing author script is served compiled (${readerOf(brokenPage)}, ${brokenPage?.headers()['x-mx-reader-fallback'] ?? 'no fallback'})`);
   const f3 = await artifactDocument(p3, { timeout: 20000 });
   await f3.waitForSelector('h1', { timeout: 20000 });
@@ -232,7 +231,7 @@ const broken = await api('/api/artifacts', {
  * The edit handover replaces the compiled story root by design (spec §7.3).
  */
 await becomeOwner(page, BASE, mint.token);
-await page.goto(readerUrl(`${BASE}/a/${doc.id}`), { waitUntil: 'load' });
+await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 await inlineStory(page);
 await page.waitForTimeout(4000);
 const documentFrame = () => page.mainFrame();
@@ -285,7 +284,7 @@ check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentE
       accountRequests.push(r.url());
     }
   });
-  const isolatedPage = await p4.goto(readerUrl(`${BASE}/a/${isolated.id}`));
+  const isolatedPage = await p4.goto(`${BASE}/a/${isolated.id}`);
   {
     check(readerOf(isolatedPage) === 'compiled', `the author-script document is served compiled (${readerOf(isolatedPage)}, ${isolatedPage?.headers()['x-mx-reader-fallback'] ?? 'no fallback'})`);
     // The same document by itself: compiled, its script only as data, under a policy with no inline script.

@@ -1,3 +1,4 @@
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from './helmet';
 
@@ -13,7 +14,6 @@ const valid = (key: keyof typeof fields, value: string | boolean) => key === 'en
   : value.trim().length > 0 && value.length <= (key === 'shortName' ? 30 : 100);
 const metaName = (key: keyof typeof fields) => `artifactbin:pwa-${fields[key]}`;
 const keys = Object.keys(fields) as Array<keyof typeof fields>;
-const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function readPwaSettings(source: string | JsxNode[]): PwaSettings {
   const parsed = typeof source === 'string' ? parseJsx(source) : { ok: true as const, nodes: source };
@@ -36,7 +36,7 @@ export function writePwaSettings(source: string, settings: PwaSettings): string 
   const parsed = parseJsx(source);
   if (!parsed.ok) throw new Error('Fix the source before editing PWA settings.');
   const { helmet } = splitHelmet(parsed.nodes);
-  const markup = keys.filter(key => settings[key] !== undefined).map(key => `<meta name="${metaName(key)}" content="${escape((key === 'icon' ? 'ref:' : '') + settings[key]!)}" />`).join('');
+  const markup = keys.filter(key => settings[key] !== undefined).map(key => `<meta name="${metaName(key)}" content="${escapeHtml((key === 'icon' ? 'ref:' : '') + settings[key]!)}" />`).join('');
   if (!helmet) return markup ? `<Helmet>${markup}</Helmet>\n${source}` : source;
   if (helmet.selfClosing) return source.slice(0, helmet.start) + `<Helmet>${markup}</Helmet>` + source.slice(helmet.end);
   const removed = helmet.children.filter((n): n is JsxElement => n.type === 'element' && n.tag === 'meta' && keys.some(key => attr(n, 'name') === metaName(key)));

@@ -19,7 +19,6 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 /** Every document route serves the compiled reader. */
-const readerUrl = (url) => url;
 const check = createChecker('dataflow');
 /**
  * The document's realm once it is live: the served page itself, once its islands
@@ -76,11 +75,11 @@ p.on('request', (r) => {
   if (r.method() === 'GET' && /[?&]q=/.test(r.url())) directCalls.push(r.url());
 });
 const docEngine = engineLoads(p);
-const resp = await p.goto(readerUrl(`${B}/a/${doc.id}`), { waitUntil: 'load' });
+const resp = await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
 const csp = resp.headers()['content-security-policy'] ?? '';
 check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the reader uses the strict navigable app CSP; author execution is isolated in its child frame');
 check(await servedTopLevel(p), 'no iframe: the public data document IS the page');
-check(p.url() === readerUrl(`${B}/a/${doc.id}`), `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
+check(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
 const frame = p.mainFrame();
 const managedRealm = async host => {
   const outer = host.locator('iframe[title="Dataflow script"]');
@@ -177,7 +176,7 @@ check(!!tdoc.id, 'the DataTable document published');
 const pageCalls = [];
 p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`)) pageCalls.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
 const tableEngine = engineLoads(p);
-await p.goto(readerUrl(`${B}/a/${tdoc.id}`), { waitUntil: 'load' });
+await p.goto(`${B}/a/${tdoc.id}`, { waitUntil: 'load' });
 check(await servedTopLevel(p), 'the table document is top-level too');
 const f2 = p.mainFrame();
 await f2.locator('[aria-label="Data grid"] tbody tr').first().waitFor({ timeout: 20000 });
@@ -231,7 +230,7 @@ reader.on('request', (r) => {
   if (r.method() === 'POST') readerRelay.push(1);
   if (r.method() === 'GET') readerDirect.push(1);
 });
-const privResp = await reader.goto(readerUrl(`${B}/a/${priv.id}`), { waitUntil: 'load' });
+const privResp = await reader.goto(`${B}/a/${priv.id}`, { waitUntil: 'load' });
 check(privResp.status() === 200, `the admitted reader opens the private document (${privResp.status()})`);
 check((await reader.locator('[data-mx-inline-story]').count()) === 1, 'the admitted private document renders inline after its ACL');
 const pf = await liveDocument(reader);
@@ -264,7 +263,7 @@ const upErrors = [];
 up.on('pageerror', (e) => upErrors.push(e.message));
 const upQueries = [];
 up.on('request', (r) => { if (r.url().includes(`/a/${udoc.id}/query`)) upQueries.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
-await up.goto(readerUrl(`${B}/a/${udoc.id}?$region=west`), { waitUntil: 'load' });
+await up.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
 const uf = up.mainFrame();
 await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 check((await uf.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', `the link's selection is what the control shows at first paint (${await uf.$eval('select[aria-label="Region"]', (el) => el.value)})`);
@@ -273,7 +272,7 @@ const upRuns = upQueries.filter((q) => q.body?.hold === undefined);
 // The selected numbers arrived in the HTML (lib/story/served-results.server): the page asks for nothing to show them.
 check(upRuns.length === 0, `the document's first rows came with the page, for the selection: no run request (${upRuns.length} run request(s))`);
 // Key order is the store's: a compiled page's guest snapshot comes back from JSONB, which puts `errors` first.
-check(/"results":\{(?:"errors":\{\},)?"tables":\{"/.test(await (await fetch(readerUrl(`${B}/a/${udoc.id}?$region=west`), { headers: { accept: 'text/html' } })).text()), 'and the served page carries those results for the linked selection');
+check(/"results":\{(?:"errors":\{\},)?"tables":\{"/.test(await (await fetch(`${B}/a/${udoc.id}?$region=west`, { headers: { accept: 'text/html' } })).text()), 'and the served page carries those results for the linked selection');
 check(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
 // (b) the address follows the reader
 await uf.selectOption('select[aria-label="Region"]', 'east');
@@ -292,7 +291,7 @@ await up.close();
 // must not reload when a signal changes.
 let frameLoads = 0;
 owner.on('domcontentloaded', () => { frameLoads++; });
-await owner.goto(readerUrl(`${B}/a/${udoc.id}?$region=west`), { waitUntil: 'load' });
+await owner.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
 const ownerFrame = await liveDocument(owner);
 await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 check(ownerFrame.url().includes('$region=west'), `the owner document receives the link's selection (${new URL(ownerFrame.url()).search})`);
@@ -330,7 +329,7 @@ const bp = await b.newPage({ viewport: { width: 1200, height: 900 } });
 const bookingRequests = [];
 bp.on('request', (r) => bookingRequests.push(r.url()));
 const bookingEngine = engineLoads(bp);
-await bp.goto(readerUrl(`${B}/a/${booking.id}`), { waitUntil: 'load' });
+await bp.goto(`${B}/a/${booking.id}`, { waitUntil: 'load' });
 await bp.locator('main h2').first().waitFor({ timeout: 20000 });
 check(await bookingEngine, 'the booking page loaded its SQLite engine');
 await bp.waitForTimeout(500);

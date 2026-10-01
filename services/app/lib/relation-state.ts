@@ -1,7 +1,6 @@
 /** Storage for relation lifecycles. Callers own authorization and subject/object locks. */
 import {RELATION_EVENTS,type Queryable,type RelationVerb,type RelationStatus,type RelationDirection} from '@artifactbin/contracts';
 
-export interface RelationState {status:RelationStatus;direction:RelationDirection;initiated_by:string;revision:number;accepted_at:string|null;explicit_join:boolean}
 /** A read projection, not another table: keeps the membership wire independent of storage. */
 export const JOIN_RELATIONS = `(SELECT object_id AS artifact_id, subject_id AS user_id, status, direction,
  coalesce(initiated_by,subject_id) AS initiated_by, accepted_at AS joined_at, revision, explicit_join FROM relations

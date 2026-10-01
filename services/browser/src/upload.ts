@@ -1,4 +1,4 @@
-import type {RenderUploadRequest,RenderUploadResult} from '@artifactbin/contracts';
+import type {RenderUploadRequest} from '@artifactbin/contracts';
 export interface UploadOptions { origin:string; prefix:string; proxyUrl?:string }
 export const MAX_EXPORT_BYTES=64*1024*1024;
 export function admittedUploadUrl(raw:string,options:Pick<UploadOptions,'origin'|'prefix'>):URL {
@@ -22,4 +22,3 @@ export async function uploadImage(target:RenderUploadRequest['upload'],bytes:Uin
     if(!response.ok)throw new Error('upload failed');
   } catch {throw new Error('Export upload failed');}
 }
-export type UploadedImage = Extract<RenderUploadResult,{ok:true}>;

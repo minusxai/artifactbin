@@ -32,7 +32,6 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  */
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
-import { readerUrl } from './lib/gate-reader.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('layout-shift');
@@ -129,7 +128,7 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
       }
     }).observe({ type: 'layout-shift', buffered: true });
   });
-  await page.goto(`${readerUrl(`${B}/a/${id}`)}${edit ? '#edit' : ''}`, { waitUntil: 'commit', timeout: 60000 });
+  await page.goto(`${B}/a/${id}${edit ? '#edit' : ''}`, { waitUntil: 'commit', timeout: 60000 });
   // Edit mode adds a bar around the document; wait for it before taping, so
   // what is measured is the document settling rather than the bar arriving.
   // The top bar's edit control becomes the exit while editing (ArtifactSurface).
@@ -234,7 +233,7 @@ check(m.seen[0] < 40, `mobile: the document uses the full width (left edge ${m.s
 async function measureBleed(id, token, width = 1600) {
   const page = await browser.newPage({ viewport: { width, height: 1000 } });
   await becomeOwner(page, B, token);
-  await page.goto(readerUrl(`${B}/a/${id}`), { waitUntil: 'commit', timeout: 60000 });
+  await page.goto(`${B}/a/${id}`, { waitUntil: 'commit', timeout: 60000 });
   const target = await artifactDocument(page, { timeout: 60_000 });
   await target.waitForSelector('.mx-doc', { state: 'attached', timeout: 60_000 });
   // Past every late arrival — a font landing can widen a line after first paint.
@@ -316,7 +315,7 @@ check(mm.overflow === 0, `mismatch: the document still does not scroll sideways 
   });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   await becomeOwner(page, B, navDeck.token);
-  await page.goto(readerUrl(`${B}/a/${navDeck.id}`), { waitUntil: 'load' });
+  await page.goto(`${B}/a/${navDeck.id}`, { waitUntil: 'load' });
   const frame = page.mainFrame();
   // SCOPED to the document column: the rail's previews are real <Slide>
   // elements too (that is what makes them faithful), so an unscoped query
@@ -356,7 +355,7 @@ check(mm.overflow === 0, `mismatch: the document still does not scroll sideways 
     'the counter tracks position');
 
   // The CAPTURE render — what /export screenshots — carries no chrome at all.
-  const capture = await fetch(readerUrl(`${B}/a/${navDeck.id}/raw?chrome=0`), {
+  const capture = await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`, {
     headers: { Authorization: `Bearer ${navDeck.token}` },
   });
   check(capture.status === 200, 'the owner can read the capture render');
