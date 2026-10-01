@@ -43,32 +43,33 @@ export interface SplitCarriers {
   moduleDataTag: string;
 }
 
+/** The carriers as text, never parsed: what moving them needs (`withStoredCarriers`). */
+function sliceCarriers(html: string): Omit<SplitCarriers, 'moduleData'> {
+  const start = html.endsWith(CLOSE) ? html.lastIndexOf(MODULE_DATA_OPEN) : -1;
+  const story = start >= 0 ? html.slice(0, start) : html;
+  const literals = [...story.matchAll(LITERALS_RE)].map((match) => match[0]).join('');
+  return { story: literals ? story.replace(LITERALS_RE, '') : story, literals, moduleDataTag: start >= 0 ? html.slice(start) : '' };
+}
+
 /** Read the carriers back: the module-data carrier only as the html's trailing block, the literals anywhere. */
 export function splitCarriers(html: string): SplitCarriers {
-  let story = html;
-  let moduleData: unknown[] | null = null;
-  let moduleDataTag = '';
-  const start = story.lastIndexOf(MODULE_DATA_OPEN);
-  if (start >= 0 && story.endsWith(CLOSE)) {
-    const parsed: unknown = JSON.parse(story.slice(start + MODULE_DATA_OPEN.length, -CLOSE.length));
-    if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('carriers: invalid module data');
-    moduleData = parsed.moduleData;
-    moduleDataTag = story.slice(start);
-    story = story.slice(0, start);
-  }
-  const literals = [...story.matchAll(LITERALS_RE)].map((match) => match[0]).join('');
-  return { story: literals ? story.replace(LITERALS_RE, '') : story, literals, moduleData, moduleDataTag };
+  const sliced = sliceCarriers(html);
+  if (!sliced.moduleDataTag) return { ...sliced, moduleData: null };
+  const parsed: unknown = JSON.parse(sliced.moduleDataTag.slice(MODULE_DATA_OPEN.length, -CLOSE.length));
+  if (!parsed || typeof parsed !== 'object' || !('moduleData' in parsed) || !Array.isArray(parsed.moduleData)) throw new Error('carriers: invalid module data');
+  return { ...sliced, moduleData: parsed.moduleData };
 }
 
 /**
  * A fresh SSR render with the version's stored carriers: the SSR module renders only the document tree,
  * while the carriers are version-owned and exist in its stored first render. A kind the render already
- * carries is kept, never duplicated; with nothing missing the render comes back as it is.
+ * carries is kept, never duplicated; with nothing missing the render comes back as it is. Never parses
+ * the module data: the assembler's one `splitCarriers` does.
  */
 export function withStoredCarriers(rendered: string, storedHtml: string): string {
-  const fresh = splitCarriers(rendered);
+  const fresh = sliceCarriers(rendered);
   if (fresh.literals && fresh.moduleDataTag) return rendered;
-  const stored = splitCarriers(storedHtml);
+  const stored = sliceCarriers(storedHtml);
   if ((fresh.literals || !stored.literals) && (fresh.moduleDataTag || !stored.moduleDataTag)) return rendered;
   return fresh.story + (fresh.literals || stored.literals) + (fresh.moduleDataTag || stored.moduleDataTag);
 }

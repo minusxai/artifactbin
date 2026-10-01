@@ -2,7 +2,7 @@
  * The compiled page's tail data blocks (lib/compiled-page/carriers): what the compiler writes is what
  * serve, the assembler and the offline file read back, byte for byte.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { prepareStoryParts } from '@/lib/story/prepare-runtime.server';
 import { compileDataflow, prepareCompile } from '@/lib/story/compile-dataflow';
@@ -83,6 +83,15 @@ describe('carriers', () => {
     const freshLiterals = `<div>f</div>${emitCarriers({ literals: ['own'], key: 'cccccccccccccccc' }, null)}`;
     expect(withStoredCarriers(freshLiterals, stored)).toBe(`${freshLiterals}${emitCarriers(null, [{ rows: [1] }])}`);
     expect(withStoredCarriers('<p>fresh</p>', '<p>nothing stored</p>')).toBe('<p>fresh</p>');
+  });
+
+  it('parses the module data once on the serve path (stored html served as it is)', () => {
+    const stored = `<p>x</p>${emitCarriers({ literals: ['chart'], key: KEY }, [{ rows: [1] }])}`;
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(splitCarriers(withStoredCarriers(stored, stored)).moduleData).toEqual([{ rows: [1] }]);
+      expect(parse).toHaveBeenCalledTimes(1);
+    } finally { parse.mockRestore(); }
   });
 
   it('gives the module-data carrier the page data id the browser module reads (the offline file)', () => {
