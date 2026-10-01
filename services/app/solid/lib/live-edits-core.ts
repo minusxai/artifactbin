@@ -136,7 +136,6 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
       setState((s) => ({ ...s, pending: false, status: '' }));
       return;
     }
-    setState((s) => ({ ...s, pending: true, status: 'saving…' }));
     const backend = options().backend;
 
     const run = (async () => {
@@ -230,6 +229,10 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
       }
     })();
     inFlight = run;
+    // Only now say so: a listener this wakes (a remote document waiting for the editor to be idle) must see the
+    // save in flight. Announced before `inFlight` was set, it saw an idle editor, adopted the remote document
+    // under the save and rebased the save onto it — the remote edit was overwritten.
+    setState((s) => ({ ...s, pending: true, status: 'saving…' }));
     return run;
   };
 
