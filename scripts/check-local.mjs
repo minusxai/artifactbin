@@ -28,6 +28,6 @@ try {
   if (label === 'test' && !refs.length && !args.includes('--files')) refs.push('HEAD');
   // A preview is not verification and must not produce a reusable pass.
   if (args.includes('--dry')) throw new Error('Agents should run npm test directly; discovery is already budgeted.');
-  generateTeaching();
-  process.exitCode = runCheck({ root: path.resolve('.'), label, commands, env, refs, reuse });
+  await generateTeaching();
+  process.exitCode = await runCheck({ root: path.resolve('.'), label, commands, env, refs, reuse });
 } catch (error) { console.error(`[check] ${error.message}`); process.exitCode = 1; }

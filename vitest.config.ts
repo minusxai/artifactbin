@@ -1,12 +1,10 @@
 import path from 'path';
-import { generateTeaching } from './scripts/lib/generate-teaching.mjs';
 import { defineConfig } from 'vitest/config';
 import solid from 'vite-plugin-solid';
 import yaml from '@rollup/plugin-yaml';
 
-// Discovery imports source consumers before global setup runs.
-generateTeaching();
-
+// The CLI's generated teaching is produced by the global setup (and by `npm test` before Vitest
+// starts), behind a content-verified cache, not on every config load.
 // The island tests (Solid, lib/islands): jsdom and the Solid JSX transform. Every other project
 // matches `lib/**/__tests__` too, so they exclude this glob.
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
@@ -27,6 +25,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    experimental: { fsModuleCache: true },
     testTimeout: 45_000,
     hookTimeout: 45_000,
     // The SSR'd document needs the prebuilt story runtime, which is a
