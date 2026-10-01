@@ -31,6 +31,17 @@ describe('renderSchema', () => {
     for (const s of renderSchema([T], { schema: 'app' })) expect(s).toMatch(/app\.widgets/);
   });
 });
+describe('renderSchema: a declared column compression', () => {
+  const C: Table = { name: 'docs_lz4', columns: [{ name: 'id', type: 'TEXT' }, { name: 'body', type: 'JSONB', compression: 'lz4' }], primaryKey: ['id'] };
+  it('sets lz4 only while the column has another method, and a server without lz4 (PGLite) keeps its default', async () => {
+    const statements = renderSchema([C], { schema: 'app' });
+    expect(statements.filter((x) => x.includes('SET COMPRESSION lz4'))).toHaveLength(1);
+    expect(statements.find((x) => x.includes('SET COMPRESSION'))).toMatch(/attcompression IS DISTINCT FROM 'l'[\s\S]*EXCEPTION WHEN feature_not_supported/);
+    for (let boot = 0; boot < 2; boot++) for (const statement of statements) await pg.exec(statement);
+    await pg.exec(`INSERT INTO app.docs_lz4 VALUES ('a', '{"x":1}')`);
+    expect((await pg.query("SELECT attcompression FROM pg_attribute WHERE attrelid = 'app.docs_lz4'::regclass AND attname = 'body'")).rows).toEqual([{ attcompression: '' }]);
+  });
+});
 describe('renderSchema: an access method, an expression column, and a dropped column', () => {
   const D: Table = {
     name: 'gadgets',
