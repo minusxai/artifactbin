@@ -14,6 +14,7 @@ import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader-chrome';
 import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import { pageDataChanged } from '@/web/page-data-events';
 import { apiFetch } from '../lib/api';
+import { closeOnEscape } from '../lib/close-on-escape';
 
 export type ReaderPanel = 'controls' | 'menu' | 'notifications';
 type Navigate = (href: string) => void;
@@ -43,13 +44,6 @@ export function syncPanelTriggers(root: HTMLElement, open: ReaderPanel | null): 
     trigger?.setAttribute('aria-expanded', String(open === name));
     trigger?.setAttribute('aria-label', `${open === name ? 'Close' : 'Open'} ${name === 'controls' ? 'artifact controls' : 'menu'}`);
   }
-}
-
-/** Close on Escape anywhere on the page; answers the disposer. */
-export function closeOnEscape(close: () => void): () => void {
-  const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
-  window.addEventListener('keydown', escape);
-  return () => window.removeEventListener('keydown', escape);
 }
 
 /**

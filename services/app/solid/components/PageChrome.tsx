@@ -15,7 +15,7 @@ import { Tooltip } from './Tooltip';
 import { PeopleInbox } from './PeopleInbox';
 import { useInbox } from '../lib/notifications';
 import { Avatar } from './Avatar';
-import { closeOnEscape } from '../document/reader-chrome-adapter';
+import { closeOnEscape } from '../lib/close-on-escape';
 
 /** Artifact controls from the editor seam; the named export below owns app pages. */
 export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {
