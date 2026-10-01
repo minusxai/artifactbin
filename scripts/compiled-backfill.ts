@@ -59,13 +59,14 @@ async function main() {
     filters.push({ column, op: match[2] as BackfillFilter['op'], value: column === 'page_format' || column === 'handover_contract' ? Number(match[3]) : match[3]! });
   }
   // The runtime binds live at serve time, so only a raised contract or format, or an older stored stylesheet, makes a stored page stale.
-  if (values.stale) {
-    const { preparedCssVersion } = await import('@/lib/story/prepared/css-version.server');
-    filters.push({ any: [{ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT }, { column: 'css_version', op: '!=', value: preparedCssVersion() }] });
-  }
   if (values['island-build']) filters.push({ column: 'island_build', op: '=', value: values['island-build'] });
   if (values['format-below']) filters.push({ column: 'page_format', op: '<', value: Number(values['format-below']) });
   process.env.DATABASE_URL = db;
+  // After the environment is set, as every server module here: an old contract OR an older stored stylesheet.
+  if (values.stale) {
+    const { preparedCssVersion } = await import('@/lib/story/prepared/css-version.server');
+    filters.unshift({ any: [{ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT }, { column: 'css_version', op: '!=', value: preparedCssVersion() }] });
+  }
   // After the environment is set: lib/config reads it on first import.
   const [{ getDb }, { mintExportKey }, { backfillCompiledPages }] = await Promise.all([
     import('@/lib/platform/db'), import('@/lib/serving/export-read-key'), import('@/lib/compiled-page/backfill.server'),

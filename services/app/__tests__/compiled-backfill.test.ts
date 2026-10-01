@@ -88,6 +88,8 @@ describe('backfillCompiledPages', () => {
     await drainPreparedPageWarmups();
     expect(await stored(read)).toMatchObject({ css_version: preparedCssVersion() });
     expect((await stored(read)).css).not.toContain('/* old sheet */');
+    // The re-prepared sheet carries today's bare typography (its served-root flag rule).
+    expect((await stored(read)).css).toContain('data-mx-styled');
     // `--stale` selects the other one and the server prepares it again whole.
     const stale: BackfillSelector = { any: [{ column: 'handover_contract', op: '<', value: MIN_HANDOVER_CONTRACT }, { column: 'css_version', op: '!=', value: preparedCssVersion() }] };
     const run = server();
@@ -96,6 +98,7 @@ describe('backfillCompiledPages', () => {
     expect(run.asked.map((url) => new URL(url).pathname.split('/')[2])).toEqual([filled]);
     expect(await stored(filled)).toMatchObject({ css_version: preparedCssVersion() });
     expect((await stored(filled)).css).not.toContain('/* old sheet */');
+    expect((await stored(filled)).css).toContain('data-mx-styled');
     await drainPreparedPageWarmups();
   });
   it('warms what this deployment has not stored, through the server, and a second run warms nothing', async () => {
