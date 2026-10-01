@@ -40,7 +40,8 @@ export async function changedSpecifications(vitest, changedSince) {
   const related = [...new Set(await vitest.vcs.findChangedFiles({ root, changedSince }))];
   const specs = await vitest.globTestSpecifications();
   const triggers = vitest.config.forceRerunTriggers ?? [];
-  if (triggers.length && related.some(pm(triggers))) return specs;
+  const matcher = triggers.length ? pm(triggers) : undefined;
+  if (matcher && related.some((file) => matcher(file))) return specs;
   if (!related.length) return [];
 
   const cacheFile = path.join(root, 'node_modules/.cache/test-graph.json');
