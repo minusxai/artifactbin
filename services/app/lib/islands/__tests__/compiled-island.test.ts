@@ -27,8 +27,8 @@ const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const SOURCE = '<Helmet><Value name="region" type="string" default="West" /></Helmet><div id="w"><h2 id="h">Static heading</h2><p id="r">{$region}</p><p id="after">Static after</p></div>';
 
 interface ServerHalf { html: string; islands: string; browserCode: string; templateResource: string | null; islandRefs: IslandRef[]; flow: CompiledDataflow }
-function serverHalf(source: string, shipped = false): ServerHalf {
-  const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, ...(shipped ? ['--shipped'] : [])], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
+function serverHalf(source: string, shipped = false, results?: unknown): ServerHalf {
+  const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, ...(shipped ? ['--shipped'] : []), ...(results ? [`--results=${JSON.stringify(results)}`] : [])], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
   return JSON.parse(out.toString('utf8')) as ServerHalf;
 }
 async function shipped(spec: string): Promise<Record<string, unknown>> {
@@ -127,6 +127,45 @@ describe('a compiled island through the runtime', () => {
     expect(cards()).toEqual(['Carla', 'Bob']);
     dispose?.();
     runtime.dispose(); host.remove();
+  });
+  it('hydrates a Question inside Tabs beside an Input without losing the page', async () => {
+    // Regression: the chart host, built while hydrating, was not yet in the document when its engine
+    // deferral read `ownerDocument.documentElement` (an inert template document: null).
+    const server = serverHalf('<Helmet><Query name="m">{`select 1 as month, 10 as revenue union all select 2, 14`}</Query></Helmet><div id="w"><h1 id="h">Heading</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">Chart</TabsTrigger><TabsTrigger value="b">Notes</TabsTrigger></TabsList><TabsContent value="a"><Question title="Revenue" data="$m" height="240px" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"quantitative"},"y":{"field":"revenue","type":"quantitative"}}}}} /></TabsContent><TabsContent value="b"><p id="notes">Notes tab.</p></TabsContent></Tabs><div id="row"><Input placeholder="Type here" /><Badge>New</Badge></div><p id="end">Closing</p></div>', true, { tables: { m: { columns: [{ name: 'month', type: 'number' }, { name: 'revenue', type: 'number' }], rows: [{ month: 1, revenue: 10 }, { month: 2, revenue: 14 }] } }, errors: {} });
+    const host = document.createElement('div');
+    host.innerHTML = server.html;
+    document.body.append(host);
+    const heading = host.querySelector('#h');
+    const errors: unknown[] = [];
+    const log = vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args); });
+    const kits = new Map<string, Record<string, unknown>>();
+    const shippedRt = await shipped('@mx/rt');
+    await Promise.all(['basic', 'tabs', 'controls', 'data'].map(async name => { kits.set(name, await shipped(`@mx/kit/${name}`)); }));
+    let tree: () => unknown = () => null;
+    await evaluateModule(server.browserCode, spec => {
+      if (spec.includes('/rt-')) return shippedRt;
+      if (spec.includes('/boot-')) return { boot: (value: { TREE: () => unknown }) => { tree = value.TREE; } };
+      const kit = /\/kit-(\w+)-/.exec(spec)?.[1];
+      if (kit && kits.has(kit)) return kits.get(kit)!;
+      throw new Error(`unexpected island import ${spec}`);
+    }, 'test/tabs-question.js');
+    const columns = [{ name: 'month', type: 'number' as const }, { name: 'revenue', type: 'number' as const }];
+    const table = { columns, rows: [{ month: 1, revenue: 10 }, { month: 2, revenue: 14 }] };
+    const store = {
+      getState: () => ({ values: {}, tables: { m: table }, errors: {}, people: {} }), getTable: () => table, getValue: () => null, flow: server.flow,
+      pending: () => [], subscribe: () => () => {}, dispose: () => {},
+    } as unknown as DataflowStore;
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow } }, () => store);
+    const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree as never, runtime.context, host);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    log.mockRestore();
+    expect(errors, 'hydration raised no error').toEqual([]);
+    expect(host.querySelector('#h'), 'the page text is kept').toBe(heading);
+    expect(host.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    expect(host.querySelector('input[placeholder="Type here"]')).not.toBeNull();
+    host.querySelectorAll<HTMLElement>('[role="tab"]')[1]!.click();
+    expect(host.querySelector('#notes')?.closest('[role="tabpanel"]')?.hasAttribute('hidden')).toBe(false);
+    dispose?.(); runtime.dispose(); host.remove();
   });
   it('server-renders with the runtime, then hydrates in place: root adopted, siblings untouched, values live', async () => {
     const server = serverHalf(SOURCE);

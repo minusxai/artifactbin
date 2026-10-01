@@ -7,7 +7,7 @@
  *   (cd services/app && tsx --tsconfig ../../tsconfig.json lib/islands/__tests__/fixtures/compiled-island.server.ts '<markup>')
  */
 import { generate, declaredValues } from '@/lib/compiled-page/compiler';
-import { buildDocumentModules } from '@/lib/compiled-page/bundle.server';
+import { buildDocumentModules, ssrModuleOf } from '@/lib/compiled-page/bundle.server';
 import { createTemplateResourceStore } from '@/lib/compiled-page/modules.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { bindModuleCode } from '@/lib/compiled-page/runtime-binding';
@@ -42,4 +42,12 @@ const built = await buildDocumentModules(generated, {
 const browserCode = bindModuleCode(new TextDecoder().decode(stored.get(built.module!.sha)), build);
 const templateSha = /\/islands\/t\/([0-9a-f]{16})\.json/.exec(browserCode)?.[1];
 const templateResource = templateSha ? new TextDecoder().decode((await createTemplateResourceStore().get(templateSha))!) : null;
-process.stdout.write(JSON.stringify({ html: built.html, islands: generated.islands, browserCode, templateResource, islandRefs: generated.islandRefs, flow }));
+// `--results=<json>`: render again as the serve path does once the server has answered the queries.
+const served = process.argv.find((arg) => arg.startsWith('--results='));
+let html = built.html;
+if (served) {
+  const ssr = await ssrModuleOf(new TextDecoder().decode(stored.get(built.ssr!.sha)), 'served');
+  const tail = built.html.indexOf('<script type="application/json" data-mx-island-literals');
+  html = ssr.render({ values: declaredValues(flow), results: JSON.parse(served.slice('--results='.length)), mermaidImages: {}, drawings: {} }) + built.html.slice(tail);
+}
+process.stdout.write(JSON.stringify({ html, islands: generated.islands, browserCode, templateResource, islandRefs: generated.islandRefs, flow }));
