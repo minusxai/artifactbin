@@ -97,26 +97,13 @@ async function main(): Promise<void> {
     for (const name of sessionEnvNamesRead()) sessionEnvNames.add(name);
   }
   if (!EVENTS_SERVICE_URL) {
-    const { backfillAnalyticsEvents, createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');
+    const { createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');
     setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
-    /*
-     * THE BOOT PAYS FOR THE SCHEMA HERE, not on the first emit as the writer
-     * alone would: the backfill has to INSERT into a table, so it has to exist
-     * before the statement runs. Both are idempotent — the copy happens only
-     * into a log holding no row of its own, because `trackEvent` dual-writes
-     * every moment and a copy beside a live sentence would say it twice — and both are wrapped,
-     * because telemetry may cost a boot a round trip but never the boot itself.
-     * The database here is the app's own (PGLite, or a Postgres it owns), so it
-     * holds `analytics_events` too; a SPLIT deployment's events role has no read
-     * on the app schema, so its operator runs the same statement once by hand
-     * (services/events/CONTRACT.md).
-     */
+    // The schema is paid for at boot, not on the first emit; idempotent, and wrapped because telemetry may cost a boot a round trip but never the boot itself.
     try {
       await ensureEventsSchema(queryable, EVENTS_SCHEMA);
-      const copied = await backfillAnalyticsEvents(queryable, { schema: EVENTS_SCHEMA, from: 'analytics_events' });
-      if (copied > 0) console.log(`[events] copied ${copied} legacy analytics rows into ${EVENTS_SCHEMA}.events`);
     } catch (error) {
-      console.error('[events] the legacy analytics backfill failed:', error);
+      console.error('[events] schema setup failed:', error);
     }
   }
   /*
