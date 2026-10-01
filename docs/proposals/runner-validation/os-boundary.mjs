@@ -6,6 +6,7 @@ const code=`const fs=require('node:fs'),net=require('node:net');
 if(process.getuid()!==1000)throw Error('root');
 for(const p of ['/tmp/forbidden','/validation/forbidden']){let denied=false;try{fs.writeFileSync(p,'bad')}catch{denied=true}if(!denied)throw Error('writable root');}
 if(fs.readFileSync('/proc/self/status','utf8').match(/NoNewPrivs:\\s+(\\d)/)?.[1]!=='1')throw Error('privileges');
+if(!fs.readFileSync('/proc/self/status','utf8').match(/Seccomp:\\s+2\\s/))throw Error('seccomp');
 if(!fs.readFileSync('/proc/self/status','utf8').match(/CapEff:\\s+0+\\s/))throw Error('capabilities');
 if(fs.readFileSync('/sys/fs/cgroup/memory.max','utf8').trim()!=='201326592')throw Error('memory');
 if(fs.readFileSync('/sys/fs/cgroup/pids.max','utf8').trim()!=='32')throw Error('pids');

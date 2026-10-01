@@ -29,10 +29,10 @@ export async function fixtureModel(mode='normal'){
  const url=await listen(server);return {url,requests,close:()=>close(server)};
 }
 
-export async function readModel(response){
+export async function readModel(response,maxBytes=1024*1024){
  if(!response.ok)throw Error(`ai_http_${response.status}`);
- const message=assistant(),decoder=new TextDecoder(),tools=new Map();let buffered='',done=false,finish=false;
- for await(const bytes of response.body){buffered+=decoder.decode(bytes,{stream:true});let boundary;
+ const message=assistant(),decoder=new TextDecoder(),tools=new Map();let buffered='',done=false,finish=false,received=0;
+ for await(const bytes of response.body){received+=bytes.byteLength;if(received>maxBytes)throw Error('response_limit');buffered+=decoder.decode(bytes,{stream:true});let boundary;
  while((boundary=buffered.indexOf('\n\n'))>=0){const frame=buffered.slice(0,boundary);buffered=buffered.slice(boundary+2);const data=frame.split('\n').filter(x=>x.startsWith('data:')).map(x=>x.slice(5).trim()).join('\n');if(!data)continue;if(data==='[DONE]'){done=true;continue;}
  const chunk=JSON.parse(data),choice=chunk.choices?.[0];if(chunk.usage)message.usage={...message.usage,input:chunk.usage.prompt_tokens,output:chunk.usage.completion_tokens,totalTokens:chunk.usage.prompt_tokens+chunk.usage.completion_tokens};
  if(choice?.finish_reason){finish=true;message.stopReason=choice.finish_reason==='tool_calls'?'toolUse':'stop';}
@@ -43,6 +43,7 @@ export async function readModel(response){
  for(const tool of tools.values())message.content.push({type:'toolCall',id:tool.id,name:tool.name,arguments:JSON.parse(tool.arguments)});
  return message;
 }
+async function boundedJson(response,maxBytes){let text='',bytes=0;const decoder=new TextDecoder();for await(const chunk of response.body){bytes+=chunk.byteLength;if(bytes>maxBytes)throw Error('response_limit');text+=decoder.decode(chunk,{stream:true});}return JSON.parse(text+decoder.decode());}
 const openaiMessages=context=>context.messages.map(m=>m.role==='toolResult'?{role:'tool',tool_call_id:m.toolCallId,content:JSON.stringify(m.content)}:m.role==='assistant'?{role:'assistant',content:m.content.filter(c=>c.type==='text').map(c=>c.text).join(''),tool_calls:m.content.filter(c=>c.type==='toolCall').map(c=>({id:c.id,type:'function',function:{name:c.name,arguments:JSON.stringify(c.arguments)}}))}:{role:'user',content:typeof m.content==='string'?m.content:JSON.stringify(m.content)});
 
 export async function runDesignPath({db,actor,routes,artifactId,threadId,work,session,modelMode='normal',history=[],retryReplies=false}){
@@ -59,11 +60,11 @@ export async function runDesignPath({db,actor,routes,artifactId,threadId,work,se
  const path=operation==='read'?`/api/artifacts/${artifactId}`:`/api/artifacts/${artifactId}/annotations/${threadId}`;
  const headers={'content-type':'application/json'};if(operation==='reply')Object.assign(headers,{'X-Artifactbin-Remote-Session':session.id,'X-Artifactbin-Remote-Proof':session.runnerKey,'Idempotency-Key':`${work.id}-${args.phase}`});
  const request=new Request(base+path,{method:operation==='read'?'GET':'POST',headers,signal:controller.signal,...(operation==='reply'?{body:JSON.stringify({reply:args.body,request_id:work.id,phase:args.phase})}:{})});
- const retry=request.clone();const started=Date.now();const response=await forward(request,actor);run.network.push({kind:'artifactbin',operation,status:response.status,durationMs:Date.now()-started});if(retryReplies&&operation==='reply'){const again=await forward(retry,actor);run.network.push({kind:'artifactbin',operation,status:again.status,replay:true});if(again.status!==response.status)throw Error('reply_replay_failed');await again.arrayBuffer();}observed.push({operation,status:response.status});if(!response.ok)throw Error(`artifactbin_http_${response.status}`);return response.json();
+ const retry=request.clone();const started=Date.now();const response=await forward(request,actor);run.network.push({kind:'artifactbin',operation,status:response.status,durationMs:Date.now()-started});if(retryReplies&&operation==='reply'){const again=await forward(retry,actor);run.network.push({kind:'artifactbin',operation,status:again.status,replay:true});if(again.status!==response.status)throw Error('reply_replay_failed');await again.arrayBuffer();}observed.push({operation,status:response.status});if(!response.ok)throw Error(`artifactbin_http_${response.status}`);return boundedJson(response,run.request.maxResponseBytes??1024*1024);
  }
  if(operation==='ai.open'){
  const started=Date.now();const response=await fetch(model.url+'/v1/chat/completions',{redirect:'manual',method:'POST',headers:{'content-type':'application/json',authorization:'Bearer fixture-key'},body:JSON.stringify({model:'fixture',stream:true,messages:openaiMessages(args.context),tools:args.context.tools.map(t=>({type:'function',function:{name:t.name,parameters:t.parameters}}))}),signal:controller.signal});
- run.network.push({kind:'ai',status:response.status,requestId:response.headers.get('x-request-id'),durationToHeadersMs:Date.now()-started});const message=await readModel(response);run.usage.push({...message.usage,dollars:null,pricingVersion:null});const streamId=`${id}:${streams.size}`;streams.set(streamId,[{type:'done',reason:message.stopReason,message},null]);return {streamId};
+ run.network.push({kind:'ai',status:response.status,requestId:response.headers.get('x-request-id'),durationToHeadersMs:Date.now()-started});const message=await readModel(response,run.request.maxResponseBytes??1024*1024);run.usage.push({...message.usage,dollars:null,pricingVersion:null});const streamId=`${id}:${streams.size}`;streams.set(streamId,[{type:'done',reason:message.stopReason,message},null]);return {streamId};
  }
  if(operation==='ai.next'){if(!args.streamId.startsWith(id+':'))throw Error('foreign_stream');return streams.get(args.streamId).shift();}
  throw Error('unknown_capability');

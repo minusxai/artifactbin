@@ -7,7 +7,7 @@ import {POST as reply} from '@/app/api/artifacts/[id]/annotations/[annId]/route'
 import {createAnnotationFor} from '@/lib/annotations';
 import {remoteAgents} from '@/lib/remote/agents';
 import {remoteSessions} from '@/lib/remote/registry';
-import {runDesignPath} from '../../../docs/proposals/runner-validation/path.mjs';
+import {runDesignPath,fixtureModel,readModel} from '../../../docs/proposals/runner-validation/path.mjs';
 const harness=useAppHarness(); afterEach(()=>remoteSessions.clear());
 async function setup(){
  const token=await mintToken('design'),user=await createUser({email:'mxmx_test_design@example.com'}); await claimToken(user.id,token.token);
@@ -167,3 +167,18 @@ it('defines cron timezone/DST behavior and rejects invalid configuration',()=>{
  expect(nextDue('30 1 * * *','America/New_York',first).toISOString()).toBe('2026-11-02T06:30:00.000Z');
  expect(()=>nextDue('not cron','UTC',new Date())).toThrow();expect(()=>nextDue('* * * * *','Invalid/Zone',new Date())).toThrow();
 });
+
+it('bounds upstream response bytes during streaming before assembling tool arguments',async()=>{
+ const model=await fixtureModel();try{
+ const response=await fetch(model.url+'/v1/chat/completions',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer fixture-key'},body:JSON.stringify({messages:[]})});
+ await expect(readModel(response,16)).rejects.toThrow('response_limit');
+ }finally{await model.close();}
+});
+
+it('refuses a success result with unawaited host IO still in flight',async()=>{
+ const runner=new DesignRunner(await harness.db(),async(_id:string,run:any)=>{const controller=new AbortController();run.controllers.add(controller);return new Promise((_,reject)=>controller.signal.addEventListener('abort',()=>reject(Error('aborted'))));});await runner.initialize();
+ try{
+ const {runId}=await runner.start({userId:'dangling',requestId:crypto.randomUUID(),bundle:'var Program={default:async(i,c)=>{c.artifactbin.read({}).catch(()=>{});return "premature success"}}',input:{},timeoutMs:10000});
+ const result=await runner.wait(runId);expect(result.status).toBe('failed');expect(result.receipt.error).toBe('dangling_capabilities');
+ }finally{await runner.close();}
+},15000);

@@ -23,7 +23,7 @@ export class DesignRunner{
  const fingerprint=createHash('sha256').update(JSON.stringify(request)).digest('hex'),id=randomUUID();
  const rows=await this.db.query("INSERT INTO design_runs(id,owner,request_key,fingerprint,status,data) VALUES($1,$2,$3,$4,'queued',$5) ON CONFLICT(owner,request_key) DO NOTHING RETURNING id",[id,request.userId,request.requestId,fingerprint,JSON.stringify(request)]);
  if(!rows.rows.length){const r=(await this.db.query('SELECT id,fingerprint FROM design_runs WHERE owner=$1 AND request_key=$2',[request.userId,request.requestId])).rows[0];if(r.fingerprint!==fingerprint)throw Error('start_conflict');return {runId:r.id};}
- let resolve;const finished=new Promise(r=>resolve=r);this.active.set(id,{request,resolve,finished,revoked:false,controllers:new Set(),sequence:0,requests:0,usage:[],network:[],eventTail:Promise.resolve()});
+ let resolve;const finished=new Promise(r=>resolve=r);this.active.set(id,{request,resolve,finished,revoked:false,controllers:new Set(),inflight:new Set(),sequence:0,requests:0,usage:[],network:[],eventTail:Promise.resolve()});
  void this.launch(id).catch(error=>this.finish(id,"failed",null,{error:error.message}));return {runId:id};
  }
  async launch(id){const run=this.active.get(id);const docker=process.env.RUNNER_VALIDATION_DOCKER;
@@ -36,16 +36,18 @@ export class DesignRunner{
  }
  async message(id,msg){const run=this.active.get(id);if(!run||run.revoked)return;
  if(msg.type==='ready'){run.child.stdin.write(JSON.stringify({type:'run',bundle:run.request.bundle,input:run.request.input,env:run.request.env??{},memoryMiB:run.request.memoryMiB??64,cpuMs:run.request.cpuMs??200})+'\n');return;}
+ if(msg.type==='result' && run.inflight.size){await this.finish(id,'failed',null,{error:'dangling_capabilities'});return;}
  if(msg.type==='result' && Buffer.byteLength(JSON.stringify(msg.result))>(run.request.maxOutputBytes??1024*1024)){await this.finish(id,'failed',null,{error:'output_limit'});return;}
  if(msg.type==='result'){await this.finish(id,'completed',msg.result,{cpuMs:msg.cpuMs});return;}
  if(msg.type==='error'){await this.finish(id,'failed',null,{error:msg.error});return;}
  if(msg.type!=='call')return;
+ run.inflight.add(msg.id);
  try{
  if(++run.requests>(run.request.maxRequests??100))throw Error('request_limit');
  const value=msg.operation==='emit'?await this.event(id,msg.args):await this.capabilities(id,run,msg.operation,msg.args);
  if(run.revoked)return;
  const encoded=JSON.stringify({type:'response',id:msg.id,value});if(Buffer.byteLength(encoded)>(run.request.maxResponseBytes??1024*1024))throw Error('response_limit');run.child.stdin.write(encoded+'\n');
- }catch(error){if(!run.revoked)run.child.stdin.write(JSON.stringify({type:'response',id:msg.id,error:error.message})+'\n');}
+ }catch(error){if(!run.revoked)run.child.stdin.write(JSON.stringify({type:'response',id:msg.id,error:error.message})+'\n');}finally{run.inflight.delete(msg.id);}
  }
  async event(id,event){const run=this.active.get(id);const sequence=++run.sequence;const append=run.eventTail.then(async()=>{await this.db.query('INSERT INTO design_events VALUES($1,$2,$3)',[id,sequence,JSON.stringify(event)]);if(event.type==='checkpoint')await this.db.query('UPDATE design_branches SET checkpoint=$2,checkpoint_sequence=$3 WHERE run_id=$1 AND checkpoint_sequence<$3',[id,JSON.stringify(event.messages),sequence]);return {sequence};});run.eventTail=append;return append;}
  async finish(id,status,result,extra={}){const run=this.active.get(id);if(!run||run.revoked)return;run.revoked=true;clearTimeout(run.timer);for(const c of run.controllers)c.abort();run.child?.kill('SIGKILL');if(process.env.RUNNER_VALIDATION_DOCKER)await new Promise(resolve=>{const rm=spawn('docker',['rm','-f',`runner-validation-${id}`],{stdio:'ignore'});rm.on('close',resolve);rm.on('error',resolve);});await run.eventTail;const receipt={runId:id,status,durationMs:Date.now()-run.started,requests:run.requests,observedRequests:run.network,usage:run.usage,dollars:null,pricingVersion:null,...extra};await this.db.query('UPDATE design_runs SET status=$2,receipt=$3,output=$4 WHERE id=$1',[id,status,JSON.stringify(receipt),JSON.stringify(result)]);run.resolve({status,result,receipt});}
