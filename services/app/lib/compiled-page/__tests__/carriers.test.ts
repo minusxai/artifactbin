@@ -15,7 +15,8 @@ import {
 import { ISLAND_DATA_ID } from '../contract';
 
 const KEY = 'aaaaaaaaaaaaaaaa';
-const literalsText = (tags: string): unknown => JSON.parse(/^<script[^>]*>([\s\S]*)<\/script>$/.exec(tags)![1]!);
+/** One carrier tag's JSON text: after its opener's `>`, before the closing tag. */
+const literalsText = (tag: string): unknown => JSON.parse(tag.slice(tag.indexOf('>') + 1, -'</script>'.length));
 
 describe('carriers', () => {
   it('writes the stored wire format exactly (stored pages are served unchanged)', () => {
