@@ -68,8 +68,12 @@ interface RegionEditor {
   restore: HTMLElement[];
   handedOver(text: string): boolean;
   adopt(region: JsxNode[], elements: () => HTMLElement[]): void;
-  /** The same editor at a new path (blocks added or removed ahead of it); its prose is the region's already. */
-  repath(path: string): void;
+  /**
+   * The same editor at a new path (blocks added or removed ahead of it); its prose is the region's already. Its edits
+   * carry the new path at once; the returned redraw (null: the path did not move) brings its AST-path decorations up
+   * to date — every cell of a table, so it is the caller's to run now or in an idle slice.
+   */
+  repath(path: string): (() => void) | null;
   dispose(): void;
 }
 
@@ -427,10 +431,10 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       repath(nextPath) {
         // Held for showing exactly this prose: its nodes stand as they are (the same source), only its path moves —
         // and with it the AST-path decorations, redrawn without rebuilding or re-comparing the prose.
-        if (nextPath === path) return;
+        if (nextPath === path) return null;
         path = nextPath;
         mount.dataset.mxEditRegion = nextPath;
-        setCurrentPath(nextPath);
+        return () => setCurrentPath(path);
       },
       dispose() {
         if (mount.isConnected && mount.parentNode) {
@@ -453,13 +457,20 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   };
   visit(nodes, '');
   for (const host of hosts) host();
-  // Held editors stay as they are: only their path (and the nodes carrying it) moves to this draft's.
-  for (const [path, , editor] of adopted) {
-    editor.repath(path);
+  // Held editors stay as they are: only their path moves to this draft's. The decorations carrying it are redrawn now
+  // for the editors on screen (read first, in one pass) and in idle slices for the rest, as off-screen regions mount.
+  const keptOnScreen = adopted.map(([, , editor]) => {
+    const box = editor.view()?.dom.getBoundingClientRect();
+    return !!box && box.bottom >= 0 && box.top <= viewportHeight;
+  });
+  const redraws: Array<() => void> = [];
+  adopted.forEach(([path, , editor], index) => {
+    const redraw = editor.repath(path);
     mounted.set(path, editor);
     const live = editor.view();
     if (live) callbacks.onView?.(live);
-  }
+    if (redraw) { if (keptOnScreen[index]) redraw(); else redraws.push(redraw); }
+  });
   held?.dispose();
   cleanups.push(() => {
     for (const editor of mounted.values()) if (!holding.has(editor)) editor.dispose();
@@ -478,12 +489,16 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   const run = () => {
     slice = null;
     const until = view.performance.now() + SLICE_MS;
-    while (pending.length && view.performance.now() < until) mountRegion(pending.shift()!);
-    if (pending.length) schedule();
+    while ((redraws.length || pending.length) && view.performance.now() < until) {
+      if (redraws.length) redraws.shift()!();
+      else mountRegion(pending.shift()!);
+    }
+    if (redraws.length || pending.length) schedule();
   };
-  if (pending.length) schedule();
+  if (redraws.length || pending.length) schedule();
   cleanups.unshift(() => {
     pending = [];
+    redraws.length = 0;
     if (slice !== null) { if (idle.cancelIdleCallback) idle.cancelIdleCallback(slice); else view.clearTimeout(slice); }
   });
   return {
