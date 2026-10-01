@@ -53,6 +53,7 @@
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22.13.0",
     "@types/pg": "8.16.0",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "esbuild": "0.28.2",
     "jsdom": "30.0.1",
     "tailwindcss": "4.2.1",

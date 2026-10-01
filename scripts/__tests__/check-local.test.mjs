@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runCheck } from '../lib/check-evidence.mjs';
+import { typeCheckCommands } from '../lib/type-check.mjs';
 
 async function fixture(test) {
   const root = mkdtempSync(path.join(tmpdir(), 'check-evidence-'));
@@ -79,4 +80,64 @@ describe('successful local check evidence', () => {
     expect(out.indexOf('first')).toBeLessThan(out.indexOf('second'));
     expect(out.indexOf('second')).toBeLessThan(out.indexOf('third'));
   }));
+});
+
+// The validate type-checker: the native compiler (tsgo) where its platform binary is installed, tsc elsewhere.
+// Both must read the same tsconfig the same way, so a fixture's errors are compared line for line between them.
+describe('validate type-checker', () => {
+  const repo = path.resolve(new URL('../..', import.meta.url).pathname);
+  const native = typeCheckCommands({ root: repo })[0][0];
+  const tsc = [process.execPath, path.join(repo, 'node_modules/typescript/bin/tsc')];
+  const compile = (command, root, extra = []) => {
+    const run = spawnSync(command[0], [...command.slice(1), '--noEmit', '-p', 'tsconfig.json', ...extra], { cwd: root, encoding: 'utf8' });
+    return { status: run.status, errors: (run.stdout + run.stderr).split('\n').filter(line => /error TS\d+/.test(line)).map(line => line.trim()) };
+  };
+
+  it('uses the platform tsgo binary with its own build-info files, and tsc when the binary is missing', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'type-check-'));
+    try {
+      const fallback = typeCheckCommands({ root, node: 'node', platform: 'plan9', arch: 'mips' });
+      expect(fallback).toEqual([
+        ['node', 'node_modules/typescript/bin/tsc', '--noEmit', '-p', 'tsconfig.json'],
+        ['node', 'node_modules/typescript/bin/tsc', '--noEmit', '-p', 'services/utils/tsconfig.strict.json'],
+      ]);
+      const exe = path.join(root, 'node_modules/@typescript/native-preview-plan9-mips/lib/tsgo');
+      mkdirSync(path.dirname(exe), { recursive: true }); writeFileSync(exe, '');
+      const commands = typeCheckCommands({ root, node: 'node', platform: 'plan9', arch: 'mips' });
+      expect(commands.map(command => command[0])).toEqual([exe, exe]);
+      expect(commands.map(command => command.slice(1, 4))).toEqual([['--noEmit', '-p', 'tsconfig.json'], ['--noEmit', '-p', 'services/utils/tsconfig.strict.json']]);
+      // tsc 5 and tsgo write incompatible build info; a shared file would make every switch a cold run.
+      const infos = commands.map(command => command[command.indexOf('--tsBuildInfoFile') + 1]);
+      expect(new Set(infos).size).toBe(2);
+      for (const info of infos) expect(info).toMatch(/^node_modules\/\.cache\/tsgo\//);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it.skipIf(native === process.execPath)('reports the same errors at the same file:line as tsc, including after an incremental edit', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'type-check-parity-'));
+    const put = (name, text) => { mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); writeFileSync(path.join(root, name), text); };
+    try {
+      put('tsconfig.json', JSON.stringify({ compilerOptions: { strict: true, noEmit: true, incremental: true, noUnusedLocals: true,
+        noUncheckedSideEffectImports: true, module: 'esnext', moduleResolution: 'bundler', target: 'ES2022', types: [],
+        tsBuildInfoFile: 'tsc.tsbuildinfo' }, include: ['src/**/*.ts'] }));
+      put('src/ok.ts', 'export const answer: number = 42;\n');
+      expect(compile([native], root, ['--tsBuildInfoFile', 'native.tsbuildinfo'])).toEqual({ status: 0, errors: [] });
+      put('src/broken.ts', [
+        "import './missing.css';",
+        'const unusedProbe = 1;',
+        'export function probe(n: number) { return n; }',
+        "probe('wrong');",
+        '',
+      ].join('\n'));
+      const fromNative = compile([native], root, ['--tsBuildInfoFile', 'native.tsbuildinfo']);
+      const fromTsc = compile(tsc, root);
+      expect(fromNative.status).not.toBe(0);
+      expect(fromTsc.status).not.toBe(0);
+      // Same places; the wording may differ (tsgo names the unresolved side-effect import TS2882, tsc TS2307).
+      const where = errors => errors.map(line => line.slice(0, line.indexOf(':')));
+      expect(where(fromNative.errors)).toEqual(where(fromTsc.errors));
+      expect(where(fromNative.errors)).toEqual(['src/broken.ts(1,8)', 'src/broken.ts(2,7)', 'src/broken.ts(4,7)']);
+      expect(fromNative.errors.slice(1)).toEqual(fromTsc.errors.slice(1));
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }, 60_000);
 });
