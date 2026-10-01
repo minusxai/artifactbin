@@ -112,7 +112,12 @@ export function TabsTrigger(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> &
 }
 
 export function TabsContent(props: JSX.HTMLAttributes<HTMLDivElement> & { value: string; forceMount?: boolean }) {
-  const ctx = state(); const island = useIsland(); const { value, forceMount: _forceMount, style: authorStyle, ...rest } = props; const active = () => ctx.value() === value; let panel!: HTMLDivElement;
+  const ctx = state(); const island = useIsland();
+  // `children` stays behind splitProps' lazy getter: destructuring it with `...rest` would build the panel's
+  // content (a Question, a chart) once up front, outside the panel's hydration context, and that copy would
+  // mount into a detached tree (its engine deferral then read `documentElement` of an inert template document).
+  const [local, rest] = splitProps(props, ['value', 'forceMount', 'style', 'children']);
+  const value = local.value; const authorStyle = local.style; const active = () => ctx.value() === value; let panel!: HTMLDivElement;
   if (props.id) ctx.registerContent(value, props.id);
   // Radix's isMountAnimationPreventedRef: true for the panel active on mount, false from the first frame.
   let prevented = untrack(active);
@@ -135,5 +140,5 @@ export function TabsContent(props: JSX.HTMLAttributes<HTMLDivElement> & { value:
   createEffect(on(ctx.value, rerender, { defer: true }));
   // As an attribute: served as React serves it, and left alone while hydrating.
   const served = [typeof authorStyle === 'string' ? authorStyle : '', prevented ? 'animation-duration:0s' : ''].filter(Boolean).join(';') || undefined;
-  return <div ref={panel} data-state={active() ? 'active' : 'inactive'} data-orientation={ctx.orientation} role="tabpanel" aria-labelledby={ctx.triggerId(value)} data-slot="tabs-content" id={props.id ?? ctx.contentId(value)} tabIndex={0} hidden={!active()} {...rest} {...({ 'attr:style': served } as JSX.HTMLAttributes<HTMLDivElement>)}>{_forceMount ? props.children : active() ? props.children : null}</div>;
+  return <div ref={panel} data-state={active() ? 'active' : 'inactive'} data-orientation={ctx.orientation} role="tabpanel" aria-labelledby={ctx.triggerId(value)} data-slot="tabs-content" id={props.id ?? ctx.contentId(value)} tabIndex={0} hidden={!active()} {...rest} {...({ 'attr:style': served } as JSX.HTMLAttributes<HTMLDivElement>)}>{local.forceMount ? local.children : active() ? local.children : null}</div>;
 }
