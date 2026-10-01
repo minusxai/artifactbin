@@ -82,7 +82,7 @@ Run these from the repository root. Keep this list current.
 - `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — the named browser gates in
   a Linux container, built and served as CI does; the output and exit status are the gates'.
 - CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:islands`, `test:integration`,
-  `build`, `test:gates`. Do not invoke these locally to work around deferral.
+  `build`, `test:gates`. Never use them to bypass deferral.
 - `npm run build:islands -w services/app` — build the shared reader islands and manifest.
 - `node scripts/gate-container.mjs hydration` — verify the compiled reader handover in a Linux container.
 - `npm run generate:routes`, `generate-story-ui-classes`, `render:schema` —
@@ -112,16 +112,6 @@ Run these from the repository root. Keep this list current.
   [services/app/lib/story-ui/AGENTS.md](services/app/lib/story-ui/AGENTS.md) before changing markup.
 - After a lockfile merge, regenerate if necessary and run `npm ci --dry-run`; a populated local install
   can hide a broken lockfile. Native packages and browser assets also need build/image verification.
-
-## Architecture pointers
-
-- Compiled reader (runtime binding, `?b=` build coherence, retained builds, `MIN_HANDOVER_CONTRACT`, the
-  carrier wire format in `lib/compiled-page/carriers.ts`): [docs/phase2-architecture.md](docs/phase2-architecture.md)
-  §3. A deploy that keeps the contract number needs no recompile; changing a stored format
-  (carriers, module specifiers) needs a contract bump and a backfill.
-- Kit overlays (popper, popup-dismiss, dialog-shell, tooltip-core) and the in-place editor:
-  phase2 §7; editing for users in [docs/editing.md](docs/editing.md).
-- The offline file: [docs/serving-and-security.md](docs/serving-and-security.md) "The offline file".
 
 ## Delegated work
 
