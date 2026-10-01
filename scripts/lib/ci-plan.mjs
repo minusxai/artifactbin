@@ -164,6 +164,8 @@ export function isBuildInput(path) {
   if (/(^|\/)__tests__\//.test(path) || /\.test\.[cm]?[jt]sx?$/.test(path)) return false;
   if (/^(\.github|\.agent|docs|evals)\//.test(path)) return false;
   if (/^scripts\/gates?[-.][^/]*\.mjs$/.test(path)) return false;
+  // How the test shards are packed (scripts/lib/timed-sequencer.mjs) never reaches the bundle.
+  if (/^scripts\/(test-timings\.(json|mjs)|lib\/timed-sequencer\.mjs)$/.test(path)) return false;
   if (/^[^/]+\.md$/.test(path)) return false;
   return true;
 }
