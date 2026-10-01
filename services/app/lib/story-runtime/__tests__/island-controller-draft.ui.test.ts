@@ -33,8 +33,12 @@ vi.mock('@/lib/islands/live-update', () => liveUpdate);
 const editSession = vi.hoisted(() => ({
   unmounts: 0,
   mounts: 0,
+  /** What the live editors answer when a draft of typed prose is offered to them. */
+  reconcile: false,
+  reconciled: [] as Array<HTMLElement | null>,
   session: {
     setNodes: () => {}, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
+    reconcileDraft: (_before: unknown, _after: unknown, _next: unknown, draft: HTMLElement | null) => { editSession.reconciled.push(draft); return editSession.reconcile; },
     unmountCompiledDom: () => { editSession.unmounts++; },
     mountCompiledDom: async () => { editSession.mounts++; },
   },
@@ -44,7 +48,8 @@ vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => (
 
 import { createIslandController, holdChartDrawings } from '../island-controller';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
-import { createEditDraftSender } from '@/solid/editor/edit-draft';
+import { createEditDraftSender, DRAFT_IDLE_MS } from '@/solid/editor/edit-draft';
+import { TYPING_QUIET_MS } from '../island-controller';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -377,5 +382,137 @@ describe('island controller editor drafts', () => {
     expect(host.querySelector(':scope > [data-mx-chart-hold]'), 'the redrawn chart takes over').toBeNull();
     rect.mockRestore();
     host.remove();
+  });
+
+  const editingController = async (fetch: (url: string, init: RequestInit) => Promise<Response>) => {
+    engine.state.applied.length = 0;
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const spy = vi.fn(fetch);
+    vi.spyOn(window, 'fetch').mockImplementation(spy as unknown as typeof window.fetch);
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null },
+    });
+    const mounts = editSession.mounts;
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > mounts);
+    return { root, controller, fetch: spy };
+  };
+  const compiled = async (_url: string, init: RequestInit) => {
+    const { source } = JSON.parse(String(init.body)) as { source: string };
+    return new Response(JSON.stringify({ html: `<div data-mx-inline-story>${source}</div>` }), { status: 200 });
+  };
+
+  it('typing: held until it pauses, then adopted by the live editor with NO compile, no morph and no remount', async () => {
+    editSession.reconcile = true;
+    editSession.reconciled.length = 0;
+    const { root, controller, fetch } = await editingController(compiled);
+    const unmounts = editSession.unmounts;
+    const show = createEditDraftSender({ current: controller }, { editId: () => 'e1', theme: () => null, colorMode: () => 'light' });
+    const sent = vi.spyOn(controller, 'update');
+    for (const text of ['v0 t', 'v0 ty', 'v0 typ']) show(`<p>${text}</p>`, { typing: true });
+    expect(sent).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_IDLE_MS + 50));
+    expect(sent).toHaveBeenCalledTimes(1);
+    expect(sent.mock.calls[0]![0]).toMatchObject({ source: '<p>v0 typ</p>', typing: true });
+    await settle(() => editSession.reconciled.length === 1);
+    await tick();
+    // The editor adopted it in place (no compiled draft was even needed): the network and the page never moved.
+    expect(editSession.reconciled).toEqual([null]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(editSession.unmounts).toBe(unmounts);
+    expect(engine.state.applied).toEqual([]);
+    expect(root.textContent).toBe('v0');
+    // Anything else is sent at once, and carries the typing held before it.
+    show('<p>held</p>', { typing: true });
+    show('<p>held and moved</p>');
+    expect(sent).toHaveBeenCalledTimes(2);
+    expect(sent.mock.calls[1]![0]).toMatchObject({ source: '<p>held and moved</p>' });
+    expect(sent.mock.calls[1]![0]).not.toHaveProperty('typing');
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_IDLE_MS + 50));
+    expect(sent).toHaveBeenCalledTimes(2);
+    editSession.reconcile = false;
+    await settle(() => engine.state.releases.length > 0);
+    while (engine.state.releases.length) { engine.state.releases.shift()!(); await tick(); }
+    controller.dispose();
+  });
+
+  it('a draft that must redraw (a chart, a component) waits until typing has paused, never under the caret', async () => {
+    editSession.reconcile = false;
+    const { root, controller } = await editingController(compiled);
+    const unmounts = editSession.unmounts;
+    root.dispatchEvent(new Event('input', { bubbles: true }));
+    const typedAt = performance.now();
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>chart changed</p>', editId: 'e1', theme: null, colorMode: 'light' });
+    await new Promise((resolve) => setTimeout(resolve, TYPING_QUIET_MS / 2));
+    expect(editSession.unmounts, 'nothing redrawn while typing').toBe(unmounts);
+    expect(engine.state.applied).toEqual([]);
+    await settle(() => engine.state.releases.length === 1);
+    expect(performance.now() - typedAt).toBeGreaterThanOrEqual(TYPING_QUIET_MS - 20);
+    expect(editSession.unmounts).toBe(unmounts + 1);
+    engine.state.releases.shift()!();
+    await settle(() => engine.state.active === 0);
+    expect(root.textContent).toBe('chart changed');
+    controller.dispose();
+  });
+
+  it('compiles one draft at a time, the newest wins, and a failed preview (502) is a no-op that blocks nothing', async () => {
+    editSession.reconcile = false;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    let fail!: () => void;
+    let first = true;
+    const { root, controller, fetch } = await editingController((url, init) => {
+      if (!first) return compiled(url, init);
+      first = false;
+      return new Promise((resolve) => { fail = () => resolve(new Response('bad gateway', { status: 502 })); });
+    });
+    for (const version of ['v1', 'v2', 'v3']) {
+      controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: `<p>${version}</p>`, editId: 'e1', theme: null, colorMode: 'light' });
+      await tick();
+    }
+    expect(fetch).toHaveBeenCalledTimes(1);
+    fail();
+    await settle(() => fetch.mock.calls.length === 2);
+    await tick();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetch.mock.calls[1]![1].body)).source, 'the waiting draft is the newest; v2 is never compiled').toBe('<p>v3</p>');
+    await settle(() => engine.state.releases.length === 1);
+    engine.state.releases.shift()!();
+    await settle(() => engine.state.active === 0);
+    expect(root.textContent).toBe('v3');
+    controller.dispose();
+  });
+
+  it('names every draft in order (X-Draft-Sequence); 409 applies nothing; 429 resends the newest draft once', async () => {
+    editSession.reconcile = false;
+    const answers: Array<() => Response> = [
+      () => new Response(JSON.stringify({ error: 'superseded' }), { status: 409 }),
+      () => new Response(JSON.stringify({ error: 'draft_compile_busy' }), { status: 429, headers: { 'Retry-After': '1' } }),
+      () => new Response(JSON.stringify({ error: 'draft_compile_busy' }), { status: 429, headers: { 'Retry-After': '1' } }),
+    ];
+    const { root, controller, fetch } = await editingController(async (url, init) => (answers.shift() ?? (() => null))() ?? compiled(url, init));
+    const unmounts = editSession.unmounts;
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
+    await settle(() => fetch.mock.calls.length === 1);
+    await tick(); await tick();
+    expect(editSession.unmounts, '409: nothing drawn').toBe(unmounts);
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v2</p>', editId: 'e1', theme: null, colorMode: 'light' });
+    await settle(() => fetch.mock.calls.length === 2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(fetch, 'no resend before Retry-After').toHaveBeenCalledTimes(2);
+    await settle(() => fetch.mock.calls.length === 3);
+    // The resend was refused again: no third try, no storm.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const sequences = fetch.mock.calls.map(([, init]) => new Headers(init.headers).get('X-Draft-Sequence')!);
+    expect(sequences.every((value) => /^[\w-]{1,64}\.\d+$/.test(value))).toBe(true);
+    expect(new Set(sequences.map((value) => value.split('.')[0])).size).toBe(1);
+    expect(sequences.map((value) => Number(value.split('.')[1]))).toEqual([1, 2, 3]);
+    expect(JSON.parse(String(fetch.mock.calls[2]![1].body)).source).toBe('<p>v2</p>');
+    expect(root.textContent).toBe('v0');
+    controller.dispose();
   });
 });

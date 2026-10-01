@@ -6,6 +6,14 @@ import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { isProseTree } from './model';
 
 export function replaceProseRegion(source: string, path: string, expected: string, replacement: string): string {
+  // The region as the editor last wrote it is, verbatim and once, in the source (its blocks carry their unique
+  // ids): replace it there without parsing the whole document — a report's worth of tables is not the edit.
+  const at = expected && /\bid=["{]/.test(expected) ? source.indexOf(expected) : -1;
+  if (at >= 0 && source.indexOf(expected, at + 1) < 0) {
+    const next = parseJsx(replacement);
+    if (!next.ok || !next.nodes.every(isProseTree) || validateJsx(next.nodes, { components: [] }).length) return source;
+    return source.slice(0, at) + serializeJsx(next.nodes) + source.slice(at + expected.length);
+  }
   const parsed = parseJsx(source),
     old = parseJsx(expected),
     next = parseJsx(replacement);
