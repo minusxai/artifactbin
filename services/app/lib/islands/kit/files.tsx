@@ -30,12 +30,12 @@ const count = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : 
 const join = (...v: (string | false | undefined)[]) => v.filter(Boolean).join(' ');
 const GRID = { icons: 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4', tiles: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3' };
 export function Files(p: Props) {
-  // Today's live listing hands `<Files>` its rows, variant and capture only: the
-  // section carries no authored id, stamp or class — so neither does this one.
+  // The section carries the compiler's recipe class (`class`), or the default plus an author's `className`;
+  // it carries no authored id or stamp.
   const island = useIsland(); const { data,rows,variant,capture } = p;
   const density = () => variant === 'tiles' ? 'tiles' : 'icons';
   const items = () => rows ?? (data && refName(data) ? island.table(refName(data)!)?.rows : undefined) ?? [];
-  return <section data-slot="files" class="my-6">
+  return <section data-slot="files" class={typeof p.class === 'string' ? p.class : join('my-6', typeof p.className === 'string' ? p.className : undefined)}>
     <ul aria-label="Files" data-slot="files-list" data-variant={density()} class={join('m-0 list-none p-0',items().length > 0 && GRID[density()])}>
       <For each={items()}>{row => {
         const id = text(row.id); const name = text(row.title) || text(row.name) || id || 'Untitled'; const url = text(row.url) || (id ? `/a/${id}` : '');
