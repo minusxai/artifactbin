@@ -70,8 +70,11 @@ function regionEnd(siblings: JsxNode[], start: number): number {
 
 /** How many recent hand-overs an editor remembers: drafts in flight are one or two behind it. */
 const HANDED_KEPT = 8;
-/** The longest an off-screen region mount slice may hold the page (one region at least). */
-const SLICE_MS = 40;
+/**
+ * How long an off-screen mount slice may build editors (one region at least). Every slice that changes the page also
+ * costs one style pass of the whole page at the next frame, so fewer, fuller slices block less in all.
+ */
+const SLICE_MS = 200;
 const isBreak = (node: JsxNode | undefined): boolean => node?.type === 'text' && !node.value.trim();
 /**
  * The editor's blocks, laid out with the line breaks the region had between and after its blocks. Breaks are child
@@ -327,8 +330,6 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     mount.dataset.mxEditRegion = path;
     mount.style.display = 'contents';
     if (placement) PLACEMENT.forEach((name, i) => mount.style.setProperty(`--mx-place-${name}`, placement[i]!));
-    parent.insertBefore(mount, elements[0]!);
-    for (const element of elements) element.remove();
     let previous = region;
     /** What this editor handed over at its recent pauses: a draft of one of them is this editor's own, passed. */
     const handed: string[] = [];
@@ -346,6 +347,12 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         handed.push(written.trim());
         if (handed.length > HANDED_KEPT) handed.shift();
       }} />, mount);
+    // The editor is built OFF the document and only then takes its blocks' place. ProseMirror writes its root's
+    // `contenteditable`, and the browser answers that write by bringing the whole page's styles up to date at once
+    // when anything is pending: built in place, every region paid a full style pass of the page (most of a second on
+    // a table-heavy document at slow CPUs). Built here, a slice of regions shares one, at the next frame.
+    parent.insertBefore(mount, elements[0]!);
+    for (const element of elements) element.remove();
     mounted.set(path, {
       view: () => liveView,
       handedOver: (text) => handed.includes(text.trim()),
@@ -376,7 +383,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   for (const host of hosts) host();
   /**
    * Regions on screen are editable when this returns. The rest (a long document's off-screen tables) mount in
-   * slices of at most SLICE_MS between frames and input, so a redraw is never one task that freezes typing; until
+   * idle slices of about SLICE_MS between frames and input, so a redraw is never one task that freezes typing; until
    * then each shows its compiled blocks, exactly as it reads.
    */
   for (const region of regions) if (region.visible) mountRegion(region);
