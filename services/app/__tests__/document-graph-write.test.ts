@@ -1,6 +1,6 @@
 import {documentEdit} from './prepared-document';
 import {expect,it,vi} from 'vitest';
-import {useAppHarness,request} from './harness';
+import {useAppHarness,request,settleBackgroundWrites} from './harness';
 import {getDb} from '@/lib/db';
 import {mintToken} from '@/lib/tokens';
 import {getArtifactById,editorScope,createArtifact,refLoaderForActor,applyEditScoped} from '@/lib/artifacts';
@@ -14,6 +14,8 @@ async function setup(){
  const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);
  const {id}=await response.json(),row=(await getArtifactById(id))!,document=createDocumentGraph(row.source!,row.version),db=await getDb();
  await db.query('UPDATE artifacts SET document=$2::jsonb,source=NULL WHERE id=$1',[id,JSON.stringify(document)]);
+ // The create's telemetry must not land inside a test's count of its own statements.
+ await settleBackgroundWrites();
  return {db,actor,row,base:{id,version:row.version,document,meta:row.meta}};
 }
 it('atomically commits a structural edit, exact archive and invertible history in one statement',async()=>{
