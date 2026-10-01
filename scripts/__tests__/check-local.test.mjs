@@ -113,7 +113,8 @@ describe('validate type-checker', () => {
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
-  it.skipIf(native === process.execPath)('reports the same errors at the same file:line as tsc, including after an incremental edit', () => {
+  // CI installs the binary (linux-x64): there a missing one fails here instead of silently checking with tsc.
+  it.skipIf(!process.env.CI && native === process.execPath)('reports the same errors at the same file:line as tsc, including after an incremental edit', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'type-check-parity-'));
     const put = (name, text) => { mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); writeFileSync(path.join(root, name), text); };
     try {
