@@ -3,6 +3,9 @@
 import { createEffect, createSignal, For, onCleanup, Show, lazy } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { JsxNode } from '@/lib/jsx';
+import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
+import { READER_READY_ATTR } from '@/lib/compiled-page/contract';
+import { ISLANDS_READY_EVENT } from '@/lib/islands/contract';
 import { mountCompiledEditRegions, type CompiledEditMount } from '@/solid/editor/dom-mounter';
 import { createLiveEditsCore, type LiveEditsCore } from '@/solid/lib/live-edits-core';
 import { createFileBackend, rebuildArtifactFile, sourceChangedOutside } from './file-backend';
@@ -18,6 +21,7 @@ declare global { interface Window { __afbinOfflineReady?: Promise<void>; } }
 
 const SourceEditor = lazy(() => import('@/solid/editor/SourceEditor'));
 const NOTHING_TO_SAVE = 'No changes to save';
+const EDIT_REFUSED = 'This text could not be applied to the current document.';
 const INVALID_SOURCE_EDIT = 'Editing needs a valid source. Fix the markup in the file, then open it again.';
 const BUTTON = 'inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-edge px-2 font-sans text-xs text-fg disabled:cursor-default disabled:opacity-50';
 
@@ -46,8 +50,8 @@ function projectText(root: HTMLElement, nodes: JsxNode[]): void {
  * Solid's hydration markers and blanks or corrupts the region (the save → reopen bug this guards).
  */
 function afterReady(work: () => void): void {
-  if (!document.getElementById(ARTIFACT_FILE_IDS.compiledCode) || document.documentElement.hasAttribute('data-mx-ready')) { work(); return; }
-  document.addEventListener('mx:ready', work, { once: true });
+  if (!document.getElementById(ARTIFACT_FILE_IDS.compiledCode) || document.documentElement.hasAttribute(READER_READY_ATTR)) { work(); return; }
+  document.addEventListener(ISLANDS_READY_EVENT, work, { once: true });
 }
 
 /** Every element whose value is `$name` for one of `stale`'s names (a Select's `options`, a
@@ -149,10 +153,12 @@ function OfflineShell(props: Opened) {
     if (props.invalid) return;
     setEditing(true);
     editMount = mountCompiledEditRegions(story, file().island.nodes, {
-      onFlow: (_path, expected, replacement) => {
+      // The app's own flow-edit kernel: the region at `path`, checked against what the editor last saw, prose only.
+      onFlow: (path, expected, replacement) => {
         const before = source();
-        const at = before.indexOf(expected);
-        if (at >= 0) queueSource(before.slice(0, at) + replacement + before.slice(at + expected.length));
+        const next = replaceProseRegion(before, path, expected, replacement);
+        if (next !== before) queueSource(next);
+        else if (expected !== replacement) setEditStatus(EDIT_REFUSED);
       },
       onError: setEditStatus,
     });
