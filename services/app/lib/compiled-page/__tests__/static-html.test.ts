@@ -5,8 +5,10 @@
  * browser module with and without the chunks.
  */
 import { describe, expect, it } from 'vitest';
-import { declaredValues, generate } from '../compiler';
-import { buildDocumentModules, ssrTransformStats } from '../bundle.server';
+import { writeFileSync } from 'node:fs';
+import { performance } from 'node:perf_hooks';
+import { compilePage, declaredValues, generate } from '../compiler';
+import { buildDocumentModules, loadKitServer, ssrTransformStats } from '../bundle.server';
 import { loadCompilerBuild } from '../build.server';
 import { createModuleStore } from '../modules.server';
 import type { CompileInput } from '../contract';
@@ -35,7 +37,7 @@ const EDGES: CorpusDoc[] = [
 async function compileBoth(input: CompileInput) {
   const build = loadCompilerBuild();
   const base = { ...input, glyphCatalogUrl: build.manifest['@mx/glyphs'] };
-  const chunked = generate(base);
+  const chunked = generate({ ...base, kitServer: await loadKitServer() });
   const jsx = generate({ ...base, staticHtml: false });
   const options = { build, flow: input.flow, values: declaredValues(input.flow), store: createModuleStore() };
   const [fast, reference] = [await buildDocumentModules(chunked, options), await buildDocumentModules(jsx, options)];
@@ -45,6 +47,7 @@ async function compileBoth(input: CompileInput) {
 describe('static chunks', () => {
   it('serve every corpus and edge document byte for byte as the all-JSX skeleton does', async () => {
     let chunks = 0;
+    const kitChunks = new Set<string>();
     for (const doc of [...await corpus(), ...EDGES]) {
       const input = await inputOf(doc).catch((error: unknown) => { throw new Error(`${doc.key}: ${String(error)}`); });
       const { chunked, jsx, fast, reference } = await compileBoth(input);
@@ -54,9 +57,11 @@ describe('static chunks', () => {
       expect(chunked.islandRefs, doc.key).toEqual(jsx.islandRefs);
       expect(chunked.kit.islands, doc.key).toEqual(jsx.kit.islands);
       chunks += chunked.staticHtml.length;
+      for (const html of chunked.staticHtml) for (const [, slot] of html.matchAll(/data-slot="([a-z-]+)"/g)) kitChunks.add(slot!);
     }
-    // The chunks are exercised, not bypassed.
+    // The chunks are exercised, not bypassed — the kit's among them.
     expect(chunks).toBeGreaterThan(100);
+    expect([...kitChunks]).toEqual(expect.arrayContaining(['table', 'table-row', 'table-cell', 'card', 'card-content', 'badge', 'icon', 'separator', 'alert']));
   }, 240_000);
 
   it('keeps a heavy static document out of the module Babel transforms', async () => {
@@ -90,4 +95,32 @@ describe('static chunks', () => {
     })();
     expect(ssrTransformStats().misses).toBe(after.misses + 1);
   }, 60_000);
+
+  it('compiles a kit-table report (28 kit Tables × 30 rows and a chart) in two seconds, its tables as static chunks', async () => {
+    const cell = (t: number, r: number, c: number, body: string, cls = '') => `<TableCell${cls ? ` className="${cls}"` : ''} id="c${t}_${r}_${c}">${body}</TableCell>`;
+    const row = (t: number, r: number) => `<TableRow id="r${t}_${r}">${cell(t, r, 0, `Item ${r} golf`)}${cell(t, r, 1, String(r * 17), 'text-right tabular-nums')}${cell(t, r, 2, `<Badge variant="secondary" id="b${t}_${r}">ok</Badge>`)}${cell(t, r, 3, `note ${r} with <strong>bold</strong> &amp; text`)}</TableRow>`;
+    const table = (t: number) => `<h2 className="mt-8 text-xl font-semibold" id="h${t}">Section ${t}</h2><p className="text-sm text-muted-foreground" id="p${t}">Notes for ${t}: alpha &amp; beta.</p>`
+      + `<Card id="k${t}"><CardContent id="kc${t}"><Table id="t${t}"><TableHeader id="th${t}"><TableRow id="tr${t}">${['Name', 'Value', 'State', 'Notes'].map((h, i) => `<TableHead id="hd${t}_${i}">${h}</TableHead>`).join('')}</TableRow></TableHeader>`
+      + `<TableBody id="tb${t}">${Array.from({ length: 30 }, (_, r) => row(t, r)).join('')}</TableBody></Table></CardContent></Card>`;
+    const markup = `<Helmet><Import name="sales" src="ref:SALES1" /><Query name="monthly">{\`select month, sum(revenue) as revenue from sales.rows group by 1 order by 1\`}</Query></Helmet>`
+      + `<div data-design="tw" className="px-6" id="root"><h1 className="text-3xl font-bold" id="title">Report</h1>`
+      + `<Question title="Revenue" data="$monthly" height="300px" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} id="q1" />`
+      + `${Array.from({ length: 28 }, (_, t) => table(t)).join('')}</div>`;
+    const input = await inputOf({ key: 'kit-report', group: 'tag', markup, template: null });
+    const build = loadCompilerBuild();
+    // The process's first compile loads the build's server half; the measured one is this document's first.
+    await compilePage(await inputOf(edge('warm', '<Card><Table><TableBody><TableRow><TableCell>w</TableCell></TableRow></TableBody></Table></Card>')), build);
+    const generated = generate({ ...input, kitServer: await loadKitServer() });
+    expect(generated.staticHtml.join('')).toMatch(/<td data-slot="table-cell" class="[^"]*" data-mx-ast="[\d.]+" id="c27_29_0"/);
+    expect(generated.skeleton.length).toBeLessThan(40_000);
+    const start = performance.now();
+    const page = await compilePage(input, build);
+    const cold = performance.now() - start;
+    const again = performance.now();
+    await compilePage(input, build);
+    const warm = performance.now() - again;
+    if (process.env.P3_REPORT_DIR) writeFileSync(`${process.env.P3_REPORT_DIR}/kit-report.json`, JSON.stringify({ source: markup.length, html: page.html.length, first: cold, again: warm }));
+    expect(page.html).toContain('Item 29 golf');
+    expect(cold).toBeLessThan(2_000);
+  }, 120_000);
 });
