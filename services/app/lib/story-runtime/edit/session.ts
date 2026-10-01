@@ -53,7 +53,7 @@ import {
 } from './hover-select';
 import { createImageTransfer, DROP_REPLACE_CSS, EDIT_DROP_REPLACE_ATTR } from './image-transfer';
 import { createFormatLink } from './format-link';
-import type { CompiledEditMount, CompiledEditCallbacks, ReconcileOptions } from '@/solid/editor/dom-mounter';
+import type { CompiledEditMount, CompiledEditCallbacks, HeldEditors, ReconcileOptions } from '@/solid/editor/dom-mounter';
 
 /**
  * Selection chrome, injected on entering edit mode and removed on leaving.
@@ -95,6 +95,13 @@ const EDIT_CSS_ATTR = 'data-mx-edit-css';
 export interface FrameEditSession {
   /** Attach the Solid edit regions and text-host listeners to a server-compiled story. */
   mountCompiledDom(): Promise<void>;
+  /**
+   * Before a compiled draft is drawn: keep the editors whose region `draft` (the draft's story root, off the page)
+   * draws exactly as they stand in for it, and swap their blocks there for stand-ins. Returns the live editor roots
+   * by stand-in path, for the morph to place (lib/islands/morph/engine `morphDraftDom`). `unmountCompiledDom` then
+   * leaves them running and the next `mountCompiledDom` takes them over: a redraw rebuilds only what it changed.
+   */
+  holdUnchanged(next: JsxNode[], draft: HTMLElement): ReadonlyMap<string, HTMLElement>;
   /** Release Solid prose regions before a compiled DOM morph; the session and its commands stay live. */
   unmountCompiledDom(): void;
   /** A compiled draft may replace the DOM when no host text or composition is pending. */
@@ -128,7 +135,7 @@ interface FrameEditSessionOptions {
   /** Ask the runtime to re-render (a new body epoch releases the focus guard). */
   requestRender: () => void;
   /** Browser-only Solid boundary (solid/editor/dom-mounter). */
-  mountCompiled: (root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks) => CompiledEditMount;
+  mountCompiled: (root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks, held?: HeldEditors) => CompiledEditMount;
 }
 
 /**
@@ -175,6 +182,8 @@ export function createFrameEditSession({
   };
   const views: EditViews = { all: new Set(), last: null };
   let compiledMount: CompiledEditMount | null = null;
+  /** Editors held across the redraw in progress (`holdUnchanged`), for the next mount. */
+  let held: HeldEditors | null = null;
   let pendingBookmark: EditorBookmark | undefined;
   /*
    * The Undo/Redo target, held for the redraw the history step always causes. The painted draft may still
@@ -335,6 +344,15 @@ export function createFrameEditSession({
   return {
     canApplyDraft() { return !typingReported && !active?.userEdited; },
     reconcileDraft(before, after, next, draft, options) { return !disposed && !!compiledMount?.reconcile(before, after, next, draft, options); },
+    holdUnchanged(next, draft) {
+      held?.dispose();
+      held = null;
+      if (disposed || !compiledMount) return new Map();
+      // What is half-typed is handed over first: an editor is held for the prose it has handed over.
+      for (const view of views.all) flushFlowView(view);
+      held = compiledMount.hold(next, draft);
+      return held.stands;
+    },
     unmountCompiledDom() {
       for (const view of views.all) flushFlowView(view);
       const toolbarFocus = doc.activeElement instanceof HTMLElement
@@ -353,6 +371,8 @@ export function createFrameEditSession({
       if (disposed) return;
       const readerScroll = { x: win.scrollX, y: win.scrollY };
       compiledMount?.dispose();
+      const keep = held ?? undefined;
+      held = null;
       compiledMount = mountCompiled(root, nodes, {
         onFlow(path, expected, replacement, group, change) {
           historyBookmark = historyLanded = undefined;
@@ -369,7 +389,7 @@ export function createFrameEditSession({
         onHostFocus: hostSession.onFocus,
         onHostInput: hostSession.onInput,
         onHostBlur: hostSession.onBlur,
-      });
+      }, keep);
       // Replacing prose with ProseMirror briefly shortens the page. Put the reader back after
       // layout settles; a draft recompile uses this same mounter and keeps its visible place.
       win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
@@ -451,6 +471,8 @@ export function createFrameEditSession({
     dispose() {
       compiledMount?.dispose();
       compiledMount = null;
+      held?.dispose();
+      held = null;
       // No scroll is put back here: leaving edit mode, the page moves the document itself as its chrome changes
       // (solid/pages/Document `keepReadingPlace`), and restoring this moment's scroll a frame later undid that.
       disposed = true;

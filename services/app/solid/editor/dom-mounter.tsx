@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /** Attach prose editing to the compiler's `data-mx-ast` DOM without interpreting the document again. */
-import { createSignal, type Setter } from 'solid-js';
+import { batch, createSignal, type Setter } from 'solid-js';
 import { render } from 'solid-js/web';
 import { serializeJsx, type JsxNode } from '@/lib/jsx';
 import { editorDocument, isProseTree, sourceNodes } from '@/lib/editor-v2/model';
@@ -13,6 +13,7 @@ import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
 import { FlowEditor } from '@/solid/editor/FlowEditor';
 import { GridEdit, type GridTile } from '@/solid/editor/GridEdit';
 import { discoverSlides } from '@/lib/story-runtime/slides';
+import { AST_PATH_ATTR as AST_PATH } from '@/lib/story-ui/ast-path';
 
 export interface CompiledEditCallbacks {
   onFlow(path: string, expected: string, replacement: string, group?: string, selection?: EditorSelectionChange): void;
@@ -37,6 +38,39 @@ export interface CompiledEditMount {
    * False, and nothing changed, when anything else differs: the caller draws it.
    */
   reconcile(before: JsxNode[], after: JsxNode[], next: JsxNode[], draft: HTMLElement | null, options?: ReconcileOptions): boolean;
+  /**
+   * Before a compiled draft is drawn: hold every editor whose region the draft compiles to exactly the blocks it
+   * stands in for (same prose, same compiled HTML, wherever its path moved). In `draft` (off the page) those blocks
+   * become a stand-in, `[data-mx-edit-region="<new path>"]`, where the morph places the live editor (the result's
+   * `stands`); `dispose` then leaves held editors running, and the next mount, given them, adopts them under their
+   * new paths instead of building them again. A redraw rebuilds only the regions it changed.
+   */
+  hold(next: JsxNode[], draft: HTMLElement): HeldEditors;
+}
+
+/** Editors held across a redraw (`CompiledEditMount.hold`), by their region's path in the draft. */
+export interface HeldEditors {
+  /** The live editor roots the morph places at the draft's stand-ins, by the stand-in's path. */
+  readonly stands: ReadonlyMap<string, HTMLElement>;
+  /** For the next mount: the held editor at `path`, taken (once). */
+  take(path: string): RegionEditor | undefined;
+  /** Tear down every editor no mount took, its compiled blocks back in its place. */
+  dispose(): void;
+}
+
+/** One mounted prose editor. */
+interface RegionEditor {
+  mount: HTMLElement;
+  view(): EditorView | null;
+  /** The source of the blocks it shows, as last drawn or handed over. */
+  shown(): JsxNode[];
+  /** The compiled blocks it stands in for, put back when it leaves. */
+  restore: HTMLElement[];
+  handedOver(text: string): boolean;
+  adopt(region: JsxNode[], elements: () => HTMLElement[]): void;
+  /** The same editor at a new path (blocks added or removed ahead of it), with its region's new nodes. */
+  repath(path: string, region: JsxNode[]): void;
+  dispose(): void;
 }
 
 export interface ReconcileOptions {
@@ -160,11 +194,18 @@ const sameMaps = (a: Map<string, string>, b: Map<string, string>): boolean =>
 /** Item placement a lone block hands to the editor root that stands in for it in a flex/grid parent. */
 const PLACEMENT = ['grid-column-start', 'grid-column-end', 'grid-row-start', 'grid-row-end', 'flex-grow', 'flex-shrink', 'flex-basis', 'align-self', 'justify-self', 'order'] as const;
 
+/** The attribute on a region's editor root, and on a held editor's stand-in in a draft. */
+export const EDIT_REGION_ATTR = 'data-mx-edit-region';
+/** Compiled blocks compared across a redraw: their AST paths are positional (a block added above moves them). */
+const compiledKey = (blocks: readonly Element[]): string => blocks.map((block) => block.outerHTML.replace(/ data-mx-ast="[^"]*"/g, '')).join('');
+
 /** One region replaces only its authored prose siblings; adjacent compiled islands keep their DOM identity. */
-export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks): CompiledEditMount {
+export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks, held?: HeldEditors): CompiledEditMount {
   const cleanups: Array<() => void> = [];
   /** Every mounted prose editor, by its region's path: what `reconcile` keeps alive. */
-  const mounted = new Map<string, { view: () => EditorView | null; adopt(region: JsxNode[], elements: () => HTMLElement[]): void; handedOver(text: string): boolean }>();
+  const mounted = new Map<string, RegionEditor>();
+  /** Editors `hold` handed to the next mount: `dispose` leaves them running. */
+  const holding = new Set<RegionEditor>();
   // GridEdit's grip/resize affordances (STORY_GRID_EDIT_CSS's [data-mx-grid-tile]/.mx-grid-resize
   // rules) are structural, not authored content — same reasoning as the React adapter's own
   // `<style data-mx-grid-css>`, injected inside the story surface rather than the app's <head>.
@@ -270,6 +311,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   interface RegionMount { path: string; region: JsxNode[]; elements: HTMLElement[]; parent: HTMLElement; layout: 'grid' | 'flex' | null; placement: string[] | null; visible: boolean; height: number }
   const view = root.ownerDocument.defaultView ?? window;
   const regions: RegionMount[] = [];
+  /** Held editors this mount takes over, with their region's path and nodes here. */
+  const adopted: Array<[string, JsxNode[], RegionEditor]> = [];
   const hosts: Array<() => void> = [];
   const displays = new Map<HTMLElement, string>();
   const viewportHeight = view.innerHeight;
@@ -310,6 +353,11 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       const start = index++;
       index = regionEnd(siblings, start);
       const region = siblings.slice(start, index);
+      const kept = held?.take(path);
+      if (kept) {
+        if (kept.mount.isConnected && root.contains(kept.mount)) { adopted.push([path, region, kept]); continue; }
+        kept.dispose();
+      }
       const elements = Array.from({ length: index - start }, (_, offset) => at([parentPath, String(start + offset)].filter(Boolean).join('.')))
         .filter((el): el is HTMLElement => !!el);
       if (!elements.length || !elements[0]!.parentElement || !elements.every((el) => el.parentElement === elements[0]!.parentElement)) continue;
@@ -326,8 +374,10 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     }
   };
   /** THE WRITE PASS for one region: its blocks leave, one editor stands in for them. */
-  const mountRegion = ({ path, region, elements, parent, layout, placement, height }: RegionMount) => {
+  const mountRegion = ({ path: initialPath, region, elements, parent, layout, placement, height }: RegionMount) => {
     if (!elements.every((el) => el.isConnected && el.parentElement === parent)) return;
+    let path = initialPath;
+    const [currentPath, setCurrentPath] = createSignal(path);
     const mount = root.ownerDocument.createElement('div');
     mount.dataset.mxEditRegion = path;
     mount.style.display = 'contents';
@@ -339,9 +389,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     /** What this editor handed over at its recent pauses: a draft of one of them is this editor's own, passed. */
     const handed: string[] = [];
     let liveView: EditorView | null = null;
-    let restore = elements;
     const [current, setCurrent] = createSignal(region) as [() => JsxNode[], Setter<JsxNode[]>];
-    const disposeSolid = render(() => <FlowEditor nodes={current()} path={path}
+    const disposeSolid = render(() => <FlowEditor nodes={current()} path={currentPath()}
       onError={callbacks.onError} onBusy={callbacks.onBusy}
       onView={(view) => { if (view) liveView = view; callbacks.onView?.(view); }}
       onChange={(blocks, group, selection) => {
@@ -358,36 +407,57 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     // a table-heavy document at slow CPUs). Built here, a slice of regions shares one, at the next frame.
     parent.insertBefore(mount, elements[0]!);
     for (const element of elements) element.remove();
-    mounted.set(path, {
+    const editor: RegionEditor = {
+      mount,
+      restore: elements,
       view: () => liveView,
+      shown: () => previous,
       handedOver: (text) => handed.includes(text.trim()),
       adopt(next, compiled) {
         previous = next;
         setCurrent(() => next);
         const blocks = compiled();
-        if (blocks.length) restore = blocks;
+        if (blocks.length) editor.restore = blocks;
       },
-    });
+      repath(nextPath, next) {
+        previous = next;
+        if (nextPath !== path) { path = nextPath; mount.dataset.mxEditRegion = nextPath; }
+        // One update: the editor's AST-path decorations follow the path; its prose (the same) is not rebuilt.
+        batch(() => { setCurrentPath(nextPath); setCurrent(() => next); });
+      },
+      dispose() {
+        if (mount.isConnected && mount.parentNode) {
+          // The compiled blocks of the last draft adopted, so leaving shows what was typed.
+          for (const element of editor.restore) mount.parentNode.insertBefore(element, mount);
+          mount.remove();
+        }
+        // Torn down off the page, as it was built: removing an editable root in place brought the page's styles up to
+        // date at every region.
+        disposeSolid();
+      },
+    };
+    mounted.set(path, editor);
     // The editor root replaces the region's blocks as ONE child of their parent; under a flex or
     // grid parent it adopts that layout (edit-mode CSS) so the blocks lay out as they read.
     // The whole content of a flex/grid parent: the root fills it and adopts its layout. Beside
     // other items it stays one item, placed as its single block was. Set on the wrapper, not
     // the editor root: ProseMirror owns its root's attributes.
     if (layout) mount.setAttribute('data-mx-parent-layout', Array.from(parent.children).every((child) => child === mount) ? layout : 'item');
-    cleanups.push(() => {
-      mounted.delete(path);
-      if (mount.isConnected) {
-        // The compiled blocks of the last draft adopted, so leaving shows what was typed.
-        for (const element of restore) parent.insertBefore(element, mount);
-        mount.remove();
-      }
-      // Torn down off the page, as it was built: removing an editable root in place brought the page's styles up to
-      // date at every region.
-      disposeSolid();
-    });
   };
   visit(nodes, '');
   for (const host of hosts) host();
+  // Held editors stay as they are: only their path (and the nodes carrying it) moves to this draft's.
+  for (const [path, region, editor] of adopted) {
+    editor.repath(path, region);
+    mounted.set(path, editor);
+    const live = editor.view();
+    if (live) callbacks.onView?.(live);
+  }
+  held?.dispose();
+  cleanups.push(() => {
+    for (const editor of mounted.values()) if (!holding.has(editor)) editor.dispose();
+    mounted.clear();
+  });
   /**
    * Regions on screen are editable when this returns. The rest (a long document's off-screen tables) mount in
    * idle slices of about SLICE_MS between frames and input, so a redraw is never one task that freezes typing; until
@@ -411,6 +481,46 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   });
   return {
     dispose() { for (const cleanup of cleanups.reverse()) cleanup(); },
+    hold(next, draft) {
+      const stands = new Map<string, HTMLElement>();
+      const taken = new Map<string, RegionEditor>();
+      // In page order, so a region is matched with the editor that showed it, not an identical one elsewhere.
+      const live = [...mounted.values()]
+        .filter((editor) => editor.mount.isConnected && !editor.mount.hasAttribute('data-mx-parent-layout') && !holding.has(editor))
+        .sort((a, b) => (a.mount.compareDocumentPosition(b.mount) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+      const keys = new Map<RegionEditor, string>();
+      const keyOf = (editor: RegionEditor) => { let key = keys.get(editor); if (key === undefined) { key = serializeJsx(editor.shown()); keys.set(editor, key); } return key; };
+      const doc = root.ownerDocument;
+      let from = 0;
+      for (const region of proseRegions(next)) {
+        const want = serializeJsx(region.nodes);
+        let found = -1;
+        for (let i = from; i < live.length; i++) if (keyOf(live[i]!) === want) { found = i; break; }
+        if (found < 0) continue;
+        const editor = live[found]!;
+        const blocks = region.nodes.flatMap((_, offset) => {
+          const el = draft.querySelector<HTMLElement>(`[${AST_PATH}="${CSS.escape([region.parentPath, String(region.start + offset)].filter(Boolean).join('.'))}"]`);
+          return el ? [el] : [];
+        });
+        // The draft must draw exactly what the editor stands in for: the same blocks, in one parent, compiled alike.
+        if (!blocks.length || !blocks.every((el) => el.parentNode === blocks[0]!.parentNode) || compiledKey(blocks) !== compiledKey(editor.restore)) continue;
+        from = found + 1;
+        const stand = draft.ownerDocument.createElement('div');
+        stand.setAttribute(EDIT_REGION_ATTR, region.path);
+        blocks[0]!.parentNode!.insertBefore(stand, blocks[0]!);
+        for (const block of blocks) block.remove();
+        // Leaving shows the draft's blocks (their paths are the draft's).
+        editor.restore = blocks.map((block) => doc.adoptNode(block));
+        stands.set(region.path, editor.mount);
+        taken.set(region.path, editor);
+        holding.add(editor);
+      }
+      return {
+        stands,
+        take(path) { const editor = taken.get(path); taken.delete(path); if (editor) holding.delete(editor); return editor; },
+        dispose() { for (const editor of taken.values()) { holding.delete(editor); editor.dispose(); } taken.clear(); },
+      };
+    },
     reconcile(before, after, next, draft, options = {}) {
       const was = proseRegions(before), now = proseRegions(after), into = proseRegions(next);
       if (was.length !== now.length || now.length !== into.length || now.some((region, i) => region.path !== was[i]!.path || region.path !== into[i]!.path)) return false;

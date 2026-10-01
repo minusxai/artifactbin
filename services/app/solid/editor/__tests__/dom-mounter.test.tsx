@@ -7,6 +7,7 @@ import type { EditorView } from 'prosemirror-view';
 import { flushFlowView } from '@/lib/editor-v2/flow-view';
 import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import { serializeJsx } from '@/lib/jsx';
+import { morphDraftDom } from '@/lib/islands/morph/engine';
 
 describe('compiled DOM edit mounter', () => {
   it('mounts the regions on screen at once and the off-screen ones in later slices, never after dispose', async () => {
@@ -53,6 +54,50 @@ describe('compiled DOM edit mounter', () => {
     expect(again.querySelectorAll('[data-mx-edit-region]').length).toBe(0);
     expect(again.querySelectorAll('h2[data-mx-ast], table[data-mx-ast]').length).toBe(12);
     again.remove();
+  });
+  it('keeps the editor of a region a redraw draws unchanged, under its new path, and rebuilds only the changed one', async () => {
+    const before = parseJsxOrThrow('<div id="r"><p id="a">A</p><Badge id="x">b</Badge><p id="b">B <strong>bold</strong></p></div>').nodes;
+    const after = parseJsxOrThrow('<div id="r"><p id="a">A changed</p><Badge id="x">b</Badge><Badge id="y">c</Badge><p id="b">B <strong>bold</strong></p></div>').nodes;
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0" id="r"><p data-mx-ast="0.0" id="a">A</p><span data-mx-ast="0.1" id="x">b</span><p data-mx-ast="0.2" id="b">B <strong data-mx-ast="0.2.1">bold</strong></p></div>';
+    document.body.append(root);
+    const draft = document.implementation.createHTMLDocument('').createElement('div');
+    draft.innerHTML = '<div data-mx-ast="0" id="r"><p data-mx-ast="0.0" id="a">A changed</p><span data-mx-ast="0.1" id="x">b</span><span data-mx-ast="0.2" id="y">c</span><p data-mx-ast="0.3" id="b">B <strong data-mx-ast="0.3.1">bold</strong></p></div>';
+    const onFlow = vi.fn();
+    const first = mountCompiledEditRegions(root, before, { onFlow });
+    const kept = root.querySelector<HTMLElement>('[data-mx-edit-region="0.2"]')!;
+    const changed = root.querySelector<HTMLElement>('[data-mx-edit-region="0.0"]')!;
+    expect(kept).not.toBeNull();
+    expect(changed).not.toBeNull();
+
+    const held = first.hold(after, draft);
+    // Only the unchanged region is held; in the draft its blocks are a stand-in at its new path.
+    expect([...held.stands.keys()]).toEqual(['0.3']);
+    expect(held.stands.get('0.3')).toBe(kept);
+    expect(draft.querySelector('#b')).toBeNull();
+    expect(draft.querySelector('[data-mx-edit-region="0.3"]')).not.toBeNull();
+    first.dispose();
+    // The held editor is still on the page; the other went back to its compiled block.
+    expect(kept.isConnected).toBe(true);
+    expect(changed.isConnected).toBe(false);
+    expect(root.querySelector('#a')?.textContent).toBe('A');
+
+    morphDraftDom(root, draft, new Set(), new Set(), held.stands);
+    expect(root.querySelector('[data-mx-edit-region]')).toBe(kept);
+    const second = mountCompiledEditRegions(root, after, { onFlow }, held);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The same editor root, now answering to the region's new path; the changed region has a new editor.
+    expect(root.querySelector('[data-mx-edit-region="0.3"]')).toBe(kept);
+    expect(kept.querySelector('p')?.getAttribute('data-mx-ast')).toBe('0.3');
+    const rebuilt = root.querySelector<HTMLElement>('[data-mx-edit-region="0.0"]')!;
+    expect(rebuilt).not.toBe(changed);
+    expect(rebuilt.textContent).toBe('A changed');
+    expect(root.querySelector('#y')).not.toBeNull();
+    second.dispose();
+    // Leaving puts back the draft's compiled blocks, with the draft's paths.
+    expect(root.querySelector('#b')?.getAttribute('data-mx-ast')).toBe('0.3');
+    expect(root.querySelector('[data-mx-edit-region]')).toBeNull();
+    root.remove();
   });
   it('renames a compiled deck slide through the rail edit control', () => {
     const root = document.createElement('div');
