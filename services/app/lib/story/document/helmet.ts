@@ -261,15 +261,16 @@ function helmetContent(helmet: JsxElement): HelmetContent {
 /** The tree with every Helmet subtree removed, parents cloned immutably (spans untouched). */
 function withoutHelmets(nodes: JsxNode[]): JsxNode[] {
   const out: JsxNode[] = [];
+  let changed = false;
   for (const n of nodes) {
     if (n.type !== 'element' || n.tag === 'Iframe') { out.push(n); continue; }
-    if (isHelmet(n)) continue;
+    if (isHelmet(n)) { changed = true; continue; }
     const children = withoutHelmets(n.children);
-    out.push(children === n.children || children.every((c, i) => c === n.children[i]) && children.length === n.children.length
-      ? n
-      : { ...n, children });
+    if (children === n.children) out.push(n);
+    else { changed = true; out.push({ ...n, children }); }
   }
-  return out;
+  // Nothing removed below: the same array, so an unchanged subtree stays the same object all the way up.
+  return changed ? out : nodes;
 }
 
 /**
@@ -356,10 +357,16 @@ const hasBoundSource = (nodes: JsxNode[]): boolean => nodes.some((n) => {
 
 /** Split Helmet out of the tree wherever it sits; body keeps original node spans. */
 export function splitHelmet(nodes: JsxNode[]): HelmetSplit {
+  // Trees are not mutated once parsed, so one tree's split is answered once: the editor's title, tables, query
+  // cells and draft all ask for the same (shared) tree's at each pause, and each asking walked all of it.
+  const kept = splits.get(nodes);
+  if (kept) return kept;
   const helmet = findHelmets(nodes)[0] ?? null;
-  if (!helmet) return { helmet: null, content: EMPTY_HELMET_CONTENT, body: nodes };
-  return { helmet, content: helmetContent(helmet), body: withoutHelmets(nodes) };
+  const split = helmet ? { helmet, content: helmetContent(helmet), body: withoutHelmets(nodes) } : { helmet: null, content: EMPTY_HELMET_CONTENT, body: nodes };
+  splits.set(nodes, split);
+  return split;
 }
+const splits = new WeakMap<JsxNode[], HelmetSplit>();
 
 /**
  * Canonical placement: the Helmet (if any) as FIRST top-level node, body order

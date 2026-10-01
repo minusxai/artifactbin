@@ -162,6 +162,15 @@ export const editorSchema = new Schema({
 export function isProseTree(node: JsxNode): boolean {
   if (node.type === 'text') return true;
   if (node.type !== 'element' || node.control || node.isComponent) return false;
+  // Parsed trees are never mutated: a table's thousands of cells are checked once, not at every pause and region walk.
+  const kept = proseTrees.get(node);
+  if (kept !== undefined) return kept;
+  const prose = proseTreeOf(node);
+  proseTrees.set(node, prose);
+  return prose;
+}
+const proseTrees = new WeakMap<JsxElement, boolean>();
+function proseTreeOf(node: JsxElement): boolean {
   if (
     !blockTags.has(node.tag) &&
     !containerTags.has(node.tag) &&
