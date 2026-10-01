@@ -72,11 +72,13 @@ const EDIT_MODE_CSS = [
   `[${EDIT_LAYOUT_ATTR}="flex"] > .mx-prose-region > .ProseMirror { display: flex; flex: 1 1 auto; align-self: stretch; min-width: 0; }`,
   `[${EDIT_LAYOUT_ATTR}="grid"] > .mx-prose-region > .ProseMirror { display: grid; grid-column: 1 / -1; min-width: 0; }`,
   `[${EDIT_LAYOUT_ATTR}="item"] > .mx-prose-region > .ProseMirror { grid-column-start: var(--mx-place-grid-column-start, auto); grid-column-end: var(--mx-place-grid-column-end, auto); grid-row-start: var(--mx-place-grid-row-start, auto); grid-row-end: var(--mx-place-grid-row-end, auto); flex-grow: var(--mx-place-flex-grow, 0); flex-shrink: var(--mx-place-flex-shrink, 1); flex-basis: var(--mx-place-flex-basis, auto); align-self: var(--mx-place-align-self, auto); justify-self: var(--mx-place-justify-self, auto); order: var(--mx-place-order, 0); min-width: 0; }`,
-  // An editor region off screen is neither styled nor laid out: on a page of dozens of tables, inserting or removing
-  // one block (a remount, a new paragraph) otherwise brought the WHOLE page's styles up to date (120-200 ms at normal
-  // CPU). Only the block size is held (the region's measured height, then its last rendered one): the inline size is
-  // the column's anyway. Not under a flex or grid parent, where size containment would change how the item sizes.
-  `[data-mx-edit-region]:not([${EDIT_LAYOUT_ATTR}]) > .mx-prose-region > .ProseMirror { content-visibility: auto; contain-intrinsic-block-size: auto var(--mx-region-h, 480px); }`,
+  // A table in an editor region off screen is neither styled nor laid out: on a page of dozens of tables, inserting or
+  // removing one block (a remount, a new paragraph) otherwise brought the WHOLE page's styles up to date (120-200 ms at
+  // normal CPU). Tables only: the story's table is a block scroll box already (chrome-css STORY_TABLE_CSS), so the
+  // containment this implies changes no margin — on the editor root it stopped its blocks' margins collapsing with the
+  // page's and moved the reader. Held at its measured height (its region is the table alone), then its last rendered
+  // one. Not under a flex or grid parent, where size containment would change how the item sizes.
+  `[data-mx-edit-region]:not([${EDIT_LAYOUT_ATTR}]) > .mx-prose-region > .ProseMirror > table { content-visibility: auto; contain-intrinsic-block-size: auto var(--mx-region-h, 480px); }`,
   '[contenteditable="true"]:focus { outline: none; }',
   // Hover draws nothing: the cursor says what a click does, and one grip sits in the margin.
   `[${EDIT_HOVER_ATTR}="block"][${EDIT_HOVER_ATTR}] { cursor: pointer; }`,
