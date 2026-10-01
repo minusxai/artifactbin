@@ -15,9 +15,11 @@ import { fileURLToPath } from 'node:url';
 const APP = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO = join(APP, '../..');
 
+// `--cache`: both skip when their content-verified marker matches this tree (the test global setup
+// keys them the same way), so a build after a test run, or CI's restored test builds, reuses them.
 const steps = [
-  { cwd: APP, args: ['scripts/build-server-reader.mjs'] },
-  { cwd: REPO, args: ['scripts/build-islands.mjs'] },
+  { cwd: APP, args: ['scripts/build-server-reader.mjs', '--cache'] },
+  { cwd: REPO, args: ['scripts/build-islands.mjs', '--cache'] },
   { cwd: APP, args: ['scripts/generate-routes.mjs'] },
 ];
 
