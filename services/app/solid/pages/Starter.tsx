@@ -26,6 +26,7 @@ import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
 import { wireFaceFallback } from '@/lib/story-runtime/reader-actions';
+import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { wireGithubStar } from '@/lib/github-star';
 import { displayTitle } from '@/lib/story/title';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
@@ -135,9 +136,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   });
   let holder!: HTMLDivElement;
   const chooseMode = (next: 'light' | 'dark') => {
-    if (next === 'dark') document.documentElement.dataset.theme = 'dark';
-    else delete document.documentElement.dataset.theme;
-    try { localStorage.setItem('mx_theme', next); } catch { /* private mode */ }
+    chooseTheme(next);
     holder?.querySelector('[data-mx-reader-chrome]')?.setAttribute('data-mx-ground', next);
     setMode(next);
   };

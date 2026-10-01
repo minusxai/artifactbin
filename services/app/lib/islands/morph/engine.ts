@@ -28,7 +28,7 @@ import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH } from '@/lib/compil
 import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
 import { LITERALS_ATTR } from '@/lib/compiled-page/carriers';
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
-import { readerMode } from '@/lib/story-runtime/reader-mode';
+import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/story/url-values';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
@@ -632,11 +632,7 @@ function syncHead(doc: Document, next: Document, { adopted, override }: { adopte
   const html = doc.documentElement;
   const theme = next.documentElement.getAttribute('data-theme');
   if (theme) html.setAttribute('data-theme', theme); else html.removeAttribute('data-theme');
-  if (!override) {
-    const mode = next.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    html.classList.toggle('dark', mode === 'dark');
-    html.classList.toggle('light', mode !== 'dark');
-  }
+  applyColorMode(html, override, next.documentElement.classList.contains('dark') ? 'dark' : 'light');
 }
 
 /** Where the element the reader's anchor names sits in the viewport now, or null. */

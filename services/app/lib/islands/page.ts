@@ -22,7 +22,7 @@
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { applyAnchor } from '@/lib/story-runtime/anchor';
 import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
-import { readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
+import { applyColorMode, readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
@@ -85,12 +85,7 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   // the window.name envelope parser into every kit-family bundle.
   if (mode) html.setAttribute('data-mx-reader-mode', mode);
   else html.removeAttribute('data-mx-reader-mode');
-  if (mode) {
-    for (const el of [html, doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR)]) {
-      el?.classList.toggle('dark', mode === 'dark');
-      el?.classList.toggle('light', mode !== 'dark');
-    }
-  }
+  for (const el of [html, doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR)]) applyColorMode(el, mode);
   // Document affordances with no Solid-side replacement: they must outlive the SPA's takeover,
   // never cleared by `takeover()` below (only by this function's own disposer, for tests/unmount).
   const persistent: Array<() => void> = [];
