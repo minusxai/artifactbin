@@ -5,39 +5,40 @@
  * build's own coherent set of chunks (runtime-binding.ts).
  */
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
-import { parseCompilerBuild } from './build.server';
+import { islandFile, parseCompilerBuild } from './build.server';
 import type { CompilerBuild } from './contract';
 
 const keyOf = (name: string): string => `island-builds/${name}`;
-const fileOf = (name: string): string => path.join(process.cwd(), 'public/islands', name);
 const manifestKey = (id: string): string => `island-builds/manifest-${id}.json`;
 const safeName = (name: string): boolean => /^[a-z0-9][a-z0-9-]*-[0-9a-f]{16}\.(?:js|wasm)$/.test(name);
 let archiving: Promise<void> | null = null;
 let archived = '';
 
-/** Called at server start and before storing a compile: every URL a page of this build can name is durable first. */
-export function archiveSharedBuild(build: CompilerBuild): Promise<void> {
+/**
+ * Called at server start and before storing a compile: every URL a page of this build can name is durable first.
+ * The names are the build's own (`graph` ∪ `ssr`); `read` gives a file's bytes (this server's public/islands by default).
+ */
+export function archiveSharedBuild(build: CompilerBuild, read: (name: string) => Buffer = (name) => readFileSync(islandFile(name))): Promise<void> {
   if (archived === build.id) return Promise.resolve();
   if (archiving) return archiving;
   archiving = (async () => {
     // Archived already (by an earlier process of this deploy): the manifest is written last, so all is there.
     if (await objectStore().get(manifestKey(build.id)).then(() => true, () => false)) { archived = build.id; return; }
-    const text = readFileSync(fileOf('manifest.json'), 'utf8');
-    const manifest = JSON.parse(text) as { build: string; files: Record<string, unknown>; ssr: { url: string } };
-    if (manifest.build !== build.id) throw new Error('island build changed while archiving');
-    const names = [...new Set([...Object.keys(manifest.files), manifest.ssr.url].map((url) => url.slice('/islands/'.length)))];
+    const manifest = read('manifest.json');
+    if (parseCompilerBuild(manifest.toString('utf8'), 'manifest.json').id !== build.id) throw new Error('island build changed while archiving');
+    const urls = [...Object.keys(build.graph ?? {}), ...(build.ssr ? [build.ssr.url] : [])];
+    const names = [...new Set(urls.map((url) => url.slice('/islands/'.length)))];
     if (names.some((name) => !safeName(name))) throw new Error('invalid island file in build manifest');
     let next = 0;
     await Promise.all(Array.from({ length: Math.min(8, names.length) }, async () => {
       while (next < names.length) {
         const name = names[next++]!;
-        await objectStore().put(keyOf(name), readFileSync(fileOf(name)), name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
+        await objectStore().put(keyOf(name), read(name), name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
       }
     }));
     // The manifest last: once it is retrievable, every file it names already is.
-    await objectStore().put(manifestKey(build.id), Buffer.from(text), 'application/json');
+    await objectStore().put(manifestKey(build.id), manifest, 'application/json');
     archived = build.id;
   })().finally(() => { archiving = null; });
   return archiving;
