@@ -474,17 +474,20 @@ export function createIslandController({ win, root, islands, nodes: served, port
         previewing = !!command.preview;
         if (previewing && !frozen) { freezeIslandPaint(root, islands); frozen = true; }
         if (!previewing) latestSource = source;
-        const release = () => {
-          if (!compiling) return;
-          compiling = false;
-          const next = queuedCompile;
-          queuedCompile = null;
-          next?.();
-        };
         const compile = () => {
           // Superseded while it waited (a newer draft queued itself instead, or Done moved on): nothing to compile.
           if (disposed || sequence !== draftSequence) return;
           compiling = true;
+          // Frees THIS compile's slot once (after its answer is read, or on failure), never the next one's.
+          let released = false;
+          const release = () => {
+            if (released) return;
+            released = true;
+            compiling = false;
+            const next = queuedCompile;
+            queuedCompile = null;
+            next?.();
+          };
           void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
             method: 'POST', credentials: 'same-origin', cache: 'no-store',
             headers: { 'Content-Type': 'application/json' },
