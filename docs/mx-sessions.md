@@ -1,9 +1,10 @@
 # Unified mx and live browser sessions
 
 The runtime owns one five-method data capability: `describe`, `read`, `set`,
-`mutate`, and `subscribe`. Both the public artifact page and managed iframe use
-this implementation; the iframe adapter transports requests and coalesced
-subscription packets over its existing MessagePort. It owns no cached read API.
+`mutate`, and `subscribe`, installed as `window.mx` on the public artifact page
+for browser sessions. It owns no cached read API. The page's own author script
+does not use it: it imports the declared names from `page` as Preact signals
+(`lib/islands/page-runtime.ts`).
 Signals include scalar values, local tables, and query results. Only scalars can
 be set; declared mutations own row writes. Mutation arguments apply to one call.
 

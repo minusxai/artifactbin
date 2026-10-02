@@ -32,9 +32,12 @@ describe('the markup field description', () => {
     expect(text).toMatch(/data-design="tw"/);
   });
 
-  it('rejects inline style= while naming the one allowed <style> override seam', () => {
+  it('allows inline style= while naming the one <style> block in the Helmet', () => {
     expect(text).toMatch(/<style>/);
-    expect(text).toMatch(/style=/);
+    expect(text).toMatch(/inline style= is allowed/);
+    expect(text).not.toMatch(/style=[^.]*rejected/);
+    expect(text).not.toContain('<Iframe>');
+    expect(text).toMatch(/<script>: an ES module in the document/);
   });
 
   it('points at the installed local reference', () => {

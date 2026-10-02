@@ -6,7 +6,7 @@ description: >-
 ## Start
 
 `markup` is **static JSX data** over the component registry.
-Keep content and interactions native; use Iframe for isolated DOM scripts or canvas.
+Markup carries content, data and layout; the Helmet script carries behaviour.
 
 <!--bundle:skip-->
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
@@ -15,9 +15,9 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects), plus safe signal conditions; no arbitrary expressions,
   spreads or inline handlers (`onClick=` is
-  rejected). In JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
-  `<html>`/`<head>`/`<body>`. Widget DOM scripts belong inside managed
-  [Iframe](markup-iframe.md).
+  rejected; the Helmet script attaches handlers with `addEventListener`). In
+  JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
+  `<html>`/`<head>`/`<body>`.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
@@ -73,8 +73,7 @@ outright, no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 At most ONE per document, holding at most one each of `<title>`, `<style>`
 and `<script>`, plus `<meta name content />` pairs, plus any number of the
 DATA declarations `<Import>`, `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
-Write it anywhere outside Iframe; it is hoisted to the top when stored.
-Parent CSS and data declarations belong here. Iframe owns its own CSS/JS.
+Write it anywhere; it is hoisted to the top when stored.
 
 ```jsx
 <Helmet>
@@ -83,21 +82,16 @@ Parent CSS and data declarations belong here. Iframe owns its own CSS/JS.
 </Helmet>
 ```
 
-<!--bundle:skip-->
-One legacy Helmet script may run after hydration in a hidden opaque realm:
-no parent DOM, cookies, storage or direct API requests. Use conditions and
-Dialog for parent UI; move DOM scripts into Iframe. See [script APIs](markup-scripts.md).
-`</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
-Inside Iframe, attach DOM handlers with `addEventListener`; the `mx` bridge
-is in that reference.
+The `<script>` is an ES module in the document: Preact signals over the
+declared names, npm libraries, exported components — [scripts](markup-scripts.md).
 
-<!--/bundle:skip-->
-- **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
-  Scope rules to your own class names (bare element selectors leak into chart
-  chrome); colors from theme tokens (`var(--primary)`).
+- **Custom CSS lives in that `<style>` block**; an inline `style={{…}}` is fine
+  for a one-off. Scope rules to your own class names (bare element selectors
+  leak into chart chrome); colors from theme tokens (`var(--primary)`).
   **Utilities compile `!important`** — never fight a Tailwind class from a
-  style block. At save, `position: fixed/sticky`, `@import` and a `url()`
-  outside `@font-face` are stripped; `100vh` becomes the reader viewport.
+  style block. CSS is unconstrained: `position: fixed`/`sticky`, `vh` (the
+  real viewport), `@import url(…)`, `url()` and `@font-face` all work.
+  There is no `<link>` and no body `<style>`.
 - **Override a theme** in that block under `:root` — no theme-name selector
   or `!important`: `:root { --background: #0c0d0e; --primary: #ff6a1f; --chart-1: #ec6100; --font-display: Georgia, serif; }`.<!--bundle:skip-->
   Keys: `--background --foreground --card --popover --primary --secondary
@@ -107,7 +101,9 @@ is in that reference.
 - **Web fonts**: `<meta name="font-display" content="Lobster" />` (also
   `font-body`, `font-mono`) names a Google family, served from this origin;
   an unknown family fails the publish. An `@font-face` `url(https://…)` in
-  your `<style>` is imported the same way.
+  your `<style>` is imported the same way. Or load one the CSS way:
+  `@import url(https://fonts.googleapis.com/css2?family=…)` at the top of
+  the style block.
 <!--/bundle:skip-->
 - **Theme tokens first**: `text-muted-foreground`, `bg-muted`, `border-border`,
   `bg-background` follow the active theme; hardcoded palettes fight it. ONE
@@ -159,4 +155,4 @@ Flow columns: [Grid](templates.md).
   headings — write `<h2>`s as short claims. Decks and `<Grid>` dashboards get none.
 
 <!--/bundle:skip-->
-[Three.js, libraries and file references](markup-libraries.md).
+[Scripts, components and libraries (Three.js)](markup-scripts.md).

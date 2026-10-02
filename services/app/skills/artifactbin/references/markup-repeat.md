@@ -35,8 +35,8 @@ When supplied, `keyBy` must name a unique non-null string or finite number in
 every row. An invalid explicit key is an error, not an index fallback. Numeric `1` and
 string `"1"` are distinct keys. The template updates with query results and
 preserves item identity when rows move if `keyBy` is supplied. Empty results render no items. There
-is a limit of 1,000 rows and 50,000 expanded template nodes. Nested For loops,
-DataTable, and Iframe inside For templates are not supported. Use DataTable for
+is a limit of 1,000 rows and 50,000 expanded template nodes. Nested For loops
+and DataTable inside For templates are not supported. Use DataTable for
 large virtualized tabular results, sorting, and paging. For renders a block wrapper accepting class and style, providing an owner
 surface for comments even when a row disappears. Bound editors inside For are not supported; use editable DataTable columns.
 Row mutation buttons are supported when For has a stable keyBy.

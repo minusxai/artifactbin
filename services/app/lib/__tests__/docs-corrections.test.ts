@@ -329,9 +329,10 @@ describe('URL-kept external assets', () => {
     expect(flat(markup)).toContain('An image `src` also binds');
     expect(markup).toContain('{$pick}');
   });
-  it('the CSS strip carves out the one url() publish now imports', () => {
-    expect(markup).not.toMatch(/external\s*\n?\s*`url\(\)`\/`@import` are stripped/);
-    expect(flat(markup)).toContain('`@import` and a `url()` outside `@font-face` are stripped');
+  it('authored CSS is unconstrained: nothing is stripped at save', () => {
+    expect(flat(markup)).not.toMatch(/stripped/);
+    expect(flat(markup)).toContain('CSS is unconstrained: `position: fixed`/`sticky`, `vh` (the real viewport), `@import url(…)`, `url()` and `@font-face` all work');
+    expect(flat(markup)).toContain('an inline `style={{…}}` is fine');
   });
   it('the web-fonts bullet says an @font-face url is imported too', () => {
     expect(flat(markup)).toContain('An `@font-face` `url(https://…)` in your `<style>` is imported the same way');

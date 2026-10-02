@@ -77,10 +77,10 @@ export const CSV_URL_FIELD_GUIDANCE =
   'Types are inferred per column, same as the dataset field.';
 
 export const MARKUP_FIELD_GUIDANCE = [
-  'Static JSX document. Prefer native kit layouts, charts, controls, conditions and Dialog; reserve <Iframe> for isolated DOM-script/canvas widgets.',
+  'Static JSX document. Markup for content, data and layout (kit layouts, charts, controls, conditions, Dialog); the Helmet <script> for behaviour.',
   MARKUP_STYLE_RULE,
   'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
-  'Inline style=/onClick= rejected. ONE <Helmet> holds <style>; its <script> runs without parent DOM access.',
+  'onClick= is rejected; inline style= is allowed. ONE <Helmet> holds <style> and a <script>: an ES module in the document, declared names imported from page as Preact signals.',
   'Read `afbin help markup` or the installed references/markup.md first.',
   'Data: <Import name="d" src="ref:<id>" /><Query name="q">{`select … from d.rows`}</Query> (SQLite) in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',

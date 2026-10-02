@@ -1,11 +1,15 @@
 # Hosted JavaScript libraries
 
-A library runs inside a managed `<Iframe>`: the platform packages the frame's
-markup, styles and scripts into an opaque sandboxed child, and the script tags
-it declares are resolved through the asset pipeline before anything mounts.
-The deployment serves its own pinned bundles at
-`<origin>/libraries/<name>-<version>/index.js`, so the URL an author writes
-belongs to the server they publish to, not to any one host.
+The document's Helmet `<script>` imports a library directly, by npm name
+(`import * as THREE from 'three'`, resolved at publish to `https://esm.sh/three`)
+or by full URL; the agent skill teaches this in `references/markup-scripts.md`.
+The rest of this page describes the older managed `<Iframe>` path, which the
+skill no longer teaches: the platform packages the frame's markup, styles and
+scripts into an opaque sandboxed child, and the script tags it declares are
+resolved through the asset pipeline before anything mounts. The deployment
+serves its own pinned bundles at `<origin>/libraries/<name>-<version>/index.js`,
+so the URL an author writes belongs to the server they publish to, not to any
+one host.
 
 ```jsx
 <Iframe title="3D model" height={450}>

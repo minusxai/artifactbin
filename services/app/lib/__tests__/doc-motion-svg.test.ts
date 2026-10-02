@@ -45,10 +45,11 @@ describe('markup doc teaches the motion kit', () => {
     expect(doc).toMatch(/text-\[#/);
   });
 
-  it('teaches the authored <style> block: template-literal idiom, custom keyframes, inline ban', () => {
+  it('teaches the authored <style> block: template-literal idiom, custom keyframes, inline style allowed', () => {
     expect(doc).toContain('<style>{`');
     expect(doc).toContain('@keyframes');
-    expect(doc).toMatch(/style=.*(rejected|not allowed)|inline `?style`?[^.]*(rejected|stays out)/i);
+    expect(doc).toMatch(/inline `style=\{\{…\}\}` is fine/);
+    expect(doc).not.toMatch(/style=`? is rejected/);
   });
 
   it('states the cascade contract: utilities are !important and always win', () => {

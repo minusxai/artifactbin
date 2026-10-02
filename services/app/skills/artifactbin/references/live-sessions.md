@@ -111,17 +111,17 @@ return await page.evaluate(async () => {
 });
 ```
 
-The same [five-method mx API](markup-scripts.md) is on `window.mx` in the
-artifact page and managed iframe. Read names from `describe()`. Use
+`window.mx` is for driving a page from a session; the page's own `<Helmet>`
+script uses the `page` signals instead ([scripts](markup-scripts.md)). Read
+names from `describe()`. Use
 `page.evaluate(() => window.mx.read(['count','results'], {wait:true}))`; selected
 values are at `snapshot.signals.NAME.value`. `set` changes scalar signals;
 `mutate` runs declared row writes. Neither changes artifact source. A local-table
 mutation belongs to this live instance; a dataset mutation persists in the dataset.
-Use ordinary Playwright locators for interactions. Managed content has its
-own inner frame: `page.frameLocator('iframe[title="Widget"]').frameLocator('iframe')`.
-Inspect the controls and their accessible names; use `selectOption` for native
-selects, or click a custom select trigger and its option. A native artifact
-control is in the main page; no widget frame is needed.
+Use ordinary Playwright locators for interactions: every control, and every
+component the script mounts, is in the main page. Inspect the controls and their
+accessible names; use `selectOption` for native selects, or click a custom
+select trigger and its option.
 
 Inspect controls with Playwright's accessibility snapshot before choosing a
 locator; raw HTML buries controls beneath styles and chrome:

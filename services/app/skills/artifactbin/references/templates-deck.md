@@ -54,10 +54,10 @@ never in paragraphs.
 `<Helmet>` (title, styles) is the FIRST top-level node, BEFORE `<SlideDeck>` — never inside it.
 
 THE SLIDE (every CONTENT slide — accent dividers are the one exemption, see below;
-fixed/sticky are banned — a slide is a tall section):
+no fixed or sticky chrome — a slide is a tall section):
 - `<Slide>` already fills the reader's real viewport (`--mx-vh`, platform-provided, with
   a headless fallback) as a flex column — add the dressing per slide.
-  Never vh units (broken in this surface); never a raw `<section>` for a slide — Slide is what
+  Give it no height of your own; never a raw `<section>` for a slide — Slide is what
   powers the reader's slide overview and present-mode paging.
 - Give EVERY slide a short spoken `title` (it names the slide in the overview rail and the
   present controls).
