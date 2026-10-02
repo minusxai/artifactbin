@@ -11,7 +11,7 @@ import { parseRowRef } from '@/lib/story/data/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-// Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
+// Shared with the render-time gate in lib/story-ui/interpreter-primitives — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
 import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';

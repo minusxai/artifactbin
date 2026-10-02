@@ -1,5 +1,5 @@
 /**
- * WHEN THE REACT APP LOADS ON THE HTML-FIRST READER PAGE (docs/phase2-architecture.md §2.2, §7.1).
+ * WHEN THE SOLID APP LOADS ON THE HTML-FIRST READER PAGE (docs/phase2-architecture.md §2.2, §7.1).
  *
  * The compiled `/a/:id` page is finished HTML: the document, its islands and the server-rendered
  * reader chrome. The app (~275 KB) is the reader's SECOND screen, so it loads only when it is

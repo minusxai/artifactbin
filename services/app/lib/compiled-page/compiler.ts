@@ -21,7 +21,7 @@
  * as today) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
  * runtime with lib/jsx/reactive. `codegen-safety.ts structureIndependent` is the proof.
  *
- * Ported from the prototype (scripts/probe/solid/compile.mjs). Pure and deterministic for one input.
+ * Pure and deterministic for one input.
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
@@ -144,7 +144,7 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
 /** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
-/** Components whose HTML the retired React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
+/** Components whose HTML is rendered at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
 const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import', 'Mutation', 'Column']);
@@ -157,7 +157,7 @@ const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((ta
 const CELL_EXPORTS: ReadonlySet<string> = new Set(['CellControl', 'cellAttrs']);
 /** The tags today's editing cell draws; another tag with `run` in a cell draws nothing. */
 const CELL_CONTROLS: ReadonlySet<string> = new Set(['Select', 'DatePicker', 'input', 'textarea', 'select']);
-/** Today's native editing cell's classes (RuntimeCellControl), before the author's. */
+/** The native editing cell's classes, before the author's. */
 const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50';
 /** What the editing cell reads of its authored props at run time (the rest are its element's attributes). */
 const CELL_API = ['value', 'label', 'aria-label', 'placeholder', 'options', 'multiple', 'allowCreate', 'valueFormat', 'nullable', 'exclude', 'min', 'max', 'type', 'args', 'disabled'];
@@ -582,7 +582,7 @@ export function generate(input: GenerateInput): Generated {
         ? ` class={$rowClass(${lit(rowBase)}, ${lit(authorClass)}, ${ctx.row})}`
         : cls ? ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag === 'Skeleton' ? 'StaticSkeleton' : node.tag);
-      // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
+      // A row action writes with its row (a Button with `run`/`set`).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
       if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
       return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${jsxAttrs(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
@@ -602,7 +602,7 @@ export function generate(input: GenerateInput): Generated {
       const attrs = json(Object.fromEntries(elementAttrs(tag, props)));
       return `<BoundImage template={${lit(source.value.json)}} props={${ctx.row ? `${rowAttrsFn(mode, ctx)}(${attrs}, ${ctx.row}, ${ctx.scope})` : attrs}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
     }
-    // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
+    // A `$`-bound native form control (interpreter boundAttrs).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
     const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];
     if (boundAttrs.length) {
@@ -670,9 +670,9 @@ export function generate(input: GenerateInput): Generated {
 
   /**
    * Today's editing cell. What differs per row — the row's values, the
-   * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here, as
-   * today's React renders it: the element's attributes serialised by React's server renderer, and its class
-   * merged by the kit's merger (order included).
+   * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here: the element's attributes serialised with React's attribute rules
+   * (static-solid/attrs.ts, kept for byte parity with stored pages), and its class merged by the kit's
+   * merger (order included).
    */
   function emitCellControl(node: JsxElement, tag: string, path: string, mode: Mode, ctx: Ctx): string {
     useKit('CellControl', mode, ctx);
@@ -745,8 +745,8 @@ export function generate(input: GenerateInput): Generated {
     const style = svg ? {} : { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
     const { className, ...rest } = wrapper;
     // The wrapper's style goes to rt.Repeat as `attr:style`: its spread then SETS the attribute (skipped while
-    // hydrating), keeping React's served `min-height:1px` byte for byte. A spread `style` would be rewritten
-    // through the CSSOM (`min-height: 1px;`) during hydration, which today's page never does.
+    // hydrating), keeping the served `min-height:1px` byte for byte. A spread `style` would be rewritten
+    // through the CSSOM (`min-height: 1px;`) during hydration, which the served page must not do.
     const attrs = elementAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
       .map(([n, v]): Attr => [n === 'style' ? 'attr:style' : n, v]);
     const suffix = path.replace(/\./g, '_');

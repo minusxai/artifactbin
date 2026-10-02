@@ -2,10 +2,8 @@
 /**
  * The data-bound kit. The island context is the sole source of live tables and values.
  *
- * PARITY: each widget renders the DOM today's reader renders (the runtime adapters in
- * lib/story-runtime/StoryRuntimeApp around components/kit/data-table, controls' SelectControl and
- * views/story/QuestionEmbed), which scripts/gate-compiled-parity.mjs compares attribute by
- * attribute. Two consequences shape this file:
+ * PARITY: each widget renders the DOM the former reader rendered (the frozen react-oracle recording behind
+ * lib/islands/__tests__/kit-parity.ts), compared attribute by attribute. Two consequences shape this file:
  *  - An absent attribute is spread in (`attr()`), never bound to `undefined`: Solid's server
  *    renderer writes `class=""`/`style=""` for an undefined binding, which today's DOM does not have.
  *  - Inline styles are strings in the browser's own serialization (`max-height: 300px;`) wherever

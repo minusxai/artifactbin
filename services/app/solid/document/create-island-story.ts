@@ -13,7 +13,7 @@
  * Holding the document: the islands' own live stream (lib/islands/live) would reload the page on a
  * new version, so this claims STORY_ADOPT_HOOK for its lifetime and the page feeds new versions to
  * `controller.update` itself. Leaving disposes the islands and removes the element a microtask after
- * cleanup, as the React mount did.
+ * cleanup.
  */
 import { createSignal, onCleanup, type Accessor } from 'solid-js';
 import type { IslandDocument } from '@/lib/islands/contract';

@@ -197,7 +197,7 @@ function resolveImageAndFileProps(
      */
     const patch: RefPropPatch = { [pos.prop]: url, ...sized, ...widths };
     if (ref.blur && props.style === undefined) {
-      // An OBJECT, not a string: React rejects a string `style` prop, and both
+      // An OBJECT, not a string: the AST's style contract is an object, and both
       // render paths hand this straight to createElement.
       patch.style = {
         backgroundImage: `url(${ref.blur})`,

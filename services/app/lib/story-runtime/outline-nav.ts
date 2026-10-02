@@ -2,10 +2,10 @@
  * The OUTLINE's behaviour — wired from the ~1 KB entry EVERY document loads
  * (anchor-entry), never from the runtime.
  *
- * The rail's markup is server-rendered by the runtime's React tree so it is
- * in the SSR string at its final width. Its
+ * The rail's markup is server-rendered by the compiler so it is
+ * in the served HTML at its final width. Its
  * behaviour cannot live there: a document of pure prose — which is exactly
- * the kind that has sections — ships no runtime at all, so a React `onClick`
+ * the kind that has sections — ships no runtime at all, so a component `onClick`
  * on those rows would never exist and the rail would be furniture. Measured:
  * the first browser gate clicked a row and nothing moved.
  *

@@ -30,8 +30,7 @@ export interface NumberEditorPanelProps {
 /**
  * A text field committed on blur or Enter, empty as null — the TitleField pattern.
  * Re-seeded whenever `value` changes from OUTSIDE this field (a remote agent, code
- * mode, a commit round-tripping through the parent) — mirroring the React panel's
- * `key={...}` remount, which discards any in-progress local draft.
+ * mode, a commit round-tripping through the parent) — discarding any in-progress local draft.
  */
 function TextField(props: {
   label: string;

@@ -17,7 +17,7 @@ if (cache && serverReaderFresh()) {
   process.exit(0);
 }
 fs.mkdirSync(output, { recursive: true });
-// Older checkouts produced a React SSR artifact here. It is no longer a server input.
+// Older checkouts produced an SSR bundle here. It is no longer a server input.
 fs.rmSync(path.join(output, 'story-ssr.cjs'), { force: true });
 const prepared = await preparationInputs(path.resolve(root, '../..'));
 const kindsEntry = path.join(root, 'lib/story-ui/mermaid-source.ts');

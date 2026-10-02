@@ -14,8 +14,8 @@
  * until it is saved or the user explicitly recovers the remote version.
  *
  * Options are read LIVE through a getter: callbacks (`onRemoteDocument`, `isUserEditing`) and the
- * backend are whatever the owner holds at the moment of use — React hands its latest props, Solid its
- * props proxy. The `initial*` fields are read once, at creation, as the hook's `useRef(initial)` did.
+ * backend are whatever the owner holds at the moment of use — a Solid caller hands its
+ * props proxy. The `initial*` fields are read once, at creation.
  */
 import type { DocumentGraph, DocumentAssetWarning } from '@artifactbin/contracts';
 import { advanceBrowserDocument, prepareBrowserDocumentUpdate, preparesOffThread, warmBrowserPreparer } from '@/lib/story/document/document-authoring-client';

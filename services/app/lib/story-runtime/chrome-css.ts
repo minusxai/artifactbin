@@ -1,14 +1,14 @@
 import { CHROME_IDENTITY } from '../accounts/chrome-identity';
 
 /**
- * The document's own navigation chrome, as CSS — react-free so the builder
+ * The document's own navigation chrome, as CSS — framework-free so the builder
  * (which runs on the server) can inline it into <head> without importing the
- * runtime's React half.
+ * browser runtime.
  *
  * Inlined by the SERVER, not injected by the runtime: the rail is a layout
  * sibling of the document, so a rail that arrived with hydration would shift
  * every deck 190px sideways one tick after it painted — the exact regression
- * scripts/gate-layout-shift.mjs was written for. Server CSS + server-rendered
+ * scripts/gates/gate-layout-shift.mjs was written for. Server CSS + server-rendered
  * rail (discovery is a pure AST walk now) means the deck's first paint is its
  * final geometry.
  *

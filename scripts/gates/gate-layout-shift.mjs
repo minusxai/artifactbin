@@ -131,7 +131,7 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
   await page.goto(`${B}/a/${id}${edit ? '#edit' : ''}`, { waitUntil: 'commit', timeout: 60000 });
   // Edit mode adds a bar around the document; wait for it before taping, so
   // what is measured is the document settling rather than the bar arriving.
-  // The top bar's edit control becomes the exit while editing (ArtifactSurface).
+  // The top bar's edit control becomes the exit while editing.
   if (edit) await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 
 

@@ -11,14 +11,14 @@ import { STORY_THEMES } from '@/lib/data/story/story-themes';
  *
  * Everything here that names part of the API is DERIVED, never retyped: the
  * themes come from the registry with their real preview images, the formats from
- * the badge component. Guarded by components/__tests__/human-docs.ui.test.tsx.
+ * the badge component.
  */
 const SECTION = 'font-mono text-xs tracking-[0.14em] text-faint uppercase';
 const PROSE = 'mt-3 font-sans text-sm leading-relaxed text-muted';
 
 /** The tour's sections, in reading order. ONE list feeds both the contents
  * block and each section's anchor id, so an entry cannot point at a section
- * that does not exist (guarded by human-docs.ui.test.tsx). */
+ * that does not exist */
 const TOC = [
   { id: 'get-started', label: 'get started' },
   { id: 'publish', label: 'what an agent can publish' },

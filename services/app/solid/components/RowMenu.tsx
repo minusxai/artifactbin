@@ -1,17 +1,13 @@
 /* @jsxImportSource solid-js */
 /**
- * THE OVERFLOW MENU BEHIND A ROW'S "…". Same interface — a list of
- * items — with one change a port must make: `icon` is a FUNCTION returning the element. In React an
- * element is a description that can be rendered anywhere; in Solid, JSX evaluates to a real DOM node,
- * and a prop getter that builds one would build a fresh node on every read (or, read once, a single
- * node that can only live in one place).
+ * THE OVERFLOW MENU BEHIND A ROW'S "…". A list of items, where `icon` is a
+ * FUNCTION returning the element: in Solid, JSX evaluates to a real DOM node, and a prop getter that
+ * builds one would build a fresh node on every read (or, read once, a single node that can only live
+ * in one place).
  *
  * Items are rendered with <Index>, not <For>: callers build a fresh items array (fresh objects) on
  * every reactive read, and <For> keys by object identity, so it would recreate every button whenever
  * `busy` changed — dropping focus. <Index> keys by position and updates the fields in place.
- *
- * `useDeleteArtifact` (the confirm-then-delete helper beside the React RowMenu) is not ported: Trash
- * does not use it, and in React it is why ConfirmDialog rides in every RowMenu importer's chunk.
  */
 import { createEffect, createSignal, Index, onCleanup, Show, type JSX } from 'solid-js';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
