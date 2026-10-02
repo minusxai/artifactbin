@@ -23,7 +23,7 @@ vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => (
 
 import { createIslandController } from '@/lib/story-runtime/island-controller';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
-import { disposeChangedDraftIslands, hydrateDraftIslands, morphDraftDom, sameDataflow } from '../morph/engine';
+import { disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, morphDraftDom, sameDataflow } from '../morph/engine';
 import { ISLAND_DOCUMENT_KEY } from '../contract';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -156,6 +156,40 @@ describe('the draft module step', () => {
     expect(dispose).not.toHaveBeenCalled();
     expect(hydrate).toHaveBeenCalledTimes(1);
     expect(root.querySelector('svg.marks')).not.toBeNull();
+    root.remove();
+  });
+
+  it('lets the running one-tree go on when every component the draft hydrates is kept (a paragraph inserted above a chart), and hydrates it again otherwise', async () => {
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<div data-hk="d-0" class="mx-doc"><p data-mx-ast="0">Before</p><div data-mx-ast="1" data-hk="d-1" aria-label="Question embed"><svg class="marks"></svg></div></div>';
+    document.body.append(root);
+    const hydrate = vi.fn();
+    const dispose = vi.fn();
+    const seam = { islands: new Map([['d-', ['document', dispose]]]), hydrate, modules: new WeakMap(), trees: new WeakMap() } as any;
+    (root as any)[ISLAND_DOCUMENT_KEY] = { morph: seam, store: null, mode: () => 'edit' };
+    const next = document.createElement('div');
+    next.innerHTML = '<div data-hk="d-0" class="mx-doc"><p data-mx-ast="0">Before</p><p data-mx-ast="1">Inserted</p><div data-mx-ast="2" data-hk="d-1"><span>Static preview</span></div></div>';
+    // The chart moved from 1 to 2, its markup unchanged.
+    const stable = new Map([['2', '1']]);
+    expect(draftTreeKept(next, new Set(), stable)).toBe(true);
+    const chart = root.querySelector('[aria-label="Question embed"]');
+    disposeChangedDraftIslands(root, new Set(), stable, true);
+    morphDraftDom(root, next, new Set(), stable);
+    const preview = document.implementation.createHTMLDocument();
+    preview.body.innerHTML = `<div data-mx-inline-story="">${next.innerHTML}</div>`;
+    const entries = [['d-', () => null, 'document']] as const;
+    await hydrateDraftIslands(window, root, preview, new Set(), stable, async () => ({ ISLANDS: entries }) as any, { ISLANDS: entries } as any, new Map(), true);
+    expect(dispose).not.toHaveBeenCalled();
+    expect(hydrate).not.toHaveBeenCalled();
+    expect(root.querySelector('[data-mx-ast="2"]')).toBe(chart);
+    expect(chart!.querySelector('svg.marks')).not.toBeNull();
+    expect(root.textContent).toContain('Inserted');
+    expect(root.textContent).not.toContain('Static preview');
+    // A component the draft changed (or adds) is hydrated: the tree hydrates again.
+    const added = document.createElement('div');
+    added.innerHTML = '<div data-hk="d-0" class="mx-doc"><div data-mx-ast="0" data-hk="d-1"></div><div data-mx-ast="1" data-hk="d-2"></div></div>';
+    expect(draftTreeKept(added, new Set(), new Map([['0', '1']]))).toBe(false);
     root.remove();
   });
 

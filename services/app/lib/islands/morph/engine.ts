@@ -520,8 +520,23 @@ export function adoptVersionRecord(doc: Document, next: Document): void {
   syncModuleRecord(doc, next);
 }
 
-/** Release only changed draft islands before their compiled roots are morphed. */
-export function disposeChangedDraftIslands(root: HTMLElement, stableIds: ReadonlySet<string>, stable: StablePaths): void {
+/**
+ * Whether the page's running whole-document tree (`d-`) can go on running under this draft instead of hydrating
+ * again: every node the draft's tree hydrates, its root aside, is a component the draft keeps as it is (or inside
+ * one). Hydrating the tree again rebuilt every component in it, a kept chart drawing itself anew in the reply's apply.
+ */
+export function draftTreeKept(draft: ParentNode, stableIds: ReadonlySet<string>, stable: StablePaths): boolean {
+  const keyed = [...draft.querySelectorAll(`[${HK}^="d-"]`)];
+  const tree = keyed[0];
+  if (!tree || !keyed.every((el) => tree.contains(el))) return false;
+  const paths = newPathsOf(stable);
+  const kept = keyed.filter((el) => el !== tree && el.hasAttribute(AST_PATH_ATTR)
+    && (stableIds.has(el.id) || paths.has(el.getAttribute(AST_PATH_ATTR)!)));
+  return keyed.every((el) => el === tree || kept.some((component) => component.contains(el)));
+}
+
+/** Release only changed draft islands before their compiled roots are morphed (and the `d-` tree unless `keepTree`). */
+export function disposeChangedDraftIslands(root: HTMLElement, stableIds: ReadonlySet<string>, stable: StablePaths, keepTree = false): void {
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   const seam = running?.morph;
   if (!seam) return;
@@ -531,6 +546,7 @@ export function disposeChangedDraftIslands(root: HTMLElement, stableIds: Readonl
     const element = unitsOf(root, [rid]).get(rid)?.[0];
     // A one-tree root spans every component; one stable child cannot retain its old reactive owner.
     if (rid !== 'd-' && element && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? ''))) continue;
+    if (rid === 'd-' && keepTree) continue;
     seam.islands.delete(rid);
     dispose();
   }
@@ -570,6 +586,8 @@ export async function hydrateDraftIslands(
   loaded?: IslandModule | null,
   /** Editors kept across the draft (morphDraftDom): the whole-document tree's restoring morph places them too. */
   editRegions: ReadonlyMap<string, Element> = new Map(),
+  /** `draftTreeKept`: the running `d-` tree goes on running (it was not disposed), nothing in it hydrates again. */
+  keepTree = false,
 ): Promise<void> {
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   const seam = running?.morph;
@@ -583,6 +601,7 @@ export async function hydrateDraftIslands(
   for (const entry of module.ISLANDS) {
     const element = unitsOf(root, [entry[0]]).get(entry[0])?.[0];
     if (!element || (entry[0] !== 'd-' && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? '')))) continue;
+    if (entry[0] === 'd-' && keepTree && seam.islands.has('d-')) continue;
     seam.hydrate(entry);
     if (entry[0] === 'd-' && running.mode?.() === 'edit') {
       const draft = preview.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);

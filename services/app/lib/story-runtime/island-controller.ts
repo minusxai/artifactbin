@@ -331,7 +331,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (!pending || disposed || !drafting() || pending.sequence !== draftSequence) return;
     // The page's SHARED parse (update-parts storyUpdatePartsShared): the draft's source was parsed at the hand-over
     // that sent it, and the source on screen at the one before, so neither is parsed whole again when the reply lands.
-    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
+    const [{ disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
       import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
@@ -384,9 +384,11 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (pending.sheet && sheet && sheet.textContent !== pending.sheet.textContent) sheet.textContent = pending.sheet.textContent;
     editSheetWritten = true;
     edit?.unmountCompiledDom();
-    disposeChangedDraftIslands(root, stableIds, stablePaths);
+    // Every component the draft's whole-document tree hydrates is kept as it is: the running tree goes on running.
+    const keepTree = draftTreeKept(pending.root, stableIds, stablePaths);
+    disposeChangedDraftIslands(root, stableIds, stablePaths, keepTree);
     morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
-    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors);
+    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors, keepTree);
     nodes = pending.nodes;
     lastDrawn = after;
     shown = { module: versionModuleUrl(pending.document), source: pending.source };
