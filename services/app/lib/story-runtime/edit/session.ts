@@ -104,6 +104,10 @@ export interface FrameEditSession {
    * leaves them running and the next `mountCompiledDom` takes them over: a redraw rebuilds only what it changed.
    */
   holdUnchanged(next: JsxNode[], draft: HTMLElement): ReadonlyMap<string, HTMLElement>;
+  /** Decide `holdUnchanged` for this draft ahead, a few regions while `more()`, reading only: true once decided. */
+  prepareHold(next: JsxNode[], draft: HTMLElement, more: () => boolean): boolean;
+  /** Undo `holdUnchanged` when the draw it was for does not happen: the editors run on as they were, the draft as it came. */
+  releaseHeld(): void;
   /** Release Solid prose regions before a compiled DOM morph; the session and its commands stay live. */
   unmountCompiledDom(): void;
   /** A compiled draft may replace the DOM when no host text or composition is pending. */
@@ -150,6 +154,9 @@ interface FrameEditSessionOptions {
  * Ctrl/Cmd-Z (solid/editor/InPlaceEditor): it runs before any document listener and steps aside
  * inside an `<input>` or `<textarea>`, where the key belongs to that field's own text.
  */
+const sameBookmark = (a: EditorBookmark | undefined, b: EditorBookmark): boolean => !!a
+  && a.anchor.id === b.anchor.id && a.anchor.offset === b.anchor.offset && a.head.id === b.head.id && a.head.offset === b.head.offset;
+
 /** Two JSON-shaped values hold the same data (what equal JSON.stringify output meant, without building it). */
 function sameData(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -187,6 +194,8 @@ export function createFrameEditSession({
   /** Editors held across the redraw in progress (`holdUnchanged`), for the next mount. */
   let held: HeldEditors | null = null;
   let pendingBookmark: EditorBookmark | undefined;
+  /** The reader's scroll position as the last redraw began (`unmountCompiledDom`), for the remount to keep. */
+  let scrollBeforeRedraw: { x: number; y: number } | null = null;
   /*
    * The Undo/Redo target, held for the redraw the history step always causes. The painted draft may still
    * hold the same block (same id) in its old shape — a heading the undo turns back into its literal `### `
@@ -197,13 +206,19 @@ export function createFrameEditSession({
   /** Where that target landed in the stale draft: moving the caret from there afterwards is the person's own choice. */
   let historyLanded: string | undefined;
   const restorePending = () => {
-    if (pendingBookmark)
-      for (const view of views.all)
-        if (restoreBookmark(view, pendingBookmark)) {
-          if (historyBookmark) historyLanded = JSON.stringify(captureBookmark(view.state));
-          pendingBookmark = undefined;
-          break;
-        }
+    if (!pendingBookmark) return;
+    // The editor that had the caret was kept across the redraw and still has it there: nothing to restore (a
+    // selection dispatched again redrew the editor, and on a table region walked it once per view tried).
+    if (pendingBookmark !== historyBookmark) {
+      const focused = [...views.all].find((view) => !view.isDestroyed && view.hasFocus());
+      if (focused && sameBookmark(captureBookmark(focused.state), pendingBookmark)) { pendingBookmark = undefined; return; }
+    }
+    for (const view of views.all)
+      if (restoreBookmark(view, pendingBookmark)) {
+        if (historyBookmark) historyLanded = JSON.stringify(captureBookmark(view.state));
+        pendingBookmark = undefined;
+        break;
+      }
   };
 
   const post = (message: Record<string, unknown>) => channel.post({ ...message, nonce: channel.nonce });
@@ -352,10 +367,25 @@ export function createFrameEditSession({
       if (disposed || !compiledMount) return new Map();
       // What is half-typed is handed over first: an editor is held for the prose it has handed over.
       for (const view of views.all) flushFlowView(view);
+      // Read a task ahead of the morph, while the page is laid out: in the morph's task (a new stylesheet written,
+      // blocks moved) the read laid the whole page out at once.
+      scrollBeforeRedraw = { x: win.scrollX, y: win.scrollY };
       held = compiledMount.hold(next, draft);
       return held.stands;
     },
+    prepareHold(next, draft, more) {
+      if (disposed || !compiledMount) return true;
+      // An editor is held for the prose it has handed over: what is half-typed goes first, as the hold itself does.
+      for (const view of views.all) flushFlowView(view);
+      return compiledMount.prepareHold(next, draft, more);
+    },
+    releaseHeld() {
+      held?.release();
+      held = null;
+      scrollBeforeRedraw = null;
+    },
     unmountCompiledDom() {
+      scrollBeforeRedraw ??= { x: win.scrollX, y: win.scrollY };
       for (const view of views.all) flushFlowView(view);
       const toolbarFocus = doc.activeElement instanceof HTMLElement
         && !!doc.activeElement.closest('[aria-label="Typography toolbar"]');
@@ -371,7 +401,10 @@ export function createFrameEditSession({
     },
     async mountCompiledDom() {
       if (disposed) return;
-      const readerScroll = { x: win.scrollX, y: win.scrollY };
+      // Where the reader was before the redraw (read at the hold or the unmount, before the morph: read here, after
+      // it, it laid the whole redrawn page out in the draw's task).
+      const readerScroll = scrollBeforeRedraw ?? { x: win.scrollX, y: win.scrollY };
+      scrollBeforeRedraw = null;
       compiledMount?.dispose();
       const keep = held ?? undefined;
       held = null;

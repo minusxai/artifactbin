@@ -11,8 +11,9 @@
  * is adopted, not replaced; static siblings stay the same nodes; a value change reaches the adopted
  * text.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import * as rt from '../rt';
@@ -27,9 +28,27 @@ const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const SOURCE = '<Helmet><Value name="region" type="string" default="West" /></Helmet><div id="w"><h2 id="h">Static heading</h2><p id="r">{$region}</p><p id="after">Static after</p></div>';
 
 interface ServerHalf { html: string; islands: string; browserCode: string; templateResource: string | null; islandRefs: IslandRef[]; flow: CompiledDataflow }
-function serverHalf(source: string, shipped = false, results?: unknown): ServerHalf {
-  const out = execFileSync(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, ...(shipped ? ['--shipped'] : []), ...(results ? [`--results=${JSON.stringify(results)}`] : [])], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
-  return JSON.parse(out.toString('utf8')) as ServerHalf;
+/** Every server half these cases render, compiled (a node process each) in parallel before the first case. */
+const CALLS: Array<[string, boolean?, unknown?]> = [
+  ['<Helmet><Value name="name" type="string" default="Ada" /></Helmet><section id="box" data-note="{$name}"><p id="static">Served static content</p><span>{$name}</span></section>'],
+  ['<Dialog><DialogTrigger>Open dialog</DialogTrigger><DialogContent aria-label="Test dialog"><p>Dialog body</p><DialogClose>Close</DialogClose></DialogContent></Dialog>', true],
+  ['<Helmet><Value name="rows" type="table" value={[{"k":"a","label":"Alice"},{"k":"b","label":"Bob"},{"k":"c","label":"Carla"}]} /><Query name="ordered">{`select * from rows order by label`}</Query></Helmet><div id="w"><For each={$ordered} keyBy="k" id="f"><p>{$_row.label}</p></For></div>', true],
+  ['<Helmet><Query name="m">{`select 1 as month, 10 as revenue union all select 2, 14`}</Query></Helmet><div id="w"><h1 id="h">Heading</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">Chart</TabsTrigger><TabsTrigger value="b">Notes</TabsTrigger></TabsList><TabsContent value="a"><Question title="Revenue" data="$m" height="240px" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"quantitative"},"y":{"field":"revenue","type":"quantitative"}}}}} /></TabsContent><TabsContent value="b"><p id="notes">Notes tab.</p></TabsContent></Tabs><div id="row"><Input placeholder="Type here" /><Badge>New</Badge></div><p id="end">Closing</p></div>', true, { tables: { m: { columns: [{ name: 'month', type: 'number' }, { name: 'revenue', type: 'number' }], rows: [{ month: 1, revenue: 10 }, { month: 2, revenue: 14 }] } }, errors: {} }],
+  [SOURCE],
+  ['<Helmet><Value name="rows" type="table" value={[{"k":"a"},{"k":"b"}]} /></Helmet><div id="w"><For each={$rows} keyBy="k" id="f"><p id="i">{$_row.k}</p></For></div>'],
+];
+const compileServerHalf = async (source: string, shipped = false, results?: unknown): Promise<ServerHalf> => {
+  const { stdout } = await promisify(execFile)(path.join(ROOT, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, ...(shipped ? ['--shipped'] : []), ...(results ? [`--results=${JSON.stringify(results)}`] : [])], { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
+  return JSON.parse(stdout) as ServerHalf;
+};
+const compiled = new Map<string, ServerHalf>();
+beforeAll(async () => {
+  await Promise.all(CALLS.map(async (call) => { compiled.set(JSON.stringify(call), await compileServerHalf(...call)); }));
+}, 120_000);
+function serverHalf(...call: [string, boolean?, unknown?]): ServerHalf {
+  const found = compiled.get(JSON.stringify(call));
+  if (!found) throw new Error('a server half outside CALLS');
+  return found;
 }
 async function shipped(spec: string): Promise<Record<string, unknown>> {
   const url = loadCompilerBuild().manifest[spec]!;
@@ -40,7 +59,7 @@ describe('a compiled island through the runtime', () => {
   // Retired the lazy template action-gate assertion: new modules do not request shell template resources.
   // Retired the inert page-template clone assertion: new modules use native Solid factories, not shell clones.
   it('hydrates the shipped module without loading the cold template resource', async () => {
-    const server = serverHalf('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><section id="box" data-note="{$name}"><p id="static">Served static content</p><span>{$name}</span></section>');
+    const server = serverHalf(...CALLS[0]);
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
@@ -64,7 +83,7 @@ describe('a compiled island through the runtime', () => {
     dispose?.(); runtime.dispose(); host.remove(); vi.unstubAllGlobals();
   });
   it('opens a dialog from the shipped module after hydration', async () => {
-    const server = serverHalf('<Dialog><DialogTrigger>Open dialog</DialogTrigger><DialogContent aria-label="Test dialog"><p>Dialog body</p><DialogClose>Close</DialogClose></DialogContent></Dialog>', true);
+    const server = serverHalf(...CALLS[1]);
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
@@ -85,7 +104,7 @@ describe('a compiled island through the runtime', () => {
     dispose?.(); runtime.dispose(); host.remove(); vi.unstubAllGlobals();
   });
   it('removes an adopted keyed row when the bridged table shrinks', async () => {
-    const server = serverHalf('<Helmet><Value name="rows" type="table" value={[{"k":"a","label":"Alice"},{"k":"b","label":"Bob"},{"k":"c","label":"Carla"}]} /><Query name="ordered">{`select * from rows order by label`}</Query></Helmet><div id="w"><For each={$ordered} keyBy="k" id="f"><p>{$_row.label}</p></For></div>', true);
+    const server = serverHalf(...CALLS[2]);
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
@@ -131,7 +150,7 @@ describe('a compiled island through the runtime', () => {
   it('hydrates a Question inside Tabs beside an Input without losing the page', async () => {
     // Regression: the chart host, built while hydrating, was not yet in the document when its engine
     // deferral read `ownerDocument.documentElement` (an inert template document: null).
-    const server = serverHalf('<Helmet><Query name="m">{`select 1 as month, 10 as revenue union all select 2, 14`}</Query></Helmet><div id="w"><h1 id="h">Heading</h1><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">Chart</TabsTrigger><TabsTrigger value="b">Notes</TabsTrigger></TabsList><TabsContent value="a"><Question title="Revenue" data="$m" height="240px" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"quantitative"},"y":{"field":"revenue","type":"quantitative"}}}}} /></TabsContent><TabsContent value="b"><p id="notes">Notes tab.</p></TabsContent></Tabs><div id="row"><Input placeholder="Type here" /><Badge>New</Badge></div><p id="end">Closing</p></div>', true, { tables: { m: { columns: [{ name: 'month', type: 'number' }, { name: 'revenue', type: 'number' }], rows: [{ month: 1, revenue: 10 }, { month: 2, revenue: 14 }] } }, errors: {} });
+    const server = serverHalf(...CALLS[3]);
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
@@ -168,7 +187,7 @@ describe('a compiled island through the runtime', () => {
     dispose?.(); runtime.dispose(); host.remove();
   });
   it('server-renders with the runtime, then hydrates in place: root adopted, siblings untouched, values live', async () => {
-    const server = serverHalf(SOURCE);
+    const server = serverHalf(...CALLS[4]);
     // The deleted per-island path is represented by a single document root.
     expect(server.islandRefs).toEqual([{ renderId: 'd-', path: '0', kit: [], readsData: true }]);
     expect(server.html).not.toContain('<mx-slot');
@@ -202,7 +221,7 @@ describe('a compiled island through the runtime', () => {
 
   it("serves a <For> wrapper's inline style as React writes it and hands it to hydration as an attribute", () => {
     // React's server renderer writes `min-height:1px`; today's hydration leaves a served attribute alone.
-    const server = serverHalf('<Helmet><Value name="rows" type="table" value={[{"k":"a"},{"k":"b"}]} /></Helmet><div id="w"><For each={$rows} keyBy="k" id="f"><p id="i">{$_row.k}</p></For></div>');
+    const server = serverHalf(...CALLS[5]);
     const host = document.createElement('div');
     host.innerHTML = server.html;
     expect(host.querySelector('#w > div')?.getAttribute('style')).toBe('min-height:1px');

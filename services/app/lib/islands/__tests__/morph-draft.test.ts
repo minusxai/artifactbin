@@ -12,6 +12,8 @@ const editSession = vi.hoisted(() => ({
     setNodes: () => {}, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
     reconcileDraft: () => false,
     holdUnchanged: () => new Map<string, HTMLElement>(),
+    prepareHold: () => true,
+    releaseHeld: () => {},
     unmountCompiledDom: () => {},
     mountCompiledDom: async () => { editSession.mounts++; },
   },

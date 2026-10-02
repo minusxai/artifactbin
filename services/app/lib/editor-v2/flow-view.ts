@@ -149,6 +149,9 @@ function keepPastedEdgeSpaces(tr: Transaction, from: number, plain: string) {
   if (first.trim()) insert(/^[ \t]*/.exec(first)![0], tr.mapping.map(from, -1));
 }
 
+/** How many AST-path decorations one repath step redraws: a few table rows, well inside an idle slice at slow CPUs. */
+const REPATH_STEP = 30;
+
 export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, onCompositionSettled: () => void): FlowView {
   /** The AST-path decorations last drawn, and for what: recomputed only when the document, its source or its path moves. */
   let memo: { doc: EditorState['doc']; nodes: JsxNode[]; path: string; list: Decoration[]; set: DecorationSet } | null = null;
@@ -270,7 +273,8 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
       // A selection or other doc-preserving transaction redraws nothing: the paths are the same as last time.
       if (!memo || memo.doc !== current.doc || memo.nodes !== nodes || memo.path !== path) {
         const list = pathDecorations(current.doc, nodes, path);
-        memo = { doc: current.doc, nodes, path, list, set: DecorationSet.create(current.doc, list) };
+        // A copy: building a set empties the array it is given, and a repath draws from this list in steps.
+        memo = { doc: current.doc, nodes, path, list, set: DecorationSet.create(current.doc, [...list]) };
       }
       return memo.set;
     },
@@ -420,16 +424,29 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
       // The decorations on screen stay until the step runs (a selection change meanwhile redraws nothing).
       const from = memo;
       if (from && !staged) staged = { doc: from.doc, set: from.set };
-      return [() => {
+      // A table's cells are redrawn REPATH_STEP at a time: each step draws the new path up to its share and keeps the
+      // last drawn one after it, so no step redraws the whole table (one table was a 50 ms task at slow CPUs).
+      const count = Math.max(1, Math.ceil((from?.list.length ?? 0) / REPATH_STEP));
+      let list: Decoration[] | null = null;
+      return Array.from({ length: count }, (_, index) => () => {
         if (view.isDestroyed) return;
         // A composition, or a document changed meanwhile, takes the new path whole at its next update.
         const doc = view.state.doc, { nodes } = props();
         if (state.composing || !staged || staged.doc !== doc || !from || from.doc !== doc || from.nodes !== nodes) { staged = null; return; }
-        staged = null;
-        const list = pathDecorations(doc, nodes, to);
-        memo = { doc, nodes, path: to, list, set: DecorationSet.create(doc, list) };
+        list ??= pathDecorations(doc, nodes, to);
+        if (list.length === from.list.length) {
+          // This step's share swapped in the set drawn so far (rebuilding the whole set every step walked every cell).
+          const share = [index * REPATH_STEP, (index + 1) * REPATH_STEP] as const;
+          const set = staged.set.remove(from.list.slice(...share)).add(doc, list.slice(...share));
+          if (index < count - 1) staged = { doc, set };
+          else { staged = null; memo = { doc, nodes, path: to, list, set }; }
+        } else {
+          staged = null;
+          memo = { doc, nodes, path: to, list, set: DecorationSet.create(doc, [...list]) };
+        }
+        // Drawn whole (the last step, or the tree's shape moved): the steps left find nothing staged and do nothing.
         view.updateState(view.state);
-      }];
+      });
     },
     sync(nodes) {
       if (state.composing) return;

@@ -59,6 +59,12 @@ export function ancestorCrumbs(el: Element, nodes: JsxNode[]): StoryEditCrumb[] 
   return out.reverse();
 }
 
+/** The kind `describeSelection` gives `el` (null: it describes none), without reading its geometry. */
+export function describedKind(el: Element, nodes: JsxNode[]): StoryEditSelection['kind'] | null {
+  const path = el.getAttribute(AST_PATH_ATTR);
+  return (path && selectionKindAt(nodes, path)) || null;
+}
+
 /**
  * Describe `el` for the parent. Null when the element carries no AST path or
  * the source does not know it — a stale path must never be reported as a
