@@ -40,7 +40,7 @@
  * in that gap reaches the page exactly as one a second later would.
  *
  * THE BUDGET: the HTML never waits on a slow query. Whatever has not answered
- * within SERVED_RESULTS_BUDGET_MS is left to the page, exactly as today. The
+ * within SERVED_RESULTS_BUDGET_MS is left to the page. The
  * late run is DETACHED, not aborted: it keeps filling the result cache it
  * leased, so the page's own request that follows is a hit or a short wait
  * rather than a cold start.

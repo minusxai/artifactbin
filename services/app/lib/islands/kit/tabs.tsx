@@ -3,7 +3,7 @@ import { useIsland } from '../context';
 import { createContext, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, splitProps, untrack, useContext, type JSX } from 'solid-js';
 
 /**
- * Radix Tabs, as the retired React kit renders and runs it (components/kit/tabs over @radix-ui/react-tabs and
+ * Radix Tabs, as the retired React kit rendered and ran it (over @radix-ui/react-tabs and
  * its roving focus group). The served markup is Radix's server render; what Radix changes once it runs,
  * this changes the same way and at the same moment:
  *  - the tablist is `tabindex=-1` until its tabs have mounted, then `0` (and `-1` again while a Shift+Tab
@@ -128,10 +128,10 @@ export function TabsContent(props: JSX.HTMLAttributes<HTMLDivElement> & { value:
     if (next !== written) panel.style.animationDuration = next ?? '';
     written = next;
   };
-  // Today's reader re-renders the whole story when the document's query results land in the browser,
+  // The former reader re-renders the whole story when the document's query results land in the browser,
   // after the first frame: an active panel then drops its mount style (`style=""`). A compiled page
   // serves those results, so its store never lands them; a document that runs queries is re-rendered
-  // here, once, at the same point — a document without queries keeps the mount style, as it does today.
+  // here, once, at the same point — a document without queries keeps the mount style, as it did in the former reader.
   const runsQueries = island.declaresQueries();
   onMount(() => {
     const frame = requestAnimationFrame(() => { prevented = false; if (runsQueries) rerender(); });

@@ -186,7 +186,7 @@ export type Drawn = { code: string; image?: MermaidImage; error?: string; palett
 export type ReaderDrawing = Omit<Drawn, 'code' | 'error'> & { image: MermaidImage };
 
 /**
- * Draw `code` in `element`'s theme, as today's reader does: wait for the palette's faces, measure them
+ * Draw `code` in `element`'s theme, as the compiled reader does: wait for the palette's faces, measure them
  * before and after, embed the page's fonts in a portable drawing, and mark the drawing (palette key,
  * metrics, faces) only when the fonts held still. Resolves null once `live()` turns false; rejects
  * when Mermaid cannot draw the source.

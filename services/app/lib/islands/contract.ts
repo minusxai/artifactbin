@@ -87,7 +87,7 @@ export interface IslandContext extends IslandData, IslandWrites {
    * Where an island's overlay (Dialog, Popover, Tooltip content) portals: the first-party trusted
    * UI container when the page has one — the same destination the app's
    * overlays use — else null. With null, Dialog and Popover content render in place; Tooltip content
-   * portals to `document.body`, as today's story tooltip does.
+   * portals to `document.body`, as the former story tooltip does.
    * Read when the overlay opens.
    */
   trustedPortal(): HTMLElement | null;
@@ -208,7 +208,7 @@ export const RENDER_ID_PATTERN = /^[\w-]+$/;
 export const PUBLIC_MX_KEY = '__mxPublicApi';
 export type PublicMxHost = HTMLElement & { [PUBLIC_MX_KEY]?: () => void };
 
-/** Fired on `document` once every island has hydrated (the same event today's runtime fires after hydration). */
+/** Fired on `document` once every island has hydrated (the same event the former runtime fires after hydration). */
 export const ISLANDS_READY_EVENT = 'mx:ready';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export const ISLANDS_READY_EVENT = 'mx:ready';
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * Every vendored interactive component renders the DOM today's Radix-based kit
+ * Every vendored interactive component renders the DOM the former Radix-based kit
  * renders: the same elements, roles, `data-state`/`data-orientation` attributes,
  * `aria-*` idrefs (generated ids may differ, their RESOLUTION may not), author
  * ids and `data-mx-ast` paths verbatim, closed content rendered (hidden), never
@@ -246,7 +246,7 @@ export interface IslandPageData {
   /**
    * The managed `<Iframe>`'s asset door (lib/story-runtime/managed-assets ManagedAssetsConfig): the
    * deployment's asset origin and this page's absolute import door (with a capture's verified export key),
-   * exactly as today's island carries it. Absent without an asset origin; a frame then refuses external assets.
+   * exactly as the former island carries it. Absent without an asset origin; a frame then refuses external assets.
    */
   managedAssets?: { origin: string; resolveUrl: string };
   /**

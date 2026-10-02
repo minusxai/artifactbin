@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Manifest } from 'vite';
-import type { LazyCode } from '@/lib/story/document';
 
 /** Build-owned reader discovery. Hints never execute code or change access. */
 type ReaderPreloader = (html: string) => string;
@@ -85,67 +84,6 @@ export function createEntryPreloader(webDir: string, entries: readonly string[])
       }
     }
     return inject(html, cached);
-  };
-}
-
-/** What a document's lazy code resolves to in the app's build. */
-interface DocumentHints { chart: Hint[]; mermaid: Record<string, Hint[]> }
-
-const CHART_MODULE = 'components/viz/VegaChart.tsx';
-const MERMAID_ENGINE = 'components/kit/mermaid-render.ts';
-
-/**
- * The Mermaid modules each diagram kind loads, recorded by the runtime build
- * (scripts/build-server-reader.mjs) beside the SSR bundle: Mermaid's dispatch
- * is read from the installed package there, and the kinds from the kit.
- */
-const MERMAID_MODULES_FILE = path.resolve('lib/build-assets/mermaid-modules.json');
-
-function readDocumentHints(webDir: string, mermaidModulesFile: string): DocumentHints {
-  const manifest = readManifest(webDir);
-  const keys = Object.keys(manifest);
-  const keyFor = (suffix: string) => keys.find(key => key.endsWith(suffix));
-  const chartKey = keyFor('/' + CHART_MODULE);
-  const chart = chartKey ? closureHints(manifest, [chartKey]) : [];
-  let kinds: Record<string, string[]> = {};
-  try { kinds = (JSON.parse(readFileSync(mermaidModulesFile, 'utf8')) as { kinds?: Record<string, string[]> }).kinds ?? {}; }
-  catch { console.warn('[reader] Mermaid module record unavailable; diagrams load by discovery'); }
-  const engine = keyFor('/' + MERMAID_ENGINE);
-  const mermaid: Record<string, Hint[]> = {};
-  for (const [kind, modules] of Object.entries(kinds)) {
-    // Recorded by their path below node_modules/, which is how a Vite manifest key ends too.
-    const moduleKeys = Array.isArray(modules) ? modules.map(module => keyFor('/node_modules/' + module)) : [];
-    // All or nothing: a kind whose modules this build cannot place is left to
-    // load by discovery rather than preloaded in part.
-    if (!engine || !moduleKeys.length || moduleKeys.some(key => !key)) continue;
-    mermaid[kind] = closureHints(manifest, [engine, ...moduleKeys as string[]]);
-  }
-  return { chart, mermaid };
-}
-
-/**
- * Per DOCUMENT: the lazy code this document will run (lib/story/document/lazy-code) —
- * the chart module when it draws a chart, each Mermaid kind's engine, diagram
- * and layout closure for the kinds it draws — and never code it will not run.
- * Resolved once per server from the Vite manifest; a document with none gets
- * its HTML back unchanged.
- */
-export function createDocumentPreloader(webDir: string, mermaidModulesFile = MERMAID_MODULES_FILE): (html: string, needs: LazyCode) => string {
-  let cached: DocumentHints | undefined;
-  return (html, needs) => {
-    // A stored diagram drawing is the page's own paint: the first is asked for beside the code.
-    const first = needs.mermaidImages?.[0];
-    const image = first ? [{ href: first, style: false, as: 'image' as const }] : [];
-    if (!needs.chart && !needs.mermaid.length) return image.length ? inject(html, image) : html;
-    if (!cached) {
-      try { cached = readDocumentHints(webDir, mermaidModulesFile); }
-      catch {
-        console.warn('[reader] preload manifest unavailable; using lazy discovery');
-        cached = { chart: [], mermaid: {} };
-      }
-    }
-    const { chart, mermaid } = cached;
-    return inject(html, [...(needs.chart ? chart : []), ...needs.mermaid.flatMap(kind => mermaid[kind] ?? []), ...image]);
   };
 }
 

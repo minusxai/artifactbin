@@ -1,6 +1,6 @@
 /**
  * THE SERVED DOCUMENT'S STYLESHEETS — one source for every renderer that serves a document BY ITSELF
- * (`/a/:id/raw`, a domain post, a capture): today's standalone document (lib/story/document) and the
+ * (`/a/:id/raw`, a domain post, a capture): the standalone document (lib/story/document) and the
  * compiled reader (lib/compiled-page/serve.server) emit exactly these tags, in this order, with
  * exactly this text. Byte for byte matters beyond looks: Mermaid reads `--font-mono`'s TEXT into its
  * palette, and the palette names a stored drawing (lib/mermaid-images), so a minified copy of the

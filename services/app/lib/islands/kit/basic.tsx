@@ -110,7 +110,7 @@ const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Objec
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : 'that did not save');
 
 /**
- * Each document's row actions (today's RowActionsContext, lib/story-runtime/row-actions): a row's write
+ * Each document's row actions (the former RowActionsContext, lib/story-runtime/row-actions): a row's write
  * in flight, and its refusal, belong to the document, so they outlive the button — a row reordered,
  * filtered or scrolled out of a virtual window and back is still busy, and a second click writes nothing.
  */
@@ -136,13 +136,13 @@ export function Button(props: ButtonProps) {
   const island = useIsland();
   const store = island.store();
   if (!store) {
-    // Today's static face: the binding stamped, the button disabled.
+    // The former static face: the binding stamped, the button disabled.
     const stamp = [name ? `run:${own.run}` : '', own.set && typeof own.set === 'object' ? `set:${Object.keys(own.set).join(',')}` : ''].filter(Boolean).join(' ');
     return <button data-slot="button" data-variant={variant} data-size={size} data-mx-bound={stamp} disabled {...rest} />;
   }
   const row = own.row ?? null;
   const read = (map: unknown) => { const b = bindings(map, row); return b ? resolveBindings(b, (ref) => (ref === VIEWER_ID ? viewerId(island) : store.getValue(ref))) : undefined; };
-  // The server render has no transport: the context says what today's served page says until the check answers.
+  // The server render has no transport: the context says what the former served page says until the check answers.
   const unavailable = hydratedRead(() => (name ? island.mutationUnavailable(name) : null), { value: name ? ACCESS_PENDING : null });
   const [error, setError] = createSignal<string | null>(null);
   const alert = <Show when={error()}><span role="alert" class="mx-write-error">{error()}</span></Show>;
