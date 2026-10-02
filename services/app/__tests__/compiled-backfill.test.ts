@@ -41,10 +41,10 @@ async function owner() {
   const t = await mintToken('backfill'); await claimToken(user.id, t.token);
   return t.token;
 }
-/** The server, as the script reaches it: every request it was asked, in order. */
+/** The server, as the script reaches it: every document it was asked for, in order (its health checks are the pacing's). */
 function server() {
   const asked: string[] = [];
-  const fetch: BackfillOptions['fetch'] = async (url, init) => { asked.push(url); return app.request(url, init); };
+  const fetch: BackfillOptions['fetch'] = async (url, init) => { if (new URL(url).pathname !== '/api/health') asked.push(url); return app.request(url, init); };
   return { asked, fetch };
 }
 const compiledBuilds = async () => Object.fromEntries((await (await harness.db()).query<{ artifact_id: string; slot: string; build: string | null }>(
@@ -169,4 +169,32 @@ describe('backfillCompiledPages', () => {
   });
 
 
+});
+
+describe('backfill self-pacing', () => {
+  it('sends no new version while the server health check answers slowly, and still finishes', async () => {
+    const db: BackfillOptions['db'] = {
+      query: async <R,>(sql: string) => ({ rows: (sql.includes('FROM artifacts') ? [{ id: 'aaaaaa', version: 1 }, { id: 'bbbbbb', version: 1 }] : []) as R[] }),
+    };
+    const order: string[] = [];
+    let slow = 2;
+    const fetch: BackfillOptions['fetch'] = async (url) => {
+      const path = new URL(url).pathname;
+      if (path === '/api/health') {
+        order.push(slow > 0 ? 'health:slow' : 'health:ok');
+        if (slow-- > 0) await new Promise((r) => setTimeout(r, 60));
+        return new Response('ok');
+      }
+      order.push(path);
+      return new Response('<html></html>', { headers: { 'x-mx-reader': 'compiled' } });
+    };
+    const sleeps: number[] = [];
+    const report = await backfillCompiledPages({
+      db, base: BASE, fetch, mintKey: () => 'k', concurrency: 1, healthMs: 30, log: () => {},
+      sleep: async (ms) => { sleeps.push(ms); },
+    });
+    expect(order).toEqual(['health:slow', 'health:slow', 'health:ok', '/a/aaaaaa/raw', 'health:ok', '/a/bbbbbb/raw']);
+    expect(sleeps).toEqual([1_000, 2_000]);
+    expect(report.warmed).toBe(2);
+  });
 });

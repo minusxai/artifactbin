@@ -63,6 +63,7 @@ import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server'
 import { archiveSharedBuild } from '@/lib/compiled-page/shared-builds.server';
 import type { CompilerBuild, StoredCompile } from '@/lib/compiled-page/contract';
 import { MIN_PAGE_FORMAT, MIN_HANDOVER_CONTRACT } from '@/lib/compiled-page/contract';
+import { prepareWorkers } from './prepare-workers.server';
 
 /** Raise manually when older prepared pages cannot be read. */
 const PAGE_FORMAT = MIN_PAGE_FORMAT;
@@ -194,13 +195,16 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
     // imports this module, so its access helper is reached the same way (no import cycle at load).
     const [{ compilePage }, { anonymousAccessFacts }] = await Promise.all([import('@/lib/compiled-page/compiler'), import('@/lib/compiled-page/snapshots.server')]);
     const flow = page.declared?.flow ?? null;
-    const compiled = await compilePage({
+    const input = {
       nodes: page.data.nodes, colorMode: page.data.colorMode, template: page.data.template ?? null, chrome: page.data.chrome !== false,
       ...(page.data.glyphs ? { glyphs: page.data.glyphs } : {}),
       refData: refData ?? {}, flow, build: build.id, authorScript: page.authorScript,
       // The plan snapshots key on: the anonymous reader's admission, decided as the snapshot store decides it.
       ...(flow ? { access: await anonymousAccessFacts(row, flow) } : {}),
-    }, build);
+    };
+    // The compile itself is CPU-bound (Babel, Solid, the static kit): on a prepare thread when this process has them.
+    const threads = prepareWorkers();
+    const compiled = threads ? await threads.compilePage(input, build) : await compilePage(input, build);
     if (compiled.unported.length) return { build: build.id, error: `unported: ${compiled.unported.join(', ')}`, reason: 'unported', unported: compiled.unported };
     await createSpeculationRulesStore().put(compiled.links);
     return compiled;
