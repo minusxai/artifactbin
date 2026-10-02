@@ -151,7 +151,7 @@ function keepPastedEdgeSpaces(tr: Transaction, from: number, plain: string) {
 }
 
 /** How many AST-path decorations one repath step redraws: a few table rows, well inside an idle slice at slow CPUs. */
-const REPATH_STEP = 120;
+const REPATH_STEP = 40;
 
 export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, onCompositionSettled: () => void): FlowView {
   /** The AST-path decorations last drawn, and for what: recomputed only when the document, its source or its path moves. */

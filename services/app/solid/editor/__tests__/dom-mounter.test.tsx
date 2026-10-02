@@ -100,6 +100,11 @@ describe('compiled DOM edit mounter', () => {
     expect(kept).not.toBeNull();
     expect(changed).not.toBeNull();
 
+    // Decided ahead a region a step, reading only: the draft is untouched until the hold.
+    let steps = 1;
+    while (!first.prepareHold(after, draft, () => false)) steps++;
+    expect(steps).toBe(2);
+    expect(draft.querySelector('#b')).not.toBeNull();
     const held = first.hold(after, draft);
     // Only the unchanged region is held; in the draft its blocks are a stand-in at its new path.
     expect([...held.stands.keys()]).toEqual(['0.3']);

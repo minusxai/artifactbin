@@ -104,6 +104,8 @@ export interface FrameEditSession {
    * leaves them running and the next `mountCompiledDom` takes them over: a redraw rebuilds only what it changed.
    */
   holdUnchanged(next: JsxNode[], draft: HTMLElement): ReadonlyMap<string, HTMLElement>;
+  /** Decide `holdUnchanged` for this draft ahead, a few regions while `more()`, reading only: true once decided. */
+  prepareHold(next: JsxNode[], draft: HTMLElement, more: () => boolean): boolean;
   /** Undo `holdUnchanged` when the draw it was for does not happen: the editors run on as they were, the draft as it came. */
   releaseHeld(): void;
   /** Release Solid prose regions before a compiled DOM morph; the session and its commands stay live. */
@@ -365,6 +367,12 @@ export function createFrameEditSession({
       for (const view of views.all) flushFlowView(view);
       held = compiledMount.hold(next, draft);
       return held.stands;
+    },
+    prepareHold(next, draft, more) {
+      if (disposed || !compiledMount) return true;
+      // An editor is held for the prose it has handed over: what is half-typed goes first, as the hold itself does.
+      for (const view of views.all) flushFlowView(view);
+      return compiledMount.prepareHold(next, draft, more);
     },
     releaseHeld() {
       held?.release();

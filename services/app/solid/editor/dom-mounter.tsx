@@ -47,6 +47,11 @@ export interface CompiledEditMount {
    * new paths instead of building them again. A redraw rebuilds only the regions it changed.
    */
   hold(next: JsxNode[], draft: HTMLElement): HeldEditors;
+  /**
+   * Decide `hold` for this draft ahead, a few regions while `more()` (one at least), reading only: true once decided.
+   * The draw then holds at once when the editors still stand as they were decided over (it decides again otherwise).
+   */
+  prepareHold(next: JsxNode[], draft: HTMLElement, more: () => boolean): boolean;
 }
 
 /** Editors held across a redraw (`CompiledEditMount.hold`), by their region's path in the draft. */
@@ -263,14 +268,17 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   const holding = new Set<RegionEditor>();
   // GridEdit's grip/resize affordances (STORY_GRID_EDIT_CSS's [data-mx-grid-tile]/.mx-grid-resize
   // rules) are structural, not authored content — same reasoning as the React adapter's own
-  // `<style data-mx-grid-css>`, injected inside the story surface rather than the app's <head>.
-  if (!root.querySelector('style[data-mx-grid-css]')) {
+  // `<style data-mx-grid-css>`, injected inside the story surface rather than the app's <head>. Only with a Grid
+  // to edit: a stylesheet added and removed at every redraw re-styled the whole page twice (a forced pass of most
+  // of 100 ms on a table-heavy document at slow CPUs).
+  const gridStyle = () => {
+    if (root.querySelector('style[data-mx-grid-css]')) return;
     const style = root.ownerDocument.createElement('style');
     style.dataset.mxGridCss = '';
     style.textContent = STORY_GRID_EDIT_CSS;
     root.prepend(style);
     cleanups.push(() => style.remove());
-  }
+  };
   const railRows = root.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row');
   discoverSlides(nodes).forEach((slide, index) => {
     const row = railRows[index];
@@ -337,6 +345,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         children: () => <span /> }];
     });
     if (!tiles.length) return;
+    gridStyle();
     const overlay = root.ownerDocument.createElement('div');
     overlay.dataset.mxGridEdit = path;
     overlay.style.cssText = 'position:absolute;inset:0;z-index:2;pointer-events:none';
@@ -547,56 +556,100 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     redraws.length = 0;
     if (slice !== null) { if (idle.cancelIdleCallback) idle.cancelIdleCallback(slice); else view.clearTimeout(slice); }
   });
-  return {
-    dispose() { for (const cleanup of cleanups.reverse()) cleanup(); },
-    hold(next, draft) {
-      const stands = new Map<string, HTMLElement>();
-      const taken = new Map<string, RegionEditor>();
-      // In page order, so a region is matched with the editor that showed it, not an identical one elsewhere.
-      const live = [...mounted.values()]
-        .filter((editor) => editor.mount.isConnected && !editor.mount.hasAttribute('data-mx-parent-layout') && !holding.has(editor))
-        .sort((a, b) => (a.mount.compareDocumentPosition(b.mount) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
-      const doc = root.ownerDocument;
-      const regions = proseRegions(next);
-      // The draft's region blocks by path, in one pass over the draft (a query per block scanned it once each).
-      const wanted = new Set(regions.flatMap((region) => region.nodes.map((_, offset) => [region.parentPath, String(region.start + offset)].filter(Boolean).join('.'))));
-      const byPath = new Map<string, HTMLElement>();
-      // A region block holds no other region's block (its prose is the region's), so the walk never enters one: a
-      // table's thousands of cells are not visited.
-      const find = (parent: Element) => {
-        for (let el = parent.firstElementChild; el; el = el.nextElementSibling) {
-          const path = el.getAttribute(AST_PATH);
-          if (path !== null && wanted.has(path)) { if (!byPath.has(path)) byPath.set(path, el as HTMLElement); continue; }
-          find(el);
-        }
-      };
-      find(draft);
-      /** What `release` puts back: each held editor's blocks before the hold, and its stand-in in the draft. */
-      const undo: Array<{ editor: RegionEditor; restore: HTMLElement[]; restoreKey: string | undefined; stand: HTMLElement; blocks: HTMLElement[] }> = [];
-      let from = 0;
-      for (const region of regions) {
+  /** The editors a hold may keep, in page order: a region is matched with the editor that showed it, not an identical one elsewhere. */
+  const holdable = () => [...mounted.values()]
+    .filter((editor) => editor.mount.isConnected && !editor.mount.hasAttribute('data-mx-parent-layout') && !holding.has(editor))
+    .sort((a, b) => (a.mount.compareDocumentPosition(b.mount) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+  /** A hold decided over a draft, region by region, reading only (the stand-ins are made by `hold`). */
+  interface HoldPlan {
+    next: JsxNode[];
+    draft: HTMLElement;
+    /** The editors as they stood when it was decided: what each showed, and which had the caret. */
+    live: RegionEditor[];
+    shown: JsxNode[][];
+    focused: RegionEditor | undefined;
+    matches: Array<{ region: ProseRegion; editor: RegionEditor; blocks: HTMLElement[]; key: string }>;
+    /** Decide more regions while `more()` (one at least); true once every region is decided. */
+    step(more: () => boolean): boolean;
+  }
+  let plan: HoldPlan | null = null;
+  const focusedOf = (live: RegionEditor[]) => live.find((editor) => editor.view()?.hasFocus());
+  /** Still what `hold` would decide now: the same editors, showing the same prose, the caret in the same one. */
+  const planCurrent = (decided: HoldPlan): boolean => {
+    const live = holdable();
+    return live.length === decided.live.length && live.every((editor, i) => editor === decided.live[i] && editor.shown() === decided.shown[i])
+      && focusedOf(live) === decided.focused;
+  };
+  const planHold = (next: JsxNode[], draft: HTMLElement): HoldPlan => {
+    const live = holdable();
+    const regions = proseRegions(next);
+    // The draft's region blocks by path, in one pass over the draft (a query per block scanned it once each).
+    const wanted = new Set(regions.flatMap((region) => region.nodes.map((_, offset) => [region.parentPath, String(region.start + offset)].filter(Boolean).join('.'))));
+    const byPath = new Map<string, HTMLElement>();
+    // A region block holds no other region's block (its prose is the region's), so the walk never enters one: a
+    // table's thousands of cells are not visited.
+    const find = (parent: Element) => {
+      for (let el = parent.firstElementChild; el; el = el.nextElementSibling) {
+        const path = el.getAttribute(AST_PATH);
+        if (path !== null && wanted.has(path)) { if (!byPath.has(path)) byPath.set(path, el as HTMLElement); continue; }
+        find(el);
+      }
+    };
+    find(draft);
+    const decided: HoldPlan = { next, draft, live, shown: live.map((editor) => editor.shown()), focused: focusedOf(live), matches: [], step };
+    let index = 0, from = 0;
+    function step(more: () => boolean): boolean {
+      while (index < regions.length) {
+        const region = regions[index++]!;
         let found = -1;
         // Compared as trees, offsets aside, stopping at the first difference: serializing every region of the draft
         // and every editor to compare them was most of a reply's apply on a table-heavy page. The editor in the
         // region's own place is also compared serialized, as authored markup: a served tree and the page's parse may
         // spell the same markup with different fields.
         for (let i = from; i < live.length; i++) {
-          const shown = live[i]!.shown();
+          const shown = decided.shown[i]!;
           if (sameNodes(shown, region.nodes) || (i === from && serializeJsx(shown) === serializeJsx(region.nodes))) { found = i; break; }
         }
-        if (found < 0) continue;
-        const editor = live[found]!;
-        const blocks = region.nodes.flatMap((_, offset) => {
-          const el = byPath.get([region.parentPath, String(region.start + offset)].filter(Boolean).join('.'));
-          return el ? [el] : [];
-        });
-        // The draft must draw exactly what the editor stands in for: the same blocks, in one parent, compiled alike —
-        // or, for the editor holding the caret, the prose it shows (it typed the change): rebuilding it under the
-        // caret threw away its focus and paid a style pass of the whole page.
-        if (!blocks.length || !blocks.every((el) => el.parentNode === blocks[0]!.parentNode) || inIsland(blocks[0]!) || inIsland(editor.mount)) continue;
-        const key = compiledKey(blocks);
-        if (key !== restoreKeyOf(editor) && !editor.view()?.hasFocus()) continue;
-        from = found + 1;
+        if (found >= 0) {
+          const editor = live[found]!;
+          const blocks = region.nodes.flatMap((_, offset) => {
+            const el = byPath.get([region.parentPath, String(region.start + offset)].filter(Boolean).join('.'));
+            return el ? [el] : [];
+          });
+          // The draft must draw exactly what the editor stands in for: the same blocks, in one parent, compiled alike —
+          // or, for the editor holding the caret, the prose it shows (it typed the change): rebuilding it under the
+          // caret threw away its focus and paid a style pass of the whole page.
+          if (blocks.length && blocks.every((el) => el.parentNode === blocks[0]!.parentNode) && !inIsland(blocks[0]!) && !inIsland(editor.mount)) {
+            const key = compiledKey(blocks);
+            if (key === restoreKeyOf(editor) || editor === decided.focused) {
+              from = found + 1;
+              decided.matches.push({ region, editor, blocks, key });
+            }
+          }
+        }
+        if (index < regions.length && !more()) return false;
+      }
+      return true;
+    }
+    return decided;
+  };
+  return {
+    dispose() { for (const cleanup of cleanups.reverse()) cleanup(); },
+    prepareHold(next, draft, more) {
+      if (!plan || plan.next !== next || plan.draft !== draft || !planCurrent(plan)) plan = planHold(next, draft);
+      return plan.step(more);
+    },
+    hold(next, draft) {
+      // Decided ahead in slices (`prepareHold`) when nothing it read has moved since; decided here otherwise.
+      const decided = plan && plan.next === next && plan.draft === draft && planCurrent(plan) ? plan : planHold(next, draft);
+      plan = null;
+      decided.step(() => true);
+      const stands = new Map<string, HTMLElement>();
+      const taken = new Map<string, RegionEditor>();
+      const doc = root.ownerDocument;
+      /** What `release` puts back: each held editor's blocks before the hold, and its stand-in in the draft. */
+      const undo: Array<{ editor: RegionEditor; restore: HTMLElement[]; restoreKey: string | undefined; stand: HTMLElement; blocks: HTMLElement[] }> = [];
+      for (const { region, editor, blocks, key } of decided.matches) {
         const stand = draft.ownerDocument.createElement('div');
         stand.setAttribute(EDIT_REGION_ATTR, region.path);
         blocks[0]!.parentNode!.insertBefore(stand, blocks[0]!);

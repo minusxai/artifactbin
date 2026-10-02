@@ -19,7 +19,7 @@ import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
-import { nextTask, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
+import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
@@ -310,6 +310,14 @@ export function createIslandController({ win, root, islands, nodes: served, port
     const module = await loadDraftModule(win, root, pending.document);
     const stale = () => disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending;
     if (stale()) return;
+    // Which editors the draft keeps is decided ahead, a few regions a task (comparing every kept table with the
+    // draft's was one long task at slow CPUs); the hold below then only makes the stand-ins.
+    for (;;) {
+      const until = win.performance.now() + PARSE_SLICE_MS;
+      if (!edit || edit.prepareHold(pending.nodes, pending.root, () => win.performance.now() < until)) break;
+      await nextTask(win);
+      if (stale()) return;
+    }
     const late = drawBlockedFor();
     if (late !== null) { retryDraw(late); return; }
     // Editors whose region this draft draws exactly as it is stay mounted (focus, caret and history with them) and
