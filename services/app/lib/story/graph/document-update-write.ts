@@ -54,15 +54,18 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const changed=param([...new Set([...Object.keys(update.patch.updated),...Object.keys(update.patch.inserted),...update.patch.removed])]);
  const preimage=param([...new Set([...Object.keys(update.patch.updated),...update.patch.removed])]),touched=param(update.patch.touched);
  const refs=update.effects.references?`||jsonb_build_object('refs',${graphReferencesSql('l.next_document')})`:'';
+ const withheldNow=`(${withhold}::boolean AND artifacts.version=${wholeVersion}::int+1)`;
  const strip=update.effects.css?"-'parsedArtifact'-'compiledCss'-'cssCompileVersion'":"-'parsedArtifact'";
  const mention=documentMentionSql(actor,id,update.mentions,param,visibility,shares,!!options.dryRun);
  const resources=documentResourceSql(update.datasetBindings,param,!!options.dryRun);
  const ownerOnly=`(${hasParent}::boolean AND NOT EXISTS(SELECT 1 FROM locked WHERE ${owner.where(ownerValue)}))`;
  const invalidParent=`(${hasParent}::boolean AND ${parent}::text IS NOT NULL AND NOT EXISTS(SELECT 1 FROM destination))`;
  const editEvents=await documentEditEventSql(id,actor,param,hasParent);
- // `previous` (the old row, read by the archive, the history log and the id/notification steps) carries the whole old
- // document only when this commit archives a version or replaces the document; otherwise only the nodes this patch
- // changes or touches and the byte count, never megabytes through every step after the UPDATE.
+ // `previous` (the old row, read by the history log and the id/notification steps) carries the whole old document only
+ // when this commit replaces the document; otherwise only the nodes this patch changes or touches and the byte count.
+ // The archive copies the locked row's stored (compressed) value as it is, never a rebuilt one. `transformed` is not
+ // materialized: the new document flows straight into the UPDATE instead of through a spilled work table, and
+ // `updated` returns it only when the answer needs it (the ids it introduces are computed beside it, in `after_ids`).
  const prefix=`WITH RECURSIVE observed AS MATERIALIZED (
   SELECT id,sharing_revision FROM artifacts WHERE id=$1 AND ${scope.where('$2')}
  ), locked AS MATERIALIZED (
@@ -72,10 +75,12 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
   SELECT p.ancestor_ids||p.id AS ancestors FROM artifacts p,locked l WHERE ${hasParent}::boolean AND p.id=${parent}::text AND p.format='folder' AND p.deleted_at IS NULL
    AND (CASE WHEN l.user_id IS NOT NULL THEN p.user_id=l.user_id ELSE p.token_id=l.token_id END)
    AND p.id<>l.id AND NOT l.id=ANY(p.ancestor_ids) AND cardinality(p.ancestor_ids)+1<6 ${options.dryRun?'':'FOR SHARE OF p'}
- ), ${mention.before} ${resources.before} transformed AS MATERIALIZED (
-  SELECT l.*,${sql.expression} AS next_document,a.archiving,
-   CASE WHEN a.archiving OR ${replacement}::jsonb IS NOT NULL THEN NULL ELSE jsonb_build_object('nodes',COALESCE((SELECT jsonb_object_agg(k,d.document#>ARRAY['nodes',k]) FROM unnest(${changed}::text[]||${touched}::text[]) k WHERE d.document#>ARRAY['nodes',k] IS NOT NULL),'{}'::jsonb),'bytes',d.document->'bytes') END AS slim_document
+ ), ${mention.before} ${resources.before} transformed AS ${options.dryRun?'MATERIALIZED':'NOT MATERIALIZED'} (
+  SELECT l.*,nx.next_document,a.archiving,
+   ARRAY(SELECT DISTINCT substring(s FROM 4) FROM unnest(CASE WHEN ${replacement}::jsonb IS NOT NULL THEN ARRAY(SELECT jsonb_object_keys(nx.next_document->'nodes')) ELSE ${changed}::text[] END) k CROSS JOIN LATERAL jsonb_array_elements_text(nx.next_document#>ARRAY['nodes',k,'selectors']) s WHERE s LIKE 'id:%') AS after_ids,
+   CASE WHEN ${replacement}::jsonb IS NOT NULL THEN NULL ELSE jsonb_build_object('nodes',COALESCE((SELECT jsonb_object_agg(k,d.document#>ARRAY['nodes',k]) FROM unnest(${changed}::text[]||${touched}::text[]) k WHERE d.document#>ARRAY['nodes',k] IS NOT NULL),'{}'::jsonb),'bytes',d.document->'bytes') END AS slim_document
   FROM locked l CROSS JOIN LATERAL (SELECT l.document||'{}'::jsonb AS document OFFSET 0) d
+   CROSS JOIN LATERAL (SELECT ${sql.expression} AS next_document OFFSET 0) nx
    CROSS JOIN LATERAL (SELECT (${whole}::boolean OR l.document_archived_at IS NULL OR l.document_archived_at<=now()-interval '120 seconds') AS archiving) a
   WHERE ${mention.guard} AND ${resources.guard} AND ${annotationSqlGuard(annotationOps)} AND (l.format='markup' OR(${replacement}::jsonb IS NOT NULL AND l.format<>'folder' AND l.dataset_policy IS NULL)) AND (${replacement}::jsonb IS NOT NULL OR d.document->>'policy'=${policy}) AND ${sql.guard} AND (NOT ${whole}::boolean OR l.version=${wholeVersion}::int)
    AND (NOT ${currentSyntax}::boolean OR l.format<>'markup' OR l.meta @> '${JSON.stringify(DATA_SYNTAX_META)}'::jsonb)
@@ -96,11 +101,12 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
    description=CASE WHEN ${hasDescription}::boolean THEN ${descriptionValue}::text ELSE l.description END,
    actor_user_id=$4,actor_token_id=$5,updated_at=now(),
    document_archived_at=CASE WHEN l.archiving THEN now() ELSE l.document_archived_at END
-  FROM transformed l WHERE artifacts.id=l.id RETURNING artifacts.*,jsonb_build_object('version',l.version,'title',l.title,'description',l.description,'format',l.format,'source',l.source,'meta',l.meta,
+  FROM transformed l WHERE artifacts.id=$1 AND artifacts.id=l.id RETURNING ${HEAD_COLUMNS.map(name=>`artifacts.${name}`).join(',')},
+   CASE WHEN ${withheldNow} THEN NULL ELSE artifacts.document END AS document,${withheldNow} AS withheld,l.after_ids,jsonb_build_object('version',l.version,'title',l.title,'description',l.description,'format',l.format,'source',l.source,'meta',l.meta,
    'actor_user_id',l.actor_user_id,'actor_token_id',l.actor_token_id,'edit_id',l.edit_id,'ancestor_ids',l.ancestor_ids,'archiving',l.archiving,'document',COALESCE(l.slim_document,l.document)) AS previous
  ), archived AS (
   INSERT INTO artifact_versions(artifact_id,version,title,description,format,source,meta,actor_user_id,actor_token_id,document)
-  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',NULLIF(previous->'document','null'::jsonb) FROM updated
+  SELECT id,(previous->>'version')::int,previous->>'title',previous->>'description',previous->>'format',previous->>'source',previous->'meta',previous->>'actor_user_id',previous->>'actor_token_id',(SELECT l.document FROM locked l) FROM updated
   WHERE (previous->>'archiving')::boolean ON CONFLICT DO NOTHING
  ), ${documentAnnotationSql(annotationOps,aliases)}, logged AS (
   INSERT INTO artifact_edits(artifact_id,edit_id,splice_start,removed,inserted,span_start,span_end,actor_user_id,actor_token_id,document_state,annotation_changes)
@@ -118,7 +124,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), changed_ids AS MATERIALIZED (
   SELECT u.id,u.version,
    CASE WHEN ${replacement}::jsonb IS NOT NULL THEN ARRAY(SELECT source_id FROM artifact_source_ids WHERE artifact_id=u.id AND retired_version IS NULL) ELSE ARRAY(SELECT DISTINCT substring(s FROM 4) FROM unnest(${changed}::text[]) k CROSS JOIN LATERAL jsonb_array_elements_text(u.previous#>ARRAY['document','nodes',k,'selectors']) s WHERE s LIKE 'id:%') END AS before_ids,
-   ARRAY(SELECT DISTINCT substring(s FROM 4) FROM unnest(CASE WHEN ${replacement}::jsonb IS NOT NULL THEN ARRAY(SELECT jsonb_object_keys(u.document->'nodes')) ELSE ${changed}::text[] END) k CROSS JOIN LATERAL jsonb_array_elements_text(u.document#>ARRAY['nodes',k,'selectors']) s WHERE s LIKE 'id:%') AS after_ids
+   u.after_ids
   FROM updated u
  ), reserved AS (
   INSERT INTO artifact_source_ids(artifact_id,source_id,provenance,first_version)
@@ -144,10 +150,10 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), anchors AS (
   UPDATE annotations a SET anchor_key=x.source_id FROM aliases x WHERE a.artifact_id=x.artifact_id AND a.anchor_key=x.legacy_key AND NOT EXISTS(SELECT 1 FROM moved_annotations m WHERE m.id=a.id)
  ), ${mention.after} ${resources.after} ${editEvents} response AS (
-  SELECT true AS applied,CASE WHEN ${withhold}::boolean AND u.version=${wholeVersion}::int+1 THEN ${headWithoutDocument('u')} ELSE to_jsonb(u)-'previous' END AS artifact,${withhold}::boolean AND u.version=${wholeVersion}::int+1 AS withheld,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
+  SELECT true AS applied,CASE WHEN u.withheld THEN ${headWithoutDocument('u')} ELSE to_jsonb(u)-'previous'-'withheld'-'after_ids' END AS artifact,u.withheld,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
   UNION ALL SELECT false,to_jsonb(l),false,l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
  ) SELECT applied,withheld,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
- const preview=`SELECT true AS applied,to_jsonb(t)-'next_document'-'archiving'-'slim_document' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly},${invalidParent} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
+ const preview=`SELECT true AS applied,to_jsonb(t)-'next_document'-'archiving'-'slim_document'-'after_ids' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly},${invalidParent} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
  const query=prefix+(options.dryRun?preview:commit);
  // Dry-run omits commit-only parameters as well as every write CTE. Compact
  // placeholders so PostgreSQL never receives an untyped, unused parameter.
