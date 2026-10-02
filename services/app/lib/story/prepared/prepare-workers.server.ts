@@ -23,12 +23,15 @@ function workerEntry(): { url: URL; execArgv?: string[] } | null {
   return existsSync(fileURLToPath(dev)) ? { url: dev, execArgv: [] } : null;
 }
 
+/** Each thread holds its own compiler and vega (hundreds of MB): a few, started only as work arrives. */
+const MAX_THREADS = 3;
+
 let pool: DraftCompilePool | null | undefined;
 
 function compilePool(): DraftCompilePool | null {
   if (pool !== undefined) return pool;
   const entry = workerEntry();
-  pool = entry ? createDraftCompilePool({ ...entry, workers: Math.max(1, availableParallelism() - 1) }) : null;
+  pool = entry ? createDraftCompilePool({ ...entry, workers: Math.max(1, Math.min(MAX_THREADS, availableParallelism() - 1)) }) : null;
   return pool;
 }
 
