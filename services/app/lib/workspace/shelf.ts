@@ -37,7 +37,7 @@ export interface ShelfItem {
  * It lives HERE, beside the policy, rather than in the component that renders
  * it, because it is what a page ANSWERS and not how the answer looks: the
  * dashboard, the profile and now a folder's page each build these rows on the
- * server, and a server module may not import React. `solid/components/Shelf.tsx`
+ * server, and a server module may not import a component. `solid/components/Shelf.tsx`
  * re-exports it, so nothing that already named it had to move.
  */
 export interface ShelfRow extends ShelfItem {

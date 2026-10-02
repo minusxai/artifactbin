@@ -188,7 +188,7 @@ export interface CompiledPage {
   links: LinkHints;
   /** Kit components rendered by the Solid kit, by where they render. */
   kit: { skeleton: string[]; islands: string[] };
-  /** Legacy reporting field. Solid renders all static components, so this is empty. */
+  /** Always empty: Solid renders every static component. Kept so stored pages keep their shape. */
   reactStatic: string[];
   /**
    * Registered components the compile could not place: a non-empty list refuses the compile (fallback).
@@ -240,9 +240,8 @@ export interface IslandRenderData {
 export type CompilePage = (input: CompileInput, build: CompilerBuild) => Promise<CompiledPage>;
 
 /**
- * The most a read may spend compiling inline on a build-id miss before it falls back to today's renderer
- * (spec §6). After Wave 4 (spec §6.1) a read always waits for the compile, and this only decides whether
- * the inline compile is logged as slow.
+ * The most a read may spend compiling inline on a build-id miss before it is logged as slow
+ * (spec §6). There is no other renderer: a read always waits for the compile.
  */
 export const COMPILE_INLINE_BUDGET_MS = 300;
 

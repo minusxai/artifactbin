@@ -1,8 +1,7 @@
 /**
  * A continuous prose region's PROSEMIRROR view, framework-free: the schema-bound editor state,
  * key bindings, node views, AST-path decorations, the guarded transaction pipeline, paste and
- * composition handling. components adapt it — lib/editor-v2/flow-editor (React) owns its boundary
- * with two layout effects; a Solid adapter (P3 probe) with onMount + one effect.
+ * composition handling. solid/editor/FlowEditor.tsx adapts it with onMount + one effect.
  */
 import { DOMSerializer, type ResolvedPos } from 'prosemirror-model';
 import { EditorState, TextSelection, type Command, type Transaction } from 'prosemirror-state';

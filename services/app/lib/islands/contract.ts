@@ -4,7 +4,7 @@
  * Types and constants only, browser-safe and framework-free: an island is
  * typed against the existing framework-free document store (lib/story-runtime/store),
  * and the Solid bridge that feeds it is an implementation detail of rt.ts.
- * The SPA (React) and the islands (Solid) share ONE store and ONE document
+ * The SPA (Solid) and the islands (Solid) share ONE store and ONE document
  * element; this file is where they agree on the handle.
  *
  * Owners: rt.ts / boot.ts (w2-runtime), kit/* (w2-kit-*), viewer + writes (w3-viewer-writes), handover (w3-handover).
@@ -85,8 +85,8 @@ export interface IslandContext extends IslandData, IslandWrites {
   store(): DataflowStore | null;
   /**
    * Where an island's overlay (Dialog, Popover, Tooltip content) portals: the first-party trusted
-   * UI container when the page has one — the same destination today's React
-   * kit uses — else null. With null, Dialog and Popover content render in place; Tooltip content
+   * UI container when the page has one — the same destination the app's
+   * overlays use — else null. With null, Dialog and Popover content render in place; Tooltip content
    * portals to `document.body`, as today's story tooltip does.
    * Read when the overlay opens.
    */

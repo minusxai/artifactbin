@@ -55,8 +55,8 @@ await esbuild.build({
   external: [...EXTERNALS, ...BUNDLE_ONLY_EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
   define: tailwindDefine,
   // `require` for the bundled CJS deps, under a name nothing else can collide
-  // with: the app itself uses createRequire (lib/story/document loads the SSR
-  // bundle that way), and a plain banner declared it twice — a SyntaxError at
+  // with: the app itself uses createRequire (lib/object-store, lib/mermaid-images/fonts
+  // resolve packages that way), and a plain banner declared it twice — a SyntaxError at
   // the first line of the image's only entrypoint.
   banner: { js: "import { createRequire as __mxCreateRequire } from 'node:module'; const require = __mxCreateRequire(import.meta.url);" },
   logLevel: 'warning',

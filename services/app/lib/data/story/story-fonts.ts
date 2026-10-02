@@ -7,7 +7,7 @@
  * theme's entries into @font-face CSS.
  *
  * The CSS is emitted into the document <head> as a `<style data-mx-fonts>` node
- * (`buildStoryDocument`, lib/story/document.ts) with plain `url()` refs — one shared, cacheable
+ * (the document builder, lib/story/styles/document-styles.ts) with plain `url()` refs — one shared, cacheable
  * static asset per theme, no data-URI payload on every story view. The node is platform chrome,
  * never authored source, so it must not reach `content.story` on any save path.
  */

@@ -4,7 +4,7 @@
  *
  * There are three renderings of one document: the SSR string, the island the
  * client hydrates from, and the live frame an open reader adopts. The first two
- * are built by `lib/story/document.ts` and the third by
+ * are built by `lib/story/document` and the third by
  * `lib/story/document/update-parts.ts`. A second copy of a transform whose whole job is
  * to make those renderings identical is how they drift: a pass that landed in
  * one of them and not the other would show a reader watching an agent write a
@@ -12,8 +12,8 @@
  *
  * So the passes live here, in order, and both consumers call this:
  *   1. `fixHtmlNesting` — nesting the HTML parser will not undo (a `<p>` around
- *      a block parses back as a different tree, which React answers by
- *      discarding the whole server tree; every document published before the
+ *      a block parses back as a different tree, which a hydrating client
+ *      cannot adopt; every document published before the
  *      door existed is still stored with the fault).
  *   2. `splitHelmet` — `[Helmet?, ...body]`, the canonical shape.
  *   3. The ASSET MAPPING (lib/story/assets/asset-url) — external image sources, and

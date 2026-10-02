@@ -6,10 +6,9 @@
  * never writes back into the buffer; only a `revision` bump moves it, and it reads `value` at that
  * moment.
  *
- * The Solid hazard is the inverse of React's: React needed `latest` refs so a stale render could not
- * supply the text; Solid effects track whatever they read, so the replacement effect must read
+ * Solid effects track whatever they read, so the replacement effect must read
  * `props.value` UNTRACKED — tracked, every keystroke echo would re-run it (harmless only while the
- * echo is exact, and a lagging echo is precisely the bug the React comment describes).
+ * echo is exact, and a lagging echo would overwrite what the user just typed).
  */
 import { createEffect, on, onCleanup, untrack } from 'solid-js';
 import { createSourceView, type SourceView } from '@/lib/source-editor/codemirror';
@@ -29,7 +28,7 @@ export interface SourceEditorProps {
 export default function SourceEditor(props: SourceEditorProps) {
   let host!: HTMLDivElement;
   let view: SourceView | null = null;
-  // Mounted once per editor (and again only when readOnly/ariaLabel change, as the React deps did):
+  // Mounted once per editor (and again only when readOnly/ariaLabel change):
   // its buffer, caret and undo history live as long as the pane does.
   createEffect(on([() => props.readOnly ?? false, () => props.ariaLabel ?? 'Markup source'], ([readOnly, ariaLabel]) => {
     const created = createSourceView({

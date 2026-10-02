@@ -39,7 +39,7 @@ export function reportMarkdown(base, head) {
     const c = head.documents.conditions;
     lines.push(`### Document views`, '', sizeOnly
       ? `Anonymous reader, cold cache, one unthrottled pass per fixture and route. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. KB are response bodies; timing columns are informational.`
-      : `Anonymous reader, cold cache, ${c.latencyMs} ms latency, ${c.downloadMbps} Mbps down, ${c.cpuSlowdown}× CPU slowdown, median of ${c.runs}. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. Takeover: the React runtime owns the visible document. Painted: charts/diagram drawn. KB are response bodies.`, '');
+      : `Anonymous reader, cold cache, ${c.latencyMs} ms latency, ${c.downloadMbps} Mbps down, ${c.cpuSlowdown}× CPU slowdown, median of ${c.runs}. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. Takeover: the app's rendered document replaces the server copy. Painted: charts/diagram drawn. KB are response bodies.`, '');
     lines.push(documentViewsMarkdown(head.documents.summary, base.documents?.summary ?? {}), '');
   }
   const headLoads = loadsSummary(head), baseLoads = loadsSummary(base);

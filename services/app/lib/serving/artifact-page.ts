@@ -5,7 +5,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
  * key, the canonical address (the client heals to it), the viewer's role and
- * session kind, and ArtifactSurface's props (the prepared reader runtime, the
+ * session kind, and the artifact page's props (the prepared reader runtime, the
  * design, the declared dataflow, the open-annotation count).
  *
  * ONE answer for both doors: the JSON route (client navigation,

@@ -2,7 +2,7 @@
  * THE COMPILED PAGE'S AUTHOR SCRIPT HOST, loaded lazily by `boot` only when the page data island names
  * an author script (IslandPageData.authorScript): today's author-script session
  * (lib/story-runtime/author-script `createAuthorScriptSession`) started against the island store, as
- * lib/story-runtime/entry.tsx starts it against the standalone document's store.
+ * the standalone document starts it against its own store.
  *
  * The trust boundary is today's, unchanged: the code never runs in this document. The session mounts
  * a hidden `sandbox="allow-scripts"` frame on the fixed HTTP wrapper (`AUTHOR_FRAME_PATH`, its own CSP),

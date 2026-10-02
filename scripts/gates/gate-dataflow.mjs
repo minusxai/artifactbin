@@ -23,7 +23,7 @@ const check = createChecker('dataflow');
 /**
  * The document's realm once it is live: the served page itself, once its islands
  * have hydrated (`<html data-mx-ready>`) — the app
- * adopts it only on intent for a reader who cannot edit (docs/phase2-architecture.md §7), so no React
+ * adopts it only on intent for a reader who cannot edit (docs/phase2-architecture.md), so no app
  * root need ever appear.
  */
 const liveDocument = async (page) => {

@@ -865,7 +865,7 @@ export function DatasetEditorPage({
                 })
               });
               await onSaved?.();
-              // Cross the Solid/React entry after consumers have read the save response.
+              // Cross the app entry after consumers have read the save response.
               // A same-task document navigation can discard its body in Chromium.
               await new Promise(resolve => setTimeout(resolve, 250));
               window.location.assign(`/a/${data.id}`);

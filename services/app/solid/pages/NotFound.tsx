@@ -1,7 +1,6 @@
 /* @jsxImportSource solid-js */
 /**
- * The app's ONE 404 (web/pages/NotFound.tsx) in Solid: same copy, same accessible names. The
- * React page's `useLoginHref` hook becomes a signal set on mount and re-read on click.
+ * The app's ONE 404. The login href is a signal set on mount and re-read on click.
  */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { LINK } from '../components/ui';

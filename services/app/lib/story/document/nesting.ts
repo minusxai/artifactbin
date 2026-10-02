@@ -1,17 +1,17 @@
 /**
  * The HTML parser's content model, applied to the AST before we store it.
  *
- * A document's markup is React-rendered twice — once to a string on the server,
- * once into a live DOM on the client — and the two are only the same tree if
- * the STRING survives being parsed back. It does not always: HTML's parser has
- * a content model with implied end tags, so `<p><div>x</div></p>` parses as an
- * EMPTY `<p>` followed by a sibling `<div>`. React's client render has no such
- * rule (it builds the tree through DOM APIs, which enforce nothing), so it
- * produces the nesting the author wrote.
+ * A document's markup is rendered twice — once to a string on the server,
+ * once into a live DOM on the client (the editor, a live update) — and the two
+ * are only the same tree if the STRING survives being parsed back. It does not
+ * always: HTML's parser has a content model with implied end tags, so
+ * `<p><div>x</div></p>` parses as an EMPTY `<p>` followed by a sibling `<div>`.
+ * A client render builds the tree through DOM APIs, which enforce nothing, so
+ * it produces the nesting the author wrote.
  *
- * The result is a hydration mismatch — React error #418 — and React's answer to
- * that is to discard the whole server tree and re-render the root on the
- * client. The reader sees the document paint once with the parser's tree
+ * The result is a hydration mismatch: the island cannot adopt a served tree
+ * shaped differently from the one it builds, and (in the React era, error
+ * #418) the client re-rendered the whole root. The reader sees the document paint once with the parser's tree
  * (the `<p>`'s classes stranded on an empty element, its children promoted to
  * the grandparent and wearing none of them) and then repaint with the author's.
  * Measured on production: two of three public documents carried at least one
@@ -96,7 +96,7 @@ const isElement = (n: JsxNode): n is JsxElement => n.type === 'element';
  * It stops at two things. A component, because what it renders is unknowable
  * from here (see the module header) — except `<For>`, which is the
  * interpreter's own control element and draws a wrapper `<div>` around its
- * rows (lib/story-ui/interpreter.tsx). Inside `<svg>` that wrapper is a `<g>`,
+ * rows (lib/compiled-page/compiler). Inside `<svg>` that wrapper is a `<g>`,
  * which closes nothing, so there the search goes on into the row template. And
  * a button-scope element, because that is precisely where the parser stops
  * looking too.

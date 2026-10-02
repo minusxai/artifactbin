@@ -481,7 +481,7 @@ for (let i = 0; i < 400 && !ready.ran; i++) {
   if (ready.ran) break;
   await reader.waitForTimeout(50);
 }
-check(ready.ran, `slow reader: the SPA mounted its inline document and protected controls (${ready.ran})`);
+check(ready.ran, `slow reader: the app mounted its inline document and protected controls (${ready.ran})`);
 
 /*
  * THE ANSWER MEASURED IS THE REVEAL, not the hide. The chrome is now

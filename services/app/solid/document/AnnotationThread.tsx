@@ -167,7 +167,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
         </div>
       </Show>
       <ul class="flex flex-col gap-3 px-3 py-3">
-        {/* Keyed by comment id, as React keyed it: a live frame replaces every row object, and must not remount a comment someone is reading. */}
+        {/* Keyed by comment id: a live frame replaces every row object, and must not remount a comment someone is reading. */}
         <For each={visibleComments().map((comment) => comment.id)}>{(commentId, index) => {
           const c = () => visibleComments().find((comment) => comment.id === commentId) ?? props.a.thread[0]!;
           const commentFolded = () => props.open && props.isCommentFolded(c().id);

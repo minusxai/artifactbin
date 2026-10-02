@@ -122,8 +122,7 @@ const rowActionsOf = (island: IslandContext) => {
 };
 
 /**
- * `<Button>`, and live: `run="$add" set={{…}} args={{…}}` (today's ButtonAdapter / RuntimeRowAction in
- * lib/story-runtime/StoryRuntimeApp). A click first sets the page values `set=` names, in one step, then
+ * `<Button>`, and live: `run="$add" set={{…}} args={{…}}` (the former runtime's ButtonAdapter / RuntimeRowAction). A click first sets the page values `set=` names, in one step, then
  * performs the named `<Mutation>` with `args=`. While it is in flight the button is `aria-busy` and
  * disabled; a write the reader may not make (a guest's `$_me` write, a closed dataset, a check still in
  * flight) is disabled with the reason as its accessible description and in a tooltip; a refusal is shown in

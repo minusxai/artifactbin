@@ -2,7 +2,7 @@
  * Gate: THERE IS ONE DOCUMENT.
  *
  * Editing used to build a second one — a different iframe, a different origin,
- * a different renderer, a second React root, the dataflow run again and every
+ * a different renderer, a second framework root, the dataflow run again and every
  * chart mounted again — and everything that made that bearable (the reading
  * position carried between two renderings, the holds that put it back, the
  * reveal that hid the seam) existed because of it. This gate asserts the thing

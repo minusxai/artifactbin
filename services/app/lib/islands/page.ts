@@ -91,7 +91,7 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   const persistent: Array<() => void> = [];
   const stops: Array<() => void> = [];
   // The public page API is a separate lazy chunk: browser sessions need it even when the
-  // React app waits for intent. Boot owns its lifetime through the root's private handle.
+  // Solid app waits for intent. Boot owns its lifetime through the root's private handle.
   const installPublicMx = () => {
     const root = doc.querySelector<IslandHost>(STORY_ROOT_SELECTOR);
     const island = root?.[ISLAND_DOCUMENT_KEY];
