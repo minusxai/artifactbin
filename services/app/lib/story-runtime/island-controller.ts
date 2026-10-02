@@ -40,37 +40,13 @@ export function moveInto(host: HTMLElement, story: HTMLElement): void {
   host.appendChild(story);
 }
 
-/** Stop island behavior for editing while retaining its last painted DOM as the compiled draft. */
-export function freezeIslandPaint(root: HTMLElement, islands: IslandDocument | null): void {
-  if (!islands) return;
-  const painted = [...root.querySelectorAll<HTMLElement>('[data-hk], [aria-label="Question embed"]')]
-    .filter((element) => !element.parentElement?.closest('[data-hk], [aria-label="Question embed"]'))
-    .map((element) => {
-      const copy = element.cloneNode(true) as HTMLElement;
-      const originals = element.querySelectorAll('canvas');
-      const canvases = copy.querySelectorAll('canvas');
-      for (let index = 0; index < originals.length; index++) {
-        const original = originals[index], canvas = canvases[index];
-        if (!original || !canvas) continue;
-        canvas.width = original.width;
-        canvas.height = original.height;
-        try { canvas.getContext('2d')?.drawImage(original, 0, 0); } catch { /* a tainted canvas keeps its frame */ }
-      }
-      return { element, parent: element.parentNode, next: element.nextSibling, html: element.innerHTML,
-        drawing: !!element.querySelector('svg.marks, [aria-label="Question embed"] svg, [aria-label="Question embed"] canvas'), copy };
-    });
-  islands.setMode('edit');
-  for (const { element, parent, next, html, drawing, copy } of painted) {
-    // A chart controller may clear its *root* after disposal. Detach that whole
-    // root from the edited document so a delayed cleanup owns only the old node.
-    if (drawing && parent) {
-      if (element.parentNode === parent) parent.replaceChild(copy, element);
-      else parent.insertBefore(copy, next?.isConnected ? next : null);
-    } else {
-      if (!element.isConnected && parent) parent.insertBefore(element, next?.isConnected ? next : null);
-      if (element.innerHTML !== html) element.replaceChildren(...copy.childNodes);
-    }
-  }
+/**
+ * Pause the islands for editing (lib/islands/boot `setMode('edit')`): they stay mounted with their DOM and state, a
+ * chart stays drawn, and the editor's first draft keeps the running tree when it keeps every component in it (the
+ * morph engine's `draftTreeKept`), exactly as every later draft does.
+ */
+export function pauseIslandsForEditing(islands: IslandDocument | null): void {
+  islands?.setMode('edit');
 }
 
 const CHART = '[aria-label="Question embed"]';
@@ -560,7 +536,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         previewing = false;
         if (edit || editLoading) return;
         editLoading = true;
-        if (!frozen) freezeIslandPaint(root, islands);
+        if (!frozen) pauseIslandsForEditing(islands);
         frozen = true;
         void Promise.all([import('@/lib/story-runtime/edit/session'), import('@/solid/editor/dom-mounter')]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }]) => {
           if (disposed || !editRequested) return;
@@ -611,7 +587,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         const source = command.source;
         // A previewed version is drawn like a draft but is not what Done saves: the head comes back after it.
         previewing = !!command.preview;
-        if (previewing && !frozen) { freezeIslandPaint(root, islands); frozen = true; }
+        if (previewing && !frozen) { pauseIslandsForEditing(islands); frozen = true; }
         if (!previewing) latestSource = source;
         // A new look (theme, colour mode) or a previewed version is a page the editors cannot show by themselves.
         if (previewing || ('redraw' in command && command.redraw === true)) redrawOwed = true;
