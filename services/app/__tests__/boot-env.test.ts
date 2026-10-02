@@ -112,7 +112,8 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-describe('production boot environment', () => {
+// Each case boots its own server with its own environment and port, so they boot side by side.
+describe.concurrent('production boot environment', () => {
   it('exits before listening when AUTH__SECRET is absent', async () => {
     const port = await availablePort(0);
     const result = await runBoot(port, {
