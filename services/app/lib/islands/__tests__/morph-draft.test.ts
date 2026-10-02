@@ -25,6 +25,7 @@ import { createIslandController } from '@/lib/story-runtime/island-controller';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import { disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, morphDraftDom, sameDataflow } from '../morph/engine';
 import { ISLAND_DOCUMENT_KEY } from '../contract';
+import { boot, type MorphableIslandDocument } from '../boot';
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const settle = async (until: () => boolean) => { for (const end = Date.now() + 5000; Date.now() < end && !until();) await tick(); };
@@ -118,6 +119,50 @@ describe('a draft drawn in place', () => {
  * loadDraftModule), which a test cannot answer through the controller, so these drive the engine's
  * draft steps with the module handed in.
  */
+describe('entering edit mode', () => {
+  it('the first draft after entering edit mode keeps the hydrated chart element: the same element, still connected, its drawing intact', async () => {
+    document.body.innerHTML = '<div data-mx-inline-story=""><div data-hk="d-0" class="mx-doc"><p data-mx-ast="0">Before</p>'
+      + '<div data-mx-ast="1" data-hk="d-1" aria-label="Question embed"><svg class="marks"><rect></rect></svg></div></div></div>';
+    const root = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
+    // The page's running whole-document tree, its chart drawn (the islands project renders it fresh in place of the served root).
+    const Tree = () => {
+      const tree = document.createElement('div');
+      tree.setAttribute('data-hk', 'd-0');
+      tree.className = 'mx-doc';
+      tree.innerHTML = '<p data-mx-ast="0">Before</p><div data-mx-ast="1" data-hk="d-1" aria-label="Question embed"><svg class="marks"><rect></rect></svg></div>';
+      return tree;
+    };
+    const islands = boot({ ISLANDS: [['d-', Tree, 'document']] }) as MorphableIslandDocument;
+    const chart = root.querySelector('[aria-label="Question embed"]')!;
+    const drawing = chart.querySelector('svg.marks')!;
+    vi.spyOn(window, 'fetch').mockImplementation((async (_url: string, init?: RequestInit) => {
+      const { source } = JSON.parse(String(init!.body)) as { source: string };
+      const text = /<p>(.*?)<\/p>/.exec(source)![1];
+      return new Response(JSON.stringify({ html: '<div data-mx-inline-story><div data-hk="d-0" class="mx-doc">'
+        + `<p data-mx-ast="0">${text}</p><div data-mx-ast="1" data-hk="d-1" aria-label="Question embed"><span>Static preview</span></div></div></div>` }), { status: 200 });
+    }) as typeof window.fetch);
+    const controller = createIslandController({
+      win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>Before</p><Question title="Q" />', portal: { current: null },
+    });
+    const mounts = editSession.mounts;
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > mounts);
+    expect(islands.mode()).toBe('edit');
+    expect(root.querySelector('[aria-label="Question embed"]'), 'entering edit mode keeps the chart element').toBe(chart);
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>After</p><Question title="Q" />', editId: 'e2', theme: null, colorMode: 'light' });
+    await settle(() => root.querySelector('p')?.textContent === 'After');
+    expect(root.querySelector('p')?.textContent, 'the draft was drawn').toBe('After');
+    expect(root.querySelector('[data-mx-ast="1"]'), 'the first draft keeps the hydrated chart element').toBe(chart);
+    expect(chart.isConnected).toBe(true);
+    expect(chart.querySelector('svg.marks'), 'its drawing intact').toBe(drawing);
+    expect(root.textContent).not.toContain('Static preview');
+    expect(islands.morph!.islands.has('d-'), 'the running tree goes on running: nothing hydrates it again').toBe(true);
+    controller.dispose();
+    islands.dispose();
+  });
+});
+
 describe('the draft module step', () => {
   it('a version that declares the same data at other source offsets is the same dataflow; another query is not', () => {
     const query = { name: 'q', engine: 'sqlite', sql: 'select 1 as n', params: [], reads: { imports: [], queries: [], values: [], builtins: [] }, columns: [{ name: 'n', type: 'number' }] };

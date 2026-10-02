@@ -98,6 +98,12 @@ export interface IslandRuntime {
    * the overlay says guest. Every island reading `viewer()` or `$_me.id` follows.
    */
   setViewer(viewer: IslandViewer): void;
+  /**
+   * Edit mode PAUSES the islands without disposing them (lib/islands/boot `setMode`): a bound control moves no
+   * value while paused, so nothing the reader does repaints under the editors; their DOM and component state stay,
+   * and the editor's drafts keep the running tree. The store's answers still reach them (a chart a draft adds draws).
+   */
+  setPaused(paused: boolean): void;
   /** Stop following the store and dispose it. Islands are disposed by their own handles. */
   dispose(): void;
 }
@@ -183,6 +189,7 @@ export function createIslandRuntime(
   const unsubscribe = store?.subscribe(sync) ?? (() => {});
 
   const noData = () => new Error('no data declared');
+  let paused = false;
   const context: IslandContext = {
     assetsUrl: () => data.assetsUrl ?? null,
     values: () => state.values,
@@ -197,7 +204,7 @@ export function createIslandRuntime(
     pending: (name) => !!state.pending[name],
     error: (name) => state.errors[name],
     people: () => state.people,
-    setValue: (name, value, opts) => store?.setValue(name, value, opts?.debounce ? { debounce: true } : undefined),
+    setValue: (name, value, opts) => { if (!paused) store?.setValue(name, value, opts?.debounce ? { debounce: true } : undefined); },
     ...declarationsOf(() => store),
     /*
      * The write as the wire states it (the store's `mutate(request)`): OPTIMISTIC — a click before
@@ -227,6 +234,7 @@ export function createIslandRuntime(
     context,
     store,
     setViewer: (next) => { setViewer(() => next); },
+    setPaused: (next) => { paused = next; },
     dispose: () => { unsubscribe(); store?.dispose(); },
   };
 }
