@@ -12,11 +12,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Show } from 'solid-js';
 import { boot } from '../boot';
-import { startPage } from '../page';
 import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
 import { DataTable, Question } from '../kit/data';
-import { PUBLIC_MX_KEY, type IslandDocument, type IslandEvent, type PublicMxHost } from '../contract';
+import type { IslandDocument, IslandEvent } from '../contract';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const reads = (imports: string[]) => ({ imports, queries: [], values: [], builtins: [] });
@@ -135,48 +134,6 @@ describe('boot', () => {
     expect(ready).toHaveBeenCalledTimes(1);
     expect(booted.store).toBeNull();
     expect(booted.context.writesUnavailable()).toBeNull();
-  });
-
-  it('keeps the public mx API on a compiled data page until that page is disposed', async () => {
-    page(snapshot);
-    const stopPage = startPage();
-    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
-    await vi.waitFor(() => expect(window.mx).toBeDefined());
-    expect((await window.mx!.read(['region'])).signals.region.value).toBe('West');
-    const installed = window.mx;
-    booted.dispose();
-    booted = null;
-    expect(window.mx).not.toBe(installed);
-    stopPage();
-  });
-
-  it('releases the public mx API when the compiled document enters edit mode', async () => {
-    page(snapshot);
-    const stopPage = startPage();
-    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
-    await vi.waitFor(() => expect(window.mx).toBeDefined());
-    const installed = window.mx;
-    booted.setMode('edit');
-    expect(window.mx).not.toBe(installed);
-    booted.setMode('read');
-    await vi.waitFor(() => expect(window.mx).toBeDefined());
-    expect((await window.mx!.read(['region'])).signals.region.value, 'reading again in place: the public API is back').toBe('West');
-    stopPage();
-  });
-
-  it('installs no public mx API when the document is disposed before the API chunk loads', async () => {
-    delete window.mx;
-    page(snapshot);
-    const stopPage = startPage();
-    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
-    const root = booted.root as PublicMxHost;
-    booted.dispose();
-    booted = null;
-    await import('../mx-host');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(window.mx).toBeUndefined();
-    expect(root[PUBLIC_MX_KEY]).toBeUndefined();
-    stopPage();
   });
 
   it('accepts ISLANDS alone for a module whose islands read no data', () => {

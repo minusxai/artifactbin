@@ -12,7 +12,7 @@
  *  1. The stored compile, independent of the current deployment. None, or a
  *     hand-raised compatibility minimum → compile inline and wait. A recorded
  *     failure keeps its reason (`compile-error`, `unported`). A version's author script
- *     is served by the compiled page (the lazy author host, lib/islands/author-host);
+ *     is served by the compiled page (run in the document by lib/islands/page-runtime);
  *     a compile that does not carry it → `unported`: a page must be whole.
  *  2. The data. Only the head of a document a guest may read has a guest
  *     snapshot (an archived version is its editors' alone). A FRESH snapshot

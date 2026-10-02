@@ -10,9 +10,6 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { authorFrameResponse } from '@/server/author-frame';
-import { AUTHOR_SCRIPT_DOCUMENT } from '@/lib/story-runtime/author-script-bootstrap';
-import { managedAuthorDocument } from '@/lib/story-runtime/managed-author-document';
 import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
 import { DOMAIN_HOME_CSP } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/serving';
@@ -82,15 +79,6 @@ describe('the app CSP', () => {
     const script = APP_CSP.split('; ').find((directive) => directive.startsWith('script-src'))!.split(' ');
     expect(script).toContain("'wasm-unsafe-eval'");
     expect(script).not.toContain("'unsafe-eval'");
-  });
-
-  it('never lets author code compile WebAssembly: no author frame is given \'wasm-unsafe-eval\'', () => {
-    const wrapper = authorFrameResponse(new Request('https://app.test/author-frame?artifact=Ab12Cd'), 'https://assets.test', 'https://app.test').headers.get('content-security-policy')!;
-    for (const policy of [wrapper, AUTHOR_SCRIPT_DOCUMENT, managedAuthorDocument('https://assets.test')]) {
-      expect(policy).toContain('script-src');
-      expect(policy).not.toContain('wasm-unsafe-eval');
-      expect(policy).not.toContain("'unsafe-eval'");
-    }
   });
 
   it('allows only the app shell\'s theme stamp inline', () => {

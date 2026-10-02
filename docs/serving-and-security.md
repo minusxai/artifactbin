@@ -71,6 +71,7 @@ the page's JSON island, and loaded by the page runtime
 exposes only the declared names: Values and Queries as signals over the page's
 store, Mutations through the same permission-checked `/mutate` door as the
 kit's controls. Account APIs, cookies and the app's storage stay out of reach.
+There is no author frame and no managed `<Iframe>`.
 
 **Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
 at publish — against the artifacts it may read, by the SQLite engine the
@@ -106,8 +107,7 @@ hold, when one of the document's queries shows a person from it.
 Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
 page, the standalone `/raw` document and the offline file. It admits compiling
 WebAssembly and nothing else — `eval`, `new Function` and string timers stay
-refused — and it is never added to the author-script frames, where author code
-runs. The wasm is fetched from this origin at a content-addressed `/islands/`
+refused. The wasm is fetched from this origin at a content-addressed `/islands/`
 URL (the `/raw` document's `connect-src` names that directory), cached
 `immutable`; the offline file carries it inside itself.
 

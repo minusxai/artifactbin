@@ -28,7 +28,7 @@ import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
 import { startIslandLive } from './live';
-import { ISLANDS_READY_EVENT, ISLAND_DOCUMENT_KEY, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandHost } from './contract';
+import { LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR } from './contract';
 import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
 
 /**
@@ -90,20 +90,6 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   // never cleared by `takeover()` below (only by this function's own disposer, for tests/unmount).
   const persistent: Array<() => void> = [];
   const stops: Array<() => void> = [];
-  // The public page API is a separate lazy chunk: browser sessions need it even when the
-  // Solid app waits for intent. Boot owns its lifetime through the root's private handle.
-  const installPublicMx = () => {
-    const root = doc.querySelector<IslandHost>(STORY_ROOT_SELECTOR);
-    const island = root?.[ISLAND_DOCUMENT_KEY];
-    const store = island?.store;
-    if (!root || !store) return;
-    void import('./mx-host').then(({ installPublicMx }) => {
-      installPublicMx(root, store, win, () => island.mode() === 'read' && root.isConnected);
-    }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
-  };
-  doc.addEventListener(ISLANDS_READY_EVENT, installPublicMx);
-  stops.push(() => doc.removeEventListener(ISLANDS_READY_EVENT, installPublicMx));
-  if (html.hasAttribute('data-mx-ready')) installPublicMx();
   // These document affordances also run inside a frame, like the legacy page entry. Nothing on the
   // app side re-wires them, so they must survive the SPA's takeover (persistent, not stops).
   persistent.push(markScrollableTables(doc), wireOutline(doc));

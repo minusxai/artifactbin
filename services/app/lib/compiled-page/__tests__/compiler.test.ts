@@ -243,7 +243,7 @@ describe('compilePage', () => {
   });
 
   it('ports every registered component: none is served with its behaviour missing (partial) or refused (unported)', () => {
-    // w3-behaviour: the managed <Iframe> and the <DeckGL> map were the last partial ones; each is an island now.
+    // w3-behaviour: the <DeckGL> map was the last partial one; it is an island now.
     for (const tag of STORY_UI_COMPONENT_NAME_LIST) {
       const { nodes } = parseJsx(`<div><${tag} id="x" /></div>`) as { nodes: JsxNode[] };
       let generated: ReturnType<typeof generate>;
@@ -253,29 +253,21 @@ describe('compilePage', () => {
     }
   });
 
-  it('compiles <Iframe> and <DeckGL> as islands in the embed family, served as today\'s boxes', async () => {
-    const source = '<div><Iframe title="Gallery" height={120} id="f" className="my-4"><p>Hello</p><script>{`document.body.dataset.ok = "1"`}</script></Iframe><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
+  it('compiles <DeckGL> as an island in the embed family, served as today\'s box', async () => {
+    const source = '<div><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
     const input = await inputOf(source);
     const page = await compilePage(input, loadCompilerBuild());
-    // Their own family (lib/islands/contract KIT_FAMILIES 'embed'): a page with a table never downloads the frame's island code.
+    // Its own family (lib/islands/contract KIT_FAMILIES 'embed'): a page with a table never downloads the map's island code.
     expect(page.module!.specifiers).toContain('@mx/kit/embed');
     expect(page.module!.specifiers).not.toContain('@mx/kit/data');
-    // The asset door is the page's (IslandPageData.managedAssets), never a compile-time prop.
-    expect(new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!)).not.toContain('assetsOrigin');
     expect(page.partial).toEqual([]);
     // The deleted per-component island entries now share the one document root.
-    expect(page.islands.map((i) => i.kit)).toEqual([['DeckGL', 'Iframe']]);
+    expect(page.islands.map((i) => i.kit)).toEqual([['DeckGL']]);
     const html = dom(page.html);
-    const frame = html.querySelector('#f')!;
-    // Attributes compared as sets (shapeOf keeps data-mx-ast out; it is asserted on its own).
-    expect(frame.getAttribute('data-mx-ast')).toBe('0.0');
-    expect(shapeOf(frame.outerHTML)).toEqual(shapeOf('<div id="f" class="my-4" data-mx-managed-frame="" aria-label="Gallery" style="height:120px;width:100%"><div style="height:100%"></div></div>'));
     // Today's runtime adapter: the identity on the outer box, the author's class on the map's own box, the stand-in inside.
     const map = html.querySelector('#map')!;
-    expect(map.getAttribute('data-mx-ast')).toBe('0.1');
+    expect(map.getAttribute('data-mx-ast')).toBe('0.0');
     expect(shapeOf(map.outerHTML)).toEqual(shapeOf('<div id="map"><div class="rounded"><div class="w-full rounded-md bg-muted" style="height:320px" aria-busy="true" aria-label="Countries"></div></div></div>'));
-    // The frame's author content reaches the island only as data: compiled at publish (lib/story/reader/managed-iframe), never as markup.
-    expect(dom(page.html).querySelector('#f')?.textContent).not.toContain('Hello');
   });
 
   it('compiles a DataTable column\'s content per row, and a control with run there as today\'s editing cell', async () => {
@@ -299,13 +291,6 @@ describe('compilePage', () => {
     const number = table.querySelector('input[type="number"]');
     expect(number?.getAttribute('class')?.split(/\s+/)).toEqual(expect.arrayContaining(['h-8', 'text-right', 'tabular-nums']));
     expect(number?.getAttribute('value')).toBe('2');
-  });
-
-  it('an <Iframe> whose content is refused renders nothing, as the interpreter does', async () => {
-    const page = await compilePage(await inputOf('<div><Iframe title="x" height={120}><iframe src="https://x.test" /></Iframe><p id="after">after</p></div>'), loadCompilerBuild());
-    expect(page.islands).toEqual([]);
-    expect(dom(page.html).querySelector('[data-mx-managed-frame]')).toBeNull();
-    expect(dom(page.html).querySelector('#after')).toBeTruthy();
   });
 });
 

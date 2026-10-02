@@ -1,6 +1,7 @@
 /**
- * Fixed trusted HTTP document. Author bytes arrive only after load over a transferred port. Its own
- * path, outside `/islands/` (the compiled reader's content-addressed code): the island runtime mounts it.
+ * The former author-script wrapper document. Nothing in the app serves or mounts it any more: the author
+ * script runs in the document itself (lib/islands/page-runtime). Kept only because the CLI preview
+ * (services/cli/src/preview/session.ts, via server/author-frame) still serves it; delete both with that.
  */
 export const AUTHOR_FRAME_PATH = '/author-frame';
 export const AUTHOR_FRAME_DOCUMENT = '<!doctype html><html data-mx-author-wrapper><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style></head><body><script>'+String.raw`

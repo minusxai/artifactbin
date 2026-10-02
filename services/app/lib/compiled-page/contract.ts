@@ -196,7 +196,7 @@ export interface CompiledPage {
    * path); kept as the refusal's door.
    */
   unported: string[];
-  /** Components rendered statically whose BEHAVIOUR is not ported yet (`Iframe`, `DeckGL`): served, reported. */
+  /** Components rendered statically whose BEHAVIOUR is not ported yet (`DeckGL`): served, reported. */
   partial: string[];
   /**
    * The version's author script, or null. DATA, never code of this page: the assembler writes it into

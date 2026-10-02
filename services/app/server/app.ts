@@ -40,8 +40,6 @@ import { exportAssetResponse } from '@/lib/export/assets';
 import { publicRefAssetResponse } from '@/lib/serving';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
-import { authorFrameResponse } from './author-frame';
-import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, createSpaEntry, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer, type CompiledStory } from '@/lib/serving';
@@ -311,8 +309,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Its home page links the stylesheets THIS page links, read from the same shell.
   app.use('*', customHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
   const assetsOrigin = ASSETS_ORIGIN;
-  // The fixed author-script wrapper is separate from the content-addressed islands.
-  app.get(AUTHOR_FRAME_PATH, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
     if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();

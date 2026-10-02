@@ -30,7 +30,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 
 
-const FRAME = '<div><Iframe title="Gallery" height={100}><img src="https://img.example/a.png" alt="a" /></Iframe></div>';
+const FRAME = '<Helmet><Value name="x" type="string" default="a"/></Helmet><div><p>{$x}</p></div>';
 
 async function publishFrame(): Promise<string> {
   const user = await ensureUsername(await createUser({ email: `mxmx_test_assets_${Math.random().toString(36).slice(2, 8)}@example.com` }));

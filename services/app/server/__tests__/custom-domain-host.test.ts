@@ -344,12 +344,8 @@ describe('everything else on a verified host is 404', () => {
     expect(((await viewer.json()) as { viewer: unknown }).viewer, 'a domain post\'s reader is a guest').toBeNull();
     noCookie(viewer);
     for (const id of [w.quiet.id, w.theirs.id, w.secret.id]) expect((await app().request(`${HOST}/a/${id}/viewer`)).status, id).toBe(404);
-    // The author-script wrapper remains sandboxed at its one active address.
-    for (const wrapper of ['/author-frame']) {
-      const answer = await app().request(`${HOST}${wrapper}?artifact=${w.post.id}`);
-      expect(answer.status, wrapper).toBe(200);
-      expect(answer.headers.get('content-security-policy'), wrapper).toContain('sandbox allow-scripts');
-    }
+    // The script runs in the document itself: there is no author-script wrapper to serve.
+    expect((await app().request(`${HOST}/author-frame?artifact=${w.post.id}`)).status).toBe(404);
     expect((await app().request(`${HOST}/story/author-frame?artifact=${w.post.id}`)).status).toBe(404);
   });
 

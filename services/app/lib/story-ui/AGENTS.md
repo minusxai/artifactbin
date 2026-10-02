@@ -3,7 +3,7 @@
 These rules cover `lib/story-ui` and the parser in `lib/jsx`, and only what is specific to markup.
 The shared rules live once elsewhere and are not restated here: working rules and app chrome
 (tooltips included) in the root [AGENTS.md](../../../../AGENTS.md); node identity, the runtime and
-the author-script sandbox boundary in [serving and security](../../../../docs/serving-and-security.md). Read those first.
+where the author script runs in [serving and security](../../../../docs/serving-and-security.md). Read those first.
 
 - Static JSX is data. `lib/jsx/parse.ts` uses acorn/acorn-jsx and records non-static expressions.
   Validation accepts only allowlisted reactive/row expressions in permitted scopes and rejects the
@@ -13,7 +13,9 @@ the author-script sandbox boundary in [serving and security](../../../../docs/se
   URL schemes or component vocabulary; account for authored HTML spellings versus compiled JSX prop names.
 - The publish path (`lib/story/document/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
   Inline style policy and authored style blocks have different rules. Do not relax one because another
-  layer also sanitizes. Managed HTML/iframes and author scripts use their own explicit contracts.
+  layer also sanitizes. The author script runs in the document itself as a module built at publish
+  (`lib/story/document/author-module.server`, run by `lib/islands/page-runtime`); there is no author
+  frame and no managed `<Iframe>`.
 - `lib/jsx/serialize.ts` must preserve entity escaping and static template-literal children: SQL and
   CSS containing quotes, angle brackets or braces must survive repeated edit/serialize/parse cycles.
 - Component names must agree between `component-names.ts`, the compiler's `KIT` table and JSX validation.
