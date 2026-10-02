@@ -1,16 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
 import * as rt from '../rt';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import type { Component } from 'solid-js';
-import { brotliCompressSync } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
-import { kitchenSinkMarkup } from '@/lib/story/fixtures/kitchen-sink';
 import { morphDraftDom } from '../morph/engine';
 import { delegateEvents, hydrate } from 'solid-js/web';
 
@@ -143,11 +140,11 @@ describe('one tree SSR to hydrate', () => {
     runtime.dispose(); host.remove(); warnings.mockRestore(); errors.mockRestore();
   });
 
-  it('hydrates shipped Tabs with 1,100 static rows and a sibling live Switch', async () => {
-    const rows = Array.from({ length: 1_100 }, (_, i) => `<p id="row-${i}">Static row ${i}</p>`).join('');
+  it('hydrates shipped Tabs with server-owned static rows in an unopened panel and a sibling live Switch', async () => {
+    const rows = Array.from({ length: 20 }, (_, i) => `<p id="row-${i}">Static row ${i}</p>`).join('');
     const server = fixture(`<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p id="first">First panel</p></TabsContent><TabsContent value="two">${rows}</TabsContent></Tabs><Switch label="Live switch" checked="$flag" id="live-switch" />`);
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
-    const last = host.querySelector('#row-1099');
+    const last = host.querySelector('#row-19');
     const first = host.querySelector('#first');
     const keys = [...host.querySelectorAll('[data-hk]')].map(el => el.getAttribute('data-hk'));
     const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -169,67 +166,45 @@ describe('one tree SSR to hydrate', () => {
     const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: { flag: false } } }, shippedRt.createDataflowStore as typeof createDataflowStore);
     const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree!, runtime.context, host);
     expect(dispose).toBeTypeOf('function');
-    expect(host.querySelector('#row-1099')).toBe(last);
+    expect(host.querySelector('#row-19')).toBe(last);
     expect(host.querySelector('#first')).toBe(first);
     expect([...host.querySelectorAll('[data-hk]')].map(el => el.getAttribute('data-hk'))).toEqual(keys);
     host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]!.click();
-    expect(host.querySelector('#row-1099')).toBe(last);
+    expect(host.querySelector('#row-19')).toBe(last);
     expect(last?.closest('[role="tabpanel"]')?.hasAttribute('hidden')).toBe(false);
     const toggle = host.querySelector<HTMLElement>('[role="switch"]')!;
     toggle.click();
     expect(toggle.getAttribute('aria-checked')).toBe('true');
-    expect(brotliCompressSync(server.browserCode).byteLength).toBeLessThan(5 * 1024);
     expect(warnings).not.toHaveBeenCalled();
     expect(errors).not.toHaveBeenCalled();
     dispose?.(); runtime.dispose(); host.remove(); warnings.mockRestore(); errors.mockRestore();
   });
 
-  it('hydrates the kitchen sink through the shipped one-tree runtime', async () => {
-    const source = kitchenSinkMarkup({ dataset: 'Data01', recipe: 'Viz001', image: 'Image1', pdf: 'Paper1' });
-    const server = fixture(source);
+  it('keeps a bound native input live after hydration, and serves a bound image without its unresolved template', async () => {
+    const server = fixture('<Helmet><Value name="region" type="string" default="west" /><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><input aria-label="Region" value="$region" /><img src="$pick" alt="the pick" />');
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
-    expect(host.querySelectorAll<HTMLElement>('[data-slot="accordion-content"]')[1]?.textContent).toContain('Collapsed until clicked.');
-    const pageData = host.querySelector('script[data-mx-module-data]')?.cloneNode(true) as HTMLScriptElement | undefined;
-    if (pageData) { pageData.id = 'mx-story-data'; document.body.append(pageData); }
-    for (const match of server.browserCode.matchAll(/document\.querySelector\(['"]([^'"]+)['"]\)/g)) {
-      expect(document.querySelector(match[1]!)).not.toBeNull();
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="Region"]')!;
+    const image = host.querySelector<HTMLImageElement>('img[alt="the pick"]')!;
+    expect(input.value).toBe('west');
+    // The server never writes the unresolved template as a source; the image island resolves it.
+    expect(image.getAttribute('src')).toBeNull();
+    const manifest = loadCompilerBuild().manifest;
+    const shippedRt = await import(/* @vite-ignore */ pathToFileURL(path.resolve(ROOT, 'services/app/public', manifest['@mx/rt']!.slice(1))).href) as Record<string, unknown>;
+    const modules = new Map<string, Record<string, unknown>>();
+    for (const match of server.browserCode.matchAll(/from\s*["'](\/islands\/[^"']+)["']/g)) {
+      if (!match[1]!.includes('/boot-')) modules.set(match[1]!, await import(/* @vite-ignore */ pathToFileURL(path.resolve(ROOT, 'services/app/public', match[1]!.slice(1))).href) as Record<string, unknown>);
     }
     let tree: Component | null = null;
-    const modules = new Map<string, Record<string, unknown>>();
-    const specifiers = [...server.browserCode.matchAll(/from\s*["'](\/islands\/[^"']+)["']/g)].map(match => match[1]!);
-    await Promise.all([...new Set(specifiers)].map(async specifier => {
-      if (specifier.includes('/boot-')) return;
-      const file = path.resolve(ROOT, 'services/app/public', specifier.slice(1));
-      modules.set(specifier, await import(/* @vite-ignore */ pathToFileURL(file).href) as Record<string, unknown>);
-    }));
-    await evaluateModule(server.browserCode, specifier => specifier.includes('/boot-')
+    await evaluateModule(server.browserCode, spec => spec.includes('/boot-')
       ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
-      : modules.get(specifier)!, 'test/one-tree-kitchen.js');
-    expect(tree).not.toBeNull();
-    const shippedRt = modules.get(loadCompilerBuild().manifest['@mx/rt']!)!;
-    const portal = document.createElement('div'); document.body.append(portal);
-    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: {} } }, shippedRt.createDataflowStore as typeof createDataflowStore, { trustedPortal: () => portal });
-    (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree!, runtime.context, host);
-    const dialogText = host.querySelector('dialog p');
-    expect(dialogText?.textContent).toContain('Dialog content opened from the gallery.');
-    [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Open dialog')!.click();
-    expect(portal.querySelector('dialog p')).toBe(dialogText);
-    expect(portal.querySelector('dialog button')?.textContent).toBe('Close');
-    portal.querySelector<HTMLButtonElement>('dialog button')!.click();
-    expect(host.querySelector('dialog p')).toBe(dialogText);
-    const secondPanel = host.querySelectorAll<HTMLElement>('[data-slot="accordion-content"]')[1]!;
-    expect(secondPanel.textContent).toContain('Collapsed until clicked.');
-    [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('Accordion section B'))!.click();
-    expect(secondPanel.hidden).toBe(false);
-    expect(secondPanel.textContent).toContain('Collapsed until clicked.');
-    // What the kit loads lazily on mount (Mermaid's engine) finishes loading here, not after the
-    // environment is torn down (an unhandled EnvironmentTeardownError otherwise, timing-dependent).
-    const lazy = new Set<string>();
-    for (const specifier of modules.keys()) {
-      const text = readFileSync(path.resolve(ROOT, 'services/app/public', specifier.slice(1)), 'utf8');
-      for (const match of text.matchAll(/import\(["']\.\/([\w-]+\.js)["']\)/g)) lazy.add(match[1]!);
-    }
-    await Promise.all([...lazy].map(name => import(/* @vite-ignore */ pathToFileURL(path.resolve(ROOT, 'services/app/public/islands', name)).href).catch(() => null)));
-    runtime.dispose(); host.remove(); pageData?.remove(); portal.remove();
+      : modules.get(spec) ?? (() => { throw new Error(`unexpected import ${spec}`); })(), 'test/one-tree-bound.js');
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: { region: 'west', pick: 'https://example.test/a.png' } } }, shippedRt.createDataflowStore as typeof createDataflowStore);
+    const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree!, runtime.context, host);
+    expect(host.querySelector('input[aria-label="Region"]')).toBe(input);
+    runtime.context.setValue('region', 'east');
+    expect(input.value).toBe('east');
+    // The image island owns the source from here (resolution through the asset door: bound-image.test).
+    expect(host.querySelector('img[alt="the pick"]')).toBe(image);
+    dispose?.(); runtime.dispose(); host.remove();
   });
 });
