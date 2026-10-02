@@ -21,16 +21,16 @@ import {TABLES} from '../../platform/schema';
  */
 const HEAD_COLUMNS=TABLES.find(table=>table.name==='artifacts')!.columns.map(column=>column.name).filter(name=>name!=='document');
 const headWithoutDocument=(alias:string)=>`jsonb_build_object(${HEAD_COLUMNS.map(name=>`'${name}',${alias}.${name}`).join(',')})`;
-/** `withheld`: the row came back without its document or source (see `withholdDocument`). */
+/** `withheld`: the row came back without its document or source (see `withholdDocument`), on any head. */
 export type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
  /** Refuse (as not applied) a markup head not yet in the current data syntax (./data-syntax): the edit door converts it first. */
  currentSyntax?:boolean;
  /**
-  * The caller answers with the patch when it landed on exactly the version it was prepared against (the browser
-  * editor's save, lib/artifacts respondToEdit): then the statement returns the head WITHOUT its document, and the
-  * caller derives what needs the new source after it has answered (lib/artifacts settleCommittedHead). A patch that
-  * landed on a newer head returns the whole row as before.
+  * The caller answers with patches, never the document (the browser editor's save, lib/artifacts respondToEdit): the
+  * statement returns the head WITHOUT its document, and the caller derives what needs the new source after it has
+  * answered (lib/artifacts settleCommittedHead). A patch that landed on a newer head is answered with the logged
+  * patches between (lib/artifacts patchesSince), so it is withheld too.
   */
  withholdDocument?:boolean}={}):Promise<DocumentCommitResult|null>{
  const initial=[id,scope.val,newEditId(),actor?.userId??null,actor?.tokenId||null];
@@ -54,7 +54,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const changed=param([...new Set([...Object.keys(update.patch.updated),...Object.keys(update.patch.inserted),...update.patch.removed])]);
  const preimage=param([...new Set([...Object.keys(update.patch.updated),...update.patch.removed])]),touched=param(update.patch.touched);
  const refs=update.effects.references?`||jsonb_build_object('refs',${graphReferencesSql('l.next_document')})`:'';
- const withheldNow=`(${withhold}::boolean AND artifacts.version=${wholeVersion}::int+1)`;
+ const withheldNow=`${withhold}::boolean`;
  const strip=update.effects.css?"-'parsedArtifact'-'compiledCss'-'cssCompileVersion'":"-'parsedArtifact'";
  const mention=documentMentionSql(actor,id,update.mentions,param,visibility,shares,!!options.dryRun);
  const resources=documentResourceSql(update.datasetBindings,param,!!options.dryRun);
