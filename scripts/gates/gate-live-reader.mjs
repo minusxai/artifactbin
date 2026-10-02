@@ -9,7 +9,7 @@
  *
  * Two documents, because they take different routes to the same promise: one
  * with a chart (it hydrates, so it re-renders itself in place) and one of pure
- * prose (today's reader ships it no runtime, so it reloads — keeping the
+ * prose (the former reader shipped it no runtime, so it reloaded — keeping the
  * reader's place across it, which is the only thing a reload would cost). The
  * compiled reader draws both in place (lib/islands/live-update): the page is
  * never navigated and a chart keeps its element.
@@ -90,7 +90,7 @@ const browser = await chromium.launch();
     chartKept: document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe ?? null,
   }));
   check(/THE AGENT REWROTE THIS/.test(after.text), "the reader sees the agent's write, with no reload of their own");
-  // Both readers draw the new version in place: today's by re-rendering, the compiled page by morphing its
+  // The compiled reader draws the new version in place: the page by morphing its
   // served story into the new version's (lib/islands/live-update), an unchanged island left running.
   check(reloads === loadsBefore, `and the page was never navigated to do it (${reloads - loadsBefore})`);
   check(before.chart && after.chartKept === 'keep', 'the chart kept its rendered element through the update');

@@ -1,11 +1,11 @@
 /**
- * THE MANAGED `<Iframe>`'S BEHAVIOUR, loaded lazily by the island (../embed.tsx) once it is mounted: today's
- * managed frame (lib/story-runtime/managed-iframe ManagedIframeView) without React — the author content's
+ * THE MANAGED `<Iframe>`'S BEHAVIOUR, loaded lazily by the island (../embed.tsx) once it is mounted: the
+ * managed frame (the former React ManagedIframeView's behaviour, framework-free) — the author content's
  * assets resolved first, then one sandboxed author realm (`allow-scripts`, its own locked document) bound
  * to the document's store through the author-script bridge (`window.mx`, signals, writes, comments).
  *
  * The store is the page's own; a document that declares no data has none, and the frame gets an empty one,
- * as today's runtime always hands it one.
+ * as the former runtime always hands it one.
  *
  * THE ASSET DOOR (pageAssetDoor) is the PAGE's, read here when a frame mounts, never compiled into the version:
  * the data island's `managedAssets` (the deployment's asset origin and this page's absolute import door, a
@@ -31,7 +31,7 @@ export interface ManagedFrameMount {
   store: DataflowStore | null;
   /** The frame's accessible name (managedFrameLayout). */
   label: string;
-  /** A failure to start, as today's frame shows it (`role="alert"`, ≤ 500 characters). */
+  /** A failure to start, as the former frame shows it (`role="alert"`, ≤ 500 characters). */
   onError(message: string): void;
 }
 

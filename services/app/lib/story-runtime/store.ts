@@ -244,7 +244,7 @@ export interface CreateStoreOptions {
   transport?: QueryTransport | null;
   /**
    * ONE reason that refuses EVERY write on this render, whatever the datasets
-   * would have said (StoryIslandData.readOnly): a SNAPSHOT render — today
+   * would have said (StoryIslandData.readOnly): a SNAPSHOT render — currently
    * `?version=N`, the archived view — is not the document a write could land
    * on, so it says so by name instead of letting the missing transport answer
    * "This view cannot save changes", which is true and about the wrong thing.
