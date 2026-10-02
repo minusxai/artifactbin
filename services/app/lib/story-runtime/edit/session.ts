@@ -367,6 +367,9 @@ export function createFrameEditSession({
       if (disposed || !compiledMount) return new Map();
       // What is half-typed is handed over first: an editor is held for the prose it has handed over.
       for (const view of views.all) flushFlowView(view);
+      // Read a task ahead of the morph, while the page is laid out: in the morph's task (a new stylesheet written,
+      // blocks moved) the read laid the whole page out at once.
+      scrollBeforeRedraw = { x: win.scrollX, y: win.scrollY };
       held = compiledMount.hold(next, draft);
       return held.stands;
     },
@@ -379,9 +382,10 @@ export function createFrameEditSession({
     releaseHeld() {
       held?.release();
       held = null;
+      scrollBeforeRedraw = null;
     },
     unmountCompiledDom() {
-      scrollBeforeRedraw = { x: win.scrollX, y: win.scrollY };
+      scrollBeforeRedraw ??= { x: win.scrollX, y: win.scrollY };
       for (const view of views.all) flushFlowView(view);
       const toolbarFocus = doc.activeElement instanceof HTMLElement
         && !!doc.activeElement.closest('[aria-label="Typography toolbar"]');
@@ -397,8 +401,8 @@ export function createFrameEditSession({
     },
     async mountCompiledDom() {
       if (disposed) return;
-      // Where the reader was before the redraw (read at the unmount, while the page was laid out: read here, after
-      // the morph, it laid the whole redrawn page out in the draw's task).
+      // Where the reader was before the redraw (read at the hold or the unmount, before the morph: read here, after
+      // it, it laid the whole redrawn page out in the draw's task).
       const readerScroll = scrollBeforeRedraw ?? { x: win.scrollX, y: win.scrollY };
       scrollBeforeRedraw = null;
       compiledMount?.dispose();
