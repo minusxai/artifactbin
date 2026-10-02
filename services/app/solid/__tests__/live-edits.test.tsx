@@ -345,6 +345,51 @@ describe('adopting a remote document', () => {
  * returns a precise, self-correcting message ("a document may carry only one
  * <Helmet>"), and the author is the one person who can act on it.
  */
+describe('the editor knows its own save before it has finished applying it', () => {
+  // The stream announces a save to every page, this one included, and that ping can overtake the reply. A page
+  // that cannot place it fetches the whole document (megabytes) for its own keystrokes, in the middle of typing.
+  it('a ping that overtakes the save reply is placed once the reply lands: this page\'s own edit, not news', async () => {
+    let respond!: (r: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((r) => { respond = r; }));
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const own = hook.result.isOwnEdit('edit-2');
+    const other = hook.result.isOwnEdit('edit-elsewhere');
+    expect(own, 'undecided while the save is on the wire').not.toBe(false);
+    respond(okResponse({ edit_id: 'edit-2', version: 2, markup: '<p>a</p>' }));
+    await expect(Promise.resolve(own)).resolves.toBe(true);
+    await expect(Promise.resolve(other)).resolves.toBe(false);
+  });
+
+  it('knows the reply\'s edit id while typing still holds the save back from being applied', async () => {
+    let typing = false;
+    const { hook } = setup({ isUserEditing: () => typing });
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    typing = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(hook.result.state.editId, 'the reply is held while the user types').toBe('edit-1');
+    expect(hook.result.isOwnEdit('edit-2')).toBe(true);
+    expect(hook.result.isOwnEdit('edit-elsewhere')).toBe(false);
+    typing = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(hook.result.state.editId).toBe('edit-2');
+  });
+
+  it('a ping during a save that fails is not this page\'s', async () => {
+    let fail!: (e: Error) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    const own = hook.result.isOwnEdit('edit-2');
+    fail(new TypeError('Failed to fetch'));
+    await expect(Promise.resolve(own)).resolves.toBe(false);
+  });
+});
+
 describe('a refused save tells the author what to fix', () => {
   const refusal = (details: Array<{ message: string }>) =>
     errResponse(400, { error: 'invalid_jsx', details });

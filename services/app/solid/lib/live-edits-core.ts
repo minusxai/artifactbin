@@ -83,8 +83,13 @@ export interface LiveEditsCore {
   recover(mode: 'retry' | 'server'): Promise<void>;
   /** True when nothing is queued, nothing is in flight and no failed draft is retained. */
   isIdle(): boolean;
-  /** "That head pointer is one WE produced" — lets the live stream drop our own echo early. */
-  isOwnEdit(candidate: string): boolean;
+  /**
+   * "That head pointer is one WE produced" — lets the live stream drop our own echo instead of fetching the whole
+   * document for it. Known the moment a save's reply lands, before it is applied (typing can hold that back for
+   * seconds). While a save is on the wire its ping can overtake the reply: the answer is then a promise that settles
+   * when the reply lands.
+   */
+  isOwnEdit(candidate: string): boolean | Promise<boolean>;
   /** The owner is gone: stop scheduling, and let an in-flight response land without side effects. */
   dispose(): void;
 }
@@ -121,6 +126,11 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
   let failedChange: PendingChange | null = null;
   /** The pending change IS the failed one, re-queued for retry (offline) — not newer work. */
   let retryOwed = false;
+  /** The head pointers this client's saves produced, newest last, recorded as each reply lands. */
+  const ownEdits: string[] = [];
+  /** Settles when the save on the wire has its reply (or failed); null when no save is on the wire. */
+  let replied: Promise<void> | null = null;
+  const isKnownOwn = (candidate: string) => candidate === editId || ownEdits.includes(candidate);
 
   const isUserEditing = () => options().isUserEditing?.() ?? false;
   // The first save of a session would otherwise post the whole graph to the worker and prepare cold (see warmBrowserPreparer).
@@ -193,7 +203,15 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
         early = null;
         const { update: documentUpdate, warnings } = await (ready ?? prepareChange(backend, { ...current, document: current.document }, change));
         prepared = true;
-        const res = await backend.commitEdit({ edit_id: editId, document_update: documentUpdate });
+        const request = backend.commitEdit({ edit_id: editId, document_update: documentUpdate });
+        // Ours from the moment the reply lands, although applying it may wait (the graph advance, typing in
+        // progress). Registered before the await below, so it has run by the time anything resumes on the reply.
+        const reply: Promise<void> = request.then((answer) => {
+          if (answer.ok && answer.body.edit_id) { ownEdits.push(answer.body.edit_id); if (ownEdits.length > 8) ownEdits.shift(); }
+          if (replied === reply) replied = null;
+        }, () => { if (replied === reply) replied = null; });
+        replied = reply;
+        const res = await request;
         const body = res.body;
 
         if (res.ok) {
@@ -378,7 +396,11 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
     adoptRemote,
     recover,
     isIdle,
-    isOwnEdit: (candidate) => candidate === editId,
+    isOwnEdit: (candidate) => {
+      if (isKnownOwn(candidate)) return true;
+      const reply = replied;
+      return reply ? reply.then(() => isKnownOwn(candidate)) : false;
+    },
     dispose() {
       alive = false;
       window.clearTimeout(warmTimer);
