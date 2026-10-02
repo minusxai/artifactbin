@@ -13,10 +13,26 @@ import {GRAPH_POLICY} from './document-graph';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
 import {newEditId} from '../document/splice';
 import {DATA_SYNTAX_META} from '../data/data-syntax';
-export type DocumentCommitResult={applied:true;row:ArtifactRow}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
+import {TABLES} from '../../platform/schema';
+/**
+ * The committed head WITHOUT its document: every artifacts column but `document`, built column by column. Not
+ * `to_jsonb(u)-'document'`: that converts the whole new document to JSON first (megabytes on a table-heavy page) only
+ * to drop it again. The list is the schema's own, so a new column rides along.
+ */
+const HEAD_COLUMNS=TABLES.find(table=>table.name==='artifacts')!.columns.map(column=>column.name).filter(name=>name!=='document');
+const headWithoutDocument=(alias:string)=>`jsonb_build_object(${HEAD_COLUMNS.map(name=>`'${name}',${alias}.${name}`).join(',')})`;
+/** `withheld`: the row came back without its document or source (see `withholdDocument`). */
+export type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean};
 export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
  /** Refuse (as not applied) a markup head not yet in the current data syntax (./data-syntax): the edit door converts it first. */
- currentSyntax?:boolean}={}):Promise<DocumentCommitResult|null>{
+ currentSyntax?:boolean;
+ /**
+  * The caller answers with the patch when it landed on exactly the version it was prepared against (the browser
+  * editor's save, lib/artifacts respondToEdit): then the statement returns the head WITHOUT its document, and the
+  * caller derives what needs the new source after it has answered (lib/artifacts settleCommittedHead). A patch that
+  * landed on a newer head returns the whole row as before.
+  */
+ withholdDocument?:boolean}={}):Promise<DocumentCommitResult|null>{
  const initial=[id,scope.val,newEditId(),actor?.userId??null,actor?.tokenId||null];
  // `d.document` is the locked head's document read ONCE: every `l.document->…` in the patch and its guards decompressed
  // the whole stored document again (a table-heavy document is megabytes: most of the commit).
@@ -34,6 +50,7 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  const annotationOps=param(JSON.stringify(annotationSqlInput(update.annotationOps))),aliases=param(JSON.stringify(update.aliases??[]));
  const replacement=param(update.replacement?JSON.stringify(update.replacement):null);
  const patch=param(JSON.stringify(update.patch)),whole=param(update.whole??false),wholeVersion=param(update.patch.baseVersion),policy=param(GRAPH_POLICY),currentSyntax=param(!!options.currentSyntax);
+ const withhold=param(!!options.withholdDocument&&!update.replacement&&!update.whole);
  const changed=param([...new Set([...Object.keys(update.patch.updated),...Object.keys(update.patch.inserted),...update.patch.removed])]);
  const preimage=param([...new Set([...Object.keys(update.patch.updated),...update.patch.removed])]),touched=param(update.patch.touched);
  const refs=update.effects.references?`||jsonb_build_object('refs',${graphReferencesSql('l.next_document')})`:'';
@@ -127,9 +144,9 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
  ), anchors AS (
   UPDATE annotations a SET anchor_key=x.source_id FROM aliases x WHERE a.artifact_id=x.artifact_id AND a.anchor_key=x.legacy_key AND NOT EXISTS(SELECT 1 FROM moved_annotations m WHERE m.id=a.id)
  ), ${mention.after} ${resources.after} ${editEvents} response AS (
-  SELECT true AS applied,to_jsonb(u)-'previous' AS artifact,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
-  UNION ALL SELECT false,to_jsonb(l),l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
- ) SELECT applied,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
+  SELECT true AS applied,CASE WHEN ${withhold}::boolean AND u.version=${wholeVersion}::int+1 THEN ${headWithoutDocument('u')} ELSE to_jsonb(u)-'previous' END AS artifact,${withhold}::boolean AND u.version=${wholeVersion}::int+1 AS withheld,u.id FROM updated u WHERE EXISTS(SELECT 1 FROM logged) AND (SELECT count(*) FROM parent_notifications)>=0 ${update.mentions?.length?'AND (SELECT count(*) FROM mention_wake)>=0':''}
+  UNION ALL SELECT false,to_jsonb(l),false,l.id FROM locked l WHERE NOT EXISTS(SELECT 1 FROM updated)
+ ) SELECT applied,withheld,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent,artifact||jsonb_build_object('open_annotations',(SELECT count(*) FROM annotations a WHERE a.artifact_id=response.id AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open'),'shares',COALESCE(CASE WHEN applied THEN ${shares}::jsonb END,(SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=response.id),'[]'::jsonb)) AS artifact FROM response`;
  const preview=`SELECT true AS applied,to_jsonb(t)-'next_document'-'archiving'-'slim_document' AS artifact,${mention.refusal} AS refusal,${ownerOnly} AS owner_only,${invalidParent} AS invalid_parent FROM transformed t UNION ALL SELECT false,to_jsonb(l),${mention.refusal},${ownerOnly},${invalidParent} FROM locked l WHERE NOT EXISTS(SELECT 1 FROM transformed)`;
  const query=prefix+(options.dryRun?preview:commit);
  // Dry-run omits commit-only parameters as well as every write CTE. Compact
@@ -140,8 +157,8 @@ export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,sc
   if(position<0){position=bindings.length;bindings.push(original);}
   return `$${position+1}`;
  });
- const result=await db.query<{applied:boolean;artifact:ArtifactRow;refusal:string|null;owner_only:boolean;invalid_parent:boolean}>(statement,bindings.map(index=>sql.params[index]));
+ const result=await db.query<{applied:boolean;withheld?:boolean;artifact:ArtifactRow;refusal:string|null;owner_only:boolean;invalid_parent:boolean}>(statement,bindings.map(index=>sql.params[index]));
  const row=result.rows[0];if(!row)return null;
  const artifact=await hydrateArtifactDocument(row.artifact);
- return row.applied?{applied:true,row:artifact}:{applied:false,head:artifact,...(row.refusal?{refusal:row.refusal}:{}),...(row.owner_only?{ownerOnly:true}:{}),...(row.invalid_parent?{invalidParent:true}:{})};
+ return row.applied?{applied:true,row:artifact,...(row.withheld?{withheld:true as const}:{})}:{applied:false,head:artifact,...(row.refusal?{refusal:row.refusal}:{}),...(row.owner_only?{ownerOnly:true}:{}),...(row.invalid_parent?{invalidParent:true}:{})};
 }

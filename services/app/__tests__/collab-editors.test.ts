@@ -39,8 +39,10 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { roleFor as requestRoleFor } from '@/lib/accounts';
-import { canReadArtifact, effectiveRole as roleFor, getArtifactById,getVersionFor } from '@/lib/artifacts';
+import { canReadArtifact, committedHeadsSettled, effectiveRole as roleFor, getArtifactById,getVersionFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
+import { getDb } from '@/lib/platform/db';
+import { storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
@@ -615,5 +617,42 @@ describe('the browser edit answer', () => {
     const echoed = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits?echo=full`, { method: 'POST', json: documentEditBody(now, { source: (full.markup as string).replace('one, typed', 'one') }) }), params({ id }));
     expect(echoed.status).toBe(200);
     expect((await echoed.json()).document.kind).toBe('graph');
+  });
+
+  it('withholds the new document: no markup, state or mutations, and the head is settled after the answer exactly as an answered commit settles it', async () => {
+    const DATA = (n: number) => `<Helmet><Value name="n" type="number" default={${n}} /><Query name="q">{\`select $n * 21 as n\`}</Query></Helmet><div><p id="a">Answer <Number data="$q" col="n" /></p><Mermaid title="D0" code={${JSON.stringify('flowchart LR\n  a[Request] --> b[Read]')}} /></div>`;
+    const w = await world(DATA(2));
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const twin = await create(w.ta.token, { markup: DATA(2), visibility: 'public' });
+    const edit = async (id: string, echo: string) => {
+      const base = await head(id);
+      const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits${echo}`, { method: 'POST', json: documentEditBody(base, { source: (base.source as string).replace('default={2}', 'default={3}') }) }), params({ id }));
+      expect(res.status, await res.clone().text()).toBe(200);
+      return { base, text: await res.text() };
+    };
+    const { base, text } = await edit(w.doc.id, '');
+    const answer = JSON.parse(text);
+    for (const key of ['document', 'markup', 'state', 'mutations']) expect(answer, key).not.toHaveProperty(key);
+    expect(answer).toMatchObject({ id: w.doc.id, version: base.version + 1, edit_id: expect.any(String) });
+    expect(answer).toHaveProperty('theme');
+    expect(answer.patch).toBeDefined();
+    expect(text.length).toBeLessThan(JSON.stringify(base.document).length);
+
+    // The twin takes the same edit on the answered path, which settles inline; both heads end the same.
+    // The withheld answer is the full answer's head, every other key included (a new column rides along).
+    const full = JSON.parse((await edit(twin.id, '?echo=full')).text);
+    const without = (keys: string[], drop: string[]) => keys.filter((k) => !drop.includes(k)).sort();
+    expect(without(Object.keys(answer), ['patch'])).toEqual(without(Object.keys(full), ['document', 'markup', 'state', 'mutations']));
+    await committedHeadsSettled();
+    const [settled, answered] = [await getArtifactById(w.doc.id), await getArtifactById(twin.id)];
+    // The two documents differ only in their stamped node ids (same length), so the stored records are the same
+    // compiled dataflow, each certified against its own head's source.
+    const record = (row: typeof settled) => storedCompiledDataflow(row!.meta, row!.source!);
+    expect(record(settled)).not.toBeNull();
+    expect(record(settled)).toEqual(record(answered));
+    const db = await getDb();
+    const harvests = async (id: string) => (await db.query<{ version: number }>('SELECT version FROM mermaid_harvests WHERE artifact_id=$1 ORDER BY version', [id])).rows.map((r) => r.version);
+    expect(await harvests(w.doc.id)).toContain(settled!.version);
+    expect(await harvests(twin.id)).toContain(answered!.version);
   });
 });
