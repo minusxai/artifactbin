@@ -89,6 +89,21 @@ describe('a draft drawn in place', () => {
     page.dispose();
   });
 
+  it('keeps a chart without an id when a paragraph is inserted above it: the same element, its drawing intact', async () => {
+    const page = await editing(`<p>Before</p>${chart('Q', '')}`, '<p data-mx-ast="0">Before</p><div data-mx-ast="1" data-hk="s0-0" aria-label="Question embed"><svg class="marks"></svg></div>',
+      (source) => {
+        const prose = [...source.matchAll(/<p>(.*?)<\/p>/g)].map((match) => match[1]);
+        return `${prose.map((text, i) => `<p data-mx-ast="${i}">${text}</p>`).join('')}<div data-mx-ast="${prose.length}" data-hk="s1-0"><span>Static preview</span></div>`;
+      });
+    const element = page.root.querySelector('[aria-label="Question embed"]')!;
+    await page.draw(`<p>Before</p><p>Inserted</p>${chart('Q', '')}`, () => page.root.querySelectorAll('p').length === 2);
+    // The same drawn element, now at the chart's new place.
+    expect(page.root.querySelector('[data-mx-ast="2"]')).toBe(element);
+    expect(element.querySelector('svg.marks')).not.toBeNull();
+    expect(page.root.textContent).not.toContain('Static preview');
+    page.dispose();
+  });
+
   it('a changed chart takes the draft\'s own preview in place of its old drawing', async () => {
     const page = await editing(`<p>Before</p>${chart('Q')}`, '<p data-mx-ast="0">Before</p><div id="chart" data-mx-ast="1" data-hk="s0-0" aria-label="Question embed"><svg class="marks"></svg></div>',
       () => '<p data-mx-ast="0">Before</p><div id="chart" data-mx-ast="1" data-hk="s0-0"><span>Static preview</span></div>');

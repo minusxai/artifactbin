@@ -248,9 +248,24 @@ export function createIslandController({ win, root, islands, nodes: served, port
     visit(source);
     return found;
   };
-  const stablePathsFor = (next: JsxNode[], previous = nodes): Set<string> => {
+  /**
+   * Components without an id the draft draws unchanged: by their path in the draft → their path on the page. One at
+   * the same place with the same markup first; then one whose place moved (a paragraph added above a chart) but whose
+   * markup did not, matched in document order with the first unclaimed component of the same markup on the page.
+   */
+  const stablePathsFor = (next: JsxNode[], previous = nodes): Map<string, string> => {
     const before = componentPaths(previous), after = componentPaths(next);
-    return new Set([...after].filter(([path, text]) => before.get(path) === text).map(([path]) => path));
+    const stable = new Map<string, string>();
+    for (const [path, text] of after) if (before.get(path) === text) stable.set(path, path);
+    const claimed = new Set(stable.values());
+    const free = new Map<string, string[]>();
+    for (const [path, text] of before) if (!claimed.has(path)) free.set(text, [...(free.get(text) ?? []), path]);
+    for (const [path, text] of after) {
+      if (stable.has(path)) continue;
+      const old = free.get(text)?.shift();
+      if (old !== undefined) stable.set(path, old);
+    }
+    return stable;
   };
   /**
    * One draft is drawn at a time. The draw spans awaits (the engine, the draft's island module), and a
