@@ -135,6 +135,8 @@ function mountComponents(root: ParentNode, mod: ComponentModule, bindings: PageB
       const sig = bindings.signal(declared);
       if (sig) props[prop] = sig; else console.error(`[page] <${name} ${prop}> binds $${declared}, which is not declared`);
     }
+    // The server-rendered children were the fallback; the component replaces them rather than being diffed against them.
+    el.replaceChildren();
     render(h(component as ComponentType<Record<string, unknown>>, props), el);
     mounted.push(el);
   }
@@ -151,7 +153,9 @@ export interface AuthorModuleStart {
 }
 
 /** Point the module's bare vendor imports at this build's chunks, so the script and the runtime share one Preact. */
-export function resolveVendorImports(source: string, vendor: Readonly<Record<string, string>>): string {
+export function resolveVendorImports(source: string, vendor: Readonly<Record<string, string>>, base: string = typeof document === 'undefined' ? 'http://localhost/' : document.baseURI): string {
+  // Absolute URLs: a blob: module has no hierarchical base, so a root-relative chunk path would not resolve from it.
+  vendor = Object.fromEntries(Object.entries(vendor).map(([spec, url]) => [spec, new URL(url, base).href]));
   const specifiers = Object.keys(vendor).sort((a, b) => b.length - a.length).map((s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')).join('|');
   if (!specifiers) return source;
   return source.replace(new RegExp(`(["'])(${specifiers})\\1`, 'g'), (match, quote: string, spec: string) => (vendor[spec] ? `${quote}${vendor[spec]}${quote}` : match));
