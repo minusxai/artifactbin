@@ -90,7 +90,18 @@ const ENTRIES = [
   // Image bindings load only on pages that author a data-selected image.
   { specifier: '@mx/kit/image', name: 'kit-image', file: () => islandModule('kit/image') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
+  // The author script's runtime (lib/islands/page-runtime): the declared names as signals over the page's store, and
+  // the mounts for the components the script exports. Preact and its signals are vendored as entries of THIS graph so
+  // the script's `import ... from 'preact'` (rewritten to these URLs when it loads) and the runtime share one instance.
+  { specifier: '@mx/page-runtime', name: 'page-runtime', file: () => islandModule('page-runtime') },
+  { specifier: 'preact', name: 'preact', file: () => islandModule('vendor/preact') },
+  { specifier: 'preact/hooks', name: 'preact-hooks', file: () => islandModule('vendor/preact-hooks') },
+  { specifier: 'preact/compat', name: 'preact-compat', file: () => islandModule('vendor/preact-compat') },
+  { specifier: 'preact/jsx-runtime', name: 'preact-jsx-runtime', file: () => islandModule('vendor/preact-jsx-runtime') },
+  { specifier: '@preact/signals', name: 'preact-signals', file: () => islandModule('vendor/preact-signals') },
 ];
+/** The specifiers an author module may import bare; each resolves to its chunk of the page's build (page-runtime rewrites them). */
+export const AUTHOR_VENDOR_SPECIFIERS = Object.freeze(['preact', 'preact/hooks', 'preact/compat', 'preact/jsx-runtime', '@preact/signals']);
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
 
 /**

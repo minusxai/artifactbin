@@ -26,6 +26,7 @@
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
+import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
@@ -192,11 +193,37 @@ const jsxLiteral = (value: string): string => escapeHtml(value).replace(/\{/g, '
 const isElement = (node: JsxNode): node is JsxElement => node.type === 'element';
 
 /** Does this node itself need the browser? */
+/**
+ * A capitalized tag outside the registry is a component the document's SCRIPT exports (validated at publish against
+ * the built module's exports): the compiler emits its mount node, with its props as data and its children as the
+ * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime).
+ */
+const REGISTERED_COMPONENTS: ReadonlySet<string> = new Set(JSX_STORY_COMPONENT_NAMES);
+export const isScriptComponent = (node: JsxNode): boolean => isElement(node) && node.isComponent && !REGISTERED_COMPONENTS.has(node.tag);
+export const MOUNT_ATTR = 'data-mx-mount';
+/** The mount's props (literal JSON), its bindings (prop → declared name) and the DOM attributes the node keeps. */
+export function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {
+  const props: Record<string, unknown> = {};
+  const bind: Record<string, string> = {};
+  let id: string | undefined, cls: string | undefined;
+  for (const a of node.attributes) {
+    if (!a.value.static) { if (a.value.reactive?.kind === 'signal') bind[a.name] = a.value.reactive.name; continue; }
+    const v = a.value.json;
+    if (a.name === 'id' && typeof v === 'string') { id = v; continue; }
+    if ((a.name === 'className' || a.name === 'class') && typeof v === 'string') { cls = v; continue; }
+    const ref = typeof v === 'string' ? refName(v) : null;
+    if (ref) bind[a.name] = ref; else props[a.name] = v;
+  }
+  return { props, bind, ...(id !== undefined ? { id } : {}), ...(cls !== undefined ? { cls } : {}) };
+}
+
 function selfDynamic(node: JsxNode): boolean {
   if (node.type === 'text') return false;
   if (node.type === 'expression') return !node.value.static;
   if (node.control) return node.control.kind !== 'fragment';
   if (node.tag === 'For') return true;
+  // A mount is static markup: its bindings are data the runtime reads, never an island's.
+  if (isScriptComponent(node)) return false;
   if (ISLAND_TAGS.has(node.tag)) return true;
   if (node.attributes.some((a) => !a.value.static)) return true;
   if (node.attributes.some((a) => ['run', 'set', 'args'].includes(a.name))) return true;
@@ -427,6 +454,30 @@ export function generate(input: GenerateInput): Generated {
     return known.html;
   }
   /** A static kit component's server HTML (`KIT_CHUNK`), from the build's server kit; null when it keeps its JSX. */
+  /** A script component's mount as static HTML: the node, its data, and its children as the fallback. */
+  function mountHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
+    const { props, bind, id, cls } = mountParts(node);
+    const attrs: Array<[string, string]> = [[MOUNT_ATTR, node.tag], ['data-mx-props', JSON.stringify(props)], ['data-mx-bind', JSON.stringify(bind)]];
+    if (id !== undefined) attrs.push(['id', id]);
+    if (cls !== undefined) attrs.push(['class', cls]);
+    const attrHtml = solidAttrs(attrs, safeAttr);
+    if (attrHtml === null) return null;
+    const parts: string[] = [];
+    for (let i = 0; i < node.children.length; i++) {
+      const child = childHtmlOf(node.children[i]!, `${path}.${i}`, ctx);
+      if (child === null) return null;
+      if (child.counts) parts.push(child.html);
+    }
+    return `<div${attrHtml}>${solidChildren(parts)}</div>`;
+  }
+  /** The same mount inside an island's JSX. */
+  function mountJsx(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
+    const { props, bind, id, cls } = mountParts(node);
+    const children = node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
+    const idJsx = id !== undefined ? ` id={${lit(id)}}` : '';
+    const clsJsx = cls !== undefined ? ` class={${lit(cls)}}` : '';
+    return `<div ${MOUNT_ATTR}={${lit(node.tag)}} data-mx-props={${lit(JSON.stringify(props))}} data-mx-bind={${lit(JSON.stringify(bind))}}${idJsx}${clsJsx}>${children}</div>`;
+  }
   function kitHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (!input.kitServer || ctx.liveKit || !KIT_CHUNK.has(node.tag)) return null;
     if (node.attributes.some((a) => !a.value.static)) return null;
@@ -464,7 +515,7 @@ export function generate(input: GenerateInput): Generated {
   function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
     if (node.tag === 'Grid' || node.tag === 'GridItem') return gridHtml(node, path, ctx);
-    if (node.isComponent) return kitHtml(node, path, ctx);
+    if (node.isComponent) return isScriptComponent(node) ? mountHtml(node, path, ctx) : kitHtml(node, path, ctx);
     const lower = node.tag.toLowerCase();
     if (SOLID_SPECIAL_TAGS.has(lower)) return null;
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
@@ -575,6 +626,7 @@ export function generate(input: GenerateInput): Generated {
       const props = ctx.preview.rewrite(rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview.values));
       return `<${previewTag} p={${json(props)}} />`;
     }
+    if (isScriptComponent(node)) return mountJsx(node, path, mode, ctx);
     if (node.isComponent) {
       const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }

@@ -161,18 +161,18 @@ export const APP_CSP = [
   // reader's document runs its queries on (lib/story-runtime/page-sqlite) —
   // and nothing else: no eval, no Function, no string timers. Author code
   // never runs here; it runs in its own frame, whose policy does not admit it.
-  "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
+  "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' blob: https: ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline' https:",
   // Listing thumbnails redirect from /a/:id/export to the configured asset
   // origin. Admit that destination for images; local posters remain same-origin.
-  `img-src 'self' data: blob:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`, "font-src 'self' data:",
+  `img-src 'self' data: blob: https:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`, "font-src 'self' data: https:",
   // `media-src` has no default of its own either, so without this line every
   // <video> and <audio> on an app page is refused by `default-src 'none'`.
   // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
   // upload page previewing a file BEFORE it is sent (web/pages/FileUpload).
   // GLTFLoader also fetches embedded textures through local blob URLs.
   // Frame and worker policies stay same-origin; blobs are data here.
-  "media-src 'self' blob:",
-  "connect-src 'self' blob:",
+  "media-src 'self' blob: https:",
+  "connect-src 'self' blob: https:",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
   // No feature starts a worker today (the source editor runs none). This is
   // here because the failure would be silent and remote: `worker-src` has no

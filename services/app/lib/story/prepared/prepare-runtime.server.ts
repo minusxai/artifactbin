@@ -2,7 +2,8 @@ import { readerDataflow } from '../data/compiled-dataflow';
 import type { PreparedStoryRuntime } from './prepared-runtime';
 import { storyBodyFor } from '../document/body';
 import { assetLookupFrom } from '../assets/asset-url';
-import { EMPTY_HELMET_CONTENT } from '../document/helmet';
+import { EMPTY_HELMET_CONTENT, type HelmetContent } from '../document/helmet';
+import { buildAuthorModule } from '../document/author-module.server';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { glyphsForNodes } from '../assets/icon-glyphs';
 import { documentFonts } from '../styles/document-fonts';
@@ -77,6 +78,16 @@ export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData
 }
 
 /** One parse, glyph resolution and font lookup shared by raw/export and SPA. */
+/** The Helmet script as the module the page runs (lib/story/document/author-module.server); a draft whose script does not build carries none. */
+async function authorModuleCode(helmet: HelmetContent): Promise<string | null> {
+  if (!helmet.script) return null;
+  const built = await buildAuthorModule(helmet.script, {
+    values: helmet.values.map((v) => v.name), queries: helmet.queries.map((q) => q.name), mutations: helmet.mutations.map((m) => m.name),
+  });
+  if (!built.ok) { console.warn('[prepare] the author script does not build:', built.errors.join('; ')); return null; }
+  return built.module.code;
+}
+
 export async function prepareStoryParts(input: PrepareStoryInput) {
   const chrome = input.chrome ?? true;
   const split = storyBodyFor(input.source, input.assetUrls ? assetLookupFrom(input.assetUrls) : undefined, { capture: !chrome });
@@ -97,7 +108,7 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
   const baseCss = storyBaseCss(baseRecipe);
   const runtime: PreparedStoryRuntime = {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
-    authorScript: helmet.script && !/<\/script/i.test(helmet.script) ? helmet.script : null,
+    authorScript: await authorModuleCode(helmet),
     theme: input.theme, title,
     // The faces this document's first screen paints (lib/story/styles/first-screen-fonts), one per file.
     fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts, importedFaces }).map(face => face.url),

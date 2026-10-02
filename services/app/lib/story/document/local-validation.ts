@@ -6,10 +6,13 @@ import {STORY_HTML_TAGS} from '@/lib/story-ui/component-names';
 import {dataflowOf,splitHelmet,validateHelmet,type HelmetSplit} from './helmet';
 import {analyzeRowScopes} from '../data/row-scope';
 import {collectRefNameUses,validateDataflow} from '../data/dataflow';
-import {managedIframeSourceErrors} from '../reader/managed-iframe-source';
-import {findBrokenEmbeds,findExternalSubresources} from '../data/refs';
+import {findBrokenEmbeds} from '../data/refs';
 
-export function validateMarkupStructure(source:string):{errors:ValidationError[];split?:HelmetSplit}{
+export interface MarkupStructureOptions{
+ /** The components the document's script exports (the server builds the script first); absent, any unknown capitalized tag passes when a script exists. */
+ scriptComponents?:ReadonlySet<string>;
+}
+export function validateMarkupStructure(source:string,options:MarkupStructureOptions={}):{errors:ValidationError[];split?:HelmetSplit}{
  const parsed=parseJsx(source);
  if(!parsed.ok)return{errors:[syntaxErrorDetail(source,parsed)]};
  const split=splitHelmet(parsed.nodes);
@@ -18,8 +21,9 @@ export function validateMarkupStructure(source:string):{errors:ValidationError[]
   ...localPathErrors(parsed.nodes),
   ...helmetErrors,
   ...analyzeRowScopes(split.body,split.content.queries.length ? undefined : Object.fromEntries(split.content.values.flatMap(value=>value.kind==='table'?[[value.name,value.columns]]:[]))).errors.map(message=>({message})),
-  ...validateJsx(split.body,{components:JSX_STORY_COMPONENT_NAMES,allowedHtmlTags:STORY_HTML_TAGS,stylePolicy:'no-inline-style'}),
-  ...managedIframeSourceErrors(split.body),...findExternalSubresources(source),...findBrokenEmbeds(source),
+  ...validateJsx(split.body,{components:JSX_STORY_COMPONENT_NAMES,allowedHtmlTags:STORY_HTML_TAGS,stylePolicy:'allow',
+   scriptComponents:options.scriptComponents??(split.content.script?'any':undefined)}),
+  ...findBrokenEmbeds(source),
   ...(helmetErrors.length?[]:validateDataflow(dataflowOf(split.content),collectRefNameUses(split.body))),
  ]};
 }
@@ -28,7 +32,7 @@ export function validateMarkupStructure(source:string):{errors:ValidationError[]
 function localPathErrors(nodes:JsxNode[]):ValidationError[]{
  const errors:ValidationError[]=[];
  for(const node of nodes){
-  if(node.type!=='element'||node.tag==='Iframe')continue;
+  if(node.type!=='element')continue;
   for(const attr of node.attributes){
    if(!['href','src','source','poster','srcSet','srcset'].includes(attr.name)||!attr.value.static||typeof attr.value.json!=='string')continue;
    const values=attr.name.toLowerCase()==='srcset'?attr.value.json.split(',').map(item=>item.trim().split(/\s+/)[0]??''):[attr.value.json];

@@ -31,6 +31,7 @@ import { inferColumns, type ColumnType, type DatasetColumn } from '../datasets/d
 import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
 import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { builtinInput, READ_ONLY_REF_ATTRS, reservedDeclarationName, VIEWER, VIEWER_ID } from './builtins';
+import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 
 // ── declarations ────────────────────────────────────────────────────────────
 
@@ -283,7 +284,7 @@ export function resolveRefTemplate(value: string, get: (name: string) => Scalar 
 export { coerceScalarInput } from './scalar-input';
 
 /** What a reference position expects: a table, a scalar, or (on `run=`) a mutation. */
-type RefKind = 'table' | 'scalar' | 'mutation';
+type RefKind = 'table' | 'scalar' | 'mutation' | 'any';
 
 /**
  * Where a `$name` is READ, and what kind it must name. Components are matched
@@ -648,6 +649,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
 // ── the reference graph ─────────────────────────────────────────────────────
 
 /** Every `$name` reference in the BODY, from the REF_ATTRS positions only. */
+const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(JSX_STORY_COMPONENT_NAMES);
 export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
   const out: RefNameUse[] = [];
   const expressionUses = (expression: ReactiveExpression | undefined, span: Span, tag: string, attr: string) => {
@@ -659,9 +661,15 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
       if (n.type === 'expression' && !n.value.static) expressionUses(n.value.reactive, n, 'expression', 'value');
       if (n.type !== 'element') continue;
       if (n.control && n.control.kind !== 'fragment') expressionUses(n.control.test, n, 'condition', 'test');
+      const scriptComponent = n.isComponent && !REGISTERED_COMPONENT_NAMES.has(n.tag);
       for (const a of n.attributes) if (!a.value.static) {
         if(n.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') out.push({name:a.value.reactive.name,tag:n.tag,attr:a.name,expects:'table',start:a.start,end:a.end});
+        // A script component's prop binds the declared signal, whatever its kind; the runtime hands it over as one.
+        else if (scriptComponent && a.value.reactive?.kind === 'signal') out.push({name:a.value.reactive.name,tag:n.tag,attr:a.name,expects:'any',readOnly:true,start:a.start,end:a.end});
         else expressionUses(a.value.reactive, a, n.tag, a.name);
+      } else if (scriptComponent && typeof a.value.json === 'string') {
+        const name = refName(a.value.json);
+        if (name) out.push({name,tag:n.tag,attr:a.name,expects:'any',readOnly:true,start:a.start,end:a.end});
       }
       // `set=` WRITES its keys (declared scalar Values) and READS its sources; `args=` only reads.
       for (const a of n.attributes) {
@@ -741,7 +749,7 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
     const kind = kinds.get(u.name);
     if (!kind) {
       errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into <import>.rows …`}</Mutation>' : hint}`, u, u.tag, u.attr));
-    } else if (kind !== u.expects) {
+    } else if (u.expects !== 'any' && kind !== u.expects) {
       errors.push(err(
         u.expects === 'table'
           ? `<${u.tag} ${u.attr}="$${u.name}"> needs a table (a <Query> or a <Value type="table">), but "${u.name}" is ${describe(kind)}`

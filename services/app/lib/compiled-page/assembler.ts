@@ -207,8 +207,14 @@ function islandData(input: AssembleInput): IslandPageData {
     readOnly: overlay.readOnly ?? null,
     // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to
     // hand to its sandboxed frame; it is never a script of this page (contract CompiledPage.authorScript).
-    ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript } : {}),
+    ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript, vendor: vendorUrls(input.build.manifest) } : {}),
   };
+}
+
+/** What a script may import bare, each at the serving build's chunk (IslandPageData.vendor; build-islands AUTHOR_VENDOR_SPECIFIERS). */
+const AUTHOR_VENDOR = ['preact', 'preact/hooks', 'preact/compat', 'preact/jsx-runtime', '@preact/signals', '@mx/page-runtime'] as const;
+function vendorUrls(manifest: Readonly<Record<string, string>>): Record<string, string> {
+  return Object.fromEntries(AUTHOR_VENDOR.flatMap((spec) => (manifest[spec] ? [[spec, manifest[spec]!]] : [])));
 }
 
 /**

@@ -23,9 +23,8 @@ import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/document/helmet';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
-import { sanitizeStoryMarkupCss } from '@/lib/data/story/banned-css';
 import { RETIRED_STORY_THEMES } from '@/lib/data/story/story-themes';
-import { remapMarkupStyleViewportUnits, transformOutsideManagedIframes } from '@/lib/story/reader/managed-iframe-source';
+import { buildAuthorModule, type AuthorModule } from './author-module.server';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
@@ -138,9 +137,21 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // The Helmet subtree is validated by ITS grammar (lib/story/document/helmet.ts) and
   // split out before the generic gate — lib/jsx never learns Helmet exists,
   // and body nodes keep their original spans so diagnostics stay precise.
-  const structural = validateMarkupStructure(source);
-  const split = structural.split;
+  // The script first: its build errors are the publish's (a typo'd declared name, a syntax error, a relative
+  // import), and its exports are the components the markup may mount, which the structural check needs.
+  let structural = validateMarkupStructure(source, { scriptComponents: new Set<string>() });
+  let split = structural.split;
   if (!split) return json({error:'invalid_jsx',details:structural.errors},400);
+  let authorModule: AuthorModule | null = null;
+  if (split.content.script) {
+    const built = await buildAuthorModule(split.content.script, {
+      values: split.content.values.map((v) => v.name), queries: split.content.queries.map((q) => q.name), mutations: split.content.mutations.map((m) => m.name),
+    });
+    if (!built.ok) return json({ error: 'invalid_script', details: built.errors.map((message) => ({ message })) }, 400);
+    authorModule = built.module;
+    structural = validateMarkupStructure(source, { scriptComponents: new Set(authorModule.exports) });
+    split = structural.split!;
+  }
 
   // FONTS the document asks for (Helmet <meta name="font-display" …>),
   // resolved at PUBLISH so a reader never waits on — or is exposed to — an
@@ -167,15 +178,11 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
     }, 400);
   }
 
-  // Belt to the validator's no-inline-style gate: strip banned CSS declarations
-  // (fixed/sticky positioning, external url()/@import) from authored style
-  // content, then remap viewport-height units in it. Authored `<style>` renders
-  // straight through the interpreter, and this save-side pass is the only place
-  // its `vh` lengths are rewritten (lib/story-surface/viewport-units.ts).
+  // Authored CSS is stored as written: the document is its own page, so nothing in it needs stripping.
   const normalization = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
   const normalized = typeof normalization === 'string' ? normalization : normalization.source;
   if (typeof normalization !== 'string') repairs.push(...normalization.repairs);
-  const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(normalized, sanitizeStoryMarkupCss)));
+  const sanitized = canonicalizeMarkup(normalized);
   if(sanitized.includes('\0'))return json({error:'invalid_source_encoding',details:['Document source cannot contain a NUL character.']},400);
   if(!sanitized.isWellFormed())return prepareJsx(body,Buffer.from(sanitized,'utf8').toString('utf8'),ctx);
   if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);

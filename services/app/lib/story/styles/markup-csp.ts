@@ -32,11 +32,11 @@ const SOURCE_DIRECTIVES = [
   "default-src 'none'",
   // 'wasm-unsafe-eval': the runtime compiles its SQLite engine (WebAssembly
   // only — no eval); the author's script runs in a child frame without it.
-  "script-src 'unsafe-inline' 'self' 'wasm-unsafe-eval'",
-  "style-src 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "media-src 'self' data: blob:",
+  "script-src 'unsafe-inline' 'self' 'wasm-unsafe-eval' blob: https:",
+  "style-src 'unsafe-inline' https:",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data: https:",
+  "media-src 'self' data: blob: https:",
   // The runtime's fixed same-origin HTTP wrapper; authored raw frames remain invalid JSX.
   "frame-src 'self'",
   // Raw <iframe> remains invalid markup. The trusted runtime owns this HTTP
@@ -149,7 +149,7 @@ const viewerPath = (id: string): string => `/a/${id}/viewer`;
  * `application/json` island, which is not script. `'self'` leads, so the policy
  * says first what the page runs.
  */
-const COMPILED_SCRIPT_SRC = "script-src 'self' 'wasm-unsafe-eval'";
+const COMPILED_SCRIPT_SRC = "script-src 'self' 'wasm-unsafe-eval' blob: https:";
 
 export interface MarkupCspOptions {
   /** The response is the compiled reader's (x-mx-reader: compiled): no inline script is admitted. */
@@ -165,7 +165,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const viewer = options.compiled ? ` ${self}${viewerPath(id)} ${self}${storyFragmentPath(id)}` : '';
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data:`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: https:`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // Firefox evaluates inherited 'self' against the opaque srcdoc realm for

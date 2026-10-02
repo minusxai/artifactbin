@@ -33,7 +33,7 @@ import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
-import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer, type PublicMxHost } from './contract';
+import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
 import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './module';
 import { installIslandDocument } from './handover';
@@ -195,14 +195,24 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
-  const uninstallMx = () => (root as PublicMxHost)[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
+  /**
+   * Run the version's script IN THIS DOCUMENT: the page runtime (`@mx/page-runtime`, a chunk of the serving build
+   * named by the page data) binds the declared names as signals over this store, loads the module with its vendor
+   * imports pointed at the same build, and mounts the components it exports where the markup placed them.
+   */
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
     stopAuthor();
     if (!source) return;
-    const { startAuthorHost } = await import('./author-host');
-    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
+    const vendor = readPageData(doc).vendor ?? {};
+    const runtimeUrl = vendor['@mx/page-runtime'];
+    if (!runtimeUrl) { console.error('[islands] the page names a script but no runtime for it'); return; }
+    const runtime = (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime');
+    if (generation !== authorGeneration || disposed || mode !== 'read') return;
+    const stop = await runtime.startAuthorModule({ source, store, root, vendor });
+    if (generation !== authorGeneration || disposed || mode !== 'read') { stop(); return; }
+    stopAuthor = () => { stopAuthor = () => {}; stop(); };
   };
   const islandDocument: MorphableIslandDocument = {
     morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), trees: new WeakMap(module.TREE ? [[module.TREE, module]] : []), restartAuthor },
@@ -223,16 +233,12 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
         runtime.setPaused(false);
         openLive(data.results?.since ?? null);
         followUrl();
-        if (store && win.parent === win) void import('./mx-host').then(({ installPublicMx }) => {
-          installPublicMx(root, store, win, () => !disposed && mode === 'read');
-        }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
         const script = readPageData(doc).authorScript;
         void restartAuthor(typeof script === 'string' && script ? script : null).catch((error: unknown) => console.error('[islands] author host failed', error));
         emit({ type: 'mode', mode });
         return;
       }
       stopAuthor();
-      uninstallMx();
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
@@ -250,7 +256,6 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
       if (disposed) return;
       disposed = true;
       stopAuthor();
-      uninstallMx();
       disposeIslands();
       stopLive();
       stopUrl();

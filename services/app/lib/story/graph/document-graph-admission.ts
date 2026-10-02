@@ -4,10 +4,8 @@
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {json} from '../../http/http';
 import {repairJsxSource} from '../../jsx/repair';
-import {sanitizeStoryMarkupCss} from '../../data/story/banned-css';
 import {MAX_EXTERNAL_IMAGES_PER_PUBLISH} from '../../platform/config';
 import {canonicalizeMarkup} from '../document/canonical-source';
-import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from '../reader/managed-iframe-source';
 import {createDocumentGraph,graphNodes,graphSource,graphReferences,type DocumentGraph} from './document-graph';
 import {graphFromSource} from './document-graph-source';
 import {prepareGraphPatch,selectGraphKeys,type GraphPatch} from './document-graph-patch';
@@ -57,7 +55,7 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  // them before taking the diff includes every normalization effect in the patch.
  const normalization=context.normalizeMarkup?.(canonicalizeMarkup(source))??source;
  source=typeof normalization==='string'?normalization:normalization.source;
- source=canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(source,sanitizeStoryMarkupCss)));
+ source=canonicalizeMarkup(source);
  const identity=stampNodeIds(source,{previousSource:graphSource(base.document),reservedIds:base.reservedIds,retireLegacyAliases:true});
  try{candidate=whole?createDocumentGraph(identity.source,base.version+1):graphFromSource(base.document,identity.source,base.version+1);}
  catch(error){if(error instanceof Error)return invalid(error.message);throw error;}

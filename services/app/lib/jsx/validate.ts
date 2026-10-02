@@ -54,7 +54,19 @@ export function listHasDangerousScheme(value: string, lowerAttributeName: string
   return urlListUrls(value, lowerAttributeName).some(hasDangerousScheme);
 }
 
+/** The script's components for the validateJsx run in progress (synchronous; see ValidateOptions.scriptComponents). */
+let scriptComponents: ReadonlySet<string> | 'any' = new Set<string>();
+const isScriptComponent = (el: JsxElement): boolean => el.isComponent && (scriptComponents === 'any' ? !JSX_REGISTERED.has(el.tag) : scriptComponents.has(el.tag));
+let JSX_REGISTERED: ReadonlySet<string> = new Set<string>();
+
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
+  scriptComponents = options.scriptComponents ?? new Set<string>();
+  JSX_REGISTERED = new Set(options.components);
+  try { return validateJsxNodes(nodes, options); }
+  finally { scriptComponents = new Set<string>(); }
+}
+
+function validateJsxNodes(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
   const components = new Set(options.components);
   // Case-insensitive: tags are compared lowercased below, so an allowlist may
   // carry canonical SVG casing (`clipPath`) and still match authored variants.
@@ -194,7 +206,7 @@ function validateElement(
     object: 'use the <Video> component, or <img>/<video> with a ref: source',
     embed: 'use the <Video> component, or <img>/<video> with a ref: source',
     script: 'a document carries ONE script, in <Helmet><script>{`…`}</script></Helmet>',
-    link: 'no external stylesheets or fonts — style with className, or <Helmet><style>',
+    link: 'put @import url(…) or @font-face in <Helmet><style>{`…`}</style></Helmet>; there is no <link>',
     meta: '<meta name content /> belongs in <Helmet>; http-equiv is the document\'s own to set',
     base: 'the document sets its own base target; relative links already resolve',
     noscript: 'the document always runs its script — write the content directly',
@@ -219,7 +231,7 @@ function validateElement(
 
   // Tag allowlist.
   if (el.isComponent) {
-    if (!components.has(el.tag)) {
+    if (!components.has(el.tag) && !isScriptComponent(el)) {
       // Stable prefix (asserted by callers/tests) + recovery guidance: name the legacy
       // trap when it applies, and ALWAYS list the registered set so the model can pick
       // a real component instead of retrying the same unknown tag.
@@ -266,6 +278,8 @@ function validateElement(
     // Spread / non-static attribute values.
     if (!a.value.static) {
       if (el.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') continue;
+      // A script component's prop may be a declared name: it mounts with that signal.
+      if (isScriptComponent(el) && a.value.reactive?.kind === 'signal') continue;
       if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) continue;
       errors.push({
         message: `Attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`,

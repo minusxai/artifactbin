@@ -273,4 +273,10 @@ export interface IslandPageData {
    * store — never in this document.
    */
   authorScript?: string | null;
+  /**
+   * The script's bare imports → this build's chunks (`preact`, `@preact/signals`, … and `@mx/page-runtime` itself),
+   * present with `authorScript`: the runtime resolves the module's imports against the serving build, so the
+   * script and the runtime share one Preact.
+   */
+  vendor?: Readonly<Record<string, string>>;
 }
