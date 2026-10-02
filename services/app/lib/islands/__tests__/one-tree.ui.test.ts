@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import * as rt from '../rt';
 import { createDataflowStore } from '@/lib/story-runtime/store';
@@ -12,16 +13,36 @@ import { morphDraftDom } from '../morph/engine';
 import { delegateEvents, hydrate } from 'solid-js/web';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
-const fixture = (source: string): { html: string; browserCode: string; flow: CompiledDataflow } => JSON.parse(execFileSync(
-  path.join(ROOT, 'node_modules/.bin/tsx'),
-  ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, '--shipped'],
-  { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 },
-).toString('utf8'));
+type Fixture = { html: string; browserCode: string; flow: CompiledDataflow };
+const tabs = (heading: string) => `<p id="f6">${heading}</p><Tabs defaultValue="one" id="tabs"><TabsList id="list"><TabsTrigger value="one" id="t1">One</TabsTrigger><TabsTrigger value="two" id="t2">Two</TabsTrigger></TabsList><TabsContent value="one" id="p1"><p id="panel">Panel one</p></TabsContent><TabsContent value="two" id="p2"><p>Panel two</p></TabsContent></Tabs>`;
+const rows = Array.from({ length: 20 }, (_, i) => `<p id="row-${i}">Static row ${i}</p>`).join('');
+/** Every page these cases hydrate, compiled by the server half (a node process each) in parallel before the first case. */
+const SOURCES = {
+  flagBefore: '<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><p id="f6">Before</p><p id="live">{$flag ? "On" : "Off"}</p>',
+  flagAfter: '<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><p id="f6">EDITED IN PLACE</p><p id="live">{$flag ? "On" : "Off"}</p>',
+  tabsBefore: tabs('Before'),
+  // The edit adds a block ahead of the unchanged Tabs, so every hydration key after it moves.
+  tabsAfter: tabs('EDITED IN PLACE').replace('<Tabs', '<p id="added">Added</p><Tabs'),
+  branch: '<Helmet><Value name="open" type="boolean" default={false} /></Helmet><section id="case">{$open && <p aria-label="Positive">positive</p>}</section>',
+  siblings: '<Helmet><Value name="name" type="string" default="Ada" /></Helmet><h1 id="heading">Static heading</h1><p id="live">{$name}</p><footer id="end">Static footer</footer>',
+  rows: `<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p id="first">First panel</p></TabsContent><TabsContent value="two">${rows}</TabsContent></Tabs><Switch label="Live switch" checked="$flag" id="live-switch" />`,
+  bound: '<Helmet><Value name="region" type="string" default="west" /><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><input aria-label="Region" value="$region" /><img src="$pick" alt="the pick" />',
+};
+const compiled = new Map<string, Fixture>();
+beforeAll(async () => {
+  await Promise.all(Object.values(SOURCES).map(async (source) => {
+    const { stdout } = await promisify(execFile)(path.join(ROOT, 'node_modules/.bin/tsx'),
+      ['--tsconfig', path.join(ROOT, 'tsconfig.json'), 'lib/islands/__tests__/fixtures/compiled-island.server.ts', source, '--shipped'],
+      { cwd: path.join(ROOT, 'services/app'), maxBuffer: 64 * 1024 * 1024 });
+    compiled.set(source, JSON.parse(stdout) as Fixture);
+  }));
+}, 120_000);
+const fixture = (source: string): Fixture => compiled.get(source) ?? (() => { throw new Error('a source outside SOURCES'); })();
 
 describe('one tree SSR to hydrate', () => {
   it('keeps authored prose present while a draft replaces a hydrated document tree', async () => {
-    const before = fixture('<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><p id="f6">Before</p><p id="live">{$flag ? "On" : "Off"}</p>');
-    const after = fixture('<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><p id="f6">EDITED IN PLACE</p><p id="live">{$flag ? "On" : "Off"}</p>');
+    const before = fixture(SOURCES.flagBefore);
+    const after = fixture(SOURCES.flagAfter);
     const host = document.createElement('div'); host.innerHTML = before.html; document.body.append(host);
     const next = document.createElement('div'); next.innerHTML = after.html;
     const treeOf = async (code: string, id: string): Promise<Component> => {
@@ -45,10 +66,8 @@ describe('one tree SSR to hydrate', () => {
   });
 
   it('re-hydrates a draft after the reader has clicked and keys have moved, keeping static runs inside a kept Tabs', async () => {
-    const tabs = (heading: string) => `<p id="f6">${heading}</p><Tabs defaultValue="one" id="tabs"><TabsList id="list"><TabsTrigger value="one" id="t1">One</TabsTrigger><TabsTrigger value="two" id="t2">Two</TabsTrigger></TabsList><TabsContent value="one" id="p1"><p id="panel">Panel one</p></TabsContent><TabsContent value="two" id="p2"><p>Panel two</p></TabsContent></Tabs>`;
-    const before = fixture(tabs('Before'));
-    // The edit adds a block ahead of the unchanged Tabs, so every hydration key after it moves.
-    const after = fixture(tabs('EDITED IN PLACE').replace('<Tabs', '<p id="added">Added</p><Tabs'));
+    const before = fixture(SOURCES.tabsBefore);
+    const after = fixture(SOURCES.tabsAfter);
     const host = document.createElement('div'); host.innerHTML = before.html; document.body.append(host);
     const next = document.createElement('div'); next.innerHTML = after.html;
     const manifest = loadCompilerBuild().manifest;
@@ -93,7 +112,7 @@ describe('one tree SSR to hydrate', () => {
   });
 
   it('mounts static content when a false server branch becomes true in the browser', async () => {
-    const server = fixture('<Helmet><Value name="open" type="boolean" default={false} /></Helmet><section id="case">{$open && <p aria-label="Positive">positive</p>}</section>');
+    const server = fixture(SOURCES.branch);
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
     let tree: Component | null = null;
     await evaluateModule(server.browserCode, spec => spec.includes('/rt-') ? rt as unknown as Record<string, unknown>
@@ -107,7 +126,7 @@ describe('one tree SSR to hydrate', () => {
     dispose?.(); runtime.dispose(); host.remove();
   });
   it('adopts static siblings and updates the live expression with aligned keys', async () => {
-    const server = fixture('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><h1 id="heading">Static heading</h1><p id="live">{$name}</p><footer id="end">Static footer</footer>');
+    const server = fixture(SOURCES.siblings);
     const host = document.createElement('div');
     host.innerHTML = server.html;
     document.body.append(host);
@@ -141,8 +160,7 @@ describe('one tree SSR to hydrate', () => {
   });
 
   it('hydrates shipped Tabs with server-owned static rows in an unopened panel and a sibling live Switch', async () => {
-    const rows = Array.from({ length: 20 }, (_, i) => `<p id="row-${i}">Static row ${i}</p>`).join('');
-    const server = fixture(`<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p id="first">First panel</p></TabsContent><TabsContent value="two">${rows}</TabsContent></Tabs><Switch label="Live switch" checked="$flag" id="live-switch" />`);
+    const server = fixture(SOURCES.rows);
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
     const last = host.querySelector('#row-19');
     const first = host.querySelector('#first');
@@ -181,7 +199,7 @@ describe('one tree SSR to hydrate', () => {
   });
 
   it('keeps a bound native input live after hydration, and serves a bound image without its unresolved template', async () => {
-    const server = fixture('<Helmet><Value name="region" type="string" default="west" /><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><input aria-label="Region" value="$region" /><img src="$pick" alt="the pick" />');
+    const server = fixture(SOURCES.bound);
     const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
     const input = host.querySelector<HTMLInputElement>('input[aria-label="Region"]')!;
     const image = host.querySelector<HTMLImageElement>('img[alt="the pick"]')!;
