@@ -42,6 +42,12 @@ export interface LiveArtifactOptions {
    * its ping overtook it): the ping is held until it settles, so a page never fetches its own write.
    */
   isOwnFrame?: (editId: string) => boolean | PromiseLike<boolean>;
+  /**
+   * Settles when a frame may be fetched. The frame is the whole document (megabytes, parsed on the page
+   * thread), so an editor holds it until the user stops typing; pings arriving meanwhile fold into the one
+   * fetch that follows. Absent: fetch at once.
+   */
+  whenIdle?: () => Promise<void>;
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
   onData?: (event: ArtifactDataEvent) => void;
   /** The ANNOTATIONS on this document changed (owner-credentialed connections only). */
@@ -92,25 +98,27 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
           if (!alive || fetching || !wanted) return;
           clearTimeout(retry);
           retry = undefined;
-          const target = wanted;
           fetching = true;
-          void backend
-            .liveFrame()
-            .then((frame) => {
-              fetching = false;
-              if (!alive) return;
-              // Refused, or a head older than the one announced (a lagging read): not yet seen, retry.
-              if (!frame || frame.version < target.version) throw new Error('frame not available yet');
-              attempt = 0;
-              if (frame.version >= seenVersion) surface(frame, target.by);
-              if (wanted === target) wanted = null;
-              else fetchWanted();
-            })
-            .catch(() => {
+          void (async () => {
+            // Held until the caller is idle; the head to fetch is the newest announced by then.
+            await options.whenIdle?.();
+            const target = wanted;
+            if (!alive || !target) return;
+            const frame = await backend.liveFrame();
+            if (!alive) return;
+            // Refused, or a head older than the one announced (a lagging read): not yet seen, retry.
+            if (!frame || frame.version < target.version) throw new Error('frame not available yet');
+            attempt = 0;
+            if (frame.version >= seenVersion) surface(frame, target.by);
+            if (wanted === target) wanted = null;
+          })().then(
+            () => { fetching = false; fetchWanted(); },
+            () => {
               fetching = false;
               if (!alive) return;
               retry = setTimeout(fetchWanted, liveBackoffDelay(attempt++));
-            });
+            },
+          );
         };
         /*
          * The stream carries PINGS; the document is fetched. A ping names the
@@ -146,7 +154,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
               // A frame fetch is waiting out its backoff (it failed while offline): the page is back, try now.
               if (wanted && retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; fetchWanted(); return; }
               if (fetching || wanted) return;
-              void backend.liveFrame().then((frame) => {
+              void Promise.resolve(options.whenIdle?.()).then(() => (alive ? backend.liveFrame() : null)).then((frame) => {
                 if (!alive || !frame || frame.version <= seenVersion || wanted || fetching) return;
                 placeOwn(frame.editId, (own) => {
                   if (frame.version <= seenVersion || wanted || fetching) return;
