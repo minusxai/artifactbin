@@ -654,5 +654,11 @@ describe('the browser edit answer', () => {
     const harvests = async (id: string) => (await db.query<{ version: number }>('SELECT version FROM mermaid_harvests WHERE artifact_id=$1 ORDER BY version', [id])).rows.map((r) => r.version);
     expect(await harvests(w.doc.id)).toContain(settled!.version);
     expect(await harvests(twin.id)).toContain(answered!.version);
+
+    // The first edit after a quiet spell archives the version it replaced, copied as stored: the archive is exactly
+    // the pre-edit head, document and all.
+    const archived = await getVersionFor({ userId: base.user_id, tokenId: base.token_id }, w.doc.id, base.version);
+    expect(archived?.source).toBe(base.source);
+    expect((await db.query<{ document: unknown }>('SELECT document FROM artifact_versions WHERE artifact_id=$1 AND version=$2', [w.doc.id, base.version])).rows[0]?.document).toEqual(base.document);
   });
 });

@@ -12,6 +12,8 @@ export function graphPatchSql(document:string,version:string,patch:GraphPatch,in
   const reads=param(JSON.stringify(patch.reads)),inserted=param(JSON.stringify(patch.inserted)),removed=param(patch.removed),updated=param(JSON.stringify(patch.updated)),touched=param(patch.touched),delta=param(patch.byteDelta),base=param(patch.baseVersion),limit=param(MAX_CONTENT_BYTES),policy=param(GRAPH_POLICY);
   const selections=param(JSON.stringify(patch.selections)),unitDeltas=param(JSON.stringify(patch.unitDeltas)),claims=param(JSON.stringify(patch.claims));
   const nodes=`(${document}->'nodes')`;
+  // One node by path: `nodes->key` would first copy the whole node map (megabytes) out of the document, per reference.
+  const node=(key:string)=>`(${document}#>ARRAY['nodes',${key}])`;
   // LATERAL stages are rescanned against PostgreSQL's locked-row recheck.
   // A recursive CTE here can retain its pre-wait work table during EvalPlanQual.
   const stages=Array.from({length:Math.max(0,...Object.values(patch.updated).map(write=>write.patches.length))},(_,step)=>{
@@ -25,21 +27,26 @@ export function graphPatchSql(document:string,version:string,patch:GraphPatch,in
     ||CASE WHEN ${inserted}::jsonb ? n.key OR (n.flags->>'self')::boolean THEN jsonb_build_object('selfVersion',${version}+1) ELSE '{}'::jsonb END
     ||CASE WHEN ${inserted}::jsonb ? n.key OR (n.flags->>'children')::boolean THEN jsonb_build_object('childrenVersion',${version}+1) ELSE '{}'::jsonb END
     ||jsonb_build_object('subtreeVersion',${version}+1))
-    FROM (SELECT key,COALESCE(${inserted}::jsonb->key,${nodes}->key) AS value,
+    FROM (SELECT key,COALESCE(${inserted}::jsonb->key,${node('key')}) AS value,
       COALESCE(${updated}::jsonb->key->'patches','[]'::jsonb) AS patches,${updated}::jsonb->key AS flags
       FROM unnest(${touched}::text[]) key) n
     ${stages.join('\n')}),'{}'::jsonb))`;
-  const expression=`(${document}||jsonb_build_object('claimedIds',(${document}->'claimedIds')||COALESCE((SELECT jsonb_object_agg(c.id,${version}+1) FROM jsonb_to_recordset(${claims}::jsonb) c(id text,version int)),'{}'::jsonb),'nodes',${replacement},'bytes',(${document}->>'bytes')::int+${delta}::int))`;
+  // Every jsonb construction walks and re-serializes all it keeps, so the document is rebuilt ONCE, around the new node
+  // map: the keys it rewrites are dropped first (the old map is skipped, not walked) and the map is set last. Concatenating
+  // the whole document with a new object would walk the old map and the new one, then discard the old.
+  const expression=`jsonb_set((${document}-'nodes'-'claimedIds'-'bytes')||jsonb_build_object('claimedIds',(${document}->'claimedIds')||COALESCE((SELECT jsonb_object_agg(c.id,${version}+1) FROM jsonb_to_recordset(${claims}::jsonb) c(id text,version int)),'{}'::jsonb),'bytes',(${document}->>'bytes')::int+${delta}::int),'{nodes}',${replacement},true)`;
   const guard=`${document}->>'policy'=${policy} AND ${document}->>'kind'='graph'
     AND ${version}-${base}::int BETWEEN 0 AND 200
     AND (${document}->>'bytes')::int+${delta}::int BETWEEN 0 AND ${limit}::int
     AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${claims}::jsonb) c(id text,version int) WHERE (${document}->'claimedIds'->>c.id)::int IS DISTINCT FROM c.version)
-    AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${selections}::jsonb) s(selector text,keys jsonb)
-      WHERE s.keys IS DISTINCT FROM (SELECT COALESCE(jsonb_agg(n.key ORDER BY n.key),'[]'::jsonb)
-        FROM jsonb_each(${nodes}) n WHERE (n.value->'selectors') ? s.selector))
+    AND (jsonb_array_length(${selections}::jsonb)=0 OR NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${selections}::jsonb) s(selector text,keys jsonb)
+      LEFT JOIN (SELECT sel AS selector,jsonb_agg(n.key ORDER BY n.key) AS keys
+        FROM jsonb_each(${nodes}) n CROSS JOIN LATERAL unnest(ARRAY(SELECT x->>'selector' FROM jsonb_array_elements(${selections}::jsonb) x)) sel
+        WHERE (n.value->'selectors') ? sel GROUP BY sel) found ON found.selector=s.selector
+      WHERE s.keys IS DISTINCT FROM COALESCE(found.keys,'[]'::jsonb)))
     AND NOT (${nodes} ?| ARRAY(SELECT jsonb_object_keys(${inserted}::jsonb)))
     AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${reads}::jsonb) r(key text,facet text,version int)
-      WHERE ${nodes}->r.key IS NULL OR (${nodes}->r.key->>r.facet)::int IS DISTINCT FROM r.version)`;
+      WHERE ${node('r.key')} IS NULL OR (${document}#>>ARRAY['nodes',r.key,r.facet])::int IS DISTINCT FROM r.version)`;
   return {expression,guard,params};
 }
 
