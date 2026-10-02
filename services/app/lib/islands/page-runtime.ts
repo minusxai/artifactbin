@@ -12,7 +12,9 @@
  *
  * Preact and signals-core are shared with the vendor chunks the script imports: one graph, one instance.
  */
-import { Signal, batch, signal } from '@preact/signals-core';
+// `@preact/signals`, not the core: importing it installs Preact's integration, so a component that reads a
+// signal's `.value` re-renders when it changes whether or not the author's script imported it itself.
+import { Signal, batch, signal } from '@preact/signals';
 import { h, render, type ComponentType } from 'preact';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { Row, Scalar } from '@/lib/story/data/dataflow';
