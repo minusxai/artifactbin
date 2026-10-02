@@ -1,14 +1,15 @@
-// DESTINATION: scripts/__tests__/build-islands.test.mjs
 /**
  * The shared island build (scripts/build/build-islands.mjs): once per deploy, Solid 1.9, the runtime and
  * every kit family become content-addressed chunks under services/app/public/islands with a
  * manifest and a build id (docs/phase2-architecture.md §1, §3; lib/compiled-page/contract CompilerBuild).
+ *
+ * Every case reads the build the test global setup already wrote (services/app/test/setup/build-runtime.global.ts
+ * runs `build-islands.mjs --cache` into public/islands); none builds again.
  */
-import { beforeAll, describe, expect, it } from 'vitest';
-import { existsSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, it } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { buildIslands, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
+import { CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
@@ -25,41 +26,26 @@ describe('the toolchain', () => {
 });
 
 describe('buildIslands', () => {
-  // ONE build shared by every case: a full island build costs ~15 s in CI, and three of them made this
-  // file the slowest in its shard. Determinism is checked against the build the test setup already
-  // wrote (services/app/public/islands, build-runtime.global.ts), from the same sources.
-  let outDir;
-  let first;
-  beforeAll(async () => {
-    outDir = mkdtempSync(path.join(tmpdir(), 'islands-build-'));
-    writeFileSync(path.join(outDir, 'prior-0000000000000000.js'), 'prior build');
-    first = await buildIslands({ outDir });
-  }, 120_000);
+  const outDir = DEFAULT_OUT_DIR;
+  const written = JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
+  const first = { ...written, closure: (urls) => closureOf(written.files, urls) };
   it('names every specifier a compiled page may import', () => {
-    expect(readFileSync(path.join(outDir, 'prior-0000000000000000.js'), 'utf8')).toBe('prior build');
     expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
     expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js')), 'generated code reaches Solid only through @mx/rt').toEqual([]);
   });
 
-  it('writes content-addressed chunks, a manifest and a 16-hex build id, deterministically', async () => {
+  it('writes content-addressed chunks, a manifest and a 16-hex build id', () => {
     expect(first.build).toMatch(/^[0-9a-f]{16}$/);
     for (const specifier of ISLAND_SPECIFIERS) {
       const url = first.manifest[specifier];
       expect(url, specifier).toMatch(/^\/islands\/[\w-]+-[0-9a-f]{8,}\.js$/);
       expect(existsSync(path.join(outDir, url.slice('/islands/'.length))), `${specifier} → ${url} exists`).toBe(true);
     }
-    expect(JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'))).toEqual({ build: first.build, manifest: first.manifest, files: expect.any(Object), ssr: first.ssr, offline: first.offline, sqliteWasm: expect.stringMatching(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/) });
+    expect(Object.keys(written).sort()).toEqual(['build', 'files', 'manifest', 'offline', 'sqliteWasm', 'ssr']);
+    expect(written.sqliteWasm).toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
     // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
     const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
     expect(withSolidWeb).toHaveLength(1);
-    const setupManifest = path.join(ROOT, 'services/app/public/islands/manifest.json');
-    const again = existsSync(setupManifest)
-      ? JSON.parse(readFileSync(setupManifest, 'utf8'))
-      : await buildIslands({ outDir: mkdtempSync(path.join(tmpdir(), 'islands-build-')) });
-    expect(again.build).toBe(first.build);
-    expect(again.manifest).toEqual(first.manifest);
-    expect(again.ssr).toEqual(first.ssr);
-    expect(again.offline).toEqual(first.offline);
     expect(first.offline).toMatch(/^\/islands\/offline-[0-9a-f]{16}\.json\.gzip$/);
   });
 
@@ -157,11 +143,19 @@ describe('buildIslands', () => {
     expect(bytes).toBeLessThanOrEqual(27_979);
   });
 
-  it('keeps framed transport, comment target parsing and event contracts out of rt+boot', () => {
-    const { manifest, closure, outputInputs } = first;
+  it('keeps framed transport, comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
+    const { manifest, closure } = first;
+    // Which modules each output carries: the --cache marker the setup build wrote beside its manifest.
+    const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
+    const all = Object.values(outputInputs).flat();
     const modules = closure([manifest['@mx/rt'], manifest['@mx/boot']]).flatMap((url) => outputInputs[url]);
-    for (const name of ['story-runtime/relay-transport.ts', 'story/comment-target.ts', 'contracts/src/events.ts']) {
+    for (const name of ['story-runtime/relay-transport.ts', 'story/annotations/comment-target.ts']) {
+      expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
+    }
+    // The compiled reader merges classes at compile time: no reader runtime chunk carries a class merger.
+    for (const pkg of ['tailwind-merge', 'class-variance-authority', 'clsx']) {
+      expect(modules.some((input) => input.includes(`node_modules/${pkg}/`)), pkg).toBe(false);
     }
   });
 

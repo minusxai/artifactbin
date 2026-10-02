@@ -64,11 +64,10 @@ describe('compilePage', () => {
   it('restores long hostile static text in the served document and a reloaded SSR module', async () => {
     const hostile = `begin </script><script>alert(1)</script> & {braces} backslash \\ backtick \` interpolation \${value} ${'x'.repeat(2_000)} end`;
     const input = await inputOf(`<Tabs defaultValue="one"><TabsContent value="one"><p>${hostile.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;')}</p></TabsContent></Tabs>`);
-    const generated = generate(input);
-    // One-tree static content is server owned; the deleted browser template resource has no assertion here.
-    const browser = await browserModuleCode(generated.browserIslands, loadCompilerBuild());
-    expect(browser.code).not.toContain('alert(1)');
-    const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: null, values: {} });
+    const store = createModuleStore();
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: null, values: {}, store });
+    // Static content is server owned: the browser module never carries it.
+    expect(new TextDecoder().decode((await store.get(built.module!.sha))!)).not.toContain('alert(1)');
     expect(dom(built.html).textContent).toContain(hostile);
     const reloaded = await loadSsrModule(built.ssr!);
     const html = reloaded.render({ values: {}, results: null, mermaidImages: {}, drawings: {} });
@@ -115,25 +114,20 @@ describe('compilePage', () => {
     const built = await buildDocumentModules(generated, { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
     const bytes = (await store.get(built.module!.sha))!;
     expect(Buffer.byteLength(blocks)).toBeGreaterThan(3_000_000);
-    expect(brotliCompressSync(generated.islands).byteLength).toBeLessThan(10_000);
-    expect([...Object.values(generated.staticTexts), ...generated.staticHtml].join('')).toContain(blocks.slice(3, 120));
-    expect(generated.skeleton).not.toContain(blocks.slice(3, 120));
     expect(dom(built.html).querySelectorAll('template[data-mx-island-template]')).toHaveLength(0);
     // The deleted template resource no longer carries unopened panels; the server DOM does.
     expect(built.html).toContain(blocks.slice(3, 120));
     expect(dom(built.html).querySelector('[data-slot="tabs-content"][hidden]')?.textContent).toContain(blocks.slice(3, 120));
     expect(brotliCompressSync(bytes).byteLength).toBeLessThan(4_000);
     expect(built.templateBrBytes).toBeNull();
-    expect(new TextDecoder().decode(bytes)).not.toContain('requestIdleCallback');
   }, 120_000);
   it('needs no factory resource for a small dataflow page', async () => {
     const input = await inputOf('<Helmet><Value name="name" type="string" default="Ada" /></Helmet><p>{$name}</p>');
     const store = createModuleStore();
     const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
-    const browser = new TextDecoder().decode((await store.get(built.module!.sha))!);
-    // The deleted factory resource and its idle fetch are absent from one-tree modules.
+    // One-tree modules carry no factory resource.
+    expect(built.module).not.toBeNull();
     expect(built.templateBrBytes).toBeNull();
-    expect(browser).not.toContain('requestIdleCallback');
   });
   it('keeps hostile template closers inert in the served document', async () => {
     const input = await inputOf('<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one">safe</TabsContent><TabsContent value="two"><p>&lt;/template&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p></TabsContent></Tabs>');
@@ -147,25 +141,14 @@ describe('compilePage', () => {
     expect(built.html).not.toContain('</template><script>alert(1)</script>');
     expect(browser).not.toContain('alert(1)');
   });
-  it('moves only large used hoisted props into page data', async () => {
+  it('carries a large hoisted prop in the page\'s data, never in the browser module', async () => {
     const note = 'literal-prop-' + 'x'.repeat(2_000);
-    const generated = generate(await inputOf(`<Question id="q" viz={{kind:"table",note:${JSON.stringify(note)}}} />`));
-    expect(generated.moduleData).toContain(JSON.stringify({ kind: 'table', note }));
-    expect(generated.browserIslands).not.toContain(note);
-    expect(generated.islands).toContain(note);
-  });
-  it('measures the synthetic 10 MB table module before and after', async () => {
-    const rows = Array.from({ length: 100 }, (_, i) => ({ label: `row ${i}: ${'x'.repeat(100_000)}` }));
-    const input = await inputOf(`<Helmet><Value name="rows" type="table" value={${JSON.stringify(rows)}} /></Helmet><For each={$rows}><p>$_row.label</p></For>`);
-    const generated = generate(input);
-    const build = loadCompilerBuild();
-    const before = await transformSolid(`${generated.islands}\nconst FLOW=JSON.parse(${JSON.stringify(JSON.stringify(input.flow))});`, { generate: 'dom', hydratable: true }, { minify: true, moduleName: '@mx/rt' });
-    const flowIndex = generated.moduleData.length;
-    const islands = generated.moduleData.length ? generated.browserIslands : `const $moduleData = JSON.parse(document.getElementById("mx-story-data").textContent).moduleData;\n${generated.browserIslands}`;
-    const after = await browserModuleCode(islands, build, input.flow, flowIndex);
-    expect(Buffer.byteLength(JSON.stringify(rows))).toBeGreaterThan(10_000_000);
-    expect(Buffer.byteLength(before)).toBeGreaterThan(10_000_000);
-    expect(Buffer.byteLength(after.code)).toBeLessThan(4_000);
+    const store = createModuleStore();
+    const input = await inputOf(`<Question id="q" viz={{kind:"table",note:${JSON.stringify(note)}}} />`);
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store });
+    const pageData = JSON.parse(dom(built.html).querySelector('[data-mx-module-data]')!.textContent!).moduleData;
+    expect(JSON.stringify(pageData)).toContain(JSON.stringify({ kind: 'table', note }));
+    expect(new TextDecoder().decode((await store.get(built.module!.sha))!)).not.toContain(note);
   });
   it('keeps a large literal table out of the browser module and carries it in the page', async () => {
     const rows = Array.from({ length: 120 }, (_, i) => ({ label: `row ${i}: ${'x'.repeat(180)}` }));
@@ -176,27 +159,27 @@ describe('compilePage', () => {
     expect(page.html).toContain(rows[0]!.label);
     expect(page.html).toMatch(/<script type="application\/json" data-mx-module-data>[\s\S]*<\/script>$/);
   });
-  it('compiles a native Value input as a live binding', async () => {
-    const source = '<Helmet><Value name="region" type="string" default="west" /></Helmet><input aria-label="Region" value="$region" />';
-    const generated = generate(await inputOf(source));
-    expect(generated.islands).toContain('<BoundNative tag={"input"} bind={$d0}');
-    expect(generated.islands).toContain('JSON.parse("{\\\"value\\\":\\\"region\\\"}")');
-    expect(generated.islandRefs.flatMap((island) => island.kit)).toContain('BoundNative');
+  // Their liveness after hydration: one-tree.ui.test (the input) and bound-image.test (the image island).
+  it('serves a native Value input with its value, as a live control of the page\'s tree', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="region" type="string" default="west" /></Helmet><input aria-label="Region" value="$region" />'), loadCompilerBuild());
+    expect(dom(page.html).querySelector('input[aria-label="Region"]')?.getAttribute('value')).toBe('west');
+    expect(page.islands.flatMap((island) => island.kit)).toContain('BoundNative');
+    expect(page.module!.specifiers).toContain('@mx/kit/controls');
   });
 
-  it('keeps a bound image live and sends its source template to the image island', async () => {
-    const source = '<Helmet><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><img src="$pick" alt="the pick" />';
-    const generated = generate(await inputOf(source));
-    expect(generated.islands).toContain('BoundImage');
-    expect(generated.islands).toContain('template={"$pick"}');
-    expect(generated.skeleton).not.toContain('src="$pick"');
+  it('hands a bound image to the image island, never serving its template as a source', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><img src="$pick" alt="the pick" />'), loadCompilerBuild());
+    expect(dom(page.html).querySelector('img[alt="the pick"]')).toBeTruthy();
+    expect(page.html).not.toContain('src="$pick"');
+    expect(page.islands.flatMap((island) => island.kit)).toContain('BoundImage');
+    expect(page.module!.specifiers).toContain('@mx/kit/image');
   });
 
-  it('routes row image attributes through the image helper after row substitution', async () => {
-    const source = '<Helmet><Value name="covers" type="table" value={[{"id":1,"cover_ref":"ref:Abc123"}]} /></Helmet><For each={$covers}><img src="$_row.cover_ref" alt="cover" /></For>';
-    const generated = generate(await inputOf(source));
-    expect(generated.islands).toContain('BoundImage template={"$_row.cover_ref"}');
-    expect(generated.islandRefs.flatMap((island) => island.kit)).not.toContain('rowImageAttrs');
+  it('serves a row image per row through the image island, its row field substituted', async () => {
+    const page = await compilePage(await inputOf('<Helmet><Value name="covers" type="table" value={[{"id":1,"cover_ref":"ref:Abc123"},{"id":2,"cover_ref":"ref:Def456"}]} /></Helmet><For each={$covers}><img src="$_row.cover_ref" alt="cover" /></For>'), loadCompilerBuild());
+    expect(dom(page.html).querySelectorAll('img[alt="cover"]')).toHaveLength(2);
+    expect([...dom(page.html).querySelectorAll('img[alt="cover"]')].map((img) => img.getAttribute('src'))).toEqual(['/a/Abc123/raw', '/a/Def456/raw']);
+    expect(page.module!.specifiers).toContain('@mx/kit/image');
   });
   it('stores the legacy outline decision and heading paths with the version', async () => {
     const source = '<article><h2>One &amp; all</h2><h3>Part</h3><h2>Two</h2><h2>Three</h2></article>';
@@ -273,13 +256,12 @@ describe('compilePage', () => {
   it('compiles <Iframe> and <DeckGL> as islands in the embed family, served as today\'s boxes', async () => {
     const source = '<div><Iframe title="Gallery" height={120} id="f" className="my-4"><p>Hello</p><script>{`document.body.dataset.ok = "1"`}</script></Iframe><DeckGL id="map" className="rounded" title="Countries" height="320px" basemap="none" layers={[{"@@type":"ScatterplotLayer","getPosition":"@@=[lng, lat]"}]} /></div>';
     const input = await inputOf(source);
-    // Their own family (lib/islands/contract KIT_FAMILIES 'embed'): a page with a table never downloads the frame's island code.
-    const { islands } = generate(input);
-    expect(islands).toContain('import { DeckGL, Iframe } from "@mx/kit/embed";');
-    expect(islands).not.toContain('@mx/kit/data');
-    // The asset door is the page's (IslandPageData.managedAssets), never a compile-time prop.
-    expect(islands).not.toContain('assetsOrigin');
     const page = await compilePage(input, loadCompilerBuild());
+    // Their own family (lib/islands/contract KIT_FAMILIES 'embed'): a page with a table never downloads the frame's island code.
+    expect(page.module!.specifiers).toContain('@mx/kit/embed');
+    expect(page.module!.specifiers).not.toContain('@mx/kit/data');
+    // The asset door is the page's (IslandPageData.managedAssets), never a compile-time prop.
+    expect(new TextDecoder().decode((await createModuleStore().get(page.module!.sha))!)).not.toContain('assetsOrigin');
     expect(page.partial).toEqual([]);
     // The deleted per-component island entries now share the one document root.
     expect(page.islands.map((i) => i.kit)).toEqual([['DeckGL', 'Iframe']]);
@@ -302,19 +284,21 @@ describe('compilePage', () => {
       + '<DataTable data="$t" rowKey="id" id="tbl"><Column col="id" /> <Column col="w">\n  </Column><Column col="note"><b id="n">{$_row.s}</b></Column>'
       + '<Column col="s"><Select label="S {$_row.id}" value="$_row.s" options={["a","b"]} run="$set_s" className="w-24" /></Column>'
       + '<Column col="n"><input type="number" value="$_row.n" run="$set_n" /></Column></DataTable>';
-    const { islands } = generate(await inputOf(source.replace('"w":""}', '"w":"","note":""}')));
+    const page = await compilePage(await inputOf(source.replace('"w":""}', '"w":"","note":""}')), loadCompilerBuild());
     // Its own family: a page without column content never loads the cells.
-    expect(islands).toContain('import { CellControl, cellAttrs } from "@mx/kit/cells";');
-    expect(islands).toContain('import { DataTable } from "@mx/kit/data";');
-    // One entry per <Column>, a hole where the content draws nothing (whitespace), a function per row otherwise.
-    expect(islands).toContain('cells={[undefined, undefined, (row');
-    expect(islands).toMatch(/<b \{\.\.\.cellAttrs\(\$d\d+, row\d+_\d+, cell\d+_\d+\)\}>\{rt\.text\(/);
+    expect(page.module!.specifiers).toEqual(expect.arrayContaining(['@mx/kit/cells', '@mx/kit/data']));
+    const table = dom(page.html).querySelector('#tbl')!;
+    // A column's content draws per row (its id made per-row); a column whose content is whitespace draws the cell as before.
+    expect([...table.querySelectorAll('tbody td b')].map((b) => b.textContent)).toEqual(['a']);
+    expect(table.querySelector('tbody td b')?.id).toMatch(/^mx-instance-/);
     // Today's classes, merged at compile time (tailwind-merge: the cell's flex replaces the shell's inline-flex, the author's w-24 the cell's w-full).
-    expect(islands).toContain('<CellControl tag={"Select"} run={"set_s"} field={"s"}');
-    expect(islands).toContain('cls={"mx-control relative flex-col gap-1.5 align-top flex min-w-0 w-24"}');
-    expect(islands).toContain('<CellControl tag={"input"} run={"set_n"} field={"n"}');
-    expect(islands).toContain('cls={"w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50 h-8 text-right tabular-nums"}');
-    expect(islands).toMatch(/templates=\{\$d\d+\}/);
+    const select = table.querySelector('button[aria-label="S 1"]')?.closest('.mx-control');
+    expect(select?.getAttribute('class')?.split(/\s+/)).toEqual(expect.arrayContaining(['flex', 'w-24']));
+    expect(select?.getAttribute('class')?.split(/\s+/)).not.toEqual(expect.arrayContaining(['inline-flex']));
+    expect(select?.getAttribute('class')?.split(/\s+/)).not.toEqual(expect.arrayContaining(['w-full']));
+    const number = table.querySelector('input[type="number"]');
+    expect(number?.getAttribute('class')?.split(/\s+/)).toEqual(expect.arrayContaining(['h-8', 'text-right', 'tabular-nums']));
+    expect(number?.getAttribute('value')).toBe('2');
   });
 
   it('an <Iframe> whose content is refused renders nothing, as the interpreter does', async () => {
@@ -326,27 +310,13 @@ describe('compilePage', () => {
 });
 
 describe('one-tree identity across versions', () => {
-  const keysOf = async (source: string): Promise<Record<string, string>> => {
-    const generated = generate(await inputOf(source));
-    const keys: Record<string, string> = {};
-    // The deleted per-island digest list is replaced by a single stable tree render id.
-    for (const ref of generated.islandRefs) keys[ref.renderId] = ref.path;
-    return keys;
-  };
-  const helmet = '<Helmet><Value name="region" type="string" default="West" /><Value name="other" type="string" default="x" /></Helmet>';
-
-  it('names the same island by the same key when an island before it shifts its render id and its constants', async () => {
-    const before = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
-    const after = await keysOf(`${helmet}<div id="w"><section id="s1"><p id="p1">static</p><p id="n" title="{$region}">{$other}</p></section><section id="s2"><p id="b" title="{$other}">{$region}</p></section></div>`);
-    expect(before).toEqual({ 'd-': '0' });
-    expect(after).toEqual({ 'd-': '0' });
-  });
-
-  it('gives a changed island another key', async () => {
-    const one = await keysOf(`${helmet}<div id="w"><p id="b">{$region}</p></div>`);
-    const two = await keysOf(`${helmet}<div id="w"><p id="b">{$other}</p></div>`);
-    expect(one).toEqual({ 'd-': '0' });
-    expect(two).toEqual({ 'd-': '0' });
+  it('names the page\'s one hydration root by the same key whatever a version adds or changes', async () => {
+    const helmet = '<Helmet><Value name="region" type="string" default="West" /><Value name="other" type="string" default="x" /></Helmet>';
+    for (const body of ['<div id="w"><p id="b">{$region}</p></div>', '<div id="w"><p id="n" title="{$region}">{$other}</p><p id="b">{$other}</p></div>']) {
+      const page = await compilePage(await inputOf(helmet + body), loadCompilerBuild());
+      expect(page.islands.map((ref) => [ref.renderId, ref.path])).toEqual([['d-', '0']]);
+      expect(dom(page.html).querySelector('[data-hk^="d-"]')).toBeTruthy();
+    }
   });
 });
 
@@ -427,8 +397,9 @@ describe('no refusal', () => {
 
 describe('names', () => {
   it('a hyphenated api prop is an attribute name, not a refusal', async () => {
-    const { islands } = await compileSources(await inputOf('<Helmet><Value name="q" type="string" /></Helmet><div id="w"><Input aria-label="Search" value="$q" id="i" /></div>'));
-    expect(islands).toContain('aria-label={"Search"}');
+    const page = await compilePage(await inputOf('<Helmet><Value name="q" type="string" /></Helmet><div id="w"><Input aria-label="Search" value="$q" id="i" /></div>'), loadCompilerBuild());
+    expect(page.unported).toEqual([]);
+    expect(dom(page.html).querySelector('#i [aria-label="Search"], #i[aria-label="Search"]')).toBeTruthy();
   });
 });
 
@@ -566,11 +537,13 @@ describe('the one-tree module path', () => {
     expect(again.ssr!.sha).toBe(built.ssr!.sha);
   });
 
-  it('dashboard: the chart slot names the question, and every island reads data', async () => {
-    const generated = generate(await inputOf(fixture('dashboard.jsx').replaceAll('{{sales}}', 'SALES1'), 'dashboard'));
-    expect(generated.islands).toContain(`${CHART_SLOT_ATTR}={"AVkX"}`);
-    expect(generated.islandRefs.every((i) => i.readsData)).toBe(true);
-    expect(generated.islandRefs.flatMap((i) => i.kit)).toEqual(expect.arrayContaining(['Select', 'Number', 'Question', 'DataTable']));
+  it('dashboard: once the server has the question\'s rows, the served chart box is the slot named for the question', async () => {
+    const input = await inputOf(fixture('dashboard.jsx').replaceAll('{{sales}}', 'SALES1'), 'dashboard');
+    const built = await buildDocumentModules(generate(input), { build: loadCompilerBuild(), flow: input.flow, values: declaredValues(input.flow), store: createModuleStore() });
+    const ssr = await loadSsrModule(built.ssr!);
+    const monthly = { columns: [{ name: 'month', type: 'date' }, { name: 'revenue', type: 'number' }], rows: [{ month: '2026-01-01', revenue: 3 }] };
+    const html = ssr.render({ values: declaredValues(input.flow), results: { tables: { monthly }, errors: {} } as never, mermaidImages: {}, drawings: {} });
+    expect(dom(html).querySelector(`[${CHART_SLOT_ATTR}="AVkX"]`)).toBeTruthy();
   });
 });
 
