@@ -19,6 +19,7 @@ import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
+import { nextTask, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
@@ -301,26 +302,34 @@ export function createIslandController({ win, root, islands, nodes: served, port
     // commit or composition. It waits, and a newer draft that lands meanwhile replaces it.
     const wait = drawBlockedFor();
     if (wait !== null) { retryDraw(wait); return; }
-    // Fetch the draft's module while the editor is still mounted. From here to the remount nothing
-    // awaits: a keystroke typed during a slow module fetch otherwise lands on no editor, and the
-    // caret comes back where it was when the fetch began (mid-word).
+    // Which components stay is decided from the two trees alone, before the draw's own tasks.
+    const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
+    // Fetch the draft's module while the editor is still mounted. From the hold to the remount nothing
+    // awaits but one yield the hold is undone across when input lands in it: a keystroke typed during a slow
+    // module fetch otherwise lands on no editor, and the caret comes back where it was when the fetch began.
     const module = await loadDraftModule(win, root, pending.document);
-    if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
+    const stale = () => disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending;
+    if (stale()) return;
     const late = drawBlockedFor();
     if (late !== null) { retryDraw(late); return; }
+    // Editors whose region this draft draws exactly as it is stay mounted (focus, caret and history with them) and
+    // the morph puts them where the draft has them; only the regions it changed are rebuilt.
+    const keptEditors = edit?.holdUnchanged(pending.nodes, pending.root) ?? new Map<string, HTMLElement>();
+    // The hold is its own task, the morph and remount the next: together they were one long task at slow CPUs.
+    // Typing, a newer draft or leaving meanwhile undoes the hold (the editors run on as they were).
+    await nextTask(win);
+    if (stale()) { edit?.releaseHeld(); return; }
+    const blocked = drawBlockedFor();
+    if (blocked !== null) { edit?.releaseHeld(); retryDraw(blocked); return; }
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
     redrawOwed = false;
     shownSource = pending.source;
     shownParts = afterParts ? partsKey(afterParts) : null;
-    const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
     // Written only when it changed: rewriting the same sheet re-styles the whole page, which the editors' removal
     // below then paid at once (most of a reply's apply on a table-heavy page).
     if (pending.sheet && sheet && sheet.textContent !== pending.sheet.textContent) sheet.textContent = pending.sheet.textContent;
-    // Editors whose region this draft draws exactly as it is stay mounted (focus, caret and history with them) and
-    // the morph puts them where the draft has them; only the regions it changed are rebuilt.
-    const keptEditors = edit?.holdUnchanged(pending.nodes, pending.root) ?? new Map<string, HTMLElement>();
     edit?.unmountCompiledDom();
     disposeChangedDraftIslands(root, stableIds, stablePaths);
     morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
@@ -370,8 +379,9 @@ export function createIslandController({ win, root, islands, nodes: served, port
   };
   /** Parse a compiled page and queue it as the draft to draw (the newest wins). */
   const queueDraw = async (html: string, nodes: JsxNode[], source: string | null, sequence: number) => {
-    const next = new DOMParser().parseFromString(html, 'text/html');
-    if (disposed || sequence !== draftSequence || !drafting()) return;
+    // Parsed in slices: one parse of a table-heavy page was a single long task right as the reply landed.
+    const next = await parseHtmlInSlices(win, html, () => !disposed && sequence === draftSequence && drafting());
+    if (!next || disposed || sequence !== draftSequence || !drafting()) return;
     const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]');
     if (!nextRoot) throw new Error('draft preview carried no story');
     pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes, source, sequence };

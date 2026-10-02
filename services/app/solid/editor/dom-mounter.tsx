@@ -57,6 +57,8 @@ export interface HeldEditors {
   take(path: string): RegionEditor | undefined;
   /** Tear down every editor no mount took, its compiled blocks back in its place. */
   dispose(): void;
+  /** The draw did not happen: every editor goes back to running as it was, and the draft gets its blocks back. */
+  release(): void;
 }
 
 /** One mounted prose editor. */
@@ -67,6 +69,8 @@ interface RegionEditor {
   shown(): JsxNode[];
   /** The compiled blocks it stands in for, put back when it leaves. */
   restore: HTMLElement[];
+  /** `compiledKey(restore)`, kept while `restore` stays: a redraw compares every kept editor's blocks with the draft's. */
+  restoreKey?: string;
   handedOver(text: string): boolean;
   adopt(region: JsxNode[], elements: () => HTMLElement[]): void;
   /**
@@ -115,7 +119,7 @@ const HANDED_KEPT = 8;
  * How long an off-screen mount slice may build editors (one region at least). The page's own style pass for what a
  * slice inserted follows at the next frame; on a table-heavy page that pass, not the editors, is most of the time.
  */
-const SLICE_MS = 50;
+const SLICE_MS = 16;
 /**
  * One idle slice of queued work (`next` hands the next item, undefined when none is left). An item is started only
  * when the last one's cost still fits in what is left of `budget`, so a slice ends under it instead of one item past
@@ -248,6 +252,7 @@ export const EDIT_REGION_ATTR = 'data-mx-edit-region';
 const inIsland = (el: Element): boolean => !!el.parentElement?.closest('[data-hk]:not([data-hk^="d-"])');
 /** Compiled blocks compared across a redraw: their AST paths are positional (a block added above moves them). */
 const compiledKey = (blocks: readonly Element[]): string => blocks.map((block) => block.outerHTML.replace(/ data-mx-ast="[^"]*"/g, '')).join('');
+const restoreKeyOf = (editor: RegionEditor): string => (editor.restoreKey ??= compiledKey(editor.restore));
 
 /** One region replaces only its authored prose siblings; adjacent compiled islands keep their DOM identity. */
 export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks, held?: HeldEditors): CompiledEditMount {
@@ -467,7 +472,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         previous = next;
         setCurrent(() => next);
         const blocks = compiled();
-        if (blocks.length) editor.restore = blocks;
+        if (blocks.length) { editor.restore = blocks; editor.restoreKey = undefined; }
       },
       repath(nextPath) {
         // Held for showing exactly this prose: its nodes stand as they are (the same source), only its path moves —
@@ -556,10 +561,18 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       // The draft's region blocks by path, in one pass over the draft (a query per block scanned it once each).
       const wanted = new Set(regions.flatMap((region) => region.nodes.map((_, offset) => [region.parentPath, String(region.start + offset)].filter(Boolean).join('.'))));
       const byPath = new Map<string, HTMLElement>();
-      for (const el of draft.querySelectorAll<HTMLElement>(`[${AST_PATH}]`)) {
-        const path = el.getAttribute(AST_PATH)!;
-        if (wanted.has(path) && !byPath.has(path)) byPath.set(path, el);
-      }
+      // A region block holds no other region's block (its prose is the region's), so the walk never enters one: a
+      // table's thousands of cells are not visited.
+      const find = (parent: Element) => {
+        for (let el = parent.firstElementChild; el; el = el.nextElementSibling) {
+          const path = el.getAttribute(AST_PATH);
+          if (path !== null && wanted.has(path)) { if (!byPath.has(path)) byPath.set(path, el as HTMLElement); continue; }
+          find(el);
+        }
+      };
+      find(draft);
+      /** What `release` puts back: each held editor's blocks before the hold, and its stand-in in the draft. */
+      const undo: Array<{ editor: RegionEditor; restore: HTMLElement[]; restoreKey: string | undefined; stand: HTMLElement }> = [];
       let from = 0;
       for (const region of regions) {
         let found = -1;
@@ -577,16 +590,21 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
           const el = byPath.get([region.parentPath, String(region.start + offset)].filter(Boolean).join('.'));
           return el ? [el] : [];
         });
-        // The draft must draw exactly what the editor stands in for: the same blocks, in one parent, compiled alike.
-        if (!blocks.length || !blocks.every((el) => el.parentNode === blocks[0]!.parentNode) || inIsland(blocks[0]!) || inIsland(editor.mount)
-          || compiledKey(blocks) !== compiledKey(editor.restore)) continue;
+        // The draft must draw exactly what the editor stands in for: the same blocks, in one parent, compiled alike —
+        // or, for the editor holding the caret, the prose it shows (it typed the change): rebuilding it under the
+        // caret threw away its focus and paid a style pass of the whole page.
+        if (!blocks.length || !blocks.every((el) => el.parentNode === blocks[0]!.parentNode) || inIsland(blocks[0]!) || inIsland(editor.mount)) continue;
+        const key = compiledKey(blocks);
+        if (key !== restoreKeyOf(editor) && !editor.view()?.hasFocus()) continue;
         from = found + 1;
         const stand = draft.ownerDocument.createElement('div');
         stand.setAttribute(EDIT_REGION_ATTR, region.path);
         blocks[0]!.parentNode!.insertBefore(stand, blocks[0]!);
         for (const block of blocks) block.remove();
+        undo.push({ editor, restore: editor.restore, restoreKey: editor.restoreKey, stand });
         // Leaving shows the draft's blocks (their paths are the draft's).
         editor.restore = blocks.map((block) => doc.adoptNode(block));
+        editor.restoreKey = key;
         stands.set(region.path, editor.mount);
         taken.set(region.path, editor);
         holding.add(editor);
@@ -595,6 +613,16 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         stands,
         take(path) { const editor = taken.get(path); taken.delete(path); if (editor) holding.delete(editor); return editor; },
         dispose() { for (const editor of taken.values()) { holding.delete(editor); editor.dispose(); } taken.clear(); },
+        release() {
+          for (const { editor, restore, restoreKey, stand } of undo) {
+            stand.replaceWith(...editor.restore);
+            editor.restore = restore;
+            editor.restoreKey = restoreKey;
+            holding.delete(editor);
+          }
+          undo.length = 0;
+          taken.clear();
+        },
       };
     },
     reconcile(before, after, next, draft, options = {}) {
