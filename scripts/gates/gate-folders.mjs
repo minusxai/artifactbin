@@ -323,7 +323,7 @@ const inTrash = new Set((trash.files ?? []).map((f) => f.id));
 check(inTrash.has(folder.id) && inTrash.has(seen.id), 'and both are listed in the trash');
 
 // The Trash route is a separate Solid entry. Exercise its browser handoff and
-// restore action after arriving from the React shelf.
+// restore action after arriving from the shelf.
 await owner.goto(`${BASE}/trash`, { waitUntil: 'load' });
 const trashTable = owner.getByRole('table');
 await trashTable.getByText('Field Notes 2026').first().waitFor({ timeout: 20000 });

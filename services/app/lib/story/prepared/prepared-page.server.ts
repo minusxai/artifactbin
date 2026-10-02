@@ -187,8 +187,8 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
   if (!build) return { build: 'none', error: compiler.error ?? 'no island build', reason: 'compile-error' };
   try {
     await archiveSharedBuild(build);
-    // Imported on first compile, not at the top: the compiler carries Babel, Solid and today's React
-    // kit (it renders static components at compile time), and this module sits under lib/artifacts,
+    // Imported on first compile, not at the top: the compiler carries Babel, Solid and the static kit
+    // (it renders static components at compile time), and this module sits under lib/artifacts,
     // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
     // that does not prepare a page never loads any of it. The snapshot store
     // imports this module, so its access helper is reached the same way (no import cycle at load).
@@ -407,7 +407,7 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
  * of edits prepares the last head once), every failure swallowed — a warm-up
  * that fails is a first reader who misses, nothing more.
  */
-const queued = new Map<string, string>();
+const queued = new Map<string, { origin: string; row?: ArtifactRow }>();
 let worker: Promise<void> | null = null;
 let warming = false;
 
@@ -419,20 +419,21 @@ let warming = false;
  */
 export function enablePreparedPageWarmups(): void { warming = true; }
 
-export function warmPreparedPage(id: string, origin: string = PUBLIC_BASE_URL): void {
+/** `row`: the head the caller already read and decoded (lib/artifacts settleCommittedHead), so it is not read again. */
+export function warmPreparedPage(id: string, origin: string = PUBLIC_BASE_URL, row?: ArtifactRow): void {
   if (!warming) return;
-  queued.set(id, origin);
+  queued.set(id, { origin, ...(row ? { row } : {}) });
   if (worker) return;
   // A microtask, not a timer: a test's fake clock must never strand the queue.
   worker = Promise.resolve().then(async () => {
     while (queued.size) {
-      const [next, from] = queued.entries().next().value!;
+      const [next, { origin: from, row: held }] = queued.entries().next().value!;
       queued.delete(next);
       try {
         // Decoded, never MIGRATED: a warm-up writes nothing but its own cache (a first reader's
         // read still performs the lazy representation migration it always has).
         const db = await getDb();
-        const row = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [next])).rows[0];
+        const row = held ?? (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [next])).rows[0];
         if (row?.format === 'markup') await preparedPageFor(row, null, from);
       } catch (error) {
         console.warn('[prepared-page] warm-up failed', next, error);

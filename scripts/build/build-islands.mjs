@@ -39,7 +39,8 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 const APP = path.join(ROOT, 'services/app');
 const ISLANDS_SRC = path.join(APP, 'lib/islands');
 export const DEFAULT_OUT_DIR = path.join(APP, 'public/islands');
-const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
+/** The `--cache` marker: what the last build read, and which modules each of its outputs carries (its tests read that). */
+export const CACHE_MARKER = path.join(ROOT, 'node_modules/.cache/build-islands.json');
 const SQLITE_WASM = path.join(ROOT, 'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm');
 
 const escapeAttribute = (value) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -108,7 +109,7 @@ const STANDALONE_LAZY = [
   { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
   // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.
   { request: './morph/engine', name: 'morph-engine', file: () => path.join(ISLANDS_SRC, 'morph/engine.ts') },
-  // The page's own SQLite engine (today's page engine and the SQLite core), loaded by boot behind the first paint.
+  // The page's own SQLite engine (the page engine and the SQLite core), loaded by boot behind the first paint.
   { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
   // The link following the reader, loaded by boot after hydration.
   { request: './url-sync', name: 'url-sync', file: () => path.join(ISLANDS_SRC, 'url-sync.ts') },
@@ -469,7 +470,7 @@ async function main(argv) {
     return;
   }
   const before = fs.existsSync(outDir) ? new Map(fs.readdirSync(outDir).map((name) => [name, fs.statSync(path.join(outDir, name)).size])) : new Map();
-  const { build, manifest, files, closure, inputs } = await buildIslands({ outDir });
+  const { build, manifest, files, closure, inputs, outputInputs } = await buildIslands({ outDir });
   const added = fs.readdirSync(outDir).filter((name) => !before.has(name)).reduce((n, name) => n + fs.statSync(path.join(outDir, name)).size, 0);
   const retained = [...before.values()].reduce((n, size) => n + size, 0);
   console.log(describePrecompression(`build-islands ${ISLANDS_PATH}`, await precompressTree(outDir)));
@@ -477,7 +478,7 @@ async function main(argv) {
   console.log(`build-islands: build ${build}, ${Object.keys(files).length} chunks; rt+boot ${br([manifest['@mx/rt'], manifest['@mx/boot']])} B br`);
   console.log(`build-islands: retained ${retained} B; this build added ${added} B`);
   fs.mkdirSync(path.dirname(CACHE_MARKER), { recursive: true });
-  fs.writeFileSync(CACHE_MARKER, JSON.stringify({ outDir, toolHash: toolHash(), sources: sourceHashes(trackedSources(inputs)) }, null, 1) + '\n');
+  fs.writeFileSync(CACHE_MARKER, JSON.stringify({ outDir, toolHash: toolHash(), sources: sourceHashes(trackedSources(inputs)), outputInputs }, null, 1) + '\n');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

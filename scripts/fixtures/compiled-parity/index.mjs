@@ -1,9 +1,9 @@
 /**
- * Parity-only fixtures for gate-compiled-parity: the shapes the production census found refused by
+ * Parity-only fixtures (the compiled-page parity tests): the shapes the production census found refused by
  * the compiler before w3-compiler-coverage — a registered wrapper with no Solid port (`Slide`,
  * `SlideDeck`, `Icon`, `Table`) holding an island, holding a `$` value, or sitting in a `<For>` row.
  * The kitchen sink's deck and table are static, so these are what prove the shells served around live
- * children match today's renderer. Kept apart from the page-speed set: the performance lab does not
+ * children match the frozen react-oracle recording. Kept apart from the page-speed set: the performance lab does not
  * view them.
  *
  * (`<Param>` and other unregistered legacy tags cannot be published any more; the unit tests in
@@ -13,7 +13,7 @@
 const ROWS = '[{"k":"a","n":1,"on":true},{"k":"b","n":2,"on":false},{"k":"c","n":3,"on":true}]';
 
 /**
- * A deck whose slides read values and repeat rows (with icons). No slide holds a button: today's reader serves a
+ * A deck whose slides read values and repeat rows (with icons). No slide holds a button: the retired React reader served a
  * miniature's buttons inside the rail row's own button, the parser closes the row early, hydration fails (#418)
  * and React re-renders the rail on the client with client ids — the compiled page serves that final tree (a held
  * `<template>` the deck behaviour puts in place; unit-tested in compiler-coverage.test.ts and deck.test.ts), but

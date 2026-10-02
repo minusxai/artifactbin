@@ -145,7 +145,7 @@ try {
     await plainSource.waitFor();
     const initialSource = await plainSource.inputValue();
     check(initialSource.includes('Editor gate'), 'a slow rich-editor download still presents the complete source');
-    // React replaces the initial textarea when the lazy editor starts loading, so a
+    // The app replaces the initial textarea when the lazy editor starts loading, so a
     // one-shot evaluate can read the detached node; a locator assertion re-resolves it.
     await expect(plainSource).toHaveCSS('background-color', 'rgb(30, 30, 30)');
     await expect(plainSource).toHaveCSS('color', 'rgb(212, 212, 212)');
@@ -190,7 +190,7 @@ try {
 
     /*
      * AND TYPING INTO IT MUST NOT LOSE CHARACTERS. A controlled <Editor value>
-     * is a race: every keystroke sets React state, and a render one keystroke
+     * is a race: every keystroke sets component state, and a render one keystroke
      * behind pushes that STALE string back into the editor. Measured before
      * the fix, at full speed: "typed in code mode" reached the server as
      * "typemode", while the same words at 150ms a key arrived whole — which is

@@ -135,8 +135,8 @@ function createNewCommentDraft(backend: ArtifactBackend, open: () => boolean) {
 
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const backend = props.backend ?? createHttpBackend(props.id);
-  // React's effects compared their dependencies by value; a Solid prop getter notifies whenever its
-  // source does. These memos are the dependency arrays: an effect keyed on one runs on a real change.
+  // A Solid prop getter notifies whenever its source does, even for an equal value. These memos
+  // are the dependency list: an effect keyed on one runs on a real change.
   const railOpen = createMemo(() => props.railOpen);
   const pickOnOpen = createMemo(() => props.pickOnOpen !== false);
   const handedSelection = createMemo(() => props.initialSelection ?? null);

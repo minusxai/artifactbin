@@ -172,8 +172,14 @@ const assetWarningsEcho = (warnings: AssetWarning[] | undefined): Record<string,
 const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<string, unknown> =>
   (repairs?.length ? { source_repairs: repairs } : {});
 
-/** Full wire shape for a single-artifact read. */
-export async function artifactToWire(row: ArtifactRow, base: string) {
+/** A committed head without its content: the wire shape less `markup`, `state` and the declared `mutations`. */
+async function artifactHeadToWire(row: ArtifactRow, base: string) {
+  const { document: _document, markup: _markup, state: _state, mutations: _mutations, ...head } = await artifactToWire(row, base, false) as Awaited<ReturnType<typeof artifactToWire>> & { document?: unknown; mutations?: unknown };
+  return head;
+}
+
+/** Full wire shape for a single-artifact read. `content: false`: the row carries no source, so derive nothing from it. */
+export async function artifactToWire(row: ArtifactRow, base: string, content = true) {
   // `deleted_at` is dropped with the ownership columns: the trash gate means a
   // row a caller can read is always live, so the field could only ever echo
   // null — a key in every agent's context that can carry no news.
@@ -188,7 +194,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
   const isDoc = format === 'markup' || format === 'folder';
   return {
     ...rest,
-    state: artifactState(row),
+    state: content ? artifactState(row) : '',
     format,
     url: `${base}/a/${row.id}`,
     // The trail rides in `...rest`; the parent is derived from it, and it is
@@ -209,7 +215,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           // Declared mutations by name, parameter and the dataset each writes, so a CLI can
           // validate a `--name --write` call before it sends anything and name that dataset
           // when a row action cannot run from a command line.
-          mutations: await declaredDatasetMutations(row),
+          mutations: content ? await declaredDatasetMutations(row) : [],
         }
       : {}),
     theme: design.theme,
@@ -707,12 +713,18 @@ export async function respondToEdit(
   const input = parseEditBody(body);
   if (!input) return json({ error: 'invalid_edit_body' }, 400);
 
-  const outcome = await apply(input);
+  const outcome = await apply(echo === 'patch' ? { ...input, patchEcho: true } : input);
   if (outcome instanceof Response) return outcome; // publish-pipeline 400 (invalid_jsx, …)
   if (!outcome) return json({ error: 'not_found' }, 404);
   // The edit path runs the SAME publish door, so it answers the same way: a URL
   // it could not import is news wherever the write came in from.
   if (outcome.applied) {
+    // The commit withheld the new document: it landed on exactly the version the patch was prepared against, so the
+    // patch IS the answer. Nothing here may need the new source (`markup`, `state`, the declared `mutations`): the
+    // editor reads none of them, and deriving any would decode the whole document on the save's path.
+    if (outcome.withheld && input.documentUpdate) {
+      return json({ ...(await artifactHeadToWire(outcome.row, base)), patch: input.documentUpdate.patch, ...assetWarningsEcho(outcome.warnings) });
+    }
     const wire = await artifactToWire(outcome.row, base);
     const update = input.documentUpdate;
     if (echo === 'patch' && update && !update.whole && outcome.row.version === update.patch.baseVersion + 1) {

@@ -282,6 +282,35 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (edit && !edit.canApplyDraft()) return 250;
     return null;
   };
+  /**
+   * The served page carries the reader's cut of the story sheet; every compile reply carries the whole sheet. Writing
+   * the whole one once on entering edit mode, while typing pauses, keeps the first reply from swapping it (a sheet
+   * swap restyles the whole page inside that reply's draw). A draft drawn first already wrote it.
+   */
+  let editSheetWritten = false;
+  let editSheetLoading = false;
+  const loadEditSheet = () => {
+    // A page without a story sheet has nothing a reply could swap.
+    if (editSheetWritten || editSheetLoading || !id || !docSheet(win.document)) return;
+    editSheetLoading = true;
+    void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.ok ? response.json() as Promise<{ css?: unknown }> : null)
+      .then((payload) => {
+        if (!payload || typeof payload.css !== 'string') return;
+        const css = payload.css;
+        const write = () => {
+          if (disposed || editSheetWritten || !editRequested) return;
+          const quiet = win.performance.now() - lastInputAt;
+          if (quiet < TYPING_QUIET_MS) { win.setTimeout(write, TYPING_QUIET_MS - quiet); return; }
+          editSheetWritten = true;
+          const sheet = docSheet(win.document);
+          if (sheet && sheet.textContent !== css) sheet.textContent = css;
+        };
+        write();
+      })
+      .catch(() => { /* the first compile reply writes the sheet instead */ })
+      .finally(() => { editSheetLoading = false; });
+  };
   const drawDraft = async () => {
     const pending = pendingDraft;
     if (!pending || disposed || !drafting() || pending.sequence !== draftSequence) return;
@@ -338,6 +367,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     // Written only when it changed: rewriting the same sheet re-styles the whole page, which the editors' removal
     // below then paid at once (most of a reply's apply on a table-heavy page).
     if (pending.sheet && sheet && sheet.textContent !== pending.sheet.textContent) sheet.textContent = pending.sheet.textContent;
+    editSheetWritten = true;
     edit?.unmountCompiledDom();
     disposeChangedDraftIslands(root, stableIds, stablePaths);
     morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
@@ -502,6 +532,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
           // The editor and the page both say so on Done: the first ends the session and starts the return to reading.
           if (!wasEditing) return;
           edit?.dispose(); edit = null;
+          // Back to reading draws the reader's sheet again: the next edit session writes the whole one anew.
+          editSheetWritten = false;
           // Editing paused to preview a version: that version draws on, and Done (`restored`) returns to the head.
           if (previewing) return;
           draftSequence++; pendingDraft = null; nextCompile = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null;
@@ -518,6 +550,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
           edit = createFrameEditSession({ win, root, channel, requestRender: () => {}, mountCompiled: mountCompiledEditRegions });
           edit.setNodes(nodes);
           await edit.mountCompiledDom();
+          loadEditSheet();
         }).catch((error) => { if (!disposed) console.error('Failed to mount compiled editor', error); }).finally(() => { editLoading = false; });
         return;
       }

@@ -1,13 +1,13 @@
 /* @jsxImportSource solid-js */
 /**
  * THE EMBED FAMILY (`@mx/kit/embed`): `<Iframe>` and `<DeckGL>` as islands. Each
- * island is the box today's reader draws, server-rendered at its final size; its behaviour is a lazy chunk
+ * island is the box the former reader draws, server-rendered at its final size; its behaviour is a lazy chunk
  * loaded once the island is mounted, never part of the shared runtime or of a page's first paint:
  *
- * - `<Iframe>`: today's managed frame (lib/story-runtime/managed-iframe) — ./embed/frame-engine mounts the
+ * - `<Iframe>`: the former managed frame (lib/story-runtime/managed-iframe) — ./embed/frame-engine mounts the
  *   sandboxed author realm in the box and binds it to the document's store, its assets resolved through the
  *   page's own door (IslandPageData.managedAssets) or, framed, the parent page's relay.
- * - `<DeckGL>`: today's map — ./embed/deck-engine replaces
+ * - `<DeckGL>`: the former map — ./embed/deck-engine replaces
  *   the loading stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
  */
 import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
@@ -28,7 +28,7 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : und
  */
 const servedStyle = (css: string) => ({ 'attr:style': css }) as JSX.HTMLAttributes<HTMLDivElement>;
 
-/** `<Iframe>`: the managed frame's box (today's `data-mx-managed-frame` element), the author realm mounted in it. */
+/** `<Iframe>`: the managed frame's box (the `data-mx-managed-frame` element), the author realm mounted in it. */
 export function Iframe(props: Props) {
   const island = useIsland();
   const { label, pixels } = managedFrameLayout(props.title, props.height);
@@ -53,7 +53,7 @@ export function Iframe(props: Props) {
 
 /**
  * `<DeckGL>`: the runtime adapter's box (identity) around the map's own (class), and in it the map's box —
- * served as today's loading stand-in and turned into the map's figure when the engine lands, so the element
+ * served as the former loading stand-in and turned into the map's figure when the engine lands, so the element
  * the page was served with is the one the map draws into.
  */
 export function DeckGL(props: Props) {
@@ -68,7 +68,7 @@ export function DeckGL(props: Props) {
     let stop = () => {};
     const cancel = deferEngine(box, () => { void import('./embed/deck-engine').then(({ mountDeckEngine }) => {
       if (!live) return;
-      // Through the CSSOM, as today's engine sets its figure's height (the attribute then reads `height: 320px;`).
+      // Through the CSSOM, as the former engine sets its figure's height (the attribute then reads `height: 320px;`).
       box.style.cssText = '';
       box.style.height = `${height}px`;
       stop = mountDeckEngine(box, {

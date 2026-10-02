@@ -10,8 +10,7 @@
  * caused it. The editor owns the doors (upload, import) and the write; this owns only
  * the choosing.
  *
- * DEVIATION: the React dialog reads `useArtifactBackend().unavailable('webAssets')` from
- * context; Solid has no equivalent context yet (see solid/editor/EditPanel.tsx), so this
+ * There is no artifact-backend context in the app (see solid/editor/EditPanel.tsx), so this
  * takes `unavailable` as an explicit prop. Whoever wires this dialog into a live page
  * passes `backend.unavailable('webAssets')`.
  */
@@ -64,7 +63,7 @@ export default function ImageDialog(props: {
   /** Answers arriving after a newer choice (or after closing) are dropped. */
   let attempt = 0;
   // Solid sets `autofocus` as a plain attribute; jsdom (and some browsers) never act on it, so
-  // the initial focus is set explicitly, the same outcome React's autoFocus prop gives at mount.
+  // the initial focus is set explicitly, so focus lands at mount.
   createDialogShell({ panel: () => panel, onClose: () => props.onClose(), initialFocus: () => chooseFileButton, lockScroll: true, focusable: FOCUSABLE });
 
   const run = async (label: 'Uploading…' | 'Importing…', obtain: () => Promise<ImageChoice>) => {

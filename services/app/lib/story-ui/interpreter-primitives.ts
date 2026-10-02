@@ -1,4 +1,4 @@
-/** Framework-free author AST props and names shared by the React editor and Solid compiler. */
+/** Framework-free author AST props and names shared by the compiler and the editor. */
 import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';
 import { DENIED_JSX_ATTRS } from '@/lib/jsx/denied-attrs';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';

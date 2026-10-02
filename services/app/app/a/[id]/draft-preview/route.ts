@@ -15,6 +15,8 @@ import { collectExternalAssetUrls } from '@/lib/story/assets';
 import { lookupWebAssets } from '@/lib/serving';
 import { createHash } from 'node:crypto';
 import { collectRefUses } from '@/lib/story/data';
+import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
+import { inlineStoryCss } from '@/lib/story/styles/inline-css';
 
 const MAX_SOURCE_LENGTH = 1024 * 1024;
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -35,6 +37,33 @@ function draftTicket(request: Request, gate: ReturnType<typeof draftCompileGate>
   const credential = request.headers.get('authorization') ?? request.headers.get('cookie') ?? '';
   const session = `${new URL(request.url).pathname}:${createHash('sha256').update(credential).digest('base64url')}:${named[1]}`;
   return gate.arrive(session, Number(named[2]));
+}
+
+/**
+ * GET: the stylesheet a draft of the saved head compiles with — the whole sheet (every recipe and theme), where
+ * the served page carries only the reader's cut (lib/story/prepared/reader-sheet.server). The editor writes it
+ * once on entering edit mode, before typing, so the first compile reply swaps no sheet (a sheet swap restyles the
+ * whole page, inside that reply's draw).
+ */
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  const { id } = await ctx.params;
+  if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404, NO_STORE);
+  const artifact = await getArtifactById(id);
+  if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
+  const actor = await requestOrSessionActor(request);
+  if (!canEdit(await roleFor(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  const meta = (artifact.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
+  const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
+  const source = artifact.source ?? '';
+  // As the POST below compiles a draft of this source: the same sheet, assets and design.
+  const [compiledCss, assetUrls] = await Promise.all([
+    compileStoryCss(source, { force: true }), lookupWebAssets(collectExternalAssetUrls(source).all),
+  ]);
+  const parts = await prepareStoryParts({
+    source, compiledCss, theme: design.theme, colorMode: design.colorMode, title: artifact.title, template: meta.template ?? null,
+    refData: {}, assetUrls,
+  });
+  return json({ css: inlineStoryCss(parts.runtime), version: artifact.version }, 200, NO_STORE);
 }
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {

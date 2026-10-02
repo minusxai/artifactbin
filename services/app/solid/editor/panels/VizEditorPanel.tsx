@@ -67,7 +67,7 @@ export interface VizEditorPanelProps {
  * The Question's header strip, as a rename field. A draft committed on blur or
  * Enter — not per keystroke, which would push a document write (and a re-parse
  * of the whole body) on every letter. Re-seeded whenever `title` changes from
- * OUTSIDE this field (mirrors the React panel's `key={title}` remount).
+ * OUTSIDE this field (a reseed, not a remount).
  */
 function TitleField(props: { title: string | null; onCommit: (title: string | null) => void }): JSX.Element {
   const [draft, setDraft] = createSignal(props.title ?? '');

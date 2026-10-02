@@ -103,7 +103,7 @@ export async function runDev({ appOnly, args = [] }) {
  * The sources used by the server reader and the offline editor. Rebuild their assets
  * when one changes, then let tsx restart the server from the changed bundle.
  */
-const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/story-ui', 'lib/story', 'lib/offline', 'lib/viz', 'lib/data/story', 'components/kit', 'components/offline'];
+const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/story-ui', 'lib/story', 'lib/offline', 'lib/viz', 'lib/data/story'];
 
 function watchServerSources() {
   let timer = null;

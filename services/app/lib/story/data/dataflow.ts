@@ -256,7 +256,7 @@ export const carriesRef = (value: unknown): boolean =>
  * with a hole in it is not a URL, and the renderer draws the alt text instead.
  *
  * Pure, and shared by the runtime and its own server-side render: the two must
- * agree byte for byte or React discards the whole server tree (#418).
+ * agree byte for byte or the island cannot adopt the server tree (the React era's #418).
  */
 export function resolveRefTemplate(value: string, get: (name: string) => Scalar | undefined): string | null {
   const whole = refName(value);
@@ -315,8 +315,8 @@ export const REF_ATTRS: {
     Segmented: { value: 'scalar', options: 'table' },
     Switch: { checked: 'scalar' },
     // The one TRIGGER position: a kit <Button run="$name"> runs the named
-    // <Mutation> with the document's current values (components/kit/button
-    // static face; lib/story-runtime/StoryRuntimeApp live face).
+    // <Mutation> with the document's current values (the compiler's static
+    // face, lib/islands/kit/basic's live face).
     Button: { run: 'mutation' },
     Dialog: {open: 'scalar'},
     DialogContent: {run: 'mutation'},

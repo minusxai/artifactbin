@@ -18,10 +18,10 @@
  * and attribute NAMES come only from the validated AST and are re-checked against a strict grammar
  * (`safeTag`/`safeAttr`); a name outside it refuses the compile. Props are computed by the
  * interpreter's `rawBuildProps` (dangerous schemes, handlers and denied attributes dropped exactly
- * as today) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
+ * as the former React render did) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
  * runtime with lib/jsx/reactive. `codegen-safety.ts structureIndependent` is the proof.
  *
- * Ported from the prototype (scripts/probe/solid/compile.mjs). Pure and deterministic for one input.
+ * Pure and deterministic for one input.
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
@@ -50,7 +50,7 @@ import { buildDocumentModules, loadKitServer, type KitServer } from './bundle.se
 import { contentSha } from './speculation';
 import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
-import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
+import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, solidTrimText, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -101,11 +101,13 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value', 'forceMount'] },
   Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion', api: ['forceMount'] },
   // Store adapters: the DOM carries only the node's identity (id, data-mx-ast).
-  Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format'], dom: 'identity' },
+  // Number, Select and DataTable read the author's class as `className` (kit/data), never the compiler's `class`.
+  Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format', 'className'], dom: 'identity' },
   Question: { mod: 'data', island: true, api: ['data', 'viz', 'title', 'height', 'recipeData'], dom: 'identity', grid: true },
-  DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates'], dom: 'identity', grid: true, noChildren: true },
+  // The live grid puts the author's class on its `data-slot="data-table"` box (recipes/data), and its adapter wrapper takes `id`/`data-*`.
+  DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates', 'className'], dom: 'identity', grid: true, noChildren: true },
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
-  Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options'] },
+  Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options', 'className'] },
   Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },
   Mermaid: { mod: 'mermaid', island: true, api: ['code', 'title', 'colorMode'], grid: true },
   Input: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'type', 'min', 'max', 'step', 'aria-label'] },
@@ -122,7 +124,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
   // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
   User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
-  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): today's managed frame and map.
+  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): the managed frame and map.
   Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
   DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen', 'open'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
@@ -140,11 +142,15 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
   'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction', 'CardContent', 'CardFooter',
   'Badge', 'Alert', 'AlertTitle', 'AlertDescription', 'Progress', 'Icon', 'Separator', 'Skeleton',
   'Breadcrumb', 'BreadcrumbList', 'BreadcrumbItem', 'BreadcrumbLink', 'BreadcrumbPage', 'BreadcrumbSeparator', 'BreadcrumbEllipsis',
+  // A Button without run/set (one with them is an island), a Video (its `ref:` poster resolved here, `kitParts`), a deck's
+  // SlideDeck and Slide (named by a pattern: a new string literal here would join the recipe class union, recipe-classes.ts,
+  // and flip every story's CSS compile version).
+  'Button', 'Video', 'File', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
 ]);
 /** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
-/** Components whose HTML the retired React kit renders at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
+/** Components whose HTML is rendered at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
 /** Registered tags that render nothing (declarations, templates). */
 const INERT: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Import', 'Mutation', 'Column']);
@@ -155,9 +161,9 @@ const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((ta
  * control, and the cell scope's attribute resolver every element in a column's content uses.
  */
 const CELL_EXPORTS: ReadonlySet<string> = new Set(['CellControl', 'cellAttrs']);
-/** The tags today's editing cell draws; another tag with `run` in a cell draws nothing. */
+/** The tags the editing cell draws; another tag with `run` in a cell draws nothing. */
 const CELL_CONTROLS: ReadonlySet<string> = new Set(['Select', 'DatePicker', 'input', 'textarea', 'select']);
-/** Today's native editing cell's classes (RuntimeCellControl), before the author's. */
+/** The native editing cell's classes, before the author's. */
 const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50';
 /** What the editing cell reads of its authored props at run time (the rest are its element's attributes). */
 const CELL_API = ['value', 'label', 'aria-label', 'placeholder', 'options', 'multiple', 'allowCreate', 'valueFormat', 'nullable', 'exclude', 'min', 'max', 'type', 'args', 'disabled'];
@@ -169,6 +175,8 @@ const hasContent = (nodes: JsxNode[]): boolean => nodes.some((n) => n.type !== '
 const RAIL_THUMB_ATTR = 'data-mx-thumb';
 /** The deck's framework-free behaviour chunk, by its manifest specifier. */
 const DECK_BEHAVIOR = '@mx/deck';
+/** A rail miniature part's kind (`previewOf`). */
+const P = { NONE_K: 0, TEXT: 1, LIT: 2, HOLE_TEXT: 3, ELEMENT: 4, COMPONENT: 5 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Static HTML → JSX
@@ -455,6 +463,7 @@ export function generate(input: GenerateInput): Generated {
   }
   function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    if (node.tag === 'Grid' || node.tag === 'GridItem') return gridHtml(node, path, ctx);
     if (node.isComponent) return kitHtml(node, path, ctx);
     const lower = node.tag.toLowerCase();
     if (SOLID_SPECIAL_TAGS.has(lower)) return null;
@@ -501,7 +510,7 @@ export function generate(input: GenerateInput): Generated {
     if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
     // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
     if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
-    // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
+    // The dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
     if (node.tag === 'DialogContent') props.stacked = !(typeof props.className === 'string' && props.className);
     // The runtime registry hands Mermaid the document's colour mode.
     if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
@@ -540,7 +549,7 @@ export function generate(input: GenerateInput): Generated {
     const cls = meta.dom === 'identity' ? null : node.tag === 'Icon' ? cn(ICON_BASE_CLASS, typeof props.className === 'string' ? props.className : undefined) : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
     let dom: Props = { ...props };
     for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
-    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
+    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST || (node.tag === 'DataTable' && k.startsWith('data-'))));
     // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
     if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
     if (inGrid) api.inGridItem = true;
@@ -582,7 +591,7 @@ export function generate(input: GenerateInput): Generated {
         ? ` class={$rowClass(${lit(rowBase)}, ${lit(authorClass)}, ${ctx.row})}`
         : cls ? ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag === 'Skeleton' ? 'StaticSkeleton' : node.tag);
-      // A row action writes with its row (interpreter rowAction → StoryRuntimeApp RuntimeRowAction).
+      // A row action writes with its row (a Button with `run`/`set`).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
       if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
       return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${jsxAttrs(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
@@ -602,7 +611,7 @@ export function generate(input: GenerateInput): Generated {
       const attrs = json(Object.fromEntries(elementAttrs(tag, props)));
       return `<BoundImage template={${lit(source.value.json)}} props={${ctx.row ? `${rowAttrsFn(mode, ctx)}(${attrs}, ${ctx.row}, ${ctx.scope})` : attrs}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
     }
-    // A `$`-bound native form control (interpreter boundAttrs → StoryRuntimeApp NativeBoundControl).
+    // A `$`-bound native form control (interpreter boundAttrs).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
     const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];
     if (boundAttrs.length) {
@@ -669,10 +678,10 @@ export function generate(input: GenerateInput): Generated {
   }
 
   /**
-   * Today's editing cell. What differs per row — the row's values, the
-   * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here, as
-   * today's React renders it: the element's attributes serialised by React's server renderer, and its class
-   * merged by the kit's merger (order included).
+   * The editing cell. What differs per row — the row's values, the
+   * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here: the element's attributes serialised with React's attribute rules
+   * (static-solid/attrs.ts, kept for byte parity with stored pages), and its class merged by the kit's
+   * merger (order included).
    */
   function emitCellControl(node: JsxElement, tag: string, path: string, mode: Mode, ctx: Ctx): string {
     useKit('CellControl', mode, ctx);
@@ -697,8 +706,11 @@ export function generate(input: GenerateInput): Generated {
     return `<CellControl tag={${lit(tag)}} run={${lit(refName(run))}}${field ? ` field={${lit(field)}}` : ''} p={${json(api)}} attrs={${json(Object.fromEntries(attrs.filter(([n]) => n !== 'class')))}} cls={${lit(cls)}} path={${lit(path)}} row={${ctx.row}} cell={${ctx.scope}}>${children}</CellControl>`;
   }
 
-  /** Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out. */
-  function emitGrid(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
+  /**
+   * Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out. A Grid is two boxes, its
+   * GridItems (nothing else) the inner box's children; a GridItem is one box around its children.
+   */
+  function gridParts(node: JsxElement, path: string, ctx: Ctx): { attrs: Attr[]; inner: string | null; kids: Array<[JsxNode, string, Ctx]> } {
     const raw = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
     const props = ctx.preview ? ctx.preview.rewrite(raw) : raw;
     const { className, style, cols, rowHeight, mode: gridMode, x, y, w, h, minHeight, editing: _editing, ...rest } = props;
@@ -710,10 +722,10 @@ export function generate(input: GenerateInput): Generated {
       const items = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'GridItem' ? [[c, i] as const] : []));
       const rows = gridRows(items.map(([c]) => gridItemRect(rawBuildProps(c.attributes, true, 'GridItem', '', undefined, {}) as Parameters<typeof gridItemRect>[0], nCols)));
       const flow = gridMode === 'flow';
-      const outer = elementAttrs('div', { className: cn('@container w-full', classString), style: { ...styleObject, '--g-cols': String(nCols), '--g-rh': `${rh}px`, '--g-rows': String(rows) }, ...rest });
+      const attrs = elementAttrs('div', { className: cn('@container w-full', classString), style: { ...styleObject, '--g-cols': String(nCols), '--g-rh': `${rh}px`, '--g-rows': String(rows) }, ...rest });
       const inner = flow ? 'grid w-full grid-cols-[repeat(var(--g-cols),minmax(0,1fr))] items-start @max-2xl:grid-cols-1' : 'relative w-full h-[calc(var(--g-rows)*var(--g-rh))] @max-2xl:h-auto';
-      const kids = items.map(([c, i]) => emit(c, `${path}.${i}`, mode, { ...ctx, grid: { cols: nCols, flow } })).join('');
-      return `<div${jsxAttrs(outer)}><div class={${lit(inner)}}>${kids}</div></div>`;
+      const kids = items.map(([c, i]): [JsxNode, string, Ctx] => [c, `${path}.${i}`, { ...ctx, grid: { cols: nCols, flow } }]);
+      return { attrs, inner, kids };
     }
     const flow = ctx.grid?.flow ?? false;
     const nCols = ctx.grid?.cols ?? 12;
@@ -721,7 +733,188 @@ export function generate(input: GenerateInput): Generated {
     const cls = cn(flow ? 'min-w-0 p-[3px] col-span-[var(--gi-w)] min-h-[var(--gi-min-h)] @max-2xl:col-span-1' : 'overflow-hidden p-[3px]', flow ? 'relative' : 'absolute left-[calc(var(--gi-x)/var(--g-cols)*100%)] top-[calc(var(--gi-y)*var(--g-rh))] w-[calc(var(--gi-w)/var(--g-cols)*100%)] h-[calc(var(--gi-h)*var(--g-rh))] @max-2xl:static @max-2xl:w-full', classString);
     const minH = flow && typeof minHeight === 'number' && Number.isFinite(minHeight) ? Math.max(0, Math.min(10000, minHeight)) : 0;
     const attrs = elementAttrs('div', { className: cls, style: { ...styleObject, '--gi-min-h': `${minH}px`, '--gi-x': String(rect.x), '--gi-y': String(rect.y), '--gi-w': String(rect.w), '--gi-h': String(rect.h) }, ...rest });
-    return `<div${jsxAttrs(attrs)}>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</div>`;
+    return { attrs, inner: null, kids: node.children.map((c, i): [JsxNode, string, Ctx] => [c, `${path}.${i}`, ctx]) };
+  }
+  function emitGrid(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
+    const { attrs, inner, kids } = gridParts(node, path, ctx);
+    const content = kids.map(([c, p, kidCtx]) => emit(c, p, mode, kidCtx)).join('');
+    return inner === null ? `<div${jsxAttrs(attrs)}>${content}</div>` : `<div${jsxAttrs(attrs)}><div class={${lit(inner)}}>${content}</div></div>`;
+  }
+  /** A static Grid/GridItem's server HTML, as Solid serves `emitGrid`'s JSX under `NoHydration`; null when it keeps its JSX. */
+  function gridHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
+    if (node.attributes.some((a) => !a.value.static)) return null;
+    const { attrs, inner, kids } = gridParts(node, path, ctx);
+    const attrHtml = solidAttrs(attrs, safeAttr);
+    const innerHtml = inner === null ? '' : solidAttrs([['class', inner]], safeAttr);
+    if (attrHtml === null || innerHtml === null) return null;
+    const parts: string[] = [];
+    for (const [c, p, kidCtx] of kids) {
+      const child = childHtmlOf(c, p, kidCtx);
+      if (child === null) return null;
+      if (child.counts) parts.push(child.html);
+    }
+    const content = solidChildren(parts);
+    return inner === null ? `<div${attrHtml}>${content}</div>` : `<div${attrHtml}><div${innerHtml}>${content}</div></div>`;
+  }
+
+  /**
+   * RAIL MINIATURES AS STATIC CHUNKS. What `emit` writes for a node in the deck rail's preview context, as Solid's
+   * server renders that JSX: the rail sits under `NoHydration`, so its native elements are inline template text
+   * (Babel's `trimWhitespace` of the raw JSX text, attributes as `solidAttrs`), its components and `<rt.NoHydration>`
+   * holes are boxed in `<!--$-->…<!--/-->` when their element has more than one child (babel-plugin-jsx-dom-expressions
+   * `transformChildren`), and a component's children reach it as Babel shapes them (decoded text, `{ t }` elements).
+   * Null when any part keeps its JSX (fragments, long texts, components outside `KIT_CHUNK`, a Button with run/set).
+   */
+  // Kinds are numbers: a string literal in this file joins the recipe class union (recipe-classes.ts) and flips every story's CSS version.
+  type Preview =
+    | { kind: typeof P.NONE_K }
+    | { kind: typeof P.TEXT; value: string } | { kind: typeof P.LIT; value: string } | { kind: typeof P.HOLE_TEXT; value: string }
+    | { kind: typeof P.ELEMENT; html: string } | { kind: typeof P.COMPONENT; html: string };
+  const NONE: Preview = { kind: P.NONE_K };
+  function previewOf(node: JsxNode, path: string, ctx: Ctx): Preview | null {
+    const values = ctx.preview!.values;
+    if (node.type === 'text') {
+      if (node.value === '') return NONE;
+      if (node.value.length > 1024) return null;
+      return /\r|\n/.test(node.value) ? { kind: P.LIT, value: node.value } : { kind: P.TEXT, value: node.value };
+    }
+    if (node.type === 'expression') {
+      if (!node.value.static) {
+        const value = isReactiveExpression(node.value.reactive) ? evaluateReactive(node.value.reactive, values, undefined) : null;
+        return typeof value === 'string' || typeof value === 'number' ? { kind: P.LIT, value: String(value) } : NONE;
+      }
+      const v = node.value.json;
+      return typeof v === 'string' || typeof v === 'number' ? { kind: P.HOLE_TEXT, value: String(v) } : NONE;
+    }
+    if (node.control) {
+      if (node.control.kind === 'fragment') return null;
+      if (!isReactiveExpression(node.control.test) || node.children.length !== 2) return NONE;
+      const yes = Boolean(evaluateReactive(node.control.test, values));
+      return node.control.kind === 'and' && !yes ? NONE : previewOf(node.children[yes ? 0 : 1]!, `${path}.${yes ? 0 : 1}`, ctx);
+    }
+    if (INERT.has(node.tag)) return NONE;
+    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return NONE;
+    return previewElement(node, path, ctx);
+  }
+  /** A native element's children as its server template writes them, or null. */
+  function previewChildren(parts: ReadonlyArray<Preview | null>): string | null {
+    const shown: Preview[] = [];
+    for (const part of parts) {
+      if (part === null) return null;
+      if (part.kind === P.NONE_K) continue;
+      // Adjacent JSX texts are one JSX text, and a whitespace run that is not all spaces is not counted as a child.
+      if (part.kind === P.TEXT) {
+        const text = part.value;
+        if (shown.at(-1)?.kind === P.TEXT || (/^\s*$/.test(text) && !/^ *$/.test(text))) return null;
+      }
+      shown.push(part);
+    }
+    const boxed = shown.length > 1;
+    return shown.map((part) => {
+      if ((part.kind === P.ELEMENT || part.kind === P.COMPONENT)) return part.kind === P.ELEMENT ? part.html : boxed ? `<!--$-->${part.html}<!--/-->` : part.html;
+      if (part.kind === P.TEXT) return solidTrimText(jsxLiteral(part.value));
+      if (part.kind === P.LIT) return solidText(part.value);
+      if (part.kind !== P.HOLE_TEXT) return '';
+      return boxed ? `<!--$-->${solidText(part.value)}<!--/-->` : solidText(part.value);
+    }).join('');
+  }
+  /** A component's children as Babel hands them to it: text decoded and trimmed, elements and components as `{ t }`. */
+  function previewComponentChildren(parts: ReadonlyArray<Preview | null>): unknown[] | null {
+    const out: unknown[] = [];
+    for (const part of parts) {
+      if (part === null) return null;
+      if (part.kind === P.NONE_K) continue;
+      if ((part.kind === P.ELEMENT || part.kind === P.COMPONENT)) out.push({ t: part.html });
+      else if (part.kind !== P.TEXT) out.push(part.value);
+      else if (shownText(part.value)) out.push(solidTextValue(part.value));
+    }
+    return out;
+  }
+  const shownText = (value: string): boolean => solidTrimText(jsxLiteral(value)).length > 0;
+  function previewElement(node: JsxElement, path: string, ctx: Ctx): Preview | null {
+    const preview = ctx.preview!;
+    const element = (tag: string, attrs: Attr[], inner: string | null): Preview | null => {
+      const attrHtml = solidAttrs(attrs, safeAttr);
+      if (attrHtml === null || inner === null) return null;
+      return { kind: P.ELEMENT, html: VOID.test(tag) ? `<${tag}${attrHtml}>` : `<${tag}${attrHtml}>${inner}</${tag}>` };
+    };
+    if (node.tag === 'For') {
+      if (isTableParts(node)) return NONE;
+      const owner = node.attributes.find((a) => a.name === 'id')?.value;
+      const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, preview.values);
+      const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
+      const props = preview.rewrite({ ...wrapper, id: ownerId || undefined,
+        ...(!ctx.svg ? { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
+      const tag = ctx.svg ? 'g' : 'div';
+      return element(tag, elementAttrs(tag, props), '');
+    }
+    if (node.tag === 'Grid' || node.tag === 'GridItem') {
+      const { attrs, inner, kids } = gridParts(node, path, ctx);
+      const content = previewChildren(kids.map(([c, p, kidCtx]) => previewOf(c, p, kidCtx)));
+      if (inner === null) return element('div', attrs, content);
+      const box = element('div', [['class', inner]], content);
+      return box && box.kind === P.ELEMENT ? element('div', attrs, box.html) : null;
+    }
+    if (PREVIEW_EMBEDS[node.tag]) return element('div', elementAttrs('div', { style: PREVIEW_STYLE }), solidText(PREVIEW_EMBEDS[node.tag]!));
+    if (node.tag === 'Input' || node.tag === 'Select' || node.tag === 'Switch') {
+      const previewTag = `Preview${node.tag}`;
+      const component = input.kitServer?.static?.[previewTag];
+      if (typeof component !== 'function') return null;
+      useKit(previewTag, 'static', ctx);
+      const p = JSON.parse(JSON.stringify(preview.rewrite(rawBuildProps(node.attributes, true, node.tag, path, undefined, preview.values)) ?? null)) as unknown;
+      const html = kitServerHtml(component, { p }, []);
+      return html === null ? null : { kind: P.COMPONENT, html };
+    }
+    if (node.isComponent) {
+      if (!KIT_CHUNK.has(node.tag)) return null;
+      const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
+      const component = meta && input.kitServer?.[meta.mod]?.[node.tag];
+      if (!meta || typeof component !== 'function') return null;
+      const parts = kitParts(node, path, 'static', ctx, meta);
+      if (typeof parts === 'string' || parts.api.run !== undefined || parts.api.set !== undefined) return null;
+      useKit(node.tag, 'static', ctx);
+      const props: Props = {};
+      for (const [k, v] of Object.entries(parts.api)) props[safeAttr(k)] = typeof v === 'string' ? v : JSON.parse(JSON.stringify(v ?? null));
+      if (parts.cls) props.class = parts.cls;
+      for (const [n, v] of parts.attrs) props[safeAttr(n)] = v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? true : v;
+      const children = meta.noChildren ? [] : previewComponentChildren(node.children.map((c, i) => previewOf(c, `${path}.${i}`, ctx)));
+      if (children === null) return null;
+      const html = kitServerHtml(component, props, children);
+      return html === null ? null : { kind: P.COMPONENT, html };
+    }
+    const lower = node.tag.toLowerCase();
+    if (SOLID_SPECIAL_TAGS.has(lower)) return null;
+    const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
+    const kids = (inner: Ctx) => previewChildren(node.children.map((c, i) => previewOf(c, `${path}.${i}`, inner)));
+    const source = lower === 'img' ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
+    if (source?.value.static && typeof source.value.json === 'string' && (refName(source.value.json) || parseRowRef(source.value.json) || carriesRef(source.value.json))) {
+      const rest = rawBuildProps(node.attributes.filter((a) => a !== source), false, node.tag, path, undefined, preview.values);
+      return element('img', elementAttrs('img', { ...rest, 'data-mx-bound': `src:${source.value.json}` }), '');
+    }
+    const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
+    const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];
+    if (boundAttrs.length) {
+      const bind = Object.entries(Object.fromEntries(boundAttrs.map((a) => [a.name.toLowerCase(), refName(a.value.static ? a.value.json : null)])))
+        .map(([name, value]) => `${name}:$${value}`).join(' ');
+      const props = rawBuildProps(node.attributes.filter((a) => !boundAttrs.includes(a)), false, node.tag, path, undefined, preview.values);
+      return element(tag, elementAttrs(tag, { ...props, disabled: true, 'data-mx-bound': bind }), VOID.test(lower) ? '' : kids(ctx));
+    }
+    let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, preview.values);
+    const patch = resolveRefProps(node, props, refData);
+    if (patch) props = { ...props, ...patch };
+    props = preview.rewrite(props);
+    const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
+    const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
+    const attrs = elementAttrs(tag, props);
+    if (lower === 'option' && ctx.selectValue !== undefined) {
+      const value = props.value ?? node.children.map((child) => child.type === 'text' ? child.value : '').join('');
+      const i = attrs.findIndex(([name]) => name === 'selected');
+      if (i >= 0) attrs.splice(i, 1);
+      if (String(value) === ctx.selectValue) attrs.push(['selected', '']);
+    }
+    if (VOID.test(lower)) return element(lower, attrs, '');
+    if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return element(tag, attrs, solidText(String(props.defaultValue ?? props.value)));
+    return element(tag, attrs, kids(inner));
   }
 
   function emitFor(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
@@ -745,8 +938,8 @@ export function generate(input: GenerateInput): Generated {
     const style = svg ? {} : { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
     const { className, ...rest } = wrapper;
     // The wrapper's style goes to rt.Repeat as `attr:style`: its spread then SETS the attribute (skipped while
-    // hydrating), keeping React's served `min-height:1px` byte for byte. A spread `style` would be rewritten
-    // through the CSSOM (`min-height: 1px;`) during hydration, which today's page never does.
+    // hydrating), keeping the served `min-height:1px` byte for byte. A spread `style` would be rewritten
+    // through the CSSOM (`min-height: 1px;`) during hydration, which the served page must not do.
     const attrs = elementAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
       .map(([n, v]): Attr => [n === 'style' ? 'attr:style' : n, v]);
     const suffix = path.replace(/\./g, '_');
@@ -773,10 +966,14 @@ export function generate(input: GenerateInput): Generated {
     const rail = slides.map((slide) => {
       // The same Solid skeleton renderer draws a miniature with declared values and rail-local IDs.
       const preview: Ctx['preview'] = { rewrite: allocate([slide.node], slide.path), values: previewValues };
-      const miniature = emit(slide.node, '0', 'static', { row: null, preview });
+      // Rendered here when every part can be (`previewOf`); the constants its JSX would hoist are never read by the browser module.
+      const mark = data.length;
+      const shown = input.staticHtml === false ? null : previewOf(slide.node, '0', { row: null, preview });
+      data.length = mark;
+      const miniature = shown && (shown.kind === P.ELEMENT || shown.kind === P.COMPONENT) ? staticChunkJsx(staticHtml.push(shown.html) - 1) : emit(slide.node, '0', 'static', { row: null, preview });
       // A miniature holding a button sits in the rail row's own button: parsed in place, the inner button would close
       // the row. Served inert in a `<template>` (a parser scope boundary) and put in place by the deck behaviour
-      // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree today's rail renders.
+      // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree the former rail rendered.
       const thumb = hasButton(slide.node) ? `<template ${RAIL_THUMB_ATTR}="">${miniature}</template>` : miniature;
       return `<button type="button" class="mx-rail-row" aria-label={${lit(`Go to slide ${slide.index + 1}: ${slide.title}`)}} aria-current={${lit(String(slide.index === 0))}}><span class="mx-rail-label"><span class="mx-rail-index">{${lit(String(slide.index + 1))}}</span><span class="mx-rail-title">{${lit(slide.title)}}</span></span><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px">${thumb}</div></span></button>`;
     }).join('');

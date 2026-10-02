@@ -12,13 +12,10 @@
  * author's script exists (lib/story-runtime/pristine). Everything without it
  * is dropped — including a forgery posted through the unforgeable `top`.
  *
- * `options` is read LIVE (a Solid props object, not a spread copy): React's
- * ref-mirror pattern (`optionsRef.current`, `onXRef.current`) is exactly what
- * a live getter already gives for free, so none of it is needed here — every
+ * `options` is read LIVE (a Solid props object, not a spread copy), so every
  * callback reads `options.x` at the moment it fires. Only the two effects that
  * must re-subscribe on specific changes (never on every option) name their
- * dependencies explicitly, through `on([...])` — React's dependency array made
- * explicit instead of inferred from a render.
+ * dependencies explicitly, through `on([...])`.
  */
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import {

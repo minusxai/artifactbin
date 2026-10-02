@@ -409,6 +409,23 @@ describe('island controller editor drafts', () => {
     return new Response(JSON.stringify({ html: `<div data-mx-inline-story>${source}</div>` }), { status: 200 });
   };
 
+  it("entering edit mode writes the whole story sheet once, before any draft, so the first reply swaps none", async () => {
+    const sheet = document.createElement('style');
+    sheet.setAttribute('data-mx-story-css', '');
+    sheet.textContent = '.reader-cut{}';
+    document.head.append(sheet);
+    try {
+      const { controller, fetch } = await editingController(async (url, init) => {
+        if (!init?.method) return new Response(JSON.stringify({ css: '.reader-cut{}.every-recipe{}' }), { status: 200 });
+        return compiled(url, init);
+      });
+      await settle(() => sheet.textContent === '.reader-cut{}.every-recipe{}');
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(String(fetch.mock.calls[0]?.[0])).toBe('/a/doc/draft-preview');
+      controller.dispose();
+    } finally { sheet.remove(); }
+  });
+
   it('typing: held until it pauses, then adopted by the live editor with NO compile, no morph and no remount', async () => {
     editSession.reconcile = true;
     editSession.reconciled.length = 0;

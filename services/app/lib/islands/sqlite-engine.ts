@@ -1,7 +1,7 @@
 /**
- * THE PAGE'S OWN SQLITE ENGINE, for a compiled page (docs/phase2-architecture.md §2.3): today's page
+ * THE PAGE'S OWN SQLITE ENGINE, for a compiled page (docs/phase2-architecture.md §2.3): the page
  * engine (lib/story-runtime/page-engine — the SQLite core over the imports this reader holds, the
- * dataflow evaluator, the optimistic overlay) over today's wasm loader (lib/story-runtime/page-sqlite
+ * dataflow evaluator, the optimistic overlay) over the wasm loader (lib/story-runtime/page-sqlite
  * `sqliteFrom`), unchanged.
  *
  * Bundled ALONE by the island build (scripts/build/build-islands.mjs STANDALONE_LAZY): framework-free, its

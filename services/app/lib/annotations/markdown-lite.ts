@@ -7,7 +7,7 @@ import { isSessionMentionHref } from './session-mentions';
  * A comment body is plain TEXT on every wire (the `annotations.body` column,
  * `GET /api/artifacts/<id>`, the `annotate` operation). Nothing here changes
  * that: this module is the READING half — the page parses the text it was
- * given and renders React elements from the result. The wire never carries
+ * given and renders elements from the result. The wire never carries
  * markup, so an agent keeps writing exactly what it already writes.
  *
  * Why own the parser rather than take a dependency: the corpus is small
@@ -32,7 +32,7 @@ import { isSessionMentionHref } from './session-mentions';
  *     417 ms to 0.4 ms when that was fixed — the `bounded` tests hold the
  *     line, on the path the parser actually walks.
  *
- * Pure — no DOM, no React. `components/MarkdownLite.tsx` is the renderer;
+ * Pure — no DOM, no framework. `solid/document/CommentMarkdown.tsx` is the renderer;
  * `plainText` is what the COMPACT surfaces show (a preview clamped to two
  * lines must read as a sentence, not as syntax).
  */

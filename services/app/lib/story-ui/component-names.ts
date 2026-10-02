@@ -33,9 +33,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   // A PDF the document links, as a card that opens it.
   'File',
   'Icon',
-  // WHO IS READING, and what to do about it (components/kit/user.tsx,
-  // components/kit/user-image.tsx, components/kit/user-handle.tsx,
-  // components/kit/sign-in.tsx). `<User userId="$_me">` names a person from the
+  // WHO IS READING, and what to do about it (lib/islands/kit/people.tsx). `<User userId="$_me">` names a person from the
   // same cards a DataTable cell uses — the face and the handle it composes are
   // also tags of their own; `<SignIn>` is the guest's door.
   'User', 'UserImage', 'UserHandle', 'SignIn',
@@ -47,9 +45,9 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
 
 /**
  * The tags whose `id` names a PERSON rather than an element — the seam
- * lib/story-ui/interpreter takes `id` out at, and the set lib/artifacts
+ * the compiler takes `id` out at, and the set lib/artifacts
  * `drawsPeople` and lib/story/data/dataflow REF_ATTRS answer for. Names only, so
- * server-side validation still pulls in no React.
+ * server-side validation still pulls in no component code.
  */
 export const PERSON_TAGS: ReadonlySet<string> = new Set(['User', 'UserImage', 'UserHandle']);
 

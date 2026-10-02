@@ -88,14 +88,14 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     // The agent pointer ahead of every preload and style, as server/app's withAgentDiscovery places it:
     // a shell tool that keeps only a page's first few kilobytes still sees it.
     + (help ? agentDiscoveryHead(help) : '')
-    // A chrome-less page is the framed or standalone copy (/raw): its links leave the frame, as today's.
+    // A chrome-less page is the framed or standalone copy (/raw): its links leave the frame.
     + (chrome ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
     + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]), Boolean(spa))
     + islandPreloads.map(modulePreload).join('')
     + (input.sheets
-      // Today's standalone document's sheets, exactly (lib/story/styles/document-styles).
+      // The standalone document's sheets, exactly (lib/story/styles/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
       : `<style>${appMonoFaces}:root{--mx-vh:100vh${spa ? ';--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace' : ''}}body{margin:0${spa ? ';font-size:14px;font-family:var(--font-mono)' : ''}}</style>`)
     + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')

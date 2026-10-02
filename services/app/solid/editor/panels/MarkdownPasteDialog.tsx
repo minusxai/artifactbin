@@ -15,7 +15,7 @@ export default function MarkdownPasteDialog(props: {
   let panel: HTMLDivElement | undefined;
   let textarea: HTMLTextAreaElement | undefined;
   // Solid sets `autofocus` as a plain attribute; jsdom (and some browsers) never act on it, so
-  // the initial focus is set explicitly, the same outcome React's autoFocus prop gives at mount.
+  // the initial focus is set explicitly, so focus lands at mount.
   createDialogShell({ panel: () => panel, onClose: () => props.onClose(), initialFocus: () => textarea, lockScroll: true, focusable: 'textarea,button:not([disabled])' });
   return (
     <div
