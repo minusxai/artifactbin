@@ -101,11 +101,13 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value', 'forceMount'] },
   Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion', api: ['forceMount'] },
   // Store adapters: the DOM carries only the node's identity (id, data-mx-ast).
-  Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format'], dom: 'identity' },
+  // Number, Select and DataTable read the author's class as `className` (kit/data), never the compiler's `class`.
+  Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format', 'className'], dom: 'identity' },
   Question: { mod: 'data', island: true, api: ['data', 'viz', 'title', 'height', 'recipeData'], dom: 'identity', grid: true },
-  DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates'], dom: 'identity', grid: true, noChildren: true },
+  // The live grid puts the author's class on its `data-slot="data-table"` box (recipes/data), and its adapter wrapper takes `id`/`data-*`.
+  DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates', 'className'], dom: 'identity', grid: true, noChildren: true },
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
-  Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options'] },
+  Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options', 'className'] },
   Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },
   Mermaid: { mod: 'mermaid', island: true, api: ['code', 'title', 'colorMode'], grid: true },
   Input: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'type', 'min', 'max', 'step', 'aria-label'] },
@@ -140,6 +142,10 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
   'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction', 'CardContent', 'CardFooter',
   'Badge', 'Alert', 'AlertTitle', 'AlertDescription', 'Progress', 'Icon', 'Separator', 'Skeleton',
   'Breadcrumb', 'BreadcrumbList', 'BreadcrumbItem', 'BreadcrumbLink', 'BreadcrumbPage', 'BreadcrumbSeparator', 'BreadcrumbEllipsis',
+  // A Button without run/set (one with them is an island), a Video (its `ref:` poster resolved here, `kitParts`), a deck's
+  // SlideDeck and Slide (named by a pattern: a new string literal here would join the recipe class union, recipe-classes.ts,
+  // and flip every story's CSS compile version).
+  'Button', 'Video', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
 ]);
 /** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
@@ -455,6 +461,7 @@ export function generate(input: GenerateInput): Generated {
   }
   function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
+    if (node.tag === 'Grid' || node.tag === 'GridItem') return gridHtml(node, path, ctx);
     if (node.isComponent) return kitHtml(node, path, ctx);
     const lower = node.tag.toLowerCase();
     if (SOLID_SPECIAL_TAGS.has(lower)) return null;
@@ -540,7 +547,7 @@ export function generate(input: GenerateInput): Generated {
     const cls = meta.dom === 'identity' ? null : node.tag === 'Icon' ? cn(ICON_BASE_CLASS, typeof props.className === 'string' ? props.className : undefined) : recipe ? cn(recipe({ ...props, ...(inGrid ? { inGridItem: true } : {}) })) : typeof props.className === 'string' ? props.className : null;
     let dom: Props = { ...props };
     for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
-    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST));
+    if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST || (node.tag === 'DataTable' && k.startsWith('data-'))));
     // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
     if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
     if (inGrid) api.inGridItem = true;
@@ -697,8 +704,11 @@ export function generate(input: GenerateInput): Generated {
     return `<CellControl tag={${lit(tag)}} run={${lit(refName(run))}}${field ? ` field={${lit(field)}}` : ''} p={${json(api)}} attrs={${json(Object.fromEntries(attrs.filter(([n]) => n !== 'class')))}} cls={${lit(cls)}} path={${lit(path)}} row={${ctx.row}} cell={${ctx.scope}}>${children}</CellControl>`;
   }
 
-  /** Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out. */
-  function emitGrid(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
+  /**
+   * Grid/GridItem are compile-time macros: layout arithmetic done here, plain HTML out. A Grid is two boxes, its
+   * GridItems (nothing else) the inner box's children; a GridItem is one box around its children.
+   */
+  function gridParts(node: JsxElement, path: string, ctx: Ctx): { attrs: Attr[]; inner: string | null; kids: Array<[JsxNode, string, Ctx]> } {
     const raw = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
     const props = ctx.preview ? ctx.preview.rewrite(raw) : raw;
     const { className, style, cols, rowHeight, mode: gridMode, x, y, w, h, minHeight, editing: _editing, ...rest } = props;
@@ -710,10 +720,10 @@ export function generate(input: GenerateInput): Generated {
       const items = node.children.flatMap((c, i) => (isElement(c) && c.tag === 'GridItem' ? [[c, i] as const] : []));
       const rows = gridRows(items.map(([c]) => gridItemRect(rawBuildProps(c.attributes, true, 'GridItem', '', undefined, {}) as Parameters<typeof gridItemRect>[0], nCols)));
       const flow = gridMode === 'flow';
-      const outer = elementAttrs('div', { className: cn('@container w-full', classString), style: { ...styleObject, '--g-cols': String(nCols), '--g-rh': `${rh}px`, '--g-rows': String(rows) }, ...rest });
+      const attrs = elementAttrs('div', { className: cn('@container w-full', classString), style: { ...styleObject, '--g-cols': String(nCols), '--g-rh': `${rh}px`, '--g-rows': String(rows) }, ...rest });
       const inner = flow ? 'grid w-full grid-cols-[repeat(var(--g-cols),minmax(0,1fr))] items-start @max-2xl:grid-cols-1' : 'relative w-full h-[calc(var(--g-rows)*var(--g-rh))] @max-2xl:h-auto';
-      const kids = items.map(([c, i]) => emit(c, `${path}.${i}`, mode, { ...ctx, grid: { cols: nCols, flow } })).join('');
-      return `<div${jsxAttrs(outer)}><div class={${lit(inner)}}>${kids}</div></div>`;
+      const kids = items.map(([c, i]): [JsxNode, string, Ctx] => [c, `${path}.${i}`, { ...ctx, grid: { cols: nCols, flow } }]);
+      return { attrs, inner, kids };
     }
     const flow = ctx.grid?.flow ?? false;
     const nCols = ctx.grid?.cols ?? 12;
@@ -721,7 +731,28 @@ export function generate(input: GenerateInput): Generated {
     const cls = cn(flow ? 'min-w-0 p-[3px] col-span-[var(--gi-w)] min-h-[var(--gi-min-h)] @max-2xl:col-span-1' : 'overflow-hidden p-[3px]', flow ? 'relative' : 'absolute left-[calc(var(--gi-x)/var(--g-cols)*100%)] top-[calc(var(--gi-y)*var(--g-rh))] w-[calc(var(--gi-w)/var(--g-cols)*100%)] h-[calc(var(--gi-h)*var(--g-rh))] @max-2xl:static @max-2xl:w-full', classString);
     const minH = flow && typeof minHeight === 'number' && Number.isFinite(minHeight) ? Math.max(0, Math.min(10000, minHeight)) : 0;
     const attrs = elementAttrs('div', { className: cls, style: { ...styleObject, '--gi-min-h': `${minH}px`, '--gi-x': String(rect.x), '--gi-y': String(rect.y), '--gi-w': String(rect.w), '--gi-h': String(rect.h) }, ...rest });
-    return `<div${jsxAttrs(attrs)}>${node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('')}</div>`;
+    return { attrs, inner: null, kids: node.children.map((c, i): [JsxNode, string, Ctx] => [c, `${path}.${i}`, ctx]) };
+  }
+  function emitGrid(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
+    const { attrs, inner, kids } = gridParts(node, path, ctx);
+    const content = kids.map(([c, p, kidCtx]) => emit(c, p, mode, kidCtx)).join('');
+    return inner === null ? `<div${jsxAttrs(attrs)}>${content}</div>` : `<div${jsxAttrs(attrs)}><div class={${lit(inner)}}>${content}</div></div>`;
+  }
+  /** A static Grid/GridItem's server HTML, as Solid serves `emitGrid`'s JSX under `NoHydration`; null when it keeps its JSX. */
+  function gridHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
+    if (node.attributes.some((a) => !a.value.static)) return null;
+    const { attrs, inner, kids } = gridParts(node, path, ctx);
+    const attrHtml = solidAttrs(attrs, safeAttr);
+    const innerHtml = inner === null ? '' : solidAttrs([['class', inner]], safeAttr);
+    if (attrHtml === null || innerHtml === null) return null;
+    const parts: string[] = [];
+    for (const [c, p, kidCtx] of kids) {
+      const child = childHtmlOf(c, p, kidCtx);
+      if (child === null) return null;
+      if (child.counts) parts.push(child.html);
+    }
+    const content = solidChildren(parts);
+    return inner === null ? `<div${attrHtml}>${content}</div>` : `<div${attrHtml}><div${innerHtml}>${content}</div></div>`;
   }
 
   function emitFor(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
