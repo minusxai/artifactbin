@@ -39,11 +39,11 @@ export function graphPatchSql(document:string,version:string,patch:GraphPatch,in
     AND ${version}-${base}::int BETWEEN 0 AND 200
     AND (${document}->>'bytes')::int+${delta}::int BETWEEN 0 AND ${limit}::int
     AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${claims}::jsonb) c(id text,version int) WHERE (${document}->'claimedIds'->>c.id)::int IS DISTINCT FROM c.version)
-    ${patch.selections.length?`AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${selections}::jsonb) s(selector text,keys jsonb)
+    AND (jsonb_array_length(${selections}::jsonb)=0 OR NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${selections}::jsonb) s(selector text,keys jsonb)
       LEFT JOIN (SELECT sel AS selector,jsonb_agg(n.key ORDER BY n.key) AS keys
         FROM jsonb_each(${nodes}) n CROSS JOIN LATERAL unnest(ARRAY(SELECT x->>'selector' FROM jsonb_array_elements(${selections}::jsonb) x)) sel
         WHERE (n.value->'selectors') ? sel GROUP BY sel) found ON found.selector=s.selector
-      WHERE s.keys IS DISTINCT FROM COALESCE(found.keys,'[]'::jsonb))`:''}
+      WHERE s.keys IS DISTINCT FROM COALESCE(found.keys,'[]'::jsonb)))
     AND NOT (${nodes} ?| ARRAY(SELECT jsonb_object_keys(${inserted}::jsonb)))
     AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset(${reads}::jsonb) r(key text,facet text,version int)
       WHERE ${node('r.key')} IS NULL OR (${document}#>>ARRAY['nodes',r.key,r.facet])::int IS DISTINCT FROM r.version)`;
