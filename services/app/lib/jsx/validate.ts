@@ -9,7 +9,6 @@ import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { validateDeckMap } from '@/lib/viz/deck-spec';
 import { parseRowRef } from '@/lib/story/data/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
-import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter-primitives — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
@@ -111,7 +110,7 @@ function walk(
     return;
   }
   if (inFor && node.attributes.some(a=>(['value','checked','options'].includes(a.name) || (a.name === 'run' && node.tag !== 'Button')) && a.value.static && typeof a.value.json === 'string' && /^\$[A-Za-z_]\w*$/.test(a.value.json))) errors.push({message:'Bound controls inside For are not supported; use editable DataTable columns',start:node.start,end:node.end});
-  if (inFor && ['DataTable', 'Iframe'].includes(node.tag)) errors.push({message:'DataTable and Iframe must be outside For templates',start:node.start,end:node.end});
+  if (inFor && node.tag === 'DataTable') errors.push({message:'DataTable must be outside For templates',start:node.start,end:node.end});
   if (node.tag === 'For') {
     const key = node.attributes.find(a => a.name === 'keyBy')?.value;
     const eachValue = node.attributes.find(a => a.name === 'each')?.value;
@@ -152,11 +151,6 @@ function walk(
     for (const message of validateDeckMap({ layers: prop('layers'), basemap: prop('basemap'), initialViewState: prop('initialViewState'), tooltip: prop('tooltip'), legend: prop('legend'), title: prop('title') })) {
       errors.push({ message, tag: node.tag, start: node.start, end: node.end });
     }
-  }
-  if (node.tag === 'Iframe') {
-    try { compileManagedIframe(node); }
-    catch (error) { errors.push({ message: error instanceof Error ? error.message : String(error), tag: node.tag, start: node.start, end: node.end }); }
-    return;
   }
   const childrenInSvg = inSvg || (!node.isComponent && node.tag.toLowerCase() === 'svg');
   for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'For' ? true : node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag, inFor || node.tag === 'For');

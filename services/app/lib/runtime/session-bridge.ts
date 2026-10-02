@@ -13,7 +13,7 @@
  * Vite, which runs in FRONT of this process's listener (`server.ts`: the Vite chain
  * wraps the listener, not the app), so a session talking to the app object alone gets
  * 404 for `/@vite/client`, `/solid-entry.tsx` and `/shell.css`, and
- * `window.mx` is never defined — every session-driven gate and eval fails on a page
+ * the page never boots — every session-driven gate and eval fails on a page
  * that looks fine in a real browser. So in development the hop goes over loopback
  * HTTP, through EXACTLY the chain a real browser's request travels, with the actor in
  * the same signed header a split deployment uses. The secret is generated per boot

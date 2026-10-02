@@ -161,7 +161,7 @@ describe('the shards are cut from those rows', () => {
 
  describe('browser provisioning follows the selected gates', () => {
   it('keeps Chromium-only shards free of unused engines', () => {
-    expect(browsersFor(['annotations', 'managed-iframe'])).toEqual(['chromium']);
+    expect(browsersFor(['annotations', 'dataflow'])).toEqual(['chromium']);
   });
   it('preserves all three engines for screenshot coverage', () => {
     expect(browsersFor(['annotations', 'screenshot-comments'])).toEqual(['chromium', 'firefox', 'webkit']);

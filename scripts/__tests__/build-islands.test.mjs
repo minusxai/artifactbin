@@ -70,43 +70,6 @@ describe('buildIslands', () => {
     expect(text.length).toBeLessThan(512 * 1024);
   });
 
-  it('bundles the managed frame\'s behaviour alone: its own file, no imports, no Solid, loaded by the embed family by content address', () => {
-    const { manifest, files } = first;
-    const engines = Object.keys(files).filter((url) => /\/frame-engine-[0-9a-f]{16}\.js$/.test(url));
-    expect(engines).toHaveLength(1);
-    const engine = engines[0];
-    expect(files[engine].imports).toEqual([]);
-    const code = readFileSync(path.join(outDir, engine.slice('/islands/'.length)), 'utf8');
-    expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
-    // Some chunk of the embed family's closure asks for it by its file name, lazily.
-    const name = engine.slice('/islands/'.length);
-    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
-    expect([...reach([manifest['@mx/kit/embed']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(`import("./${name}")`))).toBe(true);
-    // …and nothing the data family loads does: a page with a table never carries the frame's door.
-    expect([...reach([manifest['@mx/kit/data']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
-    // …and nothing in the shared runtime's closure does.
-    expect([...reach([manifest['@mx/rt'], manifest['@mx/boot']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
-  });
-
-  it('bundles the author script host alone: its own file, no imports, no Solid, loaded by boot by content address and only there', () => {
-    const { manifest, files } = first;
-    const hosts = Object.keys(files).filter((url) => /\/author-host-[0-9a-f]{16}\.js$/.test(url));
-    expect(hosts).toHaveLength(1);
-    const host = hosts[0];
-    expect(files[host].imports).toEqual([]);
-    const code = readFileSync(path.join(outDir, host.slice('/islands/'.length)), 'utf8');
-    expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
-    expect(code, 'today\'s wrapper and sandbox').toContain('/author-frame');
-    const name = host.slice('/islands/'.length);
-    const text = (url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8');
-    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
-    const runtime = [...reach([manifest['@mx/rt'], manifest['@mx/boot']])];
-    // Boot asks for it lazily, by file name; nothing in the runtime's closure carries its code.
-    expect(runtime.some((url) => text(url).includes(`import("./${name}")`))).toBe(true);
-    expect(runtime.some((url) => text(url).includes('mx:author:init'))).toBe(false);
-    expect(runtime).not.toContain(host);
-  });
-
   it('bundles the page\'s SQLite engine alone: its own file, no imports, no Solid, the core inlined, loaded by boot by content address', () => {
     const { manifest, files } = first;
     const engines = Object.keys(files).filter((url) => /\/sqlite-engine-[0-9a-f]{16}\.js$/.test(url));
@@ -159,7 +122,7 @@ describe('buildIslands', () => {
     }
   });
 
-  it('keeps every kit family inside the ready-time static budget, with the map and frame engines behind dynamic imports', () => {
+  it('keeps every kit family inside the ready-time static budget, with the map engine behind dynamic imports', () => {
     const { manifest, files, closure } = first;
     const staticUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.map(family => manifest[`@mx/kit/${family}`])]);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
@@ -168,7 +131,6 @@ describe('buildIslands', () => {
     expect(withImage.reduce((sum, url) => sum + files[url].br, 0)).toBeLessThanOrEqual(85 * 1024);
     const dataCode = staticUrls.map(url => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).join('\n');
     const dynamic = [...dataCode.matchAll(/import\("\.\/([\w-]+\.js)"\)/g)].map(match => `/islands/${match[1]}`);
-    expect(dynamic.some(url => /frame-engine-[0-9a-f]{16}\.js$/.test(url))).toBe(true);
     expect(dynamic.some(url => files[url]?.gz > 100 * 1024)).toBe(true);
     expect(dynamic.every(url => !staticUrls.includes(url))).toBe(true);
   });

@@ -100,8 +100,8 @@ export interface RanDataflow extends StoryIslandDataflow {
  * document that declares nothing has no dataflow at all (and
  * `{$_me ? … : <SignIn/>}` is exactly such a document), and the viewer is not
  * the document's data — it is never declared, never carried in a link, never
- * written, and never among the signals the author script reads through
- * `window.mx` (lib/story-runtime/mx).
+ * written, and never among the signals the author script reads
+ * (lib/islands/page-runtime).
  */
 export interface StoryViewer {
   id: string;
@@ -307,7 +307,7 @@ export interface StoryController {
  * that HEARS the edit is a ~1.5KB module every document loads (it also carries
  * the reading position), and the piece that can re-render the document is the
  * island runtime that only a document with components or data loads at all.
- * Deliberately not part of `window.mx`, which is the author's API.
+ * Deliberately not part of the author script's API (lib/islands/page-runtime).
  */
 export const STORY_ADOPT_HOOK = '__mxAdoptDocument';
 

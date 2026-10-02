@@ -105,27 +105,22 @@ export const AUTHOR_VENDOR_SPECIFIERS = Object.freeze(['preact', 'preact/hooks',
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
 
 /**
- * LAZY BEHAVIOURS BUILT ON THEIR OWN. A framework-free engine an island loads on mount (the managed
- * `<Iframe>`'s author realm) shares most of its modules with the runtime (the store, the dataflow
- * grammar). Split with the graph, it would re-partition the runtime's chunks (esbuild groups files by
+ * LAZY BEHAVIOURS BUILT ON THEIR OWN. A framework-free engine boot or an island loads on demand (the
+ * live morph, the page's SQLite engine) shares most of its modules with the runtime (the store, the
+ * dataflow grammar). Split with the graph, it would re-partition the runtime's chunks (esbuild groups files by
  * the entries that reach them) and grow every interactive page's rt+boot closure for a behaviour few
  * pages have. So it is bundled ALONE — self-contained, its shared code copied in, no Solid — and the
  * island's `import('<request>')` is rewritten to its content-addressed file beside the chunks. Only a
  * module that needs no Solid may be listed: it runs outside the one Solid the islands share.
  */
 const STANDALONE_LAZY = [
-  { request: './embed/frame-engine', name: 'frame-engine', file: () => path.join(ISLANDS_SRC, 'kit/embed/frame-engine.ts') },
   { request: './image-map', name: 'image-map', file: () => path.join(ISLANDS_SRC, 'kit/image-map.ts') },
-  // The version's author script (lib/islands/author-host), loaded by boot only when the page data names one.
-  { request: './author-host', name: 'author-host', file: () => path.join(ISLANDS_SRC, 'author-host.ts') },
   // The live morph (lib/islands/live-update → ./morph/engine): a new version drawn in place, loaded only when one lands.
   { request: './morph/engine', name: 'morph-engine', file: () => path.join(ISLANDS_SRC, 'morph/engine.ts') },
   // The page's own SQLite engine (the page engine and the SQLite core), loaded by boot behind the first paint.
   { request: './sqlite-engine', name: 'sqlite-engine', file: () => path.join(ISLANDS_SRC, 'sqlite-engine.ts') },
   // The link following the reader, loaded by boot after hydration.
   { request: './url-sync', name: 'url-sync', file: () => path.join(ISLANDS_SRC, 'url-sync.ts') },
-  // Browser sessions need the public mx API, but its dataflow grammar stays outside rt+boot.
-  { request: './mx-host', name: 'mx-host', file: () => path.join(ISLANDS_SRC, 'mx-host.ts') },
 ];
 
 async function buildStandaloneLazy() {

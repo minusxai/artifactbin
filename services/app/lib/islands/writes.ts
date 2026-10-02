@@ -6,7 +6,7 @@
  * through the store) or dismisses it.
  *
  * Built on the store's own write lifecycle (lib/story-runtime/store `subscribeWrites`), so a write
- * from any caller — an island, the author's `window.mx`, the SPA — is reported the same way.
+ * from any caller — an island, the author's script, the SPA — is reported the same way.
  * Framework-free; the indicator (kit/status.tsx) and boot's `writes` event read it.
  */
 import type { DataflowStore, StoreWriteEvent } from '@/lib/story-runtime/store';

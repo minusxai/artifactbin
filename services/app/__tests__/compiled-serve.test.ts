@@ -560,18 +560,6 @@ describe('a version with an author script', () => {
     expect(res.status).toBe(500);
     expect(await res.text()).toContain('could not be rendered');
   });
-
-  it('its wrapper answers at its own address: fixed bytes under their own sandbox CSP', async () => {
-    for (const wrapper of ['/author-frame']) {
-      const res = await app.request(wrapper);
-      expect(res.status, wrapper).toBe(200);
-      const csp = res.headers.get('content-security-policy')!;
-      expect(csp, wrapper).toContain('sandbox allow-scripts');
-      expect(csp, wrapper).toContain("frame-src 'none'");
-      expect(csp, wrapper).toContain("default-src 'none'");
-      expect(await res.text(), wrapper).toContain('data-mx-author-wrapper');
-    }
-  });
 });
 
 describe('the viewer overlay door', () => {

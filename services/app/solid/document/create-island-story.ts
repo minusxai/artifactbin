@@ -4,7 +4,7 @@
  * The compiled story root the server drew is already on screen, its islands hydrated. This adopts
  * THAT element — never drawing it again — and establishes the page's private controller over it
  * (lib/story-runtime/island-controller): comments and the selection bubble anchor on its
- * `data-mx-ast` paths, `window.mx` edits and in-place editing reach it through
+ * `data-mx-ast` paths, and in-place editing reaches it through
  * lib/story-runtime/document-endpoint, and a new version is morphed into it in place.
  *
  * The page's chrome learns the controller's secret (`nonce`) from the returned accessors; the

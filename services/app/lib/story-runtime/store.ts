@@ -7,7 +7,7 @@ import type {ImageAssetAnswer} from '@/lib/story/data/ref-data';
  * current rows, and it is the ONE thing every consumer reads: the islands'
  * Solid bridge (lib/islands/rt), the bound native controls
  * (`<select value="$region">` writes here), and the author's script through
- * `window.mx` (lib/story-runtime/mx.ts). Nothing else holds document data.
+ * its signals (lib/islands/page-runtime). Nothing else holds document data.
  *
  * Reactivity is by reference: the declarations become a dependency graph
  * (runtime-graph.ts) and a pure core (dataflow-core.ts) versions every node,

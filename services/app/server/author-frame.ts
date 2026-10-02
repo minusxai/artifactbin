@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { AUTHOR_FRAME_DOCUMENT } from '@/lib/story-runtime/author-frame';
 import { libraryUrls } from '@/lib/libraries';
 
-/** Fixed wrapper bytes only; author-controlled content is transferred later over a MessagePort. */
+/**
+ * The former author-script wrapper response. The app no longer routes it; only the CLI preview
+ * (services/cli/src/preview/session.ts) still imports it. Delete this with that import.
+ */
 export function authorFrameResponse(request: Request, assetsOrigin: string | null, main: string): Response {
   const ids = new URL(request.url).searchParams.getAll('artifact');
   if (ids.length > 1 || (ids.length === 1 && !/^[A-Za-z0-9]{6}$/.test(ids[0]))) return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });

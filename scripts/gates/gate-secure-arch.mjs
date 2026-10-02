@@ -4,11 +4,9 @@
  *
  *   1. READER: /a/<id> answers a viewer with no session with the app document
  *      and its story runtime inline — same URL, no artifact iframe — under the
- *      document CSP; authored child realms remain opaque to app credentials and
- *      storage, with network limited to declared hosts, and the history prelude holds. A signed-in
- *      NON-owner gets the same document, no redirect.
- *   2. OWNER: the app page (page controls + inline story runtime), and edit
- *      mode retains that document runtime; authored child realms retain their CSP.
+ *      document CSP, and the trusted runtime reaches its scoped query door. A
+ *      signed-in NON-owner gets the same document, no redirect.
+ *   2. OWNER: the app page (page controls + inline story runtime).
  *   3. EXPORT still yields a PNG for a reader after the reader path changed.
  *   4. `/raw` is an internal address: absent from the docs.
  *   5. App pages carry a CSP with frame-ancestors.
@@ -17,10 +15,9 @@
  *      localStorage and /a/<id> shows owner chrome around the inline runtime.
  *   7. Cookie-authenticated mutations reject a cross-site Origin.
  *
- * What a SANDBOXED author realm can and cannot reach — the opaque origin, the
- * refused fetch, image, parent and storage, the forged reader action and text
- * edit — belongs to gate-script-slice, which proves each of them directly;
- * this gate asks only who is served what.
+ * The author script runs in the document itself (lib/islands/page-runtime);
+ * there is no author frame or managed Iframe. This gate asks only who is
+ * served what.
  *
  * Runs against a dev server started with the mail sink:
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
@@ -32,7 +29,7 @@ import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
-import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
+import { openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
@@ -72,30 +69,7 @@ const api = async (path, body) => {
   return res.json();
 };
 
-// Author code now owns an isolated child realm. Its declared signal is the
-// reporting channel; it must never reach the parent's DOM to report a result.
-const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string" default="{}"/><script>{\`
-(function(){
-  var out = {};
-  function t(k, fn){ try { out[k] = String(fn()); } catch (e) { out[k] = 'THROW ' + e.name; } }
-  t('origin', function(){ return window.origin; });
-  t('isTop', function(){ return window.top === window; });
-  t('parentDom', function(){ return parent.document.body.textContent; });
-  t('cookie', function(){ return document.cookie; });
-  t('storage', function(){ return localStorage.length; });
-  t('sw', function(){ navigator.serviceWorker.register('/sw.js').catch(function(){}); return 'attempted'; });
-  var before = location.pathname;
-  t('replaceState', function(){ history.replaceState(null, '', '/spoofed'); return location.pathname === before ? 'held' : 'SPOOFED ' + location.pathname; });
-  fetch('/api/artifacts').then(function(r){ out.fetch = 'OK ' + r.status; render(); }, function(){ out.fetch = 'blocked'; render(); });
-  // Direct requests from author code are denied; declared data operations use
-  // the bridge. The trusted parent query allowance is checked separately.
-  var id = location.pathname.split('/')[2] || 'unknown';
-  fetch('/a/' + id + '/query?q=%7B%7D').then(function(r){ out.ownQuery = 'OK ' + r.status; render(); }, function(){ out.ownQuery = 'blocked'; render(); });
-  fetch('/a/' + id + '/start', { method: 'POST' }).then(function(r){ out.start = 'OK ' + r.status; render(); }, function(){ out.start = 'blocked'; render(); });
-  function render(){ void mx.set({probe:JSON.stringify(out)}); }
-  render();
-})();
-\`}</script></Helmet>
+const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string" default="{}"/></Helmet>
 <div className="p-8"><h1 className="text-3xl font-bold">SEC-PROBE-DOC</h1><pre id="sec-probe">{$probe}</pre></div>`;
 
 const doc = await api('/api/artifacts', { title: 'Sec Probe', markup: PROBE, visibility: 'public' });
@@ -105,23 +79,11 @@ check(doc.visibility === 'public', 'probe doc is public');
 const readerResp = await reader.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 const readerPath = new URL(reader.url()).pathname;
 const readerCsp = readerResp.headers()['content-security-policy'] ?? '';
-check(!readerCsp.includes('sandbox') && /script-src[^;]*'self'/.test(readerCsp) && !/script-src[^;]*'unsafe-eval'/.test(readerCsp), `reader carries strict app CSP; author children own the sandbox (${readerCsp.slice(0, 80)}…)`);
+check(!readerCsp.includes('sandbox') && /script-src[^;]*'self'/.test(readerCsp) && !/script-src[^;]*'unsafe-eval'/.test(readerCsp), `reader carries the strict app CSP (${readerCsp.slice(0, 80)}…)`);
 check(readerPath.includes(doc.id) && new URL(reader.url()).origin === BASE, `reader reaches its canonical artifact address (${readerPath})`);
 check(await servedTopLevel(reader), 'reader page has NO artifact iframe');
-await reader.waitForFunction(() => { const t = document.getElementById('sec-probe')?.textContent ?? ''; return /"fetch"/.test(t) && /"ownQuery"/.test(t) && /"start"/.test(t); }, null, { timeout: 15000 }).catch(() => {});
-const probe = JSON.parse(await reader.locator('#sec-probe').textContent().catch(() => '{}') || '{}');
-check(probe.origin === 'null', `author origin is opaque (${probe.origin})`);
-check(probe.isTop === 'false', 'author code runs in a child realm, not the top-level document');
-check(/THROW/.test(probe.parentDom ?? ''), 'author cannot access the parent DOM');
-check(/THROW/.test(probe.cookie ?? ''), `document.cookie throws (${probe.cookie})`);
-check(/THROW/.test(probe.storage ?? ''), `localStorage throws (${probe.storage})`);
-check(probe.fetch === 'blocked', `fetch to /api is blocked (${probe.fetch})`);
-check(probe.ownQuery === 'blocked', `author code cannot directly fetch a query endpoint (${probe.ownQuery})`);
 const parentQuery = await reader.evaluate(async id => (await fetch('/a/' + id + '/query?q=%7B%7D')).status, doc.id);
 check(parentQuery === 200, `trusted document runtime can fetch its scoped query (${parentQuery})`);
-check(probe.start === 'blocked', `fetch to /a/<id>/start is blocked (${probe.start}) — path-exact, not a prefix`);
-check(probe.replaceState === 'held' || /THROW/.test(probe.replaceState ?? ''), `author history cannot spoof the page URL (${probe.replaceState})`);
-check(new URL(reader.url()).pathname === readerPath && new URL(reader.url()).origin === BASE, 'author probe cannot change the canonical top-level path or origin');
 
 // signed-in NON-owner: same document, same URL, no hop
 const otherResp = await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -137,36 +99,11 @@ check((await reader.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' })).status(
 await owner.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' });
 check((await owner.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null)) === 'SEC-PRIVATE', 'private: owner sees it in the shell');
 
-// ── 2. owner: app shell + inline runtime; EDITING DOES NOT WEAKEN CHILD SANDBOXES ──────
+// ── 2. owner: app shell + inline runtime ──────
 await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 const ownerFrame = owner.locator('[data-mx-inline-story]');
 const ownerText = await ownerFrame.locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
-check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document in the sandboxed iframe');
-
-/*
- * There is no edit canvas to carry a CSP of its own any more: editing happens
- * in the served document, which already has one from its response headers. So
- * what has to be true is stronger and simpler — entering edit mode changes
- * nothing about the sandbox. Entering edit may stop the author realm entirely;
- * if it remains, it must keep its sandbox and opaque origin.
- */
-await owner.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'attached' });
-const sandboxBefore = await owner.evaluate(() =>
-  document.querySelector('iframe[title="Isolated artifact script"]')?.getAttribute('sandbox') ?? null);
-await openArtifactControls(owner);
-await owner.click('[aria-label="Edit artifact"]');
-await owner.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
-await owner.waitForTimeout(3000);
-const editing = await owner.evaluate(() => {
-  const f = document.querySelector('iframe[title="Isolated artifact script"]');
-  let reachable = false;
-  try { reachable = !!f?.contentDocument; } catch { reachable = false; }
-  return { sandbox: f?.getAttribute('sandbox') ?? null, reachable };
-});
-check(!!sandboxBefore && (editing.sandbox === null || editing.sandbox === sandboxBefore),
-  'entering edit mode stops the author realm or keeps every sandbox flag');
-check(!editing.reachable,
-  'and author code is STILL opaque to the page (contentDocument null)');
+check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document inline');
 
 // ── 3. export still works for a reader ────────────────────────────────────
 const shot = await readerCtx.request.get(`${BASE}/a/${doc.id}/export`);

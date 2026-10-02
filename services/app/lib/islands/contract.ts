@@ -206,9 +206,6 @@ export const LIVE_ID_ATTR = 'data-mx-live-id';
 export const LIVE_EDIT_ATTR = 'data-mx-live-edit';
 /** A compiler-generated hydration key prefix (`s<i>-`, `d-`); anything else never reaches a selector. Stateless: no `g`/`y` flag. */
 export const RENDER_ID_PATTERN = /^[\w-]+$/;
-/** The story root's private slot for the public `mx` API's uninstaller (lib/islands/mx-host `installPublicMx`). */
-export const PUBLIC_MX_KEY = '__mxPublicApi';
-export type PublicMxHost = HTMLElement & { [PUBLIC_MX_KEY]?: () => void };
 
 /** Fired on `document` once every island has hydrated (the same event the former runtime fires after hydration). */
 export const ISLANDS_READY_EVENT = 'mx:ready';
@@ -246,9 +243,10 @@ export interface IslandPageData {
   viewerUrl?: string;
   assetsUrl?: string;
   /**
-   * The managed `<Iframe>`'s asset door (lib/story-runtime/managed-assets ManagedAssetsConfig): the
-   * deployment's asset origin and this page's absolute import door (with a capture's verified export key),
-   * exactly as the former island carries it. Absent without an asset origin; a frame then refuses external assets.
+   * The page's asset door (lib/story-runtime/managed-assets ManagedAssetsConfig): the deployment's asset
+   * origin and this page's absolute import door (with a capture's verified export key). Absent without an
+   * asset origin. No browser module reads it since the managed `<Iframe>` was removed; the assembler and
+   * the prepare runtime still write it.
    */
   managedAssets?: { origin: string; resolveUrl: string };
   /**

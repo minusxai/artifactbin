@@ -61,16 +61,10 @@ Interactive pages load only their needed same-origin, content-addressed chunks.
 The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
 not executable inline script, and author strings never become generated code.
 
-Author scripts run in a second opaque child reached through the fixed
-`/author-frame` wrapper, never in the visible renderer. The page carries the
-script only as data (inside its JSON data island, which is not script under
-the page's `script-src`); the page's runtime hands it to the child over a
-MessagePort after the wrapper loads, and the wrapper answers under its own
-policy (`sandbox allow-scripts`, no framing, no forms). A bounded
-MessagePort exposes only declared values, query refreshes and permitted
-dataset mutations. Managed `<Iframe>` assets are imported through the
-document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;
-arbitrary network, navigation, account APIs and parent DOM access remain denied.
+The author script runs in the document itself: the page runtime
+(`lib/islands/page-runtime`) loads it as a module built at publish
+(`lib/story/document/author-module.server`), with the document's declared names as
+signals over the page's store. There is no author frame and no managed `<Iframe>`.
 
 **Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
 at publish — against the artifacts it may read, by the SQLite engine the
@@ -106,8 +100,7 @@ hold, when one of the document's queries shows a person from it.
 Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
 page, the standalone `/raw` document and the offline file. It admits compiling
 WebAssembly and nothing else — `eval`, `new Function` and string timers stay
-refused — and it is never added to the author-script frames, where author code
-runs. The wasm is fetched from this origin at a content-addressed `/islands/`
+refused. The wasm is fetched from this origin at a content-addressed `/islands/`
 URL (the `/raw` document's `connect-src` names that directory), cached
 `immutable`; the offline file carries it inside itself.
 

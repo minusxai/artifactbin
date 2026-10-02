@@ -40,7 +40,6 @@ import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides'
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
 import type { GeneratedSources } from './codegen-safety';
@@ -125,8 +124,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
   // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
   User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
-  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): the managed frame and map.
-  Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
+  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): the map.
   DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen', 'open'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
   Table: { mod: 'static' }, TableHeader: { mod: 'static' }, TableBody: { mod: 'static' }, TableFooter: { mod: 'static' }, TableRow: { mod: 'static' }, TableHead: { mod: 'static' }, TableCell: { mod: 'static' }, TableCaption: { mod: 'static' },
@@ -244,9 +242,6 @@ function readsDataNode(node: JsxNode): boolean {
 
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
 
-/** The managed frame's author content compiled as inert data (lib/story/reader/managed-iframe), or null when it is refused. */
-const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe(node); } catch { return null; } };
-
 /* ────────────────────────────────────────────────────────────────────────────
  * The generator
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -343,7 +338,6 @@ export function generate(input: GenerateInput): Generated {
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
     if (known !== undefined) return known;
-    if (isElement(node) && node.tag === 'Iframe' && managedFrameOf(node) === null) return false;
     const value = selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser));
     needs.set(node, value);
     return value;
@@ -394,8 +388,6 @@ export function generate(input: GenerateInput): Generated {
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
     }
     if (INERT.has(node.tag)) return '';
-    // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
-    if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
     // Both builds keep the same tree of hydration boundaries. Static descendants are
     // server markup only; the browser emits an empty boundary at the same position.
     // A live control is emitted as a sibling of these boundaries, never inside one.
@@ -429,7 +421,6 @@ export function generate(input: GenerateInput): Generated {
     }
     if (node.control) return null;
     if (INERT.has(node.tag)) return { html: '', counts: false };
-    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return { html: '', counts: false };
     if (needsBrowser(node)) return null;
     const html = htmlOf(node, path, ctx);
     return html === null ? null : { html, counts: true };
@@ -581,11 +572,6 @@ export function generate(input: GenerateInput): Generated {
     }
     if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
     if (node.tag === 'Icon' && input.glyphCatalogUrl) props.catalogUrl = input.glyphCatalogUrl;
-    if (node.tag === 'Iframe') {
-      // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
-      if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
-      props.compiled = managedFrameOf(node);
-    }
     // The runtime hands the map the document's colour mode.
     if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
     const classes = peopleClasses(node.tag, props);
@@ -845,7 +831,6 @@ export function generate(input: GenerateInput): Generated {
       return node.control.kind === 'and' && !yes ? NONE : previewOf(node.children[yes ? 0 : 1]!, `${path}.${yes ? 0 : 1}`, ctx);
     }
     if (INERT.has(node.tag)) return NONE;
-    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return NONE;
     return previewElement(node, path, ctx);
   }
   /** A native element's children as its server template writes them, or null. */

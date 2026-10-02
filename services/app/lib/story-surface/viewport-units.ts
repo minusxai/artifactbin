@@ -11,8 +11,7 @@
  * The caller is the publish door: authored `<style>` blocks (the
  * `no-inline-style` policy allows them) render straight through the
  * interpreter, so their `vh` lengths are remapped at SAVE
- * (`story/managed-iframe-source.remapMarkupStyleViewportUnits`, beside the
- * banned-css sanitizer). The stored source is already the sanitized form and
+ * (`story/graph/document-update-client`, beside the banned-css sanitizer). The stored source is already the sanitized form and
  * the remap is idempotent, so the canonical-fixpoint contract holds.
  */
 
@@ -90,10 +89,6 @@ const MARKUP_STYLE_BLOCK_RE = /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi;
  * SOURCE — the `<style>`-block wrapper around the declaration remap above. The
  * block content is a template-literal/text child in the source, so the CSS is
  * remapped in place and everything around it survives byte-for-byte.
- *
- * Knows nothing about managed iframes: which chunks of a document reach it is
- * `story/managed-iframe-source.remapMarkupStyleViewportUnits`'s decision, and
- * an isolated frame's own styles must not adopt the host viewport.
  */
 export function remapStyleBlockViewportUnits(source: string): string {
   return source.replace(MARKUP_STYLE_BLOCK_RE, (_m, open: string, css: string, close: string) =>

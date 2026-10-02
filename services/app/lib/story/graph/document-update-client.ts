@@ -19,7 +19,7 @@ import {stampNodeIds,nodeIndex,hasAmbiguousLegacyAliases} from '../document/node
 import {canonicalizeMarkup} from '../document/canonical-source';
 import {repairJsxSource} from '../../jsx/repair';
 import {sanitizeStoryMarkupCss} from '../../data/story/banned-css';
-import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from '../reader/managed-iframe-source';
+import {remapStyleBlockViewportUnits} from '../../story-surface/viewport-units';
 import {extractClassCandidates,hasDesignSystemMarker} from '../../data/story/story-css';
 export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
 export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
@@ -30,7 +30,7 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
  let source=change.operations?graphSource(createDocumentGraph(applyOperationsToNodes(graphNodes(base.document),change.operations),base.version)):change.source??before;
  source=repairJsxSource(source)?.source??source;
  if(source.includes('\0')||!source.isWellFormed())throw new Error('Document source must be valid Unicode without NUL characters');
- source=canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(source,sanitizeStoryMarkupCss)));
+ source=canonicalizeMarkup(remapStyleBlockViewportUnits(sanitizeStoryMarkupCss(source)));
  if(hasAmbiguousLegacyAliases(source))throw new Error('Ambiguous duplicate legacy annotation anchors');
  const identity=stampNodeIds(source,{previousSource:before,reservedIds:Object.keys(base.document.claimedIds),retireLegacyAliases:true});
  const checked=validateMarkupStructure(identity.source);
