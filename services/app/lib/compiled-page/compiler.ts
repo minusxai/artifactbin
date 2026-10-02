@@ -197,7 +197,9 @@ const isElement = (node: JsxNode): node is JsxElement => node.type === 'element'
  * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime).
  */
 const REGISTERED_COMPONENTS: ReadonlySet<string> = new Set(JSX_STORY_COMPONENT_NAMES);
-export const isScriptComponent = (node: JsxNode): boolean => isElement(node) && node.isComponent && !REGISTERED_COMPONENTS.has(node.tag);
+/** Declarations and retired tags that validation refuses in a body: never a script component, so a stale document still reports them. */
+const NEVER_SCRIPT_COMPONENTS: ReadonlySet<string> = new Set(['Helmet', 'Import', 'Value', 'Query', 'Mutation', 'Notify', 'Param']);
+export const isScriptComponent = (node: JsxNode): boolean => isElement(node) && node.isComponent && !REGISTERED_COMPONENTS.has(node.tag) && !NEVER_SCRIPT_COMPONENTS.has(node.tag);
 export const MOUNT_ATTR = 'data-mx-mount';
 /** The mount's props (literal JSON), its bindings (prop → declared name) and the DOM attributes the node keeps. */
 export function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {

@@ -529,7 +529,8 @@ describe('a version with an author script', () => {
     expect(scriptSrc).not.toContain("'unsafe-inline'");
     expect(csp.split('; '), 'the page may frame the same-origin wrapper').toContain("frame-src 'self'");
     const { data, scripts, occurrences } = authorOnly(await res.text());
-    expect(data?.authorScript).toBe('document.body.dataset.ran = "1";');
+    // The data island carries the script as the module built at publish (lib/story/document/author-module.server).
+    expect(data?.authorScript).toContain('document.body.dataset.ran = "1";');
     expect(occurrences, 'nowhere but the data island').toBe(1);
     for (const script of scripts) {
       expect(script.getAttribute('src'), script.outerHTML).toMatch(/^\//);
@@ -539,16 +540,16 @@ describe('a version with an author script', () => {
 
     const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    expect(authorOnly(await page.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');
+    expect(authorOnly(await page.text()).data?.authorScript).toContain('document.body.dataset.ran = "1";');
   });
 
-  it('boots even with no island, so its store and its author host start', async () => {
+  it('boots even with no island, so its store and its script start', async () => {
     const who = await owner();
-    const id = await publish(who.token, { title: 'Scripted prose', markup: '<Helmet><Value name="n" type="number" default={0} /><script>{`mx.set({n: 1});`}</script></Helmet><h1>Only prose</h1>' });
+    const id = await publish(who.token, { title: 'Scripted prose', markup: '<Helmet><Value name="n" type="number" default={0} /><script>{`import { n } from "page"; n.value = 1;`}</script></Helmet><h1>Only prose</h1>' });
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const { data, doc } = authorOnly(await res.text());
-    expect(data?.authorScript).toBe('mx.set({n: 1});');
+    expect(data?.authorScript).toContain('n.value = 1');
     expect([...doc.querySelectorAll('script[type="module"]')].some((s) => /^\/islands\/d\/[0-9a-f]{16}\.js(?:\?b=[0-9a-f]{16})?$/.test(s.getAttribute('src') ?? '')), 'the per-document module that boots').toBe(true);
   });
 

@@ -26,7 +26,7 @@ describe('the app CSP', () => {
   it('locks framing and plugins on the app pages', async () => {
     expect(APP_CSP).toContain("default-src 'none'");
     expect(APP_CSP).toContain("script-src 'self'");
-    expect(APP_CSP.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob:");
+    expect(APP_CSP.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob: https:");
     expect(APP_CSP).toContain("frame-ancestors 'self'");
     expect(APP_CSP).toContain("object-src 'none'");
     expect(APP_CSP).toContain("base-uri 'self'");
@@ -55,9 +55,11 @@ describe('the app CSP', () => {
   it('admits local media previews and GLTF texture fetches without admitting blob scripts or frames', async () => {
     const response = await app.request('/login');
     const directives = response.headers.get('content-security-policy')!.split('; ');
-    expect(directives.find(d => d.startsWith('media-src'))).toBe("media-src 'self' blob:");
+    expect(directives.find(d => d.startsWith('media-src'))).toBe("media-src 'self' blob: https:");
     expect(directives.find(d => d.startsWith('connect-src'))?.split(' ')).toContain('blob:');
-    for (const directive of ['frame-src', 'worker-src', 'script-src']) {
+    // The author module loads from a blob: URL (lib/islands/page-runtime); frames and workers still do not.
+    expect(directives.find(d => d.startsWith('script-src'))).toContain('blob:');
+    for (const directive of ['frame-src', 'worker-src']) {
       expect(directives.find(d => d.startsWith(directive))).not.toContain('blob:');
     }
   });
@@ -106,7 +108,7 @@ describe('the app CSP', () => {
   });
 
   it('serves app images under the same-origin image policy', () => {
-    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toBe("img-src 'self' data: blob:");
+    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toBe("img-src 'self' data: blob: https:");
   });
 
   it('never lands on an artifact address or a machine surface', async () => {

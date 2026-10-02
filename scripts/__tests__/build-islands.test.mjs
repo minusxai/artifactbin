@@ -103,7 +103,8 @@ describe('buildIslands', () => {
     // helpers any kit family uses land in the shared chunk that rt's closure includes; they load on every
     // interactive page anyway. The owner's target 2 (≤ 85 KB before ready on interactive pages) is the
     // real check, in scripts/build/size-targets.mjs.
-    expect(bytes).toBeLessThanOrEqual(27_979);
+    // boot grew by the page runtime's loader (lib/islands/page-runtime: the vendor map and the module import).
+    expect(bytes).toBeLessThanOrEqual(28_600);
   });
 
   it('keeps framed transport, comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
