@@ -1,6 +1,6 @@
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility, writerFor } from './access';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
-import type { DocumentUpdate } from '@artifactbin/contracts';
+import type { DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { commitDocumentUpdate } from '../story/graph/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../story/graph/index';
@@ -825,8 +825,11 @@ export interface EditInput {
  */
 export type EditOutcome =
   /** `warnings`: external URLs the candidate named that would not import (lib/web-assets). */
-  /** `withheld`: the row carries no document or source; the patch landed on exactly its base version. */
-  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[]; withheld?: true }
+  /**
+   * `withheld`: the row carries no document or source. `remotePatches`: the patch landed on a newer head than its
+   * base; these are the logged patches of the versions between, in order (absent when the log cannot yield them all).
+   */
+  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[]; withheld?: true; remotePatches?: RemotePatch[] }
   | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
   | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' | 'empty_batch' | 'too_many_edits' | 'too_large'; editIndex?: number }
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
@@ -891,6 +894,35 @@ export function committedHeadsSettled(): Promise<void> {
 
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
 
+/** One logged commit's patch, admitted at `version - 1` (lib/story/graph advanceGraph replays it). */
+export interface RemotePatch { version: number; patch: GraphPatch }
+/** Beyond this many versions between, the editor reads the head instead. */
+const MAX_REMOTE_PATCHES = 50;
+
+/**
+ * The patches every commit between `baseVersion` and `headVersion` (both exclusive) applied, read from the edit log
+ * (`document_state.forward`, logged by the commit that admitted it). Replayed in order on the graph at `baseVersion`
+ * they give the graph the newer head was built on, without sending or decoding the document. Null when any version
+ * between has no logged patch (a replacement, a conversion), or there are too many: the caller then reads the head.
+ */
+async function patchesSince(db: Queryable, id: string, baseVersion: number, headVersion: number): Promise<RemotePatch[] | null> {
+  const count = headVersion - baseVersion - 1;
+  if (count <= 0) return count === 0 ? [] : null;
+  if (count > MAX_REMOTE_PATCHES) return null;
+  const rows = (await db.query<{ version: number | null; kind: string | null; forward: GraphPatch | null; replaced: boolean }>(
+    `SELECT (document_state->>'version')::int AS version,document_state->>'kind' AS kind,document_state->'forward' AS forward,
+      COALESCE(document_state->'replacement','null'::jsonb)<>'null'::jsonb AS replaced
+     FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq DESC LIMIT $2`, [id, count + 8])).rows;
+  const byVersion = new Map(rows.filter((r) => r.version !== null && r.version > baseVersion && r.version < headVersion).map((r) => [r.version!, r]));
+  const patches: RemotePatch[] = [];
+  for (let version = baseVersion + 1; version < headVersion; version++) {
+    const row = byVersion.get(version);
+    if (!row || row.kind !== 'operations' || row.replaced || !row.forward) return null;
+    patches.push({ version, patch: row.forward });
+  }
+  return patches;
+}
+
 /**
  * AN EDIT NEVER MIXES DATA SYNTAXES. A document the migration has not reached
  * (lib/story/data/data-syntax) refuses the edit's commit, and is converted first,
@@ -935,7 +967,8 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
     if(committed.withheld){
       settleCommittedHead(committed.row.id,committed.row.version);
-      return {applied:true,row:committed.row,withheld:true};
+      const remotePatches=committed.row.version===update.patch.baseVersion+1?null:await patchesSince(db,id,update.patch.baseVersion,committed.row.version);
+      return {applied:true,row:committed.row,withheld:true,...(remotePatches?{remotePatches}:{})};
     }
     const row=await storeCompiledRecord(db,committed.row);
     // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.

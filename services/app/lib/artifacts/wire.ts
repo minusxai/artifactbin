@@ -704,7 +704,8 @@ export async function respondToEdit(
    * 'patch': the browser editor's answer. It already holds the graph it prepared the patch against, so when the
    * patch landed on exactly that version the answer is the patch itself, not the whole document graph (megabytes
    * of JSON on a table-heavy document, parsed and cloned on the page thread at every save). A patch that landed
-   * on a newer head (a concurrent edit to other nodes), or a whole replacement, still answers in full.
+   * on a newer head (a concurrent edit to other nodes) answers with the patches between as well; a whole
+   * replacement still answers in full.
    */
   echo: 'full' | 'patch' = 'full',
 ): Promise<Response> {
@@ -722,8 +723,10 @@ export async function respondToEdit(
     // The commit withheld the new document: it landed on exactly the version the patch was prepared against, so the
     // patch IS the answer. Nothing here may need the new source (`markup`, `state`, the declared `mutations`): the
     // editor reads none of them, and deriving any would decode the whole document on the save's path.
+    // On a newer head (a concurrent edit to other nodes) the answer carries the patches of the versions between too,
+    // and the editor replays them; without them (the log could not yield every one) it reads the head itself.
     if (outcome.withheld && input.documentUpdate) {
-      return json({ ...(await artifactHeadToWire(outcome.row, base)), patch: input.documentUpdate.patch, ...assetWarningsEcho(outcome.warnings) });
+      return json({ ...(await artifactHeadToWire(outcome.row, base)), patch: input.documentUpdate.patch, ...(outcome.remotePatches ? { remote_patches: outcome.remotePatches } : {}), ...assetWarningsEcho(outcome.warnings) });
     }
     const wire = await artifactToWire(outcome.row, base);
     const update = input.documentUpdate;
