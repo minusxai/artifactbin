@@ -1,7 +1,7 @@
 import {it,expect} from 'vitest';
 import {useAppHarness} from './harness';
 import {createAppHost} from '@/server/host';
-import {localOwner} from '../../utils/src/local-owner';
+import {ANONYMOUS} from '@artifactbin/contracts';
 import {mintToken,resolveToken} from '@/lib/accounts';
 
 useAppHarness();
@@ -10,8 +10,12 @@ it.each([false,true])('assembles identity and an optional host document policy (
  const host=await createAppHost({documentEditorPolicy:grant?account=>account.userId==='usr_local':undefined,initialize:async db=>{
   await db.query("INSERT INTO users (id,email,name,username) VALUES ($1,$2,$3,$4)",['usr_local','local@self.invalid','Local owner','local']);
   token=(await mintToken('self','usr_local',db,{expiresInMs:null})).token;
- },identity:upstream=>localOwner({origin,instanceId:'self-test',ownerId:'usr_local',cookieSecret:'s'.repeat(64),upstream,
-  resolveBearer:async offered=>{const found=await resolveToken(offered);return found?{credential:'bearer',userId:found.userId??undefined,tokenId:found.id}:null;}})});
+ },identity:upstream=>({fetch:async request=>{
+  // A bearer-only identity in front of the app: the host hands every request to it with the app as its upstream.
+  const offered=/^Bearer (.+)$/.exec(request.headers.get('authorization')??'')?.[1];
+  const found=offered?await resolveToken(offered):null;
+  return upstream(request,found?{credential:'bearer',userId:found.userId??undefined,tokenId:found.id}:ANONYMOUS);
+ }})});
  const created=await host.fetch(new Request(origin+'/api/artifacts',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({markup:'<p>Hello self</p>',visibility:'private'})}));
  expect(created.status).toBe(201);const artifact=await created.json();
  const owner=await host.fetch(new Request(origin+'/api/artifacts/'+artifact.id,{headers:{authorization:'Bearer '+token}}));
