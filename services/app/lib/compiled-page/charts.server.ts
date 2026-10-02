@@ -11,7 +11,7 @@
  * the hover guide.
  *
  * A chart it cannot draw faithfully is REFUSED (thrown), never approximated:
- * the island then draws it in the browser exactly as today. Refused: an unknown
+ * the island then draws it in the browser. Refused: an unknown
  * or unresolvable viz, a spec vega reports errors for, a spec that still needs
  * a CSS custom property (`var(--…)`) only the page can resolve, a map with
  * street tiles or geo boundaries (network assets), and any SVG that carries a
@@ -306,7 +306,7 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
         ...(options.palette !== undefined ? { palette: options.palette } : {}),
       });
     } catch {
-      // Not drawable on the server: the island draws it, as every chart is drawn today.
+      // Not drawable on the server: the island draws it, as every undrawn chart is.
     }
   }
   return drawings;

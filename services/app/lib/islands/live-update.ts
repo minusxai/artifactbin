@@ -3,7 +3,7 @@
  *
  * Every compiled page that learns of a new version calls this, whoever holds the stream: the page's own
  * stream (./live) on `/raw` and on `/a/:id` before the app adopts it, and the adopted page
- * once the app holds it. It is what the retired React reader does on a write — the
+ * once the app holds it. It is what a write does for the reader — the
  * new version drawn in place, no navigation — for a page the browser never compiles:
  *
  *   the new version's story fragment (`/a/:id/story`, the same assembler output as the page) is fetched

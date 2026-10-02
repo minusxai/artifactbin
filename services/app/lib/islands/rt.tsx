@@ -212,7 +212,7 @@ export function createIslandRuntime(
       return { dataset: ref ?? '' };
     },
     writesUnavailable: () => data.readOnly ?? null,
-    // The server renders without a transport: it says what today's served page says until the check answers.
+    // The server renders without a transport: it says what the former served page says until the check answers.
     mutationUnavailable: (name) => { checks(); return store && !isServer ? store.mutationUnavailable(name) : ACCESS_PENDING; },
     mutating: (name) => { checks(); return !!store?.mutating().has(name); },
     viewer,

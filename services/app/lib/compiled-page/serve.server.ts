@@ -24,7 +24,7 @@
  *     cold path: the snapshot's own anonymous revalidation, waited for within
  *     SERVED_RESULTS_BUDGET_MS (exactly served-results.server's budget; the late
  *     run keeps going and stores its snapshot), else the page carries
- *     declarations without rows and fetches its own, as today.
+ *     declarations without rows and fetches its own.
  *  3. The story. With a snapshot (or URL `$` values, or stored drawings) the
  *     compiled page's SSR module renders the islands WITH them — cached per
  *     (build, snapshot, values, drawings), never keyed on rows; with none, the
@@ -92,7 +92,7 @@ export interface CompiledReaderRequest {
   /**
    * The reader whose holdings the page's own SQLite engine answers for (lib/artifacts holdableImports,
    * IslandPageData.hold): the one the page's query door answers — the app page's request actor, `/raw`'s
-   * anonymous reader (`null`), as today's reader decides it. Absent: the page holds nothing.
+   * anonymous reader (`null`), as the page's reader rules decide it. Absent: the page holds nothing.
    */
   holder?: RoleActor | null;
   /** An archived render's read-only reason. */
@@ -116,13 +116,13 @@ export interface CompiledReaderRequest {
   assetsUrl?: string;
   /** A domain post's attribution line (lib/story/document's bare footer), after the story. */
   footer?: { html: string; css: string } | null;
-  /** A document served by itself: today's standalone stylesheets, byte for byte (AssembleInput.sheets). */
+  /** A document served by itself: the standalone stylesheets, byte for byte (AssembleInput.sheets). */
   sheets?: AssembleInput['sheets'];
   /** Behaviour chunks this path adds to the version's own (`page`: the compiled /raw page's behaviour, lib/islands/page). */
   behaviors?: readonly string[];
   /**
    * `false`: the document without its own chrome — a deck's slide rail and present bar and their
-   * behaviour (`@mx/deck`) — as today's renderer draws `/raw?chrome=0`.
+   * behaviour (`@mx/deck`) — as `/raw?chrome=0` draws it.
    * Default true.
    */
   documentChrome?: boolean;
@@ -457,7 +457,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
         : Promise.resolve({}),
       // A capture brings its own settled run; an archived version and a version that cannot run have no snapshot.
       reader.results !== undefined || reader.at || !flow || failedState ? Promise.resolve(null) : snapshotFor(row, compiled, flow, values),
-      // What the page's engine may hold, for the door it queries through (today's reader asks on every render).
+      // What the page's engine may hold, for the door it queries through (the former reader asked on every render).
       flow && reader.doors && reader.holder !== undefined ? holdableImports(row, flow, reader.holder) : Promise.resolve([]),
     ]);
     // Local tables need the page engine even without a holdable import.

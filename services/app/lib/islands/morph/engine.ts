@@ -1,6 +1,6 @@
 /**
  * THE LIVE MORPH ENGINE (docs/phase2-architecture.md §2.4, §7.2): a compiled page brought to the
- * document's newest version IN PLACE, as today's React reader re-renders a write — no navigation, the
+ * document's newest version IN PLACE, as a write re-renders the reader — no navigation, the
  * reader's place, mode, focus, values and rows kept, a chart that did not change keeping its element.
  *
  * Framework-free and standalone (scripts/build-islands `STANDALONE_LAZY`): loaded only when a version

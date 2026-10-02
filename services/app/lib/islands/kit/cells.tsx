@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * EDITING CELLS (`@mx/kit/cells`, a family of its own: only a page whose table has column content loads it): a `<Column>`'s content in each row of a
- * `<DataTable>`, and in it today's editing cell — a
+ * `<DataTable>`, and in it the former editing cell — a
  * `<Select>`, a `<DatePicker>` or a native `<input>`/`<textarea>`/`<select>` with `run="$mutation"`.
  *
  * - `cellAttrs` is the interpreter's table scope (story-ui/interpreter scopeProps with a tableCommentScope) over
@@ -14,8 +14,8 @@
  *   reader who may not write sees the cell disabled with the reason as its description (the store's write check,
  *   followed live, so a permission change reaches a cell already on screen).
  *
- * The DOM is today's, element for element: the compiler serialises each control's authored attributes with
- * React's server renderer and evaluates its class with the kit's merger at compile time (`attrs`, `cls`); only
+ * The DOM matches the former React render, element for element (pinned by lib/islands/__tests__/kit-parity): the compiler
+ * serialises each control's authored attributes with React's attribute rules (static-solid/attrs) and evaluates its class with the kit's merger at compile time (`attrs`, `cls`); only
  * the row's values, the scope and the state are applied here.
  */
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
@@ -105,7 +105,7 @@ const parseMulti = (raw: string | null | undefined): string[] | null => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
- * The popup, as today's cell controls place it
+ * The popup, as the former cell controls place it
  * ──────────────────────────────────────────────────────────────────────────── */
 
 const POPUP_TOKENS = ['--background', '--foreground', '--popover', '--popover-foreground', '--primary', '--primary-foreground', '--muted', '--muted-foreground', '--accent', '--accent-foreground', '--border', '--input', '--ring', '--radius', '--font-body', '--font-mono'];
@@ -135,7 +135,7 @@ function anchor(root: HTMLElement, popup: HTMLElement, width?: number): () => vo
   root.ownerDocument.addEventListener('scroll', place, true);
   return () => { win.removeEventListener('resize', place); root.ownerDocument.removeEventListener('scroll', place, true); };
 }
-/** Mount `view` in the popup host while `open()`, directly (no wrapper), as React's portal does; removed on close. */
+/** Mount `view` in the popup host while `open()`, directly (no wrapper); removed on close. */
 function usePopup(open: () => boolean, root: () => HTMLElement | undefined, view: () => HTMLElement, width?: number): void {
   createEffect(() => {
     const anchorEl = root();
@@ -158,7 +158,7 @@ const CHEVRON = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24
 const CHECK = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>;
 const CALENDAR = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0 opacity-50" aria-hidden="true"><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></svg>;
 const ARROW = (d: string) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d={d} /></svg>;
-/** The cell appearance of today's SelectControl / DateControl triggers. */
+/** The cell appearance of the former SelectControl / DateControl triggers. */
 const SELECT_TRIGGER = 'inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-8 min-w-0 border border-transparent bg-transparent px-2 hover:border-border hover:bg-muted/60';
 const DATE_TRIGGER = 'inline-flex items-center justify-between rounded-md text-sm tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-8 w-full min-w-0 gap-1 border border-transparent bg-transparent px-1 hover:border-border hover:bg-muted/60';
 const POPUP = 'rounded-md border border-border bg-popover text-popover-foreground shadow-md';
@@ -242,7 +242,7 @@ interface Shared {
   cls: string;
 }
 
-/** Today's SelectControl, `appearance="cell"`, over a cell session. */
+/** The former SelectControl, `appearance="cell"`, over a cell session. */
 function CellSelect(props: Shared & {
   session: () => { draft: Scalar } | undefined; busy: () => boolean; unavailable: () => string | null; change(v: Scalar): void; commit(): void; cancel(): void; begin(): void;
   typed(v: string | null): Scalar; valueType: () => string | undefined; cell: CellScope; field?: string; children?: JSX.Element;
@@ -386,7 +386,7 @@ function monthGrid(y: number, m: number) {
   return Array.from({ length: count }, (_, i) => { const d = new Date(y, m - 1, 1 + start + i); return { iso: isoOf(d.getFullYear(), d.getMonth() + 1, d.getDate()), day: d.getDate(), inMonth: d.getMonth() === m - 1 }; });
 }
 
-/** Today's DateControl, `appearance="cell"`: a pick is the whole edit, staged and committed in one gesture. */
+/** The former DateControl, `appearance="cell"`: a pick is the whole edit, staged and committed in one gesture. */
 function CellDate(props: Shared & { busy: () => boolean; unavailable: () => string | null; change(v: Scalar): void; commit(): void; valueType: () => string | undefined }) {
   const a = () => props.authored();
   const min = () => str(a().min), max = () => str(a().max);
@@ -431,7 +431,7 @@ function CellDate(props: Shared & { busy: () => boolean; unavailable: () => stri
   </div>;
 }
 
-/** Today's native editing cell: the authored element, its draft committed on Enter, change (a select) or blur. */
+/** The former native editing cell: the authored element, its draft committed on Enter, change (a select) or blur. */
 function CellNative(props: Shared & {
   tag: string; reason: () => string | null; begin(): void; change(v: Scalar): void; commit(): void; cancel(): void; typed(v: string | null): Scalar;
   sessions: CellSessions; identity: string; children?: JSX.Element;

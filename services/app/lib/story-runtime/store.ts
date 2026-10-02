@@ -4,8 +4,8 @@ import type {ImageAssetAnswer} from '@/lib/story/data/ref-data';
  *
  * Seeded from the island's `dataflow` (the compiled declarations + the state the server
  * rendered with), it holds every scalar's current value and every table's
- * current rows, and it is the ONE thing every consumer reads: the runtime's
- * React tree (through `useSyncExternalStore`), the bound native controls
+ * current rows, and it is the ONE thing every consumer reads: the islands'
+ * Solid bridge (lib/islands/rt), the bound native controls
  * (`<select value="$region">` writes here), and the author's script through
  * `window.mx` (lib/story-runtime/mx.ts). Nothing else holds document data.
  *
@@ -145,8 +145,8 @@ export interface DataflowStore {
    * Not only the ones in flight, and that is paint-first's doing: the server
    * renders a document with no rows and no transport, so nothing is ever in
    * flight and no embed is busy; the browser renders the same document a tick
-   * later with its queries already asked for, and every embed IS busy. React
-   * answers that with #418 by throwing the server's tree away. Both sides
+   * later with its queries already asked for, and every embed IS busy. A
+   * server tree that differs from the client's cannot be adopted. Both sides
    * agree on "not current" — and it is the more honest answer while a slider
    * is still moving: the chart beside it is stale.
    *
@@ -244,7 +244,7 @@ export interface CreateStoreOptions {
   transport?: QueryTransport | null;
   /**
    * ONE reason that refuses EVERY write on this render, whatever the datasets
-   * would have said (StoryIslandData.readOnly): a SNAPSHOT render — today
+   * would have said (StoryIslandData.readOnly): a SNAPSHOT render — currently
    * `?version=N`, the archived view — is not the document a write could land
    * on, so it says so by name instead of letting the missing transport answer
    * "This view cannot save changes", which is true and about the wrong thing.

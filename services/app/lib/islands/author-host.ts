@@ -1,10 +1,10 @@
 /**
  * THE COMPILED PAGE'S AUTHOR SCRIPT HOST, loaded lazily by `boot` only when the page data island names
- * an author script (IslandPageData.authorScript): today's author-script session
+ * an author script (IslandPageData.authorScript): the author-script session
  * (lib/story-runtime/author-script `createAuthorScriptSession`) started against the island store, as
- * lib/story-runtime/entry.tsx starts it against the standalone document's store.
+ * the standalone document starts it against its own store.
  *
- * The trust boundary is today's, unchanged: the code never runs in this document. The session mounts
+ * The trust boundary is the standalone document's, unchanged: the code never runs in this document. The session mounts
  * a hidden `sandbox="allow-scripts"` frame on the fixed HTTP wrapper (`AUTHOR_FRAME_PATH`, its own CSP),
  * and the source crosses as DATA over a transferred MessagePort after the wrapper loads. The frame gets
  * only the bridge's data operations over the store (describe, read, set, declared mutations,
@@ -12,7 +12,7 @@
  *
  * Bundled ALONE (scripts/build/build-islands.mjs STANDALONE_LAZY): no Solid, its shared code copied in, so a
  * page without an author script never pays for it and the rt+boot closure never grows. A document that
- * declares no data has no island store; the realm then gets an empty one, as today's runtime always
+ * declares no data has no island store; the realm then gets an empty one, as the former runtime always
  * hands it one.
  */
 import { createAuthorScriptSession } from '@/lib/story-runtime/author-script';

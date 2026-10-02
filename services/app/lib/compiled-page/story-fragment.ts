@@ -9,7 +9,7 @@
 export const storyFragmentPath = (id: string): string => `/a/${encodeURIComponent(id)}/story`;
 
 /**
- * Which page asks: `raw` (the chrome-less reader copy, today's standalone sheets) or `app` (the app page's
+ * Which page asks: `raw` (the chrome-less reader copy, the standalone document's sheets) or `app` (the app page's
  * story: its one isolated sheet and its inline drawings). The rest of the query string is the page's own.
  */
 export const STORY_SURFACE_PARAM = 'surface';

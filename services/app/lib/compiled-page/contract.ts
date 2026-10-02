@@ -188,7 +188,7 @@ export interface CompiledPage {
   links: LinkHints;
   /** Kit components rendered by the Solid kit, by where they render. */
   kit: { skeleton: string[]; islands: string[] };
-  /** Legacy reporting field. Solid renders all static components, so this is empty. */
+  /** Always empty: Solid renders every static component. Kept so stored pages keep their shape. */
   reactStatic: string[];
   /**
    * Registered components the compile could not place: a non-empty list refuses the compile (fallback).
@@ -240,9 +240,8 @@ export interface IslandRenderData {
 export type CompilePage = (input: CompileInput, build: CompilerBuild) => Promise<CompiledPage>;
 
 /**
- * The most a read may spend compiling inline on a build-id miss before it falls back to today's renderer
- * (spec §6). After Wave 4 (spec §6.1) a read always waits for the compile, and this only decides whether
- * the inline compile is logged as slow.
+ * The most a read may spend compiling inline on a build-id miss before it is logged as slow
+ * (spec §6). There is no other renderer: a read always waits for the compile.
  */
 export const COMPILE_INLINE_BUDGET_MS = 300;
 
@@ -518,7 +517,7 @@ export interface AssembleInput {
    */
   footer?: { html: string; css: string } | null;
   /**
-   * A document served BY ITSELF (`/raw`, a domain post, a capture) carries today's standalone
+   * A document served BY ITSELF (`/raw`, a domain post, a capture) carries the standalone
    * document's stylesheets, byte for byte (lib/story/styles/document-styles), in place of `css`: the story is
    * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.
    */
@@ -554,13 +553,13 @@ export const ISLAND_DATA_ID = 'mx-story-data';
  * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
  * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
  * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
- * the attribute when it mounts (the served DOM then matches today's), and
+ * the attribute when it mounts (the served DOM then matches the former render), and
  * re-draws only when its table changes or the reader interacts (Vega loads then).
  */
 export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
 /** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */
 export const CHART_STATE_ATTR = 'data-mx-chart-state';
-/** The idle loader's marker on the SPA's script tag, so gates can tell the HTML-first page from today's. */
+/** The idle loader's marker on the SPA's script tag, so gates can tell the HTML-first page from the former client-rendered one. */
 export const SPA_IDLE_ATTR = 'data-mx-spa-idle';
 /** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
 export const READER_READY_ATTR = 'data-mx-ready';

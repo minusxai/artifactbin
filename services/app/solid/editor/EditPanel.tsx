@@ -4,12 +4,10 @@
  * enough to hold it beside the document (lib/story/reader/edit-bar's EDIT_PANEL_BREAKPOINT; narrower windows
  * get bottom sheets instead).
  *
- * Same frame as the React panel: tabs, the dot, collapse. What each tab shows is the caller's.
+ * The frame is tabs, the dot, collapse. What each tab shows is the caller's.
  *
- * DEVIATION: the React panel reads `useArtifactBackend().unavailable('versions')` from context; Solid
- * has no equivalent context yet (the app's artifact-backend boundary is still React-only), so this
- * takes `historyUnavailable` as an explicit prop. Whoever wires this panel into a live page passes
- * `backend.unavailable('versions')`.
+ * There is no artifact-backend context in the app, so this takes `historyUnavailable` as an explicit
+ * prop. Whoever wires this panel into a live page passes `backend.unavailable('versions')`.
  */
 import { createUniqueId, For, Show, type JSX } from 'solid-js';
 import History from 'lucide-solid/icons/history';

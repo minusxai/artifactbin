@@ -257,7 +257,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
   /** Editors `hold` handed to the next mount: `dispose` leaves them running. */
   const holding = new Set<RegionEditor>();
   // GridEdit's grip/resize affordances (STORY_GRID_EDIT_CSS's [data-mx-grid-tile]/.mx-grid-resize
-  // rules) are structural, not authored content — same reasoning as the React adapter's own
+  // rules) are structural, not authored content — same reasoning as the
   // `<style data-mx-grid-css>`, injected inside the story surface rather than the app's <head>.
   if (!root.querySelector('style[data-mx-grid-css]')) {
     const style = root.ownerDocument.createElement('style');

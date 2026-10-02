@@ -10,8 +10,7 @@
  * react-grid-layout-backed kernel this replaces); only the LayoutItem fields this editor ever sets
  * (no minW/maxW/isDraggable/etc.); and no debug `log()` calls (console output gated behind an env
  * flag we never set — never part of a returned layout).
- * services/app/solid/editor/__tests__/rgl-kernel.parity.test.ts asserts this produces the exact
- * same layouts as the real react-grid-layout kernel on the same inputs.
+ * solid/editor/__tests__/grid-edit.test.tsx covers the layouts it produces.
  *
  * react-grid-layout is MIT licensed:
  *
