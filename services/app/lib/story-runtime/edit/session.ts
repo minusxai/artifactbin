@@ -194,6 +194,8 @@ export function createFrameEditSession({
   /** Editors held across the redraw in progress (`holdUnchanged`), for the next mount. */
   let held: HeldEditors | null = null;
   let pendingBookmark: EditorBookmark | undefined;
+  /** The reader's scroll position as the last redraw began (`unmountCompiledDom`), for the remount to keep. */
+  let scrollBeforeRedraw: { x: number; y: number } | null = null;
   /*
    * The Undo/Redo target, held for the redraw the history step always causes. The painted draft may still
    * hold the same block (same id) in its old shape — a heading the undo turns back into its literal `### `
@@ -379,6 +381,7 @@ export function createFrameEditSession({
       held = null;
     },
     unmountCompiledDom() {
+      scrollBeforeRedraw = { x: win.scrollX, y: win.scrollY };
       for (const view of views.all) flushFlowView(view);
       const toolbarFocus = doc.activeElement instanceof HTMLElement
         && !!doc.activeElement.closest('[aria-label="Typography toolbar"]');
@@ -394,7 +397,10 @@ export function createFrameEditSession({
     },
     async mountCompiledDom() {
       if (disposed) return;
-      const readerScroll = { x: win.scrollX, y: win.scrollY };
+      // Where the reader was before the redraw (read at the unmount, while the page was laid out: read here, after
+      // the morph, it laid the whole redrawn page out in the draw's task).
+      const readerScroll = scrollBeforeRedraw ?? { x: win.scrollX, y: win.scrollY };
+      scrollBeforeRedraw = null;
       compiledMount?.dispose();
       const keep = held ?? undefined;
       held = null;
