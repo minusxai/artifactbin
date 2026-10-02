@@ -64,7 +64,7 @@ export function createArtifactVersions(options: ArtifactVersionsOptions): Artifa
   let first = true;
   let timer: ReturnType<typeof setTimeout> | undefined;
   createEffect(() => {
-    // Tracked reads: a Solid props object makes both live, exactly like the React deps list.
+    // Tracked reads: a Solid props object makes both live.
     void options.currentVersion;
     void options.backend;
     // The list loads at once; later version moves (saves, collaborators' saves over the live stream) settle briefly first.

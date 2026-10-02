@@ -4,7 +4,7 @@
  * preview. The editable editor stays mounted (hidden) while the preview shows, so its draft,
  * selection and undo history survive the round trip; the preview owns a separate read-only editor.
  *
- * FeatureGate's tooltip stays in the React shell (the reason is the button's description only).
+ * FeatureGate's tooltip stays in the shell (the reason is the button's description only).
  */
 import { createEffect, createSignal, createUniqueId, lazy, onCleanup, Show, Suspense } from 'solid-js';
 import type { SourceEditorProps } from './SourceEditor';

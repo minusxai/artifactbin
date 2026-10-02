@@ -187,8 +187,8 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
   if (!build) return { build: 'none', error: compiler.error ?? 'no island build', reason: 'compile-error' };
   try {
     await archiveSharedBuild(build);
-    // Imported on first compile, not at the top: the compiler carries Babel, Solid and today's React
-    // kit (it renders static components at compile time), and this module sits under lib/artifacts,
+    // Imported on first compile, not at the top: the compiler carries Babel, Solid and the static kit
+    // (it renders static components at compile time), and this module sits under lib/artifacts,
     // which every tool that reads artifacts loads (the CLI's teaching build among them). A process
     // that does not prepare a page never loads any of it. The snapshot store
     // imports this module, so its access helper is reached the same way (no import cycle at load).

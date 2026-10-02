@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
  * THE DATA TIERS' PAGE — `/a/<id>` (and its pretty alias) for an image, a pdf, a stored file, a viz
- * recipe or a dataset: the data branch of components/ArtifactSurface in Solid. The data tiers are
+ * recipe or a dataset: the data branch of the artifact route. The data tiers are
  * VALUES, not documents: they read as an image, a file card, a table or a recipe inside the app's own
  * measure, under the one app bar (solid/components/PageChrome) carrying the artifact's title as its
  * crumb, Fork as the bar's action and the "Artifact controls" panel (forked-from, the owner's dataset

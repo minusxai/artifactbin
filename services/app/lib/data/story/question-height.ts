@@ -1,6 +1,6 @@
 // The <Question> sizing contract — ONE for every renderer.
 //
-// The inline editor and view both render StoryRuntimeApp from the same stored
+// The editor and the reader both render from the same stored
 // source through this shared contract. Two renderers with their own defaults,
 // or only one of them parsing string heights, make a chart without an authored
 // height change size between editing and reading.

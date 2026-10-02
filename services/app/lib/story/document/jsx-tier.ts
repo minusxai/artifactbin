@@ -11,7 +11,7 @@
  * (The file keeps its jsx-* name because JSX is the SYNTAX; the stored and
  * wire format is `markup`.)
  *
- * Mirrors minusx `lib/data/story/file-markup.ts` JSX_STORY_CTX semantics:
+ * The validation chain:
  * component allowlist + STORY_HTML_TAGS + `no-inline-style` style policy, then
  * the banned-css sanitizer as belt, then the compile.
  */

@@ -14,7 +14,7 @@
  * nowhere left for them to disagree.
  *
  * No DB, no I/O, no `node:crypto` (lib/sha256): `lib/story/document/update-parts.ts`
- * calls this and `components/InPlaceEditor.tsx` imports THAT, so everything
+ * calls this and `solid/editor/InPlaceEditor.tsx` imports THAT, so everything
  * here lands in the browser bundle.
  *
  * The lookup is what the caller holds. A PREDICATE is enough when all that is
@@ -184,8 +184,8 @@ export const isWebUrl = (value: string): boolean => WEB_URL.test(value);
  * NOTHING here may consult the server's `web_assets` index. This runs on BOTH
  * ends of the wire and the island carries no asset lookup, so a server that
  * knew a URL was cached would render one address while the hydrating client
- * rendered the other — which React answers by discarding the whole server tree
- * (#418). Both ends start knowing nothing; the browser learns, and only later
+ * rendered the other — which the island cannot adopt
+ * (the React era's error #418). Both ends start knowing nothing; the browser learns, and only later
  * renders benefit.
  *
  * NULL is the refusal, and it is the MECHANISM rather than a backstop. Anything
@@ -197,8 +197,8 @@ export const isWebUrl = (value: string): boolean => WEB_URL.test(value);
  * That matters beyond tidiness: a bound `src` is set by the runtime DIRECTLY,
  * which routes around the interpreter's own dangerous-scheme filter
  * (`buildProps` drops the attribute and `RuntimeBoundSource` sets it again) —
- * the one defence-in-depth layer lib/story-ui/interpreter.tsx's header promises
- * to keep. The served document's CSP and React's refusal of `javascript:` do
+ * the one defence-in-depth layer the compiler's attribute filter
+ * (lib/story-ui/interpreter-primitives) promises to keep. The served document's CSP and the attribute filter's refusal of `javascript:` do
  * stop every shape in practice (measured: zero third-party requests), but a
  * policy that happens to hold is not the same thing as a rule that says no.
  *
@@ -306,7 +306,7 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
       }
       if (held.placeholder && !attrOf(el, 'style')) {
         // An OBJECT, not a css string: both render paths hand this straight to
-        // createElement, and React rejects a string `style` prop.
+        // createElement, and the AST's style contract is an object (static-solid/attrs.ts `styleText`).
         setAttr(el, 'style', {
           backgroundImage: `url(${held.placeholder})`,
           backgroundSize: 'cover',
@@ -315,11 +315,11 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
       }
       if (opts.capture) continue;
       /*
-       * TWO WIDTHS, and the browser picks. `srcSet` in React's own spelling
-       * rather than the HTML one: measured through the SSR renderer, a
-       * lowercase `srcset` reaches the DOM but React does not RECOGNISE it, so
-       * its own `<link rel=preload as=image>` preloads the full `href` and the
-       * phone downloads the desktop copy before it downloads the one it will
+       * TWO WIDTHS, and the browser picks. `srcSet` in the AST's prop spelling
+       * (static-solid/attrs.ts writes it as `srcset`) rather than the HTML
+       * one: measured through the former React SSR renderer, a lowercase
+       * `srcset` was not recognised, so its `<link rel=preload as=image>`
+       * preloaded the full `href` and the phone downloaded the desktop copy before it downloads the one it will
        * use. The author's own srcset wins, as their width and style do.
        */
       const srcSet = attrOf(el, 'srcset') || attrOf(el, 'sizes') ? null : assetSrcSet(url, held);
@@ -329,7 +329,7 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
       }
       /*
        * LET THE BROWSER WAIT for everything but the first viewport. `lazy` also
-       * suppresses React's preload of that image (measured), which is the
+       * suppresses the preload of that image (measured), which is the
        * point: preloading what a reader may never scroll to is the same cost
        * in a different place.
        */

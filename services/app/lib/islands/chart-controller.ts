@@ -1,6 +1,5 @@
 /**
- * THE CHART CONTROLLER — a `<Question>` chart as a FRAMEWORK-FREE controller over lib/viz (what
- * components/viz/VegaChart does inside React effects). Never imported statically: `chart.ts` loads
+ * THE CHART CONTROLLER — a `<Question>` chart as a FRAMEWORK-FREE controller over lib/viz (the chart's draw/update/dispose lifecycle). Never imported statically: `chart.ts` loads
  * it on demand, so Vega arrives after reader readiness and chart visibility, a table change,
  * or a reader interaction.
  *

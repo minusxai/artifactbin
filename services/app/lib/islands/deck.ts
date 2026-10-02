@@ -2,8 +2,7 @@
  * THE DECK'S CHROME BEHAVIOUR (`@mx/deck`, a compiled page's `behaviors: ['deck']`), with NO
  * framework. The rail and the present bar are server HTML; this tracks the active slide on scroll,
  * keeps thumbnail text leaves in sync, marks `aria-current`, pages on clicks and
- * keys, and toggles fullscreen — what StoryRuntimeApp's SlideRail, PresentBar and useSlideChrome do
- * in React. The markup it drives is the compiler's static deck chrome: `.mx-rail .mx-rail-row`,
+ * keys, and toggles fullscreen — the slide rail, present bar and slide chrome. The markup it drives is the compiler's static deck chrome: `.mx-rail .mx-rail-row`,
  * `.mx-present` (with its labelled buttons and `.mx-present-count`) and `[data-mx-slide]` slides.
  *
  * Loaded as a module script on its own. A deck with no islands has no island module, so this chunk
@@ -26,7 +25,7 @@ export function startDeck(doc: Document = document, win: Window = window): () =>
   };
   revealThumbs();
   // The document's slides, NOT the rail's miniatures (a thumbnail renders a real slide, stamps included):
-  // StoryRuntimeApp documentSlides.
+  // (`.mx-doc` slides only).
   const slides = () => [...doc.querySelectorAll<HTMLElement>('.mx-doc [data-mx-slide]')];
   const rows = () => [...doc.querySelectorAll<HTMLElement>('.mx-rail .mx-rail-row')];
   const bar = () => doc.querySelector<HTMLElement>('.mx-present');

@@ -1,9 +1,8 @@
 /**
  * THE `<DeckGL>` ENGINE'S FRAMEWORK-FREE HALF: everything the map draws that is not a view. Every layer
  * is built from the lib/viz/deck-spec contract (allowlisted types and props, interpreted accessors),
- * never from the authored JSON directly. Two views draw it: the retired React engine
- * and the compiled page's Solid island (lib/islands/kit/embed), so a
- * map is the same map on either reader.
+ * never from the authored JSON directly. The compiled page's Solid island (lib/islands/kit/embed) draws it,
+ * so a map is the same map on every reader.
  *
  * Browser-only (deck.gl and h3-js): imported by the lazily loaded engines, never by a first paint.
  */

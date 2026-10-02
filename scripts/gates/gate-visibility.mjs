@@ -94,7 +94,7 @@ check(page.url().includes(`/@${username}/${doc.id}-cookie-proof`), 'a mangled pr
 
 // ── 3. ShareLink flips visibility from the page ────────────────────────────
 // Every interaction waits for the SERVER to answer rather than a fixed pause:
-// a click that lands before React hydrates does nothing and raises nothing, so
+// a click that lands before the app hydrates does nothing and raises nothing, so
 // a sleep here turns a real failure into a coin flip (it flaked exactly once).
 const sharingPut = () => page.waitForResponse(
   (r) => r.url().includes('/sharing') && r.request().method() === 'PUT' && r.status() === 200,

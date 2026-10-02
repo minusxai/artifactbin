@@ -1,7 +1,7 @@
 /**
  * A store fact an island follows through its context (`IslandContext.mutationUnavailable`, `mutating`:
- * reactive, re-read on every store change — the subscription today's runtime adapters make with
- * `useSyncExternalStore`, lib/story-runtime/StoryRuntimeApp), held at what the server drew while the
+ * reactive, re-read on every store change — the subscription the former runtime adapters made with
+ * `useSyncExternalStore`), held at what the server drew while the
  * page hydrates.
  */
 import { createSignal, sharedConfig } from 'solid-js';

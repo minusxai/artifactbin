@@ -2,7 +2,7 @@ import type {DocumentGraph} from '@artifactbin/contracts';
 /**
  * Live document wakeups — the down-sync half of concurrent editing.
  *
- * Ported in shape from minusx `lib/chat/conversation-stream.server.ts`: the
+ * The
  * durable rows are the truth and NOTIFY is only a POINTER saying "go look".
  * Every wakeup triggers a catch-up read, so a NOTIFY lost while nobody is
  * listening changes nothing — correctness comes from the read, never from

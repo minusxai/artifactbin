@@ -736,7 +736,7 @@ jobs:
           overwrite: true
 
   # RELEASE ONLY. Selected when the CLI version changed (scripts/lib/ci-plan.mjs `cliRelease`): the
-  # four-platform build was 4.5 minutes on the Intel runner with the render proofs queued behind it,
+  # multi-platform build was 4.5 minutes on the Intel runner with the render proofs queued behind it,
   # on every full run, for bytes the publisher never uploads unless the version moved. An ordinary
   # CLI change is guarded by the bundle build and the source suite in the node job.
   cli:
@@ -889,7 +889,7 @@ jobs:
   # On main it stays a summary: a push has nothing left to fix, and a slow runner there would turn
   # this into a red merge button teaching everyone to re-run.
   #
-  # Two budgets. 240s is the ordinary one, measured from what this branch achieves. The four-platform
+  # Two budgets. 240s is the ordinary one, measured from what this branch achieves. The multi-platform
   # CLI build is the exception: it compiles a standalone executable and drives real browsers against
   # it, it runs only for a release, and it is the whole reason the rest of the run had to get out of
   # its way. Its allowance is named here rather than hidden in a slower default for everything.

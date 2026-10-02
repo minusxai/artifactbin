@@ -16,8 +16,8 @@
  *     (CSV + queries + charts), deck, Mermaid (plain, and in the industry
  *     theme) — each on the reader view and on
  *     /raw, as an anonymous reader with a cold cache under the throttling in
- *     `LAB_THROTTLE`, median of `documentRuns`. `Takeover` is when the React
- *     runtime owns the visible document (view only); `Painted` is when the
+ *     `LAB_THROTTLE`, median of `documentRuns`. `Takeover` is when the app's
+ *     rendered document replaces the server copy (view only); `Painted` is when the
  *     charts/diagram are drawn; bytes are response bodies, decoded and gzip.
  *   - App loads: the signed-in home and the anonymous prose reader, cold and
  *     warm cache, median `usefulMs` (first frame showing the content).

@@ -21,7 +21,7 @@
  *                   `[data-mx-initial-story]` copy is gone AND
  *                   `body > #root [data-mx-inline-story]` holds rendered
  *                   content, plus two animation frames (a paint opportunity).
- *                   This is when the React runtime owns the visible document.
+ *                   This is when the app's rendered document replaces the server copy.
  *                   Null on raw, which hydrates the server DOM in place.
  *   painted       — fixtures with charts/diagrams: the first state where the
  *                   expected count of `[data-mx-chart-state=ready]` (none still

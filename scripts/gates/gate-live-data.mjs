@@ -13,7 +13,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  * Checked here rather than in a unit test because every part of it is a
  * browser fact: the sandboxed document's own POST, the SSE `data` frame, the
- * store's re-run, and React keeping the DOM it already had.
+ * store's re-run, and the islands keeping the DOM they already had.
  *
  *   usage: node scripts/gates/gate-live-data.mjs [base]
  */

@@ -14,10 +14,8 @@
  * while the SQL has focus (or a chip is hovered), asks the editor to spotlight
  * them in the document: an outline, not a selection, so the rail stays here.
  *
- * DEVIATION from the React panel: this reads its ArtifactBackend from context
- * (lib/artifact-backend/context, React-only). Solid has no such context on
- * this route yet, so `backend` is an explicit prop — same precedent as
- * solid/editor/EditPanel's `historyUnavailable`. Whoever wires this panel into
+ * There is no artifact-backend context in the app, so `backend` is an explicit
+ * prop — same precedent as solid/editor/EditPanel's `historyUnavailable`. Whoever wires this panel into
  * a live page passes the artifact's backend.
  */
 import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from 'solid-js';
@@ -49,7 +47,7 @@ const PREVIEW_ROWS = 10;
 
 /**
  * A textarea committed on blur or ⌘⏎. Re-seeded whenever `sql` changes from
- * OUTSIDE this field (mirrors the React panel's `key={sql}` remount).
+ * OUTSIDE this field (a reseed, not a remount).
  */
 function SqlField(props: { name: string; sql: string; onCommit: (sql: string) => void; onFocus: () => void; onBlur: () => void }): JSX.Element {
   const [draft, setDraft] = createSignal(props.sql);

@@ -18,8 +18,7 @@
  *
  * `options` is read LIVE (a Solid props object, not a spread copy): the
  * subscription itself only re-opens when `backend`/`id`/`initialEditId`/
- * `initialVersion`/`enabled` change (the `on([...])` dependency list below,
- * React's old dependency array made explicit) — `isOwnFrame`/`onData`/
+ * `initialVersion`/`enabled` change (the `on([...])` dependency list below) — `isOwnFrame`/`onData`/
  * `onAnnotations`/`since` are read fresh inside the subscription's callbacks
  * with no ref-mirroring needed, since a live getter already reads the latest.
  */

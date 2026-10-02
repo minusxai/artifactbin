@@ -5,12 +5,11 @@
  * That version is not compiled for reading (lib/artifact-page `compiledMode`): what a person staring at
  * a brand-new document needs is not the placeholder but the paste for their agent, which is app UI
  * (solid/components/StarterInstructions). Its chrome is the reader's own (lib/story/reader/reader-chrome), drawn
- * here as components/ArtifactSurface drew it through InlineReaderChrome, with the same panels
- * solid/pages/Document opens from it.
+ * here with the same panels solid/pages/Document opens from it.
  *
  * Three ways out, all back onto the compiled page:
  *  - the first real version arrives on the live stream → reload, keeping the reader's place, into the
- *    compiled reader (ArtifactSurface's `props.starter && … && !showStarter` reload);
+ *    compiled reader;
  *  - Edit (the rail, the controls panel, or landing on `#edit`) → `/edit`, which the server serves as the
  *    compiled placeholder with the editor in place (solid/pages/Document);
  *  - a capture never reaches here: a keyed request is compiled.
