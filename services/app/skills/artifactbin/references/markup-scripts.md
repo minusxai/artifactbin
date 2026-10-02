@@ -117,8 +117,8 @@ changes.
 
 ## Libraries
 
-Import a library by its npm name or by URL. Pin a version (`three@0.170.0`)
-when the page must not change under its readers. `fetch` reaches HTTPS URLs
+Import a library by its npm name or by URL. To pin a version, pin it in every
+specifier of that package (`three@0.170.0`, `three@0.170.0/examples/…`). `fetch` reaches HTTPS URLs
 that allow cross-origin reads.
 
 ```jsx
