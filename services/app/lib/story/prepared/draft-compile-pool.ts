@@ -1,22 +1,38 @@
 /**
- * Worker threads for editor draft compiles (./draft-compile.server.ts). Each thread loads the
- * compiler once and compiles one draft at a time; a call waits for an idle thread. The input and the
- * answer are data (structured clone); a compile's error comes back as its message. A thread that
- * dies is replaced and its caller fails.
+ * Worker threads for the app's CPU-bound document work (./draft-compile.server.ts): editor draft
+ * compiles, a version's page compile and its snapshot's server-drawn charts. On the request thread
+ * each of these holds every other request this process answers (a heavy chart set held it ~15 s in
+ * production). Each thread loads the compiler and vega once and runs one job at a time; a call waits
+ * for an idle thread. The input and the answer are data (structured clone); a job's error comes back
+ * as its message. A thread that dies is replaced and its caller fails.
  */
 import { Worker } from 'node:worker_threads';
 import type { PrepareStoryInput } from './prepare-runtime.server';
+import type { CompileInput, CompiledPage, CompilerBuild, DrawnChart } from '@/lib/compiled-page/contract';
+import type { JsxNode } from '@/lib/jsx';
+import type { ServedResults } from '@/lib/story-runtime/contract';
+import type { SnapshotChartOptions } from '@/lib/compiled-page/charts.server';
 
-export type DraftCompileRequest = { id: number; input: PrepareStoryInput };
-export type DraftCompileAnswer = { id: number; ok: true; html: string } | { id: number; ok: false; error: string };
+/** One job a thread runs: a draft preview, a version's compile, or a snapshot's drawn charts. */
+export type PrepareJob =
+  | { kind?: 'draft'; input: PrepareStoryInput }
+  | { kind: 'compile'; input: CompileInput; build: CompilerBuild }
+  | { kind: 'charts'; nodes: JsxNode[]; results: Pick<ServedResults, 'tables' | 'errors'>; options: SnapshotChartOptions };
+export type DraftCompileRequest = { id: number } & PrepareJob;
+export type DraftCompileAnswer = { id: number; ok: true; value: unknown } | { id: number; ok: false; error: string };
 
 export interface DraftCompilePool {
   readonly size: number;
+  /** An editor draft's preview page. */
   compile(input: PrepareStoryInput): Promise<string>;
+  /** A version's compiled page (lib/compiled-page/compiler `compilePage`). */
+  compilePage(input: CompileInput, build: CompilerBuild): Promise<CompiledPage>;
+  /** A snapshot's server-drawn charts (lib/compiled-page/charts.server `drawSnapshotCharts`). */
+  drawCharts(nodes: JsxNode[], results: Pick<ServedResults, 'tables' | 'errors'>, options: SnapshotChartOptions): Promise<Record<string, DrawnChart>>;
   close(): Promise<void>;
 }
 
-interface Task { request: DraftCompileRequest; resolve: (html: string) => void; reject: (error: Error) => void }
+interface Task { request: DraftCompileRequest; resolve: (value: unknown) => void; reject: (error: Error) => void }
 interface Thread { worker: Worker; ready: Promise<void>; task: Task | null }
 
 export function createDraftCompilePool(options: { url: URL; execArgv?: string[]; workers: number }): DraftCompilePool {
@@ -39,7 +55,7 @@ export function createDraftCompilePool(options: { url: URL; execArgv?: string[];
       const task = thread.task;
       thread.task = null;
       worker.unref();
-      if (answer.ok) task.resolve(answer.html); else task.reject(new Error(answer.error));
+      if (answer.ok) task.resolve(answer.value); else task.reject(new Error(answer.error));
       pump();
     });
     const fail = (why: string) => {
@@ -70,15 +86,19 @@ export function createDraftCompilePool(options: { url: URL; execArgv?: string[];
     }
   };
 
+  const run = <T>(job: PrepareJob): Promise<T> => {
+    if (closed) return Promise.reject(new Error('the draft compiler is closed'));
+    return new Promise<T>((resolve, reject) => {
+      queue.push({ request: { id: ++ids, ...job }, resolve: resolve as (value: unknown) => void, reject });
+      pump();
+    });
+  };
+
   return {
     size,
-    compile(input) {
-      if (closed) return Promise.reject(new Error('the draft compiler is closed'));
-      return new Promise<string>((resolve, reject) => {
-        queue.push({ request: { id: ++ids, input }, resolve, reject });
-        pump();
-      });
-    },
+    compile: (input) => run<string>({ kind: 'draft', input }),
+    compilePage: (input, build) => run<CompiledPage>({ kind: 'compile', input, build }),
+    drawCharts: (nodes, results, options) => run<Record<string, DrawnChart>>({ kind: 'charts', nodes, results, options }),
     async close() {
       closed = true;
       for (const task of queue.splice(0)) task.reject(new Error('the draft compiler is closed'));

@@ -62,6 +62,7 @@ import { marksOf } from '@/lib/story/prepared/served-results.server';
 import { preparedPageFor } from '@/lib/story/prepared/prepared-page.server';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { drawSnapshotCharts } from './charts.server';
+import { prepareWorkers } from '@/lib/story/prepared/prepare-workers.server';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import {
   SNAPSHOT_INPUT_SETS_PER_ARTIFACT,
@@ -279,7 +280,10 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string
   // options and person cards are computed for whoever the run is for (the viewer overlay's to answer).
   const results = sharedResults({ tables: pick(state.tables, answered), errors: pick(state.errors, answered) });
   const { page } = await preparedPageFor(row, null, PUBLIC_BASE_URL);
-  const drawings = await drawSnapshotCharts(page.data.nodes, results, { colorMode: page.data.colorMode, template: page.data.template });
+  // Drawing with vega is CPU-bound and never yields (a heavy chart set held the request thread ~15 s): on a prepare thread when this process has them.
+  const chartOptions = { colorMode: page.data.colorMode, template: page.data.template };
+  const threads = prepareWorkers();
+  const drawings = threads ? await threads.drawCharts(page.data.nodes, results, chartOptions) : await drawSnapshotCharts(page.data.nodes, results, chartOptions);
   const snapshot: DataSnapshot = {
     key: { artifactId: key.artifactId, slot: key.slot, planKey: key.planKey, inputsKey: key.inputsKey },
     marks,
