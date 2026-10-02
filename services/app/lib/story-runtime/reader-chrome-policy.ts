@@ -12,7 +12,7 @@
  * The 4px slack absorbs subpixel rounding and the mobile URL bar, which
  * changes the viewport height under us as it collapses; the 4px dead zone on
  * direction is what keeps touch-scroll jitter from making the chrome flicker
- * (both numbers are the ones today's phone dock already uses).
+ * (both numbers are the ones the phone dock already uses).
  */
 
 export interface ChromeSample {

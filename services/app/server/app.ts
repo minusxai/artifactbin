@@ -151,12 +151,9 @@ export function withReaderHeadOrder(html: string): string {
   return `${faces.rest.slice(0, cut)}${fonts.join('')}${faces.rest.slice(cut)}${code.lifted.join('')}${html.slice(end)}`;
 }
 
-// Inline scripts emitted by our source HTML and Vite's development transform.
-// Keeping the hashes explicit preserves the production policy while allowing
-// React Fast Refresh to install its hook when this server hosts Vite middleware.
+// Inline scripts emitted by our source HTML. Keeping the hashes explicit preserves the production policy.
 export const APP_INLINE_SCRIPT_HASHES = [
   THEME_BOOTSTRAP_HASH, // theme bootstrap (web/solid-app.html — lib/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
-  "'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='", // Vite React-refresh preamble
 ].join(' ');
 
 export const APP_CSP = [
@@ -428,7 +425,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * the story its runtime renders (lib/artifact-page), which the page inlines.
    */
   type Bootstrap = { data: { path: string; profile?: unknown; artifact?: unknown }; compiled?: CompiledStory; reader?: ArtifactPageAnswer['reader'] };
-  /** The document parts of an answer the page serves: today's inline story, or the compiled page, and which. */
+  /** The document parts of an answer the page serves: the compiled page and the reader chrome it carries. */
   const documentParts = (answer: ArtifactPageAnswer | null): Omit<Bootstrap, 'data'> => (answer ? {
     ...(answer.compiled ? { compiled: answer.compiled } : {}),
     ...(answer.reader ? { reader: answer.reader } : {}),

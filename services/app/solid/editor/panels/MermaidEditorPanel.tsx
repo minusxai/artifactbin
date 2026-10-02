@@ -10,10 +10,8 @@
  * per keystroke — each commit re-renders the diagram, and a half-typed line would flash
  * an error on every character.
  *
- * DEVIATION: the React panel keys its fields by the incoming value (`key={t:${embed.title}}`)
- * so an edit landing from OUTSIDE the field (a remote agent, code mode) remounts it and
- * discards a stale draft. Solid has no remount-by-key; a createEffect that reseeds the
- * draft signal whenever the prop changes is the same discard, without a remount.
+ * An edit landing from OUTSIDE the field (a remote agent, code mode) must discard a stale
+ * draft: a createEffect reseeds the draft signal whenever the prop changes.
  */
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';

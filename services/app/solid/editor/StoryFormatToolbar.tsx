@@ -4,9 +4,8 @@
  * in the document. The toolbar holds no element from the document, only the DESCRIPTION it sent (its
  * path, its current classes, where it is on screen); every change goes back as one message.
  *
- * DEVIATION: the React toolbar reads `useArtifactBackend()` from context for two things — whether
- * @mentions can be looked up, and the lookup itself. Solid has no artifact-backend context yet (see
- * solid/editor/EditPanel.tsx's DEVIATION note), so this takes a narrow `backend` prop instead:
+ * There is no artifact-backend context in the app (see solid/editor/EditPanel.tsx), so the toolbar takes
+ * a narrow `backend` prop for two things — whether @mentions can be looked up, and the lookup itself:
  * `{ mentionsUnavailable: string | null; members?: (query: string, opts: { signal }) => Promise<{ people: [...] } | null> }`.
  * Whoever wires this toolbar into a live page passes the app's ArtifactBackend (it satisfies this
  * shape already — `unavailable('mentions')` and `members(...)`).

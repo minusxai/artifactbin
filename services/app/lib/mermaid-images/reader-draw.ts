@@ -2,8 +2,8 @@
  * A READER'S OWN MERMAID DRAWING, framework-free: the palette the document's theme resolves to (tokens as
  * hex, through a canvas — Mermaid's colour math cannot parse `oklch(...)`), the fonts it waits for, and
  * what a drawing is marked with for the harvest (lib/mermaid-images). ONE implementation for both readers:
- * the retired React Mermaid and the compiled reader's Solid one
- * (lib/islands/kit/mermaid) draw through `drawForReader`, so they draw and mark identically.
+ * the compiled reader's Solid Mermaid (lib/islands/kit/mermaid) draws through
+ * `drawForReader`, so every reader draws and marks identically.
  */
 import { sha256Hex } from '@/lib/platform/sha256';
 import { METRICS_PROBE, formatMermaidFaces, formatMermaidMetrics, parseMermaidFaces, parseMermaidMetrics, type MermaidMetrics } from '@/lib/mermaid-images/drawn';
@@ -182,11 +182,11 @@ export function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
 /** An engine drawing, and — when the fonts held still while it was drawn — what it was drawn under, for the harvest. */
 export type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string; metrics?: string; portable?: boolean; faces?: string };
 
-/** A reader's drawing and its marks: what React's `draw()` puts in its result (minus the code it was drawn for). */
+/** A reader's drawing and its marks: what `drawForReader` returns (minus the code it was drawn for). */
 export type ReaderDrawing = Omit<Drawn, 'code' | 'error'> & { image: MermaidImage };
 
 /**
- * Draw `code` in `element`'s theme, as today's reader does: wait for the palette's faces, measure them
+ * Draw `code` in `element`'s theme, as the compiled reader does: wait for the palette's faces, measure them
  * before and after, embed the page's fonts in a portable drawing, and mark the drawing (palette key,
  * metrics, faces) only when the fonts held still. Resolves null once `live()` turns false; rejects
  * when Mermaid cannot draw the source.

@@ -1,13 +1,11 @@
 import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmark';
 import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 /**
- * The framework-free contract between the document builder (server), the SSR
- * bundle, and the in-iframe hydration runtime. BOTH sides import it, so it
- * carries ONLY types and ids: a value here would drag one side's graph into
- * the other's bundle. The React composition lives in StoryRuntimeApp.tsx,
- * which reaches the server exclusively as a prebuilt esbuild bundle
- * (story-ssr.cjs) loaded outside the module graph — see
- * scripts/build-server-reader.mjs.
+ * The framework-free contract between the document builder (server), the compiler, and the browser
+ * islands. BOTH sides import it, so it carries ONLY types and ids: a value
+ * here would drag one side's graph into the other's bundle. The Solid
+ * composition lives in lib/islands (rt.tsx, boot.ts) and the compiler in
+ * lib/compiled-page.
  */
 import type { AnnotationRange } from '@/lib/story/annotations/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
@@ -307,8 +305,8 @@ export interface StoryController {
  *
  * It exists because the two halves of a live update ship separately: the piece
  * that HEARS the edit is a ~1.5KB module every document loads (it also carries
- * the reading position), and the piece that can re-render a React tree is the
- * ~1.3MB runtime that only a document with components or data loads at all.
+ * the reading position), and the piece that can re-render the document is the
+ * island runtime that only a document with components or data loads at all.
  * Deliberately not part of `window.mx`, which is the author's API.
  */
 export const STORY_ADOPT_HOOK = '__mxAdoptDocument';
@@ -316,7 +314,7 @@ export const STORY_ADOPT_HOOK = '__mxAdoptDocument';
 /**
  * The reader flipped the mode toggle (anchor-entry wires the click; the button
  * itself is server-rendered chrome). Same split as the adopt hook: the class
- * flip works without React, but chart ink follows the `colorMode` PROP, so a
+ * flip works without the runtime, but chart ink follows the `colorMode` PROP, so a
  * document that hydrated must also re-render — the runtime registers this and
  * the ~1.5KB module calls it when present.
  */

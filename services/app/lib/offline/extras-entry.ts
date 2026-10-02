@@ -5,7 +5,7 @@
  * Built by scripts/build-offline.mjs as its own classic IIFE, served
  * content-addressed at `/offline/extras-<hash>.js`, and loaded by an open file
  * with an SRI-pinned `<script>` the first time someone opens code view
- * (lib/offline/extras). No React here: components/SourceEditor stays in the
+ * (lib/offline/extras). No editor here: solid/editor/SourceEditor stays in the
  * file's own bundle and mounts the engine below; the file's bundle reads every
  * module below back off `globalThis.__afbinExtras` (the build stubs them to it).
  */

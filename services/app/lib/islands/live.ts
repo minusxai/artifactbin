@@ -26,8 +26,7 @@
  * page whose islands arrive with a later version (prose, then a chart) keeps the stream it has — the
  * data hook `boot` installs is read per frame.
  *
- * The same stream, door and ACL as today's (lib/story-runtime/live-entry, which the standalone
- * runtime's deletion removes); only `since` is new.
+ * The same stream, door and ACL the former standalone runtime used; only `since` is new.
  */
 import { STORY_ADOPT_HOOK, STORY_DATA_EVENT, STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { openLiveStream } from '@/lib/http/live-stream';

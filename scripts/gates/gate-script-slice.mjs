@@ -184,7 +184,7 @@ const interactive = await api('/api/artifacts', {
   await interactiveRealm.click('#tick');
   await p2.waitForTimeout(400);
   check((await interactiveRealm.textContent('#count')) === '2', 'a managed author script drives a real <button>');
-  // An authored value is the STARTING value, not a binding: React would
+  // An authored value is the STARTING value, not a binding: a framework binding would
   // otherwise make the field controlled with no onChange and refuse input.
   await interactiveRealm.fill('#field', 'edited by the reader');
   check((await interactiveRealm.inputValue('#field')) === 'edited by the reader', 'and an authored <input> stays editable');

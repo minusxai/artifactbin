@@ -40,7 +40,7 @@ function Star(props: { mobile: boolean }): JSX.Element {
 }
 
 /**
- * What an artifact page adds to the one bar (components/PageChrome's React props): its `title` as the
+ * What an artifact page adds to the one bar (`PageChromeProps`): its `title` as the
  * crumb, the controls panel's `label` ("Artifact controls"), bar `actions` beside the star, and
  * `controls` — the artifact's own rows under the appearance picker.
  */

@@ -1,10 +1,10 @@
 /**
  * THE COMPILED /raw PAGE'S OWN BEHAVIOUR (`@mx/page`, docs/phase2-architecture.md §2.2, §9): what
- * today's standalone document did with two inline preludes and its reading-position module, as one
+ * the standalone document used to do with two inline preludes and its reading-position module, as one
  * tiny framework-free chunk from the shared island build — the compiled page runs no inline script.
  * Loaded by every compiled `/raw` reader copy (never a capture), with islands or without.
  *
- *  1. `mx-framed` on `<html>` when a parent frames the document (today's MODE_PRELUDE).
+ *  1. `mx-framed` on `<html>` when a parent frames the document (the former MODE_PRELUDE).
  *  2. The reader's per-visit colour override from the `mx:doc:` window.name envelope
  *     (lib/story-runtime/reader-mode), on `<html>` and the story root — an opaque origin has no
  *     storage, so this is the only thing that survives a same-tab reload.
@@ -12,7 +12,7 @@
  *     own live stream (./live). A page with islands has `boot` hold it, seeded from its snapshot.
  *  4. Top-level: puts the reader back where a live reload left them, held against a settling layout
  *     and released the moment they take over (lib/story-runtime/anchor-restore).
- *  5. On the app page (`/a/:id`, which loads this too): the SERVED reader chrome follows today's rule
+ *  5. On the app page (`/a/:id`, which loads this too): the SERVED reader chrome follows the reader-chrome policy
  *     (lib/story-runtime/reader-chrome-policy) — shown on load, hidden by a scroll down, revealed by a
  *     scroll up and at the end — until the app's own chrome replaces it.
  *
@@ -91,7 +91,7 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   const persistent: Array<() => void> = [];
   const stops: Array<() => void> = [];
   // The public page API is a separate lazy chunk: browser sessions need it even when the
-  // React app waits for intent. Boot owns its lifetime through the root's private handle.
+  // Solid app waits for intent. Boot owns its lifetime through the root's private handle.
   const installPublicMx = () => {
     const root = doc.querySelector<IslandHost>(STORY_ROOT_SELECTOR);
     const island = root?.[ISLAND_DOCUMENT_KEY];

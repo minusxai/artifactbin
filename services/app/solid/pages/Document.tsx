@@ -51,7 +51,7 @@ import { toggleReaction, wireReaderChrome, type ReaderPanel } from '../document/
 /** The page panels wear the reader chrome's own sheet; inside the trusted root they need its tokens too. */
 const PANEL_CSS = `${STORY_CHROME_CSS}
 .mx-reader-panel, .mx-reader-scrim { --mx-reader-bg: #ffffff; --mx-reader-fg: #1a2129; --mx-reader-muted: #5a6572; --mx-reader-border: #e1e6ea; --mx-reader-accent: #0e9d4f; --mx-reader-on-accent: #ffffff; --mx-reader-scheme: light; }
-/* The app's panels never dim the document (React's PageControls did not); the scrim only catches the outside click. */
+/* The app's panels never dim the document (the controls never did); the scrim only catches the outside click. */
 .mx-reader-scrim { background: transparent !important; }
 [data-theme="dark"] .mx-reader-panel, [data-theme="dark"] .mx-reader-scrim { --mx-reader-bg: #10151b; --mx-reader-fg: #e6edf3; --mx-reader-muted: #7d8590; --mx-reader-border: #202832; --mx-reader-accent: #3fe77b; --mx-reader-on-accent: #10151b; --mx-reader-scheme: dark; }`;
 /** The document's own ground while the app holds it (a starter shows the app's dotted page instead). */

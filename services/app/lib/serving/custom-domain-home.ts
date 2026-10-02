@@ -3,8 +3,8 @@
  *
  * It IS the owner's profile listing: the same data the app's `/@handle` page
  * reads (the profile page route, asked as a guest), drawn as the same markup
- * `components/ProfileListing` produces for `surface="domain"` — but hand-built
- * here rather than through React, since this page ships no script at all
+ * the app's profile listing produces for `surface="domain"` — but hand-built
+ * here rather than through a component, since this page ships no script at all
  * beyond the theme stamp (there is nothing left to hydrate, and the CSP
  * forbids any other script). Only the page around it is its own: the head
  * (title, description, unfurl tags, a self-canonical) and the "Made with
@@ -12,8 +12,7 @@
  * beyond the theme stamp: a crawler and a reader without JavaScript get every
  * title and link in the first response.
  *
- * Keep this in parity with `components/ProfileListing.tsx` + `components/
- * Listing.tsx` + `solid/components/Shelf.tsx`'s `surface="domain"` branch — the
+ * Keep this in parity with `solid/components/Shelf.tsx`'s `surface="domain"` branch — the
  * server test (`server/__tests__/custom-domain-host.test.ts`) checks the two
  * render the same markup, less the follow header and the toolbar (script the
  * domain page cannot run).
@@ -73,7 +72,7 @@ export function linkedStylesheets(html: string): string[] {
     .filter((href): href is string => !!href && href.startsWith('/') && !href.startsWith('//'));
 }
 
-/** components/Listing's `NothingHere`. */
+/** The app listing's empty state. */
 const NOTHING_HERE_HTML = '<p class="reveal font-mono text-sm text-muted"><span class="text-accent">$</span> nothing here yet<span class="caret text-accent">▍</span></p>';
 
 /** solid/components/Avatar, at the one size (48) ListingHero draws it. */
@@ -86,7 +85,7 @@ function avatarHtml(userId: string, image: string | null | undefined, initial: s
     + '</span>';
 }
 
-/** components/Listing's `ListingHero`, `surface="domain"` (no follow header — that needs a session and /api). */
+/** The app listing's hero, `surface="domain"` (no follow header — that needs a session and /api). */
 function listingHeroHtml(handle: string, count: number, owner?: { id: string; image?: string | null }): string {
   const avatar = owner ? avatarHtml(owner.id, owner.image, handle, 48) : '';
   return '<header class="reveal mb-8">'
@@ -148,7 +147,7 @@ function shelfHtml(files: ProfileFile[]): string {
   return `<section aria-label="Shelf" data-shelf-view="grid" class="flex flex-col gap-4">${grid}</section>`;
 }
 
-/** components/ProfileListing, `surface="domain"`: folders are dropped (a folder's page is not served on the domain, so its tile would be a dead link). */
+/** The app's profile listing, `surface="domain"`: folders are dropped (a folder's page is not served on the domain, so its tile would be a dead link). */
 function profileListingHtml(data: ProfileListingData): string {
   const files = data.files.filter((f) => f.format !== 'folder');
   const count = files.filter((f) => f.format === 'markup').length;
@@ -161,7 +160,7 @@ export function renderDomainHome(input: DomainHomeInput): string {
   const heading = owner.name?.trim() || (owner.username ? `@${owner.username}` : hostname);
   const description = `Writing by ${heading}.`;
   const canonical = `https://${hostname}/`;
-  // components/Listing's `ListingColumn` — the column alone, with no app bar above it.
+  // The app listing's column — the column alone, with no app bar above it.
   const listing = `<main class="mx-auto max-w-4xl px-4 sm:px-6 pt-10 pb-24">${profile ? profileListingHtml(profile) : NOTHING_HERE_HTML}</main>`;
   return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'

@@ -19,7 +19,7 @@ const fieldClass = 'w-full rounded-md border border-input bg-background px-3 tex
 const SHELL_OMIT = new Set(['label','placeholder','className','value','options','multiple','allowCreate','valueFormat','checked','min','max','step','format','prefix','suffix','disabled','children','data']);
 function shellRest(p: Props, extra: string[] = []) { const omit = new Set([...SHELL_OMIT, ...extra]); return Object.fromEntries(Object.entries(p).filter(([k]) => !omit.has(k))) as JSX.HTMLAttributes<HTMLDivElement>; }
 function Shell(p: { authored: Props; children: JSX.Element; trailing?: JSX.Element; extra?: string[] }) {
-  // The live control: today's runtime adapters never stamp `data-mx-bound` (only the registry's static face does).
+  // The live control: the former runtime adapters never stamp `data-mx-bound` (only the registry's static face does).
   return <div {...shellRest(p.authored, p.extra)} class={join(shellClass, str(p.authored.className))}>
     <Show when={p.authored.label || p.trailing}><span class="flex items-baseline gap-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
       <Show when={p.authored.label}><span>{str(p.authored.label)}</span></Show><Show when={p.trailing}><span class="ml-auto normal-case tracking-normal tabular-nums text-foreground">{p.trailing}</span></Show>
@@ -66,7 +66,7 @@ export function Switch(p: Props) {
 export function Slider(p: Props) {
   const island = useIsland(); const min = typeof p.min === 'number' ? p.min : 0; const max = typeof p.max === 'number' ? p.max : 100;
   const value = () => { if (!nameOf(p)) return typeof p.value === 'number' ? p.value : null; const raw = valueOf(p); return raw == null ? null : Number(raw); };
-  // Today's readout (SliderControl): the value through its d3 `format`, the raw number for a bad spec.
+  // The former readout (SliderControl): the value through its d3 `format`, the raw number for a bad spec.
   const readout = () => { const v = value(); if (v == null || Number.isNaN(v)) return '—'; let text = String(v); const f = str(p.format); if (f) { try { text = d3format(f)(v); } catch { /* bad spec: raw number */ } } return `${str(p.prefix) ?? ''}${text}${str(p.suffix) ?? ''}`; };
   return <Shell authored={p} trailing={readout()}><input type="range" aria-label={str(p.label)} min={min} max={max} step={typeof p.step === 'number' ? p.step : undefined} value={value() ?? min} ref={el => el.setAttribute('value',String(value() ?? min))} disabled={!active(p)} readOnly={!nameOf(p) || undefined}
     on:input={e => { const n = nameOf(p); if (n) island.setValue(n,Number(e.currentTarget.value),undefined); }}
@@ -107,12 +107,12 @@ export function DatePicker(p: Props) {
 /** Native fields keep their tag and authored attributes; only declared bindings are intercepted. */
 export function BoundNative(p: Props & { tag: 'input' | 'select' | 'textarea'; bind?: Record<string,string>; children?: JSX.Element }) {
   const island = useIsland(); const { tag,bind,children,...attrs } = p; const name = bind?.value ?? bind?.checked; const value = () => name ? island.value(name) : p.value;
-  // Today's NativeBoundControl coerces to the bound Value's declared type: an empty choice is null (how
+  // The former NativeBoundControl coerces to the bound Value's declared type: an empty choice is null (how
   // `$region is null` means "all"), a number field a number.
   const update = (e: Event) => { if (!name) return; const el = e.currentTarget as HTMLInputElement; const type = island.valueType(name);
     island.setValue(name,bind?.checked ? el.checked : coerceScalarInput(type, el.value),tag === 'select' || bind?.checked ? undefined : { debounce: true }); };
   if (tag === 'select') {
-    // Today's NativeBoundControl: a query-bound select lists its rows (first column the value, second the
+    // The former NativeBoundControl: a query-bound select lists its rows (first column the value, second the
     // label), after an "All" entry when the bound Value may be null; authored options follow.
     const table = () => bind?.options ? island.table(bind.options) : undefined;
     const nullable = () => { const n = bind?.value; return !!n && island.nullable(n); };

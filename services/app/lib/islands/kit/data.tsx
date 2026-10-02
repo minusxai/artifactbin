@@ -2,15 +2,13 @@
 /**
  * The data-bound kit. The island context is the sole source of live tables and values.
  *
- * PARITY: each widget renders the DOM today's reader renders (the runtime adapters in
- * lib/story-runtime/StoryRuntimeApp around components/kit/data-table, controls' SelectControl and
- * views/story/QuestionEmbed), which scripts/gate-compiled-parity.mjs compares attribute by
- * attribute. Two consequences shape this file:
+ * PARITY: each widget renders the DOM the former reader rendered (the frozen react-oracle recording behind
+ * lib/islands/__tests__/kit-parity.ts), compared attribute by attribute. Two consequences shape this file:
  *  - An absent attribute is spread in (`attr()`), never bound to `undefined`: Solid's server
- *    renderer writes `class=""`/`style=""` for an undefined binding, which today's DOM does not have.
+ *    renderer writes `class=""`/`style=""` for an undefined binding, which the former DOM does not have.
  *  - Inline styles are strings in the browser's own serialization (`max-height: 300px;`) wherever
- *    today's React renders the element in the browser, and in the server's (`width:100%`) where
- *    today's element is the server-rendered adapter wrapper. Those wrapper strings are spread in as
+ *    the former React render drew the element in the browser, and in the server's (`width:100%`) where
+ *    the former element was the server-rendered adapter wrapper. Those wrapper strings are spread in as
  *    `attr:style` (a raw attribute: hydration leaves it as served), because a `style` binding — and
  *    the JSX `attr:style` form, which the compiler turns back into one — re-sets it through the
  *    CSSOM (`width: 100%;`).
@@ -42,7 +40,7 @@ import { rowsDigest } from '../digest';
 import type { CellScope } from './cells';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
-/** The authored identity today's adapters put on their outer element: the id and the compiler's `data-*` stamps, never the chart slot marker. */
+/** The authored identity the former adapters put on their outer element: the id and the compiler's `data-*` stamps, never the chart slot marker. */
 const rootProps = (props: object) => Object.fromEntries(Object.entries(props).filter(([key]) => (key === 'id' || key.startsWith('data-')) && key !== CHART_SLOT_ATTR));
 /** An attribute that is present only when it has a value. */
 const attr = (name: string, value: string | null | undefined | false): Record<string, string> => (value || value === '' ? { [name]: value } : {});
@@ -59,14 +57,14 @@ export function Number(props: { data: unknown; col?: string; agg?: NumberAgg; pr
     const value = aggregateNumber(rows, props.col ?? Object.keys(rows[0] ?? {})[0] ?? '', props.agg ?? 'first');
     return `${props.prefix ?? ''}${globalThis.Number.isFinite(value) ? numberFormatter(props.format)(value) : '—'}${props.suffix ?? ''}`;
   };
-  // Today's NumberAdapter: the figure stays while its query re-runs, and the wrapper says so.
+  // The former NumberAdapter: the figure stays while its query re-runs, and the wrapper says so.
   const busy = () => !!nameOf(props.data) && island.pending(nameOf(props.data));
   return <span {...rootProps(props)} aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() ? 'mx-busy-inline' : props.className)}><span aria-label={table() ? 'Live number' : 'Number placeholder'}>{text()}</span></span>;
 }
 
 interface SelectProps { label?: string; value?: unknown; options?: unknown; placeholder?: string; className?: string; id?: string; disabled?: boolean; [key: `data-${string}`]: unknown }
 const selectClass = 'mx-control relative inline-flex flex-col gap-1.5 align-top';
-/** Today's trigger classes in SelectControl's own order (`cn(base, field appearance)`). */
+/** The former trigger classes in SelectControl's own order (`cn(base, field appearance)`). */
 const SELECT_TRIGGER = 'inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 min-w-36 border border-input bg-background px-3 shadow-xs hover:bg-muted/40';
 const selectJoin = (...values: (string | false | undefined)[]) => values.filter(Boolean).join(' ');
 const CHEVRON = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
@@ -92,7 +90,7 @@ export function Select(p: SelectProps) {
   const entries = () => [...(valueName() && p.placeholder !== undefined ? [{ value: null, label: p.placeholder }] : []), ...options()];
   const filtered = () => entries().filter(o => o.label.toLowerCase().includes(query().toLowerCase()));
   // The popup speaks strings throughout (display and comparison); a write goes through the bound
-  // Value's declared type first — the same coercion today's NativeBoundControl applies — so a number
+  // Value's declared type first — the same coercion the former NativeBoundControl applies — so a number
   // or boolean Value never receives the option's string back verbatim (kit/controls.tsx BoundNative).
   const choose = (value: string | null) => {
    const name = valueName();
@@ -104,7 +102,7 @@ export function Select(p: SelectProps) {
   };
   let root!: HTMLDivElement; let trigger!: HTMLButtonElement; let popup: HTMLDivElement | undefined;
   const announce = popupDismiss(open, () => setOpen(false), () => trigger, () => popup);
-  // No `data-mx-bound` stamp: that marks today's STATIC render of a bound control; the live SelectAdapter never writes it.
+  // No `data-mx-bound` stamp: that marks the former STATIC render of a bound control; the live SelectAdapter never writes it.
   return <div {...rootProps(p)} class={selectJoin(selectClass,p.className)}>
     <Show when={p.label}><span class="flex items-baseline gap-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>{p.label}</span></span></Show>
     <div ref={root} class="relative min-w-0"><button ref={trigger} type="button" aria-label={p.label} aria-haspopup="listbox" aria-expanded={open()} disabled={!active()} on:click={() => { if (!open()) announce(); setOpen(!open()); }}
@@ -126,7 +124,7 @@ export function Select(p: SelectProps) {
 
 /**
  * A `<Column>` of the table. The compiler passes `{ col, id, path, ids }` (the column's author id and AST
- * path, which today's header cell carries, and its content's author ids) beside the parsed `columns`; the
+ * path, which the former header cell carries, and its content's author ids) beside the parsed `columns`; the
  * interpreter's shape also carries the column's `props` and its cell template `nodes`.
  */
 interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string[]; props?: Record<string, unknown>; nodes?: unknown[] }
@@ -145,7 +143,7 @@ function UserCell(props: { id: string; card?: PersonCard }) {
   const image = () => props.card?.image && failed() !== props.card.image ? props.card.image : null;
   return <span data-slot="user" class="inline-flex items-center gap-1.5 align-middle"><span data-slot="avatar" data-size="default" {...attr('data-unknown', props.card ? undefined : '')} aria-hidden="true" class="group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-full select-none data-[size=lg]:size-10 data-[size=sm]:size-6 inline-flex shrink-0 align-middle size-5" {...attr('style', props.card ? css({ 'background-color': personFaceBackground(props.id) }) : undefined)}><span data-slot="avatar-fallback" class={`flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs${props.card ? ' bg-transparent font-medium text-white' : ''} text-[10px]`}>{props.card ? personInitial(props.card.name) : '?'}</span><Show when={image()}>{src => <img data-slot="avatar-image" class="absolute inset-0 aspect-square size-full object-cover" src={src()} alt="" aria-hidden="true" onError={() => setFailed(src())} />}</Show></span>{props.card?.handle ? <a data-slot="user-handle" href={`/@${props.card.handle}`} target="_top" rel="noopener" class="underline-offset-2 hover:underline">@{props.card.handle}</a> : <span data-slot="user-handle" {...attr('data-unknown', props.card ? undefined : '')} {...attr('class', props.card ? undefined : 'text-muted-foreground')}>{props.card?.name ?? 'Unknown person'}</span>}</span>;
 }
-/** A row's React key in today's table: the virtualizer's item key. */
+/** A row's React key in the former table: the virtualizer's item key. */
 const rowIdentity = (row: Row | undefined, key: string | undefined, index: number): string => {
   const value = key && row ? row[key] : undefined;
   return value === null || value === undefined || (typeof value !== 'string' && typeof value !== 'number') ? `index:${index}` : `${typeof value}:${String(value)}`;
@@ -155,8 +153,8 @@ const SPINNER = 'size-[22px] animate-spin rounded-full border-2 border-border bo
 const LOCKUP_LABEL = 'font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground';
 
 /**
- * `<DataTable>` — today's DataTableAdapter (its `aria-label="DataTable embed"` wrapper, the
- * placeholder while the table has no result) around today's kit DataTable: a plain table of the
+ * `<DataTable>` — the former DataTableAdapter (its `aria-label="DataTable embed"` wrapper, the
+ * placeholder while the table has no result) around the former kit DataTable: a plain table of the
  * first rows as served, then, once mounted with a measured height, the same box as a virtual window.
  */
 export function DataTable(props: DataTableProps) {
@@ -196,7 +194,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
   let askedAt = -1;
   const remote = () => !!table()?.truncated && !!island.store();
   const shown = createMemo(() => replaced() && extra().length ? extra() : [...(table()?.rows ?? []), ...extra()]);
-  // Today's adapter hands the kit `templates` (whose props ARE the column spec) or the parsed `columns`.
+  // The former adapter hands the kit `templates` (whose props ARE the column spec) or the parsed `columns`.
   const spec = () => props.templates?.length && props.templates.every(t => t.props) ? parseColumnSpecs(props.templates.map(t => t.props)) : parseColumnSpecs(props.columns);
   const resolved = createMemo(() => resolveColumns(spec(), table()?.columns ?? [], shown()));
   const ordered = createMemo(() => remote() ? shown() : sortRows(shown(), sort()));
@@ -219,7 +217,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
   createEffect(on(table, () => { ++request; setExtra([]); setReplaced(false); setLoading(false); askedAt = -1; }, { defer: true }));
   const cycle = (col: string) => { const old = sort(); const next: SortSpec | null = !old || old.col !== col ? { col, dir: 'asc' } : old.dir === 'asc' ? { col, dir: 'desc' } : null; setSort(next); if (remote()) readWindow(0, next, true); };
   const geometry = createMemo(() => gridGeometry(resolved(), measured()));
-  // In the virtual regime the header row and every body row are the same CSS grid (today's rowGrid).
+  // In the virtual regime the header row and every body row are the same CSS grid (the former rowGrid).
   const rowGrid = () => ({ display: 'grid', 'grid-template-columns': geometry().template, width: '100%', 'min-width': geometry().minWidth ? `${geometry().minWidth}px` : undefined });
   const [virtualizer, setVirtualizer] = createSignal<ReturnType<typeof createDataVirtualizer> | null>(null);
   let previousRows = ordered().length;
@@ -254,7 +252,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
     if (!instance) { instance = { row, key }; keys.set(key, instance); }
     return instance;
   }));
-  // Today's switch: virtual once mounted with a measured height, whatever the row count; the header
+  // The former switch: virtual once mounted with a measured height, whatever the row count; the header
   // widths are read while the served table's auto layout is still on screen.
   onMount(() => {
     if (!scroll?.clientHeight) return;
@@ -323,8 +321,8 @@ const chartLabel = (envelope: VizEnvelope): string => {
 };
 
 /**
- * `<Question>` — today's QuestionAdapter wrapper (`aria-label="Question embed"`, the shared height
- * contract) around today's QuestionEmbed: its placeholders, the KPI tile, the plain table, and the
+ * `<Question>` — the former QuestionAdapter wrapper (`aria-label="Question embed"`, the shared height
+ * contract) around the former QuestionEmbed: its placeholders, the KPI tile, the plain table, and the
  * chart. The chart's drawing box is VegaChart's container, and it is the ONLY element carrying the
  * chart slot marker, so the server's drawing lands inside it and the title is in the first paint.
  */
@@ -395,7 +393,7 @@ export function Question(props: QuestionProps) {
  * served drawing reads like a drawn chart. The state is never a binding: after the server's
  * `pending`/`ready`, lib/viz/render-readiness owns it, as it does for VegaChart.
  *
- * Drawing: a slot the server did not draw is drawn here at once, as today's reader draws every chart.
+ * Drawing: a slot the server did not draw is drawn here at once, as the former reader draws every chart.
  * A served drawing is kept while it is current — the rows it was drawn from are the rows the page was
  * served with, and every later result is checked with `drawingIsCurrent` — and replaced when the
  * reader readiness and visibility, when rows change, or on early input (the lazy Vega chunk). The drawing fills its box
@@ -405,7 +403,7 @@ export function Question(props: QuestionProps) {
 const VEGA_CONTAINER: Record<string, string> = { role: 'graphics-document', 'aria-roledescription': 'visualization' };
 /**
  * A served drawing fills its box from the first paint (charts.server draws it with `DRAWING_CLASS`:
- * out of flow, scaled by its viewBox), so the box has today's size and nothing moves. A drawing
+ * out of flow, scaled by its viewBox), so the box has the former size and nothing moves. A drawing
  * stored before that (in the flow, at its nominal height) would hold a smaller box open: it is taken
  * out of the flow here instead, the one layout change such an old drawing still costs.
  */

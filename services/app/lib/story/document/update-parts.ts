@@ -10,7 +10,7 @@
  * why the tree comes from `storyBodyFor` — the ONE parse → nesting repair →
  * Helmet split → asset mapping the served document is built from
  * (lib/story/document/body) — rather than from a second copy of it here. It lives in
- * this file rather than beside the builder because `lib/story/document.ts`
+ * this file rather than beside the builder because the builder (`lib/story/document`)
  * imports `path`/`module`, so nothing in it can run in a browser, and the
  * owner's page builds these parts in one.
  *

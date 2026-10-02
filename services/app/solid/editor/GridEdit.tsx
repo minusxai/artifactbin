@@ -4,7 +4,7 @@
  * positioned by the same arithmetic RGL uses at margin [0,0] (x·colWidth, y·rowHeight), moved by
  * pointer or keyboard, and every staged layout goes through RGL's own kernel (moveElement + vertical
  * compact) so the rects handed to `onLayout` (via lib/story-ui/grid-layout diffLayouts) are the ones
- * the React editor would produce. Escape cancels a drag or a staged keyboard move; Enter commits one.
+ * react-grid-layout would produce. Escape cancels a drag or a staged keyboard move; Enter commits one.
  *
  * Tiles are keyed by identity (`key`), so a tile's DOM survives its AST path changing.
  */

@@ -11,7 +11,7 @@
  *
  *   cd services/app && npx tsx scripts/generate-offline-fixture.ts
  *
- * Needs the SSR bundle (node services/app/scripts/build-server-reader.mjs) and public/fonts (postinstall).
+ * Needs public/fonts (postinstall).
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

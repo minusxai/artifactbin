@@ -16,7 +16,7 @@ export function FlowEditor(props: FlowEditorProps) {
     flow = mountFlowView(mount, () => props, () => setCompositionEpoch((n) => n + 1));
     onCleanup(() => { flow?.destroy(); flow = null; });
   });
-  // React's dependency list [incoming, nodes, compositionEpoch], as explicit sources.
+  // Explicit sources: [incoming, nodes, compositionEpoch].
   createEffect(on([() => serializeJsx(props.nodes), () => props.nodes, compositionEpoch], () => flow?.sync(props.nodes), { defer: true }));
   // A path alone (an editor kept across a redraw, blocks added above it) redraws only the AST-path decorations: the
   // prose is the same, so it is neither rebuilt nor compared. A composition in progress takes it when it settles; a
