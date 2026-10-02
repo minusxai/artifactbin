@@ -142,8 +142,10 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
   'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction', 'CardContent', 'CardFooter',
   'Badge', 'Alert', 'AlertTitle', 'AlertDescription', 'Progress', 'Icon', 'Separator', 'Skeleton',
   'Breadcrumb', 'BreadcrumbList', 'BreadcrumbItem', 'BreadcrumbLink', 'BreadcrumbPage', 'BreadcrumbSeparator', 'BreadcrumbEllipsis',
-  // A Button without run/set (one with them is an island), a Video (its `ref:` poster resolved here, `kitParts`), a deck's Slide.
-  'Button', 'Video', 'SlideDeck', 'Slide',
+  // A Button without run/set (one with them is an island), a Video (its `ref:` poster resolved here, `kitParts`), a deck's
+  // SlideDeck and Slide (named by a pattern: a new string literal here would join the recipe class union, recipe-classes.ts,
+  // and flip every story's CSS compile version).
+  'Button', 'Video', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
 ]);
 /** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
