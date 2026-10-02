@@ -390,6 +390,45 @@ describe('the editor knows its own save before it has finished applying it', () 
   });
 });
 
+describe('a remote document waits for typing to go quiet before it is even fetched', () => {
+  // Fetching a remote frame is megabytes landing on the page thread: never while the user types.
+  it('a remote ping during typing is fetched only after typing goes quiet', async () => {
+    const { hook } = setup();
+    let idle = false;
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    void hook.result.whenIdle().then(() => { idle = true; });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    act(() => { hook.result.queue({ source: '<p>ab</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(idle, 'still typing: nothing fetched').toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(fetchMock, 'the typing was saved').toHaveBeenCalledOnce();
+    expect(idle, 'quiet and saved: fetch now').toBe(true);
+  });
+
+  it('a remote ping after typing stops is fetched at once', async () => {
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    let idle = false;
+    void hook.result.whenIdle().then(() => { idle = true; });
+    await act(async () => { await Promise.resolve(); });
+    expect(idle).toBe(true);
+  });
+
+  it('waits out uncommitted typing the editor reports, too', async () => {
+    let typing = true;
+    const { hook } = setup({ isUserEditing: () => typing });
+    let idle = false;
+    void hook.result.whenIdle().then(() => { idle = true; });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(idle).toBe(false);
+    typing = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(idle).toBe(true);
+  });
+});
+
 describe('a refused save tells the author what to fix', () => {
   const refusal = (details: Array<{ message: string }>) =>
     errResponse(400, { error: 'invalid_jsx', details });

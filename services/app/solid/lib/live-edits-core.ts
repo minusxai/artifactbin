@@ -29,6 +29,8 @@ import { sourceEdits } from '@/lib/editor-v2/source-edits';
 export const FLUSH_DEBOUNCE_MS = 500;
 /** How long after editing starts the save worker is warmed (the graph posted, one preparation run): after the editors mount. */
 export const WARM_PREPARER_MS = 1500;
+/** How often a wait for the editor to go idle looks again. */
+const IDLE_POLL_MS = 100;
 
 export interface LiveEditState {
   /** Head pointer this client is based on — every flush carries it. */
@@ -83,6 +85,12 @@ export interface LiveEditsCore {
   recover(mode: 'retry' | 'server'): Promise<void>;
   /** True when nothing is queued, nothing is in flight and no failed draft is retained. */
   isIdle(): boolean;
+  /**
+   * Settles once the user has stopped: nothing buffered (the save's own quiet period has passed), no save on the
+   * wire, no typing the editor has not committed. A remote document is FETCHED only then — it is the whole document,
+   * megabytes landing on the page thread, and the editor would not adopt it before this anyway.
+   */
+  whenIdle(): Promise<void>;
   /**
    * "That head pointer is one WE produced" — lets the live stream drop our own echo instead of fetching the whole
    * document for it. Known the moment a save's reply lands, before it is applied (typing can hold that back for
@@ -337,6 +345,11 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
   };
 
   const isIdle = () => pending === null && inFlight === null && failedChange === null;
+  const quiet = () => pending === null && inFlight === null && !isUserEditing();
+  const whenIdle = (): Promise<void> => quiet() ? Promise.resolve() : new Promise<void>((resolve) => {
+    const check = () => { if (!alive || quiet()) resolve(); else window.setTimeout(check, IDLE_POLL_MS); };
+    window.setTimeout(check, IDLE_POLL_MS);
+  });
 
   const adoptRemote: LiveEditsCore['adoptRemote'] = (remoteEditId, source, by = null, document, version, meta = {}) => {
     if (remoteEditId === editId || !isIdle() || isUserEditing()) return false;
@@ -396,6 +409,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
     adoptRemote,
     recover,
     isIdle,
+    whenIdle,
     isOwnEdit: (candidate) => {
       if (isKnownOwn(candidate)) return true;
       const reply = replied;

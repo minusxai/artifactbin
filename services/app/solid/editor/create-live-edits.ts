@@ -26,6 +26,7 @@ export function createLiveEdits(options: LiveEditsOptions) {
     flushForNavigation: core.flushForNavigation,
     adoptRemote: core.adoptRemote,
     isIdle: core.isIdle,
+    whenIdle: core.whenIdle,
     isOwnEdit: core.isOwnEdit,
     dispose: core.dispose,
   };

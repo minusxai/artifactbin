@@ -305,7 +305,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   });
 
   // Changes from elsewhere (an agent, another person) while we are editing.
-  const remote = createLiveArtifact({ backend, id: art.id, initialEditId: art.edit_id, initialVersion: art.version, enabled: typeof EventSource === 'function', isOwnFrame: (id) => live.isOwnEdit(id) });
+  const remote = createLiveArtifact({ backend, id: art.id, initialEditId: art.edit_id, initialVersion: art.version, enabled: typeof EventSource === 'function', isOwnFrame: (id) => live.isOwnEdit(id), whenIdle: () => live.whenIdle() });
   createEffect(() => {
     const frame = remote();
     if (!frame || frame.format !== 'markup' || typeof frame.source !== 'string') return;
