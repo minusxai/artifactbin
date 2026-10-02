@@ -12,7 +12,7 @@ import { rowsDigest } from './digest';
 
 /**
  * The classes a server drawing's root `<svg>` carries (charts.server `drawChart`): out of flow and the
- * full size of its chart box, scaled by its viewBox. The box then has exactly the size today's reader
+ * full size of its chart box, scaled by its viewBox. The box then has exactly the size the former reader
  * gives it — its own layout, never the drawing's nominal height — from the first paint, so nothing
  * moves when the island hydrates or when Vega later draws the chart at the box's size. Utilities of
  * the recipe base, so every reader sheet compiles them.

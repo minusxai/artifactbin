@@ -29,7 +29,6 @@ describe('the app CSP', () => {
   it('locks framing and plugins on the app pages', async () => {
     expect(APP_CSP).toContain("default-src 'none'");
     expect(APP_CSP).toContain("script-src 'self'");
-    expect(APP_CSP).toContain("'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='");
     expect(APP_CSP.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob:");
     expect(APP_CSP).toContain("frame-ancestors 'self'");
     expect(APP_CSP).toContain("object-src 'none'");
@@ -94,8 +93,8 @@ describe('the app CSP', () => {
     }
   });
 
-  it('allows only the known app and development bootstrap scripts inline', () => {
-    expect(APP_INLINE_SCRIPT_HASHES.split(' ')).toHaveLength(2);
+  it('allows only the app shell\'s theme stamp inline', () => {
+    expect(APP_INLINE_SCRIPT_HASHES.split(' ')).toHaveLength(1);
     expect(APP_CSP.split('; ').find((directive) => directive.startsWith('script-src'))).not.toContain("'unsafe-inline'");
   });
 

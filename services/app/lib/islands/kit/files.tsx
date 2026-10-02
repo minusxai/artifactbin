@@ -15,7 +15,7 @@ export function rowImageAttrs(result: Record<string, string>): Record<string, st
   return result;
 }
 /**
- * A format's glyph as today's `<Icon>` draws it: lucide's svg attributes, the glyph's
+ * A format's glyph as the former `<Icon>` draws it: lucide's svg attributes, the glyph's
  * own class, `ICON_BASE_CLASS` with the listing's size merged in (tailwind-merge's result, precomputed —
  * readers never download it), decorative, and the server-resolved glyph markup (never author text).
  */

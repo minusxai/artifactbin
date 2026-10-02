@@ -15,7 +15,7 @@ import { ISLANDS_READY_EVENT } from './contract';
 /**
  * A rail miniature the compiler served inert (compiler RAIL_THUMB_ATTR, the same name): one that holds a button
  * cannot be parsed inside the rail row's button, so it arrives in a `<template>` and is put in place here —
- * the tree today's rail renders.
+ * the tree the former rail renders.
  */
 export const RAIL_THUMB_ATTR = 'data-mx-thumb';
 

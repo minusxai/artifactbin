@@ -18,7 +18,7 @@
  * and attribute NAMES come only from the validated AST and are re-checked against a strict grammar
  * (`safeTag`/`safeAttr`); a name outside it refuses the compile. Props are computed by the
  * interpreter's `rawBuildProps` (dangerous schemes, handlers and denied attributes dropped exactly
- * as today) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
+ * as the former React render did) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
  * runtime with lib/jsx/reactive. `codegen-safety.ts structureIndependent` is the proof.
  *
  * Pure and deterministic for one input.
@@ -122,7 +122,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
   // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
   User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
-  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): today's managed frame and map.
+  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): the managed frame and map.
   Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
   DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen', 'open'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
@@ -155,7 +155,7 @@ const ISLAND_TAGS: ReadonlySet<string> = new Set([...Object.keys(KIT).filter((ta
  * control, and the cell scope's attribute resolver every element in a column's content uses.
  */
 const CELL_EXPORTS: ReadonlySet<string> = new Set(['CellControl', 'cellAttrs']);
-/** The tags today's editing cell draws; another tag with `run` in a cell draws nothing. */
+/** The tags the editing cell draws; another tag with `run` in a cell draws nothing. */
 const CELL_CONTROLS: ReadonlySet<string> = new Set(['Select', 'DatePicker', 'input', 'textarea', 'select']);
 /** The native editing cell's classes, before the author's. */
 const NATIVE_CELL = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50';
@@ -501,7 +501,7 @@ export function generate(input: GenerateInput): Generated {
     if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
     // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
     if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
-    // Today's dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
+    // The dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
     if (node.tag === 'DialogContent') props.stacked = !(typeof props.className === 'string' && props.className);
     // The runtime registry hands Mermaid the document's colour mode.
     if (node.tag === 'Mermaid') props.colorMode = input.colorMode ?? 'light';
@@ -669,7 +669,7 @@ export function generate(input: GenerateInput): Generated {
   }
 
   /**
-   * Today's editing cell. What differs per row — the row's values, the
+   * The editing cell. What differs per row — the row's values, the
    * scope, the draft, the write check — is resolved by `CellControl`; everything authored is decided here: the element's attributes serialised with React's attribute rules
    * (static-solid/attrs.ts, kept for byte parity with stored pages), and its class merged by the kit's
    * merger (order included).
@@ -776,7 +776,7 @@ export function generate(input: GenerateInput): Generated {
       const miniature = emit(slide.node, '0', 'static', { row: null, preview });
       // A miniature holding a button sits in the rail row's own button: parsed in place, the inner button would close
       // the row. Served inert in a `<template>` (a parser scope boundary) and put in place by the deck behaviour
-      // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree today's rail renders.
+      // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree the former rail rendered.
       const thumb = hasButton(slide.node) ? `<template ${RAIL_THUMB_ATTR}="">${miniature}</template>` : miniature;
       return `<button type="button" class="mx-rail-row" aria-label={${lit(`Go to slide ${slide.index + 1}: ${slide.title}`)}} aria-current={${lit(String(slide.index === 0))}}><span class="mx-rail-label"><span class="mx-rail-index">{${lit(String(slide.index + 1))}}</span><span class="mx-rail-title">{${lit(slide.title)}}</span></span><span class="mx-rail-thumb" aria-hidden="true"><div style="--mx-vh:800px">${thumb}</div></span></button>`;
     }).join('');

@@ -275,7 +275,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
         viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
         assetsUrl: assetsPath(artifact.id),
       },
-      // The managed <Iframe>'s asset door, as today's inline page's island carries it (prepared-page readerInputFor).
+      // The managed <Iframe>'s asset door, as the page's island carries it (prepared-page readerInputFor).
       managedAssets: ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } : null,
       ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
       live: at ? null : { id: artifact.id, editId: artifact.edit_id },

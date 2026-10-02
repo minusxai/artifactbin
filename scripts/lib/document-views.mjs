@@ -36,7 +36,7 @@ export function documentViewProbe() {
   /*
    * READY — when the page is interactive (docs/phase2-architecture.md §11): on the
    * reader view, the takeover (stamped below); on the raw document, the runtime's
-   * `mx:ready` after hydration (today's runtime and the compiled islands both fire
+   * `mx:ready` after hydration (the former runtime and the compiled islands both fired
    * it), or DOMContentLoaded on a page that loads no module script at all (a compiled
    * prose page: nothing to hydrate). `jsBeforeReady` counts the script bytes that
    * finished before this moment.
