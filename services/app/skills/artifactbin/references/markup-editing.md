@@ -102,8 +102,9 @@ write. Single Select and DatePicker save on selection. Multi-select keeps a draf
 Done or outside dismissal (including keyboard focus leaving); Escape cancels.
 
 Select children render as footer actions; clicking cancels the cell draft.
-For “Add Sprint…”, use a native button to open an author-script dialog,
-create with `mx.mutate`, then select the refreshed option.
+For “Add Sprint…”, use a native button to open a dialog from the
+[Helmet script](markup-scripts.md), create by calling the `<Mutation>`
+imported from `page`, then select the refreshed option.
 
 Multi-select requires `valueFormat="json"` and stores unique strings, with
 `[]` for no selections. Commas, quotes and Unicode round-trip through JSON.

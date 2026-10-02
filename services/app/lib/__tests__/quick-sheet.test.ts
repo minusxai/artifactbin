@@ -17,12 +17,13 @@ describe('the installed short skill',()=>{
   * its own transcript and cannot check "early". The tests follow: they assert the NUMBER and the
   * CONTENT of that first push, not the encouragement.
   *
-  * The second bullet keeps that first version native: the kit covers the content, `<Iframe>` is the
-  * escape hatch for an isolated script or canvas, never a layout tool. Both are asserted on the
-  * BULLET, not the page, so a stray sentence elsewhere cannot satisfy them, and on the shipped
-  * `teaching.json` too — the generated bundle is the copy the CLI actually hands an agent.
+  * The second bullet splits the work: markup carries content, data and layout, and the Helmet
+  * script (Preact + signals, any npm library) carries behaviour, its exported components mounted
+  * by name. Both are asserted on the BULLET, not the page, so a stray sentence elsewhere cannot
+  * satisfy them, and on the shipped `teaching.json` too — the generated bundle is the copy the CLI
+  * actually hands an agent.
   */
- it('counts the first push — three calls, title and headings — then fills sections, and native markup before Iframe',()=>{
+ it('counts the first push — three calls, title and headings — then fills sections, and markup for content, the script for behaviour',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
   const fewTurns=bullet('- Few turns');
   expect(fewTurns).toBeDefined();
@@ -41,13 +42,15 @@ describe('the installed short skill',()=>{
   expect(fewTurns).not.toMatch(/Skip[^.]*exporting/);
   expect(fewTurns).not.toContain('write the whole document');
   expect(fewTurns.length).toBeLessThan(600);
-  const native=bullet('- Native markup first');
+  const native=bullet('- Markup for content, data and layout');
   expect(native).toBeDefined();
-  for(const text of ['text, data, charts, tables, controls and motion','<Iframe>','isolated DOM script or canvas','never for layout or content'])expect(native).toContain(text);
+  for(const text of ['text, data, charts, tables, controls and motion','Helmet `<script>`','Preact + signals','any npm library','for behaviour','its exported components mount by name'])expect(native).toContain(text);
+  // The managed frame is gone: the brief must not send an agent to it.
+  expect(sheet).not.toContain('<Iframe>');
   // The bundle the CLI ships carries the same two bullets: a copy edit without
   // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
   expect(teaching.files['SKILL.md']).toContain('push a FIRST version within three calls of the pull');
-  expect(teaching.files['SKILL.md']).toContain('- Native markup first');
+  expect(teaching.files['SKILL.md']).toContain('- Markup for content, data and layout');
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });
  it('uses the same push for create and update with local validation',()=>{
@@ -65,7 +68,7 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('afbin help templates');
  });
  it('teaches responsive containers, static JSX and appropriate chart primitives through the example',()=>{
-  for(const term of ['@2xl:','phone width','static JSX','className','<Helmet>','CDN','never inline','never hand-rolled <svg>'])expect(sheet).toContain(term);
+  for(const term of ['@2xl:','phone width','static JSX','className','<Helmet>','CDN','custom CSS lives here','never hand-rolled <svg>'])expect(sheet).toContain(term);
   // The example being inlined verbatim is skill-brief.test.ts's assertion — it pins
   // the surrounding ```jsx fence too.
  });

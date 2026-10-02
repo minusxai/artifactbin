@@ -1,55 +1,139 @@
 ---
 name: markup-scripts
 description: >-
-  Script APIs.
+  The Helmet script: an ES module in the document, the declared names as Preact signals, any npm library, exported components mounted from markup.
 ---
 ## Read first
 
-One `<script>` in `<Helmet>` runs after hydration in a hidden opaque-origin
-iframe. The visible markup is rendered by the trusted runtime. Author scripts
-cannot access that DOM, cookies, or storage. Fetch is blocked by CSP.
+The one `<script>` in `<Helmet>` runs **in the document itself** as an ES
+module, after the markup is in the DOM: native DOM access, `import`, top-level
+`await`, strict mode. The names the Helmet declares import from `page` as
+Preact signals. Markup carries content, data and layout; the script carries
+behaviour: DOM handlers, canvas, a library, a component of your own.
 
-Use declarative controls for visible interactions and the `mx` data API for
-logic. Existing scripts that attach listeners to visible elements or manipulate
-them must be migrated; there is no legacy same-realm execution fallback. Not
-every DOM interaction currently has a declarative equivalent.
+- **Ownership**: a node bound in markup (`value="$region"`, `{$clicks}`,
+  `data="$monthly"`) changes through its signal; every other node the script
+  may touch freely.
+- **The trap**: reading `.value` outside an `effect` (or a `computed`, or a
+  component's render) is a one-time copy and subscribes to nothing.
+- A script that does not build is refused at publish as `invalid_script` with
+  the message: a syntax error, an undeclared name imported from `page`, a
+  relative import.
 
-For new canvas/library interfaces, use [managed Iframe](markup-iframe.md), with
-static DOM, style and script children. Its script may manipulate **its own
-internal HTML**, never the parent document, and receives the same bounded `mx`
-bridge plus anonymous cached assets.
+## Contents
 
-## Data API
+Example · Imports · The page module · Components · Libraries.
 
-`window.mx` is defined before the script runs:
+## Example
 
-Author a classic script body, without `import` or `export` declarations.
-`describe()` returns arrays, not dictionaries:
-`{instanceEpoch, signals:[{name, kind, writable, type?, columns?}], mutations:[{name, scope, args, available, unavailableReason}]}`.
-List names with `description.signals.map(signal => signal.name)` and
-`description.mutations.map(mutation => mutation.name)`.
+```jsx
+<Helmet>
+  <title>Regional sales</title>
+  <Value name="region" type="string" default="west" />
+  <Value name="clicks" type="number" default={0} url={false} />
+  <Value name="sales" type="table" value={[{"region":"west","month":"Jan","total":120},{"region":"west","month":"Feb","total":140},{"region":"east","month":"Jan","total":90},{"region":"east","month":"Feb","total":160}]} />
+  <Query name="monthly">{`select month, total from sales where region = $region order by month`}</Query>
+  <Mutation name="bump">{`update sales set total = total + 10 where region = $region`}</Mutation>
+  <script>{`
+    import { region, clicks, monthly, bump } from 'page';
+    import { effect, computed } from '@preact/signals';
+    import { useState } from 'preact/hooks';
 
-- `await mx.describe()` lists scalar/table/query signals and declared mutations with their arguments and current availability.
-- `await mx.read(['count', 'results'], options?)` returns `{instanceEpoch, revision, signals}`. Each selected signal is `{value, status, error?}`; status is `ready`, `pending`, or `error`. Scalars are primitive values; tables are detached `{columns, rows, truncated?}` objects. Query rows may be null before the first result. This reads authoritative host state, including across the iframe boundary.
-- `await mx.read(['results'], {wait:true})` waits for selected queries to settle. `{refresh:true}` forces selected queries to rerun and waits. Refresh accepts query names only. `timeoutMs` defaults to 10000, capped at 30000; a timeout rejects with `code: 'TIMEOUT'` and the latest `snapshot`.
-- `await mx.set({count: 2})` validates the entire scalar patch before writing. Bound controls update and dependent queries rerun. Tables and query results cannot be set. The acknowledgment includes `instanceEpoch` and `revision`; it does not wait for queries.
-- `await mx.mutate('save', {count: 3})` executes a declared mutation with per-call arguments, without changing scalar signals. It returns `{operationId, scope, status:'committed'}`. Declared row/cell parameters can be passed as `{_row:{id:1}, _value:3}`. Permissions still apply; a concurrent call to the same mutation rejects with `BUSY`. A committed write is not undone by a later refresh failure.
-- `const stop = mx.subscribe(['count', 'results'], snapshot => { ... })` delivers an asynchronous initial snapshot and subsequent selected value/status/error changes. It coalesces rapid updates. `stop()` is synchronous and idempotent; call it on `pagehide`. Callback arguments have exactly the same shape as `read()`.
+    const total = computed(() => monthly.value.reduce((s, r) => s + Number(r.total), 0));
+    effect(() => {
+      document.querySelector('#summary').textContent =
+        region.value + ': ' + total.value + (monthly.loading.value ? ' (updating…)' : '');
+    });
+    document.querySelector('#more').addEventListener('click', () => { clicks.value = clicks.value + 1; });
+    document.querySelector('#bump').addEventListener('click', async () => {
+      const status = document.querySelector('#status');
+      try { await bump(); status.textContent = 'saved'; }
+      catch (error) { status.textContent = error.message; }
+    });
 
-Use `snapshot.signals.results.value.rows`, not `snapshot.results` or `snapshot.tables`.
-Render pending and error states explicitly. Keep event handlers in `try/catch/finally`
-so failed writes restore disabled controls. Do not await a never-ending lifetime
-promise at module top level: finish startup, register handlers, and return.
-Errors expose `code` and `message`; query errors are also carried on their signal.
-
-Only currently declared signals, queries, and mutations are accepted. There is
-no script API for liking, following, commenting, source edits, arbitrary URLs,
-or authenticated fetch. Requests are bounded; a script must not flood the bridge.
-
-Changed or removed scripts revoke their old iframe and subscriptions on live
-updates; unchanged scripts survive prose edits. Revocation does not undo a write
-already accepted by the server. Origin isolation is not a guarantee of CPU or
-memory isolation.
+    export function Bars({ rows, color }) {
+      const [hover, setHover] = useState(null);
+      const max = Math.max(1, ...rows.value.map((r) => Number(r.total)));
+      return (
+        <svg viewBox="0 0 200 60" style={{ width: '100%', height: 80 }}>
+          {rows.value.map((r, i) => (
+            <rect key={r.month} x={i * 48 + 8} width={36} y={60 - (r.total / max) * 56} height={(r.total / max) * 56}
+              fill={hover === i ? 'currentColor' : color} onMouseEnter={() => setHover(i)} />
+          ))}
+        </svg>
+      );
+    }
+  `}</script>
+</Helmet>
+<div data-design="tw" className="@container space-y-4 p-6">
+  <Select label="Region" value="$region" options={["west", "east"]} />
+  <p id="summary">Loading…</p>
+  <p>Clicks: {$clicks} <button id="more">More</button> <button id="bump">Add 10</button> <span id="status" /></p>
+  <Bars rows={$monthly} color="var(--chart-1)"><p>Loading chart…</p></Bars>
+</div>
+```
 
 In Helmet script text, split `</script` as `'</scr' + 'ipt'`.
-See [markup](markup.md) for a signal-subscription example and the Helmet syntax.
+
+## Imports
+
+| Specifier | Gives |
+| --- | --- |
+| `page` | the declared names (below) |
+| `@preact/signals` | `signal`, `computed`, `effect`, `batch` |
+| `preact`, `preact/hooks` | Preact, the page's own instance |
+| `react`, `react-dom` | `preact/compat` |
+| any other bare name | that npm package from `https://esm.sh/<name>`, subpaths too |
+| `https://…` | that module |
+
+Relative imports do not exist: nothing sits beside the script.
+
+## The page module
+
+- **A Value** is a writable signal: `region.value` reads it, `region.value =
+  'east'` writes it; bound markup re-renders and dependent queries re-run. A
+  `type="table"` Value is read-only rows, like a Query.
+- **A Query** is a read-only signal of its rows, already loaded at page load.
+  `monthly.loading.value` is true while a re-run is in flight (the old rows
+  stay in `.value` meanwhile); `monthly.error.value` is the engine's message
+  or null; `await monthly.ready` gives the next settled rows and rejects with
+  the engine's message.
+- **A Mutation** is an async function: `await rename({ from: 'west', to:
+  'West' })` resolves after commit and rejects with the server's message, so
+  wrap it in `try`/`catch`. A row-scoped one takes `_row: { id: 7 }`.
+  Permissions still apply.
+
+## Components
+
+JSX in the script is Preact JSX. A component the script exports mounts
+wherever markup writes its name as a tag (any capitalized tag that is not a
+kit component): `<Bars rows={$monthly} color="teal"><p>Loading…</p></Bars>`.
+Literal props arrive as values; a `$name` prop arrives as the signal, so read
+`rows.value`. The children are the server-rendered fallback until it mounts.
+Inside a component, `onClick` and friends are ordinary Preact; markup itself
+still has no handlers. Import `@preact/signals` in a script that exports
+components: that import is what re-renders a component when a signal it read
+changes.
+
+## Libraries
+
+Import a library by its npm name or by URL. Pin a version (`three@0.170.0`)
+when the page must not change under its readers. `fetch` reaches HTTPS URLs
+that allow cross-origin reads.
+
+```jsx
+<canvas id="scene" className="block h-[420px] w-full" />
+<Helmet><script>{`
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+  const canvas = document.querySelector('#scene');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+  const camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
+  camera.position.z = 4;
+  const scene = new THREE.Scene();
+  scene.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial()));
+  const controls = new OrbitControls(camera, canvas);
+  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+`}</script></Helmet>
+```

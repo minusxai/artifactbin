@@ -7,7 +7,7 @@ visibility: unlisted
 ---
 <Helmet>
 <title>Q3 sales review</title>
-<style>{`.kpi { letter-spacing: -0.02em } /* custom CSS lives here, never inline */`}</style>
+<style>{`.kpi { letter-spacing: -0.02em } /* custom CSS lives here */`}</style>
 {/* afbin add sales.csv --json gives its ref:<id> (abc123 here); SQL reads sales.rows. */}
 <Import name="sales" src="ref:abc123" />
 {/* $region is reader state; data="$monthly" binds query rows to the view. */}

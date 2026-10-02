@@ -40,7 +40,7 @@ describe('the brief', () => {
 
   it('the example teaches the rules the prose no longer repeats', () => {
     const example = skillExample();
-    for (const rule of ['static JSX', 'className', 'never inline', '<Helmet>', '<Import name="sales"', 'sales.rows', 'ref:<id>', '$region', '"$monthly"', 'persistent id', 'never hand-rolled <svg>', '@2xl:', 'edit_id', 'visibility']) {
+    for (const rule of ['static JSX', 'className', 'custom CSS lives here', '<Helmet>', '<Import name="sales"', 'sales.rows', 'ref:<id>', '$region', '"$monthly"', 'persistent id', 'never hand-rolled <svg>', '@2xl:', 'edit_id', 'visibility']) {
       expect(example, rule).toContain(rule);
     }
   });

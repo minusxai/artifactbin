@@ -15,11 +15,11 @@ you components; this page is about using FEWER of them, better.
 The theme carries the fonts, the palette and both color modes; what your own
 Helmet CSS adds, you carry yourself:
 
-- **A family the theme lacks is a Helmet meta, never CSS**:
+- **A family the theme lacks is a Helmet meta**:
   `<meta name="font-display" content="Lobster" />` (also `font-body`,
   `font-mono`) names a Google family, served from this origin; an unknown one
-  fails the publish. CSS `url()`/`@import` is stripped at save, so a font CDN
-  link never paints.
+  fails the publish. An `@import url(…)` of a font CSS in the Helmet
+  `<style>` works too.
 <!--bundle:skip-->
 - **Color mode is a root class the reader flips**, not a media query: every
   theme ships light AND dark and `colorMode` picks your default. Author in

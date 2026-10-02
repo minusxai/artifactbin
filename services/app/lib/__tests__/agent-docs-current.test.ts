@@ -15,7 +15,9 @@
  * rejects. Add a builder here when you add one.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc } from '../skills';
+import { buildQuickSheet, renderDoc, renderTree, skillTree } from '../skills';
+import { publishJsx } from '../story/document/jsx-tier';
+import type { StoredContent } from '../story/document/input';
 
 const BASE = 'https://example.test';
 const files = (...paths: string[]) => (base: string) => paths.map((p) => renderDoc(p, base)).join('\n');
@@ -79,6 +81,50 @@ describe('the reference teaches what a document CAN do', () => {
 
   it('and the themes doc points at the same one place', () => {
     expect(buildThemesDoc(BASE)).toMatch(/Helmet/);
+  });
+});
+
+/**
+ * The Helmet script runs IN the document as an ES module over Preact signals: the hidden author
+ * frame, its `mx` API and the managed `<Iframe>` are gone, and authored CSS is no longer stripped.
+ * The scripts reference teaches the contract the page runtime implements, and its example must
+ * clear the same door an agent's push does (module build, mount validation, second-save identity).
+ */
+describe('the scripts reference teaches the in-document module', () => {
+  const scripts = renderDoc('artifactbin/references/markup-scripts.md', BASE);
+  const flat = scripts.replace(/\s+/g, ' ');
+
+  it('names the page module, the import table, the ownership rule and the trap', () => {
+    for (const text of [
+      "from 'page'", '`@preact/signals`', '`preact`, `preact/hooks`', '`react`, `react-dom` | `preact/compat`',
+      'https://esm.sh/<name>', 'Relative imports do not exist', 'invalid_script',
+      'a node bound in markup (`value="$region"`, `{$clicks}`, `data="$monthly"`) changes through its signal; every other node the script may touch freely',
+      'reading `.value` outside an `effect`', 'is a one-time copy and subscribes to nothing',
+      'monthly.loading.value', 'monthly.error.value', 'await monthly.ready',
+      "import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'",
+    ]) expect(flat, text).toContain(text);
+  });
+
+  it('teaches no part of the retired frame API', () => {
+    expect(scripts).not.toMatch(/\bmx\.(read|set|subscribe|mutate|describe)\b|<Iframe|opaque-origin iframe/);
+  });
+
+  it('publishes its example, and the stored source is stable on a second save', async () => {
+    const sample = /```jsx\n([\s\S]*?)\n```/.exec(scripts)?.[1];
+    expect(sample).toContain('export function Bars');
+    const saved = await publishJsx({}, sample!);
+    const refused = saved instanceof Response ? (await saved.text()).slice(0, 400) : null;
+    expect(refused).toBeNull();
+    const source = (saved as StoredContent).source!;
+    expect(((await publishJsx({}, source)) as StoredContent).source).toBe(source);
+  });
+});
+
+describe('no reference teaches the retired frame or the CSS strip', () => {
+  const rendered = renderTree(skillTree(), BASE).map(({ file, text }) => [file.path, text] as const);
+  it.each(rendered)('%s', (_path, text) => {
+    expect(text).not.toMatch(/<Iframe|markup-iframe|markup-libraries/);
+    expect(text).not.toMatch(/managed (Iframe|frame)|author frame|stripped at save|style=` is rejected/i);
   });
 });
 

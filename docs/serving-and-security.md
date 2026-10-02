@@ -44,7 +44,8 @@ source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
 Pages run behind a strict CSP: styles are allowed, executable inline scripts
-are refused on compiled standalone pages, **all external network blocked**,
+are refused on compiled standalone pages, the only external destinations are
+HTTPS (the author script's modules, stylesheets, fonts, images and `fetch`),
 and a `sandbox` directive gives each artifact an opaque
 origin so it can't touch the app's storage. Documents are always
 self-contained — but you don't have to make them so by hand.
@@ -61,16 +62,15 @@ Interactive pages load only their needed same-origin, content-addressed chunks.
 The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
 not executable inline script, and author strings never become generated code.
 
-Author scripts run in a second opaque child reached through the fixed
-`/author-frame` wrapper, never in the visible renderer. The page carries the
-script only as data (inside its JSON data island, which is not script under
-the page's `script-src`); the page's runtime hands it to the child over a
-MessagePort after the wrapper loads, and the wrapper answers under its own
-policy (`sandbox allow-scripts`, no framing, no forms). A bounded
-MessagePort exposes only declared values, query refreshes and permitted
-dataset mutations. Managed `<Iframe>` assets are imported through the
-document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;
-arbitrary network, navigation, account APIs and parent DOM access remain denied.
+The author script runs in the document itself, inside that opaque origin. It
+is built into an ES module at publish (`lib/story/document/author-module.server.ts`:
+JSX to Preact, bare npm names to `https://esm.sh/<name>`), carried as data in
+the page's JSON island, and loaded by the page runtime
+(`lib/islands/page-runtime.ts`) from a `blob:` URL, with its `preact` and
+`@preact/signals` imports pointed at the page's own build. Its `page` module
+exposes only the declared names: Values and Queries as signals over the page's
+store, Mutations through the same permission-checked `/mutate` door as the
+kit's controls. Account APIs, cookies and the app's storage stay out of reach.
 
 **Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
 at publish — against the artifacts it may read, by the SQLite engine the
