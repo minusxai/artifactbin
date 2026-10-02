@@ -212,6 +212,7 @@
    "services/app/__tests__/compiled-backfill.test.ts": 4797,
    "services/app/__tests__/compiled-behaviour.test.ts": 8754,
    "services/app/__tests__/compiled-fallback-policy.test.ts": 6990,
+   "services/app/__tests__/compiled-managed-assets.test.ts": 8231,
    "services/app/__tests__/compiled-page-engine.test.ts": 8673,
    "services/app/__tests__/compiled-serve.test.ts": 32274,
    "services/app/__tests__/dataset-secret-boundary.test.ts": 4559,
