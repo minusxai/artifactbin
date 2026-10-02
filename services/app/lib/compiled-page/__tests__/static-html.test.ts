@@ -80,9 +80,10 @@ describe('static chunks', () => {
     expect(chunked.islandRefs).toEqual(jsx.islandRefs);
     const html = chunked.staticHtml.join('');
     for (const mark of ['data-slot="button"', 'data-slot="video"', 'data-slot="video-link"', 'data-mx-slide=""', 'data-mx-slide-title="Slide 5"', '--g-cols:12', '--gi-w:6', 'id="g9e"', 'id="deck"']) expect(html, mark).toContain(mark);
-    // The document's body keeps no JSX for them: what is left is the live value and the deck rail's miniatures.
-    const body = chunked.skeleton.slice(chunked.skeleton.indexOf('<div class="mx-doc">'));
-    for (const tag of ['<Grid', '<Button', '<Video', '<Slide', '<SlideDeck', '<Card', '--g-cols']) expect(body, tag).not.toContain(tag);
+    // The skeleton keeps no JSX for them, the deck rail's miniatures included: what is left is the live value.
+    for (const tag of ['<Grid', '<Button', '<Video', '<Slide', '<SlideDeck', '<Card', '--g-cols', 'mx-preview-']) expect(chunked.skeleton, tag).not.toContain(tag);
+    expect(html).toContain('id="mx-preview-');
+    expect(chunked.skeleton.length).toBeLessThan(10_000);
     expect(jsx.skeleton.slice(jsx.skeleton.indexOf('<div class="mx-doc">'))).toContain('<Video');
   }, 120_000);
 

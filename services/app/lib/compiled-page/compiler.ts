@@ -50,7 +50,7 @@ import { buildDocumentModules, loadKitServer, type KitServer } from './bundle.se
 import { contentSha } from './speculation';
 import { MODULE_DATA_READ_CODE } from './carriers';
 import { reactAttrs } from './static-solid/attrs';
-import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
+import { kitServerHtml, solidAttrs, solidChildren, solidText, solidTextChild, solidTextValue, solidTrimText, staticChunkJsx, SOLID_SPECIAL_TAGS } from './static-solid/html';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Literals and names: the only doors author text has into generated code
@@ -145,7 +145,7 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
   // A Button without run/set (one with them is an island), a Video (its `ref:` poster resolved here, `kitParts`), a deck's
   // SlideDeck and Slide (named by a pattern: a new string literal here would join the recipe class union, recipe-classes.ts,
   // and flip every story's CSS compile version).
-  'Button', 'Video', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
+  'Button', 'Video', 'File', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
 ]);
 /** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
@@ -175,6 +175,8 @@ const hasContent = (nodes: JsxNode[]): boolean => nodes.some((n) => n.type !== '
 const RAIL_THUMB_ATTR = 'data-mx-thumb';
 /** The deck's framework-free behaviour chunk, by its manifest specifier. */
 const DECK_BEHAVIOR = '@mx/deck';
+/** A rail miniature part's kind (`previewOf`). */
+const P = { NONE_K: 0, TEXT: 1, LIT: 2, HOLE_TEXT: 3, ELEMENT: 4, COMPONENT: 5 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Static HTML → JSX
@@ -755,6 +757,166 @@ export function generate(input: GenerateInput): Generated {
     return inner === null ? `<div${attrHtml}>${content}</div>` : `<div${attrHtml}><div${innerHtml}>${content}</div></div>`;
   }
 
+  /**
+   * RAIL MINIATURES AS STATIC CHUNKS. What `emit` writes for a node in the deck rail's preview context, as Solid's
+   * server renders that JSX: the rail sits under `NoHydration`, so its native elements are inline template text
+   * (Babel's `trimWhitespace` of the raw JSX text, attributes as `solidAttrs`), its components and `<rt.NoHydration>`
+   * holes are boxed in `<!--$-->…<!--/-->` when their element has more than one child (babel-plugin-jsx-dom-expressions
+   * `transformChildren`), and a component's children reach it as Babel shapes them (decoded text, `{ t }` elements).
+   * Null when any part keeps its JSX (fragments, long texts, components outside `KIT_CHUNK`, a Button with run/set).
+   */
+  // Kinds are numbers: a string literal in this file joins the recipe class union (recipe-classes.ts) and flips every story's CSS version.
+  type Preview =
+    | { kind: typeof P.NONE_K }
+    | { kind: typeof P.TEXT; value: string } | { kind: typeof P.LIT; value: string } | { kind: typeof P.HOLE_TEXT; value: string }
+    | { kind: typeof P.ELEMENT; html: string } | { kind: typeof P.COMPONENT; html: string };
+  const NONE: Preview = { kind: P.NONE_K };
+  function previewOf(node: JsxNode, path: string, ctx: Ctx): Preview | null {
+    const values = ctx.preview!.values;
+    if (node.type === 'text') {
+      if (node.value === '') return NONE;
+      if (node.value.length > 1024) return null;
+      return /\r|\n/.test(node.value) ? { kind: P.LIT, value: node.value } : { kind: P.TEXT, value: node.value };
+    }
+    if (node.type === 'expression') {
+      if (!node.value.static) {
+        const value = isReactiveExpression(node.value.reactive) ? evaluateReactive(node.value.reactive, values, undefined) : null;
+        return typeof value === 'string' || typeof value === 'number' ? { kind: P.LIT, value: String(value) } : NONE;
+      }
+      const v = node.value.json;
+      return typeof v === 'string' || typeof v === 'number' ? { kind: P.HOLE_TEXT, value: String(v) } : NONE;
+    }
+    if (node.control) {
+      if (node.control.kind === 'fragment') return null;
+      if (!isReactiveExpression(node.control.test) || node.children.length !== 2) return NONE;
+      const yes = Boolean(evaluateReactive(node.control.test, values));
+      return node.control.kind === 'and' && !yes ? NONE : previewOf(node.children[yes ? 0 : 1]!, `${path}.${yes ? 0 : 1}`, ctx);
+    }
+    if (INERT.has(node.tag)) return NONE;
+    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return NONE;
+    return previewElement(node, path, ctx);
+  }
+  /** A native element's children as its server template writes them, or null. */
+  function previewChildren(parts: ReadonlyArray<Preview | null>): string | null {
+    const shown: Preview[] = [];
+    for (const part of parts) {
+      if (part === null) return null;
+      if (part.kind === P.NONE_K) continue;
+      // Adjacent JSX texts are one JSX text, and a whitespace run that is not all spaces is not counted as a child.
+      if (part.kind === P.TEXT) {
+        const text = part.value;
+        if (shown.at(-1)?.kind === P.TEXT || (/^\s*$/.test(text) && !/^ *$/.test(text))) return null;
+      }
+      shown.push(part);
+    }
+    const boxed = shown.length > 1;
+    return shown.map((part) => {
+      if ((part.kind === P.ELEMENT || part.kind === P.COMPONENT)) return part.kind === P.ELEMENT ? part.html : boxed ? `<!--$-->${part.html}<!--/-->` : part.html;
+      if (part.kind === P.TEXT) return solidTrimText(jsxLiteral(part.value));
+      if (part.kind === P.LIT) return solidText(part.value);
+      if (part.kind !== P.HOLE_TEXT) return '';
+      return boxed ? `<!--$-->${solidText(part.value)}<!--/-->` : solidText(part.value);
+    }).join('');
+  }
+  /** A component's children as Babel hands them to it: text decoded and trimmed, elements and components as `{ t }`. */
+  function previewComponentChildren(parts: ReadonlyArray<Preview | null>): unknown[] | null {
+    const out: unknown[] = [];
+    for (const part of parts) {
+      if (part === null) return null;
+      if (part.kind === P.NONE_K) continue;
+      if ((part.kind === P.ELEMENT || part.kind === P.COMPONENT)) out.push({ t: part.html });
+      else if (part.kind !== P.TEXT) out.push(part.value);
+      else if (shownText(part.value)) out.push(solidTextValue(part.value));
+    }
+    return out;
+  }
+  const shownText = (value: string): boolean => solidTrimText(jsxLiteral(value)).length > 0;
+  function previewElement(node: JsxElement, path: string, ctx: Ctx): Preview | null {
+    const preview = ctx.preview!;
+    const element = (tag: string, attrs: Attr[], inner: string | null): Preview | null => {
+      const attrHtml = solidAttrs(attrs, safeAttr);
+      if (attrHtml === null || inner === null) return null;
+      return { kind: P.ELEMENT, html: VOID.test(tag) ? `<${tag}${attrHtml}>` : `<${tag}${attrHtml}>${inner}</${tag}>` };
+    };
+    if (node.tag === 'For') {
+      if (isTableParts(node)) return NONE;
+      const owner = node.attributes.find((a) => a.name === 'id')?.value;
+      const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, preview.values);
+      const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
+      const props = preview.rewrite({ ...wrapper, id: ownerId || undefined,
+        ...(!ctx.svg ? { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
+      const tag = ctx.svg ? 'g' : 'div';
+      return element(tag, elementAttrs(tag, props), '');
+    }
+    if (node.tag === 'Grid' || node.tag === 'GridItem') {
+      const { attrs, inner, kids } = gridParts(node, path, ctx);
+      const content = previewChildren(kids.map(([c, p, kidCtx]) => previewOf(c, p, kidCtx)));
+      if (inner === null) return element('div', attrs, content);
+      const box = element('div', [['class', inner]], content);
+      return box && box.kind === P.ELEMENT ? element('div', attrs, box.html) : null;
+    }
+    if (PREVIEW_EMBEDS[node.tag]) return element('div', elementAttrs('div', { style: PREVIEW_STYLE }), solidText(PREVIEW_EMBEDS[node.tag]!));
+    if (node.tag === 'Input' || node.tag === 'Select' || node.tag === 'Switch') {
+      const previewTag = `Preview${node.tag}`;
+      const component = input.kitServer?.static?.[previewTag];
+      if (typeof component !== 'function') return null;
+      useKit(previewTag, 'static', ctx);
+      const p = JSON.parse(JSON.stringify(preview.rewrite(rawBuildProps(node.attributes, true, node.tag, path, undefined, preview.values)) ?? null)) as unknown;
+      const html = kitServerHtml(component, { p }, []);
+      return html === null ? null : { kind: P.COMPONENT, html };
+    }
+    if (node.isComponent) {
+      if (!KIT_CHUNK.has(node.tag)) return null;
+      const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
+      const component = meta && input.kitServer?.[meta.mod]?.[node.tag];
+      if (!meta || typeof component !== 'function') return null;
+      const parts = kitParts(node, path, 'static', ctx, meta);
+      if (typeof parts === 'string' || parts.api.run !== undefined || parts.api.set !== undefined) return null;
+      useKit(node.tag, 'static', ctx);
+      const props: Props = {};
+      for (const [k, v] of Object.entries(parts.api)) props[safeAttr(k)] = typeof v === 'string' ? v : JSON.parse(JSON.stringify(v ?? null));
+      if (parts.cls) props.class = parts.cls;
+      for (const [n, v] of parts.attrs) props[safeAttr(n)] = v === '' && /^(?:disabled|checked|selected|readOnly|hidden|open|multiple|required|inert|autoFocus|reversed)$/i.test(n) ? true : v;
+      const children = meta.noChildren ? [] : previewComponentChildren(node.children.map((c, i) => previewOf(c, `${path}.${i}`, ctx)));
+      if (children === null) return null;
+      const html = kitServerHtml(component, props, children);
+      return html === null ? null : { kind: P.COMPONENT, html };
+    }
+    const lower = node.tag.toLowerCase();
+    if (SOLID_SPECIAL_TAGS.has(lower)) return null;
+    const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
+    const kids = (inner: Ctx) => previewChildren(node.children.map((c, i) => previewOf(c, `${path}.${i}`, inner)));
+    const source = lower === 'img' ? node.attributes.find((a) => a.name.toLowerCase() === 'src') : undefined;
+    if (source?.value.static && typeof source.value.json === 'string' && (refName(source.value.json) || parseRowRef(source.value.json) || carriesRef(source.value.json))) {
+      const rest = rawBuildProps(node.attributes.filter((a) => a !== source), false, node.tag, path, undefined, preview.values);
+      return element('img', elementAttrs('img', { ...rest, 'data-mx-bound': `src:${source.value.json}` }), '');
+    }
+    const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
+    const boundAttrs = boundTable ? node.attributes.filter((a) => boundTable[a.name.toLowerCase()] && a.value.static && refName(a.value.json)) : [];
+    if (boundAttrs.length) {
+      const bind = Object.entries(Object.fromEntries(boundAttrs.map((a) => [a.name.toLowerCase(), refName(a.value.static ? a.value.json : null)])))
+        .map(([name, value]) => `${name}:$${value}`).join(' ');
+      const props = rawBuildProps(node.attributes.filter((a) => !boundAttrs.includes(a)), false, node.tag, path, undefined, preview.values);
+      return element(tag, elementAttrs(tag, { ...props, disabled: true, 'data-mx-bound': bind }), VOID.test(lower) ? '' : kids(ctx));
+    }
+    let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, preview.values);
+    const patch = resolveRefProps(node, props, refData);
+    if (patch) props = { ...props, ...patch };
+    props = preview.rewrite(props);
+    const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
+    const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
+    const attrs = elementAttrs(tag, props);
+    if (lower === 'option' && ctx.selectValue !== undefined) {
+      const value = props.value ?? node.children.map((child) => child.type === 'text' ? child.value : '').join('');
+      const i = attrs.findIndex(([name]) => name === 'selected');
+      if (i >= 0) attrs.splice(i, 1);
+      if (String(value) === ctx.selectValue) attrs.push(['selected', '']);
+    }
+    if (VOID.test(lower)) return element(lower, attrs, '');
+    if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return element(tag, attrs, solidText(String(props.defaultValue ?? props.value)));
+    return element(tag, attrs, kids(inner));
+  }
+
   function emitFor(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
     const each = node.attributes.find((a) => a.name === 'each');
     const name = each && !each.value.static && each.value.reactive?.kind === 'signal' ? each.value.reactive.name : null;
@@ -804,7 +966,11 @@ export function generate(input: GenerateInput): Generated {
     const rail = slides.map((slide) => {
       // The same Solid skeleton renderer draws a miniature with declared values and rail-local IDs.
       const preview: Ctx['preview'] = { rewrite: allocate([slide.node], slide.path), values: previewValues };
-      const miniature = emit(slide.node, '0', 'static', { row: null, preview });
+      // Rendered here when every part can be (`previewOf`); the constants its JSX would hoist are never read by the browser module.
+      const mark = data.length;
+      const shown = input.staticHtml === false ? null : previewOf(slide.node, '0', { row: null, preview });
+      data.length = mark;
+      const miniature = shown && (shown.kind === P.ELEMENT || shown.kind === P.COMPONENT) ? staticChunkJsx(staticHtml.push(shown.html) - 1) : emit(slide.node, '0', 'static', { row: null, preview });
       // A miniature holding a button sits in the rail row's own button: parsed in place, the inner button would close
       // the row. Served inert in a `<template>` (a parser scope boundary) and put in place by the deck behaviour
       // (lib/islands/deck RAIL_THUMB_ATTR), so the rail ends as the tree the former rail rendered.

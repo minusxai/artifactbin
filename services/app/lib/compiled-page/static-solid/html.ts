@@ -28,6 +28,8 @@ const solidTrim = (text: string): string => {
   if (/\n/.test(out)) out = out.split('\n').map((line, i) => (i ? line.replace(/^\s*/g, '') : line)).filter((line) => !/^\s*$/.test(line)).join(' ');
   return out.replace(/\s+/g, ' ');
 };
+/** A JSX text's bytes in a native element's server template: Babel's `trimWhitespace` of the raw (still entity-encoded) text. */
+export const solidTrimText = solidTrim;
 /** One element's attributes as Solid's server template writes them; null when one is outside the plain rules. */
 export function solidAttrs(attrs: ReadonlyArray<readonly [string, string]>, checkName: (name: string) => string): string | null {
   let out = '';
