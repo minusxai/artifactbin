@@ -151,7 +151,7 @@ function keepPastedEdgeSpaces(tr: Transaction, from: number, plain: string) {
 }
 
 /** How many AST-path decorations one repath step redraws: a few table rows, well inside an idle slice at slow CPUs. */
-const REPATH_STEP = 40;
+const REPATH_STEP = 30;
 
 export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, onCompositionSettled: () => void): FlowView {
   /** The AST-path decorations last drawn, and for what: recomputed only when the document, its source or its path moves. */
@@ -435,9 +435,13 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
         const doc = view.state.doc, { nodes } = props();
         if (state.composing || !staged || staged.doc !== doc || !from || from.doc !== doc || from.nodes !== nodes) { staged = null; return; }
         list ??= pathDecorations(doc, nodes, to);
-        const drawn = (index + 1) * REPATH_STEP;
-        if (index < count - 1 && list.length === from.list.length) staged = { doc, set: DecorationSet.create(doc, [...list.slice(0, drawn), ...from.list.slice(drawn)]) };
-        else {
+        if (list.length === from.list.length) {
+          // This step's share swapped in the set drawn so far (rebuilding the whole set every step walked every cell).
+          const share = [index * REPATH_STEP, (index + 1) * REPATH_STEP] as const;
+          const set = staged.set.remove(from.list.slice(...share)).add(doc, list.slice(...share));
+          if (index < count - 1) staged = { doc, set };
+          else { staged = null; memo = { doc, nodes, path: to, list, set }; }
+        } else {
           staged = null;
           memo = { doc, nodes, path: to, list, set: DecorationSet.create(doc, [...list]) };
         }
