@@ -797,6 +797,11 @@ function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; t
  */
 export interface EditInput {
   documentUpdate?:DocumentUpdate;
+  /**
+   * The caller answers with the patch, not the document, when the patch lands where it was prepared (the browser
+   * editor's save): the commit then never returns or decodes the new document, and the outcome says `withheld`.
+   */
+  patchEcho?: true;
   operations?:DocumentOperation[];
   text?: ProseOperation;
   annotationOps?: AnnotationOperation[];
@@ -820,7 +825,8 @@ export interface EditInput {
  */
 export type EditOutcome =
   /** `warnings`: external URLs the candidate named that would not import (lib/web-assets). */
-  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[] }
+  /** `withheld`: the row carries no document or source; the patch landed on exactly its base version. */
+  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[]; withheld?: true }
   | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
   | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' | 'empty_batch' | 'too_many_edits' | 'too_large'; editIndex?: number }
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
@@ -852,6 +858,37 @@ async function storeCompiledRecord(db: Queryable, row: ArtifactRow): Promise<Art
   return stored.rowCount ? { ...row, meta } : row;
 }
 
+/**
+ * What a commit that WITHHELD its document still owes, done after the reply: the new head's source exists only in the
+ * database, and decoding it (megabytes on a table-heavy document) is what the save must not wait for. So the head is
+ * read once here, off the write's path, and gets exactly what an answered commit gets inline: its dataflow record
+ * (storeCompiledRecord, guarded on the version), its diagram harvest, then the warm prepared page. A head that has
+ * moved on is skipped: the newer commit settles its own head, and readers compile and queue on a miss anyway.
+ * Serial, in commit order, and never inside a transaction (one PGLite connection).
+ */
+let settling: Promise<void> = Promise.resolve();
+function settleCommittedHead(id: string, version: number): void {
+  // Chained on a microtask, not a timer: a test's fake clock must never strand it. Its first step is a query, so the
+  // reply is written while the document is read.
+  settling = settling.then(async () => {
+    try {
+      const db = await getDb();
+      const head = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id=$1 AND version=$2 AND ${LIVE_ARTIFACT_SQL}`, [id, version])).rows[0];
+      if (!head) return;
+      const row = await storeCompiledRecord(db, head);
+      await queueMermaidHarvest(row);
+      if (row.format === 'markup') warmPreparedPage(row.id, undefined, row);
+    } catch (error) {
+      console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
+    }
+  });
+}
+
+/** Resolves once every withheld commit so far has been settled (tests, and a graceful shutdown). */
+export function committedHeadsSettled(): Promise<void> {
+  return settling;
+}
+
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
 
 /**
@@ -878,13 +915,14 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const update=input.documentUpdate;
     if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.aliases?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
-    let committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,currentSyntax:!opts.dryRun});
+    const withholdDocument=!!input.patchEcho&&!opts.dryRun;
+    let committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,currentSyntax:!opts.dryRun,withholdDocument});
     if(!committed)return null;
     // Only an editor gets here with a head: the commit already applied the scope.
     if(!committed.applied&&!opts.dryRun&&committed.head.format==='markup'&&!hasCurrentDataSyntax(committed.head.meta)){
       const converted=await convertForEdit(db,id);
       if(converted)return {applied:false,reason:'doc_changed',head:headOf(converted)};
-      committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate);
+      committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{withholdDocument});
       if(!committed)return null;
     }
     if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
@@ -895,6 +933,10 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
     if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
+    if(committed.withheld){
+      settleCommittedHead(committed.row.id,committed.row.version);
+      return {applied:true,row:committed.row,withheld:true};
+    }
     const row=await storeCompiledRecord(db,committed.row);
     // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.
     if(row.format==='markup')warmPreparedPage(row.id);
