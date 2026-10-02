@@ -38,9 +38,10 @@ export interface LiveArtifactOptions {
   /**
    * "This frame is the echo of a write I made" — the editor's own accepted
    * writes come back down the stream carrying the whole document, and it has
-   * already applied them locally.
+   * already applied them locally. A promise means "cannot tell yet" (the write's reply is still on the wire, and
+   * its ping overtook it): the ping is held until it settles, so a page never fetches its own write.
    */
-  isOwnFrame?: (editId: string) => boolean;
+  isOwnFrame?: (editId: string) => boolean | PromiseLike<boolean>;
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
   onData?: (event: ArtifactDataEvent) => void;
   /** The ANNOTATIONS on this document changed (owner-credentialed connections only). */
@@ -72,6 +73,12 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
         let fetching = false;
         let attempt = 0;
         let retry: ReturnType<typeof setTimeout> | undefined;
+        /** Answer `isOwnFrame` for this head: at once when the caller knows, once it settles when it does not. */
+        const placeOwn = (editId: string, then: (own: boolean) => void) => {
+          const own = options.isOwnFrame?.(editId) ?? false;
+          if (typeof own === 'boolean') { then(own); return; }
+          void Promise.resolve(own).then((mine) => { if (alive) then(mine); }, () => { if (alive) then(false); });
+        };
         const surface = (frame: ArtifactLiveEvent, by: string | null | undefined) => {
           seenVersion = frame.version;
           setLive({ id, frame: { ...frame, by: frame.by ?? by ?? null } });
@@ -117,13 +124,17 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
             onPing: (ping) => {
               if (!Number.isInteger(ping.version)) return;
               if (ping.version < seenVersion) return;
-              if (options.isOwnFrame?.(ping.editId)) { seenVersion = ping.version; return; }
-              if (ping.version === initialVersion && ping.editId === initialEditId) return;
-              if (wanted && wanted.version > ping.version) return;
-              wanted = ping;
-              // A fresh announcement retries now rather than waiting out the backoff.
-              if (retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; }
-              fetchWanted();
+              placeOwn(ping.editId, (own) => {
+                // Re-checked: a held ping may have been overtaken while its owner was being decided.
+                if (ping.version < seenVersion) return;
+                if (own) { seenVersion = ping.version; return; }
+                if (ping.version === initialVersion && ping.editId === initialEditId) return;
+                if (wanted && wanted.version > ping.version) return;
+                wanted = ping;
+                // A fresh announcement retries now rather than waiting out the backoff.
+                if (retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; }
+                fetchWanted();
+              });
             },
             /*
              * The page came back (visible, online) and the stream looked alive: one out-of-band read
@@ -137,8 +148,11 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
               if (fetching || wanted) return;
               void backend.liveFrame().then((frame) => {
                 if (!alive || !frame || frame.version <= seenVersion || wanted || fetching) return;
-                if (options.isOwnFrame?.(frame.editId)) { seenVersion = frame.version; return; }
-                surface(frame, null);
+                placeOwn(frame.editId, (own) => {
+                  if (frame.version <= seenVersion || wanted || fetching) return;
+                  if (own) { seenVersion = frame.version; return; }
+                  surface(frame, null);
+                });
               }).catch(() => { /* the stream's own reconnect covers an unreachable server */ });
             },
             onData: (frame) => {

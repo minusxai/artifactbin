@@ -187,17 +187,34 @@ describe('boot', () => {
     expect(document.documentElement.hasAttribute('data-mx-ready')).toBe(true);
   });
 
-  it('edit mode disposes the islands and leaves their DOM as static markup', () => {
+  it('edit mode pauses the islands: their DOM and state stay, bound controls move nothing, and reading resumes them', () => {
     page(snapshot);
-    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    const Picker = () => {
+      const island = useIsland();
+      return <div id="island"><b>{String(island.table('total')?.rows[0]?.n ?? '…')}</b><i>{String(island.value('region'))}</i>
+        <button type="button" id="north" onClick={() => island.setValue('region', 'North')}>North</button></div>;
+    };
+    booted = boot({ ISLANDS: [['s0-', Picker]], FLOW: flow });
+    const island = document.getElementById('island')!;
     const events: IslandEvent[] = [];
     booted.subscribe((e) => events.push(e));
     booted.setMode('edit');
     expect(booted.mode()).toBe('edit');
     expect(events).toEqual([{ type: 'mode', mode: 'edit' }]);
+    const morph = (booted as import('../boot').MorphableIslandDocument).morph!;
+    expect([...morph.islands.keys()], 'paused, not disposed: the morph engine can keep the running island').toEqual(['s0-']);
     booted.context.setValue('region', 'North');
-    expect(document.getElementById('island')?.textContent, 'no island computation runs after edit mode').toBe('41West');
+    document.getElementById('north')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(booted.store?.getState().values.region, 'a bound control moves no value while editing').toBe('West');
+    expect(document.getElementById('island')?.textContent, 'no island paints while editing').toBe('41WestNorth');
+    expect(document.getElementById('island'), 'the island keeps its element').toBe(island);
+    expect(island.isConnected).toBe(true);
     expect(document.getElementById('before')?.textContent).toBe('static');
+
+    booted.setMode('read');
+    expect(document.getElementById('island'), 'reading again: the same island, never hydrated again').toBe(island);
+    document.getElementById('north')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(document.getElementById('island')?.textContent, 'reading again: the island answers its controls').toBe('41NorthNorth');
   });
 
   it('a live `data` frame re-runs the queries that read the named dataset, through the page\'s own query door', async () => {
