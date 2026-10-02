@@ -27,7 +27,7 @@ export type { SharingPatch } from './sharing';
 export { runSqliteSyntaxMigrationBatch } from './sqlite-syntax-migration';
 export type { SqliteSyntaxMigrationOutcome } from './sqlite-syntax-migration';
 export { artifactState } from './state';
-export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, publishMarkupForArtifact, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
+export { MAX_STALE_EDITS, applyEditFor, applyEditScoped, artifactQuotaExceeded, commitNormalizedMarkup, committedHeadsSettled, createArtifact, getArtifactById, getArtifactFor, getEditableArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor, publishMarkupForArtifact, replaceArtifactFor, revertArtifactFor, setArtifactQuotaForTests, setMetadataFor, versionToWire } from './store';
 export type { ArtifactSummary, EditOutcome } from './store';
 export { recordArtifactView } from './view-admission';
 export { artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, refreshAssetsFor, replaceArtifactFromRequest, respondToAnnotationAction, respondToEdit } from './wire';
