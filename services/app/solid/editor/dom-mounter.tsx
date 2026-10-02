@@ -572,7 +572,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       };
       find(draft);
       /** What `release` puts back: each held editor's blocks before the hold, and its stand-in in the draft. */
-      const undo: Array<{ editor: RegionEditor; restore: HTMLElement[]; restoreKey: string | undefined; stand: HTMLElement }> = [];
+      const undo: Array<{ editor: RegionEditor; restore: HTMLElement[]; restoreKey: string | undefined; stand: HTMLElement; blocks: HTMLElement[] }> = [];
       let from = 0;
       for (const region of regions) {
         let found = -1;
@@ -601,9 +601,10 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         stand.setAttribute(EDIT_REGION_ATTR, region.path);
         blocks[0]!.parentNode!.insertBefore(stand, blocks[0]!);
         for (const block of blocks) block.remove();
-        undo.push({ editor, restore: editor.restore, restoreKey: editor.restoreKey, stand });
+        const own = { editor, restore: editor.restore, restoreKey: editor.restoreKey, stand, blocks: [] as HTMLElement[] };
+        undo.push(own);
         // Leaving shows the draft's blocks (their paths are the draft's).
-        editor.restore = blocks.map((block) => doc.adoptNode(block));
+        editor.restore = own.blocks = blocks.map((block) => doc.adoptNode(block));
         editor.restoreKey = key;
         stands.set(region.path, editor.mount);
         taken.set(region.path, editor);
@@ -614,10 +615,10 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
         take(path) { const editor = taken.get(path); taken.delete(path); if (editor) holding.delete(editor); return editor; },
         dispose() { for (const editor of taken.values()) { holding.delete(editor); editor.dispose(); } taken.clear(); },
         release() {
-          for (const { editor, restore, restoreKey, stand } of undo) {
-            stand.replaceWith(...editor.restore);
-            editor.restore = restore;
-            editor.restoreKey = restoreKey;
+          for (const { editor, restore, restoreKey, stand, blocks } of undo) {
+            stand.replaceWith(...blocks);
+            // Unless the editor adopted newer blocks meanwhile (a draft of its own typing, reconciled in place).
+            if (editor.restore === blocks) { editor.restore = restore; editor.restoreKey = restoreKey; }
             holding.delete(editor);
           }
           undo.length = 0;
