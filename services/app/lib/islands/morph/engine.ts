@@ -335,7 +335,10 @@ interface MorphContext {
   preserveCharts?: boolean;
   /** Unchanged authored components whose painted root survives a draft compile. */
   stableElementIds?: ReadonlySet<string>;
-  stableElementPaths?: ReadonlySet<string>;
+  /** Unchanged components without an id, by their path in the new tree → their path on the page now. */
+  stableElementPaths?: ReadonlyMap<string, string>;
+  /** Those components' paths on the page now. */
+  stableOldPaths?: ReadonlySet<string>;
   /** Live editor roots kept across a draft, placed where the draft has their stand-in (`[data-mx-edit-region]`). */
   editRegions?: ReadonlyMap<string, Element>;
 }
@@ -363,8 +366,13 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     byId.set((node as Element).id, node as Element);
   for (const node of olds) if (node.nodeType === 1) {
     const path = (node as Element).getAttribute(AST_PATH_ATTR);
-    if (path && ctx.stableElementPaths?.has(path)) byPath.set(path, node as Element);
+    if (path && ctx.stableOldPaths?.has(path)) byPath.set(path, node as Element);
   }
+  /** The current node a stable component at `path` in the new tree is (its path moved when blocks moved ahead of it). */
+  const stableAt = (path: string | null): Element | undefined => {
+    const old = path ? ctx.stableElementPaths?.get(path) : undefined;
+    return old === undefined ? undefined : byPath.get(old);
+  };
   let at: ChildNode | null = from.firstChild;
   const place = (node: Node) => {
     ctx.used.add(node);
@@ -385,8 +393,7 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
       if (oldRid === undefined) {
         const id = (next as Element).id;
         const stable = id && ctx.stableElementIds?.has(id) ? byId.get(id) : undefined;
-        const path = (next as Element).getAttribute(AST_PATH_ATTR);
-        const byStablePath = path && ctx.stableElementPaths?.has(path) ? byPath.get(path) : undefined;
+        const byStablePath = stableAt((next as Element).getAttribute(AST_PATH_ATTR));
         const retained = stable ?? byStablePath;
         if (retained && sameKind(retained, next)) { adoptHydrationKeys(retained, next as Element); place(retained); }
         else place(doc.importNode(next, true));
@@ -405,7 +412,7 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     // the next free node of the same kind whose own id the new version no longer names.
     const byOwnId = next.nodeType === 1 && (next as Element).id ? byId.get((next as Element).id) : undefined;
     const path = next.nodeType === 1 ? (next as Element).getAttribute(AST_PATH_ATTR) : null;
-    const byStablePath = path && ctx.stableElementPaths?.has(path) ? byPath.get(path) : undefined;
+    const byStablePath = stableAt(path);
     const match = byOwnId && !ctx.used.has(byOwnId) ? byOwnId
       : byStablePath && !ctx.used.has(byStablePath) ? byStablePath : softMatch(at, next, ctx, nextIds);
     if (match && !ctx.used.has(match) && sameKind(match, next)) {
@@ -455,7 +462,18 @@ function adoptHydrationKeys(kept: Element, next: Element): void {
 
 /** Morph an unsaved editor compile in the adopted root. Only caller-approved component IDs keep
  * their hydrated DOM; a changed component takes the compiler's fresh static preview instead. */
-export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableComponentIds: ReadonlySet<string>, stableComponentPaths: ReadonlySet<string> = new Set(), editRegions: ReadonlyMap<string, Element> = new Map()): void {
+/**
+ * Components without an id that a draft draws unchanged, by path: a set where none moved, or a map from each one's
+ * path in the draft to its path on the page now (blocks added or removed ahead of it moved it, its content did not).
+ */
+export type StablePaths = ReadonlySet<string> | ReadonlyMap<string, string>;
+const pathMap = (paths: StablePaths): ReadonlyMap<string, string> => 'get' in paths ? paths : new Map([...paths].map((path) => [path, path]));
+/** Their paths on the page before the draft is drawn. */
+const oldPathsOf = (paths: StablePaths): ReadonlySet<string> => 'get' in paths ? new Set(paths.values()) : paths;
+/** Their paths in the draft (and on the page once it is drawn). */
+const newPathsOf = (paths: StablePaths): ReadonlySet<string> => 'get' in paths ? new Set(paths.keys()) : paths;
+
+export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableComponentIds: ReadonlySet<string>, stableComponentPaths: StablePaths = new Set(), editRegions: ReadonlyMap<string, Element> = new Map()): void {
   const renderIds = (tree: ParentNode) => [...new Set([...tree.querySelectorAll(`[${HK}]`)].map(renderIdOf).filter((id): id is string => !!id))];
   const oldUnits = unitsOf(root, renderIds(root));
   const nextUnits = unitsOf(next, renderIds(next));
@@ -468,7 +486,8 @@ export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableCompon
   }
   const kept = new Set<Node>([...[...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? []), ...editRegions.values()]);
   syncAttributes(root, next, null);
-  morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds, stableElementPaths: stableComponentPaths, editRegions });
+  morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds,
+    stableElementPaths: pathMap(stableComponentPaths), stableOldPaths: oldPathsOf(stableComponentPaths), editRegions });
 }
 
 /**
@@ -501,15 +520,33 @@ export function adoptVersionRecord(doc: Document, next: Document): void {
   syncModuleRecord(doc, next);
 }
 
-/** Release only changed draft islands before their compiled roots are morphed. */
-export function disposeChangedDraftIslands(root: HTMLElement, stableIds: ReadonlySet<string>, stablePaths: ReadonlySet<string>): void {
+/**
+ * Whether the page's running whole-document tree (`d-`) can go on running under this draft instead of hydrating
+ * again: every node the draft's tree hydrates, its root aside, is a component the draft keeps as it is (or inside
+ * one). Hydrating the tree again rebuilt every component in it, a kept chart drawing itself anew in the reply's apply.
+ */
+export function draftTreeKept(draft: ParentNode, stableIds: ReadonlySet<string>, stable: StablePaths): boolean {
+  const keyed = [...draft.querySelectorAll(`[${HK}^="d-"]`)];
+  const tree = keyed[0];
+  if (!tree || !keyed.every((el) => tree.contains(el))) return false;
+  const paths = newPathsOf(stable);
+  const kept = keyed.filter((el) => el !== tree && el.hasAttribute(AST_PATH_ATTR)
+    && (stableIds.has(el.id) || paths.has(el.getAttribute(AST_PATH_ATTR)!)));
+  return keyed.every((el) => el === tree || kept.some((component) => component.contains(el)));
+}
+
+/** Release only changed draft islands before their compiled roots are morphed (and the `d-` tree unless `keepTree`). */
+export function disposeChangedDraftIslands(root: HTMLElement, stableIds: ReadonlySet<string>, stable: StablePaths, keepTree = false): void {
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   const seam = running?.morph;
   if (!seam) return;
+  // Asked of the page as it is, before the draft is drawn: the paths stable components have now.
+  const stablePaths = oldPathsOf(stable);
   for (const [rid, [, dispose]] of [...seam.islands]) {
     const element = unitsOf(root, [rid]).get(rid)?.[0];
     // A one-tree root spans every component; one stable child cannot retain its old reactive owner.
     if (rid !== 'd-' && element && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? ''))) continue;
+    if (rid === 'd-' && keepTree) continue;
     seam.islands.delete(rid);
     dispose();
   }
@@ -544,22 +581,27 @@ export async function hydrateDraftIslands(
   root: HTMLElement,
   preview: Document,
   stableIds: ReadonlySet<string>,
-  stablePaths: ReadonlySet<string>,
+  stable: StablePaths,
   importModule: NonNullable<MorphDependencies['importModule']> = defaultImport,
   loaded?: IslandModule | null,
   /** Editors kept across the draft (morphDraftDom): the whole-document tree's restoring morph places them too. */
   editRegions: ReadonlyMap<string, Element> = new Map(),
+  /** `draftTreeKept`: the running `d-` tree goes on running (it was not disposed), nothing in it hydrates again. */
+  keepTree = false,
 ): Promise<void> {
   const running = (root as IslandHost)[ISLAND_DOCUMENT_KEY] as MorphableIslandDocument | undefined;
   const seam = running?.morph;
   if (!seam) return;
   const module = loaded !== undefined ? loaded : await loadDraftModule(win, root, preview, importModule);
   if (!module) return;
+  // Asked of the page once the draft is drawn: stable components answer to their paths in the draft.
+  const stablePaths = newPathsOf(stable);
   if (module.FLOW && running.store && !sameDataflow(module.FLOW, running.store.flow))
     running.store.replaceFlow({ flow: module.FLOW });
   for (const entry of module.ISLANDS) {
     const element = unitsOf(root, [entry[0]]).get(entry[0])?.[0];
     if (!element || (entry[0] !== 'd-' && (stableIds.has(element.id) || stablePaths.has(element.getAttribute(AST_PATH_ATTR) ?? '')))) continue;
+    if (entry[0] === 'd-' && keepTree && seam.islands.has('d-')) continue;
     seam.hydrate(entry);
     if (entry[0] === 'd-' && running.mode?.() === 'edit') {
       const draft = preview.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);

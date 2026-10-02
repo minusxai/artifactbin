@@ -248,9 +248,24 @@ export function createIslandController({ win, root, islands, nodes: served, port
     visit(source);
     return found;
   };
-  const stablePathsFor = (next: JsxNode[], previous = nodes): Set<string> => {
+  /**
+   * Components without an id the draft draws unchanged: by their path in the draft → their path on the page. One at
+   * the same place with the same markup first; then one whose place moved (a paragraph added above a chart) but whose
+   * markup did not, matched in document order with the first unclaimed component of the same markup on the page.
+   */
+  const stablePathsFor = (next: JsxNode[], previous = nodes): Map<string, string> => {
     const before = componentPaths(previous), after = componentPaths(next);
-    return new Set([...after].filter(([path, text]) => before.get(path) === text).map(([path]) => path));
+    const stable = new Map<string, string>();
+    for (const [path, text] of after) if (before.get(path) === text) stable.set(path, path);
+    const claimed = new Set(stable.values());
+    const free = new Map<string, string[]>();
+    for (const [path, text] of before) if (!claimed.has(path)) free.set(text, [...(free.get(text) ?? []), path]);
+    for (const [path, text] of after) {
+      if (stable.has(path)) continue;
+      const old = free.get(text)?.shift();
+      if (old !== undefined) stable.set(path, old);
+    }
+    return stable;
   };
   /**
    * One draft is drawn at a time. The draw spans awaits (the engine, the draft's island module), and a
@@ -316,7 +331,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (!pending || disposed || !drafting() || pending.sequence !== draftSequence) return;
     // The page's SHARED parse (update-parts storyUpdatePartsShared): the draft's source was parsed at the hand-over
     // that sent it, and the source on screen at the one before, so neither is parsed whole again when the reply lands.
-    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
+    const [{ disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
       import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
@@ -369,9 +384,11 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (pending.sheet && sheet && sheet.textContent !== pending.sheet.textContent) sheet.textContent = pending.sheet.textContent;
     editSheetWritten = true;
     edit?.unmountCompiledDom();
-    disposeChangedDraftIslands(root, stableIds, stablePaths);
+    // Every component the draft's whole-document tree hydrates is kept as it is: the running tree goes on running.
+    const keepTree = draftTreeKept(pending.root, stableIds, stablePaths);
+    disposeChangedDraftIslands(root, stableIds, stablePaths, keepTree);
     morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
-    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors);
+    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors, keepTree);
     nodes = pending.nodes;
     lastDrawn = after;
     shown = { module: versionModuleUrl(pending.document), source: pending.source };
