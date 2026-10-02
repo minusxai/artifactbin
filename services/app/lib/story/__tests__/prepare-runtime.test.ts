@@ -14,7 +14,8 @@ describe('shared story preparation', () => {
   it('separates author code from top-level rendered nodes and honors the document title', async () => {
     const prepared = await prepareStoryRuntime(input('<Helmet><title>Document title</title><script>{`globalThis.probe = true`}</script></Helmet><h1 id="heading">Read me</h1>'));
     expect(prepared.title).toBe('Document title');
-    expect(prepared.authorScript).toBe('globalThis.probe = true');
+    // The script rides as the module built at publish (author-module.server): the author's statement, as a module.
+    expect(prepared.authorScript).toContain('globalThis.probe = true');
     expect(prepared.data.nodes).toHaveLength(1);
     expect(prepared.data.nodes[0]).toMatchObject({ type: 'element', tag: 'h1' });
     expect(JSON.stringify(prepared.data.nodes)).not.toContain('globalThis.probe');
