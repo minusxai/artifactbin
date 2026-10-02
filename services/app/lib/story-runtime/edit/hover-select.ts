@@ -25,7 +25,7 @@ import {
   type StoryEditParentMessage,
   type StoryEditSelection,
 } from '../contract';
-import { describeSelection } from './describe-selection';
+import { describedKind, describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
 import { canResize, editChromeKind, gripTarget, isComponentPart } from './edit-chrome';
 
@@ -97,6 +97,9 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
   let blockMode = false;
   let hovered: Element | null = null;
   let disposed = false;
+  /** A restamp `nodesChanged` put off until after the next paint. */
+  let restampFrame: number | null = null;
+  let restampTimer: number | null = null;
   /** The latest select request; a waiting reveal gives way to any newer one. */
   let selectRequest = 0;
   const at = (path: string) => root.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
@@ -133,7 +136,8 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
       return deselect();
     const el = at(selectedPath);
     if (!el) return deselect();
-    const kind = describeSelection(el, nodes())?.kind;
+    // Its kind only: a rectangle read here, right after a redraw, laid the whole page out in the draw's task.
+    const kind = describedKind(el, nodes());
     el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, blockMode ? 'block' : 'text');
     stamped.add(el);
     if (!blockMode) return deselect();
@@ -392,12 +396,21 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     nodesChanged() {
       chrome.cancel();
       blockSelection.clear();
+      // Restamped after the next paint: called in a redraw's own task, reading the selection there laid the whole
+      // redrawn page out at once (most of 100 ms on a table-heavy document at slow CPUs); the frame lays it out anyway.
+      if (restampFrame === null && restampTimer === null)
+        restampFrame = win.requestAnimationFrame(() => {
+          restampFrame = null;
+          restampTimer = win.setTimeout(() => { restampTimer = null; if (!disposed) stampSelection(); }, 0);
+        });
       // The selected node may not exist in the new document.
-      if (selectedPath && !describeSelection(at(selectedPath) ?? doc.createElement('div'), nodes())) selectedPath = null;
-      stampSelection();
+      // Asked without geometry: right after a redraw, a rectangle read here laid the whole page out in the draw's task.
+      if (selectedPath && !describedKind(at(selectedPath) ?? doc.createElement('div'), nodes())) selectedPath = null;
     },
     dispose() {
       disposed = true;
+      if (restampFrame !== null) win.cancelAnimationFrame(restampFrame);
+      if (restampTimer !== null) win.clearTimeout(restampTimer);
       chrome.dispose();
       blockSelection.dispose();
       doc.removeEventListener('focusin', onFocusIn);

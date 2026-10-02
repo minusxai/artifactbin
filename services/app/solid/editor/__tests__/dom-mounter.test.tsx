@@ -100,6 +100,11 @@ describe('compiled DOM edit mounter', () => {
     expect(kept).not.toBeNull();
     expect(changed).not.toBeNull();
 
+    // Decided ahead a region a step, reading only: the draft is untouched until the hold.
+    let steps = 1;
+    while (!first.prepareHold(after, draft, () => false)) steps++;
+    expect(steps).toBe(2);
+    expect(draft.querySelector('#b')).not.toBeNull();
     const held = first.hold(after, draft);
     // Only the unchanged region is held; in the draft its blocks are a stand-in at its new path.
     expect([...held.stands.keys()]).toEqual(['0.3']);
@@ -127,6 +132,47 @@ describe('compiled DOM edit mounter', () => {
     // Leaving puts back the draft's compiled blocks, with the draft's paths.
     expect(root.querySelector('#b')?.getAttribute('data-mx-ast')).toBe('0.3');
     expect(root.querySelector('[data-mx-edit-region]')).toBeNull();
+    root.remove();
+  });
+  it('keeps the editor holding the caret when the draft draws the prose it shows, and gives the draft its blocks back when the draw is called off', async () => {
+    const nodes = parseJsxOrThrow('<div id="r"><p id="a">A</p><p id="b">B</p></div>').nodes;
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0" id="r"><p data-mx-ast="0.0" id="a">A</p><p data-mx-ast="0.1" id="b">B</p></div>';
+    document.body.append(root);
+    // The same prose, compiled differently (what an editor that typed a structural change stands in for).
+    const draftOf = () => {
+      const draft = document.implementation.createHTMLDocument('').createElement('div');
+      draft.innerHTML = '<div data-mx-ast="0" id="r"><p data-mx-ast="0.0" id="a" class="lead">A</p><p data-mx-ast="0.1" id="b">B</p></div>';
+      return draft;
+    };
+    let view: EditorView | null = null;
+    const mount = mountCompiledEditRegions(root, nodes, { onFlow: vi.fn(), onView: (v) => { if (v) view = v; } });
+    await vi.waitFor(() => expect(view).not.toBeNull());
+    const editor = root.querySelector<HTMLElement>('[data-mx-edit-region="0"]')!;
+    expect(editor).not.toBeNull();
+
+    // Unfocused, an editor whose blocks compile differently is rebuilt.
+    const unfocused = draftOf();
+    const rebuilt = mount.hold(nodes, unfocused);
+    expect(rebuilt.stands.size).toBe(0);
+    rebuilt.release();
+
+    view!.focus();
+    expect(view!.hasFocus()).toBe(true);
+    const draft = draftOf();
+    const held = mount.hold(nodes, draft);
+    expect(held.stands.get('0')).toBe(editor);
+    expect(draft.querySelector('#a')).toBeNull();
+
+    // Called off (typing landed meanwhile): the draft has its blocks again, the editor runs on with its own.
+    held.release();
+    expect(draft.querySelector('[data-mx-edit-region]')).toBeNull();
+    expect(draft.querySelector('#a')?.className).toBe('lead');
+    expect(editor.isConnected).toBe(true);
+    expect(view!.isDestroyed).toBe(false);
+    mount.dispose();
+    // Leaving puts back the blocks it stood in for before the hold.
+    expect(root.querySelector('#a')?.className).toBe('');
     root.remove();
   });
   it('never holds an editor inside a component island: the island is redrawn whole', () => {
@@ -459,7 +505,12 @@ describe('a kept editor under a new path', () => {
     // A selection change before the steps run redraws nothing: the old paths stay until the redraw.
     view!.dispatch(view!.state.tr.setSelection(TextSelection.create(view!.state.doc, 4)));
     expect(cells()[0]).toBe('0.0.0.0.0');
-    for (const step of steps) step();
+    // A few rows a step: the first step draws the new path at the top and leaves the rest as drawn.
+    expect(steps.length).toBeGreaterThan(1);
+    steps[0]!();
+    expect(cells()[0]).toBe('0.1.0.0.0.0');
+    expect(cells().at(-1)).toBe('0.0.0.59.1');
+    for (const step of steps.slice(1)) step();
     expect(cells().every((path) => path?.startsWith('0.1.0.'))).toBe(true);
     expect(cells().at(-1)).toBe('0.1.0.0.59.1');
     expect(view!.dom.querySelector('table')?.getAttribute('data-mx-ast')).toBe('0.1.0');

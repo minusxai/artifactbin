@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { mountCompiledEditRegions } from '@/solid/editor/dom-mounter';
+import { morphDraftDom } from '@/lib/islands/morph/engine';
 import { createFrameEditSession, type FrameEditSession } from '../session';
 import {
   STORY_APPLY_FORMAT_MESSAGE,
@@ -195,6 +196,35 @@ describe('edit session', () => {
     const native = window.getSelection()!;
     expect(native.anchorNode?.textContent).toBe('### ');
     expect(native.anchorOffset).toBe(4);
+  });
+
+  it('keeps the editor holding the caret across a redraw of the prose it shows: same editor, focus and caret', async () => {
+    const frame = () => new Promise((r) => setTimeout(r, 40));
+    const nodes = parseJsxOrThrow('<div><p id="x">alpha bravo</p></div>').nodes;
+    const { root } = await open('<div><p id="x">alpha bravo</p></div>', '<div data-mx-ast="0"><p id="x" data-mx-ast="0.0">alpha bravo</p></div>');
+    const editor = root.querySelector<HTMLElement>('.ProseMirror')!;
+    editor.focus();
+    const text = root.querySelector('p#x')!.firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 3);
+    range.setEnd(text, 3);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+    await frame();
+    // The draft compiles the same prose differently (what the editor's own structural edit redraws).
+    const draft = document.createElement('div');
+    draft.innerHTML = '<div data-mx-ast="0"><p id="x" class="lead" data-mx-ast="0.0">alpha bravo</p></div>';
+    const kept = session!.holdUnchanged(nodes, draft);
+    expect(kept.size).toBe(1);
+    session!.unmountCompiledDom();
+    morphDraftDom(root, draft, new Set(), new Set(), kept);
+    session!.setNodes(nodes);
+    await session!.mountCompiledDom();
+    await frame();
+    expect(root.querySelector('.ProseMirror')).toBe(editor);
+    expect(editor.contains(document.activeElement) || document.activeElement === editor).toBe(true);
+    expect([getSelection()!.anchorNode?.textContent, getSelection()!.anchorOffset]).toEqual(['alpha bravo', 3]);
   });
 
   it('keeps a caret the person moved after Undo/Redo when the next draft is drawn', async () => {

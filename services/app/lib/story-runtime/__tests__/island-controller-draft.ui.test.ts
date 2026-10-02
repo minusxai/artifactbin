@@ -40,6 +40,8 @@ const editSession = vi.hoisted(() => ({
     setNodes: () => {}, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
     reconcileDraft: (_before: unknown, _after: unknown, _next: unknown, draft: HTMLElement | null) => { editSession.reconciled.push(draft); return editSession.reconcile; },
     holdUnchanged: () => new Map<string, HTMLElement>(),
+    releaseHeld: () => {},
+    prepareHold: () => true,
     unmountCompiledDom: () => { editSession.unmounts++; },
     mountCompiledDom: async () => { editSession.mounts++; },
   },
