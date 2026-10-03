@@ -154,24 +154,6 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(((await theirs.json()) as { forked_from: string | null }).forked_from).toBeNull();
   });
 
-  it('a private document you cannot read is the uniform 404; shared as a viewer it forks', async () => {
-    const w = await world(PROSE, 'private');
-    asSession({ id: w.bob.id, email: w.bob.email });
-    expect((await fork(w.doc.id)).status).toBe(404);
-    expect((await fork('zzzzzz')).status).toBe(404);
-
-    asSession({ id: w.owner.id, email: w.owner.email });
-    const shared = await putSharingRoute(jreq(`/api/my/artifacts/${w.doc.id}/sharing`, 'PUT', { shares: [{ email: 'bob@x.com', role: 'viewer' }] }), params(w.doc.id));
-    expect(shared.status, await shared.clone().text()).toBe(200);
-    asSession({ id: w.bob.id, email: w.bob.email });
-    const res = await fork(w.doc.id);
-    expect(res.status, await res.clone().text()).toBe(201);
-    // The copy is bob's and keeps the source's visibility; nobody is shared on it.
-    const copy = await head(((await res.json()) as { id: string }).id);
-    expect(copy.visibility).toBe('private');
-    expect(copy.user_id).toBe(w.bob.id);
-  });
-
   it('an anonymous browser cannot own a fork: 409 sign_in_required; no credential at all is 401', async () => {
     const w = await world();
     const res = await fork(w.doc.id, await agentCookie([w.anon.id]));
@@ -182,20 +164,10 @@ describe('POST /api/my/artifacts/:id/fork', () => {
 
   // A document that writes another owner's dataset is refused by name rather than
   // copied broken: fork-operation.test.ts owns that case (it also pins invalid_refs).
+  // The uniform 404, a viewer's share, and a dataset copy sharing its object key are the registry's rules, not the
+  // cookie door's: fork-operation.test.ts asserts them ('unreadable and unknown are the uniform 404', 'a private
+  // document shared to the account…', 'every format forks; a dataset copy shares the object key').
 
-  it('every format forks; a dataset fork shares the object key rather than re-uploading', async () => {
-    const w = await world();
-    const ds = await create(w.ta.token, { dataset: [{ month: '2026-01', revenue: 120 }], visibility: 'public' });
-    asSession({ id: w.bob.id, email: w.bob.email });
-    const res = await fork(ds.id);
-    expect(res.status, await res.clone().text()).toBe(201);
-    const copy = await head(((await res.json()) as { id: string }).id);
-    const source = await head(ds.id);
-    expect(copy.format).toBe('dataset');
-    expect(copy.meta.objectKey).toBe(source.meta.objectKey);
-    expect(copy.meta.columns).toEqual(source.meta.columns);
-    expect(copy.user_id).toBe(w.bob.id);
-  });
 });
 
 /**

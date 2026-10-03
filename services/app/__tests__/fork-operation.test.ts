@@ -250,6 +250,8 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     const source = await head(ds.id);
     expect(copy.format).toBe('dataset');
     expect(copy.meta.objectKey).toBe(source.meta.objectKey);
+    // Moved from fork.test.ts's cookie-door copy of this case.
+    expect(copy.meta.columns).toEqual(source.meta.columns);
     expect(copy.forked_from).toBe(ds.id);
   });
 });
