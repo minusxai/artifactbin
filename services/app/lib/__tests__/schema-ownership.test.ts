@@ -96,3 +96,8 @@ it('mutation run jobs and one recipient result per run belong to the app',()=>{
  expect(renderedSchema().schema).toContain('context JSONB');
 });
 it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});
+
+it('a reader\'s document trust belongs to the app, one row per person per scope, erased with the person',()=>{
+ expect(declared()['app.document_trust']).toBe('app');
+ expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.document_trust \([\s\S]*?user_id TEXT NOT NULL[\s\S]*?extensions JSONB NOT NULL[\s\S]*?PRIMARY KEY \(user_id, scope\)/);
+});
