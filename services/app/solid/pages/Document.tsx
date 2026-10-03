@@ -25,6 +25,8 @@ import { NotFoundPage } from './NotFound';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type ArtifactRole } from '@/lib/artifacts/share-roles';
 import { DocumentActions } from '../document/DocumentActions';
+import { CspConsentBar } from '../document/CspConsentBar';
+import type { CspRequest } from '@/lib/story/document/csp-extensions';
 import { AnnotationLayer } from '../document/AnnotationLayer';
 import { SelectionActions } from '../document/SelectionActions';
 import { ForkConfirm } from '../document/ForkArtifact';
@@ -75,6 +77,8 @@ interface DocumentAnswer {
     framedOrigin?: string;
   };
   archived?: { version: number; head: number } | null;
+  /** What the document asks of the network beyond the default policy, and this reader's standing (lib/trust). */
+  cspRequest?: CspRequest;
   like?: { liked: boolean; count: number };
   follow?: { userId: string; following: boolean; count: number } | null;
 }
@@ -465,6 +469,9 @@ export function DocumentPage(): JSX.Element {
     <TrustedUi overlay layer="navigation">
       <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
       <style>{PANEL_CSS}</style>
+      <Show when={page?.cspRequest?.status === 'blocked' && !editing()}>
+        <CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} top={phone() ? 8 : APP_BAR_H + 8} />
+      </Show>
       <Show when={panel()}>
         <Show when={panel() === 'controls'} fallback={<button type="button" aria-label="Close the menu" onClick={() => setPanel(null)} class={`fixed inset-0 z-40 cursor-default border-0 p-0 ${phone() ? 'bg-black/25' : 'bg-transparent'}`} />}>
           <button type="button" aria-label="Close page controls" class="mx-reader-scrim" onClick={() => setPanel(null)} />

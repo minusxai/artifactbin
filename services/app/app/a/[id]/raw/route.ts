@@ -59,6 +59,8 @@ import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/story
 import { documentStyleSheets } from '@/lib/story/styles';
 import type { ReaderChromeInput } from '@/lib/story/reader';
 import { readerChromeFonts } from '@/lib/story/styles';
+import { cspExtensionsFor } from '@/lib/trust/document-trust';
+import { appendCspExtensions } from '@/lib/trust/document-csp-stub';
 
 // The markup document's policy — per document, built in lib/story/styles/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -436,6 +438,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           }),
         });
         if (answer.mode === 'compiled') {
+          // What this reader trusts the document to reach beyond the default policy (its Helmet
+          // `csp-*` metas): the owner's own, or a reader's grant; nothing for anyone else, a capture included.
+          // TODO(brief A): buildDocumentCsp({ self, extensions }) replaces markupCsp + appendCspExtensions here.
+          const extensions = capture ? undefined : await cspExtensionsFor({ artifact: row, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId }, request });
           return new Response(answer.html, {
             status: 200,
             headers: {
@@ -445,7 +451,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
                 // TODO(brief C): extensions: cspExtensionsFor({ artifact: { id, version, source } of `row`, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId }, request })
                 // from '@/lib/trust/document-trust' (its "Allow once" grant arrives as `pages.carried`).
                 ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN })
-                : markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }),
+                : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions),
               ...answer.headers,
               [READER_MODE_HEADER]: 'compiled',
               // The /raw copy asks from an opaque origin; an anonymous answer is what anyone with the link reads.

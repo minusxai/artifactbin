@@ -139,6 +139,21 @@ export function stampSavedTheme(win: Window = window): void {
 const wantsAppNow = (location: Location): boolean =>
   location.hash === '#edit' || /[?&](?:comment|intent|install)=/.test(location.search);
 
+/**
+ * A document waiting on this reader's consent to the hosts it declares beyond the default policy
+ * (lib/trust, the page data's `cspRequest`): the consent bar is the app's, and the document cannot do
+ * its work until the reader answers, so the app is wanted at once. Read from the inlined page data only
+ * when it names a request, so every other page pays one substring test.
+ */
+export function awaitsConsent(doc: Document): boolean {
+  const text = doc.querySelector('body > script[type="application/json"][id="mx-page-data"]')?.textContent ?? '';
+  if (!text.includes('"cspRequest"')) return false;
+  try {
+    const ask = (JSON.parse(text) as { artifact?: { cspRequest?: { status?: string; denied?: boolean } } }).artifact?.cspRequest;
+    return ask?.status === 'blocked' && !ask.denied;
+  } catch { return false; }
+}
+
 /** Owner or editor: the served chrome offers Edit (lib/story/reader/reader-chrome renders it only for a writer). */
 export const capabilityOf = (doc: Document): SpaCapability =>
   doc.querySelector('[data-mx-reader-chrome] [data-mx-reader-action="edit"]') ? 'writer' : 'reader';
@@ -188,6 +203,6 @@ export function startSpaIdle({ load, stylesheet, idleMs = 1500, win = window }: 
   stampSavedTheme(win);
   reportInitialArtifactView(win);
   const schedule = scheduleSpaBoot(() => prepareAppShell(doc, stylesheet).then(load), { idleMs, capability: capabilityOf(doc), win });
-  if (wantsAppNow(win.location)) schedule.boot();
+  if (wantsAppNow(win.location) || awaitsConsent(doc)) schedule.boot();
   return schedule;
 }

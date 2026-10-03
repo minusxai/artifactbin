@@ -23,7 +23,7 @@ the script carries behaviour: DOM handlers, canvas, a library, a component.
 
 ## Contents
 
-Example · Imports · The page module · Components · Libraries.
+Example · Imports · The page module · Components · Libraries · Other hosts.
 
 ## Example
 
@@ -156,3 +156,22 @@ that allow cross-origin reads.
   renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
 `}</script></Helmet>
 ```
+
+## Other hosts
+
+When a script needs a host outside the default policy, declare it in the
+Helmet, https origins only (no paths; a wildcard only as a leading `*.`;
+at most 10 per meta):
+
+```jsx
+<Helmet>
+  <meta name="csp-connect" content="https://api.open-meteo.com" />
+  <meta name="csp-script" content="https://cdn.plot.ly" />
+</Helmet>
+```
+
+Also `csp-style` (fonts too), `csp-img`, `csp-media`, `csp-frame`; any
+other `csp-` name is `invalid_csp`. Publishing a host is your consent;
+every other reader, the owner included, is asked (once, always for this
+document, or never), and until then requests to it fail, so handle a
+failed `fetch`.

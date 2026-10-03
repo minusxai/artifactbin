@@ -67,6 +67,25 @@ CREATE INDEX IF NOT EXISTS idx_pages_sessions_expires ON app.pages_sessions (exp
 
 CREATE INDEX IF NOT EXISTS idx_pages_sessions_user ON app.pages_sessions (user_id);
 
+CREATE TABLE IF NOT EXISTS app.document_trust (
+  user_id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  decision TEXT NOT NULL DEFAULT 'allow',
+  extensions JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, artifact_id)
+);
+
+ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS decision TEXT NOT NULL DEFAULT 'allow';
+
+ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS extensions JSONB NOT NULL;
+
+ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.notification_jobs (
   id TEXT NOT NULL,
   mutation_run_id TEXT NOT NULL,
