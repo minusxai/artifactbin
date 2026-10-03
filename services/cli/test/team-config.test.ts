@@ -9,6 +9,20 @@ import {startupFailure} from '../src/operator-error';
 // A network origin now needs a login method teammates can actually COMPLETE, so the shared fixture
 // carries a whole one: the mail key alone leaves the sender at a default address a provider refuses.
 const settings='APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://team.example.test\nAUTH__SECRET='+ 's'.repeat(48)+'\nEMAIL__RESEND_API_KEY=re_fixture_key\nEMAIL__FROM=Team <team@example.test>\n';
+test('team host accepts an explicit signed remote runner and refuses incomplete or worker-only configuration',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-team-runner-'));
+ try{
+  const file=join(directory,'server.env');
+  const runner='RUNNER__SERVICE_URL=http://runner:3050\nCONTRACT__ACTOR_SECRET='+'r'.repeat(48)+'\n';
+  await writeFile(file,settings+runner);
+  const result=await teamSettings(file,{RUNNER__SERVICE_URL:'http://wrong',CONTRACT__ACTOR_SECRET:'wrong'});
+  assert.equal(result.env.RUNNER__SERVICE_URL,'http://runner:3050');
+  assert.equal(result.env.CONTRACT__ACTOR_SECRET,'r'.repeat(48));
+  for(const extra of ['RUNNER__SERVICE_URL=http://runner:3050\n','RUNNER__SERVICE_URL=file:///tmp/runner\nCONTRACT__ACTOR_SECRET='+ 'r'.repeat(48)+'\n','RUNNER__WORKER_IMAGE=worker\n']){
+   await writeFile(file,settings+extra);await assert.rejects(teamSettings(file),/runner|Runner|Unsupported team setting/);
+  }
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
 test('team operator settings isolate database, objects, identity and service cache from the client and shell',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'afbin-team-'));
  try{
