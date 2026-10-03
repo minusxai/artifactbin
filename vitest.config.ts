@@ -169,6 +169,8 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
+            // Launches real Chromium: integration only, like contract.test.ts.
+            'services/browser/__tests__/session-pages.test.ts',
             ...SERVER_BOOT_TESTS,
           ],
           exclude: ['**/node_modules/**'],

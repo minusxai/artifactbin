@@ -112,7 +112,8 @@ describe('buildIslands', () => {
     // interactive page anyway. The owner's target 2 (≤ 85 KB before ready on interactive pages) is the
     // real check, in scripts/build/size-targets.mjs.
     // boot grew by the page runtime's loader (lib/islands/page-runtime: the vendor map and the module import).
-    expect(bytes).toBeLessThanOrEqual(28_600);
+    // The framed document's runtime now also relays its URL values and app-path links to the app page.
+    expect(bytes).toBeLessThanOrEqual(29_500);
   });
 
   it('keeps comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
