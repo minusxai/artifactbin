@@ -8,7 +8,7 @@ Publish and edit artifacts through local files, with offline help and validation
 afbin preview report.jsx appendix.jsx
 afbin preview . --share
 afbin serve --dir ./team --port 7445
-afbin config set host http://127.0.0.1:7445
+afbin config set host http://app.lvh.me:7445
 ```
 
 Preview writes browser saves to selected local files without publishing. Shared previews allow
@@ -19,8 +19,9 @@ Preview still works after publication using the workspace host/account.
 `serve` owns persistent authenticated hosting. `--dir` holds settings, objects and the default
 PGLite database; optional `--db-url postgres://…` or `pglite://…` overrides only that database.
 Client defaults/credentials stay separate. There is no managed self daemon. Set the client host to
-the origin the server prints (`http://127.0.0.1:7445` by default): `http://localhost:7445` is a
-different origin and `afbin auth` refuses it. `--port` selects the listener for this run only; it is
+the origin the server prints (`http://app.lvh.me:7445` by default: `lvh.me` names resolve to 127.0.0.1,
+and documents are served on their own origins under it): `http://127.0.0.1:7445` is a different
+origin and `afbin auth` refuses it. `--port` selects the listener for this run only; it is
 never written back to `server.env`, so a later `afbin serve --dir X` uses the port in that file again.
 For a shared host see [team on a network](../../docs/extraction/team.md#team-on-a-network).
 

@@ -12,7 +12,9 @@ export async function prepareServe(options:ServeOptions):Promise<{config:string;
  if(!options.config){
   await privateDirectory(directory);
   const port=options.port??7445;
-  const text=`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=http://127.0.0.1:${port}\nAUTH__SECRET=${randomBytes(32).toString('hex')}\n`;
+  // The app at an lvh.me name (127.0.0.1 in public DNS), so it is same site with the documents' own
+  // origins under lvh.me (team-config teamPagesHost) and the pages cookie reaches their frames.
+  const text=`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=http://app.lvh.me:${port}\nAUTH__SECRET=${randomBytes(32).toString('hex')}\n`;
   try{await writeFile(config,text,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
  }
  const overrides:TeamOverrides={...(options.directory?{directory}:{}),...(options.port!==undefined?{port:options.port}:{}),...(options.dbUrl?{dbUrl:options.dbUrl}:{})};
