@@ -509,8 +509,13 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       await editor.getByLabel('Add email').click();
       await editor.getByLabel(`Role for ${recipient}`).click();
       await editor.getByRole('option', { name: /can edit/ }).click();
-      const sharing = await editor.request.get(`${B}/api/my/artifacts/${policyDataset.id}/sharing`);
-      assert((await sharing.json()).shares.some(s => s.email === recipient && s.role === 'editor'));
+      // The role menu's PUT lands asynchronously; read the stored shares until it has (the original read once).
+      let shares = [];
+      for (const end = Date.now() + 10_000; Date.now() < end; await delay(200)) {
+        shares = (await (await editor.request.get(`${B}/api/my/artifacts/${policyDataset.id}/sharing`)).json()).shares ?? [];
+        if (shares.some(s => s.email === recipient && s.role === 'editor')) break;
+      }
+      assert(shares.some(s => s.email === recipient && s.role === 'editor'), `the recipient is stored as an editor (${JSON.stringify(shares)})`);
       await editor.getByLabel('Close sharing', { exact: true }).click();
       await editor.getByLabel('Dismiss artifact controls').click();
       await editor.getByLabel('Allow insert', { exact: true }).check();

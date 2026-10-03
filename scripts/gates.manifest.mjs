@@ -68,15 +68,18 @@ export const GATE_SPECS = Object.freeze([
   { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
   { name: 'live-reader', needsMail: false, seconds: 30, timeoutMs: 70_000 },
   // Publishes four documents, waits for the background harvest (four surface/mode loads, each drawn twice when
-  // new), then loads 17 pages over one kind per class (proposal row 18; was 76s over ~35 kinds).
-  { name: 'mermaid-prerender', needsMail: false, seconds: 40, timeoutMs: 120_000 },
+  // new), then loads 17 pages over one kind per class (proposal row 18; was 76s over ~35 kinds). Measured 18s in
+  // a gate container (4 CPUs, two servers, beside datasets-in-documents and kit-and-fonts).
+  { name: 'mermaid-prerender', needsMail: false, seconds: 18, timeoutMs: 60_000 },
   // One walk over dataflow, local-sql-state, dataset-policies, data-ux and postgres-datasets (proposal row 10).
-  // Starts a disposable PostgreSQL through the host's Docker, so a gate container refuses it.
-  { name: 'data-journey', needsMail: true, needsPostgres: true, seconds: 50, timeoutMs: 150_000 },
-  // editable-table, roadmap-views and row-images over one account (proposal row 13).
-  { name: 'datasets-in-documents', needsMail: true, seconds: 55, timeoutMs: 170_000 },
+  // Starts a disposable PostgreSQL through the host's Docker, so a gate container refuses it. Measured 11s on
+  // a host run (one server, `node scripts/gates.mjs --servers=1 --only=data-journey`); re-read it from CI.
+  { name: 'data-journey', needsMail: true, needsPostgres: true, seconds: 11, timeoutMs: 60_000 },
+  // editable-table, roadmap-views and row-images over one account (proposal row 13). Measured 18s in a gate container.
+  { name: 'datasets-in-documents', needsMail: true, seconds: 18, timeoutMs: 60_000 },
   // full-kit, the compiled handover from hydration, libraries and fonts (proposal row 14). Needs esm.sh.
-  { name: 'kit-and-fonts', needsMail: false, seconds: 60, timeoutMs: 180_000 },
+  // Measured 28s in a gate container.
+  { name: 'kit-and-fonts', needsMail: false, seconds: 28, timeoutMs: 90_000 },
   { name: 'mobile', needsMail: false, seconds: 21, timeoutMs: 100_000 },
   // The four native-scripts briefs end to end on a server it boots with APP__PAGES_HOST=lvh.me (./lib/pages-server):
   // frame, direct query, consent and the fetch door, in-frame editing with the script badge, a comment, afbin export.
