@@ -28,10 +28,6 @@
  *                   pending) or `[data-mx-mermaid-state=ready]` is on screen
  *                   (after takeover on view), plus two animation frames
  *   scriptMs      — main-thread script execution (CDP ScriptDuration) for the tab
- *   shellJsBeforeFrameReady — view only: the app shell's own script bytes (the top page's, never the framed
- *                   document's) that had finished when the document frame (`iframe[data-mx-document-frame]`)
- *                   became ready by the frame's own probe; null when the page frames no document or the frame
- *                   never signalled ready
  */
 
 /** Installed before any page script; records paint entries and DOM milestones. */
@@ -124,7 +120,6 @@ export async function measureDocumentView(context, url, { route, painted, thrott
         : performance.getEntriesByType('resource').filter(e => e.initiatorType === 'script' || /\.m?js(\?|$)/.test(e.name)).filter(e => e.responseEnd <= s.ready).map(e => e.name);
       return { fcp: s.fcp, lcp: s.lcp, takeover: s.takeover, painted: s.painted, readyAt: s.ready, scriptsBeforeReady };
     });
-    const frameReady = route === 'view' ? await documentFrameReady(page, timeoutMs) : null;
     const metrics = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
     const bytes = { html: { decoded: 0, gzip: 0 }, js: { decoded: 0, gzip: 0 }, css: { decoded: 0, gzip: 0 }, other: { decoded: 0, gzip: 0 } };
     for (const request of requests.values()) {
@@ -140,17 +135,6 @@ export async function measureDocumentView(context, url, { route, painted, thrott
       jsBeforeReady.gzip += request.gzip;
       scriptsBeforeReady.push({ url: new URL(request.url).pathname, gzip: request.gzip });
     }
-    // THE SHELL'S JS BEFORE THE FRAME IS READY: the top page's own scripts (its resource timing never lists the frame's),
-    // minus anything on the frame's origin, finished by the moment the framed document signalled ready.
-    let shellJsBeforeFrameReady = null;
-    if (frameReady) {
-      const shell = new Set(frameReady.shellScripts.filter(e => e.at <= frameReady.at && !e.name.startsWith(`${frameReady.origin}/`)).map(e => e.name));
-      shellJsBeforeFrameReady = { decoded: 0, gzip: 0 };
-      for (const request of requests.values()) if (kindOf(request) === 'js' && shell.has(request.url)) {
-        shellJsBeforeFrameReady.decoded += request.decoded;
-        shellJsBeforeFrameReady.gzip += request.gzip;
-      }
-    }
     return {
       route, ready, errors,
       fcp: measured.fcp, lcp: measured.lcp,
@@ -161,41 +145,11 @@ export async function measureDocumentView(context, url, { route, painted, thrott
       bytes,
       jsBeforeReady,
       scriptsBeforeReady,
-      shellJsBeforeFrameReady,
       scriptMs: Math.round((metrics.ScriptDuration ?? 0) * 1000),
     };
   } finally {
     await page.close();
   }
-}
-
-/**
- * When the app page's document frame became ready, on the wall clock (`timeOrigin + ready`, so the two documents'
- * clocks compare), with the frame's origin and the top page's scripts on the same clock. The frame navigates (the
- * pages apex, then the document's own origin) while this polls, so a lost execution context is a retry, not a
- * failure. Null when the page frames no document or the frame never signals ready within `timeoutMs`.
- */
-async function documentFrameReady(page, timeoutMs) {
-  const element = await page.$('iframe[data-mx-document-frame]');
-  const frame = element ? await element.contentFrame() : null;
-  if (!frame) return null;
-  let at = null, origin = null;
-  for (const end = Date.now() + timeoutMs; at === null && Date.now() < end;) {
-    try {
-      const seen = await frame.evaluate(() => {
-        const s = window.__documentView;
-        // The pages apex's redirect is not the document: only its own origin's ready counts.
-        return s && s.ready !== null && location.pathname !== '/pages-session' ? { at: performance.timeOrigin + s.ready, origin: location.origin } : null;
-      });
-      if (seen) ({ at, origin } = seen);
-    } catch { /* navigating: the next poll reads the new document */ }
-    if (at === null) await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  if (at === null) return null;
-  const shellScripts = await page.evaluate(() => performance.getEntriesByType('resource')
-    .filter(e => e.initiatorType === 'script' || /\.m?js(\?|$)/.test(e.name))
-    .map(e => ({ name: e.name, at: performance.timeOrigin + e.responseEnd })));
-  return { at, origin, shellScripts };
 }
 
 /**
@@ -269,8 +223,6 @@ const METRICS = {
   totalGzip: s => Object.values(s.bytes).reduce((n, kind) => n + kind.gzip, 0),
   /** Script bytes on the wire that had finished before the page was ready (the size targets' "JS before ready"); null on a build that never signalled ready. */
   jsBeforeReadyGzip: s => s.jsBeforeReady?.gzip ?? null,
-  /** The app shell's own script bytes on the wire finished before its document frame was ready (view only; the size targets' target 4). */
-  shellJsBeforeFrameReadyGzip: s => s.shellJsBeforeFrameReady?.gzip ?? null,
   fcp: s => s.fcp, lcp: s => s.lcp, takeover: s => s.takeover, painted: s => s.painted, readyAt: s => s.readyAt ?? null, scriptMs: s => s.scriptMs,
 };
 
@@ -303,7 +255,7 @@ const delta = (head, base, format) => {
 export function documentViewsMarkdown(head, base = {}) {
   const columns = [
     ['requests', 'Requests', String], ['htmlGzip', 'HTML gz KB', kb], ['jsDecoded', 'JS KB', kb], ['jsGzip', 'JS gz KB', kb],
-    ['jsBeforeReadyGzip', 'JS before ready gz KB', kb], ['shellJsBeforeFrameReadyGzip', 'Shell JS before frame ready gz KB', kb], ['totalGzip', 'Total gz KB', kb],
+    ['jsBeforeReadyGzip', 'JS before ready gz KB', kb], ['totalGzip', 'Total gz KB', kb],
     ['cssGzip', 'CSS gz KB', kb], ['fcp', 'FCP ms', ms], ['lcp', 'LCP ms', ms], ['takeover', 'Takeover ms', ms],
     ['painted', 'Painted ms', ms], ['scriptMs', 'Script ms', ms],
   ];

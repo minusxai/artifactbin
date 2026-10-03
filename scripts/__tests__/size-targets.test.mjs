@@ -12,7 +12,7 @@ const KB = 1024;
  * The document's own page (`raw`, what the app page frames) carries the JS; the reader's whole page (`view`) the total,
  * and the shell's own JS before its frame is ready.
  */
-const cell = (jsBeforeReadyGzip, totalGzip, shellJsBeforeFrameReadyGzip = 40 * KB) => ({ raw: { jsBeforeReadyGzip }, view: { totalGzip, shellJsBeforeFrameReadyGzip } });
+const cell = (jsBeforeReadyGzip, totalGzip, shell = 40 * KB) => ({ raw: { jsBeforeReadyGzip }, view: { totalGzip, jsBeforeReadyGzip: shell } });
 
 describe('the four targets', () => {
   it('are the proposal\'s: 10 KB, 85 KB and 250 KB — the JS on the framed document, the total on the reader view — and 50 KB for the shell', () => {
@@ -21,9 +21,9 @@ describe('the four targets', () => {
 
   it('never judge document JS by the app shell around its frame', () => {
     // The shell's bundle readies the `view` route; the document's own page is `raw`.
-    const shell = (doc) => ({ raw: { jsBeforeReadyGzip: doc }, view: { jsBeforeReadyGzip: 45 * KB, totalGzip: 130 * KB, shellJsBeforeFrameReadyGzip: 44 * KB } });
+    const shell = (doc) => ({ raw: { jsBeforeReadyGzip: doc }, view: { jsBeforeReadyGzip: 45 * KB, totalGzip: 130 * KB } });
     const rows = evaluateSizeTargets({ summary: { prose: shell(5 * KB), deck: shell(6 * KB), kit: shell(37 * KB), dashboard: shell(58 * KB) } });
-    expect(rows.map((r) => [r.id, r.verdict, r.measured])).toEqual([[1, 'pass', 6 * KB], [2, 'pass', 58 * KB], [3, 'pass', 130 * KB], [4, 'pass', 44 * KB]]);
+    expect(rows.map((r) => [r.id, r.verdict, r.measured])).toEqual([[1, 'pass', 6 * KB], [2, 'pass', 58 * KB], [3, 'pass', 130 * KB], [4, 'pass', 45 * KB]]);
   });
 
   it('budget the app shell\'s own JS before its document frame is ready, on every page kind it frames', () => {
@@ -64,19 +64,16 @@ describe('the four targets', () => {
   });
 
   it('read what the lab summary produces from samples', () => {
-    const sample = (fixture, gzip, before, route = 'view', shell = null) => ({ fixture, route, ready: true, errors: [], fcp: 1, lcp: 1, takeover: 5, painted: null, readyAt: 5, requests: 3,
-      bytes: { html: { decoded: 10, gzip: 10 }, js: { decoded: gzip * 3, gzip }, css: { decoded: 0, gzip: 4 }, other: { decoded: 0, gzip: 6 } }, jsBeforeReady: { decoded: before * 3, gzip: before },
-      shellJsBeforeFrameReady: shell === null ? null : { decoded: shell * 3, gzip: shell }, scriptMs: 1 });
-    const summary = summarizeDocumentViews([sample('prose', 100, 20, 'view', 300), sample('prose', 300, 40, 'view', 500), sample('prose', 9, 20, 'raw'), sample('prose', 9, 40, 'raw'), sample('deck', 50, 50, 'raw'), sample('kit', 1, 1, 'raw'), sample('dashboard', 1, 1, 'raw'),
-      sample('deck', 1, 1, 'view', 100), sample('kit', 1, 1, 'view', 200), sample('dashboard', 1, 1, 'view', 100)]);
+    const sample = (fixture, gzip, before, route = 'view') => ({ fixture, route, ready: true, errors: [], fcp: 1, lcp: 1, takeover: 5, painted: null, readyAt: 5, requests: 3,
+      bytes: { html: { decoded: 10, gzip: 10 }, js: { decoded: gzip * 3, gzip }, css: { decoded: 0, gzip: 4 }, other: { decoded: 0, gzip: 6 } }, jsBeforeReady: { decoded: before * 3, gzip: before }, scriptMs: 1 });
+    const summary = summarizeDocumentViews([sample('prose', 100, 20), sample('prose', 300, 40), sample('prose', 9, 20, 'raw'), sample('prose', 9, 40, 'raw'), sample('deck', 50, 50, 'raw'), sample('kit', 1, 1, 'raw'), sample('dashboard', 1, 1, 'raw'),
+      sample('deck', 1, 60), sample('kit', 1, 10), sample('dashboard', 1, 10)]);
     expect(summary.prose.raw.jsBeforeReadyGzip).toBe(30);
     expect(summary.prose.view.totalGzip).toBe(220);
-    expect(summary.prose.view.shellJsBeforeFrameReadyGzip).toBe(400);
-    expect(summary.prose.raw.shellJsBeforeFrameReadyGzip).toBeNull();
     const rows = evaluateSizeTargets({ documents: { summary } });
     expect(rows[0]).toMatchObject({ verdict: 'pass', measured: 50, worst: 'deck' });
     expect(rows[2]).toMatchObject({ verdict: 'pass', measured: 220 });
-    expect(rows[3]).toMatchObject({ verdict: 'pass', measured: 400, worst: 'prose' });
+    expect(rows[3]).toMatchObject({ verdict: 'pass', measured: 60, worst: 'deck' });
   });
 });
 

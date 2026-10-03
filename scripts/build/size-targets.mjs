@@ -21,9 +21,10 @@
  * document's. Target 3 reads the prose view's `totalGzip`: every response body
  * a reader's page loads, the shell and its frame together. The production
  * prose page is measured separately after a deploy; the lab's prose view is
- * its proxy here. Target 4 budgets the shell itself: `shellJsBeforeFrameReadyGzip`
- * on the `view` route, the top page's own script bytes finished by the time its
- * document frame signalled ready (the document's own scripts excluded).
+ * its proxy here. Target 4 budgets the shell itself: `jsBeforeReadyGzip` on the
+ * `view` route, the app page's own script bytes finished by its ready (the
+ * page's resource timing never lists the frame's, so the document's scripts are
+ * never counted there).
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -38,8 +39,8 @@ export const SIZE_TARGETS = Object.freeze([
   { id: 2, label: 'JS before ready, interactive (kit, dashboard, every component)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['kit', 'dashboard'], optional: ['kitchen'], limit: 85 * KB },
   // The viewed page is the app shell plus the framed document.
   { id: 3, label: 'Prose page, total transferred', metric: 'totalGzip', route: 'view', fixtures: ['prose'], optional: [], limit: 250 * KB },
-  // The shell's own scripts (`view` minus the framed document's), on every page kind it frames.
-  { id: 4, label: 'App shell JS before the document frame is ready', metric: 'shellJsBeforeFrameReadyGzip', route: 'view', fixtures: ['prose', 'deck', 'kit', 'dashboard'], optional: ['kitchen'], limit: 50 * KB },
+  // The shell's own scripts: the `view` route's JS before ready, which never counts the framed document's, on every page kind it frames.
+  { id: 4, label: 'App shell JS before the document frame is ready', metric: 'jsBeforeReadyGzip', route: 'view', fixtures: ['prose', 'deck', 'kit', 'dashboard'], optional: ['kitchen'], limit: 50 * KB },
 ]);
 
 /**
