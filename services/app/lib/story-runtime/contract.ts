@@ -326,6 +326,11 @@ export const STORY_READER_MODE_MESSAGE = 'mx:reader-mode';
  * from the page chrome. This unprivileged sample lets the parent apply its
  * mobile bar visibility policy; the parent still checks the source window. */
 export const STORY_SCROLL_MESSAGE = 'mx:reader-scroll';
+/**
+ * The app page → a document framed on its own origin (APP__PAGES_HOST): the address's `#hash`, so a
+ * link to a heading scrolls the frame. `{ type, hash }`, hash `#…`; the frame takes it from its parent only.
+ */
+export const STORY_FRAME_HASH_MESSAGE = 'mx:frame-hash';
 export interface StoryScrollMessage {
   type: typeof STORY_SCROLL_MESSAGE;
   scrollY: number;

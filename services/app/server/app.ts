@@ -51,6 +51,8 @@ import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse,
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { customHostBoundary } from './custom-host';
+import { pagesHost } from './pages-host';
+import { PAGES_SESSION_META, PAGES_SESSION_PATH, PAGES_SITE, pagesApexOrigin, type PagesSite } from '@/lib/serving/pages-origin';
 import { linkedStylesheets } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
@@ -154,43 +156,65 @@ export const APP_INLINE_SCRIPT_HASHES = [
   THEME_BOOTSTRAP_HASH, // theme bootstrap (web/solid-app.html — lib/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
 ].join(' ');
 
-export const APP_CSP = [
-  // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
-  // reader's document runs its queries on (lib/story-runtime/page-sqlite) —
-  // and nothing else: no eval, no Function, no string timers. Author code
-  // never runs here; it runs in its own frame, whose policy does not admit it.
-  "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' blob: https: ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline' https:",
-  // Listing thumbnails redirect from /a/:id/export to the configured asset
-  // origin. Admit that destination for images; local posters remain same-origin.
-  `img-src 'self' data: blob: https:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`, "font-src 'self' data: https:",
-  // `media-src` has no default of its own either, so without this line every
-  // <video> and <audio> on an app page is refused by `default-src 'none'`.
-  // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
-  // upload page previewing a file BEFORE it is sent (web/pages/FileUpload).
-  // GLTFLoader also fetches embedded textures through local blob URLs.
-  // Frame and worker policies stay same-origin; blobs are data here.
-  "media-src 'self' blob: https:",
-  "connect-src 'self' blob: https:",
-  "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
-  // No feature starts a worker today (the source editor runs none). This is
-  // here because the failure would be silent and remote: `worker-src` has no
-  // default of its own, falling back through `child-src` to `default-src
-  // 'none'`, so the first feature that wants a worker would be refused by a
-  // directive nobody wrote. Vite emits workers as same-origin assets, so
-  // `'self'` is the whole permission — NOT `blob:`, which would reopen
-  // script-from-a-string.
-  "worker-src 'self'",
-  "form-action 'self'", "object-src 'none'", "base-uri 'self'",
-].join('; ');
-/** Only the development socket joins connect-src; production uses APP_CSP unchanged. */
-function developmentAppCsp(pageUrl: string, port: number): string {
+/**
+ * THE APP PAGES' POLICY, built once per shape:
+ *
+ *  - `frames`: the pages origins (APP__PAGES_HOST) the app page frames documents on — the apex, where
+ *    the frame's first URL exchanges its ticket, and every document label under it. Nothing else.
+ *  - `inPageDocuments`: with NO pages host, a document still runs inside the app page, so the page that
+ *    carries one admits what its author module needs: `blob:` modules (lib/islands/page-runtime), the
+ *    module CDNs and https data, styles, fonts, images and media. Only the compiled document page
+ *    carries it; every other app page, and every page once documents have their own origins, is strict.
+ */
+function appCsp({ inPageDocuments = false, frames = [], connect = [] }: { inPageDocuments?: boolean; frames?: readonly string[]; connect?: readonly string[] } = {}): string {
+  const open = inPageDocuments ? ' https:' : '';
+  return [
+    // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
+    // reader's document runs its queries on (lib/story-runtime/page-sqlite) —
+    // and nothing else: no eval, no Function, no string timers.
+    "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval'${inPageDocuments ? ' blob: https:' : ''} ${APP_INLINE_SCRIPT_HASHES}`, `style-src 'self' 'unsafe-inline'${open}`,
+    // Listing thumbnails redirect from /a/:id/export to the configured asset
+    // origin. Admit that destination for images; local posters remain same-origin.
+    `img-src 'self' data: blob:${open}${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`, `font-src 'self' data:${open}`,
+    // `media-src` has no default of its own either, so without this line every
+    // <video> and <audio> on an app page is refused by `default-src 'none'`.
+    // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
+    // upload page previewing a file BEFORE it is sent (web/pages/FileUpload).
+    // GLTFLoader also fetches embedded textures through local blob URLs.
+    // Frame and worker policies stay same-origin; blobs are data here.
+    `media-src 'self' blob:${open}`,
+    // `connect`: the pages apex, which sign-out asks to end the pages session (lib/accounts/browser-session).
+    ['connect-src', "'self'", `blob:${open}`, ...connect].join(' '),
+    "manifest-src 'self'", ['frame-src', "'self'", ...frames].join(' '), "frame-ancestors 'self'",
+    // No feature starts a worker today (the source editor runs none). This is
+    // here because the failure would be silent and remote: `worker-src` has no
+    // default of its own, falling back through `child-src` to `default-src
+    // 'none'`, so the first feature that wants a worker would be refused by a
+    // directive nobody wrote. Vite emits workers as same-origin assets, so
+    // `'self'` is the whole permission — NOT `blob:`, which would reopen
+    // script-from-a-string.
+    "worker-src 'self'",
+    "form-action 'self'", "object-src 'none'", "base-uri 'self'",
+  ].join('; ');
+}
+/** The strict app policy: every app page, and the document page once documents have their own origins. */
+export const APP_CSP = appCsp();
+/** The document page's policy while documents still run inside it (APP__PAGES_HOST unset). */
+export const IN_PAGE_DOCUMENT_CSP = appCsp({ inPageDocuments: true });
+/** The pages origins an app page may frame (lib/serving/pages-origin): the apex and every document label. */
+export function pagesFrameSources(site: PagesSite | null): string[] {
+  if (!site) return [];
+  const port = site.port ? `:${site.port}` : '';
+  return [`${site.scheme}//${site.host}${port}`, `${site.scheme}//*.${site.host}${port}`];
+}
+/** Only the development socket joins connect-src; production uses the policy unchanged. */
+function developmentAppCsp(csp: string, pageUrl: string, port: number): string {
   const socket = new URL(pageUrl);
   socket.protocol = socket.protocol === 'https:' ? 'wss:' : 'ws:';
   socket.port = String(port);
-  return APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${socket.origin}`);
+  return csp.replace("connect-src 'self'", `connect-src 'self' ${socket.origin}`);
 }
 const APP_SECURITY_HEADERS = {
-  'content-security-policy': APP_CSP,
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
@@ -216,6 +240,8 @@ export interface AppServerOptions {
   /** Where `npm run build:binary -w services/cli` leaves a CLI build (services/cli/dist). When its version is the
    * one the served installer pins, this server serves that build and the installer installs it from here. */
   cliReleaseDir?: string;
+  /** Every document on its own origin (APP__PAGES_HOST): this deployment's pages site, or null for off. Tests pass their own. */
+  pagesSite?: PagesSite | null;
 }
 
 const GITHUB_RELEASES = 'https://github.com/minusxai/artifactbin/releases/download/afbin-v$version';
@@ -296,6 +322,27 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  /*
+   * Every document on its own origin (server/pages-host): a pages hostname, a pages Origin and the
+   * pages cookie are decided there, before any other host boundary — and with the setting off, nowhere.
+   */
+  const pagesSite = opts.pagesSite === undefined ? PAGES_SITE : opts.pagesSite;
+  if (pagesSite) app.use('*', pagesHost(pagesSite));
+  const frames = pagesFrameSources(pagesSite);
+  const pagesApex = pagesSite ? pagesApexOrigin(pagesSite) : null;
+  /**
+   * The policy an app page carries: strict, framing the pages origins — unless the page carries a document
+   * INLINE (no pages host; or, with one, an archived version, which is read in place), whose author code
+   * it then admits.
+   */
+  const pageCsp = (url: string, inlineDocument: boolean): string => {
+    const csp = appCsp({ inPageDocuments: inlineDocument, frames, connect: pagesApex ? [pagesApex] : [] });
+    return opts.devHmrPort !== undefined ? developmentAppCsp(csp, url, opts.devHmrPort) : csp;
+  };
+  /** Where sign-out ends the pages session (lib/accounts/browser-session): named in every app page's head. */
+  const withPagesSession = (html: string): string => (pagesApex
+    ? html.replace('</head>', () => `<meta name="${PAGES_SESSION_META}" content="${escapeHtml(pagesApex + PAGES_SESSION_PATH)}"></head>`)
+    : html);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
   /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
@@ -379,9 +426,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
     const inlined = data;
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
-    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(withPagesSession(inlined ? withBootstrap(ordered, inlined) : ordered), agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
+      'content-security-policy': pageCsp(c.req.url, false),
       ...readerHeaders(found?.reader),
     } }));
   };
@@ -401,10 +448,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // The sheet already rides in the compiled head; the editor reads it back on intent.
     const bootstrapData = runtime ? { ...page, artifact: { ...page.artifact, surface: { ...page.artifact?.surface, runtime: { ...runtime, css: undefined } } } } : data;
     const bootstrap = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(bootstrapData)}</script>`;
-    const html = `${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`;
+    const html = withPagesSession(`${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`);
     return compressDynamic(c.req.raw, new Response(html, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
+      'content-security-policy': pageCsp(c.req.url, !compiled.framed),
       ...compiled.headers,
       ...readerHeaders({ mode: 'compiled' }),
     } }));
@@ -432,7 +479,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const segments = url.pathname.split('/').filter(Boolean);
     // The row documentPreparation already fetched and admitted for this request rides along: one fetch, one check.
     const document = async (id: string) => {
-      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry() } }));
+      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row } : {}), page: { spa: spaEntry() }, pages: pagesSite }));
       return answer.status === 200 ? answer : null;
     };
     if (segments.at(-1) === 'edit' || (segments[0] === 'a' && segments.length === 3 && segments[2] === 'app')) segments.pop();

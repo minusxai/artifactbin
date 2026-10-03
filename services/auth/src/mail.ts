@@ -62,7 +62,9 @@ export function devOutboxMailer(opts: DevOutboxOptions = {}): Mailer {
 export function usesDevOutbox(publicBaseUrl: string): boolean {
   try {
     const host = new URL(publicBaseUrl).hostname;
-    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+    // `lvh.me` and every name under it resolve to 127.0.0.1 in public DNS: development's same-site host
+    // for documents on their own origins (APP__PAGES_HOST, CONTRIBUTING.md) is loopback too.
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1' || host === 'lvh.me' || host.endsWith('.lvh.me');
   } catch {
     return false;
   }

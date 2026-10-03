@@ -124,6 +124,13 @@ export interface CompiledReaderRequest {
    * Default true.
    */
   documentChrome?: boolean;
+  /**
+   * The app page FRAMES the document on its own origin (AssembleInput.frame): the page carries the
+   * chrome and one frame, and none of the story, its snapshot or its code.
+   */
+  frame?: AssembleInput['frame'];
+  /** The app origin that frames a document served on its own origin (AssembleInput.appOrigin). */
+  appOrigin?: string | null;
 }
 
 export type CompiledReaderAnswer =
@@ -444,6 +451,30 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       return refuse('unported', 'the stored compile does not carry the version\'s author script');
     }
 
+    if (reader.frame) {
+      // Nothing of the document runs here: its frame loads it, its snapshot and its code, on its own origin.
+      const assembled = assembleReaderPage({
+        compiled: { ...compiled, behaviors: [] },
+        story: '',
+        css: page.css,
+        fontPreloads: [...(reader.chromeFonts ?? [])],
+        title: page.title,
+        theme: page.theme,
+        colorMode: reader.colorMode ?? page.data.colorMode,
+        snapshot: null,
+        overlay: { values: {}, mermaidImages: {}, signedIn: reader.signedIn, doors: null },
+        chrome: reader.chrome,
+        spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT && !usable.pinned ? reader.spa : null,
+        build,
+        head: reader.head,
+        live: null,
+        footer: null,
+        sheets: null,
+        frame: reader.frame,
+      });
+      return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
+    }
+
     const flow = page.declared?.flow ?? null;
     // Prepared state is useful for a version that cannot run. A healthy reader starts from defaults
     // and the guest snapshot, then lets its page engine take over; seeding `state` suppresses that run.
@@ -498,6 +529,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       live: reader.live,
       footer: reader.footer ?? null,
       sheets: reader.sheets ?? null,
+      appOrigin: reader.appOrigin ?? null,
     });
     return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
   } catch (error) {

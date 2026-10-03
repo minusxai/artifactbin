@@ -83,6 +83,9 @@ export const GATE_SPECS = Object.freeze([
   { name: 'reader-chrome', needsMail: true, serialGroup: 'clipboard', seconds: 24, timeoutMs: 110_000 },
   { name: 'web-assets', needsMail: true, seconds: 17, timeoutMs: 60_000 },
   { name: 'pdf', needsMail: false, seconds: 2, timeoutMs: 60_000 },
+  // Boots its own production server with APP__PAGES_HOST=lvh.me (the runner's servers have none), signs in,
+  // publishes and frames a private document. Measured 14s against a dev server; its own boot adds ~10s.
+  { name: 'pages-origin', needsMail: true, seconds: 30, timeoutMs: 120_000 },
   { name: 'secure-arch', needsMail: true, seconds: 14, timeoutMs: 60_000 },
   { name: 'shell-seo', needsMail: false, seconds: 3, timeoutMs: 60_000 },
   { name: 'social-preview', needsMail: false, seconds: 29, timeoutMs: 80_000 },

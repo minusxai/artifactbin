@@ -96,3 +96,8 @@ it('mutation run jobs and one recipient result per run belong to the app',()=>{
  expect(renderedSchema().schema).toContain('context JSONB');
 });
 it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});
+
+it('the pages sessions behind the documents\' own origins belong to the app and store only a cookie hash',()=>{
+ expect(declared()['app.pages_sessions']).toBe('app');
+ expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.pages_sessions \([\s\S]*?id_hash TEXT NOT NULL[\s\S]*?PRIMARY KEY \(id_hash\)/);
+});

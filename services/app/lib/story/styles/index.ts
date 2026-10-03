@@ -2,3 +2,5 @@
 export { DOCUMENT_ROOT_CSS, DOMAIN_FOOTER_CSS, DOMAIN_FOOTER_TEXT, documentStyleSheets } from './document-styles';
 export { fontPreloadTags, readerChromeFonts } from './first-screen-fonts';
 export { assetsPath, markupCsp, mutatePath, queryPath } from './markup-csp';
+export { buildDocumentCsp, NO_DOCUMENT_CSP_EXTENSIONS } from './document-csp';
+export type { DocumentCspExtensions, DocumentCspInput } from './document-csp';

@@ -41,7 +41,8 @@ export async function POST(request: Request) {
     if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== ARTIFACT_SCOPE) return json({ error: 'invalid_audience' }, 400);
     try {
       const target = new URL(body.audience);
-      const loopback = target.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname);
+      // `lvh.me` names resolve to 127.0.0.1: development's same-site app host when documents have their own origins.
+      const loopback = target.protocol === 'http:' && (['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname) || target.hostname === 'lvh.me' || target.hostname.endsWith('.lvh.me'));
       if ((target.protocol !== 'https:' && !loopback) || target.pathname !== API_RESOURCE_PATH || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
       audience = target.href;
       scope = body.scope;
