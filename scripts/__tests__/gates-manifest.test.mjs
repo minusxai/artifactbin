@@ -12,8 +12,9 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
+import { serversFor } from '../gates.servers.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
 const GATE_DIR = path.join(SCRIPTS, 'gates');
@@ -198,7 +199,7 @@ it('weighs every gate by a measured duration that fits inside its own timeout', 
 it('prints the same browser plan used by the CI shards without starting servers', () => {
   const set = onDisk;
   for (let index = 1; index <= CI_GATE_SHARDS; index++) {
-    const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight, {isolated: CI_ISOLATED_GATES});
+    const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight, CI_SHARD_OPTIONS);
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
     const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8', env: {...process.env, FORCE_COLOR: '0', NO_COLOR: '1'}}).trim();
@@ -208,11 +209,33 @@ it('prints the same browser plan used by the CI shards without starting servers'
 });
 
 describe('CI isolation', () => {
-  it('gives each gate that loses races under load a CI shard of its own', () => {
+  it('gives the gates that lose races under load one CI shard together, with no other gate in it', () => {
     const names = GATE_SPECS.map((spec) => spec.name);
     expect(CI_ISOLATED_GATES.length).toBeGreaterThan(0);
-    const shards = Array.from({ length: CI_GATE_SHARDS }, (_, i) => shardOf(names, { index: i + 1, total: CI_GATE_SHARDS }, shardWeight, { isolated: CI_ISOLATED_GATES }));
-    for (const name of CI_ISOLATED_GATES) expect(shards.find((shard) => shard.includes(name))).toEqual([name]);
+    const shards = Array.from({ length: CI_GATE_SHARDS }, (_, i) => shardOf(names, { index: i + 1, total: CI_GATE_SHARDS }, shardWeight, CI_SHARD_OPTIONS));
+    const isolated = names.filter((name) => CI_ISOLATED_GATES.includes(name));
+    for (const name of CI_ISOLATED_GATES) expect(shards.find((shard) => shard.includes(name))).toEqual(isolated);
     expect(shards.flat().sort()).toEqual([...names].sort());
+  });
+
+  it('runs that shard on one server, one gate at a time, and every other set on what was asked for', () => {
+    expect(serversFor(2, [...CI_ISOLATED_GATES], CI_ISOLATED_GATES)).toBe(1);
+    expect(serversFor(2, [CI_ISOLATED_GATES[0]], CI_ISOLATED_GATES)).toBe(1);
+    expect(serversFor(2, [...CI_ISOLATED_GATES, 'comments'], CI_ISOLATED_GATES)).toBe(2);
+    expect(serversFor(0, [...CI_ISOLATED_GATES], CI_ISOLATED_GATES)).toBe(0);
+    expect(serversFor(2, [], CI_ISOLATED_GATES)).toBe(2);
+  });
+
+  it('keeps members of a serial group in different shards while a shard without one remains', () => {
+    const weight = (name) => ({ x: 60, a: 50, b: 10 })[name];
+    // Blind to the group, longest-first puts b on the lighter shard — a's — where the two would run in turn.
+    const blind = [1, 2].map((index) => shardOf(['x', 'a', 'b'], { index, total: 2 }, weight));
+    expect(blind.find((shard) => shard.includes('a'))).toContain('b');
+    const serialGroup = (name) => (['a', 'b'].includes(name) ? 'clipboard' : undefined);
+    const apart = [1, 2].map((index) => shardOf(['x', 'a', 'b'], { index, total: 2 }, weight, { serialGroup }));
+    expect(apart.find((shard) => shard.includes('a'))).not.toContain('b');
+    // More members than shards: the rest still land somewhere, each exactly once.
+    const crowded = [1, 2].map((index) => shardOf(['x', 'a', 'b'], { index, total: 2 }, weight, { serialGroup: () => 'g' }));
+    expect(crowded.flat().sort()).toEqual(['a', 'b', 'x']);
   });
 });
