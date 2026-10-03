@@ -380,9 +380,10 @@ parameter selects another runtime.
 
 - `scripts/gates/gate-hydration.mjs`: checks the compiled story's served elements, island hydration,
   app adoption and edit handover. `x-mx-reader` confirms the compiled response.
-- `scripts/build/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (view route),
-  target 2 from `jsBeforeReady` on kit, dashboard and kitchen (view route), target 3 from the total
-  wire bytes of prose (view route); one line per target, `pass`/`fail`/`no data`; `--strict` fails on
+- `scripts/build/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (raw route),
+  target 2 from `jsBeforeReady` on kit, dashboard and kitchen (raw route), target 3 from the total
+  wire bytes of prose (view route); the raw route is the document's own page, which the app page frames, and
+  the view route's ready is the app shell's own; one line per target, `pass`/`fail`/`no data`; `--strict` fails on
   a missed target. `page-speed.yml` runs it on the head result into the job summary with `--strict`;
   that fails the page-speed workflow, which is informational and does not gate `ci.yml`.
 - `jsBeforeReady` joins the page's resource timing (names and `responseEnd`, available at the opaque

@@ -49,7 +49,7 @@ import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { CONTENT_FIELDS } from '@/lib/story/document/input';
 import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
-import { refreshWebAssets, type WebAssetImporter } from '@/lib/serving/web-assets';
+import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '@/lib/serving/web-assets';
 import { getDb } from '@/lib/platform/db';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
@@ -883,8 +883,12 @@ export async function respondToMutate(
  * not be able to mean different things by it.
  *
  * `url` refreshes one URL we hold. `id` refreshes every external URL a DOCUMENT
- * names — the shape a person actually wants ("this deck's pictures are stale"),
- * and the one an agent can call without first knowing which URLs are in there.
+ * names that we hold a copy of — the shape a person actually wants ("this deck's
+ * pictures are stale"), and the one an agent can call without first knowing
+ * which URLs are in there. Publish copies nothing (a written URL is served as
+ * written), so a copy exists only where a reader's view asked for one
+ * (app/a/[id]/assets); a URL with no copy has nothing to refresh and is left
+ * out of the report rather than named as a failure.
  * Reach for the document form is the WRITE scope, not the read one: refreshing
  * changes bytes every reader of every document naming that URL will see, so it
  * belongs to someone who may change the document, and the miss is the uniform
@@ -909,9 +913,11 @@ export async function refreshAssetsFor(
   if (id) {
     const row = await getArtifactFor(actor, id);
     if (!row) return json({ error: 'not_found' }, 404);
-    urls = collectExternalAssetUrls(row.source ?? '').all;
+    const named = collectExternalAssetUrls(row.source ?? '').all;
+    const held = await lookupWebAssets(named);
+    urls = named.filter((u) => held.has(u));
     // The bytes belong to whoever the DOCUMENT belongs to, exactly as they did
-    // when publish imported them — an editor refreshing does not take them over.
+    // when the view-time door imported them — an editor refreshing does not take them over.
     const owner = writerFor(row);
     by = { tokenId: owner.tokenId, userId: owner.userId };
   } else {

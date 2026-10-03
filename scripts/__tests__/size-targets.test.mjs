@@ -8,11 +8,19 @@ import { evaluateSizeTargets, SIZE_TARGETS, sizeTargetsMarkdown, sizeTargetsText
 import { summarizeDocumentViews } from '../lib/document-views.mjs';
 
 const KB = 1024;
-const cell = (jsBeforeReadyGzip, totalGzip) => ({ view: { jsBeforeReadyGzip, totalGzip } });
+/** The document's own page (`raw`, what the app page frames) carries the JS; the reader's whole page (`view`) the total. */
+const cell = (jsBeforeReadyGzip, totalGzip) => ({ raw: { jsBeforeReadyGzip }, view: { totalGzip } });
 
 describe('the three targets', () => {
-  it('are the proposal\'s: 10 KB, 85 KB and 200 KB, on the reader view', () => {
-    expect(SIZE_TARGETS.map((t) => [t.id, t.limit / KB, t.route])).toEqual([[1, 10, 'view'], [2, 85, 'view'], [3, 200, 'view']]);
+  it('are the proposal\'s: 10 KB, 85 KB and 200 KB — the JS on the framed document, the total on the reader view', () => {
+    expect(SIZE_TARGETS.map((t) => [t.id, t.limit / KB, t.route])).toEqual([[1, 10, 'raw'], [2, 85, 'raw'], [3, 200, 'view']]);
+  });
+
+  it('never judge document JS by the app shell around its frame', () => {
+    // The shell's bundle readies the `view` route; the document's own page is `raw`.
+    const shell = (doc) => ({ raw: { jsBeforeReadyGzip: doc }, view: { jsBeforeReadyGzip: 45 * KB, totalGzip: 130 * KB } });
+    const rows = evaluateSizeTargets({ summary: { prose: shell(5 * KB), deck: shell(6 * KB), kit: shell(37 * KB), dashboard: shell(58 * KB) } });
+    expect(rows.map((r) => [r.id, r.verdict, r.measured])).toEqual([[1, 'pass', 6 * KB], [2, 'pass', 58 * KB], [3, 'pass', 130 * KB]]);
   });
 
   it('pass when every fixture is under its limit, judged on the worst one', () => {
@@ -34,17 +42,17 @@ describe('the three targets', () => {
   });
 
   it('answer "no data" when a required fixture or the ready signal is missing, never pass by omission', () => {
-    const rows = evaluateSizeTargets({ documents: { summary: { prose: { view: { jsBeforeReadyGzip: null, totalGzip: 100 * KB } }, kit: cell(1, 1) } } });
+    const rows = evaluateSizeTargets({ documents: { summary: { prose: { raw: { jsBeforeReadyGzip: null }, view: { totalGzip: 100 * KB } }, kit: cell(1, 1) } } });
     expect(rows[0]).toMatchObject({ verdict: 'no data', missing: ['prose', 'deck'] });
     expect(rows[1]).toMatchObject({ verdict: 'no data', missing: ['dashboard'] });
     expect(rows[2]).toMatchObject({ verdict: 'pass', measured: 100 * KB });
   });
 
   it('read what the lab summary produces from samples', () => {
-    const sample = (fixture, gzip, before) => ({ fixture, route: 'view', ready: true, errors: [], fcp: 1, lcp: 1, takeover: 5, painted: null, readyAt: 5, requests: 3,
+    const sample = (fixture, gzip, before, route = 'view') => ({ fixture, route, ready: true, errors: [], fcp: 1, lcp: 1, takeover: 5, painted: null, readyAt: 5, requests: 3,
       bytes: { html: { decoded: 10, gzip: 10 }, js: { decoded: gzip * 3, gzip }, css: { decoded: 0, gzip: 4 }, other: { decoded: 0, gzip: 6 } }, jsBeforeReady: { decoded: before * 3, gzip: before }, scriptMs: 1 });
-    const summary = summarizeDocumentViews([sample('prose', 100, 20), sample('prose', 300, 40), sample('deck', 50, 50), sample('kit', 1, 1), sample('dashboard', 1, 1)]);
-    expect(summary.prose.view.jsBeforeReadyGzip).toBe(30);
+    const summary = summarizeDocumentViews([sample('prose', 100, 20), sample('prose', 300, 40), sample('prose', 9, 20, 'raw'), sample('prose', 9, 40, 'raw'), sample('deck', 50, 50, 'raw'), sample('kit', 1, 1, 'raw'), sample('dashboard', 1, 1, 'raw')]);
+    expect(summary.prose.raw.jsBeforeReadyGzip).toBe(30);
     expect(summary.prose.view.totalGzip).toBe(220);
     const rows = evaluateSizeTargets({ documents: { summary } });
     expect(rows[0]).toMatchObject({ verdict: 'pass', measured: 50, worst: 'deck' });

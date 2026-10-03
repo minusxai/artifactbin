@@ -6,9 +6,11 @@
  * door out: by URL, or by DOCUMENT (every external URL it names), answering
  * what moved, what did not, and what failed and why.
  *
- * Reach is the read ACL for the document form, so the miss is the uniform 404;
- * the URL form refreshes what we already hold, because refreshing is about the
- * copy we serve, and importing is what publishing a document does.
+ * Reach is the write scope for the document form, so the miss is the uniform
+ * 404; both forms refresh only what we already hold, because refreshing is about
+ * the copy we serve. Publish copies nothing — a written URL is served as written
+ * — so a copy exists only where a reader's view asked for one (`/a/<id>/assets`),
+ * and that is how every case below comes to hold one.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -16,6 +18,7 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { POST as refreshRoute } from '@/app/api/artifacts/assets/refresh/route';
 import { POST as myRefreshRoute } from '@/app/api/my/artifacts/[id]/assets/refresh/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
+import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { mintToken } from '@/lib/accounts';
 import { webAssetByHash } from '@/lib/serving';
@@ -59,11 +62,24 @@ const publishWithImage = async (token: string) => {
   return (await res.json()) as { id: string };
 };
 
+/** The reader's view asks the document's own door for its copy — the only way a copy comes to be held. */
+const viewCopies = async (id: string, token: string) => {
+  const res = await docAssets(request(`/a/${id}/assets?u=${encodeURIComponent(`${web}/photo.png`)}`, { token, headers: { accept: 'application/json' } }), params({ id }));
+  expect(res.status, await res.clone().text()).toBe(200);
+};
+
+/** A document naming the picture, with a held copy of it. */
+const publishAndView = async (token: string) => {
+  const made = await publishWithImage(token);
+  await viewCopies(made.id, token);
+  return made;
+};
+
 describe('POST /api/artifacts/assets/refresh', () => {
   it('re-fetches one URL and repoints the row', async () => {
     const t = await mintToken('t');
     colour = 0x11;
-    await publishWithImage(t.token);
+    await publishAndView(t.token);
     const before = (await webAssetByHash(urlHash(`${web}/photo.png`)))!.object_key;
 
     colour = 0x22;
@@ -78,7 +94,7 @@ describe('POST /api/artifacts/assets/refresh', () => {
   it('says UNCHANGED when the source is the same bytes', async () => {
     const t = await mintToken('t');
     colour = 0x33;
-    await publishWithImage(t.token);
+    await publishAndView(t.token);
     const res = await refreshRoute(request('/api/artifacts/assets/refresh', { method: 'POST', token: t.token, json: { url: `${web}/photo.png` } }));
     const body = await res.json();
     expect(body.unchanged).toEqual([`${web}/photo.png`]);
@@ -97,13 +113,29 @@ describe('POST /api/artifacts/assets/refresh', () => {
   it('refreshes every URL a DOCUMENT names', async () => {
     const t = await mintToken('t');
     colour = 0x44;
-    const made = await publishWithImage(t.token);
+    const made = await publishAndView(t.token);
     const before = (await webAssetByHash(urlHash(`${web}/photo.png`)))!.object_key;
 
     colour = 0x55;
     const res = await refreshRoute(request('/api/artifacts/assets/refresh', { method: 'POST', token: t.token, json: { id: made.id } }));
     expect((await res.json()).refreshed).toEqual([`${web}/photo.png`]);
     expect((await webAssetByHash(urlHash(`${web}/photo.png`)))!.object_key).not.toBe(before);
+  });
+
+  it('publish holds no copy, so a DOCUMENT with none answers an empty report', async () => {
+    const t = await mintToken('t');
+    const unseen = `${web}/photo.png?unseen=1`;
+    const res0 = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
+      markup: `<div><img src="${unseen}" alt="p" /></div>`,
+    } }));
+    expect(res0.status).toBe(201);
+    const made = (await res0.json()) as { id: string };
+    expect(await webAssetByHash(urlHash(unseen))).toBeNull();
+    const res = await refreshRoute(request('/api/artifacts/assets/refresh', { method: 'POST', token: t.token, json: { id: made.id } }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ refreshed: [], unchanged: [], failed: [] });
+    // …and nothing was fetched into being by asking.
+    expect(await webAssetByHash(urlHash(unseen))).toBeNull();
   });
 
   it('answers the uniform 404 for a document this token cannot reach', async () => {
@@ -126,7 +158,7 @@ describe('POST /api/my/artifacts/:id/assets/refresh — the menu row', () => {
   it('refreshes under a browser credential', async () => {
     const t = await mintToken('t');
     colour = 0x66;
-    const made = await publishWithImage(t.token);
+    const made = await publishAndView(t.token);
     const before = (await webAssetByHash(urlHash(`${web}/photo.png`)))!.object_key;
 
     colour = 0x77;

@@ -12,8 +12,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 let mockRole = 'commenter';
 let mockTitle: string | null = 'A copy';
+let mockArchived: { version: number; head: number } | null = null;
 let served: HTMLElement | null = null;
-vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, surface: { id: 'doc12345', title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, archived: mockArchived, surface: { id: 'doc12345', title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/web/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 
 import { DocumentPage } from '../pages/Document';
@@ -21,6 +22,7 @@ import { DocumentPage } from '../pages/Document';
 beforeEach(() => {
   mockRole = 'commenter';
   mockTitle = 'A copy';
+  mockArchived = null;
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
@@ -72,6 +74,33 @@ it('names the author and the document in the bar', () => {
   mount();
   expect(screen.getByRole('link', { name: "View @ada's profile" })).toHaveAttribute('href', '/@ada');
   expect(screen.getByText('A copy')).toHaveAttribute('data-mx-document-title');
+});
+
+it('says where a fork came from in the controls panel, linked to the source', () => {
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  const panel = within(screen.getByRole('region', { name: 'Artifact controls' }));
+  expect(panel.getByRole('link', { name: 'Open the artifact this was forked from' })).toHaveAttribute('href', '/a/source');
+  expect(panel.getByText(/forked from/)).toHaveAttribute('data-mx-forked-from');
+});
+
+it('an archived version names itself in the bar, read-only', () => {
+  mockRole = 'owner';
+  mockArchived = { version: 1, head: 2 };
+  mount('/a/doc?version=1');
+  const line = screen.getByText('Version 1 of 2 · read-only');
+  expect(line).toHaveAttribute('data-mx-archived-version', '1');
+  expect(line).toHaveAttribute('data-mx-archived-head', '2');
+  // Nothing on the bar acts on an older version.
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Like' })).toBeNull();
+});
+
+it('the head names no version', () => {
+  mockRole = 'owner';
+  mount();
+  expect(screen.queryByText(/read-only/)).toBeNull();
 });
 
 it('a commenter sees comments in the controls panel but no duplicate fork, edit or delete', () => {

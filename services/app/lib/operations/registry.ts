@@ -658,19 +658,19 @@ const forkArtifactOp: Operation = {
  * the second shape being the one anybody actually wants, since a person knows
  * "this deck's pictures are stale" and not which URLs are in it.
  *
- * Nothing here IMPORTS. A URL nobody has published is reported as
- * `not_cached`: importing is what publishing a document that names it does,
- * and a refresh door that also imported would be a fetch primitive under
- * another name.
+ * Nothing here IMPORTS. A URL we hold no copy of is reported as `not_cached`
+ * (the document form skips it): a copy is made only where a reader's view asks
+ * for one (app/a/[id]/assets), and a refresh door that also imported would be a
+ * fetch primitive under another name.
  */
 const refreshAssetOp: Operation = {
   name: 'refresh_asset',
   title: 'Refresh an imported web asset',
   http: { method: 'POST', path: '/api/artifacts/assets/refresh' },
-  description: 'Re-fetch the copy this deployment stores for an external image, font or PDF URL, after the source changed. Pass id to refresh EVERY external url one of your documents names, or url to refresh a single one. Nothing else about the document changes: no new version, no edit_id, and every stored <img src> keeps naming the same url. Answers {refreshed, unchanged, failed}: unchanged means the source really is the same bytes, and failed names each url with a code and a fix (not_cached — nothing is stored for it; rate_limited — this hour\'s fetch allowance is spent, which is counted per url).',
+  description: 'Re-fetch the copy this deployment stores for an external image, font or PDF URL, after the source changed. Pass id to refresh EVERY stored external url one of your documents names (a url with no stored copy is skipped), or url to refresh a single one. Nothing else about the document changes: no new version, no edit_id, and every stored <img src> keeps naming the same url. Answers {refreshed, unchanged, failed}: unchanged means the source really is the same bytes, and failed names each url with a code and a fix (not_cached — nothing is stored for it; rate_limited — this hour\'s fetch allowance is spent, which is counted per url).',
   input: {
-    id: z.string().optional().describe('a document of yours: every external url it names is refreshed'),
-    url: z.string().optional().describe('one external url to re-fetch; it must already be stored (a document must have named it)'),
+    id: z.string().optional().describe('a document of yours: every stored external url it names is refreshed'),
+    url: z.string().optional().describe('one external url to re-fetch; it must already be stored (a reader\'s view of a document copied it)'),
   },
   // A write (bytes move) but not destructive, and idempotent: refreshing twice
   // in a row costs a fetch and changes nothing the second time.
