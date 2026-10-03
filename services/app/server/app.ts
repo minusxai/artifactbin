@@ -52,7 +52,7 @@ import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
-import { PAGES_SITE, type PagesSite } from '@/lib/serving/pages-origin';
+import { PAGES_SESSION_META, PAGES_SESSION_PATH, PAGES_SITE, pagesApexOrigin, type PagesSite } from '@/lib/serving/pages-origin';
 import { linkedStylesheets } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
@@ -166,7 +166,7 @@ export const APP_INLINE_SCRIPT_HASHES = [
  *    module CDNs and https data, styles, fonts, images and media. Only the compiled document page
  *    carries it; every other app page, and every page once documents have their own origins, is strict.
  */
-function appCsp({ inPageDocuments = false, frames = [] }: { inPageDocuments?: boolean; frames?: readonly string[] } = {}): string {
+function appCsp({ inPageDocuments = false, frames = [], connect = [] }: { inPageDocuments?: boolean; frames?: readonly string[]; connect?: readonly string[] } = {}): string {
   const open = inPageDocuments ? ' https:' : '';
   return [
     // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
@@ -183,7 +183,8 @@ function appCsp({ inPageDocuments = false, frames = [] }: { inPageDocuments?: bo
     // GLTFLoader also fetches embedded textures through local blob URLs.
     // Frame and worker policies stay same-origin; blobs are data here.
     `media-src 'self' blob:${open}`,
-    `connect-src 'self' blob:${open}`,
+    // `connect`: the pages apex, which sign-out asks to end the pages session (lib/accounts/browser-session).
+    ['connect-src', "'self'", `blob:${open}`, ...connect].join(' '),
     "manifest-src 'self'", ['frame-src', "'self'", ...frames].join(' '), "frame-ancestors 'self'",
     // No feature starts a worker today (the source editor runs none). This is
     // here because the failure would be silent and remote: `worker-src` has no
@@ -326,11 +327,16 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const pagesSite = opts.pagesSite === undefined ? PAGES_SITE : opts.pagesSite;
   if (pagesSite) app.use('*', pagesHost(pagesSite));
   const frames = pagesFrameSources(pagesSite);
+  const pagesApex = pagesSite ? pagesApexOrigin(pagesSite) : null;
   /** The policy an app page carries: strict, framing the pages origins; a document page without them admits its in-page author code. */
   const pageCsp = (url: string, document: boolean): string => {
-    const csp = appCsp({ inPageDocuments: document && !pagesSite, frames });
+    const csp = appCsp({ inPageDocuments: document && !pagesSite, frames, connect: pagesApex ? [pagesApex] : [] });
     return opts.devHmrPort !== undefined ? developmentAppCsp(csp, url, opts.devHmrPort) : csp;
   };
+  /** Where sign-out ends the pages session (lib/accounts/browser-session): named in every app page's head. */
+  const withPagesSession = (html: string): string => (pagesApex
+    ? html.replace('</head>', () => `<meta name="${PAGES_SESSION_META}" content="${escapeHtml(pagesApex + PAGES_SESSION_PATH)}"></head>`)
+    : html);
   const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
   /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
@@ -414,7 +420,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
     const inlined = data;
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
-    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(withPagesSession(inlined ? withBootstrap(ordered, inlined) : ordered), agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       'content-security-policy': pageCsp(c.req.url, false),
       ...readerHeaders(found?.reader),
@@ -436,7 +442,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // The sheet already rides in the compiled head; the editor reads it back on intent.
     const bootstrapData = runtime ? { ...page, artifact: { ...page.artifact, surface: { ...page.artifact?.surface, runtime: { ...runtime, css: undefined } } } } : data;
     const bootstrap = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(bootstrapData)}</script>`;
-    const html = `${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`;
+    const html = withPagesSession(`${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`);
     return compressDynamic(c.req.raw, new Response(html, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       'content-security-policy': pageCsp(c.req.url, true),

@@ -92,6 +92,8 @@ export function idFromPagesOrigin(origin: string | null | undefined, site: Pages
 
 /** The pages apex's session exchange (server/pages-host): a ticket in, the `afbin_pages` cookie out. */
 export const PAGES_SESSION_PATH = '/pages-session';
+/** The app page's `<meta name>` naming that address, which sign-out asks to end the session (lib/accounts/browser-session). */
+export const PAGES_SESSION_META = 'mx-pages-session';
 
 /**
  * The frame's first URL: the apex exchanges `ticket` for the pages cookie (or, with no ticket — a guest

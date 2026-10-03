@@ -37,6 +37,32 @@ function postgresUrlError(value) {
   return 'Database URL must be a Postgres URL';
 }
 
+/** APP__PAGES_HOST: a bare hostname (no scheme, port, path or wildcard), as services/app/lib/platform/config parsePagesHost reads it. */
+function pagesHostError(value) {
+  return /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(String(value).trim().toLowerCase())
+    ? undefined
+    : 'Pages host must be a bare hostname such as lvh.me or pages.example.com';
+}
+
+/** The development pages host: `*.lvh.me` resolves to 127.0.0.1 in public DNS, with no hosts-file edit. */
+export const DEV_PAGES_HOST = 'lvh.me';
+
+/**
+ * Documents on their own origins need the app on the SAME SITE as the pages host (the frame's cookie is
+ * SameSite=Lax), so a loopback public URL moves to `app.<pages host>` on the same port.
+ */
+function sameSitePublicUrl(publicUrl, pagesHost) {
+  try {
+    const url = new URL(publicUrl);
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+    if (!pagesHost || !loopback) return publicUrl;
+    url.hostname = `app.${pagesHost}`;
+    return url.origin;
+  } catch {
+    return publicUrl;
+  }
+}
+
 function s3UrlError(value) {
   try {
     const url = new URL(String(value));
@@ -88,6 +114,7 @@ export function defaultAnswers(answerOverrides = {}) {
     databaseUrl: '',
     objects: 'local',
     s3Url: '',
+    pagesHost: '',
     ...answerOverrides,
   };
   if (answerOverrides.port !== undefined && answerOverrides.publicUrl === undefined) {
@@ -95,6 +122,7 @@ export function defaultAnswers(answerOverrides = {}) {
   } else if (answerOverrides.publicUrl !== undefined && answerOverrides.port === undefined) {
     answers.port = portFromPublicUrl(answerOverrides.publicUrl);
   }
+  answers.publicUrl = sameSitePublicUrl(answers.publicUrl, answers.pagesHost);
   return answers;
 }
 
@@ -122,6 +150,7 @@ export function existingAnswers(text) {
     databaseUrl,
     objects: s3Url ? 's3' : 'local',
     s3Url,
+    pagesHost: values.get('APP__PAGES_HOST') || '',
   });
 }
 
@@ -158,6 +187,12 @@ export function parseArgs(argv) {
       result.noInterview = true;
     } else if (flag === '--force') result.force = true;
     else if (flag === '--print') result.print = true;
+    else if (flag === '--pages-host') {
+      // `--pages-host` alone is development's lvh.me; `--pages-host <host>` names one.
+      const value = argv[index + 1];
+      if (value !== undefined && !value.startsWith('--')) { result.answers.pagesHost = value.trim().toLowerCase(); index += 1; }
+      else result.answers.pagesHost = DEV_PAGES_HOST;
+    }
     else if (values.has(flag)) {
       const value = argv[index + 1];
       if (value === undefined) return { ...result, error: `${flag} requires a value` };
@@ -175,6 +210,10 @@ export function parseArgs(argv) {
   }
   if (result.answers.port !== undefined) {
     const error = portError(result.answers.port);
+    if (error) return { ...result, error };
+  }
+  if (result.answers.pagesHost !== undefined) {
+    const error = pagesHostError(result.answers.pagesHost);
     if (error) return { ...result, error };
   }
   if (result.answers.databaseUrl !== undefined) {
@@ -219,6 +258,7 @@ export function buildEnvFile(answerOverrides, { generated, validate = true }) {
     .replace(/^# INTERNAL__SERVICE_SECRET=.*$/m, `INTERNAL__SERVICE_SECRET=${generated.INTERNAL__SERVICE_SECRET}`)
     .replace(/^APP__PUBLIC_BASE_URL=.*$/m, `APP__PUBLIC_BASE_URL=${answers.publicUrl}`)
     .replace(/^APP__PORT=.*$/m, `APP__PORT=${answers.port}`);
+  if (answers.pagesHost) text = text.replace(/^# APP__PAGES_HOST=.*$/m, `APP__PAGES_HOST=${answers.pagesHost}`);
 
   if (answers.database === 'postgres') {
     text = text.replace(/^# DATABASE_URL=.*$/m, `DATABASE_URL=${answers.databaseUrl}`);
@@ -243,7 +283,7 @@ export function buildEnvFile(answerOverrides, { generated, validate = true }) {
 }
 
 const MANAGED_ENV = {
-  publicUrl: ['APP__PUBLIC_BASE_URL'], port: ['APP__PORT'],
+  publicUrl: ['APP__PUBLIC_BASE_URL'], port: ['APP__PORT'], pagesHost: ['APP__PAGES_HOST', 'APP__PUBLIC_BASE_URL'],
   email: ['EMAIL__RESEND_API_KEY', 'EMAIL__FROM'], emailFrom: ['EMAIL__FROM'],
   database: ['DATABASE_URL'], databaseUrl: ['DATABASE_URL'],
   objects: ['S3_URL', 'OBJECT_STORE__LOCAL_DIR'], s3Url: ['S3_URL', 'OBJECT_STORE__LOCAL_DIR'],

@@ -133,7 +133,9 @@ describe('the app CSP', () => {
     const framing = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>', pagesSite: site });
     const csp = (await framing.request('https://app.example.com/login')).headers.get('content-security-policy')!;
     expect(csp.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://pages.example.com https://*.pages.example.com");
-    expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'")).toBe(APP_CSP);
+    // …and connects to the apex alone, where sign-out ends the pages session.
+    expect(csp.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob: https://pages.example.com");
+    expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'").replace(/connect-src [^;]*/, "connect-src 'self' blob:")).toBe(APP_CSP);
   });
 });
 

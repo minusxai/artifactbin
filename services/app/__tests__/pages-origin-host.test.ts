@@ -58,7 +58,7 @@ async function pagesCookie(app: ReturnType<typeof framing>, actor: Actor, id: st
   const set = res.headers.get('set-cookie')!;
   return /afbin_pages=([^;]+)/.exec(set)![1]!;
 }
-const query = (id: string) => JSON.stringify({ values: {}, only: ['counted'] });
+const query = (_id: string) => JSON.stringify({ values: {}, only: ['counted'] });
 
 describe('the app page frames the document on its own origin', () => {
   it('draws the chrome and one sandboxed frame whose first URL spends a ticket, under the strict policy that frames only the pages origins', async () => {
@@ -82,6 +82,8 @@ describe('the app page frames the document on its own origin', () => {
     const csp = res.headers.get('content-security-policy')!;
     expect(csp.split('; ').find((d) => d.startsWith('frame-src'))).toBe(`frame-src 'self' ${APEX} https://*.pages.example.test`);
     expect(csp.split('; ').find((d) => d.startsWith('script-src'))).not.toMatch(/blob:|https:/);
+    // Sign-out ends the pages session at the address the page names (lib/accounts/browser-session).
+    expect(html).toContain(`<meta name="mx-pages-session" content="${APEX}/pages-session">`);
   });
 
   it('frames a guest\'s page with no ticket, so the apex clears whatever the browser held', async () => {
@@ -239,7 +241,7 @@ describe('the origin gate', () => {
   it('keeps today\'s behaviour for no Origin and for the app\'s own', async () => {
     const w = await world();
     const app = framing();
-    for (const headers of [{}, { origin: APP }]) {
+    for (const headers of [{}, { origin: APP }] as Array<Record<string, string>>) {
       const res = await app.request(as(`${APP}/a/${w.secret}/query`, w.actor, { method: 'POST', headers: { ...headers, 'content-type': 'text/plain' }, body: query(w.secret) }));
       expect(res.status).toBe(200);
       expect(res.headers.get('access-control-allow-credentials')).toBeNull();
