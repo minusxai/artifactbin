@@ -7,7 +7,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
-import { within } from '@testing-library/dom';
+import { waitFor, within } from '@testing-library/dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 let mockRole = 'commenter';
@@ -48,6 +48,15 @@ function mount(path = '/a/doc') {
 
 /** The page's trusted overlays: 0 the navigation layer (install, fork), 1 discussion (comments, editor, sharing). */
 const trusted = (index = 0) => within(document.querySelectorAll('[data-trusted-ui]')[index]!.shadowRoot as unknown as HTMLElement);
+/**
+ * The app bar's open panel, wherever it is mounted: it rides the page's trusted overlay (lib/islands/trusted-portal) so it
+ * paints in the top layer above the comments rail, which is itself a top-layer overlay.
+ */
+const panelRoot = (): HTMLElement => {
+  const hosts = [...document.querySelectorAll('[data-trusted-ui]')].map((host) => host.shadowRoot as unknown as HTMLElement);
+  return hosts.find((root) => root.querySelector('[aria-label="Close panel"]')) ?? document.body;
+};
+const controls = () => within(panelRoot()).getByRole('region', { name: 'Artifact controls' });
 
 it('adopts the served frame into the page instead of rendering the document', () => {
   const { host, frame } = mount();
@@ -62,12 +71,12 @@ it('adopts the served frame into the page instead of rendering the document', ()
 it('opens the artifact controls and the menu from the app bar', () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = screen.getByRole('region', { name: 'Artifact controls' });
+  const panel = controls();
   fireEvent.click(within(panel).getByRole('button', { name: 'Dark mode' }));
   expect(within(panel).getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-  expect(screen.getByRole('navigation', { name: 'Menu' })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Artifacts' })).toBeInTheDocument();
+  expect(within(panelRoot()).getByRole('navigation', { name: 'Menu' })).toBeInTheDocument();
+  expect(within(panelRoot()).getByRole('link', { name: 'Artifacts' })).toBeInTheDocument();
 });
 
 it('names the author and the document in the bar', () => {
@@ -79,7 +88,7 @@ it('names the author and the document in the bar', () => {
 it('says where a fork came from in the controls panel, linked to the source', () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(screen.getByRole('region', { name: 'Artifact controls' }));
+  const panel = within(controls());
   expect(panel.getByRole('link', { name: 'Open the artifact this was forked from' })).toHaveAttribute('href', '/a/source');
   expect(panel.getByText(/forked from/)).toHaveAttribute('data-mx-forked-from');
 });
@@ -109,7 +118,7 @@ it('a commenter sees comments in the controls panel but no duplicate fork, edit 
   expect(screen.getByRole('button', { name: 'Fork artifact' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(screen.getByRole('region', { name: 'Artifact controls' }));
+  const panel = within(controls());
   expect(panel.getByRole('button', { name: 'Toggle comments' })).toBeInTheDocument();
   expect(panel.queryByRole('button', { name: 'Fork artifact' })).toBeNull();
   expect(panel.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
@@ -122,9 +131,47 @@ it('an owner sees edit and delete in the controls panel, and Edit and Share on t
   expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(screen.getByRole('region', { name: 'Artifact controls' }));
+  const panel = within(controls());
   expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
   expect(panel.getByRole('button', { name: 'Delete A copy' })).toBeInTheDocument();
+});
+
+/*
+ * The comments rail is a top-layer overlay (the trusted "discussion" layer), and the top layer ignores z-index: a panel
+ * on the ordinary page paints UNDER it whatever its z-index, so "Edit artifact" beside an open rail could not be
+ * pressed. The app bar's panels open in the trusted "navigation" layer, which is ordered above "discussion".
+ */
+it('the controls panel opened beside the open rail paints above it', async () => {
+  // jsdom has no top layer: model its paint order. The last root shown paints over every earlier one; z-index is not consulted.
+  const topLayer: HTMLElement[] = [];
+  const leave = (el: HTMLElement) => { const at = topLayer.indexOf(el); if (at >= 0) topLayer.splice(at, 1); };
+  Object.defineProperties(HTMLElement.prototype, {
+    showPopover: { configurable: true, writable: true, value(this: HTMLElement) { if (!this.isConnected || !this.hasAttribute('popover')) throw new DOMException('Invalid popover state', 'InvalidStateError'); leave(this); topLayer.push(this); } },
+    hidePopover: { configurable: true, writable: true, value(this: HTMLElement) { leave(this); } },
+  });
+  // Found by selector, not by role: jsdom cannot match `:popover-open`, so it computes every popover root as hidden.
+  const find = (selector: string) => [document, ...[...document.querySelectorAll('[data-trusted-ui]')].map((host) => host.shadowRoot!)]
+    .map((root) => root.querySelector<HTMLElement>(selector)).find(Boolean) ?? null;
+  try {
+    mockRole = 'owner';
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    const rail = await waitFor(() => find('[aria-label="Annotation sidebar"]') ?? Promise.reject(new Error('no rail')));
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+    const edit = find('[aria-label="Edit artifact"]');
+    expect(edit, 'the controls panel offers Edit artifact').not.toBeNull();
+    const paintOrder = (el: Element) => {
+      const root = el.getRootNode();
+      const trustedRoot = root instanceof ShadowRoot ? root.querySelector<HTMLElement>('[data-trusted-ui-root]') : null;
+      return trustedRoot ? topLayer.indexOf(trustedRoot) : -1;
+    };
+    expect(paintOrder(rail), 'the rail is a top-layer overlay').toBeGreaterThanOrEqual(0);
+    expect(paintOrder(edit!), 'the controls panel paints after the rail, so Edit artifact can be pressed').toBeGreaterThan(paintOrder(rail));
+  } finally {
+    cleanup();
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).showPopover;
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).hidePopover;
+  }
 });
 
 it('an owner reaches the social preview from the sharing dialog the rail opens', async () => {

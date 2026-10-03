@@ -718,10 +718,22 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
    * on while editing. Coalesced into the same frame as scroll and resize.
    */
   doc.addEventListener('input', scheduleSync, true);
-  const mutations = new MutationObserver((entries) => {
-    if (entries.some((entry) => [...entry.addedNodes,...entry.removedNodes].some((node) => node.nodeType === 3 || (node.nodeType === 1 && !(node as Element).matches(`style, [${ANNOTATION_AREA_ATTR}], [${ANNOTATE_BAND_ATTR}], [data-mx-selection-actions]`))))) scheduleSync();
-  });
-  mutations.observe(root ?? doc.body,{childList:true,subtree:true});
+  /*
+   * A LIVE MORPH (lib/islands/morph/engine) brings a new version in place without a re-render and without telling
+   * this layer: it rewrites a kept text node's words (characterData, no node added or removed) and resets a kept
+   * element's attributes to the served ones, which takes this layer's stamps with them. Either one re-syncs, so a
+   * comment whose words were written away falls back to the node tint and a stripped tint comes back. A stamp
+   * removal counts only when the element is still meant to carry it: `applyState` clears and re-stamps its own,
+   * and those records must not schedule another pass.
+   */
+  const STAMP_ATTRS = [ANNOTATED_ATTR, ANNOTATION_OPEN_ATTR, ANNOTATION_HOVER_ATTR, ANNOTATE_SELECTED_ATTR, ANNOTATION_RANGED_ATTR];
+  const relevant = (entry: MutationRecord): boolean => {
+    if (entry.type === 'characterData') return true;
+    if (entry.type === 'attributes') return stamped.has(entry.target as Element) && !(entry.target as Element).hasAttribute(entry.attributeName!);
+    return [...entry.addedNodes,...entry.removedNodes].some((node) => node.nodeType === 3 || (node.nodeType === 1 && !(node as Element).matches(`style, [${ANNOTATION_AREA_ATTR}], [${ANNOTATE_BAND_ATTR}], [data-mx-selection-actions]`)));
+  };
+  const mutations = new MutationObserver((entries) => { if (entries.some(relevant)) scheduleSync(); });
+  mutations.observe(root ?? doc.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:STAMP_ATTRS});
 
 
   return {
