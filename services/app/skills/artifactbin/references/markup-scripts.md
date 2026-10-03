@@ -160,8 +160,8 @@ that allow cross-origin reads.
 ## Other hosts
 
 When a script needs a host outside the default policy, declare it in the
-Helmet, one directive per meta, https origins only (no paths; a wildcard
-only as a leading `*.`; at most 10 each):
+Helmet, https origins only (no paths; a wildcard only as a leading `*.`;
+at most 10 per meta):
 
 ```jsx
 <Helmet>
@@ -170,6 +170,8 @@ only as a leading `*.`; at most 10 each):
 </Helmet>
 ```
 
-`csp-style` and `csp-img` work the same; anything else is `invalid_csp`.
-Your own documents get them; a reader is asked first, and until they allow
-it the script's requests to those hosts fail, so handle a failed `fetch`.
+Also `csp-style` (fonts too), `csp-img`, `csp-media`, `csp-frame`; any
+other `csp-` name is `invalid_csp`. Publishing a host is your consent;
+every other reader, the owner included, is asked (once, always for this
+document, or never), and until then requests to it fail, so handle a
+failed `fetch`.
