@@ -13,8 +13,10 @@
  *  - the `mx` bridge: `mx.set({...})` → setters, `mx.mutate('name', args)` → a `mutation('$name')` binding,
  *    `mx.read([...])` / `mx.subscribe([...], fn)` → a small adapter that hands the old snapshot shape over the bindings;
  *  - a managed `<Iframe>` of static HTML, `<style>` and `<script>` → its children inlined into the body (in a `<div>`
- *    keeping the Iframe's id), its style scoped to that div in the Helmet style, its script merged into the Helmet
- *    script in a block of its own, marked `{/* migrated from Iframe *\/}`.
+ *    keeping the Iframe's id), its style scoped to that div in the Helmet style (its `height` a min-height there: a body
+ *    element takes no inline style), its script merged into the Helmet script in a block of its own, marked
+ *    `{/* migrated from Iframe *\/}`; the frame's `<title>` was its tab title and is dropped. A frame with no script
+ *    adds no script.
  *
  * Anything else it leaves as it is, with a `MIGRATE:` comment where it stands (`/* … *\/` in the script, `{/* … *\/}`
  * in markup), and reports. It is a fixpoint: a migrated document, or one already on the Solid contract, comes back
@@ -517,6 +519,9 @@ function idsOf(nodes: JsxNode[], out = new Map<string, number>()): Map<string, n
 
 interface FramePlan { iframe: JsxElement; id: string; css: string; scripts: string[]; content: string; label: string; height: number | null }
 
+/** A frame's children that do not move into the body: its style and script (merged into the Helmet) and its `<title>`. */
+const FRAME_HEAD_TAGS = new Set(['style', 'script', 'title']);
+
 const indentOf = (code: string): string => /^[ \t]*(?=\S)/m.exec(code)?.[0] ?? '    ';
 const reindent = (code: string, indent: string): string => {
   const lines = code.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n');
@@ -555,11 +560,14 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     const scripts: string[] = [];
     let content = '';
     let refused: string | null = null;
+    let titles = 0;
     for (const child of iframe.children) {
       if (child.type === 'element' && child.tag === 'style') {
         const text = textOf(child);
         if (text === null) refused = 'its <style> is not static text';
         else css.push(text);
+      } else if (child.type === 'element' && child.tag === 'title') {
+        titles++;
       } else if (child.type === 'element' && child.tag === 'script') {
         if (child.attributes.some((a) => a.name === 'src')) refused = 'it loads a classic library by <script src>; import it as a module (`import … from \'name\'`) and inline the frame by hand';
         const text = textOf(child);
@@ -570,7 +578,7 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     if (iframe.children.length) {
       let at = iframe.children[0]!.start;
       for (const child of iframe.children) {
-        if (child.type !== 'element' || (child.tag !== 'style' && child.tag !== 'script')) continue;
+        if (child.type !== 'element' || !FRAME_HEAD_TAGS.has(child.tag)) continue;
         // A child alone on its lines leaves no blank line behind.
         const lineStart = source.lastIndexOf('\n', child.start - 1) + 1;
         const after = /^[ \t]*\n/.exec(source.slice(child.end));
@@ -580,12 +588,13 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
       }
       content += source.slice(at, iframe.children.at(-1)!.end);
     }
-    const innerIds = idsOf(iframe.children.filter((c) => c.type === 'element' && c.tag !== 'style' && c.tag !== 'script'));
+    const innerIds = idsOf(iframe.children.filter((c) => c.type === 'element' && !FRAME_HEAD_TAGS.has(c.tag)));
     for (const [id] of innerIds) if ((ids.get(id) ?? 0) > (innerIds.get(id) ?? 0)) refused ??= `the id "${id}" inside it is also used outside it`;
     const label = stringAttr(iframe, 'title') ?? 'Iframe';
     if (refused) { markupNote(iframe.start, `<Iframe> "${label}" was not inlined: ${refused}`); continue; }
     let id = stringAttr(iframe, 'id');
     if (!id) { do id = `migrated-frame-${++generated}`; while (ids.has(id)); ids.set(id, 1); }
+    if (titles) appliedMarkup.push(`<Iframe> "${label}": its <title> (the frame's tab title) dropped`);
     frames.push({ iframe, id, css: css.join('\n'), scripts, content, label, height: numberAttr(iframe, 'height') });
   }
 
@@ -633,7 +642,7 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     const clashes = ['mxBindings', 'mxSnapshot', 'mxRead', 'mxSubscribe'].filter((name) => authorNames.has(name));
     if (clashes.length) return unchanged(clashes.map((name) => `the script already uses the name \`${name}\`; rename it before migrating`));
   }
-  const scriptChanged = !!mainResult?.changed || frames.length > 0;
+  const scriptChanged = !!mainResult?.changed || frames.some((f) => f.scripts.length);
   if (scriptChanged) {
     const indent = indentOf(mainCode ?? '    ');
     // What the script already imports from 'page' and 'solid-js' (a header adds only the rest).
@@ -685,8 +694,9 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     else helmetInsert(`<script>${literal}</script>`);
   }
 
-  // Frames into the body, their styles into the Helmet's.
-  const css = frames.filter((f) => f.css.trim()).map((f) => `/* ${IFRAME_NOTE} "${f.label}" */\n${scopeCss(f.css.trim(), `#${f.id}`)}`).join('\n');
+  // Frames into the body, their styles (and the height each frame reserved) into the Helmet's.
+  const frameCss = (f: FramePlan): string => [f.css.trim() ? scopeCss(f.css.trim(), `#${f.id}`) : '', f.height ? `#${f.id} { min-height: ${f.height}px; }` : ''].filter(Boolean).join('\n');
+  const css = frames.filter((f) => f.css.trim() || f.height).map((f) => `/* ${IFRAME_NOTE} "${f.label}" */\n${frameCss(f)}`).join('\n');
   if (css) {
     const styleEl = helmet?.children.find((c): c is JsxElement => c.type === 'element' && c.tag === 'style') ?? null;
     const styleExpr = styleEl?.children.find((c) => c.type === 'expression') ?? null;
@@ -695,9 +705,8 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     else helmetInsert(`<style>{\`\n${escapeTemplate(css)}\n\`}</style>`);
   }
   for (const frame of frames) {
-    const style = frame.height ? ` style={{ minHeight: '${frame.height}px' }}` : '';
     const label = frame.label === 'Iframe' ? '' : ` role="group" aria-label=${JSON.stringify(frame.label)}`;
-    docEdits.push({ start: frame.iframe.start, end: frame.iframe.end, text: `{/* ${IFRAME_NOTE} */}\n<div id="${escapeHtml(frame.id)}"${label}${style}>${frame.content}</div>` });
+    docEdits.push({ start: frame.iframe.start, end: frame.iframe.end, text: `{/* ${IFRAME_NOTE} */}\n<div id="${escapeHtml(frame.id)}"${label}>${frame.content}</div>` });
     appliedMarkup.push(`<Iframe> "${frame.label}" → inlined as the <div> with id "${frame.id}", its style scoped into the Helmet style, its script merged into the Helmet script`);
   }
   flushHelmetInserts();
