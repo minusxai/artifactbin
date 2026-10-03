@@ -285,8 +285,11 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
 });
 
 /**
- * THE CREDIT LINE — the copy says where it came from, in the served document's
- * own footer, and says it WITHOUT becoming an existence oracle.
+ * THE CREDIT LINE — the copy says where it came from, in the app page's own
+ * bar around the document's frame (solid/document/DocumentActions, from the
+ * page answer's `surface.author.forkedFrom`), and says it WITHOUT becoming an
+ * existence oracle. The served document itself (`/raw`, what the frame loads)
+ * carries no chrome and never names the source at all.
  *
  * The provenance is a fact about the copy, so it is resolved at render from
  * `forked_from` rather than written into the markup: an agent that rewrites
@@ -321,19 +324,24 @@ describe('the fork credit line', () => {
   });
   const served = async (id: string, query = '') =>
     (await rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params(id))).text();
+  const credit = async (id: string) =>
+    (await (await pageRoute(new Request(`${BASE}/api/page/artifact/${id}`), params(id))).json()).surface.author.forkedFrom;
 
   it('names and links a source anyone may read', async () => {
     const w = await world();
     asSession({ id: w.bob.id, email: w.bob.email });
     const copy = (await (await fork(w.doc.id)).json()) as { id: string };
     noSession();
-    const html = await served(copy.id);
-    expect(html).toContain('data-mx-forked-from');
-    expect(html).toContain('forked from');
     // The source is NAMED and reachable — the canonical address it would be
     // shared at (the handle and slug are decoration the resolver adds when the
     // owner has them; the id is what makes it an address).
-    expect(html).toMatch(new RegExp(`<a href="[^"]*${w.doc.id}[^"]*" target="_top" aria-label="Open the artifact this was forked from"`));
+    const named = await credit(copy.id);
+    expect(named.href).toContain(w.doc.id);
+    expect(named.label).toBe(named.href.replace(/^\//, ''));
+    // The document's own bytes carry no credit: the line is the app's, drawn around the frame.
+    const html = await served(copy.id);
+    expect(html).not.toContain('data-mx-forked-from');
+    expect(html).not.toContain(w.doc.id);
   });
 
   it('says nothing about an UNLISTED source — a fork is not a listing surface', async () => {
@@ -346,9 +354,8 @@ describe('the fork credit line', () => {
     const db = await getDb();
     await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [w.doc.id, 'unlisted']);
     noSession();
-    const html = await served(copy.id);
-    expect(html).toContain('forked from a document that is not public');
-    expect(html).not.toContain(w.doc.id);
+    expect(await credit(copy.id)).toEqual({ label: 'a document that is not public', href: null });
+    expect(await served(copy.id)).not.toContain(w.doc.id);
   });
 
   it('says the SAME thing for a private source, and for one that is gone', async () => {
@@ -360,19 +367,22 @@ describe('the fork credit line', () => {
     const db = await getDb();
     await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [copy.id, 'public']);
     noSession();
+    const said = await credit(copy.id);
+    expect(said).toEqual({ label: 'a document that is not public', href: null });
     const html = await served(copy.id);
-    expect(html).toContain('forked from a document that is not public');
     expect(html).not.toContain(w.doc.id);
 
-    // …and DELETED is byte-identical to private. One branch, so there is
+    // …and DELETED is identical to private. One branch, so there is
     // nothing here for a reader to tell the two apart with.
     await db.query('DELETE FROM artifacts WHERE id = $1', [w.doc.id]);
+    expect(await credit(copy.id)).toEqual(said);
     expect(await served(copy.id)).toBe(html);
   });
 
   it('a document nobody forked keeps the credits it always had', async () => {
     const w = await world();
     noSession();
+    expect(await credit(w.doc.id)).toBeNull();
     expect(await served(w.doc.id)).not.toContain('data-mx-forked-from');
   });
 });

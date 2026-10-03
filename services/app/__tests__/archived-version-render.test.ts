@@ -2,6 +2,11 @@
  * AN OLDER VERSION, IN THE BROWSER. `?version=N` on the served document renders that archived
  * version read-only for whoever may read the version history (the owner and editors), so a
  * live session can drive it and an image export can photograph it. Nobody else learns it exists.
+ *
+ * The line that says WHICH version this is ("Version 1 of 2 · read-only") is the app bar's
+ * (solid/document/DocumentChrome, pinned in solid/__tests__/document-chrome.test.tsx), drawn
+ * around the document's frame from the page answer's `archived`; the served document itself
+ * carries no chrome. So the numbers are asserted on the page answer and the bytes on `/raw`.
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -17,6 +22,13 @@ import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
+
+/** What the page answer tells the app bar about the version it is showing (null for the head). */
+async function archivedOf(id: string, token: string, query = '') {
+  const data = await pageData(request(`/api/page/artifact/${id}${query}`, { token }), params({ id }));
+  expect(data.status, await data.clone().text()).toBe(200);
+  return ((await data.json()) as { archived?: { version: number; head: number } | null }).archived ?? null;
+}
 
 async function twoVersions() {
   const owner = await mintToken('archived-render');
@@ -37,10 +49,11 @@ describe('?version=N on the served document', () => {
     const html = await old.text();
     expect(html).toContain('Version one');
     expect(html).not.toContain('Version two');
-    expect(html).toMatch(/version 1 of 2/i);
     expect(html).not.toMatch(/mutateUrl|\/mutate/);
+    expect(await archivedOf(id, owner.token, '?version=1')).toEqual({ version: 1, head: 2 });
     const head = await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }));
     expect(await head.text()).toContain('Version two');
+    expect(await archivedOf(id, owner.token)).toBeNull();
   });
 
   it('is not found for a reader who cannot read the version history, and for a version that does not exist', async () => {
@@ -110,7 +123,7 @@ describe('who may open an archived version', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('Version two');
-    expect(html).toMatch(/version 2 of 2/i);
+    expect(await archivedOf(id, owner.token, '?version=2')).toEqual({ version: 2, head: 2 });
     // Never cached, and never an address that could be mistaken for the head's.
     expect(res.headers.get('cache-control')).toBe('no-store');
   });
