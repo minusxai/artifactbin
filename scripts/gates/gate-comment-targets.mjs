@@ -5,6 +5,7 @@ import { launchChromium } from './lib/browser.mjs';
 import { expect } from 'playwright/test';
 import { startDocument, becomeOwner } from '../lib/start-doc.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { documentLocator } from './lib/page-facts.mjs';
 import { commentTargetsMarkup } from '../fixtures/comment-targets.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
@@ -29,7 +30,11 @@ try {
   page.on('response',async response=>{if(response.status()>=400&&response.url().includes('/annotations'))console.error('Annotation request failed:',response.status(),await response.text());});
   await becomeOwner(page,base,seed.token);
   await page.goto(`${base}/a/${seed.id}`);
-  const cardText=page.locator('p[data-mx-comment-owner="order-cards"]').filter({hasText:'Alice Chen'}).first();
+  // The document runs in its own frame on its own origin; the rail, composer and tools are the app page's.
+  const doc=documentLocator(page);
+  // `Locator.and` cannot pair two locators inside a frame, so "is this one marked" is asked of its attribute.
+  const annotated=(locator,timeout=30000)=>expect(locator).toHaveAttribute('data-mx-annotated',/.*/,{timeout});
+  const cardText=doc.locator('p[data-mx-comment-owner="order-cards"]').filter({hasText:'Alice Chen'}).first();
   await cardText.waitFor();
   await openArtifactControls(page);
   await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
@@ -59,50 +64,50 @@ try {
   assert.equal(repeatComment.anchor.nodeId,'order-cards');
   assert.equal(repeatComment.range.target.kind,'repeat');
   assert.equal(repeatComment.range.target.scopes[0].key,'order-101');
-  await page.getByRole('button',{name:'Reverse JSX rows',exact:true}).click();
-  await page.getByRole('button',{name:'Rename JSX Alice',exact:true}).click();
+  await doc.getByRole('button',{name:'Reverse JSX rows',exact:true}).click();
+  await doc.getByRole('button',{name:'Rename JSX Alice',exact:true}).click();
   await cardText.filter({hasText:'updated'}).waitFor();
-  await cardText.and(page.locator('[data-mx-annotated]')).waitFor({ timeout: 10000 }).catch(async error => {
+  await annotated(cardText, 10000).catch(async error => {
     console.error('Compiled repeat pin state:', JSON.stringify({
       stored: repeatComment.range.target,
-      cards: await page.locator('[data-mx-comment-owner="order-cards"]').evaluateAll(nodes => nodes.map(node => ({
+      cards: await doc.locator('[data-mx-comment-owner="order-cards"]').evaluateAll(nodes => nodes.map(node => ({
         text: node.textContent, target: node.getAttribute('data-mx-comment-target'), annotated: node.hasAttribute('data-mx-annotated'),
       }))),
-      owner: await page.locator('#order-cards').getAttribute('data-mx-annotated'),
+      owner: await doc.locator('#order-cards').getAttribute('data-mx-annotated'),
     }));
     throw error;
   });
 
-  const cell=page.locator('td[data-mx-comment-owner="order-table"]').filter({hasText:'Alice Chen'}).first();
+  const cell=doc.locator('td[data-mx-comment-owner="order-table"]').filter({hasText:'Alice Chen'}).first();
   await select();await cell.click();await save('Keep this comment on the table customer');
   stored=await annotations();
   const tableComment=stored.find(item=>item.thread[0].body==='Keep this comment on the table customer');
   if (tableComment?.range.target.rowKey !== 'order-101') console.error('Compiled table target state:', JSON.stringify({
     stored: tableComment?.range.target,
-    cells: await page.locator('td[data-mx-comment-owner="order-table"]').evaluateAll(nodes => nodes.map(node => ({
+    cells: await doc.locator('td[data-mx-comment-owner="order-table"]').evaluateAll(nodes => nodes.map(node => ({
       text: node.textContent, target: node.getAttribute('data-mx-comment-target'), annotated: node.hasAttribute('data-mx-annotated'),
     }))),
   }));
   assert.equal(tableComment.anchor.nodeId,'order-table');
   assert.deepEqual(tableComment.range.target,{kind:'table',rowKey:'order-101',columnKey:'customer'});
-  await page.getByRole('button',{name:'Remove JSX Alice',exact:true}).click();
+  await doc.getByRole('button',{name:'Remove JSX Alice',exact:true}).click();
   await cell.waitFor({state:'detached'}).catch(async error => {
     console.error('Compiled removed row state:', JSON.stringify({
-      cells: await page.locator('td[data-mx-comment-owner="order-table"]').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent, target: node.getAttribute('data-mx-comment-target') }))),
-      cards: await page.locator('p[data-mx-comment-owner="order-cards"]').allTextContents(),
-      errors: await page.getByRole('alert').allTextContents(),
-      remove: await page.getByRole('button',{name:'Remove JSX Alice',exact:true}).evaluate(node => ({ disabled: node.disabled, busy: node.getAttribute('aria-busy'), reason: node.getAttribute('aria-description') })),
+      cells: await doc.locator('td[data-mx-comment-owner="order-table"]').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent, target: node.getAttribute('data-mx-comment-target') }))),
+      cards: await doc.locator('p[data-mx-comment-owner="order-cards"]').allTextContents(),
+      errors: [...await page.getByRole('alert').allTextContents(), ...await doc.getByRole('alert').allTextContents()],
+      remove: await doc.getByRole('button',{name:'Remove JSX Alice',exact:true}).evaluate(node => ({ disabled: node.disabled, busy: node.getAttribute('aria-busy'), reason: node.getAttribute('aria-description') })),
     }));
     throw error;
   });
-  await page.getByRole('button',{name:'Restore JSX Alice',exact:true}).click();
-  await cell.and(page.locator('[data-mx-annotated]')).waitFor();
+  await doc.getByRole('button',{name:'Restore JSX Alice',exact:true}).click();
+  await annotated(cell);
   assert.equal((await annotations()).find(item=>item.id===tableComment.id).anchor.nodeId,'order-table');
   console.log('PASS For and DataTable target identity after sorting, updates, removal and restoration');
 
   await page.reload();
-  await page.locator('td[data-mx-comment-owner="order-table"][data-mx-annotated]').filter({hasText:'Alice Chen'}).waitFor();
-  await cardText.and(page.locator('[data-mx-annotated]')).waitFor();
+  await doc.locator('td[data-mx-comment-owner="order-table"][data-mx-annotated]').filter({hasText:'Alice Chen'}).waitFor();
+  await annotated(cardText);
   assert.equal((await annotations()).length,2);
   console.log('PASS persisted comments reconnect after a fresh launch');
   // A saved markup comment must not steal the first click of a word selection.
@@ -111,12 +116,12 @@ try {
   await expect(cardText).not.toHaveCSS('cursor','pointer');
   await cardText.dblclick({position:{x:15,y:8}});
   await expect(page.getByLabel('Reply to annotation',{exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Comment on selected text',exact:true}).click();
+  await doc.getByRole('button',{name:'Comment on selected text',exact:true}).click();
   await save('Different words on an already commented markup node');
   await cardText.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());
 
 
-  const unkeyed=page.locator('#index-cards');
+  const unkeyed=doc.locator('#index-cards');
   const unkeyedAlice=unkeyed.locator('p').filter({hasText:'Alice Chen'}).first();
   await select();await unkeyedAlice.click();await save('Unkeyed list owner comment');
   let ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed list owner comment');
@@ -124,12 +129,12 @@ try {
   // Wait for the re-run to redraw the rows: a selection made before it lands is on text it replaces.
   const unkeyedOrder=()=>unkeyed.locator('p').allTextContents();
   const orderBefore=await unkeyedOrder();
-  await page.getByRole('button',{name:'Reverse JSX rows',exact:true}).click();
+  await doc.getByRole('button',{name:'Reverse JSX rows',exact:true}).click();
   await expect.poll(unkeyedOrder).not.toEqual(orderBefore);
   await expect(unkeyed).toHaveAttribute('data-mx-annotated','');
   await expect(unkeyed.locator('[data-mx-comment-target], [data-mx-annotated]')).toHaveCount(0);
   await unkeyedAlice.dblclick({position:{x:25,y:20}});
-  await page.getByRole('button',{name:'Comment on selected text',exact:true}).click();
+  await doc.getByRole('button',{name:'Comment on selected text',exact:true}).click();
   await save('Unkeyed words retain only their list owner');
   ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed words retain only their list owner');
   assert.equal(ownerComment.anchor.nodeId,'index-cards');assert.equal(ownerComment.range,null);assert(ownerComment.quote);
@@ -143,12 +148,12 @@ try {
   await save('Unkeyed area retains only its list owner');
   ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed area retains only its list owner');
   assert.equal(ownerComment.anchor.nodeId,'index-cards');assert.equal(ownerComment.range,null);
-  await page.reload();await expect(page.locator('#index-cards')).toHaveAttribute('data-mx-annotated','');
-  await expect(page.locator('#index-cards [data-mx-comment-target], #index-cards [data-mx-annotated]')).toHaveCount(0);
+  await page.reload();await expect(doc.locator('#index-cards')).toHaveAttribute('data-mx-annotated','');
+  await expect(doc.locator('#index-cards [data-mx-comment-target], #index-cards [data-mx-annotated]')).toHaveCount(0);
   console.log('PASS optional For keys render by index and persist only owner-level comments across reorder/reload');
 
   // Real pointer drag over a static node, then ensure the composer remains above app content.
-  const intro=page.locator('#lifecycle');
+  const intro=doc.locator('#lifecycle');
   await select();
   await page.getByRole('button',{name:'Screenshot',exact:true}).click();
   await expect(page.getByRole('status',{name:'Screenshot tool active'})).toHaveText(/drag an area/);

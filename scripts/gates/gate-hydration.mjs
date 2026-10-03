@@ -1,7 +1,8 @@
-/** Compiled reader handover: served story survives adoption and yields to editing. */
+/** Compiled reader handover: the served story survives the island boot in its frame and yields to editing. */
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { becomeAccountOwner, publishAs } from '../lib/start-doc.mjs';
 import { startMailSink } from '../lib/mail-login.mjs';
 import { publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
@@ -10,10 +11,11 @@ import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('hydration');
 const browser = await launchChromium();
-const waitFor = async (page, expr, ms = 20000) => {
+/** Poll an expression in a page or frame until it is truthy. */
+const waitFor = async (target, expr, ms = 20000) => {
   for (const deadline = Date.now() + ms; Date.now() < deadline;) {
-    if (await page.evaluate(expr)) return true;
-    await page.waitForTimeout(100);
+    if (await target.evaluate(expr).catch(() => false)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
   return false;
 };
@@ -21,8 +23,9 @@ const waitFor = async (page, expr, ms = 20000) => {
 const READER_HEADER = 'x-mx-reader';
 
 /**
- * The compiled page as served: its story root (a body child, no wrapper) and every element in it,
- * captured at DOMContentLoaded, before the app can have run — and every script the page fetches.
+ * The compiled page as served IN THE DOCUMENT'S FRAME: its story root (a body child, no wrapper) and every element
+ * in it, captured at DOMContentLoaded, before any island can have run. An init script runs in every frame; on the
+ * app page (which carries no story) it captures nothing.
  */
 const COMPILED_PROBE = () => {
   const state = (window.__compiledTakeover = { story: null, served: [], staticNodes: [] });
@@ -38,13 +41,13 @@ const COMPILED_PROBE = () => {
         text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') }));
   });
 };
+/** The verdict, read inside the document's frame: the served story is the one still running there. */
 const COMPILED_VERDICT = () => {
   const { story, served, staticNodes } = window.__compiledTakeover ?? { story: null, served: [], staticNodes: [] };
-  const root = document.getElementById('root');
   return {
     captured: !!story, served: served.length,
-    adopted: !!story && !!root && !root.hidden && root.contains(story),
-    same: !!story && document.querySelector('#root [data-mx-inline-story]') === story,
+    // There is no adoption any more (the app page frames the document): the served element is simply still THE story.
+    same: !!story && story.isConnected && document.querySelector('[data-mx-inline-story]') === story,
     lost: story ? served.filter((n) => !story.contains(n)).length : -1,
     staticNodes: staticNodes.length,
     staticChanged: staticNodes.filter(({ node, attrs, text }) => !story?.contains(node)
@@ -52,8 +55,7 @@ const COMPILED_VERDICT = () => {
       || [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') !== text).length,
     reactOwned: story ? [story, ...served].filter((n) => Object.keys(n).some((k) => k.startsWith('__reactFiber$'))).length : -1,
     mode: story?.__mxIslands?.mode?.() ?? null,
-    servedChrome: !!document.querySelector('body > [data-mx-reader-chrome]'),
-    appRoot: !!root,
+    framed: document.documentElement.classList.contains('mx-framed'),
   };
 };
 
@@ -78,48 +80,53 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
   const open = async (context, path) => {
     const page = await context.newPage();
     const errors = [];
-    const scripts = [];
     page.on('pageerror', (e) => errors.push(`page error: ${String(e).slice(0, 300)}`));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(`${m.text().slice(0, 300)} (${m.location().url})`); });
-    page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
     await page.addInitScript(COMPILED_PROBE);
     const response = await page.goto(`${B}${path}`, { waitUntil: 'load', timeout: 90000 });
-    return { page, errors, scripts, served: response?.headers()[READER_HEADER] ?? 'absent' };
+    const doc = await documentFrame(page, { timeout: 60000 });
+    return { page, doc, errors, served: response?.headers()[READER_HEADER] ?? 'absent' };
+  };
+  /** Poll the frame's verdict until `want`, or give up: returns the last verdict. */
+  const verdictWhen = async (page, want, ms = 30000) => {
+    let verdict = null;
+    for (const deadline = Date.now() + ms; Date.now() < deadline;) {
+      verdict = await (await documentFrame(page)).evaluate(COMPILED_VERDICT).catch(() => null);
+      if (verdict && want(verdict)) return verdict;
+      await page.waitForTimeout(100);
+    }
+    return verdict ?? { captured: false, served: 0, same: false, lost: -1, staticNodes: 0, staticChanged: -1, reactOwned: -1, mode: null, framed: false };
   };
   const judge = (label, verdict, errors) => {
-    check(verdict.captured && verdict.served > 0, `${label}: the compiled story was served as the body's own root (${verdict.served} elements)`);
-    check(verdict.adopted && verdict.same, `${label}: the app adopted THAT element into its root, not a copy`);
-    check(verdict.lost === 0, `${label}: every served element is still in the adopted story (${verdict.lost} lost)`);
+    check(verdict.captured && verdict.served > 0, `${label}: the compiled story was served as the framed document's own root (${verdict.served} elements)`);
+    check(verdict.framed, `${label}: the document runs in the app page's frame`);
+    // "The app adopted THAT element into its root" is retired: the app page frames the document and adopts nothing.
+    check(verdict.same, `${label}: the served story element is still the document's story, not a copy`);
+    check(verdict.lost === 0, `${label}: every served element is still in the story (${verdict.lost} lost)`);
     check(verdict.reactOwned === 0, `${label}: no React fiber on the island story (a guard against React returning) (${verdict.reactOwned} owned)`);
     check(verdict.mode === 'read', `${label}: the islands are still running, in read mode (${verdict.mode})`);
-    check(!verdict.servedChrome, `${label}: the served chrome gave way to the app's`);
+    // "The served chrome gave way to the app's" is retired: the document carries no chrome; the bar is the app page's.
     check(errors.length === 0, `${label}: no page error (${errors.length}: ${errors[0] ?? ''})`);
   };
 
-  // AN ANONYMOUS READER: nothing of the app after idle; reaching for Comment loads it, and it adopts.
+  // AN ANONYMOUS READER. "Nothing of the app after idle; reaching for Comment loads it" is retired: every reader gets
+  // the app page, which frames the document (lib/serving/document-frame); the islands boot in the frame regardless.
   {
-    const { page, errors, scripts, served: header } = await open(anonymous, kitPath);
+    const { page, errors, served: header } = await open(anonymous, kitPath);
     check(header === 'compiled', `anonymous: ${kitPath} is served compiled (${header})`);
-    await page.waitForLoadState('networkidle').catch(() => {});
-    await page.waitForTimeout(3000);
-    const idle = await page.evaluate(COMPILED_VERDICT);
-    const before = scripts.length;
-    check(!idle.appRoot && !idle.adopted, `anonymous: after idle the app has not loaded (${before} scripts: ${scripts.join(' ')})`);
-    await page.hover('body > [data-mx-reader-chrome] [data-mx-reader-action="comment"]');
-    const adopted = await waitFor(page, `(${COMPILED_VERDICT})().adopted`, 30000);
-    check(adopted && scripts.length > before, `anonymous: reaching for Comment loaded the app (${scripts.length - before} more scripts)`);
+    const verdict = await verdictWhen(page, (v) => v.mode === 'read');
     await page.waitForTimeout(500);
-    judge('anonymous', await page.evaluate(COMPILED_VERDICT), errors);
+    judge('anonymous', verdict.mode === 'read' ? await (await documentFrame(page)).evaluate(COMPILED_VERDICT) : verdict, errors);
     await page.close();
   }
 
-  // THE OWNER: the app loads on idle, with no gesture at all, and adopts the same element.
+  // THE OWNER: the islands boot in the frame with no gesture at all, on the same served element.
   {
     const { page, errors } = await open(ownerContext, kitPath);
-    const adopted = await waitFor(page, `(${COMPILED_VERDICT})().adopted`, 30000);
-    check(adopted, 'owner: the app loaded on idle, without a gesture, and adopted the story');
+    const verdict = await verdictWhen(page, (v) => v.mode === 'read');
+    check(verdict.mode === 'read', 'owner: the islands booted in the frame without a gesture');
     await page.waitForTimeout(500);
-    judge('owner', await page.evaluate(COMPILED_VERDICT), errors);
+    judge('owner', await (await documentFrame(page)).evaluate(COMPILED_VERDICT), errors);
     await page.close();
   }
 
@@ -130,23 +137,27 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
     const path = `/a/${doc.id}`;
     const header = await compiledServed(path);
     check(header === 'compiled', `edit: the new document is served compiled (${header})`);
-    const { page, errors } = await open(ownerContext, path);
-    check(await waitFor(page, `(${COMPILED_VERDICT})().adopted`, 30000), 'edit: the owner\'s app adopted the compiled story');
+    const { page, doc: frame, errors } = await open(ownerContext, path);
+    check((await verdictWhen(page, (v) => v.mode === 'read')).mode === 'read', 'edit: the owner\'s frame booted the compiled story');
     const head = await ownerPage.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), doc.id);
-    await page.click('#root [data-mx-reader-rail] [data-mx-reader-action="edit"]');
+    // The rail's Edit is the app bar's own button now (solid/document/DocumentChrome).
+    await page.click('header[aria-label="Page bar"] [aria-label="Edit"]');
     await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
-    check(await waitFor(page, 'window.__compiledTakeover.story.isConnected && document.querySelector("#root [data-mx-inline-story]") === window.__compiledTakeover.story && !!document.querySelector("#root #para")?.isContentEditable', 20000),
-      'edit: the adopted compiled story stayed mounted and became editable');
-    check(await page.evaluate(() => window.__compiledTakeover.story.__mxIslands?.mode?.()) === 'edit', 'edit: the islands entered edit mode');
-    await waitFor(page, '!!document.querySelector("#root #para")?.isContentEditable', 20000);
-    await page.evaluate(() => {
-      const el = document.querySelector('#root #para');
+    check(await waitFor(frame, 'window.__compiledTakeover.story.isConnected && document.querySelector("[data-mx-inline-story]") === window.__compiledTakeover.story && !!document.querySelector("#para")?.isContentEditable', 20000),
+      'edit: the compiled story stayed mounted in its frame and became editable');
+    check(await frame.evaluate(() => window.__compiledTakeover.story.__mxIslands?.mode?.()) === 'edit', 'edit: the islands entered edit mode');
+    await waitFor(frame, '!!document.querySelector("#para")?.isContentEditable', 20000);
+    // A click gives the frame the page's keyboard focus; the selection then takes the paragraph's whole text.
+    await frame.click('#para');
+    await frame.evaluate(() => {
+      const el = document.querySelector('#para');
       el.focus();
       const range = document.createRange();
       range.selectNodeContents(el);
       getSelection().removeAllRanges();
       getSelection().addRange(range);
     });
+    // The keyboard goes to the focused frame.
     await page.keyboard.type('Edited from the compiled page.');
     await page.click('[aria-label="Exit edit mode"]');
     let after = head;
@@ -163,14 +174,14 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
       again = await compiledServed(path);
     }
     check(again === 'compiled', `edit: reloading serves the compiled page again (${again})`);
-    const { page: reloaded } = await open(anonymous, path);
-    check(await reloaded.evaluate(() => document.querySelector('body > [data-mx-inline-story]')?.textContent?.includes('Edited from the compiled page.') ?? false),
+    const { page: reloaded, doc: reloadedDoc } = await open(anonymous, path);
+    check(await waitFor(reloadedDoc, 'document.querySelector("body > [data-mx-inline-story]")?.textContent?.includes("Edited from the compiled page.") ?? false', 10000),
       'edit: the reloaded compiled page shows the edit');
     await reloaded.close();
   }
 
   // Every page-speed lab fixture keeps its server-rendered static AST nodes, attributes, and direct text
-  // through the compiled island boot and app adoption. Dynamic island descendants are checked by the
+  // through the compiled island boot in the frame. Dynamic island descendants are checked by the
   // existing takeover and full-kit gates; their hydration attributes are owned by Solid.
   for (const fixture of fixtures) {
     const path = `/a/${fixture.id}`;
@@ -178,9 +189,11 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
     check(header === 'compiled', `static hydration ${fixture.key}: compiled response (${header})`);
     if (header !== 'compiled') continue;
     const { page, errors } = await open(ownerContext, path);
-    const adopted = await waitFor(page, `(${COMPILED_VERDICT})().adopted`, 30000);
-    const verdict = await page.evaluate(COMPILED_VERDICT);
-    check(adopted && verdict.staticNodes > 0 && verdict.staticChanged === 0,
+    // A prose fixture ships no island module (its mode stays null), so the boot is waited for only so long.
+    await verdictWhen(page, (v) => v.mode === 'read', 8000);
+    await page.waitForTimeout(500);
+    const verdict = await (await documentFrame(page)).evaluate(COMPILED_VERDICT);
+    check(verdict.captured && verdict.staticNodes > 0 && verdict.staticChanged === 0,
       `static hydration ${fixture.key}: ${verdict.staticNodes} static nodes retained attributes and direct text (${verdict.staticChanged} changed)`);
     check(errors.length === 0, `static hydration ${fixture.key}: no page errors (${errors[0] ?? ''})`);
     await page.close();
