@@ -11,4 +11,4 @@ export const FONT_FILES = 'https://fonts.gstatic.com';
  * The hosts an author's `<iframe>` may frame without declaring them: the players the retired `<Video>` card
  * constructed. Any other host is a `<meta name="csp-frame">` in the document's Helmet (lib/story/document/csp-extensions).
  */
-export const FRAME_HOSTS = ['https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://www.loom.com'] as const;
+export const FRAME_HOSTS = ['https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://www.loom.com'] as const;
