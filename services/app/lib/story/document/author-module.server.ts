@@ -27,6 +27,8 @@ import { AUTHOR_VENDOR_EXPORTS } from '@/lib/islands/contract';
 import type { HelmetContent } from './helmet';
 
 export const PAGE_GLOBAL = '__mxPageBindings';
+/** Where a bare npm specifier resolves (`three` → `https://esm.sh/three`): the module host every script may load from. */
+export const ESM_CDN_ORIGIN = 'https://esm.sh';
 export const PAGE_SPECIFIER = 'page';
 /** What `page` exports: each binds one declared name of its kind. */
 export const PAGE_EXPORTS = ['signal', 'query', 'mutation'] as const;
@@ -255,7 +257,7 @@ async function build(script: string, names: AuthorModuleNames): Promise<AuthorMo
           errors.push(`import "${spec}": a page script is Solid; there is no Preact or React here. Use createSignal, createEffect, createMemo, For and Show from 'solid-js', and signal('$name')/query('$name')/mutation('$name') from 'page'`);
           return { path: spec, external: true };
         }
-        if (/^[@\w][\w./@-]*$/.test(spec)) return { path: `https://esm.sh/${spec}`, external: true };
+        if (/^[@\w][\w./@-]*$/.test(spec)) return { path: `${ESM_CDN_ORIGIN}/${spec}`, external: true };
         errors.push(`import "${spec}": not a package name or a URL`);
         return { path: spec, external: true };
       });

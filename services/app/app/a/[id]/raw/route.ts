@@ -366,10 +366,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const appStory = fragment?.surface === 'app';
       {
         const capture = byExportKey && !chrome;
-        let prepared = await preparedPageFor(artifact, at, base);
+        let prepared = await preparedPageFor(artifact, at);
         if (byExportKey && request.headers.get('x-mx-compiled-backfill') === 'recompile') {
           // A page prepared under an older stylesheet is prepared again whole (its compile with it); otherwise only recompiled.
-          if (prepared.stale) prepared = await reprepareStoredPage(artifact, at, base);
+          if (prepared.stale) prepared = await reprepareStoredPage(artifact, at);
           else {
             const compiled = await recompilePage(prepared.row, at, prepared.page);
             if (compiled) prepared.page.compiled = compiled;

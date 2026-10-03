@@ -84,6 +84,8 @@ export interface InPlaceEditOptions {
   onFlush?: () => void;
   /** …and the comment shortcut (⌘⌥M) pressed inside it. */
   onCommentKey?: () => void;
+  /** "Edit script" on a script component's mount badge: open the Helmet script at that component's export. */
+  onOpenScript?: (component: string) => void;
   /** A slide was renamed from the deck's own rail. */
   onSlideTitle?: (path: string, title: string) => void;
   /**
@@ -156,6 +158,9 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
               break;
             case 'mx:comment-key':
               options.onCommentKey?.();
+              break;
+            case 'mx:open-script':
+              if (typeof event.data.component === 'string') options.onOpenScript?.(event.data.component);
               break;
             case 'mx:block-edit': {
               const next = editBlock(sourceRef.current, event.data.command);

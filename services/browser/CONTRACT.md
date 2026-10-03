@@ -9,9 +9,13 @@ A Chromium that renders a URL to an image (and, for diagrams, hands back the SVG
 `format` `png|jpg` (+ `quality`) · `viewport` · `selector` (the element to shoot) · `capture` `"full" | "card" | "preview" | { card: { x, y, width } } | { slide: n }` ·
 `sameOriginOnly` (abort every other origin) · `allowedOrigins` (optional exact additional origins for generic callers) ·
 `assetOrigin` (deployment-owned public cached-asset origin, internally fulfilled as described below) ·
-`waitForManagedFrames` (wait for author-ready handshakes) · `injectCss` · `settleMs` · `timeoutMs`.
+`waitForManagedFrames` (wait for author-ready handshakes) · `waitForMountsMs` (wait, at most that long, until every
+script component mount `[data-mx-mount]` under the selector has been rendered by the page's script instead of showing
+only its server fallback; the cap is not a failure) · `injectCss` · `settleMs` · `timeoutMs`.
 
-App exports set `sameOriginOnly` and `assetOrigin`, **not** a broad `allowedOrigins` exception.
+App exports set `sameOriginOnly` and `assetOrigin`, **not** a broad `allowedOrigins` exception: a document with a
+Helmet script adds only the module hosts its script imports from (the ESM CDN, and the host of each full-URL import),
+with `waitForMountsMs`, so its components render before the shot.
 The page is loaded through its existing internal render URL. Requests to `assetOrigin` retain that URL
 in Chromium, but only public byte GET/HEAD routes admitted by `isPublicAssetRequest` are fetched by the
 renderer from the render URL's internal origin. A fixed `Host`, derived only from `assetOrigin`, selects
@@ -44,7 +48,7 @@ FROM THE SERVICE'S NETWORK — a host that network resolves to the app, not 127.
 that Chrome canonicalises into a real TLD (`app` → `.app`, HSTS-preloaded). Private network only.
 
 `POST /harvest` with an `SvgHarvestRequest` loads the page exactly as `/render` does — same admission routing
-(`sameOriginOnly`, `allowedOrigins`, `assetOrigin`), blocked service workers, readiness waits (diagrams, managed
+(`sameOriginOnly`, `allowedOrigins`, `assetOrigin`), blocked service workers, readiness waits (diagrams, script mounts, managed
 frames, settle, charts), deadline and serialised queue — and answers JSON instead of pixels:
 `{ ok:true, loads:[[{ attributes, width, height, svg }]] }`, the SVG text of every element under `selector` matching
 `collect` whose `<img>` holds an `image/svg+xml` `data:` URL (the kit draws its diagrams that way), with that

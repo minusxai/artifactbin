@@ -1,13 +1,13 @@
 /**
- * THE COMPILED /raw PAGE'S OWN BEHAVIOUR (`@mx/page`, docs/phase2-architecture.md §2.2, §9): what
+ * THE STANDALONE DOCUMENT'S OWN BEHAVIOUR (`@mx/page`, docs/phase2-architecture.md §2.2, §9): what
  * the standalone document used to do with two inline preludes and its reading-position module, as one
  * tiny framework-free chunk from the shared island build — the compiled page runs no inline script.
- * Loaded by every compiled `/raw` reader copy (never a capture), with islands or without.
+ * Loaded by every compiled standalone reader copy (never a capture), with islands or without.
  *
- *  1. `mx-framed` on `<html>` when a parent frames the document (the former MODE_PRELUDE).
+ *  1. `mx-framed` on `<html>` when the app page frames the document (the former MODE_PRELUDE).
  *  2. The reader's per-visit colour override from the `mx:doc:` window.name envelope
- *     (lib/story-runtime/reader-mode), on `<html>` and the story root — an opaque origin has no
- *     storage, so this is the only thing that survives a same-tab reload.
+ *     (lib/story-runtime/reader-mode), on `<html>` and the story root — the document runs on its own
+ *     origin and shares no storage with the app, so this is the only thing that survives a same-tab reload.
  *  3. Top-level, on a page with NO island module (prose, a deck without islands): the document's
  *     own live stream (./live). A page with islands has `boot` hold it, seeded from its snapshot.
  *  4. Top-level: puts the reader back where a live reload left them, held against a settling layout
@@ -40,7 +40,7 @@ import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
  */
 export const CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
 
-/** Report a framed reader's scroll to the shell, which cannot inspect an opaque frame. */
+/** Report a framed reader's scroll to the app page, which cannot inspect a frame on another origin. */
 function relayFrameScroll(win: Window, doc: Document): () => void {
   if (typeof win.parent.postMessage !== 'function') return () => {};
   let queued = false;

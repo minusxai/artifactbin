@@ -494,6 +494,13 @@ interface StoryFlowEditMessage { selection?:EditorSelectionChange; type: typeof 
 export const STORY_TEXT_EDIT_MESSAGE = 'mx:text-edit';
 interface StoryTextEditMessage { type: typeof STORY_TEXT_EDIT_MESSAGE; nonce: string; path: string; innerHtml: string }
 
+/**
+ * Frame → parent: the person pressed "Edit script" on a script component's mount badge (solid/editor/dom-mounter).
+ * `component` is the mount's name; the parent opens the Helmet script in the source editor at its export.
+ */
+export const STORY_OPEN_SCRIPT_MESSAGE = 'mx:open-script';
+interface StoryOpenScriptMessage { type: typeof STORY_OPEN_SCRIPT_MESSAGE; nonce: string; component: string }
+
 /** Frame → parent: there is uncommitted typing (from the first `input` to the commit). Gates remote adoption. */
 export const STORY_TYPING_MESSAGE = 'mx:typing';
 interface StoryTypingMessage { type: typeof STORY_TYPING_MESSAGE; nonce: string; active: boolean }
@@ -897,7 +904,7 @@ type StoryEditFrameMessage =
   | StorySelectionActionMessage
   | StoryEditKeyMessage | StoryCommittedMessage | StoryLayoutEditMessage | StorySlideTitleMessage
   | StoryImageDropMessage | StoryImageReplaceMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage
-  | StoryEditFlushMessage | StoryCommentKeyMessage;
+  | StoryEditFlushMessage | StoryCommentKeyMessage | StoryOpenScriptMessage;
 export type StoryEditParentMessage =
   | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
@@ -909,6 +916,7 @@ const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
   STORY_LAYOUT_EDIT_MESSAGE, STORY_SLIDE_TITLE_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_IMAGE_REPLACE_MESSAGE,
   STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE,
   STORY_EDIT_FLUSH_MESSAGE, STORY_COMMENT_KEY_MESSAGE,
+  STORY_OPEN_SCRIPT_MESSAGE,
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
   STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,

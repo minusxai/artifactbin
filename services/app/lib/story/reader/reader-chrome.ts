@@ -56,7 +56,7 @@ interface ReaderSignIn {
   callbackUrl: string;
 }
 
-/** The fork ASK: an anchor the shell performs, since an opaque document cannot POST. */
+/** The fork ASK: an anchor the shell performs, since the document's own origin holds no app session to POST with. */
 interface ReaderFork {
   href: string;
 }
@@ -243,7 +243,7 @@ const SIGN_IN_LABEL: Record<'commenter' | 'editor', string> = {
   editor: 'log in to edit',
 };
 
-/** The login door — an anchor and nothing else; an opaque document cannot act. */
+/** The login door — an anchor and nothing else; the document's own origin holds no app session to act with. */
 const renderSignIn = (signIn: ReaderSignIn): string =>
   `<a class="mx-reader-signin" data-mx-signin href="/login?callbackUrl=${escapeHtml(encodeURIComponent(signIn.callbackUrl))}"`
   + ` target="_top" aria-label="${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}">${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}</a>`;

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { createSignal } from 'solid-js';
-import { STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_FLOW_EDIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_FLOW_EDIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_OPEN_SCRIPT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
 import { createInPlaceEdit } from '../create-in-place-edit';
 import { createEditorSource } from '../create-editor-source';
 import { renderHook } from '@/solid/__tests__/helpers';
@@ -183,4 +183,16 @@ it('takes the keys a framed document forwards: a signed flush and comment shortc
   expect(onFlush).toHaveBeenCalledTimes(2);
   expect(onCommentKey).toHaveBeenCalledTimes(1);
   expect(onHistory).toHaveBeenCalledWith('undo');
+});
+
+it('opens the script for a mount badge only on a message carrying the session nonce', () => {
+  const { runtimeRef, emit, emitUnsigned } = fakeRuntime();
+  const onOpenScript = vi.fn();
+  renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: '<p>draft</p>' }, editing: true, sessionNonce: NONCE, onSourceEdited: () => {}, onOpenScript,
+  }));
+  emitUnsigned({ type: STORY_OPEN_SCRIPT_MESSAGE, component: 'Forged' });
+  expect(onOpenScript).not.toHaveBeenCalled();
+  emit({ type: STORY_OPEN_SCRIPT_MESSAGE, component: 'Sparkline' });
+  expect(onOpenScript).toHaveBeenCalledWith('Sparkline');
 });

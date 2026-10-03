@@ -15,11 +15,14 @@ import { repathFlowView } from '@/lib/editor-v2/flow-view';
 import { GridEdit, type GridTile } from '@/solid/editor/GridEdit';
 import { discoverSlides } from '@/lib/story-runtime/slides';
 import { AST_PATH_ATTR as AST_PATH } from '@/lib/story-ui/ast-path';
+import { isScriptComponent, MOUNT_ATTR } from '@/lib/compiled-page/script-mount';
 
 export interface CompiledEditCallbacks {
   onFlow(path: string, expected: string, replacement: string, group?: string, selection?: EditorSelectionChange): void;
   onLayout?(rects: StoryLayoutRect[]): void;
   onSlideTitle?(path: string, title: string): void;
+  /** "Edit script" on a script component's mount badge (`component` is the mount's name). */
+  onOpenScript?(component: string): void;
   onError?(message: string): void;
   onBusy?(busy: boolean): void;
   onView?(view: EditorView | null): void;
@@ -197,7 +200,7 @@ export function proseRegions(nodes: JsxNode[]): ProseRegion[] {
     for (let index = 0; index < siblings.length;) {
       const node = siblings[index]!;
       if (!isBlock(node)) {
-        if (node.type === 'element') walk(node.children, [parentPath, String(index)].filter(Boolean).join('.'));
+        if (node.type === 'element' && !isScriptComponent(node)) walk(node.children, [parentPath, String(index)].filter(Boolean).join('.'));
         index++;
         continue;
       }
@@ -258,6 +261,46 @@ const inIsland = (el: Element): boolean => !!el.parentElement?.closest('[data-hk
 /** Compiled blocks compared across a redraw: their AST paths are positional (a block added above moves them). */
 const compiledKey = (blocks: readonly Element[]): string => blocks.map((block) => block.outerHTML.replace(/ data-mx-ast="[^"]*"/g, '')).join('');
 const restoreKeyOf = (editor: RegionEditor): string => (editor.restoreKey ??= compiledKey(editor.restore));
+
+/** A script mount's badge: what renders the mount, and the way to its code. Editor chrome (`data-mx-node-chrome`). */
+function ScriptMountBadge(props: { name: string; onEdit: () => void }) {
+  const label = `${props.name} · rendered by the script`;
+  // Native listeners, stopped here: selection listens on the document in the capture phase for clicks, but a press
+  // on the badge must never select the block around it.
+  const stop = (event: Event) => event.stopPropagation();
+  return <div role="group" aria-label={label} data-mx-node-chrome="" contenteditable="false"
+    style={{ display: 'flex', 'align-items': 'center', gap: '8px', width: 'fit-content', margin: '0 0 6px', padding: '2px 4px 2px 8px',
+      font: '500 12px/1.5 system-ui, sans-serif', border: '1px dashed currentColor', 'border-radius': '6px', opacity: '0.8' }}>
+    <span>{label}</span>
+    <button type="button" on:pointerdown={stop} on:mousedown={stop}
+      on:click={(event) => { event.preventDefault(); props.onEdit(); }}
+      style={{ font: 'inherit', padding: '0 6px', border: '1px solid currentColor', 'border-radius': '4px', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>
+      Edit script
+    </button>
+  </div>;
+}
+
+/**
+ * Edit mode over a script component's mount: the script is stopped (lib/islands/boot), so the mount shows its
+ * server-rendered fallback (lib/islands/page-runtime puts it back). The fallback is not the author's to type into —
+ * the component replaces it when the script runs — so it is made inert, and a badge says what renders it with an
+ * "Edit script" control. Returns the undo: the mount exactly as served, before the script mounts over it again.
+ */
+function badgeScriptMount(mount: HTMLElement, callbacks: CompiledEditCallbacks): () => void {
+  const name = mount.getAttribute(MOUNT_ATTR) ?? '';
+  const madeInert: Element[] = [];
+  for (const child of mount.children) if (!child.hasAttribute('inert')) { child.setAttribute('inert', ''); madeInert.push(child); }
+  const host = mount.ownerDocument.createElement('div');
+  host.style.display = 'contents';
+  const dispose = render(() => <ScriptMountBadge name={name} onEdit={() => callbacks.onOpenScript?.(name)} />, host);
+  // Solid renders into the host; the host stays out of the morph's way (removed before any redraw).
+  mount.prepend(host);
+  return () => {
+    dispose();
+    host.remove();
+    for (const child of madeInert) child.removeAttribute('inert');
+  };
+}
 
 /** One region replaces only its authored prose siblings; adjacent compiled islands keep their DOM identity. */
 export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], callbacks: CompiledEditCallbacks, held?: HeldEditors): CompiledEditMount {
@@ -326,6 +369,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     label.append(control);
     cleanups.push(() => { activeInput?.replaceWith(title); control.remove(); });
   });
+  for (const mount of root.querySelectorAll<HTMLElement>(`[${MOUNT_ATTR}]`)) cleanups.push(badgeScriptMount(mount, callbacks));
   const at = (path: string): HTMLElement | null => root.querySelector<HTMLElement>(`[data-mx-ast="${CSS.escape(path)}"]`);
   const staticProp = (node: JsxNode, name: string): unknown => {
     const value = node.type === 'element' ? node.attributes.find((attr) => attr.name === name)?.value : undefined;
@@ -390,6 +434,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     for (let index = 0; index < siblings.length;) {
       const node = siblings[index]!;
       const path = [parentPath, String(index)].filter(Boolean).join('.');
+      // A script component's children are its fallback (the same walk as `proseRegions`): never edited inline.
+      if (isScriptComponent(node)) { index++; continue; }
       if (!isBlock(node)) {
         hosts.push(() => mountGrid(node, path));
         if (node.type === 'element' && isEditableTextHost(node)) {

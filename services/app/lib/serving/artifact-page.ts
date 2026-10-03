@@ -205,7 +205,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
    */
   if (search.get('part') === 'editor') {
     if (!isDoc || at || exporting || !canEdit(role)) return notFound();
-    const { row, page } = await preparedPageFor(artifact, null, baseUrl(request));
+    const { row, page } = await preparedPageFor(artifact, null);
     return { status: 200, body: {
       editId: artifact.edit_id, version: artifact.version, source: row.source ?? '',
       ...(artifact.document?.kind === 'graph' ? { document: artifact.document } : {}),
@@ -237,7 +237,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
-  const prepared = isDoc ? await preparedPageFor(artifact, at, baseUrl(request)) : null;
+  const prepared = isDoc ? await preparedPageFor(artifact, at) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
   // Every document the app page serves is the prepared compiled page (§10) — a capture's and the
   // editor's address included — except the starter placeholder's READ view, whose agent instructions
@@ -264,7 +264,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   // What only this request decides, over the stored version. On the compiled page without this
   // reader's first results: its rows are the guest snapshot's, and this reader's arrive after paint.
   const servedFor = (results: boolean) => (prepared ? servedPage(prepared.row, prepared.page, {
-    at, search: new URL(request.url).search, origin: baseUrl(request),
+    at, search: new URL(request.url).search,
     // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
     drawings: engineRequested(request.url) ? 'engine' : 'stored',
     colorMode: capturedColor,

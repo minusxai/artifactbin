@@ -77,3 +77,15 @@ it('destroys the view exactly once on unmount, and remounts once when readOnly c
   expect(destroy).toHaveBeenCalledTimes(2);
   expect(document.querySelector('.cm-editor')).toBeNull();
 });
+
+it('opens with the caret and the view at a requested place (a mount badge asks for its component\'s export line)', () => {
+  const doc = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n');
+  const offset = doc.indexOf('line 150');
+  const scroll = vi.spyOn(EditorView, 'scrollIntoView');
+  const view = render(() => <SourceEditor value={doc} revision={0} onChange={() => {}} initialSelection={() => ({ start: offset, end: offset })} />);
+  const cm = EditorView.findFromDOM(view.container.querySelector('.cm-editor') as HTMLElement)!;
+  expect(cm.state.selection.main.head).toBe(offset);
+  expect(cm.state.doc.lineAt(cm.state.selection.main.head).number).toBe(150);
+  expect(cm.hasFocus || document.activeElement === cm.contentDOM).toBe(true);
+  expect(scroll).toHaveBeenCalledWith(offset, expect.objectContaining({ y: 'center' }));
+});

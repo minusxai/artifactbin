@@ -16,6 +16,7 @@ import { ArtifactRow } from '../artifacts/access';
 import { getArtifactById } from '../artifacts/store';
 import { referencedArtifactForRow } from '../artifacts/dataflow';
 import { declarationsOf } from '../story/document/index';
+import { scriptModuleOrigins } from './script-origins';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '../serving/og-card';
 import { VERSION_PARAM } from '../serving/archived-version';
 import { mintExportKey } from '../serving/export-read-key';
@@ -40,11 +41,13 @@ const EXPORT_WIDTH = 1200;
 const EXPORT_VIEWPORT_HEIGHT = 630; // og card ratio; fullPage grows past it as needed
 const RENDER_TIMEOUT_MS = 30_000;
 const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after mount
+/** How long a script document's components get to replace their fallback before the shot is taken anyway. */
+const MOUNT_WAIT_MS = 5_000;
 /** How long to wait before the single re-render (see renderArtifactImage). */
 const RENDER_RETRY_MS = 1_000;
 
 /** Bump to invalidate images made by an older capture implementation. */
-export const EXPORT_RENDER_GENERATION = 6;
+export const EXPORT_RENDER_GENERATION = 7;
 
 
 /** `format` value → export format; null when absent or unrecognized. */
@@ -151,6 +154,11 @@ type RenderInput = {
    * for a frame that a dataset page never has is a timeout, not a picture.
    */
   target: string;
+  /**
+   * A document with a Helmet script: the module hosts its script loads from (./script-origins), admitted for this
+   * render, and its component mounts waited for. Absent or empty: nothing beyond the page's own origin loads.
+   */
+  scriptOrigins?: string[];
 };
 
 /**
@@ -211,7 +219,8 @@ function renderRequest(
     // stray — abort it, which doubles as the CSP discipline for the surface.
     sameOriginOnly: true,
     ...(ASSETS_ORIGIN ? { assetOrigin: ASSETS_ORIGIN } : {}),
-    waitForManagedFrames: true,
+    // A script document runs its script for the shot: its module hosts load, and its components get to mount.
+    ...(input.scriptOrigins?.length ? { allowedOrigins: input.scriptOrigins, waitForMountsMs: MOUNT_WAIT_MS } : {}),
     settleMs: PAGE_SETTLE_MS,
     timeoutMs: RENDER_TIMEOUT_MS,
   };
@@ -227,7 +236,7 @@ async function renderOnce(input:RenderInput,format:ExportFormat,capture:ExportCa
 }
 
 interface ImageOptions {
- pageUrl:()=>string;target:string;capture?:ExportCapture;slide?:number;selection?:string;
+ pageUrl:()=>string;target:string;scriptOrigins?:string[];capture?:ExportCapture;slide?:number;selection?:string;
  crop?:SocialPreviewCrop;volatile?:boolean;refresh?:boolean;
  /** The ARCHIVED version being photographed (`?version=N`), absent for the head. */
  version?:number|null;
@@ -254,7 +263,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
    cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null),
    artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,
   },async id=>{
-   const input={urlFor:opts.pageUrl,target:opts.target},store=objectStore(),browser=services().browser;
+   const input={urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins},store=objectStore(),browser=services().browser;
    if(store.signedUpload&&browser.renderAndUpload){
     const object_key=`exports/objects/${id}.${format}`;
     const upload=await store.signedUpload(object_key,EXPORT_MIME[format]);
@@ -274,7 +283,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
 /** Binary adapter used by operations; completed exports are never retained in RAM. */
 export async function renderArtifactImage(artifact:ExportIdentity,format:ExportFormat,opts:ImageOptions):Promise<RenderResult>{
  if(opts.volatile){
-  const result=await renderWithRetry({urlFor:opts.pageUrl,target:opts.target},format,opts.capture??'full',opts.slide,opts.crop);
+  const result=await renderWithRetry({urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins},format,opts.capture??'full',opts.slide,opts.crop);
   return !result.ok&&result.reason==='navigation'?{ok:false,reason:'failed'}:result;
  }
  const resolved=await resolveArtifactImage(artifact,format,opts);
@@ -402,6 +411,7 @@ export async function exportImageResponse(
     ).toString(),
     // BY NAME, not by position: a served document is the page itself.
     target: isDocument ? 'body' : 'main',
+    ...(isDocument && artifact.source ? { scriptOrigins: scriptModuleOrigins(artifact.source) } : {}),
     ...(slide > 0 ? { slide } : {}),
   };
   const rendered=options.volatile||capture==='preview'

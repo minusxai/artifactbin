@@ -118,7 +118,11 @@ export function createSourceView({ parent, doc, readOnly, ariaLabel, selection, 
       ],
     }),
   });
-  if (selection) view.focus();
+  if (selection) {
+    view.focus();
+    // A caret asked for from outside (a mount badge's "Edit script") is shown, not left below the fold.
+    view.dispatch({ effects: EditorView.scrollIntoView(clamp(selection.start, doc.length), { y: 'center' }) });
+  }
 
   return {
     replace(text) {
