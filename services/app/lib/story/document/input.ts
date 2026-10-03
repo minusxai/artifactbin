@@ -70,6 +70,7 @@ import type { SourceRepair } from '@/lib/jsx/repair';
 export interface StoredContent {
   format: ArtifactFormat;
   source: string | null; // markup source for round-trip editing
+  /** Per-format metadata. A markup document's carries `cspExtensions` (lib/story/document/csp-extensions) only when its Helmet asks for hosts beyond the default policy. */
   meta: Record<string, unknown>;
   /** Title derived from the source's first heading — used only when the body has no title. */
   derivedTitle: string | null;
