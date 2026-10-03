@@ -207,8 +207,8 @@ function renderRequest(
       ? { width: CARD_WIDTH, height: CARD_HEIGHT }
       : { width: EXPORT_WIDTH, height: EXPORT_VIEWPORT_HEIGHT },
     // BY NAME, not by position: the page also carries the document's static
-    // body (for crawlers), which may itself contain a <Video> player frame —
-    // `first()` then measured the player and cropped every card to its width.
+    // body (for crawlers), which may itself contain an author's <iframe> —
+    // `first()` then measured that frame and cropped every card to its width.
     selector: input.target,
     capture: slide > 0
       ? { slide }

@@ -97,7 +97,7 @@ export interface ValidateOptions {
   scriptComponents?: ReadonlySet<string> | 'any';
   /**
    * Lowercase HTML tags to allow. Omit to allow all HTML tags except the built-in
-   * dangerous denylist (`script`, `iframe`, …). Provide a set to restrict further.
+   * dangerous denylist (`script`, `object`, …). Provide a set to restrict further.
    */
   allowedHtmlTags?: Iterable<string>;
   /**

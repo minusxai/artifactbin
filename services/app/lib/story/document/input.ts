@@ -98,7 +98,6 @@ const imageTitleFromUrl = (url: string): string | null => {
 };
 
 export interface ContentInputCtx {
-  prepareMarkup?: (body: Record<string, unknown>, source: string) => Promise<StoredContent | Response>;
   objects?: ContentObjects;
   prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Response>;
   /** Identity normalization after caller-coordinate validation, before compilation. */
@@ -119,12 +118,6 @@ export interface ContentInputCtx {
   creating?: boolean;
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
   loadRef?: import('../data/refs').RefLoader;
-  /**
-   * Resolve one font family the document names, answering a Response only when
-   * it cannot be had. Absent ⇒ no resolution (preview): the door still
-   * validates the NAME, so a draft that previews still publishes.
-   */
-  resolveFont?: (family: string) => Promise<Response | null>;
   /**
    * "Is the caller already over their stored-byte quota?" — asked BEFORE a
    * tier stores something large, and answered by lib/asset-quota under the
@@ -275,5 +268,5 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
 
   // The document — `markup` (story JSX). publishJsx owns
   // theme/template/colorMode validation.
-  return ctx.prepareMarkup ? ctx.prepareMarkup(body, value) : publishJsx(body, value, ctx);
+  return publishJsx(body, value, ctx);
 }

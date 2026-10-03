@@ -249,19 +249,59 @@ describe('validateJsx — <form> stays denied', () => {
 /**
  * A denied tag is the one rejection that named no way forward. The unknown
  * component lists the registry, a refused tag points at `allowed_html_tags`,
- * document-level tags name the Helmet — but `<iframe>` and friends answered
- * `Disallowed tag <iframe>` and stopped. It costs nothing in the prompt to say
+ * document-level tags name the Helmet — but `<object>` and friends answered
+ * `Disallowed tag <object>` and stopped. It costs nothing in the prompt to say
  * why, because it is paid only by an agent that got it wrong.
  */
 describe('validateJsx — denied tags say what to do instead', () => {
   const opts = { components: [], allowedHtmlTags: ['div', 'p'] };
   it.each([
-    ['<iframe src="https://example.com" />', /<Video>/],
+    ['<object data="https://example.com/x.swf" />', /<iframe src="https:\/\/…">/],
     ['<script>{`x()`}</script>', /<Helmet>/],
     ['<base href="/x" />', /own/i],
   ])('guides %s', (markup, expected) => {
     const errs = errors(markup, opts);
     expect(errs[0].message).toMatch(expected);
+  });
+});
+
+/**
+ * An author's `<iframe>`: a player or page, framed as written. The tag is ordinary vocabulary; the element is narrow —
+ * an https `src`, no children, and only the attributes that size, label and permit a player.
+ */
+describe('validateJsx — <iframe>', () => {
+  const opts = { components: [], allowedHtmlTags: ['div', 'p', 'iframe'] };
+  it('accepts an https player with every allowed attribute', () => {
+    expect(errors('<iframe src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ" title="Bunny" width={560} height="315" allow="autoplay; fullscreen" allowfullscreen loading="lazy" className="w-full" style={{ border: 0 }} id="player" />', opts)).toEqual([]);
+    expect(errors('<div><iframe src="https://example.org/page" allowFullScreen></iframe></div>', opts)).toEqual([]);
+  });
+  it('refuses an http src, a data: src, a srcdoc and a missing src', () => {
+    for (const markup of [
+      '<iframe src="http://www.youtube-nocookie.com/embed/x" />',
+      '<iframe src="data:text/html,<script>x()</script>" />',
+      '<iframe src="javascript:alert(1)" />',
+      '<iframe src="//example.org/page" />',
+      '<iframe title="no src" />',
+    ]) {
+      const errs = errors(markup, opts);
+      expect(errs.length, markup).toBeGreaterThan(0);
+      expect(errs.map((e) => e.message).join(' '), markup).toMatch(/src="https:\/\/…"|disallowed URL scheme/);
+    }
+    const srcdoc = errors('<iframe src="https://example.org" srcdoc="<script>x()</script>" />', opts);
+    expect(srcdoc).toHaveLength(1);
+    expect(srcdoc[0]!.message).toBe('Attribute "srcdoc" is not allowed');
+    expect(errors('<iframe srcdoc="<p>x</p>" />', opts).length).toBeGreaterThan(1);
+  });
+  it('refuses any attribute beyond the list, naming the list', () => {
+    for (const attr of ['sandbox="allow-scripts"', 'name="x"', 'referrerpolicy="no-referrer"', 'data-x="1"', 'aria-hidden="true"']) {
+      const errs = errors(`<iframe src="https://example.org" ${attr} />`, opts);
+      expect(errs, attr).toHaveLength(1);
+      expect(errs[0]!.message, attr).toMatch(/is not allowed on <iframe> — it takes only src, title, width, height, allow, allowfullscreen, loading, className, style/);
+    }
+  });
+  it('refuses children', () => {
+    expect(errors('<iframe src="https://example.org"><p>fallback</p></iframe>', opts).map((e) => e.message)).toEqual([expect.stringMatching(/takes no children/)]);
+    expect(errors('<iframe src="https://example.org">text</iframe>', opts)).toHaveLength(1);
   });
 });
 

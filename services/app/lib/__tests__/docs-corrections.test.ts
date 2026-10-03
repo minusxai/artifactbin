@@ -15,7 +15,7 @@ import { IMAGE_URL_FIELD_GUIDANCE } from '@/lib/serving';
 import { OPERATIONS } from '../operations/registry';
 
 const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
-const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
+const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { publishJsx } from '../story/document/jsx-tier';
@@ -241,9 +241,6 @@ describe('the markup skill', () => {
   it('markdown is refused, never "auto-converted"', () => {
     expect(doc).not.toContain('auto-converted');
   });
-  it('a <Video poster> web URL is imported, not rejected', () => {
-    expect(doc).not.toContain('thumbnail URLs are rejected');
-  });
   it('<Number> documents suffix and that agg defaults to first', () => {
     expect(doc).toMatch(/suffix/);
     expect(doc).toMatch(/agg[^\n]*(defaults? to|default[^\n]*)`first`/);
@@ -305,7 +302,7 @@ describe('the markup skill', () => {
  * A web URL in an image position is never REWRITTEN to `ref:<id>` — publish
  * stores a copy and the author's URL stays in the source, byte for byte,
  * because an agent reads back what it wrote. Four surfaces promised the
- * rewrite in four wordings (markup.md, markup-video.md, publishing-datasets.md
+ * rewrite in four wordings (markup.md, the retired markup-video.md, publishing-datasets.md
  * and the tool schema); a doc that teaches a retired mechanic is worse than
  * none, and this one an agent would act on by hunting for an id that is never
  * echoed.
@@ -325,8 +322,8 @@ describe('external asset URLs in markup', () => {
     expect(flat(markup)).toContain('Web URLs also work and are served as written');
     expect(flat(markup)).not.toMatch(/stores a copy|warns if fetching fails/);
   });
-  it('the subresource roster names all three positions and the `$` binding', () => {
-    expect(flat(markup)).toContain('In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL');
+  it('the subresource roster names both positions and the `$` binding', () => {
+    expect(flat(markup)).toContain('In parent markup only `<img src>` and `<File src>` take a URL');
     expect(flat(markup)).toContain('An image `src` also binds');
     expect(markup).toContain('{$pick}');
   });
@@ -338,8 +335,8 @@ describe('external asset URLs in markup', () => {
   it('the web-fonts bullet says an @font-face url is imported too', () => {
     expect(flat(markup)).toContain('An `@font-face` `url(https://…)` in your `<style>` is imported the same way');
   });
-  it('a <Video poster> URL is stored and kept, never rewritten', () => {
-    expect(flat(markup)).toContain('which publish fetches and stores — your URL stays in the document as written');
+  it('an <iframe src> frames a player, its default hosts and the csp-frame meta named', () => {
+    expect(flat(markup)).toContain('`<iframe src="https://…" title="…" />` frames a player: YouTube (nocookie), Vimeo, Loom; others need `csp-frame`.');
   });
   it('a DataTable column of image URLs is declared, and served from our copy', () => {
     expect(flat(markup)).toContain('kind: "image"');

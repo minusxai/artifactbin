@@ -7,9 +7,8 @@ import {MAX_DOCUMENT_BYTES,type DocumentResourcePreparation} from '@artifactbin/
 import {getDb} from '../../platform/db';
 import { editorScope, type TokenActor } from '../../artifacts/access';
 import { refLoaderForActor } from '../../artifacts/dataflow';
-import { fontResolver } from '../../artifacts/store';
 import {json} from '../../http/http';
-import {prepareJsx,applyPreparedJsx} from './jsx-tier';
+import {prepareJsx} from './jsx-tier';
 export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{
  if(typeof body.source!=='string'||Buffer.byteLength(body.source)>MAX_DOCUMENT_BYTES)return json({error:'invalid_authoring_context'},400);
  const db=await getDb(),scope=editorScope(actor);
@@ -17,8 +16,7 @@ export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string
  if(!owner)return json({error:'not_found'},404);
  const prepared=await prepareJsx({},body.source,{loadRef:refLoaderForActor({tokenId:owner.token_id,userId:owner.user_id})});
  if(prepared instanceof Response)return prepared;
- const ready=body.dryRun===true?prepared.content:await applyPreparedJsx(prepared,{resolveFont:fontResolver()});
- if(ready instanceof Response)return ready;
+ const ready=prepared.content;
  const datasetBindings:NonNullable<DocumentResourcePreparation['datasetBindings']>=[];
  const refs=(ready.meta.refs as Array<{id:string}>|undefined)??[];
  for(const ref of refs){

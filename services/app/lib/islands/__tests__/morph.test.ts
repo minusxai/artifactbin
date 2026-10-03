@@ -271,9 +271,9 @@ describe('the live morph', () => {
   it('brings the version\'s sheets and title, drops a sheet the version no longer has, and leaves the page\'s own alone', async () => {
     load(served({ edit: 'e1', sheets: { 'data-mx-tw': '.a{}', 'data-mx-author': '.mine{}', 'data-mx-chrome': '.chrome{}' } }));
     start();
-    await morph(window, { fetch: answer(served({ edit: 'e2', title: 'Renamed', sheets: { 'data-mx-tw': '.a{}.b{}', 'data-mx-webfonts': '@font-face{}' } })) });
+    await morph(window, { fetch: answer(served({ edit: 'e2', title: 'Renamed', sheets: { 'data-mx-tw': '.a{}.b{}', 'data-mx-font-vars': ':root{}' } })) });
     expect(document.head.querySelector('style[data-mx-tw]')!.textContent).toBe('.a{}.b{}');
-    expect(document.head.querySelector('style[data-mx-webfonts]')!.textContent).toBe('@font-face{}');
+    expect(document.head.querySelector('style[data-mx-font-vars]')!.textContent).toBe(':root{}');
     expect(document.head.querySelector('style[data-mx-author]')).toBeNull();
     expect(document.head.querySelector('style[data-mx-chrome]'), 'the page\'s chrome sheet is not the version\'s').not.toBeNull();
     expect(document.title).toBe('Renamed');

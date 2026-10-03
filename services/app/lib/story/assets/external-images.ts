@@ -4,10 +4,10 @@
  * of copies already held (lib/serving web-assets, custom-domains, prepared-page,
  * draft-preview), pending its removal there.
  *
- * Two positions hold an image: `<img src>` and `<Video poster>`, the two places
- * refs.ts treats as image refs; ONE holds a PDF, `<File src>`; and ONE css
- * position holds a face: `@font-face { src: url(https://…) }` inside the
- * author's own `<Helmet>` stylesheet.
+ * One position holds an image: `<img src>`, the place refs.ts treats as an
+ * image ref; ONE holds a PDF, `<File src>`; and ONE css position holds a face:
+ * `@font-face { src: url(https://…) }` inside the author's own `<Helmet>`
+ * stylesheet.
  */
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/document/helmet';
@@ -19,7 +19,6 @@ const WEB_URL = /^https?:\/\//i;
 /** [element tag, attribute] pairs that hold an image the document must own. */
 const IMAGE_POSITIONS: ReadonlyArray<readonly [tag: string, attr: string, component: boolean]> = [
   ['img', 'src', false],
-  ['Video', 'poster', true],
 ];
 
 /** The one position that holds a PDF: the card that links it. */

@@ -50,7 +50,7 @@ describe('GET /assets/<hash>', () => {
     expect(res.headers.get('Content-Disposition')).toBe('attachment');
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     // The document has an OPAQUE origin, so its own-origin font fetch is a CORS
-    // request — /webfonts carries this for the same reason.
+    // request.
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });
 

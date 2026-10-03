@@ -39,7 +39,8 @@ NEVER after an individual edit, "just to check" or mid-task:** gate containers, 
   the end of a complete, FAST-clean change it is the normal handoff: commit, push ONCE, open/update a
   PR with an empty body and inspect CI (a branch push alone starts none). Report deferral accurately;
   require selected checks before merging. Full suites, Docker/Chromium integration, the gate set and
-  production builds are CI-only. Fix CI failures together; never retry unchanged code.
+  production builds are CI-only. On a red PR: fetch every failed job's log in ONE command, fix all
+  failures together (independent ones in parallel agents), never retry unchanged code.
 - **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same
   arguments). Receipts last an hour and need matching sources, command, environment, runtime, lock and
   generated inputs; failed/deferred/empty runs never count. Label reuse as prior evidence, not a fresh
@@ -47,7 +48,6 @@ NEVER after an individual edit, "just to check" or mid-task:** gate containers, 
   external state. See [docs/agent-workflows.md](docs/agent-workflows.md).
 - **Bound investigation:** scoped `rg -l`/`rg -n`, output limits, targeted sections; skip fixtures,
   transcripts, generated assets and dependencies unless relevant; batch reads, never repeat a search.
-  Separate command duration from agent turnaround time.
 - Changing pinned docs/copy/errors: find their tests and gates (`buildQuickSheet`, `agentDiscovery`,
   `renderDoc`, exact text) and update them together. PR bodies stay empty, with no descriptive PR
   comments unless requested. Reuse only the task's own current dev server.
@@ -72,24 +72,24 @@ NEVER after an individual edit, "just to check" or mid-task:** gate containers, 
 
 From the repo root; keep this list current.
 
-- `npm ci` — install pinned dependencies (~10 s). `npm run setup` — create or repair local settings.
-- `npm run dev` — full local composition, default http://localhost:3030 (~4 s); `dev:app` without the proxy.
-- `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server (~15 s first build).
+- `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
+- `npm run dev` — full local composition, default http://localhost:3030; `dev:app` without the proxy.
+- `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server.
 - `npm run eval -- --tasks <name>` — the agent eval against that server (`--deployment`, `--help`).
   `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo (README is the guide): copy
-  it from `~/projects/artifactbin-evals/evals`, never symlink; fix its imports there after a module move.
+  it from `~/projects/artifactbin-evals/evals`, never symlink.
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
-- `npm run validate` — FAST (~1 s): name guard, incremental TypeScript (`tsgo` where installed, else
+- `npm run validate` — FAST: name guard, incremental TypeScript (`tsgo` where installed, else
   tsc) with unused declarations; utils/contracts add `noUncheckedIndexedAccess`.
 - `npm test` — affected api/node/ui/islands + CLI tests, ≤50 files; exit 2 means PR CI, never widen.
   `-- --files <paths>` is the FAST inner loop; bare and `-- <ref>` (branch changes) are SLOW, pre-merge
   only; `-- --reuse` reuses evidence. Config/package edits may defer everything (expected).
-- `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — **SLOW (~1 min), PRE-MERGE
+- `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — **SLOW, PRE-MERGE
   ONLY, NEVER AFTER AN EDIT**: named browser gates in a Linux container, built and served as CI does.
   `node scripts/gate-container.mjs hydration` verifies the compiled reader handover (reader/islands changes).
-- CI-only (~3 min PR run): `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
+- CI-only: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
   Never use them to bypass deferral.
-- `npm run build:islands -w services/app` — the shared reader islands and manifest (~15 s).
+- `npm run build:islands -w services/app` — the shared reader islands and manifest.
 - Generated inputs: `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`,
   `generate:theme-previews`, `generate:og`.
 - `npm run release:cli` — bump the CLI release; see Change checks.
@@ -117,7 +117,9 @@ From the repo root; keep this list current.
 
 The orchestrator seeds contracts, core tests and a bounded brief; the implementer completes it without
 delegating, in its own worktree, data directory and port block (never two in one checkout).
-Browser gates run in containers (`scripts/gate-container.mjs`), up to engine CPUs ÷ container CPUs
-at once (3 on a 14-CPU Colima; `GATES__CONTAINER_SLOTS` overrides); avoid host `scripts/gates/gate-*.mjs` runs. **Gates are SLOW-tier: an implementer runs them ONCE at the end
-of the brief, NEVER per edit. Every brief must say so verbatim.** Keep PRs scoped per repository.
+**Independent deliverables are separate briefs, one implementer each, in parallel worktrees; one brief
+only when deliverables share files. The orchestrator merges.** Browser gates run in containers
+(`scripts/gate-container.mjs`), up to engine CPUs ÷ container CPUs at once (`GATES__CONTAINER_SLOTS`
+overrides), never on the host. **Gates are SLOW-tier: an implementer runs them ONCE at the end of the
+brief, NEVER per edit. Every brief must say so verbatim.** Keep PRs scoped per repository.
 Handoff: [docs/agent-workflows.md](docs/agent-workflows.md).

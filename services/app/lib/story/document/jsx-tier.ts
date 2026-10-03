@@ -42,7 +42,6 @@ const COLOR_MODES = ['light', 'dark'] as const;
 
 export interface PreparedMarkup {
   content: StoredContent;
-  fonts: string[];
 }
 
 /** Validation and compilation have no import or persistence capability. */
@@ -104,12 +103,9 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
     split = structural.split!;
   }
 
-  // FONTS the document asks for (Helmet <meta name="font-display" …>),
-  // resolved at PUBLISH so a reader never waits on — or is exposed to — an
-  // upstream: lib/webfonts copies the faces into our object store and every
-  // render serves them from this origin. Bundled families short-circuit. An
-  // unknown family FAILS the publish: a document that silently fell back to
-  // sans-serif would look like it worked.
+  // FONTS the document asks for (Helmet <meta name="font-display" …>): only the NAME is checked here,
+  // because it lands in a stylesheet. Nothing is fetched or stored: serving emits the Google Fonts
+  // `@import` from the meta (lib/story/styles/document-fonts), and a bundled family is served from this origin.
   const fonts = documentFonts(split.content);
   const badFamilies = invalidFontFamilies(fonts);
   if (badFamilies.length > 0) {
@@ -184,19 +180,10 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
     derivedTitle: helmetTitle?.trim() || null,
     ...(repairs.length ? {repairs} : {}),
   };
-  return {content, fonts: fonts.families};
-}
-
-/** Apply only a successfully prepared document. */
-export async function applyPreparedJsx(prepared: PreparedMarkup, effects: Pick<ContentInputCtx, 'resolveFont'>): Promise<StoredContent | Response> {
-  if (effects.resolveFont) for (const family of prepared.fonts) {
-    const failure = await effects.resolveFont(family);
-    if (failure) return failure;
-  }
-  return prepared.content;
+  return {content};
 }
 
 export async function publishJsx(body: Record<string, unknown>, source: string, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
   const prepared = await prepareJsx(body, source, ctx);
-  return prepared instanceof Response ? prepared : applyPreparedJsx(prepared, ctx);
+  return prepared instanceof Response ? prepared : prepared.content;
 }

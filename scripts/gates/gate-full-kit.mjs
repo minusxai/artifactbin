@@ -135,12 +135,6 @@ check(await frame.evaluate("document.querySelectorAll('canvas, svg.marks').lengt
 check(/\$\s?[\d,]+/.test(text), 'inline <Number> computed a value');
 check(await frame.evaluate("!!document.querySelector('[aria-label=\"Question embed\"]')"), 'Question embeds mounted');
 
-// video renders as a click-to-open card: hosted poster, play badge, a link to
-// the watch page — and NEVER a nested frame (the sandbox would kill a player).
-check(await frame.evaluate("!!document.querySelector('[data-slot=\"video\"] a[href^=\"https://www.youtube.com/watch\"]')"), 'Video card links to the watch page');
-check(await frame.evaluate("(document.querySelector('[data-slot=\"video-thumb\"]')?.getAttribute('src') ?? '').startsWith('/a/')"), 'Video poster resolved to the hosted image ref');
-check(await frame.locator('[data-mx-inline-story] iframe').count() === 0, 'nothing in the document is framed; Video remains a link');
-
 // 3. isolation
 const csp = await frame.evaluate('window.__csp || []');
 await Promise.all(requestChecks);

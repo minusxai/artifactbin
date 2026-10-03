@@ -12,7 +12,7 @@
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
-import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR, type StoryFontAsset } from '@/lib/data/story/story-fonts';
+import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
 /** The page-level rule every served document starts with. `--mx-vh` feeds the recipes that size against the viewport (slides). */
@@ -31,8 +31,6 @@ export interface DocumentStylesInput {
   /** A domain post: its attribution line's style. */
   bare: boolean;
   theme: string | null | undefined;
-  /** The families the document imported (lib/webfonts), resolved. */
-  importedFaces: readonly StoryFontAsset[];
   /** The Helmet's font slot overrides. */
   docFonts: DocumentFonts;
   /** The author's own `<style>`. */
@@ -60,8 +58,8 @@ export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[]
     // `@container` utilities resolve against (STORY_COLUMN_CSS).
     { attr: 'data-mx-column', css: STORY_COLUMN_CSS },
     { attr: STORY_FONTS_ATTR, css: getStoryFontCss(input.theme ?? undefined) },
-    // Imported faces and the slot override LAST among the font styles: the document's own ask beats the theme.
-    input.importedFaces.length ? { attr: 'data-mx-webfonts', css: storyFontFaceCss([...input.importedFaces]) } : null,
+    // The slot override LAST among the font styles: the document's own ask beats the theme. Its own sheet,
+    // because the Google `@import` it opens with must be the first rule of a stylesheet (./document-fonts).
     fontVars ? { attr: 'data-mx-font-vars', css: fontVars } : null,
     input.authorCss ? { attr: 'data-mx-author', css: input.authorCss } : null,
   ];

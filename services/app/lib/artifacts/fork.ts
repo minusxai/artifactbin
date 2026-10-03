@@ -1,5 +1,5 @@
 import { type ArtifactRow, type TokenActor, type Visibility } from './access';
-import { afterCreated, artifactQuotaExceeded, byteQuotaFor, createArtifact, fontResolver, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, type ArtifactInput } from './store';
+import { afterCreated, artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, type ArtifactInput } from './store';
 import { compiledForRow, refLoaderForActor, rowToResolvedRef } from './dataflow';
 import { artifactQuery } from './document';
 import { grantsOf, grantsPermitRead } from '../datasets/policy/grants';
@@ -306,7 +306,6 @@ async function forkInput(
     colorMode: design.colorMode,
   }, {
     loadRef: deep?.loadRef ?? refLoaderForActor(actor),
-    resolveFont: fontResolver(),
     overByteQuota: byteQuotaFor(actor.tokenId),
   });
   if (parsed instanceof Response) return parsed;

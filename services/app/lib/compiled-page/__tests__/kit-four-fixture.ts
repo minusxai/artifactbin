@@ -1,17 +1,17 @@
 /**
  * Fixtures for the compile-time kit chunks (static-html.test.ts, and the before/after timing in the PR report): every
  * kit component the compiler pre-renders beside the tables — static Grid/GridItem (positioned and flow), static
- * Buttons, Videos, a static deck of Slides — around one live value, and the 28-kit-table report.
+ * Buttons, Files, a static deck of Slides — around one live value, and the 28-kit-table report.
  */
 const grid = (g: number) => `<Grid className="mt-6" id="g${g}"><GridItem x={0} y={0} w={6} h={2} id="g${g}a"><Card className="h-full" id="g${g}b"><CardTitle id="g${g}c">Tile ${g}</CardTitle><CardContent id="g${g}d">Body &amp; text</CardContent></Card></GridItem>`
   + `<GridItem x={6} y={0} w={6} h={3} className="bg-muted" style={{padding: 4}} id="g${g}e"><p id="g${g}f">B ${g}</p><Button variant="outline" size="sm" id="g${g}g">Open</Button></GridItem></Grid>`
   + `<Grid mode="flow" cols={3} rowHeight={40} id="f${g}"><GridItem w={2} minHeight={120} id="f${g}a"><Badge id="f${g}b">x</Badge></GridItem><GridItem w={1} id="f${g}c">text</GridItem><p id="f${g}d">stray</p></Grid>`;
-const media = (m: number) => `<Video src="https://www.youtube.com/watch?v=aqz-KE-bpKQ" title="Bunny ${m}" className="max-w-2xl" id="v${m}a" />`
-  + `<Video src="https://youtu.be/aqz-KE-bpKQ" poster="https://example.com/p${m}.png" id="v${m}b" /><Video src="https://example.com/not-a-video" id="v${m}c" />`
+const media = (m: number) => `<File src="https://example.com/r${m}.pdf" title="Report ${m}" className="max-w-2xl" id="v${m}a" />`
+  + `<File src="https://example.com/s${m}.pdf" bytes="2048" pages="2" id="v${m}b" /><File src="ref:NOPE" id="v${m}c" />`
   + `<Button id="b${m}a">Primary</Button><Button variant="ghost" size="sm" className="ml-2" id="b${m}b">Ghost</Button><Button disabled type="submit" id="b${m}c">Off</Button>`;
 const slide = (s: number) => `<Slide title="Slide ${s}" className="py-10" id="s${s}"><h2 id="s${s}h">Slide ${s}</h2>${media(s)}${grid(s)}</Slide>`;
 
-/** The four kit families pre-rendered: a static deck of six slides, each with grids, buttons and videos, and one live value outside it. */
+/** The four kit families pre-rendered: a static deck of six slides, each with grids, buttons and file cards, and one live value outside it. */
 export const KIT_FOUR_MARKUP = '<Helmet><Value name="who" type="string" default="Ada" /></Helmet>'
   + '<div data-design="tw" className="px-6" id="root"><p id="hi">Hi {$who}</p>'
   + `<SlideDeck id="deck">${Array.from({ length: 6 }, (_, s) => slide(s)).join('')}</SlideDeck>${grid(9)}${media(9)}</div>`;

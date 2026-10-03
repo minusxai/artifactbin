@@ -462,21 +462,10 @@ const CODES: Table = {
   ],
 };
 
-/**
- * Families imported from the web (lib/webfonts), resolved ONCE per deployment.
- * The row is an INDEX, not the bytes: `assets` names the faces and the
- * content-addressed object each was copied into, so a family costs one fetch
- * ever and a reader only ever talks to this origin.
- */
-const WEBFONTS: Table = {
-  name: 'webfonts',
-  columns: [
-    { name: 'family', type: 'TEXT', notNull: true },
-    { name: 'assets', type: 'JSONB', notNull: true, default: "'[]'" },
-    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-  ],
-  primaryKey: ['family'],
-};
+// RETIRED TABLE — `webfonts`, the family → copied-faces index of the retired
+// font-copying pipeline. A document's font metas now emit a Google Fonts
+// `@import` (lib/story/styles/document-fonts); nothing reads or writes it. Boot
+// DDL is additive-only, so an older database keeps the table; a fresh one never creates it.
 
 /**
  * THE GLOBAL URL → OBJECT CACHE for URL-kept external assets (lib/web-assets).
@@ -958,7 +947,7 @@ const DOCUMENT_TRUST: Table = {
   {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
  ],primaryKey:['user_id','artifact_id'],
 };
-export const TABLES: Table[] = [PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

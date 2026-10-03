@@ -28,7 +28,7 @@ import {DatasetError} from '@/lib/datasets/errors';
  */
 import { DATASET_ACCESS, canReadArtifact, canWriteDataset, writerFor, type ArtifactRow, type DatasetAccess, type TokenActor, type Visibility } from './access';
 import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
-import { artifactQuotaExceeded, byteQuotaFor, createArtifact, fontResolver, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
+import { artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { findDependentsFor, refLoaderForActor, refreshWarningsFor, declarationsForRow, runDocumentMutation } from './dataflow';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations/store';
 import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/document/node-ids';
@@ -471,8 +471,7 @@ export async function replaceArtifactWithBody(
   }
   if (options.dryRun) return preflightReply(prepared);
 
-  const applied = await applyPreparedContent(prepared, {resolveFont: fontResolver()});
-  if (applied instanceof Response) return applied;
+  const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
@@ -607,8 +606,7 @@ export async function createArtifactFromBody(
 
   if (options.dryRun) return preflightReply(prepared);
 
-  const applied = await applyPreparedContent(prepared, {resolveFont: fontResolver()});
-  if (applied instanceof Response) return applied;
+  const applied = await applyPreparedContent(prepared);
   parsed = applied;
   responseBody = row => ({...createdArtifactWire(row,base,sentMarkup),...sourceRepairsEcho(parsed.repairs)});
   let row;
@@ -924,6 +922,6 @@ export async function refreshAssetsFor(
 
 function preflightReply(prepared:PreparedContent):Response {
   return json({valid:true,dry_run:true,markup:prepared.content.source,format:prepared.content.format,
-    planned:{objects:prepared.objects.length,fonts:prepared.markup?.fonts??[]},
+    planned:{objects:prepared.objects.length},
     commit_checks:['authorization','quota','references','observed_state'],...sourceRepairsEcho(prepared.content.repairs)});
 }

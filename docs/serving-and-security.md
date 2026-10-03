@@ -134,11 +134,14 @@ once, stores a copy, and serves it from this origin:
 
 - `{ "imageUrl": … }`, `{ "pdfUrl": … }` or `{ "csvUrl": … }` on create, when
   you want the file to be an artifact with an id of its own.
-- `<meta name="font-display" content="Lobster" />` in `<Helmet>` — any
-  Google family, downloaded once, served from here.
 
 An imported copy cannot rot when the origin host dies, and no reader's IP
 leaks to it.
+
+Fonts named by `<meta name="font-display" content="Lobster" />` (also `font-body`,
+`font-mono`) in `<Helmet>` are not imported: the served stylesheet `@import`s Google
+Fonts, whose two hosts the document's policy admits (`lib/story/styles/document-csp.ts`).
+Bundled theme faces are served from this origin.
 
 The copy lives at `/assets/<sha256 of the URL>`, shared across every document
 and every user, so a popular URL is fetched exactly once. It is served

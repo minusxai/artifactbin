@@ -40,14 +40,20 @@ describe('interactive elements a script can drive', () => {
   /**
    * `<audio>`/`<video>` are in the tag allowlist, but their SOURCE is not free:
    * the URL gate admits `data:image/` alone, so inline media bytes are refused.
-   * Hosted video has its own door: the `<Video>` component, a click-to-open
-   * card for the three allowlisted hosts (video-embed.ts).
+   * A hosted player is an `<iframe src="https://…">`, framed under the
+   * document's own `frame-src`.
    */
   it('refuses media it cannot serve self-contained — the URL gate, not the tag list', () => {
     expect(validate('<video src="data:video/mp4;base64,AAAA"></video>').length).toBeGreaterThan(0);
     // An <img src> URL is served as written; every OTHER subresource position keeps the hard refusal:
     expect(findExternalSubresources('<img srcSet="https://cdn.example/x.png 1x" />').length).toBeGreaterThan(0);
     expect(findExternalSubresources('<div background="https://cdn.example/b.png" />').length).toBeGreaterThan(0);
+  });
+
+  it('allows an https <iframe>, and leaves its src out of the self-contained rule — a frame is not an import', () => {
+    expect(validate('<iframe src="https://player.vimeo.com/video/76979871" title="Clip" allowfullscreen />')).toEqual([]);
+    expect(findExternalSubresources('<div><iframe src="https://player.vimeo.com/video/76979871" title="Clip" /></div>')).toEqual([]);
+    expect(validate('<iframe src="http://player.vimeo.com/video/76979871" title="Clip" />').length).toBeGreaterThan(0);
   });
 
   it('keeps every dangerous tag denied, in the body', () => {

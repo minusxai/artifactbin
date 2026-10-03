@@ -85,7 +85,8 @@ describe('jsx tier publish', () => {
       ['<script>alert(1)</script>', /script/i],
       // unknown / disallowed tags
       ['<Bogus>unknown component</Bogus>', /Bogus/],
-      ['<iframe src="https://evil.test"></iframe>', /iframe/i],
+      ['<iframe src="http://evil.test"></iframe>', /iframe/i],
+      ['<iframe src="https://evil.test" srcdoc="<script>alert(1)</script>"></iframe>', /srcdoc/i],
       ['<object data="evil.swf"></object>', /object/i],
       ['<form action="https://evil.test"><button>go</button></form>', /form/i],
       // html injection
