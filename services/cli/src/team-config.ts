@@ -10,6 +10,8 @@ import {completeLoginMethods} from '../../auth/src/config';
 import {usesDevOutbox} from '../../auth/src/mail';
 // Only namespaces owned by the OSS host enter its process configuration.
 const teamModules=new Set(['APP','AUTH','EMAIL','ADMIN','ANALYTICS','ARTIFACTS','ASSETS','BROWSER','DATASET','EVENTS','EXPORT','FILES','IMAGES','INTERNAL','PDF','QUOTA','SQL','WEB_INGEST']);
+// Packaged hosts submit to a separate runner; worker/provider settings belong to that controller.
+const runnerSettings=new Set(['RUNNER__SERVICE_URL','CONTRACT__ACTOR_SECRET']);
 /**
  * A listen address that reaches this machine only: a local development host (`isLocalDevelopmentHost`,
  * the origin rule's), or IPv6 loopback as APP__HOST spells it, unbracketed. `usesDevOutbox` answers
@@ -43,8 +45,13 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
   const pair=line.match(/^([A-Z][A-Z0-9_]*?)=(.*)$/);
   if(!pair)throw new Error('Invalid team settings: use NAME=value lines without shell expansion.');
   const key=pair[1]!,value=pair[2]!;
-  if(key!=='DATABASE_URL'&&(!key.includes('__')||!teamModules.has(key.split('__')[0]!)||key.endsWith('__SERVICE_URL')||key==='APP__UPSTREAM_URL'))throw new Error('Unsupported team setting: '+key);
+  if(key!=='DATABASE_URL'&&!runnerSettings.has(key)&&(!key.includes('__')||!teamModules.has(key.split('__')[0]!)||key.endsWith('__SERVICE_URL')||key==='APP__UPSTREAM_URL'))throw new Error('Unsupported team setting: '+key);
   operator[key]=value;
+ }
+ if(operator.RUNNER__SERVICE_URL){
+  let runner:URL;try{runner=new URL(operator.RUNNER__SERVICE_URL);}catch{throw new Error('Runner URL must be an absolute HTTP(S) URL.');}
+  if(!['http:','https:'].includes(runner.protocol)||runner.username||runner.password||runner.search||runner.hash)throw new Error('Runner URL must be an HTTP(S) URL without credentials, query or fragment.');
+  if((operator.CONTRACT__ACTOR_SECRET?.length??0)<32)throw new Error('Remote runner requires CONTRACT__ACTOR_SECRET of at least 32 characters, matching the controller.');
  }
  const host=operator.APP__HOST?.trim()??'',port=overrides.port??Number(operator.APP__PORT);
  let url:URL;try{url=new URL(operator.APP__PUBLIC_BASE_URL??'');}catch{throw new Error('Team hosting requires APP__PUBLIC_BASE_URL.');}

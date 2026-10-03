@@ -19,7 +19,8 @@ export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string)
  const browser=createBrowser({executablePath:chromiumExecutable,sessions:{browserExecutable:chromiumExecutable,...(isSea()?{workerArgs:['--internal-browser-worker']}:{}),...sessionProcessPaths(env),baseURL:origin,request:async(request,actor)=>host.request(request,actor)}});
  const sql=createSql({maxRows:MAX_QUERY_ROWS,timeoutMs:QUERY_TIMEOUT_MS});
  try{
- host=await createAppHost({webDir:join(assets,'dist/web'),publicDir:join(assets,'public'),
+ // Trusted runner callbacks carry signed identity; ordinary login still composes through auth.
+ host=await createAppHost({webDir:join(assets,'dist/web'),publicDir:join(assets,'public'),actorSecret:readEnv(env,'CONTRACT__ACTOR_SECRET'),
   services:{sql,browser},shutdown:async()=>{await browser.close();await sql.close();},
   onTokenRevoked:id=>reader.invalidate(id),
   initialize:async db=>{

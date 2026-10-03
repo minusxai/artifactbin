@@ -275,6 +275,16 @@ Linux and Intel Mac packaging also need Python 3.8–3.14. The build creates a p
 environment and installs hash-pinned LIEF 0.17.6 to preserve ELF native symbol lookup and Mach-O
 TLS. Python and LIEF are build tools.
 
+## Lambdas
+
+Publish a JSX artifact whose Helmet script default-exports an async function,
+then `afbin runs start <artifact> --request <stable-id> --input input.json --json`.
+Poll `afbin runs status <runId>` for its terminal status, output and receipt;
+`afbin runs events <runId>` reads emitted events and `afbin runs cancel <runId>`
+requests cancellation. `afbin help lambdas` has complete authoring examples.
+Source dev includes a local runner; packaged hosts need the
+[separate signed runner](../runner/README.md). Cron schedules use the app's HTTP API.
+
 ## V0 boundaries
 
 The relay uses authenticated HTTP polling (~200 ms runner / 250 ms viewer), so it works through the existing app proxy and a custom host without a separate WebSocket service. It forwards terminal bytes, including screen redraws and menus. It is a terminal mirror, with a convenient message box.

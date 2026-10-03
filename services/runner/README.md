@@ -1,5 +1,70 @@
 # Lambda runner
 
+## Start from an OSS installation
+
+`npm run setup -- --yes` followed by `npm run dev` registers the local runner
+and scheduler automatically. No Docker or AI provider is needed for a function
+that only computes or uses declared data. The local child process uses a V8
+isolate; production container restrictions apply only when a worker image is
+configured.
+
+The packaged `afbin serve` host does not carry execution dependencies. Add
+`RUNNER__SERVICE_URL=http://runner:3050` and `CONTRACT__ACTOR_SECRET` (32+ random
+characters) to its private `server.env`, and run the controller below with the
+same signing secret and an app URL reachable from the controller. The app must
+reach the runner too. Without it the host reports `runner_unavailable`.
+Configure the worker image, model and provider key on the controller, rather
+than in `server.env`. Keep this trusted service connection inside your deployment.
+
+Publish this complete `hello.jsx` with `afbin add hello.jsx`, then
+`afbin push hello.jsx` (source development: `npm run afbin -- …`):
+
+```jsx
+---
+title: Hello lambda
+visibility: private
+---
+<Helmet>
+  <script>{`
+    export default async function(input) {
+      return {message: 'Hello ' + input.name};
+    }
+  `}</script>
+</Helmet>
+<p>A headless greeting function.</p>
+```
+
+Save `input.json` containing `{"name":"OSS"}`, then:
+
+```sh
+afbin runs start hello.jsx --request hello-1 --input input.json --json
+afbin runs status <runId> --json
+afbin runs events <runId> --after 0 --json
+```
+
+Source development uses `npm run afbin -- runs …`. Poll status until terminal;
+the completed output is `{"message":"Hello OSS"}`. `afbin runs cancel <runId>`
+requests cancellation; inspect status to observe cleanup. Read `afbin help lambdas`
+for declared-data examples, supported imports and event pagination.
+Reuse a request ID only for the same invocation to recover its existing run;
+a different input with that ID conflicts. A run can end failed, cancelled or
+interrupted, so inspect its status and receipt rather than assuming success.
+The underlying HTTP API is documented below. Scheduling currently uses HTTP,
+with an app session cookie or an account bearer credential in the Authorization
+header; session writes also require the app Origin.
+
+Schedule the same published function with
+`POST /api/artifacts/<id>/schedules` and
+`{"cron":"*/5 * * * *","timezone":"UTC","input":{"name":"scheduled OSS"}}`.
+Save its returned `id`, list it with the GET endpoint below, and stop future
+occurrences with `DELETE /api/schedules/<id>`. Both runs and schedules pin the
+published version; remove/recreate a schedule to adopt a later edit.
+
+Browser-only top-level code (such as `document.querySelector`) cannot run in
+the isolate. Keep a headless artifact DOM-free, or guard browser initialization
+with `typeof document !== 'undefined'`. Lambdas support fewer imports than the
+browser author module; see the headless restrictions below.
+
 The shared interface is `RunnerService`: `start`, `getRun`, `events`, `cancel`.
 The OSS app registers a local implementation; `RUNNER__SERVICE_URL` selects the
 signed-Actor HTTP client. Only authenticated app code supplies `userId`. Programs
@@ -31,8 +96,8 @@ zeroes. Generic external network access is deliberately not enabled in this rele
 | Existing artifact operation ACLs | Same ACLs with a fresh signed user identity attached by the host |
 
 `createAppHost({hostedAgent: {secret, model}})` installs the managed agent. The
-normal OSS `server.ts` never supplies this option. This PR supplies the hook and
-implementation; it does not change/deploy the private production composition.
+normal OSS `server.ts` never supplies this option. The shared package supplies
+the hook and implementation; deployments must activate it in their composition.
 A deployment must configure its app's runner URL and the matching Actor signing
 secret. Nothing is enabled merely by a user's program asking for it.
 
@@ -152,4 +217,4 @@ npm test -- --files services/runner/__tests__/runner-service.test.ts services/ru
 The runner CI repeats these against the production worker image and checks OS
 restrictions and cleanup. Models in tests are deterministic HTTP/SSE fixtures;
 these are not measurements of paid-provider reliability, pricing or production
-throughput. Deployment activation and pool tuning are outside this PR's activation scope.
+throughput. Deployment activation and pool tuning require verification in that deployment.

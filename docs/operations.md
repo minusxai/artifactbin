@@ -53,6 +53,12 @@ proxy or rate-limit policies. A deployment may put its own TLS proxy in front.
 Production service composition and deployment policy live in the downstream
 server repository.
 
+Source development (`npm run dev`) also registers a local Lambda runner.
+Packaged `afbin serve` hosts require a separate runner: set `RUNNER__SERVICE_URL`
+and a matching `CONTRACT__ACTOR_SECRET` in their `server.env`.
+See [runner setup and schedules](../services/runner/README.md) and
+[the OSS feature setup guide](oss-onboarding.md) for prerequisites and availability.
+
 ## Health, storage and export
 
 - `/health` reports process liveness. `/api/health` reports readiness and probes

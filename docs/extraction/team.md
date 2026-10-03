@@ -55,7 +55,7 @@ Then:
     locks/           # Existing SQLite process ownership lock
 ```
 
-Only the explicit file supplies product settings. Client defaults, credentials and inherited application/storage/service settings are not read. This OSS composition uses PGLite by default or an explicit Postgres connection, filesystem objects and local SQL/browser engines; remote object storage and service URL settings are rejected. Custom production adapters belong in the production composition. There is no schema/config migration and no OS service manager.
+Only the explicit file supplies product settings. Client defaults, credentials and inherited application/storage/service settings are not read. This OSS composition uses PGLite by default or an explicit Postgres connection, filesystem objects and local SQL/browser engines; remote object storage and SQL/browser/event service URLs are rejected. For lambdas, set `RUNNER__SERVICE_URL` and a matching `CONTRACT__ACTOR_SECRET` (32+ characters) in `server.env`, and run the [separate runner controller](../../services/runner/README.md). The packaged host has no local execution worker; without that controller, execution reports `runner_unavailable`. Runner worker images and AI credentials belong to the controller, and are refused in `server.env`. Custom production adapters belong in the production composition. There is no schema/config migration and no OS service manager.
 
 ## Integration contract
 
