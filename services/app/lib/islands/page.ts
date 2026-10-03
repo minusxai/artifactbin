@@ -12,6 +12,8 @@
  *     own live stream (./live). A page with islands has `boot` hold it, seeded from its snapshot.
  *  4. Top-level: puts the reader back where a live reload left them, held against a settling layout
  *     and released the moment they take over (lib/story-runtime/anchor-restore).
+ *  4b. Framed: the bridge's door (lib/story-runtime/frame-bridge/door), opened here because this runs before the
+ *     author's script — the editor's document half (`@mx/frame-editor`) loads only when the page attaches through it.
  *  5. On the app page (`/a/:id`, which loads this too): the SERVED reader chrome follows the reader-chrome policy
  *     (lib/story-runtime/reader-chrome-policy) — shown on load, hidden by a scroll down, revealed by a
  *     scroll up and at the end — until the app's own chrome replaces it.
@@ -27,6 +29,7 @@ import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-
 import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
+import { frameAppOrigin, openFrameDoor } from '@/lib/story-runtime/frame-bridge/door';
 import { startIslandLive } from './live';
 import { LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR } from './contract';
 import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
@@ -95,6 +98,8 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   persistent.push(markScrollableTables(doc), wireOutline(doc));
   if (framed) {
     stops.push(relayFrameScroll(win, doc));
+    // The editor's document half, on its own lazy file (scripts/build/build-islands FRAME_EDITOR): never in a reader's closure.
+    stops.push(openFrameDoor(win, frameAppOrigin(doc, win), () => import('./frame-editor')));
     return () => { for (const stop of stops.splice(0)) stop(); for (const stop of persistent.splice(0)) stop(); };
   }
   const id = doc.body?.getAttribute(LIVE_ID_ATTR);
