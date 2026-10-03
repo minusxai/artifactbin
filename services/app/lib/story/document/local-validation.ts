@@ -7,6 +7,7 @@ import {dataflowOf,splitHelmet,validateHelmet,type HelmetSplit} from './helmet';
 import {analyzeRowScopes} from '../data/row-scope';
 import {collectRefNameUses,validateDataflow} from '../data/dataflow';
 import {findBrokenEmbeds} from '../data/refs';
+import {cspExtensionsOf} from './csp-extensions';
 
 export interface MarkupStructureOptions{
  /** The components the document's script exports (the server builds the script first); absent, any unknown capitalized tag passes when a script exists. */
@@ -17,9 +18,11 @@ export function validateMarkupStructure(source:string,options:MarkupStructureOpt
  if(!parsed.ok)return{errors:[syntaxErrorDetail(source,parsed)]};
  const split=splitHelmet(parsed.nodes);
  const helmetErrors=validateHelmet(parsed.nodes);
+ const csp=cspExtensionsOf(split.content,split.helmet);
  return{split,errors:[
   ...localPathErrors(parsed.nodes),
   ...helmetErrors,
+  ...(csp.ok?[]:csp.errors),
   ...analyzeRowScopes(split.body,split.content.queries.length ? undefined : Object.fromEntries(split.content.values.flatMap(value=>value.kind==='table'?[[value.name,value.columns]]:[]))).errors.map(message=>({message})),
   ...validateJsx(split.body,{components:JSX_STORY_COMPONENT_NAMES,allowedHtmlTags:STORY_HTML_TAGS,stylePolicy:'allow',
    scriptComponents:options.scriptComponents??(split.content.script?'any':undefined)}),

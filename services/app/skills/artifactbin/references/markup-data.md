@@ -26,7 +26,7 @@ writes. The view binds names: `data="$query"`, `value="$value"`, `run="$mutation
 <Question title="Revenue by region" data="$by_region" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
 ```
 
-A complete page with writes, explained part by part: [worked example](markup-data-example.md).
+A complete page with writes: [worked example](markup-data-example.md).
 SQLite rules and every function: [SQL](markup-sql.md). Editable cells: [editing](markup-editing.md).
 
 ## Declarations (Helmet only)

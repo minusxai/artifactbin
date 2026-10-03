@@ -59,6 +59,7 @@ import { assetsPath, mutatePath, queryPath } from '@/lib/story/styles';
 import { archivedReadOnly } from './archived-version';
 import type { ReaderChromeInput } from '@/lib/story/reader';
 import { displayTitle } from '@/lib/story/document';
+import { cspRequestFor } from '@/lib/trust/document-trust';
 
 /** The story the app page inlines for this answer (server/app withInitialStory). */
 export interface InitialStory {
@@ -338,8 +339,12 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     // forever, on a control they were being shown.
     openAnnotations,
   };
+  // What the document asks of the network beyond the default policy, and where this reader stands on it:
+  // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
+  const cspRequest = isDoc ? await cspRequestFor({ artifact: row, viewer: { userId: viewerId, tokenId: actor.tokenId }, request }) : null;
   const body = {
     canonical: canonicalArtifactPath(artifact, authorUsername),
+    ...(cspRequest ? { cspRequest } : {}),
     description: row.description,
     role,
     kind,

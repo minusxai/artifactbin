@@ -6,18 +6,17 @@ order: 2
 ---
 ## Read first
 
-Use scalar Values for choices and flags, inline table Values for temporary
-rows, and Queries to derive the view. Conditions are safe structural JSX, not
-JavaScript: they can read declared scalars but cannot call functions or run
-event handlers.
+Scalar Values hold choices and flags, inline table Values hold temporary rows,
+Queries derive the view. Markup conditions (`{$editing && …}`, `{$step > 1 ?
+… : …}`) read declared scalars only; anything computed belongs in the
+[script](markup-scripts.md).
 
-Type into the kit's text fields — `<Input label="Title" value="$title" />`
+Text fields: `<Input label="Title" value="$title" />`
 (`type="text|number|email|url|search|password"`, `placeholder`, `min`, `max`,
-`step`, `required`) and `<Textarea label="Note" value="$note" rows={3} />` —
-beside `Select`, `Segmented`, `Slider`, `DatePicker` and `Switch`; all of them
-share one frame. Native `<input>`/`<select>`/`<textarea>` still bind the same way
-(`checked="$flag"` on a checkbox) and are themed now too. During a query re-run
-embeds keep their old rows and show “updating…”; failures show the engine message.
+`step`, `required`) and `<Textarea label="Note" value="$note" rows={3} />`,
+beside `Select`, `Segmented`, `Slider`, `DatePicker` and `Switch`. Native
+`<input>`/`<select>`/`<textarea>` bind the same way (`checked="$flag"` on a
+checkbox). During a re-run embeds keep their old rows and show “updating…”.
 
 ```jsx
 <Helmet>
@@ -42,37 +41,20 @@ embeds keep their old rows and show “updating…”; failures show the engine 
 </Dialog>
 ```
 
-`DialogTrigger` sets the bound boolean true. `DialogClose`, Escape, or a
-successful submit sets it false and restores focus to the trigger. A failed
-Mutation leaves the dialog open and shows the server message. `DialogContent`
-uses normal form validity before running its Mutation. The dialog is styled by
-default and stacks its children in a column; a `className` on `DialogContent`
-replaces that layout with yours. `DialogTrigger` draws a button and `DialogClose`
-an outlined one unless you style them. `Select` and `DatePicker` open inside it.
-Enter in a text field submits the enclosing `run=` form.
+- `DialogTrigger` sets the bound boolean true; `DialogClose`, Escape or a
+  successful submit sets it false and restores focus. A failed Mutation keeps
+  the dialog open with the server message. `DialogContent` checks form
+  validity first; a `className` on it replaces the default column layout.
+  Enter in a text field submits the enclosing `run=` form.
+- Every scalar Value travels in the link unless it declares `url={false}`:
+  then it is neither written there nor read back. Form fields and
+  script-set flags declare it.
+- `reset="title amount"` on a Mutation restores those scalars to their
+  defaults once the write COMMITS; a refused write changes nothing.
+- `set=` on a Button writes values on click, no SQL: `set={{"step": 2}}`, a
+  literal, `"$other"`, or in a row `"$_row.<column>"`.
 
-Every scalar Value travels in the link unless it says otherwise, so a form field
-and a script-set flag declare `url={false}`: it stays out of the address in both
-directions — not written there, not read back from a shared or stale one.
-`reset="title amount"` on the Mutation puts those scalars back to their declared
-defaults once the write is COMMITTED, which is how the box empties itself for
-the next entry; a refused write changes nothing the person typed.
-
-For scalar-only state, `set=` on a Button changes page values on click, with
-no SQL: a literal, another value (`"$other"`) or, in a row, `"$_row.<column>"`.
-
-```jsx
-<Helmet>
-  <Value name="step" type="number" default={1} url={false} />
-</Helmet>
-<Button set={{"step": 2}}>Next</Button>
-{$step > 1 ? <p>Step {$step}</p> : <p>Not started</p>}
-```
-
-Local SQL is intentionally ephemeral and per loaded document. It does not
-create a source version, alter stored dataset rows, or change permissions.
-Reload resets inline table rows to their declared rows;
-non-default scalar choices written into the URL persist, and a `url={false}`
-scalar comes back at its default because it was never in the address. A Query
-or Mutation over an `<Import>` remains a stored-dataset operation with its
-normal read and write permissions; local state does not weaken that boundary.
+Local SQL is per loaded document: it creates no version and changes no stored
+rows. Reload resets inline tables to their declared rows; a `url={false}`
+scalar returns to its default. A Query or Mutation over an `<Import>` is a
+stored-dataset operation with its normal permissions.

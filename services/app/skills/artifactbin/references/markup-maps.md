@@ -8,9 +8,8 @@ order: 3
 ## Read first
 
 Every map is one `<DeckGL>`: deck.gl layers in deck.gl's own JSON dialect
-(`"@@type"`, `"@@="` accessors), drawn from one bound query. Write layers the
-way you would for deck.gl or pydeck. The Vega recipes `minusx/choropleth@1`
-and `minusx/point-map@1` still render but are deprecated: use `<DeckGL>`.
+(`"@@type"`, `"@@="` accessors), drawn from one bound query. The recipes
+`minusx/choropleth@1` and `minusx/point-map@1` are deprecated.
 
 ```jsx
 <DeckGL data="$stores" title="Stores by region" height="420px" tooltip={["city","orders"]}
@@ -27,8 +26,7 @@ and `minusx/point-map@1` still render but are deprecated: use `<DeckGL>`.
   deliberately; `pitch` tilts the camera for 3D layers.
 - `tooltip`: `true` (the default; the row's columns), a list of columns, or
   `false`. `legend={false}` hides the legend `ramp()`/`category()` colours get.
-- `title` names the map for screen readers — give each map on a page its own.
-  Readers get zoom and reset buttons; scrolling and dragging move the map.
+- `title` names the map for screen readers; give each map its own.
 
 ## Layers
 
@@ -80,16 +78,14 @@ Bundled, with the properties to join on:
 - `us-states` — `name`, `postal` (`CA`), `fips` (`06`); `us-counties` — `name`, `fips`;
 - `india-states` — `name`, `code` (`IN-KA`), `postal` (`KA`).
 
-Names must match exactly, so join on a code when the data has one. Any other
-geography (states of another country, districts, zones) is your own GeoJSON.
+Names must match exactly, so join on a code when the data has one.
 
 ## Your own GeoJSON
 
-Any other geography — sales territories, districts, delivery zones — is your
-own GeoJSON, published as a dataset: `afbin add zones.geojson --json`. Each
-feature becomes a row: its properties as columns plus a `geometry` column.
-Query it like any rows (filter, join metrics in SQL), then draw it with a
-`GeoJsonLayer` WITHOUT `data`:
+Any other geography is your own GeoJSON dataset: `afbin add zones.geojson
+--json`. Each feature becomes a row, its properties as columns plus a
+`geometry` column. Query it like any rows, then draw it with a `GeoJsonLayer`
+WITHOUT `data`:
 
 ```jsx
 <Import name="territories" src="ref:<geojsonId>" />
@@ -112,5 +108,4 @@ convert it first). Coordinates are longitude, latitude (WGS84).
   ]} />
 ```
 
-Aggregate in SQL when the rows are many: a map over 100k raw points is a
-heavy page; bin with `HexagonLayer`/`GridLayer`, or pre-aggregate to cells.
+Over many rows, bin with `HexagonLayer`/`GridLayer` or aggregate in SQL.
