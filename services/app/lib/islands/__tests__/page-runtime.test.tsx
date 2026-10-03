@@ -8,6 +8,8 @@ import { createEffect, createRoot, For } from 'solid-js';
 import { bindPage, mountComponents, type PageBindings } from '../page-runtime';
 import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
 import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
+import { ACCESS_PENDING } from '@/lib/story-runtime/store';
+import { compiledOf } from '@/test/helpers/compiled';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import type { Row } from '@/lib/story/data/dataflow';
 
@@ -71,6 +73,28 @@ describe('the page bindings', () => {
     expect(() => bindings.signal('$monthly')).toThrow(/names no declared Value/);
     expect(() => bindings.query('$region')).toThrow(/names no declared Query/);
     expect(() => bindings.mutation('$region')).toThrow(/names no declared Mutation/);
+  });
+});
+
+describe('a mutation called right after load', () => {
+  it('waits for the page\'s edit-access check instead of being refused while it is pending', async () => {
+    const voteFlow = await compiledOf('<Import name="votes" src="ref:abc123" /><Value name="choice" type="string" default="ramen" />'
+      + '<Mutation name="vote">{`insert into votes.rows (choice) values ($choice)`}</Mutation>', { abc123: [{ name: 'choice', type: 'string' }] });
+    let answer!: (r: RunAnswer) => void;
+    const mutate = vi.fn(() => Promise.resolve({ dataset: 'abc123' }));
+    const transport: QueryTransport = { run: () => new Promise<RunAnswer>((resolve) => { answer = resolve; }), page: () => Promise.reject(new Error('unused')), mutate };
+    store = createDataflowStore({ flow: voteFlow }, { transport, debounceMs: 0 });
+    bindings = bindPage(store);
+    store.start();
+    expect(store.mutationUnavailable('vote'), 'the check is in flight').toBe(ACCESS_PENDING);
+    await expect(store.mutate('vote'), 'the store alone refuses a write while access is pending').rejects.toThrow(ACCESS_PENDING);
+
+    const written = bindings.mutation('$vote')({ choice: 'tacos' });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(mutate, 'nothing is sent before the check lands').not.toHaveBeenCalled();
+    answer({ tables: {}, errors: {}, mutationAccess: { vote: null } });
+    await expect(written).resolves.toBeUndefined();
+    expect(mutate).toHaveBeenCalledTimes(1);
   });
 });
 
