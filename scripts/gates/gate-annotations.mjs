@@ -21,6 +21,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { DOCUMENT_FRAME, documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -37,6 +38,22 @@ async function until(read, want, budgetMs = 8000) {
   }
   return last;
 }
+
+/** The app bar's Comment button, which carries the open-comment count. */
+const COMMENT_GLYPH = 'header[aria-label="Page bar"] [aria-label="Comment"]';
+
+/** How far the document's frame stops short of the page's right edge (the width it leaves a rail), in px. */
+const frameRightInset = async (page) => {
+  const box = await page.locator(DOCUMENT_FRAME).boundingBox();
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  return box ? Math.round(width - (box.x + box.width)) : null;
+};
+
+/** Page coordinates of a point given in the document frame's own viewport. */
+const toPage = async (page, point) => {
+  const box = await page.locator(DOCUMENT_FRAME).boundingBox();
+  return { x: point.x + (box?.x ?? 0), y: point.y + (box?.y ?? 0) };
+};
 
 const DOC =
   '<Helmet><title>Annotated</title></Helmet>'
@@ -64,7 +81,7 @@ const run = async () => {
     const page = await owner.newPage();
     await becomeOwner(page, BASE, token);
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-    const frame = page.locator('[data-mx-inline-story]');
+    const frame = documentLocator(page);
     await frame.locator('#figure').waitFor({ timeout: 15000 });
 
     // ── the view-mode selection bubble ────────────────────────────────────
@@ -72,19 +89,19 @@ const run = async () => {
     // frame, because only the document can see a Selection at an opaque origin.
     // Clicked-until-it-takes for the same reason as the node click below — the
     // capability grant and the lazy chunk land a beat after the page does.
-    const bubble = page.locator('[data-mx-selection-actions]');
+    const bubble = frame.locator('[data-mx-selection-actions]');
     await until(async () => {
       await frame.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
       return bubble.isVisible().catch(() => false);
     }, (v) => v === true, 15000);
     check(await bubble.isVisible(), 'selecting text in view mode raises the action bubble inside the document');
-    check(await page.locator('[aria-label="Edit selected text"]').count() === 1
-      && await page.locator('[aria-label="Comment on selected text"]').count() === 1,
+    check(await frame.locator('[aria-label="Edit selected text"]').count() === 1
+      && await frame.locator('[aria-label="Comment on selected text"]').count() === 1,
       'the owner is offered both edit and annotate');
 
     // Choosing Annotate opens the composer on those exact words — and enters
     // NOTHING. Commenting is a layer, so no hash moves and no mode opens.
-    await page.locator('[aria-label="Comment on selected text"]').click();
+    await frame.locator('[aria-label="Comment on selected text"]').click();
     const seeded = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
     check(seeded === 1, 'the composer opens on the selected words — no second click on the same text');
     check(await page.evaluate(() => location.hash) === '', 'commenting enters no mode: the hash is untouched');
@@ -111,12 +128,10 @@ const run = async () => {
     await page.keyboard.press('Escape');
     const thread = page.locator('[aria-label="Annotation thread"]');
     check((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
-    // The frame stays FULL-WIDTH — the bar drawn inside it must not narrow —
-    // and the document leaves the rail its width instead.
-    check(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right === '0px'),
-      'the open rail leaves the frame full-width, so the bar inside it does not move');
-    const railInset = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '320px', 5000);
-    check(railInset === '320px', `the document leaves the rail its width (got ${railInset})`);
+    // "The frame stays full-width so the bar inside it does not move" is retired: the bar is the app page's own
+    // (solid/document/DocumentChrome), above the frame, so the frame itself gives the rail its width.
+    const railInset = await until(() => frameRightInset(page), (v) => v === 320, 5000);
+    check(railInset === 320, `the document leaves the rail its width (got ${railInset}px)`);
     check(await page.locator('[aria-label="Annotation sidebar"]').evaluate((el) => el.style.top === '44px'),
       'the rail sits under the document\'s bar');
 
@@ -128,8 +143,8 @@ const run = async () => {
     // so it stays — and a compact identity marker floats beside it.
     const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
     check(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
-    // The count rides the framed document's comment glyph now, kept live by the page.
-    check((await page.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
+    // The count rides the app bar's Comment button (solid/document/DocumentChrome), kept live by the page.
+    check((await page.locator(COMMENT_GLYPH).textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
     await viewComments.waitFor({ timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
@@ -137,8 +152,8 @@ const run = async () => {
     const compactBox = await viewComment.boundingBox();
     check(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
       'the ambient annotation is a compact identity marker');
-    const railGone2 = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '0px', 5000);
-    check(railGone2 === '0px', 'closing the rail gives the document its width back');
+    const railGone2 = await until(() => frameRightInset(page), (v) => v === 0, 5000);
+    check(railGone2 === 0, `closing the rail gives the document its width back (${railGone2}px)`);
     check(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
       'the floating marker leaves the document full-width');
     await viewComment.hover();
@@ -212,7 +227,7 @@ const run = async () => {
     check(retained.thread === 1 && retained.highlight === 0, 'the resolve reaches the open tab live: the conversation remains and the highlight clears');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     check(threadGone === 0, 'the open-thread list empties live too');
-    const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
+    const badgeGone = await until(() => page.locator(COMMENT_GLYPH).textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
     check(badgeGone === '', 'the count badge drops with the resolve');
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     check(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
@@ -315,15 +330,18 @@ const run = async () => {
     const strangerCtx = await browser.newContext();
     const stranger = await strangerCtx.newPage();
     await stranger.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    const strangerDoc = documentLocator(stranger);
+    await strangerDoc.locator('#figure').waitFor({ timeout: 15000 }).catch(() => {});
     await sleep(1500);
-    const strangerPins = await stranger.locator('[data-mx-annotated], [data-mx-annotation-open]').count();
+    const strangerPins = await strangerDoc.locator('[data-mx-annotated], [data-mx-annotation-open]').count().catch(() => 0)
+      + await stranger.locator('[data-mx-annotated], [data-mx-annotation-open], [aria-label^="Open annotation conversation by"]').count();
     const strangerButtons = await stranger.locator('[aria-label="Toggle comments"]').count();
     check(strangerPins === 0 && strangerButtons === 0, 'a logged-out reader sees no pins and no annotate chrome');
-    // A reader is served the document top-level, so their selection happens in
-    // the page itself — and nothing grants them an action, so no chunk loads.
-    await stranger.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
+    // A reader's selection happens inside the document's frame, like the owner's — and nothing grants them an
+    // action, so no chunk loads.
+    await strangerDoc.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
     await sleep(500);
-    check(await stranger.locator('[data-mx-selection-actions]').count() === 0,
+    check(await strangerDoc.locator('[data-mx-selection-actions]').count().catch(() => 0) === 0,
       'a reader selecting text is offered nothing at all');
     await strangerCtx.close();
     await owner.close();
@@ -371,9 +389,9 @@ async function quoteLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.locator('[data-mx-inline-story]');
+  const frame = documentLocator(page);
   await frame.locator('#second').waitFor({ timeout: 15000 });
-  const raw = await until(async () => page.mainFrame(), (f) => !!f, 15000);
+  const raw = await documentFrame(page);
 
   /*
    * The drag: from one CHARACTER inside the first paragraph to one inside the
@@ -389,7 +407,7 @@ async function quoteLeg(browser) {
       const box = range.getBoundingClientRect();
       return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     }, [selector, index]);
-    return { x: inFrame.x, y: inFrame.y };
+    return toPage(page, inFrame);
   };
   const dragAcross = async () => {
     const from = await pointAt('#first', 24);   // inside "ahead of plan."
@@ -403,14 +421,14 @@ async function quoteLeg(browser) {
     await page.mouse.move(to.x, to.y, { steps: 20 });
     await page.mouse.up();
   };
-  const bubble = page.locator('[data-mx-selection-actions]');
+  const bubble = frame.locator('[data-mx-selection-actions]');
   await until(async () => {
     await dragAcross().catch(() => {});
     return bubble.isVisible().catch(() => false);
   }, (v) => v === true, 20000);
   check(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
 
-  await page.locator('[aria-label="Comment on selected text"]').click();
+  await frame.locator('[aria-label="Comment on selected text"]').click();
   await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   await page.locator('[aria-label="Annotation comment"]').fill('does this hold for both?');
   await page.locator('[aria-label="Save annotation"]').click();
@@ -432,7 +450,8 @@ async function quoteLeg(browser) {
   // (b) THE PAINT, AFTER A RELOAD: nothing about it is stored in the DOM, so a
   // reload is the honest test that the range alone can re-find the words.
   await page.reload({ waitUntil: 'load' });
-  const reloaded = await until(async () => page.mainFrame(), (f) => !!f, 15000);
+  const reloaded = await documentFrame(page);
+  await reloaded.waitForSelector('#second', { timeout: 15000 });
   const paint = await until(
     () => reloaded.evaluate((name) => {
       const highlight = window.CSS?.highlights?.get(name);
@@ -517,7 +536,7 @@ async function markdownLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.locator('[data-mx-inline-story]');
+  const frame = documentLocator(page);
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   // The comment itself through the browser door, with the session the page
@@ -618,7 +637,7 @@ async function foldLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.locator('[data-mx-inline-story]');
+  const frame = documentLocator(page);
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
@@ -781,7 +800,7 @@ async function pickLeg(browser) {
   await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined,configurable:true});});
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.locator('[data-mx-inline-story]');
+  const frame = documentLocator(page);
   await frame.locator('#figure').waitFor({ timeout: 15000 });
 
   await openArtifactControls(page);

@@ -1,7 +1,7 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkViewportGeometry } from './lib/viewport-geometry.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 /**
  * Gate: a deck must not shove its own document sideways after it opens.
  *
@@ -143,7 +143,8 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
    * exists now — entering edit is a message to the document already on screen
    * — so what is worth asserting is that the document itself does not move.
    */
-  const target = await artifactDocument(page, { timeout: 60_000 });
+  // The document is framed on its own origin; the init script above ran in the frame too, so it is measured there.
+  const target = await documentFrame(page, { timeout: 60_000 });
   // `attached`, not `visible`: the rail's previews are scaled to a few pixels,
   // so the first matching element is legitimately not "visible" to Playwright.
   await target.waitForSelector('[data-mx-inline-story]', { state: 'attached', timeout: 60_000 });
@@ -234,7 +235,7 @@ async function measureBleed(id, token, width = 1600) {
   const page = await browser.newPage({ viewport: { width, height: 1000 } });
   await becomeOwner(page, B, token);
   await page.goto(`${B}/a/${id}`, { waitUntil: 'commit', timeout: 60000 });
-  const target = await artifactDocument(page, { timeout: 60_000 });
+  const target = await documentFrame(page, { timeout: 60_000 });
   await target.waitForSelector('.mx-doc', { state: 'attached', timeout: 60_000 });
   // Past every late arrival — a font landing can widen a line after first paint.
   await page.waitForTimeout(2500);
@@ -316,7 +317,7 @@ check(mm.overflow === 0, `mismatch: the document still does not scroll sideways 
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   await becomeOwner(page, B, navDeck.token);
   await page.goto(`${B}/a/${navDeck.id}`, { waitUntil: 'load' });
-  const frame = page.mainFrame();
+  const frame = await documentFrame(page);
   // SCOPED to the document column: the rail's previews are real <Slide>
   // elements too (that is what makes them faithful), so an unscoped query
   // measures a miniature.

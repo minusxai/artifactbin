@@ -6,6 +6,8 @@ import sharp from 'sharp';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import {startDocument,becomeOwner} from '../lib/start-doc.mjs';
 import {openArtifactControls} from './lib/reveal-chrome.mjs';
+import {documentLocator} from './lib/page-facts.mjs';
+import {PAGES_BROWSER_ARGS,PAGES_HOST} from './lib/browser.mjs';
 const base=process.argv[2]??'http://localhost:3030';
 const input=await sharp({create:{width:200,height:100,channels:3,background:{r:220,g:30,b:30}}}).png().toBuffer();
 const failures=[];
@@ -14,17 +16,22 @@ for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chrom
  const seed=await startDocument(base);
  const published=await fetch(`${base}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({title:'Screenshot capture gate',markup:'<Helmet><style>{`#capturebox{width:400px;height:240px;background:rgb(220,30,30);margin:100px 40px}`}</style></Helmet><div id="capturebox"><p>Screenshot capture fixture</p></div>',visibility:'unlisted'})});
  assert(published.ok,`publish: ${published.status}`);
- const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:['--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:{});
+ // The app is at app.lvh.me and the document on <hex id>.lvh.me (lib/browser.mjs): Chromium is told the mapping by
+ // flag, Firefox by its resolver prefs; WebKit has neither and resolves lvh.me (public DNS: loopback).
+ const local=[new URL(base).hostname,PAGES_HOST,`${Buffer.from(seed.id,'utf8').toString('hex')}.${PAGES_HOST}`].join(',');
+ const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:[...PAGES_BROWSER_ARGS,'--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:name==='firefox'?{firefoxUserPrefs:{'network.dns.localDomains':local,'network.dns.forceResolve':'127.0.0.1'}}:{});
  try{
   const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:dpr});const page=await context.newPage();
   await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});const reference=document.createElement('video');reference.muted=true;reference.srcObject=stream;window.__captureReference=reference;void reference.play();return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
-  await becomeOwner(page,base,seed.token);await page.goto(`${base}/a/${seed.id}`);await page.locator('#capturebox').waitFor();
+  await becomeOwner(page,base,seed.token);await page.goto(`${base}/a/${seed.id}`);
+  // The document is framed on its own origin; the rail, tools and composer are the app page's.
+  const doc=documentLocator(page);await doc.locator('#capturebox').waitFor();
   await openArtifactControls(page);await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
   await expect(page.getByRole('button',{name:'Select',exact:true})).toHaveAttribute('aria-pressed','true');
   assert.deepEqual(await page.evaluate(()=>window.__captureTrace),[], 'Select must not request screen sharing');
   await page.getByRole('button',{name:'Screenshot',exact:true}).click();
   await expect(page.getByRole('status',{name:'Screenshot tool active'})).toHaveText(/drag an area/,{timeout:20000});
-  const box=await page.locator('#capturebox').boundingBox();assert(box);
+  const box=await doc.locator('#capturebox').boundingBox();assert(box);
   let referencePixel=[220,30,30];
   if(name==='chromium'){
    await expect.poll(()=>page.evaluate(()=>window.__captureReference?.readyState??0)).toBeGreaterThanOrEqual(2);
@@ -58,7 +65,7 @@ for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chrom
   await expect(page.getByRole('dialog',{name:'Annotation composer'})).toHaveCount(0);
   await page.reload();
   await openArtifactControls(page);await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
-  await expect(page.locator('#capturebox')).toHaveCSS('background-color','rgb(220, 30, 30)');
+  await expect(doc.locator('#capturebox')).toHaveCSS('background-color','rgb(220, 30, 30)');
   const thumbnail=page.getByRole('img',{name:'Screenshot attached to comment'}).last();await thumbnail.waitFor();
   assert(await thumbnail.evaluate(img=>img.complete&&img.naturalWidth>0),`${name}: persisted thumbnail`);
   await page.getByRole('button',{name:'Open comment screenshot'}).last().click();
