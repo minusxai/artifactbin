@@ -6,6 +6,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  *   usage: node scripts/gates/gate-editor-exits.mjs [base]
  */
 import { launchChromium } from './lib/browser.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
@@ -62,16 +63,18 @@ try {
       // The canvas mounts after the editor bar; typing before it exists types
       // into nothing and would report a loss that never happened.
       await page.waitForTimeout(3000);
-      const frame = page.mainFrame();
+      // The document is framed by the app page on its own origin; the heading is typed into there.
+      const frame = await documentFrame(page);
       await frame.waitForFunction(() => !!document.querySelector('h1')?.isContentEditable, null, { timeout: 60_000 });
       await frame.evaluate(() => {
         const h = document.querySelector('h1');
-        h.focus();
+        // The editing host takes focus (and with it the frame, so the keyboard reaches it), not the heading in it.
+        (h.closest('[contenteditable="true"]') ?? h).focus();
         const r = document.createRange(); r.selectNodeContents(h); r.collapse(false);
         const s = getSelection(); s.removeAllRanges(); s.addRange(r);
       });
       await page.keyboard.type(stamp);
-      const inDocument = await page.mainFrame().evaluate(() => document.querySelector('h1')?.textContent ?? '');
+      const inDocument = await frame.evaluate(() => document.querySelector('h1')?.textContent ?? '');
       must(inDocument.includes(stamp.trim()),
         `the ${leaveBy} case could type into the document (heading reads ${JSON.stringify(inDocument)})`);
 
@@ -92,10 +95,13 @@ try {
          * is capped BELOW the debounce (500ms) on purpose — past it, the timer
          * itself would be what saved the document.
          */
-        await page.evaluate(() => {
+        // A hidden tab hides every document in it: the app page and the document framed in it.
+        const hide = () => {
           Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
           document.dispatchEvent(new Event('visibilitychange'));
-        });
+        };
+        await page.evaluate(hide);
+        await frame.evaluate(hide);
         await page.waitForResponse((r) => r.url().includes('/edits'), { timeout: 400 }).catch(() => {});
         await page.goto('about:blank');
         await page.waitForTimeout(1500);
