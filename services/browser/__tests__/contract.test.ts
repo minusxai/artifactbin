@@ -75,7 +75,8 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
       const at = (50 * info.width + 50) * info.channels;
       return [...data.subarray(at, at + 3)];
     };
-    const fallback = await centre(await svc.render({ ...base(), url: `${pages.base}/mount`, settleMs: 0 }));
+    // The fallback render is a page whose script never mounts (no race with the swap), the capture one that does.
+    const fallback = await centre(await svc.render({ ...base(), url: `${pages.base}/never-mounts`, settleMs: 0 }));
     const mounted = await centre(await svc.render({ ...base(), url: `${pages.base}/mount`, settleMs: 0, waitForMountsMs: 5000 }));
     expect(fallback).toEqual([204, 51, 51]);
     expect(mounted).toEqual([51, 204, 51]);
