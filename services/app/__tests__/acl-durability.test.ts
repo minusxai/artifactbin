@@ -10,7 +10,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * document — nobody is told, and the owner finds out by being read. These
  * pin the columns across every mutation the document has.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
@@ -22,14 +22,12 @@ import { getArtifactById,getVersionFor } from '@/lib/artifacts';
 
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function fixtures() {

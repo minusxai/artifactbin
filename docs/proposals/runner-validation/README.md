@@ -56,13 +56,12 @@ From repository root:
 
 ```
 npm ci
-npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
 npm run validate
 npm test -- --files services/app/__tests__/runner-design.test.ts
-npm run benchmark --prefix docs/proposals/runner-validation
+npm run benchmark -w docs/proposals/runner-validation
 ```
 
-Repository policy keeps Docker integration in CI. Workflow `runner-design.yml` repeats the same handler/agent tests inside restricted Linux workers, tests the OS boundary independently of V8, tests PostgreSQL17 concurrency, and asserts no workers leak. Root API/validate CI install this package too. Pinned package-lock is included; scripts require Node22.
+Repository policy keeps Docker integration in CI. Workflow `runner-design.yml` repeats the same handler/agent tests inside restricted Linux workers, tests the OS boundary independently of V8, tests PostgreSQL17 concurrency, and asserts no workers leak. This package is a root npm workspace, so the root `npm ci` installs it; its own package-lock stays for the worker Dockerfile. Scripts require Node22.
 
 `services/app/__tests__/runner-design.test.ts` exercises real handlers with PGLite and signed HTTP forwarding. Deterministic OpenAI fixture uses actual HTTP/SSE, split every three bytes, and actual Pi tool execution. Assertions check database comments/work phase/history, not just promise resolution. It covers reply retry, seeded next-comment history, cross-owner denial, missing tokenId, the working user-only operation adapter, managed redirect rejection, truncated stream, native capability absence/identity spoof, synchronous/post-await loops, output/request limits, cancellation and crash checkpoint recovery.
 

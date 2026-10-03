@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pack, weigher } from '../lib/timed-sequencer.mjs';
+import { pack, readTimings, weigher } from '../lib/timed-sequencer.mjs';
 import { parseTimings } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
@@ -29,6 +29,12 @@ describe('timed shard packing', () => {
     const shards = pack(items(weights), 2, { 1: 25 });
     expect(shards[0]).toHaveLength(1);
     expect(shards[1]).toHaveLength(3);
+  });
+
+  it('packs by the recorded CI times, not an empty table (every file at the 1 s default would pack by count)', () => {
+    const timings = readTimings();
+    for (const project of ['api', 'api-isolated', 'node']) expect(Object.keys(timings.files[project] ?? {}).length, project).toBeGreaterThan(10);
+    expect(timings.reserve?.node).toBeTruthy();
   });
 
   it('weighs an unmeasured file at its project median', () => {

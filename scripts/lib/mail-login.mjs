@@ -47,7 +47,8 @@ export async function loginViaEmail(page, base, sink, email) {
   await page.goto(`${base}/login`, { waitUntil: 'load' });
   // The pages render in the browser now: wait for the form rather than assuming
   // it is in the HTML the server sent.
-  await page.waitForSelector('[aria-label="Email"]', { timeout: 20_000 });
+  // The login page shares the runner with the other legs of a journey gate: a long wait, not a flake.
+  await page.waitForSelector('[aria-label="Email"]', { timeout: 45_000 });
   await page.fill('[aria-label="Email"]', email);
   await page.click('[aria-label="Log in with email"]');
   await page.waitForSelector('[aria-label="Login code"]', { timeout: 15_000 });

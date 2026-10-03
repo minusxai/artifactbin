@@ -13,21 +13,21 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * failed, because each route was tested only against itself. This file tests
  * them against EACH OTHER, which is the only way that class of drift shows up.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { PUT as putBearer } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { PUT as putBrowser } from '@/app/api/my/artifacts/[id]/route';
 
 
 import { mintToken } from '@/lib/accounts';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { agentCookie, useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(null));
 
 
 // The browser route reads auth(); this suite drives the anonymous cookie, so
 // there is no account session. The handlers are the real ones.
-vi.mock('@/auth', () => ({ auth: async () => null }));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

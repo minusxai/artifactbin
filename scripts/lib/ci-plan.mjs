@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /** CI boundary: repo-relative changed paths -> selected jobs and Node test roots.
  * Dependencies include test/composition edges, not just package dependencies.
  * Unknown paths and shared configuration must select everything.
@@ -169,4 +171,16 @@ export function isBuildInput(path) {
   if (/^scripts\/(ci\/test-timings\.(json|mjs)|lib\/timed-sequencer\.mjs)$/.test(path)) return false;
   if (/^[^/]+\.md$/.test(path)) return false;
   return true;
+}
+
+/**
+ * The build cache's key from `git ls-files -s` output: git's own object ids for every build input
+ * (`isBuildInput`), so it costs one `ls-files` rather than reading the tree. scripts/ci/ci.mjs
+ * `build-key` keys CI's build cache on it; scripts/gate-container.mjs keys its build volume on it.
+ * @param {string} stagedIndex  `git ls-files -s` output
+ * @returns {{ key: string, inputs: number }}
+ */
+export function buildKey(stagedIndex) {
+  const index = stagedIndex.split('\n').filter((line) => line && isBuildInput(line.slice(line.indexOf('\t') + 1)));
+  return { key: createHash('sha256').update(index.join('\n')).digest('hex').slice(0, 32), inputs: index.length };
 }

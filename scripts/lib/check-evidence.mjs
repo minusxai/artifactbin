@@ -18,21 +18,15 @@ function descendants(root, file) {
   if (!lstatSync(full).isDirectory()) return [file];
   return [file, ...readdirSync(full).sort().flatMap(name => descendants(root, path.join(file, name)))];
 }
-/** Tracked sources are identified by git's index (blob ids, no file reads); only files that differ
- * from it (modified, deleted or untracked) and the explicit settings files are read. Generated outputs
- * are identified by their stat: every rebuild rewrites them. */
-export function fingerprint({ root, commands, env, refs = [] }) {
-  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 256 << 20 });
-  const list = args => git(args).split('\0').filter(Boolean);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify({ root, commands, env: Object.entries(env).sort(([a], [b]) => a.localeCompare(b)),
-    runtime: [process.execPath, process.version, process.platform, process.arch],
-    refs: refs.map(ref => git(['rev-parse', '--verify', ref]).trim()) }));
-  hash.update(git(['ls-files', '--stage', '-z']));
-  const read = [...new Set([...list(['diff', '--name-only', '-z']), ...list(['ls-files', '--others', '--exclude-standard', '-z']),
-    ...readdirSync(root).filter(file => /^\.env(?:\.|$)/.test(file)),
-    'services/app/.env', 'node_modules/.package-lock.json', '.npmrc'])].sort();
-  for (const file of read) {
+/** The working tree's departures from git's index: modified, deleted and untracked (not ignored) paths. */
+export function changedFiles(root) {
+  const list = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 256 << 20 }).split('\0').filter(Boolean);
+  return [...new Set([...list(['diff', '--name-only', '-z']), ...list(['ls-files', '--others', '--exclude-standard', '-z'])])];
+}
+
+/** Feeds each file's path, mode and bytes (a link's target; `missing` when deleted) into `hash`, in sorted order. */
+export function hashFiles(hash, root, files) {
+  for (const file of [...new Set(files)].sort()) {
     hash.update(file + '\0');
     const full = path.join(root, file);
     try {
@@ -42,6 +36,21 @@ export function fingerprint({ root, commands, env, refs = [] }) {
       else if (stat.isFile()) hash.update(readFileSync(full));
     } catch (error) { if (error.code !== 'ENOENT') throw error; hash.update('missing'); }
   }
+  return hash;
+}
+
+/** Tracked sources are identified by git's index (blob ids, no file reads); only files that differ
+ * from it (modified, deleted or untracked) and the explicit settings files are read. Generated outputs
+ * are identified by their stat: every rebuild rewrites them. */
+export function fingerprint({ root, commands, env, refs = [] }) {
+  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 256 << 20 });
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify({ root, commands, env: Object.entries(env).sort(([a], [b]) => a.localeCompare(b)),
+    runtime: [process.execPath, process.version, process.platform, process.arch],
+    refs: refs.map(ref => git(['rev-parse', '--verify', ref]).trim()) }));
+  hash.update(git(['ls-files', '--stage', '-z']));
+  hashFiles(hash, root, [...changedFiles(root), ...readdirSync(root).filter(file => /^\.env(?:\.|$)/.test(file)),
+    'services/app/.env', 'node_modules/.package-lock.json', '.npmrc']);
   for (const file of GENERATED.flatMap(file => descendants(root, file))) {
     try { const s = lstatSync(path.join(root, file)); hash.update(JSON.stringify([file, s.mode, s.size, s.mtimeMs])); }
     catch { hash.update('missing:' + file); }

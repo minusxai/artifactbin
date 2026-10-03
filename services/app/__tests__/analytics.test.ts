@@ -11,7 +11,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * right. Events are fired unawaited on the request path, so assertions poll.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { artifactPage as ArtifactPage, artifactMetadata as artifactPageMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -35,13 +35,10 @@ import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
+beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));
 
-// Owns the session mock for this file: id + email, settable per test.
+// Owns the session for this file (the harness setSession): id + email, settable per test.
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () =>
-    sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null,
-}));
 
 // Owns the request-headers mock: empty = called OFF a request (the server is
 // holding none — exactly like production code called from a test), populated =

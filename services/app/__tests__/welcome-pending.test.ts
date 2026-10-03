@@ -8,7 +8,7 @@
  * And what the flag is FOR: `/api/page/session` turns it into `onboarded`, the
  * one bit the app shell reads before it sends a new account to `/welcome`.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { syncProfile } from '@/lib/accounts';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
@@ -17,13 +17,13 @@ import { objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { createTestUser, eraseTestUser } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
+import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
 import sharp from 'sharp';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
 

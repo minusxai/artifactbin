@@ -5,8 +5,8 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * bounds on a share list, a trailing segment that looks like a file id, HTTP
  * validation, and what the list/metadata surfaces disclose.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import {operationHttp} from './operation-http';
 import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
@@ -20,10 +20,8 @@ import { people } from '@/lib/datasets/user-fields';
 import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 

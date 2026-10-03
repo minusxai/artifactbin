@@ -27,8 +27,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, CI_ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from './gates.manifest.mjs';
-import { resolveServers, runSecret } from './gates.servers.mjs';
+import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from './gates.manifest.mjs';
+import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
 
@@ -76,7 +76,7 @@ const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
 // those two" rather than "whichever of them fell in shard 1 of the whole set".
 const selected = shard
   ? (() => {
-      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, { isolated: CI_ISOLATED_GATES });
+      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight, CI_SHARD_OPTIONS);
       return chosen.filter((g) => names.includes(g.name));
     })()
   : chosen;
@@ -93,6 +93,12 @@ if (args.includes('--browsers')) {
 if (args.includes('--needs-postgres')) {
   console.log(needsPostgres(selected.map((gate) => gate.name)));
   process.exit(0);
+}
+
+// The isolated gates' shard: one server, one gate at a time (gates.servers.mjs `serversFor`).
+if (serversFor(servers, selected.map((g) => g.name), CI_ISOLATED_GATES) !== servers) {
+  servers = serversFor(servers, selected.map((g) => g.name), CI_ISOLATED_GATES);
+  console.log(`only gates that lose races under a neighbour's load (${selected.map((g) => g.name).join(', ')}): one server, one at a time`);
 }
 
 /** A port nothing holds right now — asked of the OS, not guessed. */

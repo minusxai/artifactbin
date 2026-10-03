@@ -42,18 +42,16 @@ permissions:
   contents: read
 
 jobs:
+  # HEAD ONLY. The base is main's own measurement of the same bytes (scripts/ci/page-speed-base.mjs):
+  # every push to main that touches these paths runs this job and uploads `page-speed-head`, which is
+  # exactly what a pull request's base would measure. The report job measures the base itself only
+  # when no main run measured those bytes.
   measure:
-    name: measure ${{ matrix.revision }}
+    name: measure head
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        revision: [base, head]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -79,20 +77,98 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      - name: Check out base build
-        if: matrix.revision == 'base'
+      - name: Build head
+        run: npm run build
+      - name: Measure head
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            node scripts/ci/performance-loads.mjs . page-speed/head.json
+          else
+            node scripts/ci/performance-loads.mjs . page-speed/head.json --size-only
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: page-speed-head
+          path: page-speed/head.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  report:
+    name: page speed report
+    runs-on: ubuntu-latest
+    needs: [measure]
+    timeout-minutes: 30
+    # Finding main's run and downloading its artifact reads the Actions API. A job-level block REPLACES
+    # the workflow's, so `contents: read` is restated rather than inherited.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # Full history: the base lookup asks git whether main's measured commit is an ancestor of the
+      # base with no change under this workflow's paths.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: page-speed-head
+          path: page-speed
+      - name: Find main's measurement of the base
+        id: base
         env:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/page-speed-base.mjs
+      - if: steps.base.outputs.found == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: page-speed-head
+          path: page-speed/main
+          run-id: ${{ steps.base.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - if: steps.base.outputs.found == 'true'
+        run: mv page-speed/main/head.json page-speed/base.json && rmdir page-speed/main
+      # THE FALLBACK: no main run measured the base's bytes (main skipped the path, its run is still in
+      # flight or expired, or this is a dispatched timing run). Measure the base here, as the retired
+      # `measure base` job did. Only this rare case runs after the head measurement instead of beside it.
+      - if: steps.base.outputs.found != 'true'
+        run: node scripts/ci/ci.mjs lock-fingerprint
+      - if: steps.base.outputs.found != 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.base.outputs.found != 'true' && steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - if: steps.base.outputs.found != 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - if: steps.base.outputs.found != 'true' && steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.base.outputs.found != 'true' && steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      - name: Check out base build
+        if: steps.base.outputs.found != 'true'
+        env:
+          BASE: ${{ steps.base.outputs.base }}
         run: |
-          case "$EVENT" in
-            pull_request) base="$PR_BASE" ;;
-            push) base="$BEFORE" ;;
-            *) base="" ;;
-          esac
-          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then base="$(git rev-parse HEAD~1)"; fi
-          git worktree add --detach .perf-base "$base"
+          git worktree add --detach .perf-base "$BASE"
           (cd .perf-base && node ../scripts/ci/ci.mjs lock-fingerprint)
           same=true
           for f in .ci-cache-key/install.json services/app/scripts/copy-assets.mjs services/cli/scripts/prepare-pty.mjs; do
@@ -106,44 +182,19 @@ jobs:
           else
             (cd .perf-base && npm ci)
           fi
-      - name: Build selected revision
+      - name: Build base
+        if: steps.base.outputs.found != 'true'
+        run: (cd .perf-base && npm run build)
+      - name: Measure base
+        if: steps.base.outputs.found != 'true'
         env:
-          REVISION: ${{ matrix.revision }}
-        run: |
-          if [ "$REVISION" = base ]; then (cd .perf-base && npm run build); else npm run build; fi
-      - name: Measure selected revision
-        env:
-          REVISION: ${{ matrix.revision }}
           EVENT: ${{ github.event_name }}
         run: |
-          if [ "$REVISION" = base ]; then target=.perf-base; else target=.; fi
           if [ "$EVENT" = workflow_dispatch ]; then
-            node scripts/ci/performance-loads.mjs "$target" "page-speed/$REVISION.json"
+            node scripts/ci/performance-loads.mjs .perf-base page-speed/base.json
           else
-            node scripts/ci/performance-loads.mjs "$target" "page-speed/$REVISION.json" --size-only
+            node scripts/ci/performance-loads.mjs .perf-base page-speed/base.json --size-only
           fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
-        with:
-          name: page-speed-${{ matrix.revision }}
-          path: page-speed/${{ matrix.revision }}.json
-          retention-days: 30
-          if-no-files-found: warn
-
-  report:
-    name: page speed report
-    runs-on: ubuntu-latest
-    needs: [measure]
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          pattern: page-speed-*
-          path: page-speed
-          merge-multiple: true
       - name: Report
         run: node scripts/ci/performance-report.mjs page-speed/base.json page-speed/head.json page-speed/combined.json >> "$GITHUB_STEP_SUMMARY"
       - name: Size targets

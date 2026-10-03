@@ -21,7 +21,7 @@
  * set from the credential it already has. The page cannot name a token, which
  * is exactly why it cannot name someone else's.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { mintToken, revokeToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
@@ -30,12 +30,12 @@ import { createArtifact } from '@/lib/artifacts';
 import { POST as claimableRoute } from '@/app/api/tokens/claimable/route';
 import { POST as claimRoute } from '@/app/api/tokens/claim/route';
 import { agentCookie, request } from '@/__tests__/harness';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, setSession } from '@/__tests__/harness';
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
 
 const sessionUser = { id: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id } } : null) }));
 
 /** Ask as a browser holding exactly these token ids. */
 const claimableResponse = async (tokenIds: string[]) => {

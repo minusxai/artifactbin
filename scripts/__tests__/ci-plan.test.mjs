@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
-import { CI_GATE_SHARDS, CI_ISOLATED_GATES, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
 /** Built and proved only for a release: the five-target binaries (the Intel proofs consume its artifact) and the distributions gate. */
@@ -22,6 +22,12 @@ describe('CI change selection', () => {
     const workspace = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
     for (const directory of workspace.workspaces) {
       const pkg = JSON.parse(readFileSync(path.join(root, directory, 'package.json'), 'utf8'));
+      // A workspace outside services/ (docs/proposals/runner-validation, installed with the rest so CI
+      // pays one install) is no CI module: it may not depend on one, or an edge would go unseen.
+      if (!directory.startsWith('services/')) {
+        expect(Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).filter((name) => name.startsWith('@artifactbin/')), directory).toEqual([]);
+        continue;
+      }
       const module = directory.split('/')[1];
       expect(CI_MODULES).toHaveProperty(module);
       for (const dependency of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) {
@@ -690,11 +696,18 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
     expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
   });
-  it('splits the node project into seven shards, and every shard runs its seventh', () => {
+  it('splits the node project into four shards, and every shard runs its fourth', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/7)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci/ci.mjs node')).run).toBe('node scripts/ci/ci.mjs node ${{ matrix.shard }}/7');
+    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/4)');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci/ci.mjs node')).run).toBe('node scripts/ci/ci.mjs node ${{ matrix.shard }}/4');
+  });
+  it('splits the ui and islands projects into two shards, and every shard runs its half', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    expect(jobs.ui.strategy.matrix.shard).toEqual([1, 2]);
+    expect(jobs.ui.name).toBe('ui tests (${{ matrix.shard }}/2)');
+    expect(jobs.ui.steps.find(step => (step.run ?? '').includes('vitest run --project=ui')).run)
+      .toBe('npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2');
   });
   it('runs the CLI source suite on the reader and island builds, never the full CLI build', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -706,12 +719,12 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(prepare).toBeGreaterThan(-1);
     expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
   });
-  it('spreads the API test files over ten shards without dropping a shard', () => {
+  it('spreads the API test files over four shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/8)');
+    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/4)');
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
-      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/8');
+      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/4');
   });
   it('restores the test global setup\'s builds before every Vitest shard and the app build run', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -758,7 +771,7 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over ten runners and pulls Postgres only for its assigned shard', () => {
+  it('fans the gate set over seven runners and pulls Postgres only for its assigned shard', () => {
     const { jobs } = ci();
     expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: CI_GATE_SHARDS }, (_, index) => index + 1));
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
@@ -796,15 +809,17 @@ describe('CI job shape', () => {
 
     const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts/gates')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
-      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: CI_ISOLATED_GATES }).reduce((sum, name) => sum + shardWeight(name), 0)));
+      shardOf(names, { index: offset + 1, total: count }, shardWeight, CI_SHARD_OPTIONS).reduce((sum, name) => sum + shardWeight(name), 0)));
     expect(heaviest(CI_GATE_SHARDS)).toBeLessThanOrEqual(heaviest(CI_GATE_SHARDS - 1));
     // Every shard fits its wall: two servers halve its summed seconds, but the clipboard group runs
-    // one gate at a time across both, so it is charged whole.
+    // one gate at a time across both, so it is charged whole — and so is the isolated gates' shard,
+    // which runs on one server (scripts/gates.servers.mjs `serversFor`).
     for (let index = 1; index <= CI_GATE_SHARDS; index++) {
-      const shard = shardOf(names, { index, total: CI_GATE_SHARDS }, shardWeight, { isolated: CI_ISOLATED_GATES });
+      const shard = shardOf(names, { index, total: CI_GATE_SHARDS }, shardWeight, CI_SHARD_OPTIONS);
       const seconds = shard.reduce((sum, name) => sum + specFor(name).seconds, 0);
       const serial = shard.filter((name) => specFor(name).serialGroup === 'clipboard').reduce((sum, name) => sum + specFor(name).seconds, 0);
-      expect(Math.max(seconds / 2, serial), `shard ${index}: ${shard.join(',')}`).toBeLessThanOrEqual(75);
+      const servers = shard.every((name) => CI_ISOLATED_GATES.includes(name)) ? 1 : 2;
+      expect(Math.max(seconds / servers, serial), `shard ${index}: ${shard.join(',')}`).toBeLessThanOrEqual(75);
     }
 
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
@@ -813,10 +828,27 @@ describe('CI job shape', () => {
   });
 
   it('does not rebuild the CLI before the binary builder rebuilds it', () => {
-    for (const job of ['cli', 'reference-compatibility']) {
+    for (const job of ['cli']) {
       const commands = ci().jobs[job].steps.map(step => step.run);
       expect(commands).not.toContain('npm run build -w services/cli');
     }
+  });
+
+  it('tests the Linux binary the release matrix built instead of compiling it again', () => {
+    const job = ci().jobs['reference-compatibility'];
+    expect(job.needs).toEqual(expect.arrayContaining(['plan', 'cli']));
+    expect(job['runs-on']).toBe('ubuntu-24.04');
+    const commands = job.steps.map(step => step.run ?? '');
+    expect(commands.some(command => command.includes('build:binary'))).toBe(false);
+    // The bundle, types and host runtime that `npm pack` and the bundle conformance read.
+    const build = job.steps.findIndex(step => step.run === 'npm run build -w services/cli');
+    const download = job.steps.findIndex(step => step.uses?.startsWith('actions/download-artifact'));
+    expect(job.steps[download]?.with).toMatchObject({ name: 'afbin-ubuntu-24.04', path: 'candidate/services/cli/dist' });
+    expect(download).toBeGreaterThan(build);
+    expect(build).toBeGreaterThan(-1);
+    expect(commands).toContain('chmod +x candidate/services/cli/dist/afbin-linux-x64');
+    expect(ci().jobs.cli.strategy.matrix.os).toContain('ubuntu-24.04');
+    expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-${{ matrix.os }}')?.with.path).toContain('services/cli/dist/afbin-*');
   });
 
   it('runs the CLI suite once and the per-platform binary smoke on every row', () => {
@@ -863,27 +895,38 @@ describe('CI job shape', () => {
 
   it('reports every job duration, and on a pull request fails the run over budget', () => {
     const { jobs } = ci();
-    // Everything that does work; not the roll-up (`test`) or what waits on it, which only add their
-    // own length to the run's wall clock.
-    const named = Object.keys(jobs).filter((job) => !['timings', 'test', 'notify-consumer'].includes(job));
-    expect(jobs.timings.needs).not.toContain('test');
-    expect(jobs.timings.needs).not.toContain('notify-consumer');
-    expect(jobs.timings.needs).toEqual(expect.arrayContaining(named));
-    expect(jobs.timings.if).toBe('always()');
+    // Folded into the roll-up (`test`), which already waits on every job that does work: one runner and
+    // one setup fewer than the separate `job timings` job it was. Not `notify-consumer` (it waits on
+    // `test`), and not `warm-caches`: waiting on it would put a 15-minute job on merge → production.
+    expect(jobs).not.toHaveProperty('timings');
+    const named = Object.keys(jobs).filter((job) => !['test', 'notify-consumer', 'warm-caches'].includes(job));
+    expect(jobs.test.needs).not.toContain('notify-consumer');
+    expect(jobs.test.needs).not.toContain('warm-caches');
+    expect(jobs.test.needs).toEqual(expect.arrayContaining(named));
+    expect(jobs.test.if).toBe('always()');
+    const step = jobs.test.steps.find((candidate) => (candidate.run ?? '').includes('/actions/runs/'));
+    expect(step.if).toBe('always()');
     // A summary on main, a gate on a pull request — where the branch can still be fixed.
-    expect(jobs.timings['continue-on-error']).toBe("${{ github.event_name != 'pull_request' }}");
+    expect(step['continue-on-error']).toBe("${{ github.event_name != 'pull_request' }}");
     // Reading the run's own job list needs a scope the workflow does not grant by default.
-    expect(jobs.timings.permissions.actions).toBe('read');
-    const report = jobs.timings.steps.at(-1).run;
+    expect(jobs.test.permissions.actions).toBe('read');
+    expect(jobs.test.permissions.contents).toBe('read');
+    const report = step.run;
     expect(report).toContain('GITHUB_STEP_SUMMARY');
     expect(report).toContain('/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs');
     expect(report).toContain('exit 1');
+    // The roll-up is still running while it reads the list; it does not measure itself.
+    expect(report).toContain('select(.name != "test")');
     // The slowest STEP is named, because "gates took 300s" is not something anyone can act on.
     expect(report).toContain('.steps[]');
-    expect(Number(jobs.timings.steps.at(-1).env.BUDGET_S)).toBeLessThanOrEqual(240);
-    // Never part of the merge gate itself: absent from the planner's job list and the roll-up's needs.
+    expect(Number(step.env.BUDGET_S)).toBeLessThanOrEqual(240);
+    // After the roll-up's verdict and before the tested tree is recorded: an over-budget pull request
+    // never leaves the artifact that IS the pass.
+    const at = (text) => jobs.test.steps.findIndex((candidate) => (candidate.run ?? '').includes(text));
+    expect(jobs.test.steps.indexOf(step)).toBeGreaterThan(at('scripts/ci/ci.mjs check'));
+    expect(jobs.test.steps.indexOf(step)).toBeLessThan(at('scripts/ci/ci.mjs record-tree'));
+    // Never a job of its own in the planner's list.
     expect(CI_JOBS).not.toContain('timings');
-    expect(jobs.test.needs).not.toContain('timings');
   });
 
   it('lints the workflows where a typo is cheap to find', () => {

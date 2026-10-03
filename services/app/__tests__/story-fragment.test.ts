@@ -6,11 +6,11 @@
  * answer is readable from the `/raw` copy's opaque origin; a fragment is never a view and never today's
  * renderer. Real routes, the harness's database, the flag in `shadow` for this file.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as storyRoute } from '@/app/a/[id]/story/route';
@@ -20,8 +20,8 @@ import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.ser
 import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
+beforeEach(() => setSession(null));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');

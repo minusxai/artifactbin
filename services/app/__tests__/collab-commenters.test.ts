@@ -9,7 +9,7 @@ import {documentEditBody} from './prepared-document';
  * comment on it — and a plain viewer may not: "anyone may read this" has never
  * meant "anyone may write on it".
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -22,15 +22,13 @@ import { canReadArtifact, effectiveRole as roleFor, getArtifactById } from '@/li
 import { SHARE_ROLES, SHARE_ROLE_LABEL } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const jreq = (path: string, method: string, body?: unknown, token?: string) =>
   new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });

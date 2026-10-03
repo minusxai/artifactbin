@@ -9,12 +9,12 @@ import {forkDatasetPreview,type ArtifactRow} from '@/lib/artifacts';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import {mintToken} from '@/lib/accounts';
 import {claimToken,createUser} from '@/lib/accounts';
-import {request,useAppHarness} from './harness';
+import {request,setSession,useAppHarness} from './harness';
 const harness=useAppHarness();const current={id:'',email:''};
-vi.mock('@/auth',()=>({auth:async()=>current.id?{user:{id:current.id,email:current.email}}:null}));
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
 beforeEach(()=>{current.id='';current.email='';});
+beforeEach(()=>setSession(()=>current.id?{user:{id:current.id,email:current.email}}:null));
 async function user(name:string){const account=await createUser({email:`mxmx_test_pg_fork_${name}@example.com`});const token=await mintToken(name);await claimToken(account.id,token.token);return {account,token};}
 async function postgresDataset(owner:Awaited<ReturnType<typeof user>>){
  const secret=await createDatasetSecret({userId:owner.account.id,tokenId:owner.token.id},'fork-test-password',target);
