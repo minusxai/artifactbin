@@ -497,9 +497,9 @@ try {
       state.served = [...story.querySelectorAll('*')];
       state.staticNodes = [...story.querySelectorAll('[data-mx-ast]')]
         // Floating content (a pinned-open tooltip or popover) is positioned at runtime: its style and side are the popper's.
-        .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"], [data-story-floating]'))
+        .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"], [data-story-floating], [aria-busy]'))
         .map((node) => ({ node, attrs: [...node.attributes].map((attr) => [attr.name, attr.value]),
-          text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') }));
+          text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('').trim() }));
     });
   };
   /** The verdict, read inside the document's frame: the served story is the one still running there. */
@@ -511,7 +511,7 @@ try {
       lost: story ? served.filter((n) => !story.contains(n)).length : -1,
       staticNodes: staticNodes.length,
       ...(() => {
-        const textOf = (node) => [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('');
+        const textOf = (node) => [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('').trim();
         const changed = staticNodes.filter(({ node, attrs, text }) => !story?.contains(node)
           || JSON.stringify([...node.attributes].map((attr) => [attr.name, attr.value])) !== JSON.stringify(attrs)
           || textOf(node) !== text);

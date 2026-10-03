@@ -658,8 +658,10 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     await becomeOwner(ownerPage, B, st.token);
     await ownerPage.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
     await openArtifactControls(ownerPage);
-    check(await ownerPage.getByRole('textbox', { name: 'Agent instructions', exact: true }).isVisible(), 'a new artifact offers its owner editable agent instructions');
-    check(await ownerPage.getByRole('button', { name: 'Copy agent instructions', exact: true }).isVisible(), 'the owner can copy instructions for the first agent edit');
+    // The controls panel fills in after it opens: wait for the fields rather than reading them at once.
+    const shown = (locator) => locator.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
+    check(await shown(ownerPage.getByRole('textbox', { name: 'Agent instructions', exact: true })), 'a new artifact offers its owner editable agent instructions');
+    check(await shown(ownerPage.getByRole('button', { name: 'Copy agent instructions', exact: true })), 'the owner can copy instructions for the first agent edit');
     await ownerPage.close();
   });
 
