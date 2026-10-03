@@ -719,6 +719,16 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(prepare).toBeGreaterThan(-1);
     expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
   });
+  it('reuses verified reader assets before packaging each CLI distribution', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    const steps = jobs.cli.steps;
+    const cache = steps.findIndex(step => step.id === 'cli-reader-assets');
+    expect(cache).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
+    expect(cache).toBeLessThan(steps.findIndex(step => step.name === 'Build compact standalone CLI'));
+    expect(steps[cache].with.path).toContain('node_modules/.cache/build-islands.json');
+    expect(steps[cache].with.key).toContain('${{ runner.arch }}');
+    expect(steps.some(step => (step.run ?? '').includes('test:binary'))).toBe(true);
+  });
   it('spreads the API test files over four shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
     expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
