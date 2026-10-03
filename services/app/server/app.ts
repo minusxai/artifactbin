@@ -199,6 +199,8 @@ function appCsp({ inPageDocuments = false, frames = [], connect = [] }: { inPage
 }
 /** The strict app policy: every app page, and the document page once documents have their own origins. */
 export const APP_CSP = appCsp();
+/** The document page's policy while documents still run inside it (APP__PAGES_HOST unset). */
+export const IN_PAGE_DOCUMENT_CSP = appCsp({ inPageDocuments: true });
 /** The pages origins an app page may frame (lib/serving/pages-origin): the apex and every document label. */
 export function pagesFrameSources(site: PagesSite | null): string[] {
   if (!site) return [];

@@ -46,14 +46,17 @@ describe('buildDocumentCsp', () => {
   });
 
   it('appends https origins a document declares, per directive — never a connection, which goes through its /fetch door — and refuses anything else', () => {
-    const extended = buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: ['https://api.example.org'], script: ['https://cdn.example.org'], style: ['https://css.example.org'], img: ['https://img.example.org'] } });
+    const extended = buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: ['https://api.example.org'], script: ['https://cdn.example.org'], style: ['https://css.example.org'], img: ['https://img.example.org'], frame: ['https://embed.example.org'], media: ['https://media.example.org'] } });
+    expect(directive(extended, 'font-src')!.split(' ').at(-1)).toBe('https://css.example.org');
+    expect(directive(extended, 'frame-src')!.split(' ').at(-1)).toBe('https://embed.example.org');
+    expect(directive(extended, 'media-src')!.split(' ').at(-1)).toBe('https://media.example.org');
     expect(directive(extended, 'connect-src')).toBe(directive(csp, 'connect-src'));
     expect(extended).not.toContain('https://api.example.org');
     expect(directive(extended, 'script-src')!.split(' ').at(-1)).toBe('https://cdn.example.org');
     expect(directive(extended, 'style-src')!.split(' ').at(-1)).toBe('https://css.example.org');
     expect(directive(extended, 'img-src')!.split(' ').at(-1)).toBe('https://img.example.org');
     for (const bad of ['http://api.example.org', 'https://api.example.org/path', "'unsafe-inline'", 'https:', '*', 'https://*.example.org', 'https://a.example.org; script-src *']) {
-      expect(() => buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: [bad], script: [], style: [], img: [] } }), bad).toThrow(/https origin/);
+      expect(() => buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: [bad], script: [], style: [], img: [], frame: [], media: [] } }), bad).toThrow(/https origin/);
     }
   });
 });

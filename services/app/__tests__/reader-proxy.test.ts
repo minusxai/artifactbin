@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
-import { APP_CSP, BOOTSTRAP_ID, candidateDocument, createAppServer } from '@/server/app';
+import { BOOTSTRAP_ID, IN_PAGE_DOCUMENT_CSP, candidateDocument, createAppServer } from '@/server/app';
 import { createArtifact } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
 import { createUser, ensureUsername } from '@/lib/accounts';
@@ -24,13 +24,13 @@ describe('reader delivery over HTTP',()=>{
  });
  it.each(['public','unlisted'] as const)('serves %s readers initial content and prepared data under app CSP',async visibility=>{
   const {row}=await publish(visibility),response=await app.request(`/a/${row.id}`),html=await response.text();
-  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(APP_CSP);
+  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(IN_PAGE_DOCUMENT_CSP);
   expect(response.headers.get('cache-control')).toBe('no-store');expect(html).toContain('data-mx-story-root');
   expect(html).toContain('>Readable body</h1>');expect(html).toContain(BOOTSTRAP_ID);expect(html).not.toContain('<iframe title="artifact"');
  });
  it('serves anonymous owners the same document policy',async()=>{
   const {row,token}=await publish();const response=await app.request(`/a/${row.id}`,{headers:{cookie:await agentCookie([token.id])}});
-  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(APP_CSP);expect(await response.text()).toContain('"role":"owner"');
+  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(IN_PAGE_DOCUMENT_CSP);expect(await response.text()).toContain('"role":"owner"');
  });
  it('never leaks private contents or a canonical redirect to strangers',async()=>{
   const owner=await ensureUsername(await createUser({email:'mxmx_test_reader@example.com'}));const {row}=await publish('private','<p>Private-only words</p>',owner.id);

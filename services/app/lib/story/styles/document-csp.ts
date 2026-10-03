@@ -24,13 +24,17 @@ import { EMBED_HOSTS, FONT_FILES, FONT_STYLES, MODULE_CDNS } from './document-so
  * `CspExtensions` (lib/story/document/csp-extensions), which replaces this declaration at merge.
  */
 export interface DocumentCspExtensions {
+  /** Reached through the document's `/fetch` door (app/a/[id]/fetch), never added to `connect-src`. */
   connect: readonly string[];
   script: readonly string[];
+  /** Stylesheets, and the fonts they load (`style-src` and `font-src`). */
   style: readonly string[];
   img: readonly string[];
+  frame: readonly string[];
+  media: readonly string[];
 }
 
-export const NO_DOCUMENT_CSP_EXTENSIONS: DocumentCspExtensions = Object.freeze({ connect: [], script: [], style: [], img: [] });
+export const NO_DOCUMENT_CSP_EXTENSIONS: DocumentCspExtensions = Object.freeze({ connect: [], script: [], style: [], img: [], frame: [], media: [] });
 
 export interface DocumentCspInput {
   /** The document's own origin (`https://<hex>.<pages host>`). */
@@ -67,7 +71,9 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
   const ext = {
     connect: httpsOrigins(extensions.connect), script: httpsOrigins(extensions.script),
     style: httpsOrigins(extensions.style), img: httpsOrigins(extensions.img),
+    frame: httpsOrigins(extensions.frame ?? []), media: httpsOrigins(extensions.media ?? []),
   };
+  void ext.connect; // validated like the rest; reached through `/fetch`, never connected to
   const appDoors = [queryPath(id), mutatePath(id), eventsPath(id), fetchPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
   return [
     "default-src 'none'",
@@ -77,10 +83,10 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     // door (app/a/[id]/fetch), so the reader's address never leaves for them.
     join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:'),
     join('style-src', "'self'", "'unsafe-inline'", FONT_STYLES, ext.style),
-    join('font-src', "'self'", 'data:', FONT_FILES, asset),
+    join('font-src', "'self'", 'data:', FONT_FILES, asset, ext.style),
     join('img-src', "'self'", 'https:', 'data:', 'blob:', asset, ext.img),
-    join('media-src', "'self'", 'https:', 'blob:', asset),
-    join('frame-src', EMBED_HOSTS),
+    join('media-src', "'self'", 'https:', 'blob:', asset, ext.media),
+    join('frame-src', EMBED_HOSTS, ext.frame),
     "form-action 'none'",
     "base-uri 'none'",
     `frame-ancestors ${appOrigin}`,

@@ -442,7 +442,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
               'Content-Type': 'text/html; charset=utf-8',
               // On its own origin the document needs no sandbox: the origin is its alone (lib/story/styles/document-csp).
               'Content-Security-Policy': pages
-                // TODO(brief C): extensions: cspExtensionsFor({ artifact, viewer: viewer ? { userId: viewer.userId, tokenId: actor.tokenId } : null, request })
+                // TODO(brief C): extensions: cspExtensionsFor({ artifact: { id, version, source } of `row`, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId }, request })
                 // from '@/lib/trust/document-trust' (its "Allow once" grant arrives as `pages.carried`).
                 ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN })
                 : markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }),

@@ -55,8 +55,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const raw = new URL(request.url).searchParams.get('url') ?? '';
   let target: URL;
   try { target = new URL(raw); } catch { return json({ error: 'invalid_url' }, 400, NO_STORE); }
-  // TODO(brief C): narrow to what this reader consented to — cspExtensionsFor({ artifact, viewer, request }).connect
-  // from '@/lib/trust/document-trust' — as well as what the document declares.
+  // TODO(brief C): replace the stored-meta read with this version's declared, consented hosts —
+  // cspExtensionsFor({ artifact: { id, version, source }, viewer: { userId, tokenId }, request }).connect
+  // from '@/lib/trust/document-trust' (derived from the version's source, narrowed by the reader's consent).
   if (!declaredConnectOrigins(artifact.meta).includes(target.origin)) {
     return json({ error: 'undeclared_host', detail: `this document does not declare ${target.origin}` }, 403, NO_STORE);
   }
