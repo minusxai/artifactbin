@@ -113,6 +113,34 @@ test('team settings refuse the network shapes teammates cannot sign in through, 
   assert.equal((await teamSettings(file)).origin,'http://127.0.0.1:7445');
  }finally{await rm(directory,{recursive:true,force:true});}
 });
+/**
+ * The app server refuses to boot without APP__PAGES_HOST, and the host it names must be same site as
+ * the public URL: a team host derives one from the hostname it already knows unless the operator names it.
+ */
+test('team settings give the host a pages host on the public URL\'s site, keep an operator\'s, and refuse to guess for an IP address',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-team-pages-'));
+ try{
+  const file=join(directory,'server.env'),secret='AUTH__SECRET='+'s'.repeat(48)+'\n',login='EMAIL__RESEND_API_KEY=re_test_key\nEMAIL__FROM=Team <team@example.test>\n';
+  const shape=(origin:string,host='0.0.0.0')=>`APP__HOST=${host}\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=${origin}\n`+secret;
+  const pages=async(text:string)=>{await writeFile(file,text);return (await teamSettings(file,{APP__PAGES_HOST:'inherited.example.test'})).env.APP__PAGES_HOST;};
+  assert.equal(await pages(shape('http://127.0.0.1:7445','127.0.0.1')),'lvh.me');
+  assert.equal(await pages(shape('http://localhost:7445','127.0.0.1')),'lvh.me');
+  assert.equal(await pages(shape('http://[::1]:7445','::1')),'lvh.me');
+  assert.equal(await pages(shape('http://app.lvh.me:7445','127.0.0.1')),'lvh.me');
+  assert.equal(await pages(shape('https://Team.Example.test')+login),'pages.team.example.test');
+  assert.equal(await pages(shape('https://team.example.test')+login+'APP__PAGES_HOST=docs.example.test\n'),'docs.example.test');
+  await writeFile(file,shape('https://203.0.113.7')+login);
+  await assert.rejects(teamSettings(file),/IP address.*APP__PAGES_HOST/);
+  await writeFile(file,shape('https://203.0.113.7')+login+'APP__PAGES_HOST=pages.example.test\n');
+  assert.equal((await teamSettings(file)).env.APP__PAGES_HOST,'pages.example.test');
+  // A published origin tells the operator which names DNS and TLS must cover; a loopback one needs nothing.
+  await writeFile(file,shape('https://team.example.test')+login);
+  const published=serverInstructions(await teamSettings(file));
+  assert.ok(published.some(line=>line.includes('https://<id>.pages.team.example.test')&&line.includes('*.pages.team.example.test')),published.join('\n'));
+  await writeFile(file,shape('http://127.0.0.1:7445','127.0.0.1'));
+  assert.ok(!serverInstructions(await teamSettings(file)).some(line=>line.includes('<id>.')));
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
 test('startup instructions name the host teammates set, the installer, and where login codes appear',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'afbin-team-instructions-'));
  try{
