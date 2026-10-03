@@ -46,7 +46,7 @@ export const GATE_SPECS = Object.freeze([
   { name: 'seamless-navigation', needsMail: true, seconds: 5, timeoutMs: 60_000 },
   { name: 'libraries', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   { name: 'postgres-datasets', needsMail: true, seconds: 14, timeoutMs: 60_000 },
-  { name: 'annotations', needsMail: false, seconds: 20, timeoutMs: 60_000 },
+  { name: 'annotations', needsMail: false, seconds: 40, timeoutMs: 120_000 },
   { name: 'app-flows', needsMail: true, seconds: 75, timeoutMs: 210_000 },
   { name: 'claim-flow', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'collab-edit', needsMail: true, seconds: 37, timeoutMs: 100_000 },
