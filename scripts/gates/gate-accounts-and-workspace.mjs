@@ -308,12 +308,17 @@ async function doorLeg() {
       await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ title: 'Connected artifact', markup: '<h1>connected</h1>' }) });
       await page.goto(`${BASE}/`, { waitUntil: 'load' }); await page.waitForTimeout(1000);
       check((await page.getByText('Connected artifact').count()) > 0, 'what the connection publishes appears on the dashboard');
-      await page.goto(`${BASE}/account`, { waitUntil: 'load' }); await page.waitForTimeout(800);
+      await page.goto(`${BASE}/account`, { waitUntil: 'load' });
       const revoke = page.locator('[aria-label^="Revoke token"]').first();
-      if (await revoke.count()) {
-        await revoke.click(); await page.getByLabel('Confirm revoke', { exact: true }).click(); await page.waitForTimeout(2500);
-        check((await fetch(`${BASE}/api/artifacts`, { headers: { Authorization: `Bearer ${accountToken}` } })).status === 401, 'a revoked connection stops working');
-      } else check(false, 'the connections panel offers revoke');
+      // Account hydration fetches connections after navigation. An 800ms sleep plus
+      // count() sampled that asynchronous state too early under distribution CI load.
+      // Wait for the actual affordance, then retain the real revocation assertion.
+      must(await revoke.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false), 'the connections panel offers revoke');
+      await revoke.click();
+      const revoked = page.waitForResponse(response => response.request().method() === 'DELETE' && new URL(response.url()).pathname.startsWith('/api/my/tokens/'));
+      await page.getByLabel('Confirm revoke', { exact: true }).click();
+      must((await revoked).ok(), 'the connection revocation succeeds');
+      check((await fetch(`${BASE}/api/artifacts`, { headers: { Authorization: `Bearer ${accountToken}` } })).status === 401, 'a revoked connection stops working');
       await openMenu(page);
       await page.click('[aria-label="Sign out"]'); await page.waitForTimeout(3000);
       await page.waitForURL(`${BASE}/login`);

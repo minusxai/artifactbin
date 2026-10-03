@@ -25,11 +25,11 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the theme carries the palette.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 
-`afbin -h` and `afbin help <topic>` work offline and print the references beside it; bare `afbin help` prints this file’s location.
+`afbin -h` and `afbin help <topic>` work offline; `afbin help` prints this file’s location.
 
 ## Example
 
-Read `afbin help <template>` for design, markup, template and theme.
+Before writing, read `afbin help <template>` for design, markup, template and theme; skipping the frame leaves content flush to the viewport edge.
 
 ```jsx
 [[ example ]]

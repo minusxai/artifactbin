@@ -361,7 +361,9 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     await f2.click('[aria-label="Load more rows"]');
     await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('1,000 of'), null, { timeout: 20000 }).catch(() => {});
     check(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), 'load more reads the next window');
-    check(pageCalls.length === tableCallsBefore && pageCalls.every((call) => call.method === 'POST'), `sort and paging read their engine windows in the page (${pageCalls.length - tableCallsBefore} requests after the first paint)`);
+    // Guest initialization may query via GET before the engine is ready; only requests caused by
+    // sorting/paging belong to this assertion (fetch-transport tests cover initialization methods).
+    check(pageCalls.length === tableCallsBefore, `sort and paging read their engine windows in the page (${pageCalls.length - tableCallsBefore} requests after the first paint)`);
     check(pageErrors.length === 0, `no page errors (${pageErrors.length})`);
     await p.close();
 
