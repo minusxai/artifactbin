@@ -41,7 +41,8 @@ const SOURCE_DIRECTIVES = [
   "img-src 'self' data: blob: https:",
   `font-src 'self' data: ${FONT_FILES}`,
   "media-src 'self' data: blob: https:",
-  // Same-origin frames only; a raw <iframe> remains invalid markup.
+  // Same-origin frames only: an author's <iframe> plays on the document's own
+  // origin (./document-csp), never in this sandboxed copy.
   "frame-src 'self'",
 ] as const;
 

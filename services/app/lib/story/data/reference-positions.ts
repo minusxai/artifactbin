@@ -3,7 +3,6 @@ export const REFERENCE_POSITIONS:ReadonlyArray<{component:boolean;tag:string;att
  {component:false,tag:'img',attribute:'src',kind:'image'},
  {component:false,tag:'img',attribute:'srcset',kind:'image',list:true},
  {component:false,tag:'source',attribute:'srcset',kind:'image',list:true},
- {component:true,tag:'Video',attribute:'poster',kind:'image'},
  {component:false,tag:'video',attribute:'poster',kind:'image'},
  {component:true,tag:'File',attribute:'src',kind:'pdf'},
  {component:false,tag:'a',attribute:'href',kind:'asset'},

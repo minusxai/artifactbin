@@ -23,7 +23,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
   container variants for responsive layout.
 - Data (`<Import>`, `<Value>`, `<Query>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
   Editable dataset cells: [editing](markup-editing.md).
-  <!--bundle:skip-->[maps](markup-maps.md) · <!--/bundle:skip-->[motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
+  <!--bundle:skip-->[maps](markup-maps.md) · <!--/bundle:skip-->[motion](markup-motion.md) · [svg](markup-svg.md).
 
 <!--bundle:skip-->
 ## Contents
@@ -73,7 +73,7 @@ outright, no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 At most ONE per document, holding at most one each of `<title>`, `<style>`
 and `<script>`, plus `<meta name content />` pairs, plus any number of the
 DATA declarations `<Import>`, `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
-Write it anywhere; it is hoisted to the top when stored.
+Write it anywhere; it is hoisted when stored.
 
 ```jsx
 <Helmet>
@@ -112,9 +112,8 @@ names, npm libraries, exported components — [scripts](markup-scripts.md).
   bespoke accent (`text-[#e2483d]`) is legitimate for the one bold moment —
   it will not follow a later theme switch.
 - `theme`, `template` and `colorMode` are top-level fields of the YAML fence
-  at the top of the file you push, not Helmet content. No genre named →
-  **default to `scrolly`**; torn →
-  ask the user. `colorMode`
+  atop the file you push, not Helmet content. No genre named →
+  **default to `scrolly`**; torn → ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
 <!--bundle:skip-->
@@ -124,13 +123,15 @@ Social preview: `<Helmet>` metas `artifactbin:og-image` and
 <!--/bundle:skip-->
 ## Images and icons
 
-Repeated galleries: use [dataset image bindings](markup-repeat.md).
+Galleries: [image bindings](markup-repeat.md).
 
 - `<img src="ref:<imageId>" />` — an [uploaded image](publishing-datasets.md).
   Web URLs also work: publish stores a copy, keeps your URL in the source,
   and warns if fetching fails.
-- In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL;
+- In parent markup only `<img src>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
+- `<iframe src="https://…" title="…" />` frames a player: YouTube
+  (nocookie), Vimeo, Loom; others need `csp-frame`.
 <!--bundle:skip-->
 - An image `src` also binds: `"$pick"`, or `"https://…/{$pick}.png"` to
   compose one — the only braced position; the first reader imports it.

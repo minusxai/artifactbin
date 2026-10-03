@@ -40,12 +40,6 @@ describe('a ref image', () => {
       .toEqual({ src: '/a/abc123/raw?v=2' });
   });
 
-  // A <Video> poster is a background, not a laid-out element: sizing it by the
-  // poster's intrinsic pixels would fight the player's own box.
-  it('sizes an <img> and not a Video poster', () => {
-    expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { poster: 'ref:abc123' }, sized))
-      .toEqual({ poster: '/a/abc123/raw?v=2' });
-  });
 });
 
 /*
@@ -82,10 +76,6 @@ describe('a ref image stored at two widths', () => {
     expect(resolveRefProps(img, { src: 'ref:abc123', srcset: '/mine 1x' }, wide)).not.toHaveProperty('srcSet');
   });
 
-  it('offers none behind a Video poster', () => {
-    expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { poster: 'ref:abc123' }, wide))
-      .toEqual({ poster: '/a/abc123/raw?v=2' });
-  });
 });
 
 /*
@@ -138,8 +128,4 @@ describe('a ref image with a blur', () => {
       .toEqual({ src: '/a/abc123/raw?v=2', width: '1200', height: '800' });
   });
 
-  it('does not put a blur behind a Video poster', () => {
-    expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { poster: 'ref:abc123' }, blurred))
-      .toEqual({ poster: '/a/abc123/raw?v=2' });
-  });
 });

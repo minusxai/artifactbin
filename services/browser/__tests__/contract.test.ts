@@ -123,7 +123,7 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
    * viewport's HEIGHT (a card is a fixed ratio — the whole point of the mode)
    * and the SURFACE's width, capped at the viewport. A served document's body
    * spans the viewport, so in the product the two coincide; here `main` is
-   * 600px and the clip follows it, which is the rule that stopped a `<Video>`
+   * 600px and the clip follows it, which is the rule that stopped an embedded
    * player's box from cropping every og card to its width.
    */
   it('clips the card stage to the surface width, at the viewport height', async () => {

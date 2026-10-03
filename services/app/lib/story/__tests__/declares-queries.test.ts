@@ -80,7 +80,6 @@ describe('a bound image source, through declaresLiveData', () => {
     no('<div><p>pick with $pick in the prose</p></div>');
     no('<div><Number data="$q" format="$,.0f" /></div>');
     no('<div><input value="$pick" /></div>');
-    no('<div><Video poster="$pick" src="https://youtu.be/x" /></div>');
   });
 
   it('is false for nothing and for source that does not parse', () => {

@@ -14,7 +14,6 @@
 import { parseJsx, type JsxAttribute, type JsxNode, type JsxElement, type ValidationError } from '@/lib/jsx';
 import {REFERENCE_POSITIONS} from './reference-positions';
 import { urlListUrls } from '@/lib/jsx/url-attrs';
-import { videoEmbedUrl } from '@/lib/story-ui/video-embed';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
 import { IMPORT_TAG, QUERY_TAG, NOTIFY_TAG, parseNotifyDecl, carriesRef, parseImportDecl, parseQueryDecl, refName } from './dataflow';
 import type { DatasetColumn } from './data-tiers';
@@ -172,11 +171,10 @@ export function findExternalSubresources(source: string): ValidationError[] {
           if (!isSelfContained(url)) reject(url, a, el.tag);
         }
       } else if (SUBRESOURCE_ATTRS.has(name) && !isSelfContained(value)) {
-        // <Video src> is the ONE sanctioned external subresource: an embed is
-        // external by definition, and lib/story-ui/video-embed.ts is its leash
-        // (host allowlist, id-constructed URL). Validated here at the door —
-        // publishing a player that renders "unsupported source" would tell the
-        // author nothing (the findBrokenEmbeds principle below).
+        // An <iframe src> is a frame DESTINATION, not a subresource to own: it
+        // is external by definition, its https rule is lib/jsx/validate's
+        // (`iframeErrors`) and which hosts load is the document CSP's frame-src.
+        if (!el.isComponent && el.tag.toLowerCase() === 'iframe' && name === 'src') continue;
         // A WEB URL in an image position is INPUT vocabulary, not a violation:
         // the publish door imports it into the global URL cache and the served
         // document is pointed at our copy (lib/story/assets/external-images,
@@ -189,7 +187,6 @@ export function findExternalSubresources(source: string): ValidationError[] {
         // /api/preview — which fetches nothing — agrees with publish.
         if (/^https?:\/\//i.test(value)
           && ((el.tag.toLowerCase() === 'img' && name === 'src')
-            || (el.tag === 'Video' && name === 'poster')
             || (el.tag === 'File' && name === 'src'))) {
           continue;
         }
@@ -207,18 +204,6 @@ export function findExternalSubresources(source: string): ValidationError[] {
          * array, so nothing here is being waved through.
          */
         if (!el.isComponent && el.tag.toLowerCase() === 'img' && name === 'src' && (carriesRef(value) || parseRowRef(value))) continue;
-        if (el.tag === 'Video' && name === 'src') {
-          if (videoEmbedUrl(value) === null) {
-            errors.push({
-              message: `"${value}" in "src" on <Video> is not a supported video source — use a YouTube, Vimeo or Loom link (watch/share URLs are fine; the card opens the video on its own page).`,
-              attr: a.name,
-              tag: el.tag,
-              start: a.start,
-              end: a.end,
-            });
-          }
-          continue;
-        }
         reject(value, a, el.tag);
       }
     }
@@ -393,7 +378,6 @@ const EMBED_DATA_PROP: Record<string, { required: string; usage: string; table?:
   Number: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   DataTable: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (<Import name="files" src="ref:<folderId>" />, select * from files.rows)', table: true },
-  Video: { required: 'src', usage: 'Use src="<YouTube/Vimeo/Loom link>" (+ optionally poster="ref:<image id>" for the thumbnail)' },
   File: { required: 'src', usage: 'Use src="ref:<pdf id>" — the id create_artifact returned for a pdf — or src="<public https link to a .pdf>" (+ optionally title="…")' },
 };
 

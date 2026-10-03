@@ -10,7 +10,7 @@
  *
  * For the document THESE HEADERS ARE THE SANDBOX:
  * - `default-src 'none'` blocks the network except the document's own query
- *   endpoint (connect-src) and the sanctioned <Video> frame hosts;
+ *   endpoint (connect-src); frames are same-origin only;
  *   subresources only from our own origin or data:/blob: — documents must be
  *   self-contained.
  * - `sandbox allow-scripts` (no allow-same-origin) gives the document an

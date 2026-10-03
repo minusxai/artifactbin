@@ -8,7 +8,7 @@ An agent sends `markup` — there is no second document tier:
 | HTML | Ordinary tags for everything else, prose included (`<h1>`, `<p>`, `<table>`, inline SVG) |
 | `<Helmet>` | At most one per document: `<title>`, one `<style>`, one `<script>`, `<meta name content>`, and the data |
 | Data | In `<Helmet>`: `<Import>` a dataset, `<Value>` page values, `<Query>` in SQLite, `<Mutation>` writes. The body binds them by name: `data="$q"`, `value="$v"`, `run="$m"`, `set={{…}}` |
-| Files | `<img src>` and `<Video poster>` take an upload (`ref:<id>`) or any `https` URL; `<File src>` links a PDF as a card |
+| Files | `<img src>` takes an upload (`ref:<id>`) or any `https` URL; `<File src>` links a PDF as a card; `<iframe src="https://…">` frames a player or page (YouTube, Vimeo and Loom by default, other hosts via `<meta name="csp-frame">`) |
 
 A document is SERVED as compiled static HTML with small Solid islands: `/a/<id>` with the app's reader
 chrome, `/a/<id>/raw` without it (see [Phase 2 architecture](phase2-architecture.md)). An author

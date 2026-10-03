@@ -15,10 +15,12 @@
  *    sanctioned door (`<Helmet><script>`, lib/story/document/helmet.ts), inside an
  *    opaque origin under `default-src 'none'`. Rejecting body scripts keeps ONE
  *    door instead of two; it is not what makes author JS safe.
- *  - `<base href>`, `<meta http-equiv>`, `<iframe>` are the ones that would act
- *    on the document itself — retarget every relative link, rewrite the
- *    document's own policy, frame elsewhere. Those have no door. `<form>` is
- *    denied for a different reason, below.
+ *  - `<base href>` and `<meta http-equiv>` are the ones that would act on the
+ *    document itself — retarget every relative link, rewrite the document's
+ *    own policy. Those have no door. `<form>` is denied for a different
+ *    reason, below. `<iframe>` is NOT here: an https player or page is
+ *    ordinary vocabulary (lib/jsx/validate `iframeErrors`), framed under the
+ *    document's own `frame-src` (lib/story/styles/document-csp).
  *
  * Every stored document has passed this gate, so the save-time check covers
  * the whole corpus.
@@ -35,6 +37,6 @@
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 export const DANGEROUS_TAGS = immutableSet([
-  'script', 'iframe', 'object', 'embed', 'base', 'meta', 'link', 'form',
+  'script', 'object', 'embed', 'base', 'meta', 'link', 'form',
   'frame', 'frameset', 'applet', 'noscript',
 ]);

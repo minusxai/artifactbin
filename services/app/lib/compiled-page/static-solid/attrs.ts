@@ -10,8 +10,12 @@
 export type Attr = [string, string];
 type Props = Record<string, unknown>;
 
-/** React's boolean attributes: any truthy value writes `name=""`, anything else writes nothing. */
-const BOOLEAN = new Set(['inert', 'allowFullScreen', 'async', 'autoPlay', 'controls', 'default', 'defer', 'disabled', 'disablePictureInPicture', 'disableRemotePlayback', 'formNoValidate', 'hidden', 'loop', 'noModule', 'noValidate', 'open', 'playsInline', 'readOnly', 'required', 'reversed', 'scoped', 'seamless', 'itemScope']);
+/**
+ * React's boolean attributes: any truthy value writes `name=""`, anything else writes nothing. `allowfullscreen` is
+ * the one lowercase spelling here: it is what an author's `<iframe>` carries (lib/jsx/validate `iframeErrors`), and
+ * React's unknown-boolean rule would drop it.
+ */
+const BOOLEAN = new Set(['inert', 'allowFullScreen', 'allowfullscreen', 'async', 'autoPlay', 'controls', 'default', 'defer', 'disabled', 'disablePictureInPicture', 'disableRemotePlayback', 'formNoValidate', 'hidden', 'loop', 'noModule', 'noValidate', 'open', 'playsInline', 'readOnly', 'required', 'reversed', 'scoped', 'seamless', 'itemScope']);
 /** Booleans React writes under their lowercase name. */
 const LOWER_BOOLEAN = new Set(['autoFocus', 'multiple', 'muted']);
 /** Written as the value's string, booleans included (`"true"`/`"false"`). */

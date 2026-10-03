@@ -1,6 +1,5 @@
 import { cn } from './cn';
 import type { Recipe } from '.';
-import { videoWatchUrl } from '@/lib/story-ui/video-embed';
 
 const withClass = (base: string): Recipe => (props) => cn(base, props.className as string | undefined);
 
@@ -24,6 +23,5 @@ export const RECIPES: Record<string, Recipe> = {
   BreadcrumbEllipsis: withClass('flex size-9 items-center justify-center'),
   SlideDeck: withClass('@container w-full'),
   Slide: withClass('relative flex flex-col min-h-[var(--mx-vh,760px)]'),
-  Video: (props) => withClass(videoWatchUrl(props.src as string | undefined) ? 'relative aspect-video w-full overflow-hidden rounded-md bg-muted' : 'flex aspect-video w-full items-center justify-center rounded-md border border-border bg-muted text-sm text-muted-foreground')(props),
   File: withClass('flex items-center gap-3 rounded-md border border-border bg-card p-4 text-card-foreground'),
 };

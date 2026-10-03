@@ -95,7 +95,9 @@ describe('parse restrictions (already-enforced contracts, pinned)', () => {
   });
   it('rejects unknown components and dangerous HTML tags', () => {
     expect(bad('<NotRegistered />').length).toBeGreaterThan(0);
-    expect(bad('<iframe src="https://x" />').length).toBeGreaterThan(0);
+    expect(bad('<object data="https://x" />').length).toBeGreaterThan(0);
+    // An <iframe> is vocabulary now, but only with an https src (lib/jsx/validate `iframeErrors`).
+    expect(bad('<iframe src="http://x" />').length).toBeGreaterThan(0);
     expect(bad('<form action="/x" />').length).toBeGreaterThan(0);
   });
   it('allows static JSON-literal attributes (embeds rely on them)', () => {

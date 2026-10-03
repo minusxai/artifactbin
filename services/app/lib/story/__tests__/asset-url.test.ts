@@ -154,11 +154,4 @@ describe('size variants', () => {
     expect(attrsOf(mapped(source, () => wide), 0).srcSet).toBeUndefined();
   });
 
-  it('leaves a <Video> poster alone — it is a background, not a laid-out image', () => {
-    const parsed = parseJsxOrThrow(`<Video src="https://v.example/v.mp4" poster="${URL_A}" />`);
-    const out = JSON.stringify(mapExternalImageSources(parsed.nodes, () => wide));
-    expect(out).toContain(assetUrlFor(URL_A, wide));
-    expect(out).not.toContain('srcSet');
-    expect(out).not.toContain('loading');
-  });
 });
