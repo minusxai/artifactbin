@@ -27,6 +27,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { documentFrame as framedDocument, INLINE_STORY } from './lib/page-facts.mjs';
+import { PAGES_HOST } from './lib/browser.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -69,8 +70,7 @@ async function paintedImages(page) {
     const deadline = Date.now() + 8000;
     const count = () => {
       const own = Array.from(document.querySelectorAll('[data-mx-inline-story] img'));
-      // ONLY artifact images. A served document also carries the reader
-      // chrome's logo (/logo-128.png), and counting it made this check pass
+      // ONLY artifact images: counting any image once made this check pass
       // while a freshly inserted image rendered its literal `ref:<id>` — which
       // is exactly the bug that hid here until gate-web-assets measured properly.
       return own
@@ -127,6 +127,30 @@ async function dispatchFileEvent(page, kind, b64) {
     document.querySelector('[data-mx-inline-story]').dispatchEvent(ev);
     return 'dispatched';
   }, { kind, b64 });
+}
+
+/*
+ * A browser whose clipboard the gate can write. `navigator.clipboard` exists only in a secure context: the app was
+ * `localhost` (secure by definition) and is now `app.lvh.me` over http, with the document framed on its own origin
+ * (`<hex id>.lvh.me`), so both are named secure for this browser — exactly what `localhost` was — and both are
+ * granted the clipboard. Real Chrome where it is installed — the clipboard is what these sections are about, and it
+ * is the browser people actually paste in; a machine without it gets Playwright's own Chromium.
+ */
+async function clipboardBrowser(docId) {
+  const app = new URL(B);
+  const origins = [app.origin, `${app.protocol}//${Buffer.from(docId, 'utf8').toString('hex')}.${PAGES_HOST}${app.port ? `:${app.port}` : ''}`];
+  const args = [`--unsafely-treat-insecure-origin-as-secure=${origins.join(',')}`];
+  const chrome = await launchChromium({ channel: 'chrome', headless: true, args })
+    .catch(() => launchChromium({ headless: true, args }));
+  const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
+  for (const origin of origins) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+  return { chrome, context };
+}
+
+/** Write the clipboard from the app page, focused first: a click into the document's frame left the focus there. */
+async function writeClipboard(page, fn) {
+  await page.evaluate(() => window.focus());
+  await page.evaluate(fn);
 }
 
 const browser = await launchChromium();
@@ -225,18 +249,9 @@ const browser = await launchChromium();
    * passed on the laptop it was written on and tested nothing on Linux.
    */
   const PASTE = process.platform === 'darwin' ? 'Meta+V' : 'Control+V';
-  /*
-   * Real Chrome where it is installed — the clipboard is what this section is
-   * about, and it is the browser people actually paste in. A machine without
-   * it (a bare container, a fresh checkout) gets Playwright's own Chromium.
-   */
-  const chrome = await launchChromium({ channel: 'chrome', headless: true })
-    .catch(() => launchChromium({ headless: true }));
-  const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
-  const page = await context.newPage();
-
   const st = await mint();
+  const { chrome, context } = await clipboardBrowser(st.id);
+  const page = await context.newPage();
   await fetch(`${B}/api/artifacts/${st.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
@@ -250,7 +265,7 @@ const browser = await launchChromium();
   await openEditor(page, st);
   const frame = await documentFrame(page);
 
-  await page.evaluate(() => navigator.clipboard.writeText('PASTED_TEXT_OK'));
+  await writeClipboard(page, () => navigator.clipboard.writeText('PASTED_TEXT_OK'));
   // The editor replaces the paragraph node after a text edit; keep a locator that resolves the current one.
   const para = frame.locator('p').filter({ hasText: 'START' }).first();
   await para.click();
@@ -261,7 +276,7 @@ const browser = await launchChromium();
   check(text.includes('PASTED_TEXT_OK'), `a real text paste lands in the paragraph (got ${JSON.stringify(text)})`);
   check(text.includes('START'), 'and it did not replace what was already there');
 
-  await page.evaluate(async () => {
+  await writeClipboard(page, async () => {
     // Encoded by Chrome itself, so the clipboard will certainly accept it.
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
@@ -362,12 +377,6 @@ const browser = await launchChromium();
  */
 {
   const PASTE = process.platform === 'darwin' ? 'Meta+V' : 'Control+V';
-  const chrome = await launchChromium({ channel: 'chrome', headless: true })
-    .catch(() => launchChromium({ headless: true }));
-  const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
-  const page = await context.newPage();
-
   const st = await mint();
   const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` };
   // The minted artifact becomes the ORIGINAL picture; the document shows it.
@@ -381,6 +390,8 @@ const browser = await launchChromium();
         + `<img src="ref:${st.id}" alt="the original" className="w-40 rounded-xl" /></div>`,
     }),
   })).json();
+  const { chrome, context } = await clipboardBrowser(doc.id);
+  const page = await context.newPage();
   const stored = async () => (await (await fetch(`${B}/api/artifacts/${doc.id}`, { headers: auth })).json()).markup ?? '';
   const imgTag = (markup) => /<img\b[^>]*\/>/.exec(markup)?.[0] ?? '';
   const idOf = (tag) => / id="([^"]+)"/.exec(tag)?.[1];
@@ -422,7 +433,7 @@ const browser = await launchChromium();
   check((afterDrop.match(/<img\b/g) ?? []).length === 1, 'and nothing was inserted beside it');
 
   // 7b. a real ⌘V while the image is selected
-  await page.evaluate(async () => {
+  await writeClipboard(page, async () => {
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');

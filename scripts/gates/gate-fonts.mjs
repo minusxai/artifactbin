@@ -114,11 +114,10 @@ check(ttf.status === 404, `the unhashed TTF is gone (${ttf.status})`);
 /**
  * ── 3. the DOCUMENT preloads its own faces ────────────────────────────────
  *
- * The parent page used to preload for a same-origin srcdoc frame that shared
- * its HTTP cache. The served document has an OPAQUE origin now (sandbox, no
- * allow-same-origin), so it has its own cache partition and a parent preload
- * would warm an entry nothing inside can use. The preload therefore lives in
- * the document's own head — which is also where the @font-face is.
+ * The document is served on its own origin and framed by the app page, so a
+ * preload in the app page would warm an entry for the app's origin, not the
+ * document's. The preload therefore lives in the document's own head — which is
+ * also where the @font-face is.
  */
 const docHead = html.slice(0, html.indexOf('</head>'));
 check(docHead.includes('rel="preload"'), "the preload is in the DOCUMENT's own head, not the app page's");
