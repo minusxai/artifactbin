@@ -1,6 +1,7 @@
 import {fixtureFetch as fetch} from './fixture-http.mjs';
 /** The font metas and the editor URL-import door share the asset gate's fixture/browser. */
 import { startDocument, becomeOwner } from '../../lib/start-doc.mjs';
+import { documentFrame } from './page-facts.mjs';
 
 export async function checkWebImport(B, browser, WEB, ok) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
@@ -79,13 +80,13 @@ export async function checkWebImport(B, browser, WEB, ok) {
       // gate-image-upload, for the same reason.)
       let inserted = null;
       for (let i = 0; i < 40 && !(inserted && inserted.w > 0); i++) {
-        const frame = page.mainFrame();
+        // The document — edited too — is the app page's frame, on its own origin.
+        const frame = await documentFrame(page).catch(() => null);
         inserted = frame
           ? await frame.evaluate(() => {
-              // NOT `querySelector('img')`: a served document also carries the
-              // reader chrome's logo, and matching that reports success for an
-              // image this gate never inserted. An IMPORTED image resolves to
-              // its own artifact's bytes — /a/<id>/raw — so match that shape.
+              // NOT `querySelector('img')`: matching any image reports success for
+              // one this gate never inserted. An IMPORTED image resolves to its
+              // own artifact's bytes — /a/<id>/raw — so match that shape.
               const img = [...document.querySelectorAll('img')]
                 .find((i) => /\/a\/[A-Za-z0-9]+\/raw/.test(i.getAttribute('src') ?? ''));
               return img ? { w: img.naturalWidth, src: img.getAttribute('src') } : null;

@@ -1,10 +1,9 @@
 /** Dataset image bindings, measured in a real browser. CI-only; no production data. */
-import {chromium} from 'playwright';
 import { launchChromium } from './lib/browser.mjs';
 import sharp from 'sharp';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import {startDocument,becomeOwner} from '../lib/start-doc.mjs';
-import {artifactDocument} from './lib/artifact-document.mjs';
+import {documentFrame,documentLocator,INLINE_STORY} from './lib/page-facts.mjs';
 import {createChecker} from './lib/assert.mjs';
 
 const base=process.argv[2]??'http://localhost:3030';
@@ -34,39 +33,41 @@ const markup=`<Helmet>
 </main>`;
 const doc=await create({markup});
 check((doc.markup??markup).split('src="$_row.cover_ref"').length===3,'two authored image templates, independent of row count');
+/** The document's frame, once its story is on screen (the app page frames every document on its own origin). */
+const storyFrame=async(page)=>{const doc=await documentFrame(page);await doc.waitForSelector(INLINE_STORY,{state:'visible',timeout:30_000});return doc;};
 const browser=await launchChromium();
 try {
  const page=await browser.newPage({viewport:{width:1100,height:800}});
  const requests=[];const errors=[];
  page.on('request',r=>requests.push(r.url()));page.on('pageerror',e=>errors.push(e.message));
  await becomeOwner(page,base,token);
- await page.goto(`${base}/a/${doc.id}`);await artifactDocument(page);
- const gallery=page.locator('#root [aria-label="Gallery"]');
+ await page.goto(`${base}/a/${doc.id}`);const doc_=await storyFrame(page);const framed=documentLocator(page);
+ const gallery=framed.locator('[aria-label="Gallery"]');
  await gallery.locator('img').first().waitFor();
- await page.waitForFunction(()=>[...document.querySelectorAll('#root [aria-label="Gallery"] img')].length===2&&[...document.querySelectorAll('#root [aria-label="Gallery"] img')].every(i=>i.naturalWidth>0));
+ await doc_.waitForFunction(()=>[...document.querySelectorAll('[aria-label="Gallery"] img')].length===2&&[...document.querySelectorAll('[aria-label="Gallery"] img')].every(i=>i.naturalWidth>0));
  const pairs=await gallery.locator('article').evaluateAll(nodes=>nodes.map(n=>({title:n.querySelector('h2').textContent,alt:n.querySelector('img').alt,src:n.querySelector('img').currentSrc})));
  check(pairs.every((p,i)=>p.title===rows[i].title&&p.alt===p.title&&p.src.includes(`/a/${refs[i]}/raw`)),'red and blue decode and match their rows');
- await page.getByLabel('Selected book',{exact:true}).fill('1');
- await page.waitForFunction(id=>document.querySelector('#root [aria-label="Selected"] img')?.currentSrc.includes(`/a/${id}/raw`),refs[1]);
- check(await page.locator('#root [aria-label="Selected"] img').getAttribute('alt')==='Blue book','shared detail query updates its image');
+ await framed.getByLabel('Selected book',{exact:true}).fill('1');
+ await doc_.waitForFunction(id=>document.querySelector('[aria-label="Selected"] img')?.currentSrc.includes(`/a/${id}/raw`),refs[1]);
+ check(await framed.locator('[aria-label="Selected"] img').getAttribute('alt')==='Blue book','shared detail query updates its image');
  for(const count of [24,48,1000]){
-  await page.getByLabel('Rows',{exact:true}).fill(String(count));
-  await page.waitForFunction(n=>document.querySelectorAll('#root [aria-label="Gallery"] article').length===n,count);
+  await framed.getByLabel('Rows',{exact:true}).fill(String(count));
+  await doc_.waitForFunction(n=>document.querySelectorAll('[aria-label="Gallery"] article').length===n,count);
   check(await gallery.locator('article').count()===count,`progressive query renders ${count} rows`);
  }
  const all=await gallery.locator('article').evaluateAll(nodes=>nodes.map(n=>({title:n.querySelector('h2').textContent,alt:n.querySelector('img').alt,src:n.querySelector('img').getAttribute('src'),lazy:n.querySelector('img').loading})));
  check(all.every((p,i)=>p.title===rows[i].title&&p.alt===p.title&&(p.src.includes(refs[i%2])||p.src.includes(encodeURIComponent(`ref:${refs[i%2]}`)))&&p.lazy==='lazy'),'1,000 items remain correctly paired');
- await page.getByRole('switch',{name:'Reverse',exact:true}).click();
- await page.waitForFunction(()=>document.querySelector('#root [aria-label="Gallery"] img')?.alt==='Blue book');
+ await framed.getByRole('switch',{name:'Reverse',exact:true}).click();
+ await doc_.waitForFunction(()=>document.querySelector('[aria-label="Gallery"] img')?.alt==='Blue book');
  check(await gallery.locator('img').first().getAttribute('alt')==='Blue book','reordering retains image/text identity');
  // Each lazy image is scrolled into the browser's loading range before asserting decode.
  for(let i=0;i<1000;i+=10)await gallery.locator('article').nth(i).scrollIntoViewIfNeeded();
  await gallery.locator('article').last().scrollIntoViewIfNeeded();
- await page.waitForFunction(()=>[...document.querySelectorAll('#root [aria-label="Gallery"] img')].every(i=>i.naturalWidth>0),null,{timeout:15000});
+ await doc_.waitForFunction(()=>[...document.querySelectorAll('[aria-label="Gallery"] img')].every(i=>i.naturalWidth>0),null,{timeout:15000});
  check(!requests.some(url=>url.includes('$_row')||url.includes('%24_row')),'no literal row-binding URL requested');
  check(!errors.some(e=>/50000|hydration|#418/.test(e)),'no expansion or hydration errors');
  const guest=await browser.newPage();await guest.goto(`${base}/a/${doc.id}`);
- await guest.waitForFunction(()=>{const images=[...document.querySelector('[aria-label="Gallery"]')?.querySelectorAll('img')??[]];return images.length===2&&images.every(i=>i.naturalWidth>0);});
+ await (await storyFrame(guest)).waitForFunction(()=>{const images=[...document.querySelector('[aria-label="Gallery"]')?.querySelectorAll('img')??[]];return images.length===2&&images.every(i=>i.naturalWidth>0);});
  check(true,'signed-out reader decodes both permitted images');await guest.close();
 
  // Captures use the standalone opaque-origin document, without a parent asset relay.
@@ -95,12 +96,12 @@ try {
  const lazy=await create({markup:`<Helmet><Import name="covers_data" src="ref:${lazyData.id}" /><Query name="covers">{\`select * from covers_data.rows\`}</Query></Helmet><For each={$covers} keyBy="id"><article className="h-96"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/></article></For>`});
  const probe=await browser.newPage({viewport:{width:1000,height:700}});const fetched=new Set();let metadata=0;
  probe.on('request',r=>{const u=new URL(r.url());if(r.resourceType()==='image'&&/^\/a\/[^/]+\/raw$/.test(u.pathname))fetched.add(u.pathname);if(u.pathname.endsWith('/assets')&&r.resourceType()!=='image')metadata++;});
- await probe.goto(`${base}/a/${lazy.id}`);
- await probe.waitForFunction(()=>document.querySelector('article img')?.naturalWidth>0);
+ await probe.goto(`${base}/a/${lazy.id}`);const probeDoc=await storyFrame(probe);
+ await probeDoc.waitForFunction(()=>document.querySelector('article img')?.naturalWidth>0);
  await probe.waitForTimeout(500);
  const initial=fetched.size;check(initial>0&&initial<distinct.length,`lazy gallery initially downloads ${initial}/${distinct.length} image assets (${metadata} metadata requests)`);
- await probe.locator('article').last().scrollIntoViewIfNeeded();
- await probe.waitForFunction(()=>[...document.querySelectorAll('article img')].at(-1)?.naturalWidth>0);
+ await documentLocator(probe).locator('article').last().scrollIntoViewIfNeeded();
+ await probeDoc.waitForFunction(()=>[...document.querySelectorAll('article img')].at(-1)?.naturalWidth>0);
  check(fetched.size>initial,'scrolling downloads additional image bytes');
  await probe.close();await page.close();
 }finally{await browser.close();}
