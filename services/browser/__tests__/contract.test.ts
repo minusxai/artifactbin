@@ -112,6 +112,8 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     expect(!r.ok&&r.reason).toBe('failed');
   });
   it('fails a render whose deadline elapses while the page is still loading, instead of calling it unreachable',async()=>{
+    // A running browser first: the timed-out render before this one closed it, and relaunching within 250ms is not what this asserts.
+    expect((await svc.render(base())).ok).toBe(true);
     const r=await svc.render({...base(),url:`${pages.base}/slow`,settleMs:0,timeoutMs:250});
     expect(!r.ok&&r.reason).toBe('failed');
   });
