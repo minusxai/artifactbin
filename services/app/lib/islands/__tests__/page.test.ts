@@ -147,6 +147,27 @@ describe('startPage', () => {
     }
   });
 
+  it('framed: a link to an app path asks the app page that frames it, never resolving against the document\'s origin', () => {
+    page();
+    document.querySelector('#mx-story-root')!.innerHTML = '<a href="/a/next" id="next">Next</a><a href="#part" id="part">Part</a>';
+    document.documentElement.setAttribute('data-mx-app-origin', 'https://app.example.test');
+    const posted: Array<[unknown, string]> = [];
+    const parent = { postMessage: (data: unknown, target: string) => { posted.push([data, target]); } };
+    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? parent : Reflect.get(target, key, target)) });
+    const stopJsdom = (event: Event) => event.preventDefault();
+    try {
+      stops.push(startPage(document, framed));
+      window.addEventListener('click', stopJsdom);
+      const click = (id: string) => { const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }); document.getElementById(id)!.dispatchEvent(event); };
+      click('part');
+      click('next');
+      expect(posted.filter(([data]) => (data as { type?: string }).type === 'mx:navigate')).toEqual([[{ type: 'mx:navigate', href: '/a/next' }, 'https://app.example.test']]);
+    } finally {
+      window.removeEventListener('click', stopJsdom);
+      document.documentElement.removeAttribute('data-mx-app-origin');
+    }
+  });
+
   it('puts the reader back where a live reload left them, and consumes the anchor', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page({ live: false });
