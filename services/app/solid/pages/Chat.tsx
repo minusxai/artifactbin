@@ -220,7 +220,7 @@ export function ChatPage(): JSX.Element {
   onCleanup(() => { stopped = true; clearTimeout(timer); });
   const close = () => { const closed = id(); setParams({}); page.seed({ sessions: sessions().filter((session) => session.id !== closed) }); };
   return <main class="mx-auto max-w-7xl px-4 py-6">
-    <h1 class="mb-1 text-xl font-semibold">Remote sessions</h1><p class="mb-6 text-sm text-muted">Your agents, running on your machine.</p>
+    <h1 class="mb-1 text-xl font-semibold">Remote sessions</h1><p class="mb-6 text-sm text-muted">Your agents, on your machine or hosted for you.</p>
     <Show when={error()}><p role="alert" class="mb-4 text-sm">{error()} <Show when={error().startsWith('Sign in')}><a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id() ? `?session=${id()}` : ''}`)}`} class="underline">Sign in</a></Show></p></Show>
     <div class="flex flex-col gap-6 md:flex-row"><aside class="shrink-0 md:w-80">
       <For each={sessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : 'Offline'}</span></button>}</For>

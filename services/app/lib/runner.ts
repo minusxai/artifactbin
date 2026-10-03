@@ -13,6 +13,7 @@ import { OPERATIONS } from './operations/registry';
 import { runOperation } from './operations/http';
 import { services } from './platform/services';
 import { json, readJson, isCrossSiteRequest } from './http';
+import {editHostedDocument} from './remote/tools';
 /** Published JSX is the default resolver; deployments/tests may supply another trusted compiler. */
 export type LambdaProgramResolver = (artifactId: string, userId: string) => Promise<{
     version: string;
@@ -71,7 +72,8 @@ export async function runnerOperation(request: Request, operation: string, input
     const actor = actorForArtifacts(caller);
     if (!actor)
         return json({ error: 'unauthorized' }, 401);
-    const allowed = new Set(['get_artifact', 'query_resource', 'mutate_dataset', 'annotate', 'list_artifacts', 'update_artifact']);
+    if(operation==='edit_document')return editHostedDocument(request,actor,input);
+    const allowed = new Set(['create_artifact', 'get_artifact', 'query_resource', 'mutate_dataset', 'annotate', 'list_artifacts', 'update_artifact']);
     if (!allowed.has(operation))
         return json({ error: 'operation_not_allowed' }, 403);
     const spec = OPERATIONS.find(op => op.name === operation)!;

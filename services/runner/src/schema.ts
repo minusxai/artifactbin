@@ -9,8 +9,8 @@ export const RUN_TABLES:Table[]=[
  {name:'runner_events',columns:[text('run_id',true),{name:'sequence',type:'INTEGER',notNull:true},data('event',true)],primaryKey:['run_id','sequence']}
 ];
 export const AGENT_TABLES:Table[]=[
- {name:'hosted_conversations',columns:[text('owner',true),text('artifact_id',true),{name:'revision',type:'INTEGER',notNull:true,default:'0'}],primaryKey:['owner','artifact_id']},
- {name:'hosted_branches',columns:[text('id',true),text('owner',true),text('artifact_id',true),text('request_key',true),data('input',true),text('program_source'),text('run_id'),{name:'cursor',type:'INTEGER',notNull:true,default:'0'},data('checkpoint'),data('result'),{...text('status',true),default:"'pending'"},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'}],primaryKey:['id'],indexes:[{name:'idx_hosted_request',columns:['owner','request_key'],unique:true},{name:'idx_hosted_pending',columns:['status','created_at']}]}
+ {name:'hosted_conversations',columns:[text('owner',true),text('artifact_id',true),{name:'revision',type:'INTEGER',notNull:true,default:'0'},{...text('input_buffer',true),default:"''"}],primaryKey:['owner','artifact_id']},
+ {name:'hosted_branches',columns:[text('id',true),text('owner',true),text('artifact_id',true),text('request_key',true),data('input',true),text('program_source'),text('run_id'),{name:'cancel_pending',type:'BOOLEAN',notNull:true,default:'false'},{name:'cursor',type:'INTEGER',notNull:true,default:'0'},data('checkpoint'),data('result'),{...text('status',true),default:"'pending'"},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'}],primaryKey:['id'],indexes:[{name:'idx_hosted_request',columns:['owner','request_key'],unique:true},{name:'idx_hosted_pending',columns:['status','created_at']}]}
 ];
 export const SCHEDULE_TABLES:Table[]=[
  {name:'runner_schedules',columns:[text('id',true),text('owner',true),data('spec',true),{name:'next_due_at',type:'TIMESTAMPTZ',notNull:true},text('active_request'),{name:'enabled',type:'BOOLEAN',notNull:true,default:'true'}],primaryKey:['id']},

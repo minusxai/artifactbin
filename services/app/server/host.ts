@@ -1,4 +1,5 @@
 import {createHostedRemoteAgent} from '@/lib/remote/hosted';
+import {hostedOperationTools} from '@/lib/remote/tools';
 import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
 import {startLambdaSchedules,setLambdaProgramResolver,type LambdaProgramResolver} from '@/lib/runner';
 import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
@@ -48,7 +49,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  await options.initialize?.(db);
  setLambdaProgramResolver(options.lambdaPrograms);
  const stopSchedules=await startLambdaSchedules(db);
- const hosted=options.hostedAgent?await createHostedRemoteAgent({...options.hostedAgent,runner:services().runner}):undefined;
+ const hosted=options.hostedAgent?await createHostedRemoteAgent({...options.hostedAgent,runner:services().runner,operationTools:hostedOperationTools()}):undefined;
  setHostedRemoteAgent(hosted?.agent);
  let ticking:Promise<void>|undefined;
  const timer=hosted?setInterval(()=>{if(!ticking)ticking=hosted.tick().catch(error=>console.error('[hosted-agent] dispatch failed',error instanceof Error?error.message:'unknown')).finally(()=>{ticking=undefined;});},1000):undefined;
