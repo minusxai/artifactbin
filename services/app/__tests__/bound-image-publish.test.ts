@@ -96,11 +96,15 @@ describe('a bound src is a binding, not an external URL', () => {
     expect(await page.text()).toContain(assetUrlFor(`${web}/logo.png`));
   });
 
-  it('a web URL in a NON-image position is still refused as non-self-contained', async () => {
-    const { res, body } = await publish(`${HELMET}<div><img src="$pick" /><input value="$pick" /><Video src="https://youtu.be/x" poster="$pick" /></div>`);
-    // `poster` is not a bindable position: the ref exemption is `img src` alone.
-    expect(res.status).toBe(400);
-    expect(JSON.stringify(body.details ?? body)).toContain('External URL');
+  it('a web URL in a NON-image position publishes as written: external subresources are allowed, and only `img src` is imported', async () => {
+    hits.length = 0;
+    const url = `${web}/clip.mp4`;
+    const { res, body } = await publish(`${HELMET}<div><img src="$pick" /><input value="$pick" /><Video src="${url}" poster="$pick" /></div>`);
+    expect(res.status, JSON.stringify(body)).toBe(201);
+    // `poster` is not a bindable position and `src` on <Video> is not an imported one: the URL stays verbatim
+    // in the source and publish fetches nothing for it.
+    expect((await getArtifactById(body.id as string))!.source).toContain(`src="${url}"`);
+    expect(hits).toEqual([]);
   });
 });
 

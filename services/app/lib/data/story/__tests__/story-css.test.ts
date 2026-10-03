@@ -204,7 +204,7 @@ describe('jsx-format stories — className candidates + always-compile', () => {
   // has exactly one style source — the compiled sheet. The recipe union (kit +
   // EXTRA_CLASS_SOURCES classes) therefore applies to marked legacy stories too, compiled
   // against the token layer so token-backed utilities (bg-muted, animate-spin ring colors)
-  // resolve. Legacy stories keep skipping the banned-candidate guard (frozen semantics).
+  // resolve.
   it('marked LEGACY stories get the recipe union + token layer (embeds keep their chrome)', async () => {
     const css = await compileStoryCss('<div data-design="tw" class="p-4">legacy with embeds</div>');
     // Asserted on a kit-sourced union class rather than one of the embed
@@ -294,31 +294,29 @@ describe('compileStoryCss — the caret blink (format:jsx)', () => {
   });
 });
 
-// Banned-CSS candidate filter: banned Tailwind candidates are dropped
-// BEFORE compile as a SEPARATE guard step — never absorbed by buildSalvaging's error-bisect.
-// Proof of separation: `fixed`/`sticky` compile perfectly fine in Tailwind, so their absence
-// from the output can only come from the guard, not from a compile failure.
-describe('compileStoryCss — banned candidate filter (format:jsx)', () => {
-  it('drops fixed/sticky candidates (including variants) from jsx-story compiles', async () => {
+// No candidate filter: CSS is unconstrained, so a jsx story compiles every candidate it uses —
+// positioning utilities and external-url arbitrary values included — exactly as Tailwind emits them.
+describe('compileStoryCss — every candidate compiles (format:jsx)', () => {
+  it('keeps fixed/sticky candidates (including variants)', async () => {
     const css = (await compileStoryCss(
       '<div className="fixed md:sticky p-4">x</div>', { force: true },
     ))!;
-    expect(css).not.toMatch(/position:\s*fixed/);
-    expect(css).not.toMatch(/position:\s*sticky/);
-    expect(css).toContain('.p-4'); // siblings survive
+    expect(css).toMatch(/position:\s*fixed/);
+    expect(css).toMatch(/position:\s*sticky/);
+    expect(css).toContain('.p-4');
   });
 
-  it('drops external-url arbitrary-value candidates; data: URIs pass', async () => {
+  it('keeps external-url and data: arbitrary-value candidates', async () => {
     const css = (await compileStoryCss(
-      `<div className="bg-[url(https://evil.example/x.png)] bg-[url(data:image/svg+xml;base64,PHN2Zy8+)] p-2">x</div>`,
+      `<div className="bg-[url(https://cdn.example/x.png)] bg-[url(data:image/svg+xml;base64,PHN2Zy8+)] p-2">x</div>`,
       { force: true },
     ))!;
-    expect(css).not.toContain('evil.example');
+    expect(css).toContain('https://cdn.example/x.png');
     expect(css).toContain('data:image/svg+xml');
     expect(css).toContain('.p-2');
   });
 
-  it('legacy marked stories are NOT candidate-filtered (frozen pipeline keeps its CSS live)', async () => {
+  it('legacy marked stories compile positioning utilities too', async () => {
     const css = (await compileStoryCss('<div data-design="tw" class="fixed p-2">x</div>'))!;
     expect(css).toMatch(/position:\s*fixed/);
   });

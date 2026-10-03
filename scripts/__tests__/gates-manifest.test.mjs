@@ -190,7 +190,7 @@ it('prints the same browser plan used by the CI shards without starting servers'
     const selected = shardOf(set, {index, total: CI_GATE_SHARDS}, shardWeight, {isolated: CI_ISOLATED_GATES});
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
-    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
+    const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8', env: {...process.env, FORCE_COLOR: '0', NO_COLOR: '1'}}).trim();
     expect(postgres).toBe(String(selected.includes('postgres-datasets')));
   }
 

@@ -49,7 +49,7 @@ describe('reader delivery over HTTP',()=>{
  });
  it('keeps scripts inert and live selections in prepared data',async()=>{
   const {row}=await publish('public','<Helmet><Value name="count" type="number" default={0}/><script>{`globalThis.shouldNotRun=true`}</script></Helmet><p>{$count}</p>');
-  const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).toContain('"authorScript":"globalThis.shouldNotRun=true"');expect(html).not.toContain('<script>globalThis.shouldNotRun');expect(html).toContain('"values":{"count":4}');
+  const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).toMatch(/"authorScript":"[^"]*globalThis\.shouldNotRun = true;/);expect(html).not.toContain('<script>globalThis.shouldNotRun');expect(html).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]*shouldNotRun/);expect(html).toContain('"values":{"count":4}');
  });
  it('keeps datasets on their existing app representation',async()=>{
   const token=await mintToken('dataset'),row=await createArtifact(token.id,null,{format:'dataset',source:null,meta:{},title:'Data',description:null,visibility:'public'});

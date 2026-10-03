@@ -1,9 +1,9 @@
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The `jsx` content tier — the minusx stories engine.
- * Publish path: static JSX over the ported shadcn kit, validated by the ported
- * three-gate pipeline (validateJsxSource → banned-css sanitize → Tailwind
- * compile at publish). Source is the single truth; the viewer renders it live
+ * Publish path: static JSX over the ported shadcn kit, validated by
+ * validateJsxSource and compiled by Tailwind at publish (CSS is unconstrained:
+ * no banned-CSS sanitize step). Source is the single truth; the viewer renders it live
  * at /a/<id> — the one URL an artifact has, no redirect and no second route.
  */
 import { describe, expect, it } from 'vitest';
@@ -71,7 +71,7 @@ describe('jsx tier publish', () => {
     expect(typeof meta.cssCompileVersion).toBe('string');
   });
 
-  it('rejects invalid jsx with actionable diagnostics (the three-gate pipeline)', async () => {
+  it('rejects invalid jsx with actionable diagnostics (the validation gate)', async () => {
     const t = await mintToken('t');
     // Every vector this tier claims to stop. `markup` is interpreted as DATA
     // and rendered SAME-ORIGIN with the app (unlike the sandboxed html tier),
@@ -88,8 +88,6 @@ describe('jsx tier publish', () => {
       ['<iframe src="https://evil.test"></iframe>', /iframe/i],
       ['<object data="evil.swf"></object>', /object/i],
       ['<form action="https://evil.test"><button>go</button></form>', /form/i],
-      // styling escape hatches
-      ['<div style="color:red">no inline style</div>', /style/i],
       // html injection
       ['<div dangerouslySetInnerHTML={{__html:"<img src=x onerror=alert(1)>"}} />', /dangerouslySetInnerHTML|not allowed/i],
       ['<div {...props}>spread</div>', /JSON literal|Spread/i],
@@ -112,34 +110,30 @@ describe('jsx tier publish', () => {
   });
 
   /**
-   * artifactbin is stricter than the ported minusx validator on purpose: an
-   * artifact must be SELF-CONTAINED. An external subresource makes a shared
-   * document phone home with every viewer's IP, breaks when that host dies,
-   * and — because ?export=png renders the page in our own headless browser —
-   * turns the export endpoint into a server-side fetch of an attacker's URL.
+   * External subresources are allowed: CSS and markup are unconstrained, and the
+   * page CSP admits every https host. A web URL in a NON-image position is kept
+   * as written (not imported, not refused); `<img src="https://…">` alone is
+   * IMPORTED by the publish door — __tests__/web-import.test.ts owns that.
    */
-  it('rejects external subresource URLs, naming the ref: fix', async () => {
+  it('publishes external subresource URLs as written; inline style is valid', async () => {
     const t = await mintToken('t');
-    // NON-image positions stay hard refusals — a srcset, a ping tracker, a
-    // protocol-relative URL and a lowercase <video poster> are not imports.
-    // (An <img src="https://…"> is no longer here: that position is now
-    // IMPORTED by the publish door — __tests__/web-import.test.ts owns it.)
-    const cases: string[] = [
-      '<div data-design="tw"><img src="//evil.test/p.png" /></div>',
-      '<div data-design="tw"><img srcSet="https://evil.test/a.png 1x, https://evil.test/b.png 2x" /></div>',
-      '<div data-design="tw"><video poster="https://evil.test/p.jpg" /></div>',
-      '<div data-design="tw"><a href="#x" ping="https://evil.test/track">x</a></div>',
-      '<div data-design="tw"><a href="#x" ping="ref:abc123 https://evil.test/track">x</a></div>',
+    // Each case and the attribute that must reach the stored source verbatim (publish only adds node ids).
+    const cases: Array<[string, string]> = [
+      ['<div data-design="tw"><img src="//cdn.test/p.png" /></div>', 'src="//cdn.test/p.png"'],
+      ['<div data-design="tw"><img srcSet="https://cdn.test/a.png 1x, https://cdn.test/b.png 2x" /></div>', 'srcSet="https://cdn.test/a.png 1x, https://cdn.test/b.png 2x"'],
+      ['<div data-design="tw"><video poster="https://cdn.test/p.jpg" /></div>', 'poster="https://cdn.test/p.jpg"'],
+      ['<div data-design="tw"><a href="#x" ping="https://cdn.test/track">x</a></div>', 'ping="https://cdn.test/track"'],
+      ['<div data-design="tw"><a href="#x" ping="ref:abc123 https://cdn.test/track">x</a></div>', 'ping="ref:abc123 https://cdn.test/track"'],
+      ['<div data-design="tw"><div style="color:red">inline style</div></div>', 'style="color:red"'],
     ];
-    for (const markup of cases) {
+    for (const [markup, kept] of cases) {
       const res = await createArtifactRoute(
         request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup } }),
       );
-      expect(res.status, markup).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('invalid_jsx');
-      // The diagnostic must teach the fix, not just refuse.
-      expect(JSON.stringify(body.details), markup).toMatch(/ref:/);
+      expect(res.status, `${markup} ${JSON.stringify(body)}`).toBe(201);
+      const got = await getArtifactRoute(request(`/api/artifacts/${body.id}`, { token: t.token }), params({ id: body.id }));
+      expect((await got.json()).markup, markup).toContain(kept);
     }
 
     // The imported position PUBLISHES even when the host is unreachable: the
