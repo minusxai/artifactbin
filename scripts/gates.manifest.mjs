@@ -21,6 +21,8 @@
  * @property {boolean} needsMail      reads a login code from the mail sink
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
  * @property {string[]} [browsers]    engines required by the default gate invocation; defaults to Chromium
+ * @property {true} [needsPostgres]   starts a disposable PostgreSQL through the host's Docker: CI pulls the image
+ *                                    for its shard, and a gate container refuses it
  * @property {number} seconds         measured CI duration under two-server load — the shard weight
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
@@ -41,45 +43,40 @@ export const GATE_SPECS = Object.freeze([
   { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
   { name: 'testusers', needsMail: true, seconds: 10, timeoutMs: 60_000 },
   { name: 'comment-targets', needsMail: false, seconds: 17, timeoutMs: 60_000 },
-  { name: 'dataset-policies', needsMail: true, seconds: 5, timeoutMs: 60_000 },
   { name: 'app-home', needsMail: false, serialGroup: 'clipboard', seconds: 1, timeoutMs: 120_000 },
   { name: 'seamless-navigation', needsMail: true, seconds: 5, timeoutMs: 60_000 },
-  { name: 'libraries', needsMail: false, seconds: 10, timeoutMs: 60_000 },
-  { name: 'postgres-datasets', needsMail: true, seconds: 14, timeoutMs: 60_000 },
   { name: 'annotations', needsMail: false, seconds: 40, timeoutMs: 120_000 },
   { name: 'app-flows', needsMail: true, seconds: 75, timeoutMs: 210_000 },
   { name: 'claim-flow', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'collab-edit', needsMail: true, seconds: 37, timeoutMs: 100_000 },
-  { name: 'data-ux', needsMail: false, seconds: 16, timeoutMs: 60_000 },
-  { name: 'dataflow', needsMail: true, seconds: 13, timeoutMs: 60_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
   // run 36838282615 that held a runner to itself and set the run's critical path.
   { name: 'editor-v2', needsMail: false, serialGroup: 'clipboard', seconds: 45, timeoutMs: 200_000 },
   { name: 'editor-path', needsMail: true, seconds: 47, timeoutMs: 150_000 },
   { name: 'editor-exits', needsMail: false, seconds: 42, timeoutMs: 120_000 },
-  { name: 'editable-table', needsMail: true, seconds: 36, timeoutMs: 120_000 },
-  { name: 'roadmap-views', needsMail: false, seconds: 8, timeoutMs: 60_000 },
   { name: 'export-slice', needsMail: false, seconds: 13, timeoutMs: 60_000 },
-  { name: 'fonts', needsMail: false, seconds: 39, timeoutMs: 150_000 },
   { name: 'folders', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
-  { name: 'full-kit', needsMail: false, seconds: 33, timeoutMs: 60_000 },
-  { name: 'hydration', needsMail: true, seconds: 31, timeoutMs: 190_000 },
   { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 47, timeoutMs: 110_000 },
-  // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
-  { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
+
   { name: 'inplace-edit', needsMail: false, seconds: 66, timeoutMs: 180_000 },
   // Frames a document on its own origin, so it boots its own production server with APP__PAGES_HOST=lvh.me
   // (scripts/gates/lib/pages-server; the runner's servers have none). Measured 10s against a dev server; its boot adds ~10s.
   { name: 'frame-editor', needsMail: false, seconds: 20, timeoutMs: 90_000 },
   { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
   { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
-  { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },
   { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
   { name: 'live-reader', needsMail: false, seconds: 30, timeoutMs: 70_000 },
-  // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
-  // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
-  { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
+  // Publishes four documents, waits for the background harvest (four surface/mode loads, each drawn twice when
+  // new), then loads 17 pages over one kind per class (proposal row 18; was 76s over ~35 kinds).
+  { name: 'mermaid-prerender', needsMail: false, seconds: 40, timeoutMs: 120_000 },
+  // One walk over dataflow, local-sql-state, dataset-policies, data-ux and postgres-datasets (proposal row 10).
+  // Starts a disposable PostgreSQL through the host's Docker, so a gate container refuses it.
+  { name: 'data-journey', needsMail: true, needsPostgres: true, seconds: 50, timeoutMs: 150_000 },
+  // editable-table, roadmap-views and row-images over one account (proposal row 13).
+  { name: 'datasets-in-documents', needsMail: true, seconds: 55, timeoutMs: 170_000 },
+  // full-kit, the compiled handover from hydration, libraries and fonts (proposal row 14). Needs esm.sh.
+  { name: 'kit-and-fonts', needsMail: false, seconds: 60, timeoutMs: 180_000 },
   { name: 'mobile', needsMail: false, seconds: 21, timeoutMs: 100_000 },
   // The four native-scripts briefs end to end on a server it boots with APP__PAGES_HOST=lvh.me (./lib/pages-server):
   // frame, direct query, consent and the fetch door, in-frame editing with the script badge, a comment, afbin export.
@@ -139,6 +136,11 @@ export function specFor(name) {
   const spec = GATE_SPECS.find((candidate) => candidate.name === name);
   if (!spec) throw new Error(`Gate manifest has no row for: ${name}`);
   return spec;
+}
+
+/** Does any of these gates start its own PostgreSQL (CI pulls the image only for a shard that holds one)? */
+export function needsPostgres(names) {
+  return names.some((name) => specFor(name).needsPostgres === true);
 }
 
 /** Browser installation plan for exactly the gates this runner will execute. */
