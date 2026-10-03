@@ -354,16 +354,20 @@ jobs:
   # slowest of eight was 188s (shard 3) — over the ~150s per-job target — so it splits ten ways.
   # EIGHT again after run 36879103503: ten shards ran 75-90s while the gate shards ran 110-160s, so two
   # of their runners went to the gates (twelve shards) and the run's runner count stayed the same.
+  # FOUR once the files that only mocked `@/auth` took their session from the harness (setSession) and joined
+  # the shared module graph, and six small isolated files merged into their neighbours: by
+  # scripts/ci/test-timings.json each of four shards carries ~215-237s of per-file time against ~119s at eight
+  # (runs 37118557786/37118962945 turned ~119s into 40-75s of Vitest), under the gate shards' ~155s.
   api:
     needs: [ plan ]
     if: needs.plan.outputs.api == 'true'
-    name: api tests (${{ matrix.shard }}/8)
+    name: api tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
+        shard: [ 1, 2, 3, 4 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -416,7 +420,7 @@ jobs:
           restore-keys: test-builds-v1-${{ runner.os }}-
       # Files are packed by measured time (scripts/lib/timed-sequencer.mjs), not by count, and the
       # api project shares one module graph per worker; the files that mock modules run isolated.
-      - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/8
+      - run: npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/4
       - if: matrix.shard == 1 && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
