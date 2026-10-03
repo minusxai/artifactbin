@@ -243,13 +243,6 @@ export interface IslandPageData {
   viewerUrl?: string;
   assetsUrl?: string;
   /**
-   * The page's asset door (lib/story-runtime/managed-assets ManagedAssetsConfig): the deployment's asset
-   * origin and this page's absolute import door (with a capture's verified export key). Absent without an
-   * asset origin. No browser module reads it since the managed `<Iframe>` was removed; the assembler and
-   * the prepare runtime still write it.
-   */
-  managedAssets?: { origin: string; resolveUrl: string };
-  /**
    * The request holds a credential for this document (session or held connection): the page's doors
    * carry it, and viewer-dependent islands show a neutral placeholder rather than guest content until
    * the viewer overlay names the reader. A non-secret hint, never the identity.

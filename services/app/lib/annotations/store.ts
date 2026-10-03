@@ -294,7 +294,6 @@ function targetBelongsTo(owner: JsxElement, target: CommentTarget): boolean {
   const entries = new Map<string, JsxElement>();
   const walk = (node: JsxNode) => { if (node.type !== 'element') return; const id = anchorKeyOf(node); if (id) entries.set(id, node); node.children.forEach(walk); };
   walk(owner);
-  if (target.kind === 'iframe') return owner.tag === 'Iframe' && (target.node.kind !== 'source' || (entries.has(target.node.id) && target.node.id !== anchorKeyOf(owner)));
   if (target.kind === 'table') return owner.tag === 'DataTable' && (!target.templateNodeId || entries.has(target.templateNodeId));
   return owner.tag === 'For' && target.scopes[0].nodeId === anchorKeyOf(owner) && target.scopes.every((scope) => entries.get(scope.nodeId)?.tag === 'For') && entries.has(target.templateNodeId);
 }

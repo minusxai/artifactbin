@@ -46,7 +46,6 @@ import { firstHeadingTitle } from '@/lib/story/document';
 import { isStartPlaceholder } from './start-placeholder';
 import type { LazyCode } from '@/lib/story/document';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { ASSETS_ORIGIN } from '@/lib/platform/config';
 import { VIEWER_OVERLAY_PATH, type AssembleInput } from '@/lib/compiled-page/contract';
 
 
@@ -275,8 +274,6 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
         viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
         assetsUrl: assetsPath(artifact.id),
       },
-      // The managed <Iframe>'s asset door, as the page's island carries it (prepared-page readerInputFor).
-      managedAssets: ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } : null,
       ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
       live: at ? null : { id: artifact.id, editId: artifact.edit_id },
       // The page's own behaviour (lib/islands/page), as a /raw copy runs it: the live stream of a page with

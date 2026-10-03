@@ -3,18 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { parseCommentTarget } from '../annotations/comment-target';
 
 describe('durable comment refinements', () => {
-  it('preserves typed table keys and scoped iframe keys', () => {
+  it('preserves typed table keys and repeat scopes', () => {
     for (const target of [
       {kind:'table',rowKey:1,columnKey:'customer'},
       {kind:'table',rowKey:'1',columnKey:'customer'},
-      {kind:'iframe',node:{kind:'key',path:['order:123','customer']}},
       {kind:'repeat',scopes:[{nodeId:'orders',key:'123'}],templateNodeId:'customer'},
     ]) expect(parseCommentTarget(target)).toEqual(target);
   });
   it('rejects malformed, unbounded and ambiguous identities', () => {
     for (const target of [null, {}, {kind:'table',rowKey:Infinity}, {kind:'table',rowKey:{}},
-      {kind:'iframe',node:{kind:'key',path:[]}},
-      {kind:'iframe',node:{kind:'key',path:['x'.repeat(10000)]}},
+      {kind:'table',rowKey:'x'.repeat(10000)},
       {kind:'repeat',scopes:[],templateNodeId:'cell'},
     ]) expect(parseCommentTarget(target)).toBeNull();
   });
@@ -24,17 +22,23 @@ describe('strict identity boundaries', () => {
   it('rejects unknown fields, excessive nesting and invalid identity characters', () => {
     for (const target of [
       {kind:'table',rowKey:'ok',owner:'forged'},
-      {kind:'iframe',node:{kind:'source',id:'x\u0000'}},
-      {kind:'iframe',node:{kind:'session',id:'x',generation:''}},
-      {kind:'iframe',node:{kind:'key',path:Array(17).fill('x')}},
+      {kind:'table',rowKey:'ok',columnKey:'x\u0000'},
+      {kind:'repeat',templateNodeId:'x',scopes:Array.from({length:17},(_,i)=>({nodeId:'n'+i,key:i}))},
       {kind:'repeat',templateNodeId:'x',scopes:[{nodeId:'a',key:1},{nodeId:'a',key:2}]},
     ]) expect(parseCommentTarget(target)).toBeNull();
   });
 });
 
+describe('retired targets', () => {
+  it('reads a stored managed-iframe target as no target: the Iframe is gone, so its comment keeps only its owner', () => {
+    expect(parseCommentTarget({kind:'iframe',node:{kind:'key',path:['order:123','customer']}})).toBeNull();
+    expect(parseAnnotationRange({v:1,kind:'target',target:{kind:'iframe',node:{kind:'source',id:'static'}}})).toBeNull();
+  });
+});
+
 describe('target range envelope', () => {
   it('preserves legacy ranges and refuses recursive envelopes or invalid refinements', () => {
-    const target={kind:'iframe',node:{kind:'key',path:['stable']}};
+    const target={kind:'table',rowKey:'stable',columnKey:'customer'};
     const text={v:1,parts:[{rel:'',start:0,end:5,text:'Alice'}]};
     expect(parseAnnotationRange(text)).toEqual(text);
     expect(parseAnnotationRange({v:1,kind:'target',target,range:text})).toEqual({v:1,kind:'target',target,range:text});

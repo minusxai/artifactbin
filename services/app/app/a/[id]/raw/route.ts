@@ -353,8 +353,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
       // breaking scoped asset imports and the capture's CSP before rendering.
       const base = byExportKey && !chrome ? new URL(request.url).origin : baseUrl(request);
-      // The managed <Iframe>'s asset door, one rule for both renderers: a capture's verified key rides in it.
-      const managedAssets = ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } : null;
       // Every admitted document read is compiled, including live story fragments.
       /** The app page's story (lib/artifact-page) differs from this copy in its sheet and its drawings, never in its story. */
       const appStory = fragment?.surface === 'app';
@@ -391,7 +389,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             assetsUrl: assetsPath(artifact.id),
           },
           ...(capture ? { assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {}),
-          managedAssets,
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
           chrome: reader && !fragment ? await rawChrome(artifact, actor, at, design.colorMode ?? prepared.page.data.colorMode) : null,

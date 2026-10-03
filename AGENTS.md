@@ -125,6 +125,9 @@ Run these from the repository root. Keep this list current.
 - `npm run release:cli` — bump the CLI release; see Change checks.
 - `npm run eval -- --help` — agent eval CLI; `evals/` is the private `minusxai/artifactbin-evals`
   repo checked out here (gitignored); its README is the guide.
+- `npm run eval` needs `evals/` present: copy it from the private clone at
+  `~/projects/artifactbin-evals/evals` (never symlink; the driver resolves real paths). When its product imports fail
+  after a module move, fix the import paths in the evals repo, not here.
 
 ## Change checks
 

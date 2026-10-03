@@ -2,12 +2,7 @@
 import { isCommentKey, type CommentKey } from '../data/row-key';
 export { isCommentKey } from '../data/row-key';
 export type { CommentKey } from '../data/row-key';
-export type IframeNodeTarget =
-  | { kind: 'source'; id: string }
-  | { kind: 'key'; path: string[] }
-  | { kind: 'session'; generation: string; id: string };
 export type CommentTarget =
-  | { kind: 'iframe'; node: IframeNodeTarget }
   | { kind: 'table'; rowKey: CommentKey; columnKey?: string; templateNodeId?: string }
   | { kind: 'repeat'; scopes: Array<{ nodeId: string; key: CommentKey }>; templateNodeId: string };
 
@@ -17,12 +12,6 @@ const identity = (value: unknown): value is string => typeof value === 'string' 
 const only = (value: Record<string, unknown>, names: string[]) => Object.keys(value).every((name) => names.includes(name));
 export function parseCommentTarget(value: unknown): CommentTarget | null {
   if (!record(value)) return null;
-  if (value.kind === 'iframe' && only(value, ['kind', 'node']) && record(value.node)) {
-    const node = value.node;
-    if (node.kind === 'source' && only(node, ['kind', 'id']) && identity(node.id)) return { kind: 'iframe', node: { kind: 'source', id: node.id } };
-    if (node.kind === 'session' && only(node, ['kind', 'id', 'generation']) && identity(node.id) && identity(node.generation)) return { kind: 'iframe', node: { kind: 'session', id: node.id, generation: node.generation } };
-    if (node.kind === 'key' && only(node, ['kind', 'path']) && Array.isArray(node.path) && node.path.length > 0 && node.path.length <= 16 && node.path.every(identity)) return { kind: 'iframe', node: { kind: 'key', path: [...node.path] } };
-  }
   if (value.kind === 'table' && only(value, ['kind', 'rowKey', 'columnKey', 'templateNodeId']) && isCommentKey(value.rowKey)) {
     if (value.columnKey !== undefined && !identity(value.columnKey) || value.templateNodeId !== undefined && !identity(value.templateNodeId)) return null;
     return { kind: 'table', rowKey: value.rowKey, ...(value.columnKey !== undefined ? {columnKey: value.columnKey as string} : {}), ...(value.templateNodeId !== undefined ? {templateNodeId: value.templateNodeId as string} : {}) };

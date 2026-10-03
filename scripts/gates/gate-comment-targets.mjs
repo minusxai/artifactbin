@@ -130,7 +130,7 @@ try {
   assert(await composer.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(el.getRootNode().elementFromPoint(r.x+r.width/2,r.y+r.height/2));}));
   await save('A drawn markup area');
   const areaComment=(await annotations()).find(item=>item.thread[0].body==='A drawn markup area');
-  assert.equal(areaComment.range.range.kind,'area');
+  assert.equal(areaComment.range.kind,'area');
   console.log('PASS area selection with parent composer layering');
   if(await page.getByRole('button',{name:'Close comments',exact:true}).isVisible())await page.getByRole('button',{name:'Close comments',exact:true}).click();
 

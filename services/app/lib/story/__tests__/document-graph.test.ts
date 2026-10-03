@@ -38,12 +38,11 @@ it('detects dangling links, multiple parents, orphaned nodes and cycles',()=>{
  const cyclic=structuredClone(graph);cyclic.nodes[first]!.children.push(graphNodeAt(graph,[0]));expect(graphIntegrity(cyclic)).not.toEqual([]);
  const orphan=structuredClone(graph);orphan.nodes.detached=structuredClone(graph.nodes[first]!);expect(graphIntegrity(orphan)).not.toEqual([]);
 });
-it('records reference metadata on its owning node, excluding isolated iframe contents',()=>{
- const graph=createDocumentGraph('<main><img src="ref:abc123" /><Iframe><img src="ref:xyz123" /></Iframe></main>',1);
+it('records reference metadata on its owning node',()=>{
+ const graph=createDocumentGraph('<main><img src="ref:abc123" /><section><img src="ref:xyz123" /></section></main>',1);
  expect(graph.nodes[graphNodeAt(graph,[0])]!.refs).toEqual([]);
  expect(graph.nodes[graphNodeAt(graph,[0,0])]!.refs).toEqual([{id:'abc123',kind:'image'}]);
- expect(graph.nodes[graphNodeAt(graph,[0,1,0])]!.refs).toEqual([]);
- expect(graph.nodes[graphNodeAt(graph,[0,1,0])]!.selectors).toEqual([]);
+ expect(graph.nodes[graphNodeAt(graph,[0,1,0])]!.refs).toEqual([{id:'xyz123',kind:'image'}]);
 });
 it('stores UTF-16 subtree sizes and certifies only inert prose positions',()=>{
  const graph=createDocumentGraph('<Helmet><title>Title</title></Helmet><section><p>👩 β</p><p>className="x"</p></section>',1);
