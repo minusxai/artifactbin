@@ -22,10 +22,11 @@
  *
  *   usage: node scripts/gates/gate-mermaid-prerender.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { MERMAID_KIND_SAMPLES } from '../fixtures/mermaid/kinds.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -82,7 +83,7 @@ const normalize = (svg) => svg.replace(/mx-mermaid-\d+/g, 'mx-mermaid-N');
 /** A stored drawing's fonts block: first child, bundled faces as woff2 data, unhinted text (lib/mermaid-images/sanitize). */
 const FONTS_BLOCK = /^(<svg\b[^>]*>)(<style>(?:@font-face\{font-family:"[\w .-]+";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/]+={0,2}\) format\("woff2"\);font-weight:[1-9]00;font-style:normal(?:;unicode-range:[U+0-9A-Fa-f?,-]+)?\})+svg\{text-rendering:geometricPrecision\}<\/style>)/;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 /**
  * One page, every diagram drawn: title → { src, svg (decoded when the engine
@@ -110,13 +111,15 @@ async function drawings(url, mode = null, { blockStored = false } = {}) {
   page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(new URL(r.url()).pathname); });
   if (mode) await page.addInitScript((m) => { window.name = `mx:doc:${JSON.stringify({ mode: m })}`; }, mode);
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 });
-  const drawn = await page.waitForFunction(() => {
+  // `/raw` IS the document; the app page frames it on its own origin, where its diagrams are drawn.
+  const doc = new URL(url).pathname.endsWith('/raw') ? page.mainFrame() : await documentFrame(page, { timeout: 90_000 });
+  const drawn = await doc.waitForFunction(() => {
     const figures = [...document.querySelectorAll('figure[data-mx-mermaid-state]')];
     // Before the app's reader takes over, its server copy is a sibling that never draws.
     return figures.length > 0 && !document.querySelector('[data-mx-initial-story]') && figures.every((f) => f.getAttribute('data-mx-mermaid-state') !== 'pending');
   }, null, { timeout: 90_000 }).then(() => true, () => false);
   await page.waitForTimeout(500);
-  const figures = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('figure[data-mx-mermaid-state]')].map((f) => {
+  const figures = await doc.evaluate(() => Object.fromEntries([...document.querySelectorAll('figure[data-mx-mermaid-state]')].map((f) => {
     const src = f.querySelector('img')?.getAttribute('src') ?? '';
     const prefix = 'data:image/svg+xml;charset=utf-8,';
     return [f.querySelector('figcaption')?.textContent ?? '', { state: f.getAttribute('data-mx-mermaid-state'), src, svg: src.startsWith(prefix) ? decodeURIComponent(src.slice(prefix.length)) : null, palette: f.getAttribute('data-mx-mermaid-palette') }];

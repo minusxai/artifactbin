@@ -19,8 +19,7 @@
  *   GET/HEAD /a/<id>/export?format=jpg&mode=card   a public post's card, the home page's thumbnail
  *   GET/HEAD /api/users/<owner>/avatar              the owner's picture, the home page's hero
  *   GET/HEAD /assets/<name>.css|.woff2              the app's built stylesheet and fonts, never its script
- *   /story, /fonts, /webfonts, /libraries, /geojson, /favicon.ico   the static runtime
- *   GET /author-frame               the fixed author-script wrapper (its bytes are the same for every document)
+ *   /story, /fonts, /libraries, /geojson, /favicon.ico   the static runtime
  *
  * Every `/a/<id>` route and every post is scoped to the OWNER's PUBLIC markup
  * documents — the app's own doors also admit unlisted ones to anyone, so that
@@ -63,9 +62,8 @@ type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => P
  * Static trees the served document and its runtime load from; passed on to the app's own static handlers.
  * `/islands/` is the compiled reader's code (docs/phase2-architecture.md §9): the shared chunks, and the
  * per-document modules and speculation rules the module store serves — all content-addressed, all public.
- * `/author-frame` is the author-script wrapper (lib/story-runtime/author-frame): fixed bytes, no document data.
  */
-const STATIC = /^\/(?:story|fonts|webfonts|libraries|geojson|islands)\/|^\/favicon\.ico$|^\/author-frame$/;
+const STATIC = /^\/(?:story|fonts|libraries|geojson|islands)\/|^\/favicon\.ico$/;
 /** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
 const buildStyle = (path: string): boolean => {
   const asset = path.startsWith(`${BUILD_ASSET_PATH}/`) ? path.slice(BUILD_ASSET_PATH.length) : path;

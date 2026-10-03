@@ -510,7 +510,7 @@ const VOID_TAGS = immutableSet([
 ]);
 /** Content parses as raw text (no nested tags) per the HTML spec's raw-text elements. */
 const RAW_TEXT_TAGS = immutableSet(['script', 'style', 'textarea', 'title', 'xmp']);
-/** Active-content tags: dropped WITH their entire subtree (mirrors lib/jsx/validate's denylist). */
+/** Active-content tags: dropped WITH their entire subtree (lib/jsx/validate's denylist, plus `iframe`: markup may frame a player, a paste never brings one). */
 const DROP_TAGS = immutableSet([
   'script', 'iframe', 'object', 'embed', 'base', 'meta', 'link', 'form',
   'frame', 'frameset', 'applet', 'noscript',

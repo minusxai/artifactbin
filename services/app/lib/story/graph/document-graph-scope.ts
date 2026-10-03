@@ -12,7 +12,7 @@ export interface GraphValidationScope {
  selectors:string[];
  errors:string[];
 }
-const neighborhoods=new Set(['Helmet','Iframe']);
+const neighborhoods=new Set(['Helmet']);
 export function graphValidationScope(before:DocumentGraph,after:DocumentGraph):GraphValidationScope {
  const patch=prepareGraphPatch(before,after,0),full=new Set<string>(),shells=new Set<string>(),selectors=new Set<string>(),errors=new Set<string>(),reads=new Map<string,{key:string;facet:GraphFacet}>();
  const roots=graphNodes(after),nodes=new Map<string,GraphAstNode>();

@@ -116,7 +116,7 @@ export function resolveRefImageSrc(src: unknown, refData: RefDataMap | undefined
 
 /**
  * Every position where markup carries an image `ref:<id>` that must become a
- * URL at render time, as ONE table: `src` on <img>, `poster` on <Video>. Both
+ * URL at render time, as ONE table: `src` on <img>. Both
  * render paths call this from their decorateElement seam and clone the patch
  * over the element, so a position resolving in the canvas and not the served
  * document (or vice versa) has nowhere to come from. Returns null when there
@@ -125,7 +125,6 @@ export function resolveRefImageSrc(src: unknown, refData: RefDataMap | undefined
  */
 const REF_IMAGE_POSITIONS: ReadonlyArray<{ component: boolean; tag: string; prop: string }> = [
   { component: false, tag: 'img', prop: 'src' },
-  { component: true, tag: 'Video', prop: 'poster' },
 ];
 
 /** The one position that resolves a PDF: `<File src>`, which becomes the card. */
@@ -166,9 +165,8 @@ function resolveImageAndFileProps(
     const url = resolveRefImageSrc(props[pos.prop], refData);
     if (!url) continue;
     /*
-     * Only a real <img> gets a box: a <Video> poster is a background, and
-     * sizing it by the poster's own pixels would fight the player's layout.
-     * And only when the author has said nothing — they mean what they wrote.
+     * Only a real <img> gets a box, and only when the author has said
+     * nothing — they mean what they wrote.
      */
     const ref = refData?.[String(props[pos.prop]).slice(4)];
     if (ref?.kind !== 'image' || pos.tag !== 'img') return { [pos.prop]: url };

@@ -16,9 +16,16 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
-import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { documentFrame, documentLocator } from './lib/page-facts.mjs';
+
+/*
+ * The document runs in its own frame on its own origin (lib/serving/document-frame) and scrolls there; the app page
+ * around it is only the bar. So every question about the reading surface is asked INSIDE the frame.
+ */
+const inDoc = async (page, fn, arg) => (await documentFrame(page)).evaluate(fn, arg);
 
 /*
  * Every document this gate starts, so a run can take them away again. It
@@ -91,7 +98,7 @@ async function publishDark(markup) {
 const doc = await publish(DOC);
 const page2 = await publish(PAGE);
 const deck = await publish(DECK, 'deck');
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // ── 1. desktop: the outline ────────────────────────────────────────────────
 {
@@ -100,28 +107,29 @@ const browser = await chromium.launch();
   // First-paint geometry: sample the column's left edge from the earliest
   // paint and after settling. A moved sample is a layout shift.
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
-  const early = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
-  const hasOutlineEarly = await page.evaluate(() => !!document.querySelector('.mx-outline'));
+  const frame = await documentFrame(page);
+  const early = await frame.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
+  const hasOutlineEarly = await frame.evaluate(() => !!document.querySelector('.mx-outline'));
   await page.waitForLoadState('networkidle');
   await sleep(800);
-  const late = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
+  const late = await inDoc(page, () => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
   check(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
   check(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
-  check(await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length) === 4, 'one row per section');
-  check(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'), 'the outline is visible at 1440');
+  check(await inDoc(page, () => document.querySelectorAll('.mx-outline-row').length) === 4, 'one row per section');
+  check(await inDoc(page, () => getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'), 'the outline is visible at 1440');
 
-  await page.getByLabel('Go to section 3: 3. The third claim').click();
+  await documentLocator(page).getByLabel('Go to section 3: 3. The third claim').click();
   await sleep(900);
-  const top = await page.evaluate(() => [...document.querySelectorAll('.mx-doc h2')][2].getBoundingClientRect().top);
+  const top = await inDoc(page, () => [...document.querySelectorAll('.mx-doc h2')][2].getBoundingClientRect().top);
   check(top >= -2 && top < 120, `clicking a row scrolled the section to the top (top=${Math.round(top)})`);
-  const current = await page.evaluate(() => [...document.querySelectorAll('.mx-outline-row')].map((r) => r.getAttribute('aria-current')));
+  const current = await inDoc(page, () => [...document.querySelectorAll('.mx-outline-row')].map((r) => r.getAttribute('aria-current')));
   check(current[2] === 'true' && current.filter(Boolean).length === 1, `the row for the section being read is current (${JSON.stringify(current)})`);
 
   // Not for a page, not for a deck, not for a capture.
   await page.goto(`${BASE}/a/${page2.id}`, { waitUntil: 'networkidle' });
-  check(await page.evaluate(() => !document.querySelector('.mx-outline')), 'a two-heading page has no outline');
+  check(await inDoc(page, () => !document.querySelector('.mx-outline')), 'a two-heading page has no outline');
   await page.goto(`${BASE}/a/${deck.id}`, { waitUntil: 'networkidle' });
-  check(await page.evaluate(() => !document.querySelector('.mx-outline') && !!document.querySelector('.mx-rail')), 'a deck keeps its slide rail and gets no outline');
+  check(await inDoc(page, () => !document.querySelector('.mx-outline') && !!document.querySelector('.mx-rail')), 'a deck keeps its slide rail and gets no outline');
   const capture = await fetch(`${BASE}/a/${doc.id}/raw?chrome=0`, { headers: { Authorization: `Bearer ${doc.token}` } }).then((r) => r.text());
   check(!capture.includes('mx-outline'), 'the capture render has no outline');
   await ctx.close();
@@ -133,18 +141,19 @@ const browser = await chromium.launch();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'networkidle' });
   await sleep(1000);
-  check(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display === 'none'), 'the outline is hidden on a phone');
-  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page does not scroll sideways');
-  const t = await page.evaluate(() => {
+  check(await inDoc(page, () => getComputedStyle(document.querySelector('.mx-outline')).display === 'none'), 'the outline is hidden on a phone');
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)
+    && await inDoc(page, () => document.documentElement.scrollWidth <= innerWidth), 'the page does not scroll sideways (nor the document in its frame)');
+  const t = await inDoc(page, () => {
     const t = document.querySelector('table');
     return { w: Math.round(t.getBoundingClientRect().width), col: Math.round(t.parentElement.getBoundingClientRect().width), overflows: t.scrollWidth > t.clientWidth, mark: t.getAttribute('data-mx-scrollable') };
   });
   check(t.w <= t.col, `the table is capped at its column (${t.w} ≤ ${t.col})`);
   check(t.overflows, 'a wide table scrolls INSIDE itself');
   check(t.mark === '', `and is marked scrollable so its edge fades (${JSON.stringify(t.mark)})`);
-  await page.evaluate(() => { const t = document.querySelector('table'); t.scrollLeft = t.scrollWidth; t.dispatchEvent(new Event('scroll')); });
+  await inDoc(page, () => { const t = document.querySelector('table'); t.scrollLeft = t.scrollWidth; t.dispatchEvent(new Event('scroll')); });
   await sleep(100);
-  check(await page.evaluate(() => document.querySelector('table').getAttribute('data-mx-scrollable')) === 'end', 'the fade drops at the last column');
+  check(await inDoc(page, () => document.querySelector('table').getAttribute('data-mx-scrollable')) === 'end', 'the fade drops at the last column');
   await ctx.close();
 }
 
@@ -153,7 +162,7 @@ const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'networkidle' });
-  const t = await page.evaluate(() => {
+  const t = await inDoc(page, () => {
     const t = document.querySelector('table');
     return { w: Math.round(t.getBoundingClientRect().width), col: Math.round(t.parentElement.getBoundingClientRect().width), display: getComputedStyle(t).display, mark: t.getAttribute('data-mx-scrollable') };
   });
@@ -173,7 +182,7 @@ const browser = await chromium.launch();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'networkidle' });
   await sleep(600);
-  const before = await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length);
+  const before = await inDoc(page, () => document.querySelectorAll('.mx-outline-row').length);
 
   const grown = DOC.replace('</article>', `${section(5, 'Added by an agent')}<table className="text-sm"><thead><tr><th>Stage</th><th>Where</th><th>What happens</th></tr></thead><tbody>${WIDE_ROW}${WIDE_ROW}</tbody></table></article>`);
   const res = await fetch(`${BASE}/api/artifacts/${doc.id}`, {
@@ -183,7 +192,7 @@ const browser = await chromium.launch();
   });
   check(res.ok, 'the agent write landed');
 
-  const after = await until(async () => page.evaluate(() => document.querySelectorAll('.mx-outline-row').length), (n) => n === before + 1, 15000);
+  const after = await until(async () => inDoc(page, () => document.querySelectorAll('.mx-outline-row').length), (n) => n === before + 1, 15000);
   check(after === before + 1, `the new section joined the outline live (${before} → ${after})`);
 
   // …and the new row actually navigates (the bug a one-shot wiring hides).
@@ -197,11 +206,11 @@ const browser = await chromium.launch();
   // yields (lib/story-runtime/anchor-restore): before the fix, the loop pulled
   // the page back from every click for four seconds.
   await sleep(1200);
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await inDoc(page, () => window.scrollTo(0, 0));
   await sleep(300);
-  await page.getByLabel('Go to section 5: 5. Added by an agent').click();
+  await documentLocator(page).getByLabel('Go to section 5: 5. Added by an agent').click();
   await sleep(1500);
-  const nav = await page.evaluate(() => {
+  const nav = await inDoc(page, () => {
     const h = [...document.querySelectorAll('.mx-doc h2')][4];
     return { y: Math.round(scrollY), top: Math.round(h?.getBoundingClientRect().top ?? -9999), vh: innerHeight };
   });
@@ -212,12 +221,13 @@ const browser = await chromium.launch();
   await page.setViewportSize({ width: 390, height: 844 });
   await sleep(600);
   const marks = await until(
-    async () => page.evaluate(() => [...document.querySelectorAll('table')].map((t) => t.getAttribute('data-mx-scrollable'))),
+    async () => inDoc(page, () => [...document.querySelectorAll('table')].map((t) => t.getAttribute('data-mx-scrollable'))),
     (m) => Array.isArray(m) && m.length === 2 && m.every((x) => x === ''),
     10000,
   );
   check(Array.isArray(marks) && marks.length === 2 && marks.every((m) => m === ''), `both tables — the original and the live one — are marked scrollable (${JSON.stringify(marks)})`);
-  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'and the page still does not scroll sideways');
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)
+    && await inDoc(page, () => document.documentElement.scrollWidth <= innerWidth), 'and the page still does not scroll sideways (nor the document in its frame)');
   await ctx.close();
 }
 
@@ -243,7 +253,7 @@ const browser = await chromium.launch();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/a/${dark.id}`, { waitUntil: 'networkidle' });
   await sleep(600);
-  const probe = await page.evaluate(() => {
+  const probe = await inDoc(page, () => {
     // Any CSS colour → rgb by letting the browser convert: the themes ship
     // oklch(), which no regex should be parsing.
     const cv = document.createElement('canvas');
@@ -285,12 +295,11 @@ const browser = await chromium.launch();
   // And the reader's own controls: a light document flipped to dark keeps it.
   const lightDoc = await publish(DOC);
   await page.goto(`${BASE}/a/${lightDoc.id}`, { waitUntil: 'networkidle' });
-  // The chrome opens hidden now — a scroll up is what brings it back.
-  await revealReaderChrome(page);
+  // The reader's colour choice is the app bar's controls panel, sent into the frame (solid/pages/Document chooseMode).
   await openArtifactControls(page);
   await page.getByLabel('Dark mode', {exact: true}).click();
   await sleep(400);
-  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')
+  check(await inDoc(page, () => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')
     && getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'),
     'and the reader\'s own dark toggle keeps the rail');
   await ctx.close();

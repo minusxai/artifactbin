@@ -24,7 +24,8 @@ import { createChecker } from './lib/assert.mjs';
 import {tsImport} from 'tsx/esm/api';
 const {prepareClientDocumentUpdate}=await tsImport('../../services/app/lib/story/graph/document-update-client.ts',import.meta.url);
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -51,7 +52,7 @@ const EDITOR_EMAIL = `mxmx_test_collab_editor_${stamp}@example.com`;
 const COMMENTER_EMAIL = `mxmx_test_collab_commenter_${stamp}@example.com`;
 
 const sink = await startMailSink();
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const ownerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const editorCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const owner = await ownerCtx.newPage();
@@ -143,13 +144,14 @@ check(sharingAttempt === 200, `the editor can change sharing permissions (${shar
 await editor.click('[aria-label="Close sharing"]');
 
 // ── 3. both edit, different paragraphs, no reload ─────────────────────────
-const frameOf = (page) => page.mainFrame();
+// The document is framed by the app page on its own origin: its paragraphs are in that frame.
+const frameOf = (page) => documentFrame(page);
 const openEditor = async (page) => {
   await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
   await page.waitForFunction(() => true, null, { timeout: 1000 }).catch(() => {});
-  const f = () => frameOf(page);
   await page.waitForTimeout(6000);
-  check(!!f() && (await f().locator('p').count()) >= 2, `${page === owner ? 'owner' : 'editor'}: the in-place editor is up`);
+  const f = await frameOf(page);
+  check(!!f && (await f.locator('p').count()) >= 2, `${page === owner ? 'owner' : 'editor'}: the in-place editor is up`);
 };
 await openEditor(editor);
 await openEditor(owner);
@@ -158,9 +160,10 @@ await openEditor(owner);
 // because a CLICK lands under the typography toolbar that floats over the
 // document while a host is focused, and the engine commits text on BLUR, so
 // moving focus to another host is what commits.
-const focusHost = (page, nth) => frameOf(page).evaluate((n) => {
+const focusHost = async (page, nth) => (await frameOf(page)).evaluate((n) => {
   const el = document.querySelectorAll('p')[n];
-  el.focus();
+  // The editing host takes focus (and with it the frame, so the keyboard reaches it), not the paragraph in it.
+  (el.closest('[contenteditable="true"]') ?? el).focus({ preventScroll: true });
   const range = document.createRange();
   range.selectNodeContents(el);
   range.collapse(false);
@@ -180,7 +183,7 @@ await editor.waitForTimeout(500);
 const stored = await api(`/api/artifacts/${doc.id}`);
 check(stored.markup.includes('Added by the editor.'), "the editor's paragraph reached the server");
 check(stored.markup.includes('Added by the owner.'), "the owner's paragraph reached the server");
-const editorSees = await frameOf(editor).locator('body').innerText();
+const editorSees = await (await frameOf(editor)).locator('body').innerText();
 check(/Added by the owner\./.test(editorSees) && /Added by the editor\./.test(editorSees), 'the editor\'s open document shows BOTH edits, live');
 
 // ── 4. the editor's dashboard names it and their role ─────────────────────

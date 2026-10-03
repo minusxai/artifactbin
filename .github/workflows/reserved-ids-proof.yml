@@ -25,7 +25,8 @@ jobs:
     env:
       NODE_ENV: production
       DATABASE_URL: postgres://proof:proof@localhost:5432/proof
-      APP__PUBLIC_BASE_URL: http://127.0.0.1:7445
+      APP__PUBLIC_BASE_URL: http://app.lvh.me:7445
+      APP__PAGES_HOST: lvh.me
       AUTH__SECRET: reserved-identities-disposable-ci-secret
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

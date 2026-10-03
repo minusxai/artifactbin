@@ -139,7 +139,7 @@ describe('node project through real routes',()=>{
   });
   it('a refused archived publish leaves head and history unchanged',async()=>{
     const s=await setup('<p id="safe">Safe</p>');const db=await getDb();await artifactQuery(db,'UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,format,source,meta) VALUES($1,1,'bad','markup',$2,'{}')`,[s.doc.id,'<p id="bad" style="color:red">Bad</p>']);
+    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,format,source,meta) VALUES($1,1,'bad','markup',$2,'{}')`,[s.doc.id,'<p id="bad" onClick="run()">Bad</p>']);
     await getVersionFor({tokenId:s.t.id,userId:null},s.doc.id,1);
     const before=await history(s.doc.id);const head=await s.read();
     await expect(restoreDocument(s.t.token,s.doc.id,1)).rejects.toThrow();

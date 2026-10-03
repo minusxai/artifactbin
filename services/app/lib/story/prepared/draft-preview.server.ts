@@ -38,8 +38,6 @@ export async function renderDraftPreview(input: PrepareStoryInput): Promise<stri
     colorMode: parts.mode,
     snapshot: null,
     overlay: { values: state?.values ?? {}, mermaidImages: {}, signedIn: false, doors: null },
-    chrome: null,
-    spa: null,
     build,
     head: null,
   }).html;

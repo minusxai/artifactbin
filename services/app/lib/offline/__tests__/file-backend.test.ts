@@ -220,10 +220,11 @@ describe('prepare — what an edit needs from artifactbin', () => {
     const source = fixture().source;
     await expect(backend.prepare(source)).resolves.toEqual({});
     await expect(backend.prepare('<p id="n1">Plain words</p>')).resolves.toEqual({});
+    // A web image is served as written, so it needs nothing from artifactbin.
+    await expect(backend.prepare('<img src="https://example.com/new.png" alt="new" />')).resolves.toEqual({});
   });
 
   it.each([
-    ['a new web image', '<img src="https://example.com/new.png" alt="new" />'],
     ['a new icon', '<Icon name="calendar" />'],
     ['a new query source binding', '<Helmet><Import name="more_data" src="ref:Zz9Zz9" /><Query name="more">{`select 1`}</Query></Helmet>'],
     ['a ref: target that is not in the file', '<Image src="ref:Qq1Qq1" alt="x" />'],
@@ -453,7 +454,7 @@ describe('a source changed outside the file', () => {
   });
 
   it('refuses what needs artifactbin, as a commit in the file does', async () => {
-    const result = await rebuildArtifactFile(changed((s) => s.replace('<Button run', '<img src="https://example.com/new.png" alt="" />\n  <Button run')));
+    const result = await rebuildArtifactFile(changed((s) => s.replace('<Button run', '<Icon name="calendar" />\n  <Button run')));
     expect(result).toMatchObject({ rebuilt: false, error: OFFLINE_ASSET_REASON });
   });
 });

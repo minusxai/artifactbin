@@ -103,3 +103,11 @@ it('co-hosted runner persistence is declared once with owner-scoped admission an
  expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_request ON app.runner_runs (owner, request_key)');
  expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_occurrence ON app.runner_schedule_occurrences (schedule_id, scheduled_at)');
 });
+it('the pages sessions behind the documents\' own origins belong to the app and store only a cookie hash',()=>{
+ expect(declared()['app.pages_sessions']).toBe('app');
+ expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.pages_sessions \([\s\S]*?id_hash TEXT NOT NULL[\s\S]*?PRIMARY KEY \(id_hash\)/);
+});
+it('a reader\'s document trust belongs to the app, one row per person per document, erased with the person',()=>{
+ expect(declared()['app.document_trust']).toBe('app');
+ expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.document_trust \([\s\S]*?user_id TEXT NOT NULL[\s\S]*?extensions JSONB NOT NULL[\s\S]*?PRIMARY KEY \(user_id, artifact_id\)/);
+});

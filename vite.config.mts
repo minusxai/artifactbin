@@ -69,9 +69,6 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         'solid-app': path.join(webRoot, 'solid-app.html'),
-        // The compiled reader page's loader (web/solid-spa-idle): an entry of its own, so the server names
-        // it from the manifest (`solid-spa-idle.ts`) and the page loads the app only when it is wanted.
-        'solid-spa-idle': path.join(webRoot, 'solid-spa-idle.ts'),
       },
       // The shell's /fonts files are the app server's (appFontFaces above), never Vite assets.
       external: [/^\/fonts\//],

@@ -197,16 +197,14 @@ test('an image tracked as typed YAML serves its source bytes',async()=>{
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 
- test('preview serves the production logo and sandboxed author wrapper',async()=>{
+ test('preview serves the production logo and no author wrapper',async()=>{
  const root=await mkdtemp(join(tmpdir(),'preview-chrome-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
   await writeFile(join(root,'report.jsx'),'<p>Draft</p>');await writeFile(join(root,'logo-128.png'),'logo');
   session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),publicAssets:root});
   const logo=await fetch(session.url+'/logo-128.png');assert.equal(logo.status,200);assert.equal(await logo.text(),'logo');
-  const frame=await fetch(session.url+'/author-frame');assert.equal(frame.status,200);
-  assert.match(frame.headers.get('content-security-policy')??'',/sandbox allow-scripts;/);
-  assert.doesNotMatch(frame.headers.get('content-security-policy')??'',/allow-same-origin/);
-  assert.match(await frame.text(),/<!doctype html>/i);
+  // The author script runs in the document: the former sandboxed wrapper is not served.
+  const frame=await fetch(session.url+'/author-frame');assert.notEqual(frame.status,200);await frame.arrayBuffer();
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 

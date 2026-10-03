@@ -48,7 +48,10 @@ export function applyOperationsToNodes(nodes:JsxNode[],operations:readonly Docum
   for(const index of path){const node=result[index];if(!node||node.type!=='element')return fail('Parent is not an element');result=node.children;}
   return result;
  };
- const nodeAt=(path:DocumentPath):JsxNode=>list(path.slice(0,-1))[path[path.length-1]!]??fail('Node does not exist');
+ const nodeAt=(path:DocumentPath):JsxNode=>{
+  const siblings=list(path.slice(0,-1)),index=path[path.length-1];
+  return typeof index==='number'&&Object.hasOwn(siblings,index)?siblings[index]!:fail('Node does not exist');
+ };
  for(const op of operations){
   operationIndex++;
   if(op.kind==='replaceDocument'){roots=parse(op.source);continue;}

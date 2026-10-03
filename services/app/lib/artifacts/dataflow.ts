@@ -764,7 +764,9 @@ export async function runDocumentDataflow(
 function compileErrorsByName(errors: ReadonlyArray<{ message: string }>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const e of errors) {
-    const name = /^<(?:Query|Mutation|Import|Value) name="([^"]+)"/.exec(e.message)?.[1] ?? '';
+    // Compile messages name their declaration either way: `<Query name="x">` or `<Query> "x"`.
+    const named = /^<(?:Query|Mutation|Import|Value)(?: name="([^"]+)"|> "([^"]+)")/.exec(e.message);
+    const name = named?.[1] ?? named?.[2] ?? '';
     out[name] = out[name] ? `${out[name]}\n${e.message}` : e.message;
   }
   return out;

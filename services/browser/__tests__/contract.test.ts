@@ -20,6 +20,9 @@ const PAGE = `<html><head><style>
 <div data-mx-slide style="height:100px;background:#3c3">two</div>
 <div data-mx-slide style="height:100px;background:#33c">three</div></main></body></html>`;
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
+/* A script component's mount: the server fallback (red) until the page's script replaces it (green), as the page runtime does. */
+const MOUNT_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px"><div data-mx-mount="Spark" style="width:100px;height:100px;background:#c33"><p style="margin:0">Loading</p></div></main><script>setTimeout(()=>{const m=document.querySelector('[data-mx-mount]');m.replaceChildren();const d=document.createElement('div');d.style.cssText='width:100px;height:100px;background:#3c3';m.append(d)},400)</script></body></html>`;
+const NEVER_MOUNTS_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px"><div data-mx-mount="Spark" style="width:100px;height:100px;background:#c33"><p>Loading</p></div></main></body></html>`;
 const NEVER_READY_PAGE = `<html><body><main><div data-mx-managed-frame><iframe></iframe></div></main></body></html>`;
 const DIAGRAM_PAGE = `<html><body style="margin:0"><main data-mx-mermaid-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{document.querySelector('main').dataset.mxMermaidState='ready';document.querySelector('main').style.background='#3c3'},400)</script></body></html>`;
 const CHART_PAGE = `<html><body style="margin:0"><main data-mx-chart-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{const m=document.querySelector('main');m.innerHTML='<div data-mx-chart-state="pending"></div>';m.removeAttribute('data-mx-chart-state');setTimeout(()=>{m.firstChild.dataset.mxChartState='ready';m.style.background='#3c3'},300)},300)</script></body></html>`;
@@ -40,7 +43,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -64,6 +67,25 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
   it('returns failure when a chart never finishes, instead of cacheable loading pixels',async()=>{
     const r=await svc.render({...base(),url:`${pages.base}/stuck-chart`,settleMs:0,timeoutMs:250});
     expect(!r.ok&&r.reason).toBe('failed');
+  });
+  it('waits for script component mounts to replace their fallback, and the capture differs from the fallback render', async () => {
+    const centre = async (r: Awaited<ReturnType<BrowserService['render']>>) => {
+      if (!r.ok) throw new Error(JSON.stringify(r));
+      const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+      const at = (50 * info.width + 50) * info.channels;
+      return [...data.subarray(at, at + 3)];
+    };
+    // The fallback render is a page whose script never mounts (no race with the swap), the capture one that does.
+    const fallback = await centre(await svc.render({ ...base(), url: `${pages.base}/never-mounts`, settleMs: 0 }));
+    const mounted = await centre(await svc.render({ ...base(), url: `${pages.base}/mount`, settleMs: 0, waitForMountsMs: 5000 }));
+    expect(fallback).toEqual([204, 51, 51]);
+    expect(mounted).toEqual([51, 204, 51]);
+  });
+  it('captures the fallback after the mount cap instead of failing when a component never mounts', async () => {
+    const started = Date.now();
+    const r = await svc.render({ ...base(), url: `${pages.base}/never-mounts`, settleMs: 0, waitForMountsMs: 300 });
+    expect(r.ok).toBe(true);
+    expect(Date.now() - started).toBeLessThan(5000);
   });
   it('waits for a lazy diagram before capturing export pixels', async () => {
     const r = await svc.render({ ...base(), url: `${pages.base}/diagram`, settleMs: 0 });
@@ -101,7 +123,7 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
    * viewport's HEIGHT (a card is a fixed ratio — the whole point of the mode)
    * and the SURFACE's width, capped at the viewport. A served document's body
    * spans the viewport, so in the product the two coincide; here `main` is
-   * 600px and the clip follows it, which is the rule that stopped a `<Video>`
+   * 600px and the clip follows it, which is the rule that stopped an embedded
    * player's box from cropping every og card to its width.
    */
   it('clips the card stage to the surface width, at the viewport height', async () => {

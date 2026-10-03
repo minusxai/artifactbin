@@ -12,7 +12,7 @@
  *  1. The stored compile, independent of the current deployment. None, or a
  *     hand-raised compatibility minimum → compile inline and wait. A recorded
  *     failure keeps its reason (`compile-error`, `unported`). A version's author script
- *     is served by the compiled page (the lazy author host, lib/islands/author-host);
+ *     is served by the compiled page (run in the document by lib/islands/page-runtime);
  *     a compile that does not carry it → `unported`: a page must be whole.
  *  2. The data. Only the head of a document a guest may read has a guest
  *     snapshot (an archived version is its editors' alone). A FRESH snapshot
@@ -52,7 +52,6 @@ import type { ArchivedRender } from '@/lib/serving';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { Scalar } from '@/lib/story/data';
-import type { ReaderChromeInput } from '@/lib/story/reader';
 import { recompilePage, type PreparedPage } from '@/lib/story/prepared/prepared-page.server';
 import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/prepared/served-results.server';
 import { readUrlValues } from '@/lib/story/data';
@@ -87,8 +86,6 @@ export interface CompiledReaderRequest {
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay; null on a capture. */
   doors: AssembleOverlay['doors'];
-  /** The managed `<Iframe>`'s asset door (AssembleOverlay.managedAssets), or none without an asset origin. */
-  managedAssets?: AssembleOverlay['managedAssets'];
   /**
    * The reader whose holdings the page's own SQLite engine answers for (lib/artifacts holdableImports,
    * IslandPageData.hold): the one the page's query door answers — the app page's request actor, `/raw`'s
@@ -99,11 +96,6 @@ export interface CompiledReaderRequest {
   readOnly?: string | null;
   /** The document's live identity (`<body data-mx-live-id data-mx-live-edit>`); null on a capture or an archived render. */
   live: { id: string; editId: string } | null;
-  /** Server-rendered reader chrome (the app page), or null (`/raw`, captures, a domain post). */
-  chrome: ReaderChromeInput | null;
-  /** Extra first-screen font files the chrome paints with (lib/story/styles/first-screen-fonts readerChromeFonts). */
-  chromeFonts?: readonly string[];
-  spa: AssembleInput['spa'];
   head: AssembleHead | null;
   /**
    * A CAPTURE's own settled run (the exporter photographs this page): its answers instead of the guest
@@ -126,6 +118,8 @@ export interface CompiledReaderRequest {
    * Default true.
    */
   documentChrome?: boolean;
+  /** The app origin that frames a document served on its own origin (AssembleInput.appOrigin). */
+  appOrigin?: string | null;
 }
 
 export type CompiledReaderAnswer =
@@ -486,20 +480,19 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
         ? (bare ? withoutDeckChrome(story) : story).replace(/<img\b[^>]*>/g, (tag) => tag.replace(/\s(?:srcSet|srcset|sizes)="[^"]*"/g, ''))
         : bare ? withoutDeckChrome(story) : story,
       css: page.css,
-      fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
+      fontPreloads: page.fontPreloads,
       title: page.title,
       theme: page.theme,
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), managedAssets: reader.managedAssets ?? null, readOnly: reader.readOnly ?? null, hold, sqliteWasm },
-      chrome: reader.chrome,
-      spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT && !usable.pinned ? reader.spa : null,
+      overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), readOnly: reader.readOnly ?? null, hold, sqliteWasm },
       build,
       head: reader.head,
       live: reader.live,
       footer: reader.footer ?? null,
       sheets: reader.sheets ?? null,
+      appOrigin: reader.appOrigin ?? null,
     });
     return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
   } catch (error) {

@@ -68,6 +68,6 @@ describe('Solid static render parity', () => {
     }
     expect(reports.flatMap((report) => report.contentDom.map((diff) => `${report.key}: ${diff}`))).toEqual([]);
     // The deleted per-island shell assigned hydration prefixes and rail IDs that the one-tree renderer cannot preserve.
-    expect(reports).toHaveLength(35);
+    expect(reports).toHaveLength(34);
   }, 300_000);
 });

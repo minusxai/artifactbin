@@ -10,7 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from '../lib/mail-login.mjs';
 import { notificationDocumentPayload, notificationMutationPayload } from '../fixtures/postgres-notifications.mjs';
@@ -46,10 +47,11 @@ async function uiResponse(page, path, action, method = 'POST', expected = 200, r
   assert.equal(response.status(), expected, `${method} ${path}: ${JSON.stringify(body)}`);
   return body;
 }
-async function previewContains(page, text, label = 'Table preview') {
-  const preview = page.getByLabel(label, { exact: true });
+/** `scope` is the page (the dataset's own app page) or a document's frame (lib/page-facts documentFrame). */
+async function previewContains(scope, text, label = 'Table preview') {
+  const preview = scope.getByLabel(label, { exact: true });
   await preview.waitFor();
-  await page.waitForFunction(({ label, text }) => [...document.querySelectorAll('[aria-label]')].some(node => node.getAttribute('aria-label') === label && node.textContent?.includes(text)), { label, text }).catch(async error => {
+  await scope.waitForFunction(({ label, text }) => [...document.querySelectorAll('[aria-label]')].some(node => node.getAttribute('aria-label') === label && node.textContent?.includes(text)), { label, text }).catch(async error => {
     const shown = (await preview.innerText()).slice(0, 300);
     secretFree(shown);
     console.error(`preview ${label} never showed ${text}: ${shown}`);
@@ -78,7 +80,7 @@ try {
   log('disposable Postgres has two schemas and a SELECT-only reader');
 
   const start = await startDocument(base);
-  browser = await chromium.launch();
+  browser = await launchChromium();
   sink = await startMailSink();
   const owner = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   const guest = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -155,13 +157,16 @@ try {
   secretFree(publication);
   assert.equal(published.status, 200, `same-owner document must accept a sourced filtered query: ${JSON.stringify(publication)}`);
   await guest.goto(`${base}/a/${start.id}`, { waitUntil: 'load' });
-  await previewContains(guest, '120', 'DataTable embed');
-  assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
-  await guest.locator('html[data-mx-ready]').waitFor();
-  await guest.getByLabel('Region', { exact: true }).fill('east');
-  await previewContains(guest, '90', 'DataTable embed');
-  assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));
+  // The document is framed by the app page on its own origin: its table and its input live in that frame.
+  const sourced = await documentFrame(guest);
+  await previewContains(sourced, '120', 'DataTable embed');
+  assert.ok(!(await sourced.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
+  await sourced.locator('html[data-mx-ready]').waitFor();
+  await sourced.getByLabel('Region', { exact: true }).fill('east');
+  await previewContains(sourced, '90', 'DataTable embed');
+  assert.ok(!(await sourced.getByLabel('DataTable embed', { exact: true }).innerText()).includes('120'));
   secretFree(await guest.content());
+  secretFree(await sourced.content());
   log('anonymous reader sees permitted source data and a typed Value filter reruns the remote query');
 
   for (const sql of ['select customer_secret from orders', "select id from orders where customer_secret='hidden-west'", 'select * from sales.internal_notes', 'select * from pg_catalog.pg_authid', 'delete from orders', 'with changed as (delete from orders returning *) select * from changed']) {

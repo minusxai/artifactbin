@@ -13,7 +13,7 @@ test('foreground team process serves real login and excludes another database ow
  const reservation=createServer();await new Promise<void>(resolve=>reservation.listen(0,'127.0.0.1',resolve));
  const port=(reservation.address() as {port:number}).port;await new Promise<void>(resolve=>reservation.close(()=>resolve()));
  const file=join(directory,'server.env');
- await writeFile(file,`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=http://127.0.0.1:${port}\nAUTH__SECRET=${'s'.repeat(48)}\nEMAIL__DEV_OUTBOX_PATH=outbox.jsonl\n`);
+ await writeFile(file,`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=http://app.lvh.me:${port}\nAUTH__SECRET=${'s'.repeat(48)}\nEMAIL__DEV_OUTBOX_PATH=outbox.jsonl\n`);
  const root=fileURLToPath(new URL('../../../',import.meta.url)),entry=new URL('../src/team-entry.ts',import.meta.url).href;
  const reporter=new URL('../src/operator-error.ts',import.meta.url).href;
  const children:ChildProcess[]=[];
@@ -36,10 +36,10 @@ test('foreground team process serves real login and excludes another database ow
  try{
   const first=launch();await ready(first);
   // Startup teaches the operator what to hand teammates, not just that a socket is open.
-  assert.match(first.output(),new RegExp(`afbin config set host http://127\\.0\\.0\\.1:${port}`));
-  assert.match(first.output(),new RegExp(`curl -fsSL http://127\\.0\\.0\\.1:${port}/chat/install\\.sh \\| sh`));
+  assert.match(first.output(),new RegExp(`afbin config set host http://app\\.lvh\\.me:${port}`));
+  assert.match(first.output(),new RegExp(`curl -fsSL http://app\\.lvh\\.me:${port}/chat/install\\.sh \\| sh`));
   assert.match(first.output(),/\[dev-mail\] otp/);
-  const response=await fetch(`http://127.0.0.1:${port}/api/auth/get-session`);assert.equal(response.status,200);assert.equal(await response.json(),null);
+  const response=await fetch(`http://app.lvh.me:${port}/api/auth/get-session`);assert.equal(response.status,200);assert.equal(await response.json(),null);
   const second=launch();assert.notEqual(await exited(second.child),0);
   const owned=await realpath(directory);
   assert.match(second.output(),new RegExp(`Another afbin serve is already using ${owned.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\.`));

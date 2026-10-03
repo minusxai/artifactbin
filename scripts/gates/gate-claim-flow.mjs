@@ -2,7 +2,7 @@
  * connected CLI credentials usable, without adopting unrelated guests. */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -19,7 +19,7 @@ const api = async (path, init = {}, token) => {
 };
 
 const sink = await startMailSink();
-const b = await chromium.launch();
+const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 
 // ── an anonymous visitor makes two documents ────────────────────────────────

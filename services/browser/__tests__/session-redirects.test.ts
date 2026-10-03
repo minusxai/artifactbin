@@ -32,3 +32,18 @@ it('honors redirect method changes and preserves 307 write bodies', async () => 
     expect(await response.text()).toBe('done');
   }
 });
+
+it('hands a redirect to another session origin back unfollowed, and still refuses every other origin', async () => {
+  const pages = (url: URL) => url.hostname.endsWith('.lvh.me');
+  const seen: string[] = [];
+  const response = await sessionRequest(new Request('http://lvh.me/pages-session?ticket=t'), async request => {
+    seen.push(request.url);
+    return new Response(null, {status:302,headers:{location:'http://646f6331.lvh.me/','set-cookie':'afbin_pages=c; Domain=.lvh.me'}});
+  }, pages);
+  // The page itself goes there: following it here would leave the frame on the apex's origin.
+  expect(response.status).toBe(302);
+  expect(response.headers.get('location')).toBe('http://646f6331.lvh.me/');
+  expect(seen).toEqual(['http://lvh.me/pages-session?ticket=t']);
+  await expect(sessionRequest(new Request('http://lvh.me/pages-session'), async () => new Response(null,{status:302,headers:{location:'https://elsewhere.test/'}}), pages)).rejects.toThrow(/origin/);
+  await expect(sessionRequest(new Request('http://lvh.me/pages-session'), async () => new Response(null,{status:302,headers:{location:'http://user:pw@646f6331.lvh.me/'}}), pages)).rejects.toThrow(/origin/);
+});

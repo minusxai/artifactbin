@@ -20,12 +20,15 @@
  * nothing: the runtime mints its session nonce before that script exists
  * (lib/story-runtime/pristine), and the page drops everything unsigned.
  *
+ * The document is framed by the app page on its own origin and scrolls in that frame: what is measured,
+ * typed into and read is the frame's; where it sits ON SCREEN is the frame's offset plus its own.
+ *
  *   usage: node scripts/gates/gate-inplace-edit.mjs [base]
  */
-import { inlineStory } from './lib/page-facts.mjs';
+import { DOCUMENT_FRAME, documentFrame, documentLocator, inlineStory } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -58,7 +61,7 @@ const publish = async (markup) => {
   return start;
 };
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // ── 1. One document, all the way through ────────────────────────────────────
 {
@@ -69,7 +72,15 @@ const browser = await chromium.launch();
   await inlineStory(page);
   await sleep(7000);
 
-  const frame = () => page.mainFrame();
+  // One frame for the whole session: a reload of it on entering or leaving edit would detach this.
+  const documentInFrame = await documentFrame(page);
+  const frame = () => documentInFrame;
+  /** Where an element's top is on the SCREEN: the frame's offset on the page plus the element's in the frame. */
+  const screenTop = async (id) => {
+    const box = await page.locator(DOCUMENT_FRAME).boundingBox();
+    const top = await frame().evaluate((elementId) => document.getElementById(elementId).getBoundingClientRect().top, id);
+    return Math.round((box?.y ?? 0) + top);
+  };
 
   await frame().evaluate(() => {
     window.scrollTo(0, 900);
@@ -88,12 +99,15 @@ const browser = await chromium.launch();
     const el = [...document.querySelectorAll('p[id]')].find((p) => p.getBoundingClientRect().top > 130);
     return { id: el.id };
   });
-  const placeOf = () => frame().evaluate((id) => Math.round(document.getElementById(id).getBoundingClientRect().top), readerPlace.id);
+  const placeOf = () => screenTop(readerPlace.id);
   const readingAt = await placeOf();
+  const frameTop = async () => Math.round((await page.locator(DOCUMENT_FRAME).boundingBox())?.y ?? 0);
+  const frameReadingAt = await frameTop();
   await page.click('[aria-label="Edit artifact"]');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
   const afterEntering = await placeOf();
+  note(`the document frame's top on the page: ${frameReadingAt} reading → ${await frameTop()} editing`);
   check(Math.abs(afterEntering - readingAt) < 5,
     `and did not move the reader (${readingAt} → ${afterEntering})`);
   check(await frame().evaluate(() => !!document.querySelector('#lede')?.isContentEditable),
@@ -111,7 +125,8 @@ const browser = await chromium.launch();
   note(`editing ${hosts[0]}, committing by moving to ${hosts[1]}`);
   const focusHost = (id) => frame().evaluate((hostId) => {
     const el = document.getElementById(hostId);
-    el.focus();
+    // The editing host takes focus (and with it the frame, so the keyboard reaches it), not the paragraph in it.
+    (el.closest('[contenteditable="true"]') ?? el).focus({ preventScroll: true });
     const range = document.createRange();
     range.selectNodeContents(el);
     const sel = getSelection();
@@ -146,11 +161,11 @@ const browser = await chromium.launch();
 
   // LEAVE
   const leavingAt = await frame().evaluate(() => window.scrollY);
-  const leavingParagraphTop = await frame().locator(`#${hosts[0]}`).evaluate(el => el.getBoundingClientRect().top);
+  const leavingParagraphTop = await screenTop(hosts[0]);
   await page.click('[aria-label="Exit edit mode"]');
   await sleep(3000);
   const returnedAt = await frame().evaluate(() => window.scrollY);
-  const returnedParagraphTop = await frame().locator(`#${hosts[0]}`).evaluate(el => el.getBoundingClientRect().top);
+  const returnedParagraphTop = await screenTop(hosts[0]);
   check(Math.abs(returnedParagraphTop - leavingParagraphTop) < 5,
     `nor moved the reader's paragraph on the way out (top ${leavingParagraphTop} → ${returnedParagraphTop}, scroll ${leavingAt} → ${returnedAt})`);
   check(await frame().evaluate(() => !document.querySelector('#lede')?.isContentEditable), 'and the document is no longer editable');
@@ -165,6 +180,8 @@ const browser = await chromium.launch();
     // Everything a script in this realm can reach, reaching for the write path.
     try { window.top.postMessage({ type: 'mx:text-edit', path: '0.1', innerHtml: 'FORGED BY THE SCRIPT' }, '*'); } catch (e) {}
     try { window.top.postMessage({ type: 'mx:text-edit', nonce: 'guessed', path: '0.1', innerHtml: 'FORGED WITH A GUESS' }, '*'); } catch (e) {}
+    // The framed document's own channel to the page: an envelope with a guessed key and a guessed nonce.
+    try { window.parent.postMessage({ type: 'mx:frame-bridge', key: 'guessed-guessed-guessed', payload: { kind: 'event', event: { type: 'mx:flow-edit', nonce: 'guessed', path: '0.1', expected: 'the author wrote this', replacement: 'FORGED THROUGH THE BRIDGE' } } }, '*'); } catch (e) {}
     setTimeout(function () {
       try { window.top.postMessage({ type: 'mx:text-edit', path: '0.1', innerHtml: 'FORGED LATE' }, '*'); } catch (e) {}
     }, 2500);
@@ -185,7 +202,8 @@ const browser = await chromium.launch();
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(5000);
 
-  const frame = () => page.mainFrame();
+  const documentInFrame = await documentFrame(page);
+  const frame = () => documentInFrame;
   check(await frame().evaluate(() => !!document.getElementById('lede')?.isContentEditable),
     'and it is editable');
 
@@ -224,12 +242,12 @@ const browser = await chromium.launch();
   // Wait for the canvas to POPULATE, then let it settle: the editor runs the
   // document's dataflow on load and remounts the canvas once when it completes,
   // so a click inside that window hits a detached frame.
-  await page.waitForFunction(
+  await (await documentFrame(page)).waitForFunction(
     () => (document.querySelector('[data-mx-inline-story]')?.querySelectorAll('p').length ?? 0) >= 2,
     null, { timeout: 30000 },
   ).catch(() => {});
   await sleep(6000);
-  const surface = () => page.mainFrame();
+  const surface = () => documentLocator(page);
 
   await surface().locator('p').nth(1).click();
   await page.keyboard.type(' Typed by the human.');
@@ -274,13 +292,13 @@ const browser = await chromium.launch();
     }),
   });
   await sleep(3000);
-  check(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+  check(/Written while watching/.test(await documentLocator(viewer).locator('body').innerText()),
     'the viewer saw the live edit');
   // Reading is chromeless until the artifact controls are opened.
   await openArtifactControls(viewer);
   await viewer.click('[aria-label="Edit artifact"]');
   await sleep(4000);
-  check(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+  check(/Written while watching/.test(await documentLocator(viewer).locator('body').innerText()),
     'the editor opens on the LIVE document, not the page it was rendered with');
   const headNow = await read();
   check(headNow.version >= 2, `the document is on a real, advanced version (v${headNow.version})`);

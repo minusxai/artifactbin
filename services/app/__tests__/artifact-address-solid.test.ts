@@ -1,25 +1,25 @@
 /**
- * EVERY ARTIFACT ADDRESS IS SOLID'S (lib/solid-routes isSolidPage): no markup answer the app page serves
- * may fall back to the Solid SPA any more. What is left without the compiled page is the starter
- * placeholder's READ view (its instructions are app UI, solid/pages/Starter); its `/edit`, a capture of
- * it and a keyed capture of any document are the compiled page, whose idle entry is the Solid reader's.
- * The standalone renderer's `legacy` fallback is gone: a compile that cannot be served is a 500, never
- * a page drawn by the retired React reader.
+ * EVERY ARTIFACT ADDRESS IS SOLID'S (lib/solid-routes isSolidPage), and a document on the app page is ONE frame on
+ * its own origin (lib/serving/document-frame): the app page renders no document. What is left without a frame is the
+ * starter placeholder's READ view (its instructions are app UI, solid/pages/Starter); its `/edit` is framed. The
+ * document itself is rendered only by the standalone compiled page (`/raw`), which is what a capture photographs, and
+ * a compile that cannot be served there is a 500 — there is no other renderer.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { artifactPageAnswer } from '@/lib/serving';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { artifactPageAnswer, pagesSite } from '@/lib/serving';
 import { mintToken } from '@/lib/accounts';
 import { mintExportKey } from '@/lib/serving';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/serving';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { CompiledPageFailed } from '@/lib/compiled-page/serve.server';
 
 vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
 
-const PAGE = { spa: { entry: '/solid-spa-idle.ts', preload: [] } };
+const PAGES = { pages: pagesSite() };
+const raw = (id: string, search = '') => rawRoute(request(`/a/${id}/raw${search}`), { params: Promise.resolve({ id }) });
 
 async function publish(body: Record<string, unknown>): Promise<{ id: string; token: string }> {
   const { token } = await mintToken('address');
@@ -30,43 +30,58 @@ async function publish(body: Record<string, unknown>): Promise<{ id: string; tok
 }
 
 describe('the starter placeholder', () => {
-  it('reads as app UI (not compiled) but opens its editor on the compiled page', async () => {
+  it('reads as app UI (not framed) but opens its editor on the framed document', async () => {
     const { id, token } = await publish({ title: null, markup: START_PLACEHOLDER_MARKUP });
-    const read = await artifactPageAnswer(request(`/a/${id}`, { token }), id, { page: PAGE });
+    const read = await artifactPageAnswer(request(`/a/${id}`, { token }), id, PAGES);
     expect(read.status).toBe(200);
-    expect(read.compiled).toBeUndefined();
+    expect(read.frame).toBeUndefined();
     expect((read.body as { surface: { starter: boolean } }).surface.starter).toBe(true);
-    const edit = await artifactPageAnswer(request(`/a/${id}/edit`, { token }), id, { page: PAGE });
-    expect(edit.compiled?.html).toContain('/solid-spa-idle.ts');
+    const edit = await artifactPageAnswer(request(`/a/${id}/edit`, { token }), id, PAGES);
+    expect(edit.frame?.src).toContain('/pages-session?');
   });
 
-  it('is photographed as the document it is: a keyed capture is compiled', async () => {
+  it('is photographed as the document it is: a keyed capture of /raw is compiled', async () => {
     const { id } = await publish({ title: null, markup: START_PLACEHOLDER_MARKUP });
-    const capture = await artifactPageAnswer(request(`/a/${id}?key=${mintExportKey(id)}`), id, { page: PAGE });
-    expect(capture.compiled?.html).toContain('Waiting for your agent');
+    const capture = await raw(id, `?chrome=0&key=${mintExportKey(id)}`);
+    expect(capture.status).toBe(200);
+    expect(await capture.text()).toContain('Waiting for your agent');
+  });
+});
+
+describe('a document on the app page', () => {
+  it('is its frame on its own origin: the answer names the document and carries none of it', async () => {
+    const { id, token } = await publish({ title: 'Framed', markup: '<h1>Framed heading</h1>' });
+    const answer = await artifactPageAnswer(request(`/a/${id}`, { token }), id, PAGES);
+    expect(answer.reader).toEqual({ mode: 'compiled' });
+    expect(answer.frame?.src).toMatch(/\/pages-session\?(?:ticket=[^&]+&)?next=/);
+    expect(decodeURIComponent(answer.frame!.src)).toContain(`.${pagesSite().host}`);
+    expect(answer.frame?.head.title).toBe('Framed');
+    // The JSON door mints no ticket and draws no frame.
+    expect((await artifactPageAnswer(request(`/a/${id}`, { token }), id)).frame).toBeUndefined();
   });
 });
 
 describe('a keyed capture of a document', () => {
-  it('is the compiled page with the Solid idle entry, never the React reader', async () => {
+  it('is the compiled standalone page, never the app page', async () => {
     const { id } = await publish({ title: 'Captured', markup: '<h1>Captured heading</h1>' });
-    const capture = await artifactPageAnswer(request(`/a/${id}?key=${mintExportKey(id)}`), id, { page: PAGE });
-    expect(capture.reader).toEqual({ mode: 'compiled' });
-    expect(capture.compiled?.html).toContain('Captured heading');
-    expect(capture.compiled?.html).toContain('/solid-spa-idle.ts');
+    const capture = await raw(id, `?chrome=0&key=${mintExportKey(id)}`);
+    expect(capture.headers.get('x-mx-reader')).toBe('compiled');
+    const html = await capture.text();
+    expect(html).toContain('Captured heading');
+    expect(html).not.toContain('data-mx-spa-idle');
   });
 });
 
 describe('a compile that cannot be served', () => {
-  it('is a failed page: a recorded compile failure has no renderer to fall back to', async () => {
+  it('is a 500 from the one renderer: a recorded compile failure has nothing to fall back to', async () => {
     const { id } = await publish({ title: 'Broken', markup: '<h1>Broken heading</h1>' });
     const db = await harness.db();
     // The first read stores this version's compile.
-    expect((await artifactPageAnswer(request(`/a/${id}`), id, { page: PAGE })).reader).toEqual({ mode: 'compiled' });
+    expect((await raw(id)).status).toBe(200);
     const build = (await db.query<{ build: string | null }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
     await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(artifactPageAnswer(request(`/a/${id}`), id, { page: PAGE })).rejects.toBeInstanceOf(CompiledPageFailed);
+    expect((await raw(id)).status).toBe(500);
     error.mockRestore();
   });
 });

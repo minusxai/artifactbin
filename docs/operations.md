@@ -27,7 +27,7 @@ from server data. `afbin config set host URL` changes the client's default;
 When one deployment answers at more than one hostname — a marketing name that
 proxies here, a previous name kept alive — `APP__PUBLIC_BASE_URL` stays the one
 canonical origin and `APP__ALIAS_ORIGINS` lists the others, comma-separated
-(HTTPS, or HTTP on loopback; no path, query or credentials; a malformed entry
+(HTTPS, or HTTP on a local development host such as `localhost` or `*.lvh.me`; no path, query or credentials; a malformed entry
 refuses the boot). The pair is served publicly at `GET /api/server`, so afbin
 accepts a link or a tracked folder carrying either name as this server while
 still sending every request and credential to `APP__PUBLIC_BASE_URL` alone.

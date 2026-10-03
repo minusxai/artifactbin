@@ -15,7 +15,7 @@ import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/datasets/local-state';
-import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
+import type { ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -100,8 +100,8 @@ export interface RanDataflow extends StoryIslandDataflow {
  * document that declares nothing has no dataflow at all (and
  * `{$_me ? … : <SignIn/>}` is exactly such a document), and the viewer is not
  * the document's data — it is never declared, never carried in a link, never
- * written, and never among the signals the author script reads through
- * `window.mx` (lib/story-runtime/mx).
+ * written, and never among the signals the author script reads
+ * (lib/islands/page-runtime).
  */
 export interface StoryViewer {
   id: string;
@@ -185,7 +185,6 @@ export interface StoryIslandData {
    * render that is not a served document, where a bound image renders static.
    */
   assetsUrl?: string | null;
-  managedAssets?: ManagedAssetsConfig;
   /**
    * WHY THIS RENDER CAN NEVER WRITE, in the words a person reads on the button.
    *
@@ -194,7 +193,7 @@ export interface StoryIslandData {
    * archived view (lib/archived-version), where the reason is "Version N is
    * read-only". It refuses every `<Mutation>` up front, whatever the datasets
    * would have said, so a button is disabled before it is pressed and
-   * `mx.describe()` reports it as the unavailable reason.
+   * a `page` mutation rejects with it as the message.
    *
    * It is not the absence of `mutateUrl`: that is already true here, and on its
    * own it makes the runtime say "This view cannot save changes" — accurate,
@@ -307,7 +306,7 @@ export interface StoryController {
  * that HEARS the edit is a ~1.5KB module every document loads (it also carries
  * the reading position), and the piece that can re-render the document is the
  * island runtime that only a document with components or data loads at all.
- * Deliberately not part of `window.mx`, which is the author's API.
+ * Deliberately not part of the author script's API (lib/islands/page-runtime).
  */
 export const STORY_ADOPT_HOOK = '__mxAdoptDocument';
 
@@ -327,6 +326,33 @@ export const STORY_READER_MODE_MESSAGE = 'mx:reader-mode';
  * from the page chrome. This unprivileged sample lets the parent apply its
  * mobile bar visibility policy; the parent still checks the source window. */
 export const STORY_SCROLL_MESSAGE = 'mx:reader-scroll';
+/**
+ * The app page → a document framed on its own origin (APP__PAGES_HOST): the address's `#hash`, so a
+ * link to a heading scrolls the frame. `{ type, hash }`, hash `#…`; the frame takes it from its parent only.
+ */
+export const STORY_FRAME_HASH_MESSAGE = 'mx:frame-hash';
+/**
+ * A document framed on its own origin → the app page: the reader moved a `<Value>` the link carries, and this is
+ * what the link should now say — the `$` params ONLY (lib/story/data/url-values `writeUrlValues('', …)`, `''` at
+ * rest), never the frame's other params or hash. Posted by the document's link follower (lib/islands/url-sync,
+ * debounced and compared there) to the app origin; the page's half of the bridge (frame-bridge/parent) takes it
+ * only from its own frame's window and origin, and the page (solid/document/create-framed-story) puts exactly
+ * those `$` pairs in its own address, so the address bar, a copied link and a reload carry the selection.
+ * Unkeyed on purpose: the author's script can move every value anyway, so it gains nothing by forging one.
+ */
+export const STORY_URL_VALUES_MESSAGE = 'mx:url-values';
+export interface StoryUrlValuesMessage { type: typeof STORY_URL_VALUES_MESSAGE; search: string }
+
+/**
+ * A document framed on its own origin → the app page: the reader followed a link to an APP path (root-relative, or
+ * absolute on either origin), which would otherwise resolve against the document's origin. `{ type, href }`, `href`
+ * a root-relative path with its query and hash. The app page performs the navigation on itself and answers
+ * STORY_NAVIGATING_MESSAGE first; a frame that hears no answer takes the top itself (lib/story-runtime/frame-bridge/links).
+ */
+export const STORY_NAVIGATE_MESSAGE = 'mx:navigate';
+/** The app page → its framed document: "I am taking this navigation" (`{ type, href }`, the href it was asked for). */
+export const STORY_NAVIGATING_MESSAGE = 'mx:navigating';
+export interface StoryNavigateMessage { type: typeof STORY_NAVIGATE_MESSAGE | typeof STORY_NAVIGATING_MESSAGE; href: string }
 export interface StoryScrollMessage {
   type: typeof STORY_SCROLL_MESSAGE;
   scrollY: number;
@@ -489,6 +515,13 @@ interface StoryFlowEditMessage { selection?:EditorSelectionChange; type: typeof 
 
 export const STORY_TEXT_EDIT_MESSAGE = 'mx:text-edit';
 interface StoryTextEditMessage { type: typeof STORY_TEXT_EDIT_MESSAGE; nonce: string; path: string; innerHtml: string }
+
+/**
+ * Frame → parent: the person pressed "Edit script" on a script component's mount badge (solid/editor/dom-mounter).
+ * `component` is the mount's name; the parent opens the Helmet script in the source editor at its export.
+ */
+export const STORY_OPEN_SCRIPT_MESSAGE = 'mx:open-script';
+interface StoryOpenScriptMessage { type: typeof STORY_OPEN_SCRIPT_MESSAGE; nonce: string; component: string }
 
 /** Frame → parent: there is uncommitted typing (from the first `input` to the commit). Gates remote adoption. */
 export const STORY_TYPING_MESSAGE = 'mx:typing';
@@ -800,11 +833,106 @@ interface StoryAnnotationLayoutMessage {
  */
 export const STORY_ANNOTATIONS_EVENT = 'annotations';
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * KEYS A FRAMED DOCUMENT FORWARDS — the page's editor listens on its own window,
+ * and a key pressed inside a framed document never reaches it. The frame half of
+ * the bridge (lib/story-runtime/frame-bridge/frame) sends these instead, signed
+ * like every other frame → parent message. Undo/redo travels as `mx:history`.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Frame → parent: hand held typing to the document now (Enter pressed, or focus left a text host). */
+export const STORY_EDIT_FLUSH_MESSAGE = 'mx:edit-flush';
+interface StoryEditFlushMessage { type: typeof STORY_EDIT_FLUSH_MESSAGE; nonce: string; reason: 'enter' | 'focusout' }
+
+/** Frame → parent: the comment shortcut (⌘⌥M / Ctrl-Alt-M) pressed inside the document while editing. */
+export const STORY_COMMENT_KEY_MESSAGE = 'mx:comment-key';
+interface StoryCommentKeyMessage { type: typeof STORY_COMMENT_KEY_MESSAGE; nonce: string }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * THE FRAME BRIDGE — the controller (`StoryController` above) across a window
+ * boundary, for a document served on its own origin and framed by the app page
+ * (lib/story-runtime/frame-bridge). Both directions are one envelope:
+ *
+ *   { type: 'mx:frame-bridge', key, payload }
+ *
+ * `key` is minted by the PAGE (its realm, its crypto) and sent in `attach`; the
+ * frame's door (lib/story-runtime/frame-bridge/door, installed by lib/islands/page
+ * BEFORE the author's script exists) is the only listener that ever sees an
+ * envelope — it stops every one from reaching another listener — so the author's
+ * script, which shares the frame's realm, never learns the key and cannot forge
+ * a reply. Every frame → page envelope carries it; the page drops any without it.
+ * The controller's own events ride inside (`event`) with the session `nonce`
+ * exactly as the in-page controller emits them, so the page's consumers
+ * (create-in-place-edit, AnnotationLayer, SelectionActions) check them unchanged.
+ * Origins: the page accepts only the document's own origin (`'null'` for the
+ * sandboxed `/a/<id>/raw` in development); the frame accepts only the app's.
+ * Geometry in `event`s stays in the FRAME's viewport (StoryEditRect); the page
+ * adds the iframe's box (StoryController.getViewportRect).
+ * ──────────────────────────────────────────────────────────────────────────── */
+export const STORY_FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';
+
+/** What the page tells the frame when it attaches: the controller's inputs (createIslandController). */
+export interface FrameBridgeAttach {
+  kind: 'attach';
+  id: string;
+  /** The version's SOURCE nodes, which comments and selections are classified against. */
+  nodes: JsxNode[];
+  editId: string;
+  source: string | null;
+}
+
+/** Page → frame. */
+export type FrameBridgeParentPayload =
+  | FrameBridgeAttach
+  /** The live inputs the controller reads (`editId()`, `initialSource()`), when the page learns newer ones. */
+  | { kind: 'context'; editId: string; source: string | null }
+  /**
+   * How far the page's bars reach over the frame's top edge (edit mode's toolbar, drawn over the frame rather than
+   * pushing it down): the document reserves that much above itself and scrolls by the same amount in one task, so
+   * nothing in it moves on screen. Absolute; 0 gives the space back.
+   */
+  | { kind: 'inset'; top: number }
+  | { kind: 'send'; command: unknown }
+  | { kind: 'update'; command: StoryDocumentUpdate }
+  | { kind: 'restored'; call: number }
+  /** The answer to a relayed app request (`fetch`): status, the headers the controller reads, the body as text. */
+  | { kind: 'fetch-result'; call: number; status: number; headers: Record<string, string>; body: string }
+  | { kind: 'fetch-result'; call: number; error: string }
+  | { kind: 'detach' };
+
+/** Frame → page. `hello` is the one unkeyed payload: the door is open and the page may attach. */
+export type FrameBridgeFramePayload =
+  | { kind: 'hello' }
+  /** The controller runs; `nonce` is what its events carry. */
+  | { kind: 'ready'; nonce: string }
+  | { kind: 'event'; event: unknown }
+  | { kind: 'restored'; call: number; ok: true }
+  | { kind: 'restored'; call: number; ok: false; error: string }
+  /** One of the controller's app requests (IslandControllerInput.appFetch), for the page to make with its session. */
+  | { kind: 'fetch'; call: number; path: string; method: 'GET' | 'POST'; headers: Record<string, string>; body: string | null }
+  /** The document scrolled: geometry the page placed over it moves. */
+  | { kind: 'scroll'; scrollX: number; scrollY: number }
+  | { kind: 'error'; message: string };
+
+export interface FrameBridgeEnvelope<P> {
+  type: typeof STORY_FRAME_BRIDGE_MESSAGE;
+  key: string;
+  payload: P;
+}
+
+/** A bridge envelope at all (any key): the door swallows these so no other listener sees one. */
+export function isFrameBridgeEnvelope(data: unknown): data is { type: typeof STORY_FRAME_BRIDGE_MESSAGE; key?: unknown; payload: { kind: string } } {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as { type?: unknown; payload?: unknown };
+  return d.type === STORY_FRAME_BRIDGE_MESSAGE && !!d.payload && typeof d.payload === 'object' && typeof (d.payload as { kind?: unknown }).kind === 'string';
+}
+
 type StoryEditFrameMessage =
   | StoryEditErrorMessage | StoryBlockEditMessage | StoryHistoryMessage | StoryFlowEditMessage | StoryEditReadyMessage | StoryTextEditMessage | StoryTypingMessage | StorySelectionMessage
   | StorySelectionActionMessage
   | StoryEditKeyMessage | StoryCommittedMessage | StoryLayoutEditMessage | StorySlideTitleMessage
-  | StoryImageDropMessage | StoryImageReplaceMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage;
+  | StoryImageDropMessage | StoryImageReplaceMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage
+  | StoryEditFlushMessage | StoryCommentKeyMessage | StoryOpenScriptMessage;
 export type StoryEditParentMessage =
   | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
@@ -815,6 +943,8 @@ const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
   STORY_EDIT_KEY_MESSAGE, STORY_COMMITTED_MESSAGE,
   STORY_LAYOUT_EDIT_MESSAGE, STORY_SLIDE_TITLE_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_IMAGE_REPLACE_MESSAGE,
   STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE,
+  STORY_EDIT_FLUSH_MESSAGE, STORY_COMMENT_KEY_MESSAGE,
+  STORY_OPEN_SCRIPT_MESSAGE,
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
   STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,

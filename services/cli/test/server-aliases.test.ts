@@ -249,6 +249,29 @@ test('browser approval at a verified alias of the selected server is not an orig
  });
 });
 
+test('browser approval on a plain-http development app at app.lvh.me pairs; plain http elsewhere is refused before any request',async()=>{
+ const deviceCode='b'.repeat(43);const DEV='http://app.lvh.me:3030';const seen:string[]=[];
+ const pairing=(async(input:RequestInfo|URL)=>{
+  const url=new URL(new Request(input as never).url);seen.push(url.origin);
+  if(url.pathname==='/oauth/device')return Response.json({device_code:deviceCode,user_code:'ABCD-EFGH',
+   verification_uri_complete:`${DEV}/oauth/device`,expires_in:300,interval:5});
+  return Response.json({error:'access_denied'},{status:400});
+ }) as typeof fetch;
+ // Accepted: the pairing reaches the approval check (denied here), not approval_origin_mismatch.
+ await withHome(async home=>{
+  await assert.rejects(deviceAuthenticate(DEV,{home,env:{},interactive:false,fetch:pairing,notify:()=>{},open:async()=>{},sleep:async()=>{}}),
+   (error:Error&{code?:string})=>{assert.equal(error.code,'access_denied');return true;});
+ });
+ assert.deepEqual([...new Set(seen)],[DEV]);
+ seen.length=0;
+ // Refused: plain http on a public name never sends a request.
+ await withHome(async home=>{
+  await assert.rejects(deviceAuthenticate('http://example.com',{home,env:{},interactive:false,fetch:pairing,notify:()=>{},open:async()=>{},sleep:async()=>{}}),
+   /HTTPS server origin/);
+ });
+ assert.deepEqual(seen,[]);
+});
+
 test('preview binds a folder tracked against a verified alias to the canonical origin',async()=>{
  await withHome(async home=>{
   await saveConnection({server:CANONICAL,token:'test-token'},home,{});

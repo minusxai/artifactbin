@@ -35,9 +35,6 @@ import { validateDatasetPolicyForRow } from '../datasets/policy/validation';
 import { actorSubject, emit } from '../platform/events';
 import { generateFileId } from '../platform/ids';
 import { type ArtifactFormat } from '../story/document/input';
-import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from '../serving/web-assets';
-import { resolveWebFont, UnknownFontError } from '../webfonts/index';
-import { webIngestRateLimited } from '../accounts/auth';
 import { json } from '../http/http';
 import { loadDatasetRows } from '../story/datasets/dataset-store';
 import { newEditId } from '../story/document/splice';
@@ -434,7 +431,7 @@ export async function publishMarkupForArtifact(current:ArtifactRow,source:string
    return response.json();
   });
   return {source:identity.source,meta:metaOverride,ids:identity.ids,aliases:identity.aliases,update};
- }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[String(error)]},400);}
+ }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[`${error}`]},400);}
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
@@ -824,12 +821,11 @@ export interface EditInput {
  * Response unchanged (same shape as parseContentInput).
  */
 export type EditOutcome =
-  /** `warnings`: external URLs the candidate named that would not import (lib/web-assets). */
   /**
    * `withheld`: the row carries no document or source. `remotePatches`: the patch landed on a newer head than its
    * base; these are the logged patches of the versions between, in order (absent when the log cannot yield them all).
    */
-  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[]; withheld?: true; remotePatches?: RemotePatch[] }
+  | { applied: true; row: ArtifactRow; withheld?: true; remotePatches?: RemotePatch[] }
   | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
   | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' | 'empty_batch' | 'too_many_edits' | 'too_large'; editIndex?: number }
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
@@ -880,7 +876,7 @@ function settleCommittedHead(id: string, version: number): void {
       if (!head) return;
       const row = await storeCompiledRecord(db, head);
       await queueMermaidHarvest(row);
-      if (row.format === 'markup') warmPreparedPage(row.id, undefined, row);
+      if (row.format === 'markup') warmPreparedPage(row.id, row);
     } catch (error) {
       console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
     }
@@ -1021,40 +1017,10 @@ export function refLoaderForUser(userId: string): RefLoader {
 }
 
 /**
- * THE PUBLISH DOOR'S ASSET IMPORTER: one external URL → one row in the global
- * URL cache (lib/web-assets), charged to whoever the DOCUMENT belongs to.
- *
- * It answers a WARNING rather than a Response, because a URL that will not
- * import must not cost an author their document: the publish succeeds, the
- * reply names what failed and what to do, and the served `<img>` draws its alt
- * text. The hourly fetch allowance is the same one every web import pays
- * (lib/auth) — probing is the abuse shape and probes fail, so ATTEMPTS are what
- * is counted. The byte quota is charged inside `importWebAsset`, at the one
- * door that turns a URL into stored bytes.
- *
- * Nothing here creates an artifact or rewrites the source: the URL the author
- * wrote stays in the document, and only the served page points at our copy.
- */
-export function assetImporterFor(tokenId: string, userId: string | null): (url: string, kind: WebAssetKind) => Promise<AssetWarning | null> {
-  return async (url, kind) => {
-    if (webIngestRateLimited(`ingest:${tokenId}`)) {
-      return { code: 'rate_limited', url, fix: 'too many web imports this hour — try again later' };
-    }
-    try {
-      await importWebAsset(url, { tokenId, userId }, kind);
-      return null;
-    } catch (error) {
-      if (error instanceof WebAssetRefused) return assetWarningFor(error);
-      throw error;
-    }
-  };
-}
-
-/**
  * The byte quota as the publish door asks it: "is this caller already over?"
  *
  * A closure over the identity, so lib/story/document/input can guard a tier without
- * knowing who is publishing (the shape assetImporterFor established). The
+ * knowing who is publishing. The
  * subject is the ACCOUNT when the token has one — a cap keyed on the token
  * alone is bypassed by minting a second one — which lib/asset-quota decides,
  * not this.
@@ -1066,26 +1032,6 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
  */
 export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
   return () => assetByteQuotaExceeded(tokenId);
-}
-
-/**
- * The publish door's font resolver: a family the document names becomes faces
- * copied into our object store (lib/webfonts), once per deployment. Failure is
- * a 400 that NAMES the family — the same stance the image door takes, and for
- * the same reason: a silent fallback renders as "it worked".
- */
-export function fontResolver(): (family: string) => Promise<Response | null> {
-  return async (family) => {
-    try {
-      await resolveWebFont(family);
-      return null;
-    } catch (error) {
-      if (error instanceof UnknownFontError) {
-        return json({ error: 'unknown_font', details: [error.message] }, 400);
-      }
-      throw error;
-    }
-  };
 }
 
 /** The actor's REACH: what they own, and what they are named editor on. */

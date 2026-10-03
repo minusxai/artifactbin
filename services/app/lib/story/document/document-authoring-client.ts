@@ -1,4 +1,4 @@
-import type {DocumentAssetWarning,DocumentGraph,DocumentUpdate,GraphPatch} from '@artifactbin/contracts';
+import type {DocumentGraph,DocumentUpdate,GraphPatch} from '@artifactbin/contracts';
 import type {ArtifactBackend} from '@/lib/artifact-backend/types';
 /** Browser transport for authoring inputs; ordinary prose and attribute edits
  * do not call it. The document itself is committed only by /edits. */
@@ -123,6 +123,6 @@ export function preparesOffThread():boolean{
 export function warmBrowserPreparer(base:ClientDocumentSnapshot):Promise<void>{
  return prepareInWorker.warm(base);
 }
-export async function prepareBrowserDocumentUpdate(backend:Pick<ArtifactBackend,'prepare'>,base:ClientDocumentSnapshot,change:ClientDocumentChange,onWarnings?:(warnings:DocumentAssetWarning[])=>void){
- return attachAuthoringContext(await prepareInWorker(base,change),source=>backend.prepare(source),onWarnings);
+export async function prepareBrowserDocumentUpdate(backend:Pick<ArtifactBackend,'prepare'>,base:ClientDocumentSnapshot,change:ClientDocumentChange){
+ return attachAuthoringContext(await prepareInWorker(base,change),source=>backend.prepare(source));
 }

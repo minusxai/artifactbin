@@ -1,6 +1,5 @@
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
-import {authorFrameResponse} from '../../../app/server/author-frame';
 import {createPreviewEditor} from './editor';
 import {previewAnnotations} from './annotations';
 import {BackendRequestError} from '../../../app/lib/artifact-backend/errors';
@@ -146,7 +145,6 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&target.pathname.startsWith('/remote/')){const id=target.pathname.slice(8);const mapped=options.localFiles?.[id];const local=remoteIds.has(id)&&mapped&&resources.has(mapped)?await localInputPath(root,mapped):undefined;if(local){res.setHeader('Content-Type',fileContentType(local)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,local))));}if(!remoteIds.has(id)||!options.asset)throw new Refusal(403,'Remote reference is not selected');const asset=await options.asset(id);res.setHeader('Content-Type',asset.contentType);return res.end(asset.bytes);}
   if(req.method==='GET'&&target.pathname.startsWith('/fonts/')&&options.publicAssets){const path=await confinedPath(options.publicAssets,target.pathname.slice(1));res.setHeader('Content-Type',fileContentType(path)??'font/woff2');return res.end(await readFile(path));}
   if(req.method==='GET'&&target.pathname==='/logo-128.png'&&options.publicAssets){res.setHeader('Content-Type','image/png');return res.end(await readFile(await confinedPath(options.publicAssets,'logo-128.png')));}
-  if((req.method==='GET'||req.method==='HEAD')&&target.pathname==='/author-frame'){const response=authorFrameResponse(new Request(target,{method:req.method}),null,url);res.statusCode=response.status;response.headers.forEach((value,key)=>res.setHeader(key,value));return res.end(Buffer.from(await response.arrayBuffer()));}
   if(req.method==='GET'&&target.pathname==='/files')return json([...allowed]);
   if(req.method==='GET'&&target.pathname==='/query'){
    const raw=target.searchParams.get('q');if(!raw)throw new Refusal(400,'Missing query request');

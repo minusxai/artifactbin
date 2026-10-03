@@ -8,7 +8,7 @@
  * the values that differ from the declared defaults, keeping every non-`$` param.
  */
 import { describe, expect, it } from 'vitest';
-import { readUrlValues, writeUrlValues } from '@/lib/story/data/url-values';
+import { readUrlValues, withUrlValuesOf, writeUrlValues } from '@/lib/story/data/url-values';
 import type { Dataflow } from '@/lib/story/data/dataflow';
 
 const flow: Dataflow = {
@@ -82,5 +82,21 @@ describe('writeUrlValues', () => {
 
   it('never writes an undeclared name or a table value', () => {
     expect(writeUrlValues('', flow, { nope: 'x', rows: [{ a: 2 }] } as never)).toBe('');
+  });
+});
+
+describe('withUrlValuesOf (a framing page taking its document\'s `$` params)', () => {
+  it('replaces the page\'s `$` params with the document\'s and keeps every other param byte for byte, in order', () => {
+    expect(withUrlValuesOf('?version=3&$team=LAL&ref=a%20b', '?$team=BOS&$top=5')).toBe('?version=3&ref=a%20b&$team=BOS&$top=5');
+    expect(withUrlValuesOf('', '?$team=BOS')).toBe('?$team=BOS');
+  });
+
+  it('clears the page\'s selection when the document is at rest, to the plain address when nothing else is left', () => {
+    expect(withUrlValuesOf('?ref=mail&$team=LAL&%24top=5', '')).toBe('?ref=mail');
+    expect(withUrlValuesOf('?$team=LAL', '')).toBe('');
+  });
+
+  it('takes only `$` params from the document: anything else it names never reaches the page\'s address', () => {
+    expect(withUrlValuesOf('?ref=mail', '?intent=fork&$team=BOS&%24top=5&version=1')).toBe('?ref=mail&$team=BOS&%24top=5');
   });
 });

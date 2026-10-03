@@ -5,7 +5,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import sharp from 'sharp';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
@@ -41,7 +41,7 @@ const rgb = async (bytes, x, y) => {
   return { size: { width: info.width, height: info.height }, color: [...data.subarray(at, at + 3)] };
 };
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 try {
   await becomeOwner(page, BASE, start.token);

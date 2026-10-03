@@ -5,7 +5,8 @@
  * that mode's whole life, so the page only draws what the phase says:
  *
  * - `enter` pushes exactly one `#edit` entry; Back and Done both leave through one `leave`, which flushes the editor
- *   ONCE, bounded by FLUSH_BOUND_MS (a flush that hangs never holds the reader in a dead editor).
+ *   ONCE, bounded by FLUSH_BOUND_MS (a flush that hangs never holds the reader in a dead editor). Done drops `#edit`
+ *   from the address before that flush, so a reload during it reads; the pushed entry is popped after it.
  * - Leaving sends the document ONE `mx:edit-mode {on:false}` (nothing else ends the session: the editor's own
  *   edit-mode toggle only pauses it for a version preview) and waits for the controller's `restored` — the saved
  *   version drawn in place over the running islands. A version this page cannot draw reloads, keeping the place.
@@ -84,16 +85,17 @@ export function createEditLifecycle(options: EditLifecycleOptions): EditLifecycl
 
   const leave = (popAddress: boolean): Promise<'restored' | 'reloaded'> => leaving ??= (async () => {
     const session = generation;
+    // The address reads again AT ONCE, before the flush: the flush may cross into the document's frame and back, and
+    // a reload (or a copied link) in that window must not come back in edit mode. replaceState fires no hashchange.
+    const pop = popAddress && onEditRoute();
+    if (pop) win.history.replaceState(win.history.state, '', readingAddress());
     setPhase('leaving');
     await flushBounded();
     if (session !== generation) return 'restored';
     if (options.pwaChanged()) { win.location.replace(readingAddress()); return 'reloaded'; }
     setSelectionPath(null);
-    if (popAddress && onEditRoute()) {
-      // Back over the entry this page pushed; an address that arrived in edit mode is rewritten instead.
-      if (pushed) { pushed = false; win.history.back(); }
-      else win.history.replaceState(win.history.state, '', readingAddress());
-    }
+    // Back over the entry this page pushed (already the reading address, so no hashchange): Back leaves the document.
+    if (pop && pushed) { pushed = false; win.history.back(); }
     setPhase('restoring');
     const controller = options.controller();
     if (!controller) { setPhase('reading'); return 'restored'; }

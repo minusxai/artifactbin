@@ -37,22 +37,18 @@ describe('publishJsx with an authored <Helmet><style> block', () => {
     expect(source).toContain('.rise');
   });
 
-  it('strips banned declarations from style content, keeping siblings', async () => {
+  it('stores style content as written: fixed positioning and viewport units are the author\'s to use', async () => {
     const stored = (await publish(STYLE_DOC)) as StoredContent;
-    expect(stored.source).not.toMatch(/position:\s*fixed/);
+    expect(stored.source).toMatch(/position:\s*fixed/);
+    expect(stored.source).toMatch(/:\s*100vh/);
+    expect(stored.source).not.toContain('var(--mx-vh');
     expect(stored.source).toContain('background: var(--primary)');
   });
 
-  it('remaps viewport-height units in style content to the host contract', async () => {
-    const stored = (await publish(STYLE_DOC)) as StoredContent;
-    expect(stored.source).not.toMatch(/:\s*100vh/);
-    expect(stored.source).toContain('var(--mx-vh,760px)');
-  });
-
-  it('still rejects inline style attributes', async () => {
+  it('accepts inline style attributes', async () => {
     const res = await publish('<div data-design="tw" style="color:red"><p>x</p></div>');
-    expect(res).toBeInstanceOf(Response);
-    expect((res as Response).status).toBe(400);
+    expect(res).not.toBeInstanceOf(Response);
+    expect((res as StoredContent).source).toContain('color:red');
   });
 
   it('compiles utilities with !important so Tailwind always beats authored CSS', async () => {

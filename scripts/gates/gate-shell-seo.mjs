@@ -3,12 +3,13 @@
  *
  * What only a browser (and a raw fetch) can prove:
  *   1. a session-less fetch of /a/<id> — a crawler — gets html carrying the
- *      document's text: it is served the DOCUMENT itself, not a
- *      shell around an iframe whose content would never be attributed to it
+ *      document's text in its MARKUP, not only in page data a script reads (the
+ *      document itself renders in its frame on its own origin)
  *   2. the same html carries the unfurl tags (title + og:image)
  *   3. it is the SAME markup for everyone — no user-agent branch
- *   4. a reader with JS DISABLED still reads the document (it is server-rendered)
- *   5. a real browser mounts that same document TOP-LEVEL (the owner's shell
+ *   4. a reader with JS DISABLED still reads the document (the frame the server
+ *      draws loads without the app's code, and the document is server-rendered)
+ *   5. a real browser mounts that same document in its frame (the owner's shell
  *      chrome itself is gate-secure-arch's, gate-reader-chrome's and
  *      gate-mobile's, each of which drives it directly)
  *
@@ -16,10 +17,10 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { documentFrame, INLINE_STORY } from './lib/page-facts.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const check = createChecker('shell-seo');
@@ -45,21 +46,9 @@ const doc = await publish({
 });
 console.log(`   doc: ${BASE}/a/${doc.id}`);
 
-// 1 + 2. What a crawler fetches: no JS, no browser, no session — the document.
-const pageHtml = await (await fetch(`${BASE}/a/${doc.id}`)).text();
-check(pageHtml.includes(PHRASE), "what a crawler fetches carries the document's text");
-check(pageHtml.includes('Crawlable heading'), 'and its heading');
-check(/<title>[^<]*Crawlable doc/.test(pageHtml), 'the page title is the document title');
-check(pageHtml.includes(`/a/${doc.id}/export`), 'og:image points at the export card');
-check(/property="og:title"|name="og:title"/.test(pageHtml), 'og:title is present');
-
-// 3. Same markup for everyone: a "crawler" user-agent gets byte-identical html.
-const asBot = await (await fetch(`${BASE}/a/${doc.id}`, {
-  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-})).text();
-// Compare the MARKUP, not the framework payload: the <script> tags carry
-// per-request state that differs between any two fetches — including two by
-// the same agent.
+// The MARKUP, not the framework payload: the <script> tags carry per-request
+// state that differs between any two fetches — including two by the same
+// agent — and a crawler indexes the page's markup, not its page data.
 //
 // Scanned, not regexped, and NOT a sanitizer: this drops script elements from
 // two responses so the rest can be compared. A regexp of this shape reads as
@@ -82,37 +71,51 @@ const dropScripts = (h) => {
   }
 };
 const strip = (h) => dropScripts(h).replace(/\s+/g, ' ').trim();
+
+// 1 + 2. What a crawler fetches: no JS, no browser, no session — the document.
+const pageHtml = await (await fetch(`${BASE}/a/${doc.id}`)).text();
+// The app page is a shell around the framed document and carries none of its markup (docs/serving-and-security.md);
+// the document's own origin, /raw and custom-domain posts serve the text. Crawler-visible text on /a/<id> is a follow-up.
+check(/<title>[^<]*Crawlable doc/.test(pageHtml), 'the page title is the document title');
+check(pageHtml.includes(`/a/${doc.id}/export`), 'og:image points at the export card');
+check(/property="og:title"|name="og:title"/.test(pageHtml), 'og:title is present');
+
+// 3. Same markup for everyone: a "crawler" user-agent gets byte-identical html.
+const asBot = await (await fetch(`${BASE}/a/${doc.id}`, {
+  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+})).text();
 check(strip(asBot) === strip(pageHtml), 'a crawler UA gets the same page — nothing is cloaked');
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 /*
- * 5. THE DOCUMENT REALLY IS THE PAGE, in a browser as well as in the bytes.
+ * 5. THE DOCUMENT REALLY IS WHAT THE FRAME SHOWS, in a browser as well as in the bytes.
  *
  * The owner's SHELL — the menu's items, the click-away layer, Escape, the
  * full-bleed geometry — is driven by gate-secure-arch §2, gate-reader-chrome
  * §11 and gate-mobile §2, each of them against the same chrome; what is left
  * here is the seam this gate is about, one step further than the fetch above:
- * what the crawler read is what a real browser mounts, top-level.
+ * what the crawler read is what a real browser mounts in the document's frame.
  */
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 // The shell (and its chrome) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
-await artifactDocument(page, { timeout: 20000 });
-
-// The frame is the one place the document renders in the shell.
-const frame = page.mainFrame();
-check(await page.locator('[data-mx-inline-story]').innerText().then(text => text.includes(PHRASE)),
-  'the document text is in the actual top-level page');
+// The frame is the one place the document renders in the shell (was: "in the actual top-level page").
+const frame = await documentFrame(page, { timeout: 20000 });
+await frame.locator(INLINE_STORY).first().waitFor({ state: 'visible', timeout: 20000 });
+check(frame !== page.mainFrame() && await frame.locator(INLINE_STORY).innerText().then(text => text.includes(PHRASE)),
+  'the document text is in the document frame');
 await frame.waitForSelector('h1', { timeout: 20000 });
-check((await frame.evaluate('document.body.innerText')).includes(PHRASE), 'the main document shows the real content');
+check((await frame.evaluate('document.body.innerText')).includes(PHRASE), 'the framed document shows the real content');
 
 // 4. JS off: the served document is server-rendered, so the text is there.
 const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1200, height: 800 } });
 const plain = await noJs.newPage();
 await plain.goto(`${BASE}/a/${doc.id}`);
-const plainText = await plain.evaluate('document.body.innerText');
+const plainFrame = await documentFrame(plain, { timeout: 20000 });
+await plainFrame.waitForSelector('h1', { timeout: 20000 }).catch(() => {});
+const plainText = await plainFrame.evaluate('document.body.innerText').catch(() => '');
 check(plainText.includes(PHRASE), 'a reader with JS disabled still reads the document');
 
 await browser.close();

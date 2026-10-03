@@ -1,6 +1,6 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { documentFrame, inlineStory } from './lib/page-facts.mjs';
 /**
  * Gate: A WRITE BY ONE READER REACHES EVERY OTHER, LIVE.
  *
@@ -12,12 +12,13 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  * a reload would silently fix and a real implementation must not need.
  *
  * Checked here rather than in a unit test because every part of it is a
- * browser fact: the sandboxed document's own POST, the SSE `data` frame, the
- * store's re-run, and the islands keeping the DOM they already had.
+ * browser fact: the framed document's own POST to its door, the SSE `data` frame,
+ * the store's re-run, and the islands keeping the DOM they already had. Every
+ * document read happens inside the document's frame (on its own origin).
  *
  *   usage: node scripts/gates/gate-live-data.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -92,32 +93,35 @@ await publish(seed.token, seed.id, poll(ds));
 const second = await startDocument(BASE);
 await publish(second.token, second.id, dashboard(ds));
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // Three independent contexts — three people, no shared session.
 const voterCtx = await browser.newContext();
 const watcherCtx = await browser.newContext();
 const dashCtx = await browser.newContext();
 const voterPage = await voterCtx.newPage();
-const watcher = await watcherCtx.newPage();
-const dash = await dashCtx.newPage();
+const watcherPage = await watcherCtx.newPage();
+const dashPage = await dashCtx.newPage();
 
-const votes = async (page) => page.evaluate(() => {
+/* `frame` is the document's frame (lib/page-facts documentFrame), never the app page around it. */
+const votes = async (frame) => frame.evaluate(() => {
   const text = document.body.innerText;
   const m = /ramen\s+(\d+)/.exec(text);
   return m ? Number(m[1]) : null;
 });
-const totalRows = async (page) => page.evaluate(() => {
+const totalRows = async (frame) => frame.evaluate(() => {
   const m = /rows:\s*([\d,]+)/.exec(document.body.innerText);
   return m ? Number(m[1].replace(/,/g, '')) : null;
 });
 
 await becomeOwner(voterPage,BASE,seed.token);
 await voterPage.goto(`${BASE}/a/${seed.id}`, {waitUntil:'load'});
-await voterPage.locator('[data-mx-inline-story]').waitFor();
-const voter = await artifactDocument(voterPage);
-await watcher.goto(`${BASE}/a/${seed.id}`, { waitUntil: 'load' });
-await dash.goto(`${BASE}/a/${second.id}`, { waitUntil: 'load' });
+await inlineStory(voterPage, { state: 'visible' });
+const voter = await documentFrame(voterPage);
+await watcherPage.goto(`${BASE}/a/${seed.id}`, { waitUntil: 'load' });
+await dashPage.goto(`${BASE}/a/${second.id}`, { waitUntil: 'load' });
+const watcher = await documentFrame(watcherPage);
+const dash = await documentFrame(dashPage);
 
 // Everyone starts from the same server-rendered state.
 const start = await until(() => votes(watcher), (v) => typeof v === 'number');
@@ -136,8 +140,8 @@ check(startRows === 1, `the dashboard starts at rows=1 (got ${startRows})`);
  * had not been re-fetched at all. The sentinel is also the stricter test: it
  * catches a reload however it happened.
  */
-const sentinel = async (page) => page.evaluate(() => { window.__mxNoReload = 1; });
-const stillAlive = async (page) => page.evaluate(() => window.__mxNoReload === 1);
+const sentinel = async (frame) => frame.evaluate(() => { window.__mxNoReload = 1; });
+const stillAlive = async (frame) => frame.evaluate(() => window.__mxNoReload === 1).catch(() => false);
 await sentinel(watcher);
 await sentinel(dash);
 
@@ -179,13 +183,10 @@ const refused = await voter.evaluate(async (id) => {
 }, seed.id).catch(() => 0);
 check(refused === 403, `a write to a closed dataset is refused (${refused})`);
 
-// ── 2. THE RELAY PATH and browser sharing control ────────────────────────────
+// ── 2. THE OWNER'S FRAMED WRITE and browser sharing control ──────────────────
 //
-// A document INSIDE a parent page is opaque-origin and cannot present a
-// session, so its writes go through the page (mx:mutate → POST /a/<id>/mutate).
-// That path is chosen by "am I framed", not by visibility — an OWNER viewing
-// their own document gets the shell, so this exercises exactly the code a
-// private document's readers use, without needing an email login.
+// The opaque-origin relay (mx:mutate through the page) is gone: a document on its own origin
+// posts to its own door with the pages session cookie (lib/serving/pages-origin), owner or not.
 //
 // The same page proves that the normal share menu can make a dataset writable.
 {
@@ -232,10 +233,10 @@ check(refused === 403, `a write to a closed dataset is refused (${refused})`);
   // is the gate: the same PUT would have been refused a moment ago.
   await publish(owner.token, owner.id, poll(ds2.id));
 
-  // Now the RELAY write: the owner's own document, framed, writing through the page.
+  // Now the owner's own document, framed on its own origin, writing through its door.
   await page.goto(`${BASE}/a/${owner.id}`, { waitUntil: 'load' });
-  const frame = await until(async () => page.mainFrame(), (f) => !!f);
-  check(!!frame, 'the owner sees the document in a frame (the relay path)');
+  const frame = await documentFrame(page).catch(() => null);
+  check(!!frame && frame !== page.mainFrame(), 'the owner sees the document in its frame');
   const relayVotes = async () => frame.evaluate(() => {
     const m = /ramen\s+(\d+)/.exec(document.body.innerText);
     return m ? Number(m[1]) : null;
@@ -243,7 +244,7 @@ check(refused === 403, `a write to a closed dataset is refused (${refused})`);
   check(await until(relayVotes, (v) => v === 1) === 1, 'the framed document renders its data');
   await frame.getByRole('button', { name: 'Vote' }).click();
   const after = await until(relayVotes, (v) => v === 2);
-  check(after === 2, `a write RELAYED through the page lands and redraws (got ${after})`);
+  check(after === 2, `the owner's write from the framed document lands and redraws (got ${after})`);
   await ctx.close();
 }
 

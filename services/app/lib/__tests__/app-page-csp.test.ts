@@ -10,10 +10,9 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { authorFrameResponse } from '@/server/author-frame';
-import { AUTHOR_SCRIPT_DOCUMENT } from '@/lib/story-runtime/author-script-bootstrap';
-import { managedAuthorDocument } from '@/lib/story-runtime/managed-author-document';
-import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
+import { APP_CSP, APP_INLINE_SCRIPT_HASHES, appPagePolicy, createAppServer, pagesFrameSources } from '@/server/app';
+import { pagesSite } from '@/lib/serving/pages-origin';
+import { pagesSiteFor } from '@/lib/serving/pages-origin';
 import { DOMAIN_HOME_CSP } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/serving';
 
@@ -35,7 +34,7 @@ describe('the app CSP', () => {
     expect(APP_CSP).toContain("base-uri 'self'");
     for (const path of ['/login', '/docs-human', '/account']) {
       const res = await app.request(path);
-      expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
+      expect(res.headers.get('content-security-policy'), path).toBe(appPagePolicy(pagesSite()));
       expect(res.headers.get('x-content-type-options'), path).toBe('nosniff');
       expect(res.headers.get('referrer-policy'), path).toBe('strict-origin-when-cross-origin');
       expect(res.headers.get('permissions-policy'), path).toBe('camera=(), microphone=(), geolocation=()');
@@ -84,15 +83,6 @@ describe('the app CSP', () => {
     expect(script).not.toContain("'unsafe-eval'");
   });
 
-  it('never lets author code compile WebAssembly: no author frame is given \'wasm-unsafe-eval\'', () => {
-    const wrapper = authorFrameResponse(new Request('https://app.test/author-frame?artifact=Ab12Cd'), 'https://assets.test', 'https://app.test').headers.get('content-security-policy')!;
-    for (const policy of [wrapper, AUTHOR_SCRIPT_DOCUMENT, managedAuthorDocument('https://assets.test')]) {
-      expect(policy).toContain('script-src');
-      expect(policy).not.toContain('wasm-unsafe-eval');
-      expect(policy).not.toContain("'unsafe-eval'");
-    }
-  });
-
   it('allows only the app shell\'s theme stamp inline', () => {
     expect(APP_INLINE_SCRIPT_HASHES.split(' ')).toHaveLength(1);
     expect(APP_CSP.split('; ').find((directive) => directive.startsWith('script-src'))).not.toContain("'unsafe-inline'");
@@ -127,4 +117,25 @@ describe('the app CSP', () => {
       expect(res.headers.get('content-security-policy'), path).not.toBe(APP_CSP);
     }
   });
+
+  it('is the strict policy again: no https: or blob: script, style, font, image, media or connection source', () => {
+    const directives = APP_CSP.split('; ');
+    expect(directives.find(d => d.startsWith('script-src'))).toBe(`script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`);
+    expect(directives.find(d => d.startsWith('style-src'))).toBe("style-src 'self' 'unsafe-inline'");
+    expect(directives.find(d => d.startsWith('font-src'))).toBe("font-src 'self' data:");
+    for (const directive of directives) expect(directive.split(' '), directive).not.toContain('https:');
+  });
+
+  it('frames exactly the pages origins when documents have their own, and stays strict on every page', async () => {
+    const site = pagesSiteFor('pages.example.com', 'https://app.example.com');
+    expect(pagesFrameSources(site)).toEqual(['https://pages.example.com', 'https://*.pages.example.com']);
+    expect(pagesFrameSources(pagesSiteFor('lvh.me', 'http://app.lvh.me:11001'))).toEqual(['http://lvh.me:11001', 'http://*.lvh.me:11001']);
+    const framing = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>', pagesSite: site });
+    const csp = (await framing.request('https://app.example.com/login')).headers.get('content-security-policy')!;
+    expect(csp.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://pages.example.com https://*.pages.example.com");
+    // …and connects to the apex alone, where sign-out ends the pages session.
+    expect(csp.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob: https://pages.example.com");
+    expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'").replace(/connect-src [^;]*/, "connect-src 'self' blob:")).toBe(APP_CSP);
+  });
 });
+

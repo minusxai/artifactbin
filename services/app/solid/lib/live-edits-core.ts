@@ -17,7 +17,7 @@
  * backend are whatever the owner holds at the moment of use — a Solid caller hands its
  * props proxy. The `initial*` fields are read once, at creation.
  */
-import type { DocumentGraph, DocumentAssetWarning } from '@artifactbin/contracts';
+import type { DocumentGraph } from '@artifactbin/contracts';
 import { advanceBrowserDocument, prepareBrowserDocumentUpdate, preparesOffThread, warmBrowserPreparer } from '@/lib/story/document/document-authoring-client';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
@@ -157,16 +157,14 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
     void warmBrowserPreparer({ ...current, document: current.document, title: current.meta.title as string | null, description: current.meta.description as string | null });
   }, WARM_PREPARER_MS);
   type Snapshot = typeof snapshot;
-  type Prepared = { update: Awaited<ReturnType<typeof prepareBrowserDocumentUpdate>>; warnings: DocumentAssetWarning[] };
+  type Prepared = Awaited<ReturnType<typeof prepareBrowserDocumentUpdate>>;
   const prepareChange = (backend: ArtifactBackend, current: Snapshot & { document: DocumentGraph }, change: PendingChange): Promise<Prepared> => {
     const { source, annotationOps, ...metadata } = change;
-    let warnings: DocumentAssetWarning[] = [];
     return prepareBrowserDocumentUpdate(
       backend,
       { ...current, document: current.document, title: current.meta.title as string | null, description: current.meta.description as string | null },
       { source, annotationOps, metadata },
-      (received) => { warnings = received; },
-    ).then((update) => ({ update, warnings }));
+    );
   };
   /**
    * THE SAVE IS PREPARED WHILE THE DEBOUNCE RUNS. A queued change starts its preparation (in the worker, with its
@@ -235,7 +233,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
         if (!current.document) throw new Error('Refresh the document before saving.');
         const ready = early && early.change === change && change === shown && early.snapshot === current && early.backend === backend ? early.result : null;
         early = null;
-        const { update: documentUpdate, warnings } = await (ready ?? prepareChange(backend, { ...current, document: current.document }, change));
+        const documentUpdate = await (ready ?? prepareChange(backend, { ...current, document: current.document }, change));
         prepared = true;
         const request = backend.commitEdit({ edit_id: editId, document_update: documentUpdate });
         // Ours from the moment the reply lands, although applying it may wait (the graph advance, typing in
@@ -279,7 +277,7 @@ export function createLiveEditsCore(options: () => LiveEditsOptions): LiveEditsC
           setState({
             editId: body.edit_id,
             version: body.version,
-            status: warnings.length ? `saved — ${warnings[0]!.fix}${warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}` : '',
+            status: '',
             pending: false,
           });
         } else if (body.detail === 'identical') {

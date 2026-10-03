@@ -37,7 +37,9 @@ APP__PORT=${p(1)}
 APP__HMR_PORT=${p(2)}
 # Every link this checkout emits. It MUST name the port the server binds, or the CLI
 # resolves this deployment's identity to an address nothing is listening on.
-APP__PUBLIC_BASE_URL=http://localhost:${p(1)}
+APP__PUBLIC_BASE_URL=http://app.lvh.me:${p(1)}
+# Every document on its own origin, <hex id>.lvh.me:<port> (required).
+APP__PAGES_HOST=lvh.me
 # SINGLE PROCESS IS THE DEFAULT: npm run dev runs sql, browser and events in process.
 # Uncomment these three only when those services really are listening on these ports
 # (docker compose, or node services/<name>/dist/server.mjs); a URL nothing serves makes

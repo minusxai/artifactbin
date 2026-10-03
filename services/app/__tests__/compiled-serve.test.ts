@@ -15,11 +15,11 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
-import { artifactPageAnswer } from '@/lib/serving';
+import { artifactPageAnswer, pagesOriginFor, pagesSite } from '@/lib/serving';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
-import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, SPA_IDLE_ATTR } from '@/lib/compiled-page/contract';
+import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import * as artifacts from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/serving';
@@ -183,11 +183,6 @@ describe('the reader mode on /raw', () => {
     expect(olderCode).not.toContain(live.manifest['@mx/boot']!);
     // Nothing was recompiled or rewritten.
     expect(await snapshot()).toEqual(before);
-    const adopting = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
-    expect(await adopting.text()).toContain(SPA_IDLE_ATTR);
-    await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,handoverContract}', '1'::jsonb) WHERE artifact_id = $1`, [id]);
-    const fullNavigation = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
-    expect(await fullNavigation.text()).not.toContain(SPA_IDLE_ATTR);
     const emptyPublic = mkdtempSync(path.join(os.tmpdir(), 'island-deploy-'));
     try {
       const nextServer = createAppServer({ publicDir: emptyPublic, indexHtml: async () => '<!doctype html><div id="root"></div>' });
@@ -261,23 +256,21 @@ describe('the reader mode on /raw', () => {
   });
 });
 
-describe('the HTML-first reader page', () => {
-  it('hands readers and owners alike to the Solid app', async () => {
+describe('the app page and the one renderer', () => {
+  it('frames the document for readers and owners alike', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Reader handover', markup: '<article><h1>Reader</h1></article>' });
-    const page = { spa: { entry: '/solid-spa-idle.ts', preload: [] } };
-    const guest = await artifactPageAnswer(request(`/a/${id}`), id, { page });
-    const writer = await artifactPageAnswer(request(`/a/${id}`, { actor: { credential: 'session', userId: who.user.id, email: who.user.email!, emailVerified: true } }), id, { page });
-    expect(guest.compiled?.html).toContain('/solid-spa-idle.ts');
-    expect(guest.compiled?.html).not.toContain('/spa-idle.ts"');
-    expect(writer.compiled?.html).toContain('/solid-spa-idle.ts');
-    expect(writer.compiled?.html).not.toContain('/spa-idle.ts"');
+    const pages = { pages: pagesSite() };
+    const guest = await artifactPageAnswer(request(`/a/${id}`), id, pages);
+    const writer = await artifactPageAnswer(request(`/a/${id}`, { actor: { credential: 'session', userId: who.user.id, email: who.user.email!, emailVerified: true } }), id, pages);
+    expect(guest.frame?.src).toContain('/pages-session?');
+    expect(writer.frame?.src).toContain('/pages-session?ticket=');
   });
   it('serves a plan outline in the initial compiled HTML and omits it from a capture', async () => {
     const who = await owner();
     const markup = '<article><h2>One</h2><p>Text</p><h2>Two</h2><p>Text</p><h2>Three</h2><p>Text</p></article>';
     const id = await publish(who.token, { title: 'Plan outline', markup, template: 'plan' });
-    const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const doc = new JSDOM(await res.text()).window.document;
     expect(doc.querySelectorAll('#mx-story-root .mx-outline-row')).toHaveLength(3);
@@ -286,32 +279,20 @@ describe('the HTML-first reader page', () => {
     expect(capture.querySelector('.mx-outline')).toBeNull();
   });
 
-  it('/a/:id serves the story with server chrome and the SPA on idle, and the same text as /raw', async () => {
+  it('/a/:id is the app shell around the document\'s frame; the story is /raw\'s alone', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf C dashboard', markup: fixture('dashboard.jsx').replaceAll('{{sales}}', await publish(who.token, { title: 'Perf sales', dataset: fixture('sales.csv') })), template: 'dashboard' });
     const rawHtml = await (await raw(id)).text();
-
     const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    const html = await res.text();
-    const doc = new JSDOM(html).window.document;
-    expect(doc.querySelector('[data-mx-initial-story]'), 'no handoff wrapper: the story IS the page').toBeNull();
-    expect(doc.querySelector('#mx-story-root')).toBeTruthy();
-    expect(doc.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)).toBeTruthy();
-    expect(doc.querySelector('[data-mx-artifact-id]')).toBeTruthy();
-    expect(storyText(html)).toContain('$744,503');
-
-    // Both compiled surfaces carry the same story text after chart slots are excluded.
-
-    const slots = [...doc.querySelectorAll('#mx-story-root [data-mx-chart-slot]')].map((slot) => slot.closest('[aria-label="Question embed"]')?.id).filter((id): id is string => !!id);
-    const textOf = (root: Element | null) => {
-      if (!root) return '';
-      for (const s of root.querySelectorAll('style, script')) s.remove();
-      for (const id of slots) { const slot = root.querySelector(`[id="${id}"]`); if (slot) slot.textContent = ''; }
-      return root.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-    };
-    expect(slots.length, 'the dashboard has chart slots to exclude').toBeGreaterThan(0);
-    expect(textOf(new JSDOM(html).window.document.getElementById('mx-story-root'))).toBe(textOf(new JSDOM(rawHtml).window.document.getElementById('mx-story-root')));
+    const doc = new JSDOM(await res.text()).window.document;
+    expect(doc.querySelector('#mx-story-root'), 'the app page renders no document').toBeNull();
+    expect(doc.querySelector('[data-mx-reader-chrome], [data-mx-spa-idle], style[data-mx-story-css]')).toBeNull();
+    const frame = doc.querySelector('body > [data-mx-framed] > iframe[data-mx-document-frame]');
+    expect(frame?.getAttribute('src')).toContain('/pages-session?');
+    expect(doc.title).toBe('Perf C dashboard');
+    expect(doc.querySelector('meta[property="og:image"]')?.getAttribute('content')).toContain(`/a/${id}/export?mode=card`);
+    expect(storyText(rawHtml)).toContain('$744,503');
   });
 });
 
@@ -348,6 +329,7 @@ describe('one row fetch and one access check per compiled view', () => {
       expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
 
       fetched.mockClear(); checked.mockClear();
+      // The app page admits once too: the frame it draws for that reader is not a second admission.
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
       expect(ofDocument()).toEqual({ fetches: 1, checks: 1 });
@@ -395,7 +377,7 @@ describe('the one reader path', () => {
       const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
       expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
 
-      expect(new JSDOM(await page.text()).window.document.querySelector('#mx-story-root')).toBeTruthy();
+      expect(new JSDOM(await page.text()).window.document.querySelector('iframe[data-mx-document-frame]')).toBeTruthy();
 
   });
 
@@ -431,16 +413,15 @@ describe('the one reader path', () => {
     expect(doc.body.getAttribute('data-mx-live-id')).toBe(id);
     expect(doc.body.getAttribute('data-mx-live-edit')).toMatch(/.+/);
     const page = new JSDOM(await (await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
-    expect(page.body.getAttribute('data-mx-live-id')).toBe(id);
+    expect(page.body.getAttribute('data-mx-live-id'), 'the app page holds no document stream: its frame does').toBeNull();
     const data = page.querySelector('body > script[type="application/json"][id="mx-page-data"]');
-    expect(data, 'the app\'s page data rides with the compiled page').toBeTruthy();
-    const payload = JSON.parse(data!.textContent!) as { artifact: { surface: { runtime: { css?: string; data: unknown } } } };
+    expect(data, 'the app\'s page data rides with its frame').toBeTruthy();
+    const payload = JSON.parse(data!.textContent!) as { artifact: { surface: { framedOrigin?: string; runtime: { css?: string; data: unknown } } } };
     expect(payload.artifact.surface.runtime.data, 'the app still gets the version it may edit').toBeTruthy();
-    expect(payload.artifact.surface.runtime.css, 'the sheet rides once, in the head').toBeUndefined();
-    expect(page.head.querySelector('style[data-mx-story-css]')?.textContent).toMatch(/\S/);
-    expect(page.head.querySelector('style[data-mx-app-reserve]')?.textContent, 'the app bar is reserved before first paint').toContain('body:has(> [data-mx-inline-story])');
-    expect(page.head.querySelector('style[data-mx-app-reserve]')?.textContent, 'the served page wears the document ground, not the app\'s dots').toContain('body:has(> [data-mx-inline-story]){background:#ffffff;background-image:none}');
-    expect(doc.head.querySelector('style[data-mx-app-reserve]'), '/raw has no app to reserve for').toBeNull();
+    expect(payload.artifact.surface.runtime.css, 'the sheet is the frame\'s').toBeUndefined();
+    expect(payload.artifact.surface.framedOrigin).toBe(pagesOriginFor(id, pagesSite()));
+    expect(page.head.querySelector('style[data-mx-story-css]')).toBeNull();
+    expect(page.head.querySelector('style[data-mx-frame-css]')?.textContent).toContain('[data-mx-framed]');
   });
 });
 
@@ -529,7 +510,8 @@ describe('a version with an author script', () => {
     expect(scriptSrc).not.toContain("'unsafe-inline'");
     expect(csp.split('; '), 'the page may frame the same-origin wrapper').toContain("frame-src 'self'");
     const { data, scripts, occurrences } = authorOnly(await res.text());
-    expect(data?.authorScript).toBe('document.body.dataset.ran = "1";');
+    // The data island carries the script as the module built at publish (lib/story/document/author-module.server).
+    expect(data?.authorScript).toContain('document.body.dataset.ran = "1";');
     expect(occurrences, 'nowhere but the data island').toBe(1);
     for (const script of scripts) {
       expect(script.getAttribute('src'), script.outerHTML).toMatch(/^\//);
@@ -537,18 +519,19 @@ describe('a version with an author script', () => {
       expect(script.getAttribute('src'), 'author code is never served under the trusted module prefix').not.toMatch(/^\/islands\/d\/.*author/);
     }
 
+    // The app page runs none of it: the script is the framed document's.
     const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
     expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
-    expect(authorOnly(await page.text()).data?.authorScript).toBe('document.body.dataset.ran = "1";');
+    expect(authorOnly(await page.text()).data, 'no island data on the app page').toBeFalsy();
   });
 
-  it('boots even with no island, so its store and its author host start', async () => {
+  it('boots even with no island, so its store and its script start', async () => {
     const who = await owner();
-    const id = await publish(who.token, { title: 'Scripted prose', markup: '<Helmet><Value name="n" type="number" default={0} /><script>{`mx.set({n: 1});`}</script></Helmet><h1>Only prose</h1>' });
+    const id = await publish(who.token, { title: 'Scripted prose', markup: '<Helmet><Value name="n" type="number" default={0} /><script>{`import { signal } from "page"; const [n, setN] = signal("$n"); setN(n() + 1);`}</script></Helmet><h1>Only prose</h1>' });
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const { data, doc } = authorOnly(await res.text());
-    expect(data?.authorScript).toBe('mx.set({n: 1});');
+    expect(data?.authorScript).toContain('setN(n() + 1)');
     expect([...doc.querySelectorAll('script[type="module"]')].some((s) => /^\/islands\/d\/[0-9a-f]{16}\.js(?:\?b=[0-9a-f]{16})?$/.test(s.getAttribute('src') ?? '')), 'the per-document module that boots').toBe(true);
   });
 
@@ -559,18 +542,6 @@ describe('a version with an author script', () => {
     const res = await raw(id, '?reader=compiled');
     expect(res.status).toBe(500);
     expect(await res.text()).toContain('could not be rendered');
-  });
-
-  it('its wrapper answers at its own address: fixed bytes under their own sandbox CSP', async () => {
-    for (const wrapper of ['/author-frame']) {
-      const res = await app.request(wrapper);
-      expect(res.status, wrapper).toBe(200);
-      const csp = res.headers.get('content-security-policy')!;
-      expect(csp, wrapper).toContain('sandbox allow-scripts');
-      expect(csp, wrapper).toContain("frame-src 'none'");
-      expect(csp, wrapper).toContain("default-src 'none'");
-      expect(await res.text(), wrapper).toContain('data-mx-author-wrapper');
-    }
   });
 });
 
@@ -586,31 +557,18 @@ describe('the viewer overlay door', () => {
       expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
       return JSON.parse(new JSDOM(await res.text()).window.document.getElementById('mx-story-data')?.textContent ?? '{}') as { viewerUrl?: string; queryUrl?: string };
     };
-    const html = { headers: { accept: 'text/html' } };
     expect(await doors(`/a/${shared}/raw?reader=compiled`)).not.toHaveProperty('viewerUrl');
-    expect((await doors(`/a/${shared}?reader=compiled`, html)).queryUrl).toBe(`/a/${shared}/query`);
-    expect(await doors(`/a/${shared}?reader=compiled`, html)).not.toHaveProperty('viewerUrl');
     expect((await doors(`/a/${mine}/raw?reader=compiled`)).viewerUrl).toBe(`/a/${mine}/viewer`);
-    expect((await doors(`/a/${mine}?reader=compiled`, html)).viewerUrl).toBe(`/a/${mine}/viewer`);
   });
 });
 
-it('renders Join in the initial HTML for persistent mutations before the app loads',async()=>{
+it('names the reader\'s Join standing in the page data for persistent mutations',async()=>{
  const who=await owner();
  const dataset=await publish(who.token,{dataset:[{n:1}],access:'readwrite'});
  const id=await publish(who.token,{markup:`<Helmet><Import name="tasks" src="ref:${dataset}" /><Mutation name="change">{\`update tasks.rows set n=n+1\`}</Mutation></Helmet><h1>Tasks</h1><Button run="$change">Change</Button>`});
  const response=await app.request(`/a/${id}`,{headers:{accept:'text/html'}});
  expect(response.status).toBe(200);
  const doc=new JSDOM(await response.text()).window.document;
- expect(doc.querySelector('[data-mx-reader-action="membership"]')?.getAttribute('aria-label')).toBe('Join artifact');
-});
-
- it('renders the notification bell on the initial signed-in reader page',async()=>{
- const who=await owner(),reader=await owner();
- const id=await publish(who.token,{markup:'<h1>Tasks</h1>'});
- const answer=await artifactPageAnswer(request(`/a/${id}`,{actor:{credential:'session',userId:reader.user.id,email:reader.user.email!,emailVerified:true}}),id,{page:{spa:null}});
- expect(answer.status).toBe(200);
- expect(answer.compiled).toBeDefined();
- const doc=new JSDOM(answer.compiled!.html).window.document;
- expect(doc.querySelector('[data-mx-reader-action="notifications"]')?.getAttribute('aria-label')).toBe('Notifications');
+ const payload=JSON.parse(doc.getElementById('mx-page-data')!.textContent!) as {artifact:{surface:{membership?:string}}};
+ expect(payload.artifact.surface.membership).toBe('join');
 });

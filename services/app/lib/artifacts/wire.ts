@@ -28,7 +28,7 @@ import {DatasetError} from '@/lib/datasets/errors';
  */
 import { DATASET_ACCESS, canReadArtifact, canWriteDataset, writerFor, type ArtifactRow, type DatasetAccess, type TokenActor, type Visibility } from './access';
 import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
-import { artifactQuotaExceeded, byteQuotaFor, createArtifact, fontResolver, getArtifactById, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
+import { artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { findDependentsFor, refLoaderForActor, refreshWarningsFor, declarationsForRow, runDocumentMutation } from './dataflow';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations/store';
 import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/document/node-ids';
@@ -49,8 +49,7 @@ import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/
 import { loadDatasetRows } from '@/lib/story/datasets/dataset-store';
 import { CONTENT_FIELDS } from '@/lib/story/document/input';
 import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
-import type { AssetWarning } from '@/lib/serving';
-import { refreshWebAssets, type WebAssetImporter } from '@/lib/serving/web-assets';
+import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '@/lib/serving/web-assets';
 import { getDb } from '@/lib/platform/db';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
@@ -147,20 +146,9 @@ function markupEcho(sent: unknown, stored: string | null): Record<string, unknow
 }
 
 /**
- * ASSET WARNINGS ride their own key.
- *
- * `warnings` already meant something on a write reply — the dependent
- * documents a dataset write broke, `{id, title, details}` — and an external URL
- * that would not import is `{code, url, fix}`. Both can be true of one markup
- * PUT, and one key holding two shapes is a wire nobody can parse: a caller
- * would have to sniff each element to know what it is reading. So the asset
- * half is `asset_warnings`, present only when there is something to say.
- */
-const assetWarningsEcho = (warnings: AssetWarning[] | undefined): Record<string, unknown> =>
-  (warnings?.length ? { asset_warnings: warnings } : {});
-
-/**
- * SOURCE REPAIRS ride their own key too, for the same reason and one more.
+ * SOURCE REPAIRS ride their own key: `warnings` already means the dependent
+ * documents a dataset write broke, and one key holding two shapes is a wire
+ * nobody can parse.
  *
  * A repair is not a warning: nothing is missing and nothing needs fixing — the
  * door already changed the document and it published. What the caller needs is
@@ -483,8 +471,7 @@ export async function replaceArtifactWithBody(
   }
   if (options.dryRun) return preflightReply(prepared);
 
-  const applied = await applyPreparedContent(prepared, {importAsset: assetImporterFor(owner.tokenId, owner.userId), resolveFont: fontResolver()});
-  if (applied instanceof Response) return applied;
+  const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
@@ -532,8 +519,7 @@ export async function replaceArtifactWithBody(
   if (!row) return json({ error: 'not_found' }, 404);
 
   // Dataset/viz refresh: warn about dependents whose bindings no longer
-  // resolve (warnings, never blocks). A DIFFERENT shape from the asset
-  // warnings below, which is exactly why it is a different key.
+  // resolve (warnings, never blocks).
   const warnings = await refreshWarningsFor(actor, row);
   const affected = ['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
   return json({
@@ -554,7 +540,6 @@ export async function replaceArtifactWithBody(
     // echo's signal that feedback exists (the GET inlines the full set).
     ...(row.format === 'markup' || row.format === 'folder' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
     ...(warnings.length ? { warnings } : {}),
-    ...assetWarningsEcho(parsed.warnings),
     ...sourceRepairsEcho(parsed.repairs),
   });
 }
@@ -621,10 +606,9 @@ export async function createArtifactFromBody(
 
   if (options.dryRun) return preflightReply(prepared);
 
-  const applied = await applyPreparedContent(prepared, {importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver()});
-  if (applied instanceof Response) return applied;
+  const applied = await applyPreparedContent(prepared);
   parsed = applied;
-  responseBody = row => ({...createdArtifactWire(row,base,sentMarkup),...assetWarningsEcho(parsed.warnings),...sourceRepairsEcho(parsed.repairs)});
+  responseBody = row => ({...createdArtifactWire(row,base,sentMarkup),...sourceRepairsEcho(parsed.repairs)});
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
@@ -717,8 +701,6 @@ export async function respondToEdit(
   const outcome = await apply(echo === 'patch' ? { ...input, patchEcho: true } : input);
   if (outcome instanceof Response) return outcome; // publish-pipeline 400 (invalid_jsx, …)
   if (!outcome) return json({ error: 'not_found' }, 404);
-  // The edit path runs the SAME publish door, so it answers the same way: a URL
-  // it could not import is news wherever the write came in from.
   if (outcome.applied) {
     // The commit withheld the new document: it landed on exactly the version the patch was prepared against, so the
     // patch IS the answer. Nothing here may need the new source (`markup`, `state`, the declared `mutations`): the
@@ -726,15 +708,15 @@ export async function respondToEdit(
     // On a newer head (a concurrent edit to other nodes) the answer carries the patches of the versions between too,
     // and the editor replays them; without them (the log could not yield every one) it reads the head itself.
     if (outcome.withheld && input.documentUpdate) {
-      return json({ ...(await artifactHeadToWire(outcome.row, base)), patch: input.documentUpdate.patch, ...(outcome.remotePatches ? { remote_patches: outcome.remotePatches } : {}), ...assetWarningsEcho(outcome.warnings) });
+      return json({ ...(await artifactHeadToWire(outcome.row, base)), patch: input.documentUpdate.patch, ...(outcome.remotePatches ? { remote_patches: outcome.remotePatches } : {}) });
     }
     const wire = await artifactToWire(outcome.row, base);
     const update = input.documentUpdate;
     if (echo === 'patch' && update && !update.whole && outcome.row.version === update.patch.baseVersion + 1) {
       const { document: _document, markup: _markup, ...head } = wire as typeof wire & { document?: unknown };
-      return json({ ...head, patch: update.patch, ...assetWarningsEcho(outcome.warnings) });
+      return json({ ...head, patch: update.patch });
     }
-    return json({ ...wire, ...assetWarningsEcho(outcome.warnings) });
+    return json({ ...wire });
   }
   switch (outcome.reason) {
     case 'stale_edit_id':
@@ -901,8 +883,12 @@ export async function respondToMutate(
  * not be able to mean different things by it.
  *
  * `url` refreshes one URL we hold. `id` refreshes every external URL a DOCUMENT
- * names — the shape a person actually wants ("this deck's pictures are stale"),
- * and the one an agent can call without first knowing which URLs are in there.
+ * names that we hold a copy of — the shape a person actually wants ("this deck's
+ * pictures are stale"), and the one an agent can call without first knowing
+ * which URLs are in there. Publish copies nothing (a written URL is served as
+ * written), so a copy exists only where a reader's view asked for one
+ * (app/a/[id]/assets); a URL with no copy has nothing to refresh and is left
+ * out of the report rather than named as a failure.
  * Reach for the document form is the WRITE scope, not the read one: refreshing
  * changes bytes every reader of every document naming that URL will see, so it
  * belongs to someone who may change the document, and the miss is the uniform
@@ -927,9 +913,11 @@ export async function refreshAssetsFor(
   if (id) {
     const row = await getArtifactFor(actor, id);
     if (!row) return json({ error: 'not_found' }, 404);
-    urls = collectExternalAssetUrls(row.source ?? '').all;
+    const named = collectExternalAssetUrls(row.source ?? '').all;
+    const held = await lookupWebAssets(named);
+    urls = named.filter((u) => held.has(u));
     // The bytes belong to whoever the DOCUMENT belongs to, exactly as they did
-    // when publish imported them — an editor refreshing does not take them over.
+    // when the view-time door imported them — an editor refreshing does not take them over.
     const owner = writerFor(row);
     by = { tokenId: owner.tokenId, userId: owner.userId };
   } else {
@@ -940,6 +928,6 @@ export async function refreshAssetsFor(
 
 function preflightReply(prepared:PreparedContent):Response {
   return json({valid:true,dry_run:true,markup:prepared.content.source,format:prepared.content.format,
-    planned:{objects:prepared.objects.length,imports:prepared.markup?.imports??[],fonts:prepared.markup?.fonts??[]},
+    planned:{objects:prepared.objects.length},
     commit_checks:['authorization','quota','references','observed_state'],...sourceRepairsEcho(prepared.content.repairs)});
 }

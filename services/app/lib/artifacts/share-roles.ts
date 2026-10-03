@@ -80,8 +80,8 @@ export const ANONYMOUS_CEILING: ArtifactRole = 'viewer';
  * cannot drift: the ceiling is what makes the refusal correct, and this is what
  * keeps it from being SILENT. An owner who sets a link to `can comment` has
  * invited whoever holds it; a guest who is shown nothing has been invited and
- * not told. The served document names it and offers /login (lib/story/document
- * renderReaderChrome) — a door, never a capability. Nothing about who may
+ * not told. The app page's bar offers /login when they ask to comment
+ * (solid/pages/Document) — a door, never a capability. Nothing about who may
  * actually write changes until there is an account for a share to resolve to.
  *
  * `none` at or below the ceiling is the load-bearing half: a guest already

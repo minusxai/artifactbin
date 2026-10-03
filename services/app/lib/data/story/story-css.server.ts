@@ -15,7 +15,6 @@ import { STORY_WYSIWYG_CLASSES } from './typography';
 import { storyMotionKitCss } from './motion';
 import { storyThemeCss } from './story-themes';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
-import { partitionBannedCandidates } from './banned-css';
 import { hasDesignSystemMarker, extractClassCandidates, type CompiledCssStoryContent } from './story-css';
 
 // The stylesheet each story is compiled against. `dark:` keys off the `.dark` class
@@ -310,16 +309,6 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
   const jsx = !!opts?.force;
   const compiler = await tailwindCompiler(jsx ? TW_INPUT_JSX_IMPORTANT : TW_INPUT_JSX);
   let candidates = [...new Set([...extractClassCandidates(story), ...STORY_RECIPE_UNION])].sort();
-  if (jsx) {
-    // Banned-CSS guard — a SEPARATE, explicit step BEFORE compile, never
-    // folded into buildSalvaging's error-bisect: a guard reject must be a deliberate drop, not a
-    // silently-absorbed "bad token". Legacy marked stories are frozen and skip this.
-    const { kept, banned } = partitionBannedCandidates(candidates);
-    if (banned.length > 0) {
-      console.warn(`[story-css] dropped ${banned.length} banned class candidate(s) (fixed/sticky/external-url):`, banned.join(' '));
-    }
-    candidates = kept;
-  }
   const { css, dropped } = buildSalvaging(c => compiler.build(c), candidates);
   if (dropped.length > 0) {
     console.warn(`[story-css] dropped ${dropped.length} uncompilable class candidate(s):`, dropped.join(' '));

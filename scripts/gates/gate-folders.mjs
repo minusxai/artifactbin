@@ -39,7 +39,7 @@ import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
@@ -50,7 +50,7 @@ const OWNER_EMAIL = `mxmx_test_folders_owner_${stamp}@example.com`;
 const EDITOR_EMAIL = `mxmx_test_folders_editor_${stamp}@example.com`;
 
 const sink = await startMailSink();
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const ownerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const editorCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const strangerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });

@@ -1,14 +1,14 @@
 // DESTINATION: services/app/lib/compiled-page/__tests__/assembler.test.ts
 /**
  * ONE assembler for every reader path (docs/phase2-architecture.md §2.2, §9; contract AssembleInput):
- * the same compiled page becomes `/a/:id` (chrome, SPA on idle) and `/raw` (neither) with no inline
- * script anywhere, the island data as JSON, the snapshot's drawings in the chart slots, and the
+ * the same compiled page becomes the standalone document (`/raw`, which the app page frames on the
+ * document's own origin; a domain post; a capture) with no inline script anywhere, the island data as JSON, the snapshot's drawings in the chart slots, and the
  * per-document module preloaded and imported.
  */
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { assembleReaderPage } from '../assembler';
-import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
+import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
 
 const build = { id: 'b'.repeat(16), manifest: { 'solid-js': '/islands/solid-1111aaaa.js', 'solid-js/web': '/islands/web-2222bbbb.js', 'solid-js/store': '/islands/store-3333cccc.js', '@mx/rt': '/islands/rt-4444dddd.js', '@mx/boot': '/islands/boot-5555eeee.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
 const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
@@ -25,7 +25,7 @@ const snapshot: DataSnapshot = { key: { artifactId: 'X34b00', slot: 'head', plan
 const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
   compiled: compiled(), story: compiled().html, css: '.mx-doc{color:red}', fontPreloads: ['/fonts/inter.woff2'], title: 'Perf <C> dashboard', theme: 'industry', colorMode: 'light', snapshot,
   overlay: { values: { region: 'West' }, mermaidImages: {}, signedIn: false, doors: { queryUrl: '/a/X34b00/query', assetsUrl: '/a/X34b00/assets', viewerUrl: '/a/X34b00/viewer' } },
-  chrome: null, spa: null, build, head: null, ...over,
+  build, head: null, ...over,
 });
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
@@ -59,12 +59,6 @@ describe('assembleReaderPage', () => {
     expect(JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!).moduleData).toEqual([{ value }]);
     expect(page.html).not.toContain('</script><script>alert');
   });
-  it('uses the app reader body font before the idle app shell loads', () => {
-    const app = assembleReaderPage(input({ spa: { entry: '/assets/main-abc.js', preload: [] } }));
-    expect(app.html).toContain('body{margin:0;font-size:14px;font-family:var(--font-mono)}');
-    expect(app.html).toContain('--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace');
-    expect(app.html).toContain('@font-face{font-family:"JetBrains Mono Variable"');
-  });
   it('serves the outline beside the column with legacy markup before the SPA loads', () => {
     const entries = [{ level: 2 as const, title: 'One & all', path: '0.0' }, { level: 3 as const, title: 'Part', path: '0.1' }];
     const page = assembleReaderPage(input({ compiled: compiled({ outline: entries, outlinePlan: true }), story: '<div class="mx-doc"><h2 data-mx-ast="0.0">One &amp; all</h2></div>' }));
@@ -94,11 +88,11 @@ describe('assembleReaderPage', () => {
   });
 
   it('emits no inline script: the data rides as JSON and every script has a same-origin src', () => {
-    const doc = dom(assembleReaderPage(input({ compiled: compiled({ templateBrBytes: 1300 }), spa: { entry: '/assets/main-abc.js', preload: ['/assets/vendor-def.js'] }, chrome: { artifactId: 'X34b00', title: 't', author: null } })));
+    const doc = dom(assembleReaderPage(input({ compiled: compiled({ templateBrBytes: 1300 }) })));
     for (const script of doc.querySelectorAll('script')) {
       if (script.type === 'application/json') continue;
       expect(script.type, script.outerHTML).toBe('module');
-      expect(script.getAttribute('src'), script.outerHTML).toMatch(/^\/(islands|assets)\//);
+      expect(script.getAttribute('src'), script.outerHTML).toMatch(/^\/islands\//);
       expect(script.textContent).toBe('');
     }
     const data = JSON.parse(doc.getElementById(ISLAND_DATA_ID)!.textContent!);
@@ -142,15 +136,12 @@ describe('assembleReaderPage', () => {
     expect(bare.querySelector('.skeleton')).toBeTruthy();
   });
 
-  it('renders the chrome and the idle SPA loader for /a/:id, and neither for /raw', () => {
-    const page = dom(assembleReaderPage(input({ chrome: { artifactId: 'X34b00', title: 'Perf', author: { username: 'sree' } }, spa: { entry: '/assets/main-abc.js', preload: ['/assets/vendor-def.js'] } })));
-    expect(page.querySelector('[data-mx-artifact-id="X34b00"]')).toBeTruthy();
-    const loader = page.querySelector(`script[type="module"][${SPA_IDLE_ATTR}]`)!;
-    expect(loader.getAttribute('src')).toBe('/assets/main-abc.js');
-    expect([...page.querySelectorAll('link[rel="modulepreload"]')].map((l) => l.getAttribute('href'))).toContain('/assets/vendor-def.js');
-    const raw = dom(assembleReaderPage(input()));
-    expect(raw.querySelector('[data-mx-artifact-id]')).toBeNull();
-    expect(raw.querySelector(`[${SPA_IDLE_ATTR}]`)).toBeNull();
+  it('is the standalone document only: no reader chrome, no app entry, and its links leave the frame', () => {
+    const page = dom(assembleReaderPage(input()));
+    expect(page.querySelector('[data-mx-reader-chrome], [data-mx-artifact-id]')).toBeNull();
+    expect(page.querySelector('[data-mx-spa-idle]')).toBeNull();
+    expect(page.querySelector('base')?.getAttribute('target')).toBe('_top');
+    expect([...page.querySelectorAll('script[src]')].every((s) => s.getAttribute('src')!.startsWith('/islands/'))).toBe(true);
   });
 
   it('emits the link hints as speculation rules only, on hover/press intent — never an eager prefetch tag or an inline rules script', () => {
@@ -181,16 +172,6 @@ describe('assembleReaderPage', () => {
     expect(doc.getElementById('mx-story-root')!.contains(footer)).toBe(false);
     expect(doc.getElementById('mx-story-root')!.compareDocumentPosition(footer) & 4 /* FOLLOWING */).toBeTruthy();
     expect([...doc.head.querySelectorAll('style')].some((s) => s.textContent?.includes('[data-mx-domain-footer]{opacity:.65}'))).toBe(true);
-  });
-
-  it('writes the managed asset door into the data island only when the request has one (IslandPageData.managedAssets)', () => {
-    const door = { origin: 'https://assets.example.test', resolveUrl: 'https://app.example.test/a/X34b00/assets?key=k' };
-    const data = (overlay: AssembleInput['overlay']) => JSON.parse(dom(assembleReaderPage(input({ overlay }))).getElementById(ISLAND_DATA_ID)!.textContent!);
-    expect(data({ ...input().overlay, managedAssets: door }).managedAssets).toEqual(door);
-    // A capture has no doors, and still its door: the frame it photographs resolves assets with the capture's key.
-    expect(data({ ...input().overlay, doors: null, managedAssets: door }).managedAssets).toEqual(door);
-    expect(data(input().overlay)).not.toHaveProperty('managedAssets');
-    expect(data({ ...input().overlay, managedAssets: null })).not.toHaveProperty('managedAssets');
   });
 
   it('never lets a title, a value or a drawing break out of its element', () => {

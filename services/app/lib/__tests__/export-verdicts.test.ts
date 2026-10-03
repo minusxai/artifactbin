@@ -142,11 +142,50 @@ describe('what the app asks the browser for', () => {
       expect(request.sameOriginOnly).toBe(true);
       expect(request.allowedOrigins).toBeUndefined();
       expect(request.assetOrigin).toEqual(ASSETS_ORIGIN ?? undefined);
-      expect(request.waitForManagedFrames).toBe(true);
+      // A document without a script has no component mounts to wait for and no module host to admit.
+      expect(request.waitForMountsMs).toBeUndefined();
     }
     // A FRESH key per attempt: minted at call time, because a key that expired
     // in the queue produced a 200 PNG of a 404 page.
     expect(browser.seen[0].url).not.toBe(browser.seen[1].url);
+  });
+
+  it('lets a script document load its modules and waits for its components to mount before the shot', async () => {
+    const browser = scripted(PNG);
+    setServices({ browser });
+    const source = [
+      '<Helmet><script>{`',
+      "  import confetti from 'canvas-confetti';",
+      "  import { scale } from 'https://cdn.example.com/scale.js';",
+      '  export function Spark(props) { return <svg />; }',
+      '`}</script></Helmet>',
+      '<Spark><p>Loading…</p></Spark>',
+    ].join('\n');
+    await exportImageResponse({ id: 'exprt2', version: ++n + 1000, format: 'markup', source }, {}, 'http://localhost:3000');
+    const [request] = browser.seen;
+    expect(request.sameOriginOnly).toBe(true);
+    // The ESM CDN bare names resolve to, and the host a full-URL import names; nothing else.
+    expect(request.allowedOrigins).toEqual(['https://esm.sh', 'https://cdn.example.com']);
+    expect(request.waitForMountsMs).toBe(5000);
+  });
+
+  it('also admits the exact hosts a script document declares for scripts and connections, never a wildcard', async () => {
+    const browser = scripted(PNG);
+    setServices({ browser });
+    const source = [
+      '<Helmet>',
+      '<meta name="csp-connect" content="https://api.open-meteo.com https://*.example.org" />',
+      '<meta name="csp-script" content="https://cdn.plot.ly" />',
+      '<meta name="csp-img" content="https://images.example.com" />',
+      '<script>{`',
+      "  import { proxy } from 'page';",
+      '  export function Weather(props) { return <svg />; }',
+      '`}</script></Helmet>',
+      '<Weather><p>Loading…</p></Weather>',
+    ].join('\n');
+    await exportImageResponse({ id: 'exprt3', version: ++n + 2000, format: 'markup', source }, {}, 'http://localhost:3000');
+    const [request] = browser.seen;
+    expect(request.allowedOrigins).toEqual(['https://esm.sh', 'https://cdn.plot.ly', 'https://api.open-meteo.com']);
   });
 
   it('names the slide as a capture mode, not a separate verb', async () => {

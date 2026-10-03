@@ -137,6 +137,14 @@ describe.concurrent('production boot environment', () => {
     expect(result.output).toContain('[boot] APP__PUBLIC_BASE_URL is required in production (every published link is minted from it). Set it to the URL people reach this on.');
   });
 
+  it('exits before listening when APP__PAGES_HOST is absent, in development too: there is no other renderer', async () => {
+    const result = await runBoot(await availablePort(5), { NODE_ENV: 'development', APP__PAGES_HOST: '' });
+
+    expect(result.kind).toBe('exited');
+    expect(result.code).toBe(1);
+    expect(result.output).toContain('[boot] APP__PAGES_HOST is required');
+  });
+
   it('boots in development with both production-only names absent', async () => {
     const port = await availablePort(2);
     const result = await runBoot(port, { NODE_ENV: 'development' });

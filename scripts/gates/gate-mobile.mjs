@@ -1,6 +1,6 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { DOCUMENT_FRAME, documentFrame } from './lib/page-facts.mjs';
 /**
  * Gate: the document chrome has to fit on a phone.
  *
@@ -13,8 +13,8 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *  2. The theme popover is a fixed `w-[26rem]` two-column grid, wider than the
  *     screen it opens on: half the themes clipped, and the page grew a
  *     horizontal scrollbar.
- *  3. The reader actions belong in one thumb-reachable bottom dock. It gets
- *     out of the document's way on downward scroll and returns on reverse.
+ *  3. The reader's controls fit the phone: the app bar's menu and controls
+ *     sheet open inside the screen and above everything else.
  *  4. A chart's hover tooltip is written for a mouse: it opens on a move and
  *     closes on `mouseout`, which a finger never sends. The card is `fixed`
  *     (it cannot scroll away) and `pointer-events: none` (it cannot be tapped
@@ -27,7 +27,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  *   usage: node scripts/gates/gate-mobile.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -69,7 +69,7 @@ const chartDoc = await (await fetch(`${B}/api/artifacts`, {
   body: JSON.stringify({ title: 'mobile gate chart', markup: chartMarkup, theme: 'manuscript' }),
 })).json();
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 const open = async (viewport, hash = '', id = st.id) => {
   const page = await browser.newPage({ viewport });
@@ -104,30 +104,13 @@ const view = await open(PHONE);
 await view.waitForTimeout(2500);
 check(!(await overflows(view)), 'viewer: the page does not scroll sideways');
 /*
- * THE OWNER'S PAGE DRAWS NO DOCK OF ITS OWN ANY MORE. The framed document
- * carries the same chrome a reader gets — logo, rail, byline — and asks the
- * page for its panels (lib/story/reader/reader-chrome; gate-reader-chrome measures
- * that chrome's geometry). What this leg keeps is the SCROLL RULE, exercised
- * in whichever document actually scrolls: hidden on load, a scroll down keeps
- * it away, a scroll up brings it back.
+ * THE BAR IS THE APP PAGE'S OWN (solid/document/DocumentChrome), drawn above the document's frame and always on
+ * screen. "The document carries the chrome" and its scroll rule (hidden on load, away on a downward scroll, back on a
+ * reverse one) are retired with the reader chrome inside the document; what stays is that the bar draws its triggers.
  */
 check((await view.getByLabel('Open menu', {exact:true}).count()) === 1
   && (await view.getByLabel('Open artifact controls', {exact:true}).count()) === 1,
-  'viewer: the inline reader draws one menu and one artifact-controls trigger');
-// An owner reads through the sandboxed artifact frame; a public reader may be
-// served the document itself. Exercise whichever window actually scrolls.
-const readingFrame = view.mainFrame();
-check((await readingFrame.locator('[data-mx-reader-chrome]').count()) === 1, 'viewer: the document carries the chrome');
-const hiddenOn = (target) => target.locator('[data-mx-reader-chrome]').evaluate(root => {
-  return root?.classList.contains('mx-reader-chrome--hidden') === true;
-});
-const dockHidden = () => hiddenOn(readingFrame);
-await readingFrame.evaluate(() => window.scrollTo(0, 500));
-await view.waitForTimeout(300);
-check(await dockHidden(), 'viewer: the chrome stays away on a downward scroll');
-await readingFrame.evaluate(() => window.scrollBy(0, -80));
-await view.waitForTimeout(300);
-check(!(await dockHidden()), 'viewer: the chrome returns on a reverse scroll');
+  'viewer: the app bar draws one menu and one artifact-controls trigger');
 
 // ── 2. the app menu on a phone ─────────────────────────────────────────────
 // Navigation folds out from the page's hamburger.
@@ -149,19 +132,21 @@ await view.waitForSelector('[aria-label="Artifact controls"]');
 const controls = await fitsAcross(view, 'Artifact controls');
 check(controls.fits, `artifact controls: sheet fits the screen (${controls.left}..${controls.right}px of ${controls.viewport}px)`);
 check(!(await overflows(view)), 'artifact controls: and opening it does not make the page scroll sideways');
-const sheetOverlap = await view.getByRole('dialog', { name: 'Artifact controls', exact: true }).evaluate(sheet => {
+// The reader's actions are the app bar's rail now (Like, Comment, Fork, Edit, Share and the triggers).
+const READER_ACTIONS = 'header[aria-label="Page bar"] button, header[aria-label="Page bar"] a';
+const sheetOverlap = await view.locator('section[aria-label="Artifact controls"]').evaluate((sheet, actions) => {
   const root = sheet.getRootNode();
   const bounds = sheet.getBoundingClientRect();
-  const overlap = [...root.querySelectorAll('[data-mx-reader-action], [data-mx-reader-trigger]')].find(button => {
+  const overlap = [...root.querySelectorAll(actions)].find(button => {
     const r = button.getBoundingClientRect();
     return r.width && r.height && r.x + r.width / 2 > bounds.left && r.x + r.width / 2 < bounds.right
       && r.y + r.height / 2 > bounds.top && r.y + r.height / 2 < bounds.bottom;
   });
-  if (!overlap) return { overlapping: false, owns: true, actions: root.querySelectorAll('[data-mx-reader-action], [data-mx-reader-trigger]').length };
+  if (!overlap) return { overlapping: false, owns: true, actions: root.querySelectorAll(actions).length };
   const r = overlap.getBoundingClientRect();
   const hit = root.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-  return { overlapping: true, owns: sheet.contains(hit), actions: root.querySelectorAll('[data-mx-reader-action], [data-mx-reader-trigger]').length, hit: hit?.outerHTML.slice(0, 160) };
-});
+  return { overlapping: true, owns: sheet.contains(hit), actions: root.querySelectorAll(actions).length, hit: hit?.outerHTML.slice(0, 160) };
+}, READER_ACTIONS);
 check(sheetOverlap.owns, `artifact controls: the open sheet paints above overlapping reader actions (${JSON.stringify(sheetOverlap)})`);
 await view.close();
 
@@ -321,20 +306,30 @@ const arcDrawn = (page) => page.waitForFunction(
   { timeout: 90_000 },
 ).then(() => true).catch(() => false);
 
+/*
+ * The chart, its card and its scroll are the DOCUMENT's, inside the frame the app page draws (the frame is what
+ * scrolls), so every helper above is handed the document's frame; a pointer or a tap is aimed in page coordinates,
+ * the frame's offset added (`onPage`).
+ */
+const onPage = async (page, point) => {
+  const box = await page.locator(DOCUMENT_FRAME).boundingBox();
+  return { x: point.x + (box?.x ?? 0), y: point.y + (box?.y ?? 0) };
+};
 const phone = await browser.newPage({ viewport: PHONE, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
 await phone.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
-check(await arcDrawn(phone), 'tooltip: the phone document draws an arc mark');
+const phoneDoc = await documentFrame(phone);
+check(await arcDrawn(phoneDoc), 'tooltip: the phone document draws an arc mark');
 
-check(await touchMark(phone), 'tooltip: the phone document draws an arc mark to touch');
-check(await cardShown(phone, true), 'tooltip: a touch opens the card');
-let tip = await cardState(phone);
+check(await touchMark(phoneDoc), 'tooltip: the phone document draws an arc mark to touch');
+check(await cardShown(phoneDoc, true), 'tooltip: a touch opens the card');
+let tip = await cardState(phoneDoc);
 check(tip.shown, `tooltip: …and it is really up (${JSON.stringify(tip)})`);
 check(tip.close, 'tooltip: and a touch-opened card carries a close button');
 check(tip.cardEvents === 'none' && tip.closeEvents !== 'none',
   `tooltip: the card stays pointer-transparent, the button does not (${tip.cardEvents} / ${tip.closeEvents})`);
 
-await phone.evaluate(() => window.scrollBy(0, 300));
-check(await cardShown(phone, false), 'tooltip: scrolling the document puts it away');
+await phoneDoc.evaluate(() => window.scrollBy(0, 300));
+check(await cardShown(phoneDoc, false), 'tooltip: scrolling the document puts it away');
 
 /*
  * …and the scroll back has to SETTLE before the next touch. A `scroll` event is delivered on a
@@ -350,9 +345,9 @@ const scrollSettled = (page, to) => page.evaluate((y) => new Promise((resolve) =
   window.scrollTo(0, y);
 }), to);
 
-await scrollSettled(phone, 0);
-await touchMark(phone);
-check(await cardShown(phone, true), 'tooltip: it opens again after the scroll');
+await scrollSettled(phoneDoc, 0);
+await touchMark(phoneDoc);
+check(await cardShown(phoneDoc, true), 'tooltip: it opens again after the scroll');
 /*
  * A 26px button is a 26px THUMB TARGET, which is half of what a phone needs. The visual stays
  * 26px — a bigger dot would cover the card it sits on — and the TARGET is grown to 44×44 under
@@ -365,7 +360,7 @@ check(await cardShown(phone, true), 'tooltip: it opens again after the scroll');
  * scrolls its element into view, and a scroll is precisely what this feature dismisses on — so
  * asking Playwright where the button is could put the card away before the hit test looks.
  */
-const targetHittable = await phone.waitForFunction(() => {
+const targetHittable = await phoneDoc.waitForFunction(() => {
   const b = document.querySelector('button[aria-label="Dismiss tooltip"]');
   if (!b) return false;
   const r = b.getBoundingClientRect();
@@ -378,7 +373,7 @@ const targetHittable = await phone.waitForFunction(() => {
   });
 }, null, { timeout: 15_000 }).then(() => true).catch(() => false);
 
-const target = await phone.evaluate(() => {
+const target = await phoneDoc.evaluate(() => {
   const b = document.querySelector('button[aria-label="Dismiss tooltip"]');
   if (!b) return null;
   const r = b.getBoundingClientRect();
@@ -401,126 +396,31 @@ check(!!target && target.width >= 44 && target.height >= 44,
 check(targetHittable,
   `tooltip: and a tap 20px outside the drawn button still lands on it (corners ${target?.around}, card ${target?.card})`);
 // Tap 18px down-left of the centre: the enlarged target, NOT the drawn button.
-if (target) await phone.touchscreen.tap(target.x - 18, target.y + 18);
-check(await cardShown(phone, false), 'tooltip: and tapping it dismisses the card');
+if (target) { const at = await onPage(phone, { x: target.x - 18, y: target.y + 18 }); await phone.touchscreen.tap(at.x, at.y); }
+check(await cardShown(phoneDoc, false), 'tooltip: and tapping it dismisses the card');
 await phone.close();
 
 // The same document with a MOUSE: desktop hover is untouched.
 const desk = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 await desk.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
-await arcDrawn(desk);
-const point = await markPoint(desk);
-check(!!point, 'tooltip: the desktop document draws an arc mark to hover');
+const deskDoc = await documentFrame(desk);
+await arcDrawn(deskDoc);
+const inFrame = await markPoint(deskDoc);
+check(!!inFrame, 'tooltip: the desktop document draws an arc mark to hover');
+const point = inFrame ? await onPage(desk, inFrame) : { x: 0, y: 0 };
+const corner = await onPage(desk, { x: 4, y: 4 });
 await desk.mouse.move(point.x - 3, point.y - 3);
 await desk.mouse.move(point.x, point.y);
-check(await cardShown(desk, true), 'tooltip: a real hover still opens the card');
-tip = await cardState(desk);
+check(await cardShown(deskDoc, true), 'tooltip: a real hover still opens the card');
+tip = await cardState(deskDoc);
 check(!tip.close, `tooltip: and a mouse-opened card carries NO close button (${JSON.stringify(tip)})`);
-await desk.mouse.move(4, 4);
-check(await cardShown(desk, false), 'tooltip: moving the cursor off the mark still closes it');
+await desk.mouse.move(corner.x, corner.y);
+check(await cardShown(deskDoc, false), 'tooltip: moving the cursor off the mark still closes it');
 await desk.close();
 
 
-// ── 6. the bar answers a scroll BEFORE the runtime has loaded ──────────────
-/*
- * THE READER IS ON THE DOCUMENT LONG BEFORE THE RUNTIME IS. The document is
- * server-rendered, so it paints at parse time; the runtime entry and its chart
- * chunk are ~1 MB behind it. The module that owns the reader's chrome — this
- * bar's scroll relay — is ~8 KB, and it used to execute LAST, in the module
- * queue behind that megabyte, because a module script without `async` runs in
- * tree order. So on a chart document at phone speeds the bar sat on the words
- * for seconds and answered nothing (measured: first hide ~4.7-5.2 s against a
- * document on screen at ~1.6 s). `async` plus a modulepreload is the fix, and
- * this is the only place it can be seen: every unit test in the suite runs the
- * module directly, which is precisely the ordering the bug lived in.
- *
- * The measurement is only worth something while the runtime is STILL IN
- * FLIGHT, so that is asserted as a check of its own — on a fast machine the
- * entry can finish before the scroll and the timing check becomes a tautology
- * the regression would sail straight through.
- */
-const CHART_DOC = '<Helmet><Value name="rows" type="table" value={[{"m":"Jan","v":12},{"m":"Feb","v":18},{"m":"Mar","v":9},{"m":"Apr","v":22}]} /></Helmet>'
-  + '<div data-design="tw" className="p-10"><h1 className="text-3xl font-bold">Chart</h1>'
-  + '<Question data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"m","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}}} />'
-  + Array.from({ length: 40 }, (_, i) => `<p className="mt-4 text-lg">Read on a phone while the runtime is still on its way. ${i + 1}</p>`).join('')
-  + '</div>';
-
-const chart = await (await fetch(`${B}/api/artifacts`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
-  body: JSON.stringify({ title: 'mobile gate — chart', visibility:'public', markup: CHART_DOC, theme: 'manuscript' }),
-})).json();
-if (!chart.id) throw new Error(`the chart document did not publish: ${JSON.stringify(chart)}`);
-
-// A READER, not the owner: no shell to hydrate first, so the only race left is
-// the one under test — the reader's own chrome against the runtime. A fresh
-// context, because `open()` carries the owner's session cookie.
-const slow = await browser.newContext({ viewport: PHONE });
-const reader = await slow.newPage();
-const cdp = await slow.newCDPSession(reader);
-await cdp.send('Network.emulateNetworkConditions', {
-  offline: false, latency: 150, downloadThroughput: 1.5 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8,
-});
-await reader.goto(`${B}/a/${chart.id}`, { waitUntil: 'commit' });
-
-/*
- * Downloaded is not RUN — an `async` module still waits for the parser to reach
- * its own tag, which is at the end of <body>. So the probe is a side effect
- * only that module has: it stamps `aria-pressed` on the appearance choices the
- * server renders WITHOUT one. `responseEnd` is 0 while a request is in flight,
- * which is how the runtime entry is caught mid-air.
- */
-const loaded = async () => ({
-  ran: await reader.locator('[data-mx-reader-chrome]').count() === 1
-    && await reader.locator('[data-mx-inline-story]').count() === 1,
-});
-
-let ready = { ran: false };
-for (let i = 0; i < 400 && !ready.ran; i++) {
-  ready = await loaded();
-  if (ready.ran) break;
-  await reader.waitForTimeout(50);
-}
-check(ready.ran, `slow reader: the app mounted its inline document and protected controls (${ready.ran})`);
-
-/*
- * THE ANSWER MEASURED IS THE REVEAL, not the hide. The chrome is now
- * server-rendered HIDDEN (lib/story/reader/reader-chrome) and a scroll UP is what
- * brings it back, so "it is hidden after a downward scroll" is the state the
- * bytes arrived in and would pass with no JavaScript at all. Leaving that
- * state is something only the reader's own module can do.
- */
-await reader.evaluate(() => window.scrollBy(0, 300));
-await reader.waitForTimeout(250);
-// Re-asked HERE, because the premise is about this moment and not the last one.
-const scrolledAt = Date.now();
-await reader.evaluate(() => window.scrollBy(0, -80));
-let shownAfter = null;
-for (let i = 0; i < 20 && shownAfter === null; i++) {
-  if (!(await hiddenOn(reader))) shownAfter = Date.now() - scrolledAt;
-  else await reader.waitForTimeout(25);
-}
-check(shownAfter !== null && shownAfter <= 500,
-  `slow reader: the chrome answers the first scroll UP within 500ms, runtime or no runtime (${shownAfter === null ? 'never' : `${shownAfter}ms`})`);
-await slow.close();
-
-/*
- * AND THE FRAMED SHAPE KEEPS THE END-OF-PAGE RULE. The owner reads through an
- * opaque frame, so the page cannot measure where that document ends — it used
- * to compare the frame's offsets against its own metrics, which never move,
- * and the rule that keeps the bar off the footer was simply absent. The sample
- * carries the answer now (StoryScrollMessage.atBottom).
- */
-const framedView = await open(PHONE, '', chart.id);
-await framedView.waitForTimeout(2500);
-const chartFrame = framedView.mainFrame();
-await chartFrame.evaluate(() => window.scrollTo(0, 400));
-await framedView.waitForTimeout(400);
-check(await hiddenOn(chartFrame), 'framed: the dock leaves on a downward scroll inside the frame');
-await chartFrame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-await framedView.waitForTimeout(400);
-check(!(await hiddenOn(chartFrame)), 'framed: and comes back at the END of the document, where the footer is and there is no further scroll');
-await framedView.close();
+// ── 6. (retired) "the bar answers a scroll before the runtime has loaded" and the framed end-of-page rule measured
+// the reader chrome's scroll relay inside the document; the bar is the app page's own now, never scrolled away.
 
 /*
  * ── 7. the selection bubble on a TOUCH device ──────────────────────────────
@@ -543,8 +443,8 @@ await framedView.close();
 const touch = await browser.newPage({ viewport: PHONE, hasTouch: true });
 await becomeOwner(touch, B, st.token);
 await touch.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-await touch.waitForSelector('[data-mx-inline-story]', { timeout: 30_000 });
-const docFrame = await artifactDocument(touch);
+const docFrame = await documentFrame(touch);
+await docFrame.waitForSelector('[data-mx-inline-story]', { timeout: 30_000 });
 await docFrame.waitForSelector('p', { timeout: 30_000 });
 
 // A coarse pointer is the whole premise: a leg that silently took the mouse
@@ -614,26 +514,9 @@ check(placed.bottom > placed.top && placed.right > placed.left
 check(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
   `touch: every action is a 44px touch target (${placed.buttons.join(', ')}px)`);
 
-/*
- * …and clear of the DOCK. On an owner's shell the document's own copy of the
- * reader chrome is display:none (`.mx-framed`), so what a bubble inside the
- * frame can actually collide with is the PAGE's dock — the two boxes are
- * compared in page space. The frame-side clamp against a dock that IS parked
- * at the foot of the viewport is a unit case (selection-actions.ui.test.ts),
- * because no browser this gate can drive puts one there: the bubble needs a
- * capability, and everyone who has one is served the shell.
- */
-// The chrome container spans the viewport; its rail/byline are the actual
-// painted bottom controls. Hidden or non-overlapping controls cannot collide.
-const bottomControls = await touch.locator('.mx-reader-rail, [data-mx-reader-byline]').evaluateAll(elements => elements.flatMap(el => {
-  const style = getComputedStyle(el), box = el.getBoundingClientRect();
-  if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || !box.width || !box.height) return [];
-  return [{left: box.left, right: box.right, top: box.top, bottom: box.bottom}];
-}));
-const overlaps = bottomControls.filter(box => placed.left < box.right && placed.right > box.left
-  && placed.top < box.bottom && placed.bottom > box.top);
-check(placed.bottom > placed.top && overlaps.length === 0,
-  `touch: the bubble stays clear of visible bottom controls (${overlaps.length} overlaps)`);
+// "…and clear of the dock" is retired: the reader's controls are the app bar ABOVE the frame, outside the
+// document's viewport, so nothing at the foot of the screen can cover a bubble (selection-actions.ui.test.ts keeps
+// the frame-side clamp).
 
 // A tap, not a click: the whole point is the finger.
 await docFrame.locator('[aria-label="Comment on selected text"]').tap();

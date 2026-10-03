@@ -1,19 +1,21 @@
 import { artifactDocument } from './lib/artifact-document.mjs';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
 import { startDocument, becomeOwner } from '../lib/start-doc.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
 const rows = Array.from({length:15}, (_,i) => ({id:i+1,item:`Task ${i+1}`,owner:'TBD',hours:2,depends_on:i===1 || i===2 ? '["1"]' : '[]',tags:'[]',status:'backlog',sprint:''}));
 const fixture = await createEditableTableFixture(base, 15, {workspace:true,rows,seed:await startDocument(base)});
 console.log(`roadmap workspace: ${fixture.url}`);
-const browser = await chromium.launch();
+const browser = await launchChromium();
+/** Checks that fail without stopping the walk, so every later check still runs; reported together at the end. */
+const failures = [];
 try {
   const ownerPage = await browser.newPage({viewport:{width:1450,height:950}});
   ownerPage.on('pageerror', error => console.error(error.message));
   await becomeOwner(ownerPage,base,fixture.token);
   await ownerPage.goto(fixture.url);
-  await ownerPage.locator('[data-mx-inline-story]').waitFor();
+  // The document is framed by the app page on its own origin: every check on the document runs in that frame.
   let page = await artifactDocument(ownerPage);
   const switchView = async name => {
     await page.getByLabel('View', {exact:true}).click();
@@ -27,9 +29,11 @@ try {
   await page.locator('#view-dag [aria-label="Dependency 1 → 3"]').first().waitFor({timeout:3000});
   assert.equal(await page.getByLabel('Item 1',{exact:true}).isVisible(),false);
   await switchView('Sprint');
-  await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
+  // The link the reader copies, the app page's address, says what they narrowed the document to (lib/islands/url-sync).
+  const linked = await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint',null,{timeout:5000}).then(()=>true,()=>false);
+  if (!linked) failures.push(`the app page's address carries the view the reader chose ($view_mode=sprint): saw ${JSON.stringify(await ownerPage.evaluate(()=>location.search))}, the frame's ${JSON.stringify(await page.evaluate(()=>location.search))}`);
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const dialog=ownerPage.getByRole('dialog',{name:'Add sprint'});
+  const dialog=page.getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
@@ -68,7 +72,6 @@ try {
   }
   assert.equal(persisted?.rows.find(row=>row.id===1)?.sprint,'Quick sprint','sprint assignment persisted before reload');
   await ownerPage.reload({waitUntil:'load'});
-  await ownerPage.locator('[data-mx-inline-story]').waitFor();
   page = await artifactDocument(ownerPage);
   await page.getByLabel('Item 1',{exact:true}).waitFor({timeout:20_000});
   await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor({timeout:20_000});
@@ -80,9 +83,10 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.getByRole('option',{name:'Sprint',exact:true}).click();
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const modalBox=await dialog.boundingBox();
+  const modalBox=await page.getByRole('dialog',{name:'Add sprint'}).boundingBox();
   assert.ok(modalBox && modalBox.x>=0 && modalBox.x+modalBox.width<=390);
   await ownerPage.keyboard.press('Escape');
-  await dialog.waitFor({state:'hidden'});
+  await page.getByRole('dialog',{name:'Add sprint'}).waitFor({state:'hidden'});
+  if (failures.length) throw new Error(`roadmap-views: ${failures.length} check(s) failed:\n - ${failures.join('\n - ')}`);
   console.log('all good: views, Vega DAG, shared sprint modal, dropdown action, compact rows and narrow layout');
 } finally { await browser.close(); }

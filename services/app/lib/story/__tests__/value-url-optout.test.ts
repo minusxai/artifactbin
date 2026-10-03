@@ -98,7 +98,7 @@ describe('<Mutation reset="…">', () => {
     for (const [reset, offender] of [['rows', 'rows'], ['nope', 'nope'], ['draft nope', 'nope']] as const) {
       const errors = validateDataflow(flow(reset), []);
       expect(errors).toHaveLength(1);
-      expect(errors[0]!.message).toContain('name="add"');
+      expect(errors[0]!.message).toContain('<Mutation> "add"');
       expect(errors[0]!.message).toContain(offender);
     }
   });

@@ -2,9 +2,9 @@
  * THE READER PAGE ASSEMBLER (docs/phase2-architecture.md §2.2, §8, §9; contract AssembleInput).
  *
  * ONE pure function turns a compiled version plus one request's overlay into
- * the whole HTML document every reader path serves: `/a/:id` (server-rendered
- * reader chrome, the Solid app loaded on idle), `/raw` (neither), and the
- * domain post, export, offline file and CLI preview that are one or the other.
+ * the whole standalone HTML document every reader path serves: `/raw` (which
+ * the app page frames on the document's own origin), the domain post, the
+ * export capture, the offline file and the CLI preview.
  * No I/O, no database, no clock: the same input is the same bytes.
  *
  * What it adds to the stored, per-version parts is what one request decides:
@@ -13,9 +13,9 @@
  *     with the snapshot's server-drawn charts put into their slots;
  *   - the island data as `<script type="application/json" id="mx-story-data">`,
  *     every `<`, `>`, U+2028 and U+2029 escaped, only on a page that boots — the
- *     version's author script among it, as data for the sandboxed author frame;
- *   - the per-document module, its shared closure preloaded, and the idle SPA
- *     entry — every script a same-origin `src`, so the page runs under
+ *     version's author script among it, as data the page runtime runs;
+ *   - the per-document module and its shared closure preloaded — every
+ *     script a same-origin `src`, so the page runs under
  *     `script-src 'self'` with NO inline script at all;
  *   - link hints: never eager — every one (`prefetch`'s full list, `prerender`'s
  *     first few) waits for hover or press intent inside ONE speculation-rules
@@ -23,24 +23,18 @@
  *     inline `<link rel="prefetch">`, which the parser would fetch on load).
  *
  * Head order: fonts first (they block text), then the page's own module
- * closure, then the styles. The SPA's preloads go last, at the end of the
- * body: the app is the reader's second screen, and its bytes must never race
- * the ones the first screen paints with.
+ * closure, then the styles.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
-import type { IslandPageData } from '@/lib/islands/contract';
-import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
+import { AUTHOR_VENDOR_EXPORTS, LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands/contract';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/styles';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
-import { renderReaderChrome } from '@/lib/story/reader';
-import { APP_BAR_H } from '@/lib/story/reader';
-import { APP_FONT_FACES, APP_SHELL_FONT_PRELOADS } from '@/lib/serving/app-fonts';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/styles';
 import {
-  CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER,
+  CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild, type DrawnChart,
 } from './contract';
 import { splitCarriers, withStoredCarriers } from './carriers';
@@ -60,7 +54,7 @@ function renderOutlineRail(entries: readonly OutlineEntry[]): string {
 }
 
 export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): AssembledPage => {
-  const { compiled, overlay, chrome, spa, build } = input;
+  const { compiled, overlay, build } = input;
   const help = input.head?.help ?? null;
   // The stored module names the runtime by specifier; its URL and preload closure are this build's.
   const module = compiled.module ? bindModuleRef(compiled.module, build) : null;
@@ -77,10 +71,6 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const islandPreloads = module ? unique([module.url, ...module.imports]) : [];
   const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
   const rules = speculationRulesOf(compiled.links);
-  // The app shell normally defines this body face in shell.css. A compiled first paint
-  // runs before that stylesheet, while Mermaid measures sequence labels against body.
-  const appMonoFaces = spa ? APP_FONT_FACES.filter((face) => face.family === 'JetBrains Mono Variable' && face.style === 'normal')
-    .map((face) => `@font-face{font-family:"${face.family}";font-style:${face.style};font-display:${face.display};font-weight:${face.weight};src:url("${face.url}") format("${face.format}");${face.unicodeRange ? `unicode-range:${face.unicodeRange};` : ''}}`).join('') : '';
 
   const head =
     '<meta charset="utf-8">'
@@ -88,37 +78,27 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     // The agent pointer ahead of every preload and style, as server/app's withAgentDiscovery places it:
     // a shell tool that keeps only a page's first few kilobytes still sees it.
     + (help ? agentDiscoveryHead(help) : '')
-    // A chrome-less page is the framed or standalone copy (/raw): its links leave the frame.
-    + (chrome ? '' : '<base target="_top">')
+    // The page is the framed or standalone copy: its links leave the frame.
+    + '<base target="_top">'
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
-    + fontPreloadTags(unique([...input.fontPreloads, ...(spa ? APP_SHELL_FONT_PRELOADS : [])]), Boolean(spa))
+    + fontPreloadTags(unique(input.fontPreloads), false)
     + islandPreloads.map(modulePreload).join('')
     + (input.sheets
       // The standalone document's sheets, exactly (lib/story/styles/document-styles).
       ? `<style>${DOCUMENT_ROOT_CSS}</style>` + input.sheets.map((sheet) => styleTag(sheet.attr, sheet.css)).join('')
-      : `<style>${appMonoFaces}:root{--mx-vh:100vh${spa ? ';--font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,monospace' : ''}}body{margin:0${spa ? ';font-size:14px;font-family:var(--font-mono)' : ''}}</style>`)
-    + (chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '')
-    // The page the app adopts (/a/:id): its bar is the top of the page from a phone's width up, so the
-    // story reserves it before first paint and the app's arrival moves nothing. On <body>: the story
-    // root is the body's own child (a rule on the root itself does not hold).
-    // Its ground too: the document's own (solid/pages/Document DOCUMENT_GROUND), never the app's dotted
-    // page, so a reload (leaving edit mode) does not flash the dots in the margins before the app adopts it.
-    + (spa ? styleTag('data-mx-app-reserve', `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`
-      + 'body:has(> [data-mx-inline-story]){background:#ffffff;background-image:none}body:has(> [data-mx-inline-story].dark){background:#0b0b0c}') : '')
+      : '<style>:root{--mx-vh:100vh}body{margin:0}</style>')
     + (input.css && !input.sheets ? styleTag('data-mx-story-css', input.css) : '')
     + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
 
   const body =
     story
     + literals
-    + (chrome ? renderReaderChrome(chrome) : '')
     // Page furniture after the story root, never inside it: the hydrated tree never sees it.
     + (input.footer?.html ?? '')
     + (module ? `<script type="application/json" id="${ISLAND_DATA_ID}">${scriptJson({ ...islandData(input), ...(moduleData ? { moduleData } : {}) })}</script>` : '')
     + behaviorSrcs.map((src) => moduleScript(src)).join('')
     + (module ? moduleScript(module.url) : '')
-    + (spa ? unique(spa.preload).map(modulePreload).join('') + moduleScript(spa.entry, ` ${SPA_IDLE_ATTR}=""`) : '')
     // The pointer again as the page's LAST line, for a reader that keeps only the tail (lib/agent-discovery).
     + (help ? agentDiscoveryTail(help) : '');
 
@@ -126,7 +106,8 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     `<!doctype html><html class="${escapeHtml(input.colorMode)}"`
     // The standalone document's sheets name the theme on the DOCUMENT element (`:root:where([data-theme])`).
     + (input.sheets && input.theme ? ` data-theme="${escapeHtml(input.theme)}"` : '')
-    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
+    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}`
+    + `${input.appOrigin ? ` data-mx-app-origin="${escapeHtml(input.appOrigin)}"` : ''}>`
     + `<head>${head}</head><body${liveAttrs(input.live ?? null)}>${body}</body></html>`;
 
   const headers: Record<string, string> = {};
@@ -144,7 +125,7 @@ const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
 const liveAttrs = (live: AssembleInput['live']): string =>
-  (live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : '');
+  (live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"${live.direct ? ` ${LIVE_DIRECT_ATTR}=""` : ''}` : '');
 
 /**
  * `crossorigin` on every module fetch, script and preload alike: a `/raw` copy
@@ -153,12 +134,12 @@ const liveAttrs = (live: AssembleInput['live']): string =>
  * warms an entry the script cannot use.
  */
 const modulePreload = (href: string): string => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`;
-const moduleScript = (src: string, attrs = ''): string => `<script type="module" src="${escapeHtml(src)}" crossorigin${attrs}></script>`;
+const moduleScript = (src: string): string => `<script type="module" src="${escapeHtml(src)}" crossorigin></script>`;
 
 /**
- * The description, canonical link and social card the reader paths emit today
- * (server/app withInitialStory, lib/story/document): `og:description` falls
- * back to the page description, as the app page's does.
+ * The description, canonical link and social card the standalone page emits
+ * (the app page names the document the same way, lib/serving/document-frame):
+ * `og:description` falls back to the page description.
  */
 function headMetadata(head: AssembleHead | null): string {
   if (!head) return '';
@@ -196,19 +177,25 @@ function islandData(input: AssembleInput): IslandPageData {
     ...(input.compiled.templateBrBytes != null ? { templateBrBytes: input.compiled.templateBrBytes } : {}),
     ...(overlay.state ? { state: overlay.state } : {}),
     results: input.snapshot?.results ?? null,
-    appPage: input.spa !== null,
     ...(overlay.doors ?? {}),
     ...((overlay.assetsUrl ?? overlay.doors?.assetsUrl) ? { assetsUrl: overlay.assetsUrl ?? overlay.doors?.assetsUrl } : {}),
-    ...(overlay.managedAssets ? { managedAssets: overlay.managedAssets } : {}),
     signedIn: overlay.signedIn,
     hold: [...(overlay.hold ?? [])],
     ...(overlay.sqliteWasm ? { sqliteWasm: overlay.sqliteWasm } : {}),
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
-    // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to
-    // hand to its sandboxed frame; it is never a script of this page (contract CompiledPage.authorScript).
+    // The version's author script rides as DATA (escaped by scriptJson): boot hands it to the page runtime,
+    // which runs it as a module of this document (contract CompiledPage.authorScript). The runtime's chunk
+    // (`vendor`) is named whenever the page declares data too, for boot's `window.page`.
     ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript } : {}),
+    ...(input.compiled.authorScript || input.compiled.plan ? { vendor: vendorUrls(input.build.manifest) } : {}),
   };
+}
+
+/** What a script may import bare, each at the serving build's chunk (IslandPageData.vendor; build-islands AUTHOR_VENDOR_SPECIFIERS). */
+const AUTHOR_VENDOR = [...Object.keys(AUTHOR_VENDOR_EXPORTS), '@mx/page-runtime'];
+function vendorUrls(manifest: Readonly<Record<string, string>>): Record<string, string> {
+  return Object.fromEntries(AUTHOR_VENDOR.flatMap((spec) => (manifest[spec] ? [[spec, manifest[spec]!]] : [])));
 }
 
 /**

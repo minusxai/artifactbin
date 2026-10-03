@@ -26,7 +26,6 @@
  */
 import { escapeText } from '@artifactbin/utils/escape';
 import { transformAsync, type PluginObj, type types as BabelTypes } from '@babel/core';
-// @ts-expect-error babel-preset-solid ships no types; it is a Babel preset function.
 import solidPreset from 'babel-preset-solid';
 import * as solid from 'solid-js';
 import * as solidWeb from 'solid-js/web';

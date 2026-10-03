@@ -12,7 +12,7 @@
  * document's own `font-*` metas.
  */
 import { describe, expect, it } from 'vitest';
-import { firstScreenFonts, readerChromeFonts } from '../styles/first-screen-fonts';
+import { firstScreenFonts } from '../styles/first-screen-fonts';
 import { storyBodyFor } from '../document/body';
 import { documentFonts } from '../styles/document-fonts';
 import { STORY_FONT_THEMES, type StoryFontAsset } from '@/lib/data/story/story-fonts';
@@ -33,10 +33,10 @@ function latin(family: string, style: 'normal' | 'italic' = 'normal'): string {
 const urls = (faces: readonly StoryFontAsset[]) => [...new Set(faces.map((f) => f.url))].sort();
 const expected = (...list: string[]) => [...new Set(list)].sort();
 
-function select(theme: string | null, source: string, importedFaces: StoryFontAsset[] = []) {
+function select(theme: string | null, source: string) {
   const split = storyBodyFor(source);
   if (!split) throw new Error('fixture did not parse');
-  return urls(firstScreenFonts({ theme, nodes: split.body, docFonts: documentFonts(split.content), importedFaces }));
+  return urls(firstScreenFonts({ theme, nodes: split.body, docFonts: documentFonts(split.content) }));
 }
 
 const PROSE = '<h1 className="text-4xl font-semibold">Typography holds still</h1><p>The body copy a reader starts reading.</p>';
@@ -100,15 +100,19 @@ describe('firstScreenFonts — per theme, from the nodes', () => {
   });
 
   it('a document font meta replaces its slot, preloaded only when that slot is painted', () => {
-    const lobster: StoryFontAsset = { family: 'Lobster', url: '/webfonts/0123456789abcdef0123456789abcdef.woff2', weight: '400', preload: true };
-    const lobsterExt: StoryFontAsset = { family: 'Lobster', url: '/webfonts/fedcba9876543210fedcba9876543210.woff2', weight: '400' };
-    const head = '<Helmet><meta name="font-display" content="Lobster" /></Helmet>';
-    expect(select('organic', head + PROSE, [lobster, lobsterExt])).toEqual(expected(lobster.url, latin('Inter')));
-    expect(select(null, head + PROSE, [lobster, lobsterExt])).toEqual([lobster.url]);
+    const head = '<Helmet><meta name="font-display" content="JetBrains Mono" /></Helmet>';
+    expect(select('organic', head + PROSE)).toEqual(expected(latin('JetBrains Mono'), latin('Inter')));
+    expect(select(null, head + PROSE)).toEqual([latin('JetBrains Mono')]);
     // No heading on the first screen: the display override is declared but never painted.
-    expect(select('organic', head + '<p>prose only</p>', [lobster, lobsterExt])).toEqual([latin('Inter')]);
+    expect(select('organic', head + '<p>prose only</p>')).toEqual([latin('Inter')]);
+  });
+
+  it('a Google family is never preloaded: its files are named by its own stylesheet, not this origin', () => {
+    const head = '<Helmet><meta name="font-display" content="Lobster" /></Helmet>';
+    expect(select('organic', head + PROSE)).toEqual([latin('Inter')]);
+    expect(select(null, head + PROSE)).toEqual([]);
     const body = '<Helmet><meta name="font-body" content="Lobster" /></Helmet>';
-    expect(select('manuscript', body + PROSE, [lobster, lobsterExt])).toEqual(expected(latin('Cormorant Garamond'), lobster.url));
+    expect(select('manuscript', body + PROSE)).toEqual([latin('Cormorant Garamond')]);
   });
 
   it('text a first screen does not render is not counted', () => {
@@ -125,19 +129,9 @@ describe('firstScreenFonts — per theme, from the nodes', () => {
   it('never names a face twice, and every face is one the theme or the document declares', () => {
     for (const t of STORY_THEMES) {
       const split = storyBodyFor(EYEBROW + PROSE + '<p><em>x</em><code>y</code></p>')!;
-      const faces = firstScreenFonts({ theme: t.name, nodes: split.body, docFonts: documentFonts(split.content), importedFaces: [] });
+      const faces = firstScreenFonts({ theme: t.name, nodes: split.body, docFonts: documentFonts(split.content) });
       expect(faces.length, t.name).toBe(new Set(faces.map((f) => f.url)).size);
       for (const f of faces) expect(STORY_FONT_THEMES[t.name], `${t.name} -> ${f.url}`).toContainEqual(f);
     }
-  });
-});
-
-describe('readerChromeFonts — the served document\'s own chrome', () => {
-  it('is set in the theme mono slot (the body face where a theme has no mono)', () => {
-    expect(urls(readerChromeFonts({ theme: 'industry' }))).toEqual([latin('JetBrains Mono')]);
-    expect(urls(readerChromeFonts({ theme: 'terminal' }))).toEqual([latin('JetBrains Mono')]);
-    expect(urls(readerChromeFonts({ theme: 'organic' }))).toEqual([latin('Inter')]);
-    expect(urls(readerChromeFonts({ theme: 'manuscript' }))).toEqual([latin('Noto Serif')]);
-    expect(urls(readerChromeFonts({ theme: null }))).toEqual([]);
   });
 });

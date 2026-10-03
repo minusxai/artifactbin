@@ -96,6 +96,8 @@ export default defineConfig({
       // cap test trips on a payload a test can build rather than on a real one.
       PDF__MAX_BYTES: '20000',
       FILES__MAX_BYTES: '10000',
+      // Required (every document on its own origin, lib/platform/config PAGES_HOST): the development host.
+      APP__PAGES_HOST: 'lvh.me',
     },
     projects: [
       {
@@ -143,6 +145,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
+            'services/browser/__tests__/session-pages.test.ts',
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
           ],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
@@ -167,6 +170,8 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
+            // Launches real Chromium: integration only, like contract.test.ts.
+            'services/browser/__tests__/session-pages.test.ts',
             ...SERVER_BOOT_TESTS,
           ],
           exclude: ['**/node_modules/**'],

@@ -26,7 +26,8 @@ const set = (target: object, key: string, value: unknown) =>
 /** A framed window whose document is `scrollHeight` tall, scrolled to `scrollY`. */
 const framed = (scrollY: number, scrollHeight: number) => {
   const posts: unknown[] = [];
-  set(window, 'parent', { postMessage: (message: unknown) => { posts.push(message); } });
+  // The frame also greets its parent (frame-bridge/door); only the scroll samples are this test's subject.
+  set(window, 'parent', { postMessage: (message: unknown) => { if ((message as { type?: unknown })?.type === STORY_SCROLL_MESSAGE) posts.push(message); } });
   set(window, 'scrollY', scrollY);
   set(window, 'innerHeight', 800);
   set(document.documentElement, 'scrollHeight', scrollHeight);

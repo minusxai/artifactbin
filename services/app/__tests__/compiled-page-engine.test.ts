@@ -10,6 +10,7 @@
  *
  * Real routes, the harness's database, the reader switch in shadow for this file.
  */
+import { framedDocument } from './harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -51,8 +52,9 @@ const SALES = (ds: string) => `<Helmet><Value name="region" type="string" />
 </Helmet><div><select aria-label="Region" value="$region" options="$regions" /><p>Total <Number data="$sales" col="revenue" agg="sum" /></p></div>`;
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }];
 
+/** The document the app page frames, on its own origin, as its reader loads it. */
 async function appPage(id: string): Promise<IslandPageData> {
-  const res = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+  const res = (await framedDocument(app, `/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } }))!;
   expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
   return islandData(await res.text());
 }

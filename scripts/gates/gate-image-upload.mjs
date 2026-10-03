@@ -13,9 +13,10 @@
  * and a real ⌘V while it is selected — and asserts only its src changed.
  *
  * The paste/drop half is realm-sensitive: the listeners live inside the SERVED
- * document (its own window, sandboxed without allow-same-origin), so the events
- * are dispatched THERE through Playwright's frame API — a page-level dispatch
- * would prove nothing, and `contentDocument` is null from the parent. Every
+ * document (its own window, framed by the app page on the document's own
+ * origin), so the events are dispatched THERE through Playwright's frame API — a
+ * page-level dispatch would prove nothing, and `contentDocument` is null from
+ * the parent. Every
  * check asserts the image actually PAINTS (naturalWidth > 0) and counts only
  * `/a/<id>/raw` sources: the credits-footer logo made an earlier version of
  * this gate pass while nothing was being inserted at all.
@@ -24,8 +25,9 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { launchChromium } from './lib/browser.mjs';
+import { documentFrame as framedDocument, INLINE_STORY } from './lib/page-facts.mjs';
+import { PAGES_HOST } from './lib/browser.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -60,18 +62,15 @@ async function mint() {
 /**
  * Count <img> that have actually decoded to non-zero pixels.
  *
- * Two realms to look in, and both matter: the EDIT canvas is a same-origin
- * frame the page can reach into, while the SERVED document is opaque-origin
- * and only reachable through the frame API. Ask Playwright for whichever
- * frame is there.
+ * The document — read or edited — is the app page's frame on its own origin,
+ * reachable only through the frame API.
  */
 async function paintedImages(page) {
   const countIn = (ctx) => ctx.evaluate(async () => {
     const deadline = Date.now() + 8000;
     const count = () => {
       const own = Array.from(document.querySelectorAll('[data-mx-inline-story] img'));
-      // ONLY artifact images. A served document also carries the reader
-      // chrome's logo (/logo-128.png), and counting it made this check pass
+      // ONLY artifact images: counting any image once made this check pass
       // while a freshly inserted image rendered its literal `ref:<id>` — which
       // is exactly the bug that hid here until gate-web-assets measured properly.
       return own
@@ -83,8 +82,7 @@ async function paintedImages(page) {
     return n;
   });
 
-  await page.locator('[data-mx-inline-story]').waitFor();
-  return countIn(page);
+  return countIn(await documentFrame(page));
 }
 
 async function openEditor(page, st) {
@@ -100,16 +98,17 @@ await becomeOwner(page, B, st.token);
  * Dispatch a paste OR drop carrying a File, inside the DOCUMENT's own realm.
  *
  * This has to run in the frame, not the page: editing happens in the served
- * document, which is sandboxed without allow-same-origin, so the parent cannot
- * reach `contentDocument` and a page-level dispatch would prove nothing. That
- * unreachability is also why this leg silently asserted nothing for a while —
- * and the feature it covers had in fact been lost. Playwright can evaluate
- * inside an opaque frame even though script cannot, which is what makes a real
- * end-to-end assertion possible here.
+ * document, on its own origin, so the parent cannot reach `contentDocument` and
+ * a page-level dispatch would prove nothing. That unreachability is also why
+ * this leg silently asserted nothing for a while — and the feature it covers had
+ * in fact been lost. Playwright can evaluate inside a cross-origin frame even
+ * though script cannot, which is what makes a real end-to-end assertion possible
+ * here.
  */
 async function documentFrame(page) {
-  await page.locator('[data-mx-inline-story]').waitFor();
-  return page.mainFrame();
+  const frame = await framedDocument(page);
+  await frame.waitForSelector(INLINE_STORY, { state: 'visible', timeout: 30_000 });
+  return frame;
 }
 
 async function dispatchFileEvent(page, kind, b64) {
@@ -130,7 +129,32 @@ async function dispatchFileEvent(page, kind, b64) {
   }, { kind, b64 });
 }
 
-const browser = await chromium.launch();
+/*
+ * A browser whose clipboard the gate can write. `navigator.clipboard` exists only in a secure context: the app was
+ * `localhost` (secure by definition) and is now `app.lvh.me` over http, with the document framed on its own origin
+ * (`<hex id>.lvh.me`), so both are named secure for this browser — exactly what `localhost` was — and both are
+ * granted the clipboard. Real Chrome where it is installed — the clipboard is what these sections are about, and it
+ * is the browser people actually paste in; a machine without it gets Playwright's own full Chromium.
+ */
+async function clipboardBrowser(docId) {
+  const app = new URL(B);
+  const origins = [app.origin, `${app.protocol}//${Buffer.from(docId, 'utf8').toString('hex')}.${PAGES_HOST}${app.port ? `:${app.port}` : ''}`];
+  const args = [`--unsafely-treat-insecure-origin-as-secure=${origins.join(',')}`];
+  // The full browser, never the headless shell: the shell ignores the secure-origin switch.
+  const chrome = await launchChromium({ channel: 'chrome', headless: true, args })
+    .catch(() => launchChromium({ channel: 'chromium', headless: true, args }));
+  const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
+  for (const origin of origins) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+  return { chrome, context };
+}
+
+/** Write the clipboard from the app page, focused first: a click into the document's frame left the focus there. */
+async function writeClipboard(page, fn) {
+  await page.evaluate(() => window.focus());
+  await page.evaluate(fn);
+}
+
+const browser = await launchChromium();
 
 // ── 1. the file picker: the guaranteed path ────────────────────────────────
 {
@@ -226,18 +250,9 @@ const browser = await chromium.launch();
    * passed on the laptop it was written on and tested nothing on Linux.
    */
   const PASTE = process.platform === 'darwin' ? 'Meta+V' : 'Control+V';
-  /*
-   * Real Chrome where it is installed — the clipboard is what this section is
-   * about, and it is the browser people actually paste in. A machine without
-   * it (a bare container, a fresh checkout) gets Playwright's own Chromium.
-   */
-  const chrome = await chromium.launch({ channel: 'chrome', headless: true })
-    .catch(() => chromium.launch({ headless: true }));
-  const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
-  const page = await context.newPage();
-
   const st = await mint();
+  const { chrome, context } = await clipboardBrowser(st.id);
+  const page = await context.newPage();
   await fetch(`${B}/api/artifacts/${st.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
@@ -251,7 +266,7 @@ const browser = await chromium.launch();
   await openEditor(page, st);
   const frame = await documentFrame(page);
 
-  await page.evaluate(() => navigator.clipboard.writeText('PASTED_TEXT_OK'));
+  await writeClipboard(page, () => navigator.clipboard.writeText('PASTED_TEXT_OK'));
   // The editor replaces the paragraph node after a text edit; keep a locator that resolves the current one.
   const para = frame.locator('p').filter({ hasText: 'START' }).first();
   await para.click();
@@ -262,7 +277,7 @@ const browser = await chromium.launch();
   check(text.includes('PASTED_TEXT_OK'), `a real text paste lands in the paragraph (got ${JSON.stringify(text)})`);
   check(text.includes('START'), 'and it did not replace what was already there');
 
-  await page.evaluate(async () => {
+  await writeClipboard(page, async () => {
     // Encoded by Chrome itself, so the clipboard will certainly accept it.
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
@@ -321,7 +336,7 @@ const browser = await chromium.launch();
   await page.route(`**/a/${st.id}/raw*`, async (route) => { await held; await route.continue(); });
   await becomeOwner(page, B, st.token);
   await page.goto(`${B}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
-  const frame = await artifactDocument(page, { timeout: 30_000 });
+  const frame = await documentFrame(page);
   await frame.waitForSelector('img[alt="blurred"]', { timeout: 20_000 });
 
   const during = await frame.evaluate(() => {
@@ -363,12 +378,6 @@ const browser = await chromium.launch();
  */
 {
   const PASTE = process.platform === 'darwin' ? 'Meta+V' : 'Control+V';
-  const chrome = await chromium.launch({ channel: 'chrome', headless: true })
-    .catch(() => chromium.launch({ headless: true }));
-  const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
-  const page = await context.newPage();
-
   const st = await mint();
   const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` };
   // The minted artifact becomes the ORIGINAL picture; the document shows it.
@@ -382,6 +391,8 @@ const browser = await chromium.launch();
         + `<img src="ref:${st.id}" alt="the original" className="w-40 rounded-xl" /></div>`,
     }),
   })).json();
+  const { chrome, context } = await clipboardBrowser(doc.id);
+  const page = await context.newPage();
   const stored = async () => (await (await fetch(`${B}/api/artifacts/${doc.id}`, { headers: auth })).json()).markup ?? '';
   const imgTag = (markup) => /<img\b[^>]*\/>/.exec(markup)?.[0] ?? '';
   const idOf = (tag) => / id="([^"]+)"/.exec(tag)?.[1];
@@ -423,7 +434,7 @@ const browser = await chromium.launch();
   check((afterDrop.match(/<img\b/g) ?? []).length === 1, 'and nothing was inserted beside it');
 
   // 7b. a real ⌘V while the image is selected
-  await page.evaluate(async () => {
+  await writeClipboard(page, async () => {
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');

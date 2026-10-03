@@ -28,17 +28,28 @@ export interface ServerIdentityDocument {
 }
 
 /**
+ * THE LOCAL DEVELOPMENT HOSTS, the only names plain HTTP is accepted on: loopback
+ * (`localhost`, `127.0.0.1`, `[::1]`), and the names reserved for or resolving
+ * to loopback — `*.localhost` (RFC 6761), `lvh.me` and `*.lvh.me` (127.0.0.1 in
+ * public DNS; development's pages host, CONTRIBUTING.md) and `*.test` (RFC 6761).
+ * Takes a WHATWG `URL.hostname`, so IPv6 arrives bracketed and names lowercased.
+ */
+export function isLocalDevelopmentHost(hostname: string): boolean {
+  return ['localhost', '127.0.0.1', '[::1]', 'lvh.me'].includes(hostname)
+    || ['.localhost', '.lvh.me', '.test'].some((suffix) => hostname.length > suffix.length && hostname.endsWith(suffix));
+}
+
+/**
  * THE ORIGIN RULE, for every origin this product accepts from a person or a
- * server: HTTPS, or HTTP on loopback for development, and an origin only —
- * no path, query, fragment or userinfo. `null` when the value is not one, so a
- * caller chooses between refusing (the CLI's `normalizeServer`) and ignoring
- * (a malformed entry in a served document).
+ * server: HTTPS, or HTTP on a local development host (`isLocalDevelopmentHost`),
+ * and an origin only — no path, query, fragment or userinfo. `null` when the
+ * value is not one, so a caller chooses between refusing (the CLI's
+ * `normalizeServer`) and ignoring (a malformed entry in a served document).
  */
 export function normalizeOrigin(value: string): string | null {
   let url: URL;
   try { url = new URL(value); } catch { return null; }
-  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && local))
+  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && isLocalDevelopmentHost(url.hostname)))
     || url.username || url.password || url.search || url.hash || url.pathname !== '/') return null;
   return url.origin;
 }

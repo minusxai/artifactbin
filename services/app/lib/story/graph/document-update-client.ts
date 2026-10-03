@@ -1,7 +1,6 @@
 import {isPersonMentionHref} from '../../annotations/person-mentions';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../validation/atlas-schemas';
 import {parseJsx} from '../../jsx/parse';
-import {collectExternalAssetUrls} from '../assets/external-images';
 import {canonicalText} from '../annotations/annotation-range';
 import type {JsxNode} from '../../jsx/types';
 import {parseAnnotationOperations} from '../annotations/annotation-edits';
@@ -18,8 +17,6 @@ import {validateMarkupStructure} from '../document/local-validation';
 import {stampNodeIds,nodeIndex,hasAmbiguousLegacyAliases} from '../document/node-ids';
 import {canonicalizeMarkup} from '../document/canonical-source';
 import {repairJsxSource} from '../../jsx/repair';
-import {sanitizeStoryMarkupCss} from '../../data/story/banned-css';
-import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from '../reader/managed-iframe-source';
 import {extractClassCandidates,hasDesignSystemMarker} from '../../data/story/story-css';
 export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
 export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
@@ -30,7 +27,7 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
  let source=change.operations?graphSource(createDocumentGraph(applyOperationsToNodes(graphNodes(base.document),change.operations),base.version)):change.source??before;
  source=repairJsxSource(source)?.source??source;
  if(source.includes('\0')||!source.isWellFormed())throw new Error('Document source must be valid Unicode without NUL characters');
- source=canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(source,sanitizeStoryMarkupCss)));
+ source=canonicalizeMarkup(source);
  if(hasAmbiguousLegacyAliases(source))throw new Error('Ambiguous duplicate legacy annotation anchors');
  const identity=stampNodeIds(source,{previousSource:before,reservedIds:Object.keys(base.document.claimedIds),retireLegacyAliases:true});
  const checked=validateMarkupStructure(identity.source);
@@ -68,22 +65,20 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
 export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:ClientDocumentChange):DocumentUpdate {
  return prepareClientDocument(base,change).update;
 }
-/** External reference shapes and cached assets are authoring inputs. Resolve
- * only the affected context before submitting the independent atomic commit. */
-export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>,onWarnings?:(warnings:NonNullable<DocumentResourcePreparation['warnings']>)=>void):Promise<DocumentUpdate> {
- return attachAuthoringContext(prepareClientDocument(base,change),prepareContext,onWarnings);
+/** External reference shapes are authoring inputs. Resolve only the affected
+ * context before submitting the independent atomic commit. */
+export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>):Promise<DocumentUpdate> {
+ return attachAuthoringContext(prepareClientDocument(base,change),prepareContext);
 }
-/** Resolve a prepared update's authoring context (asset warnings, dataset bindings) and attach it. */
-export async function attachAuthoringContext(prepared:{update:DocumentUpdate;context?:string},prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>,onWarnings?:(warnings:NonNullable<DocumentResourcePreparation['warnings']>)=>void):Promise<DocumentUpdate> {
- if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.warnings?.length)onWarnings?.(resources.warnings);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
+/** Resolve a prepared update's authoring context (dataset bindings) and attach it. */
+export async function attachAuthoringContext(prepared:{update:DocumentUpdate;context?:string},prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>):Promise<DocumentUpdate> {
+ if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
  return prepared.update;
 }
 export function needsAuthoringContext(source:string):boolean {
- const assets=collectExternalAssetUrls(source);
- if(assets.images.length||assets.fonts.length||assets.pdfs.length)return true;
  const parsed=parseJsx(source);if(!parsed.ok)return false;
  const needs=(nodes:JsxNode[]):boolean=>nodes.some(node=>{
-  if(node.type!=='element'||node.tag==='Iframe')return false;
+  if(node.type!=='element')return false;
   if(['Icon','Query','Mutation','Question'].includes(node.tag))return true;
   if(node.tag==='meta'&&node.attributes.some(a=>a.name==='name'&&a.value.static&&String(a.value.json).startsWith('font-')))return true;
   if(node.attributes.some(a=>a.value.static&&typeof a.value.json==='string'&&a.value.json.startsWith('ref:')))return true;

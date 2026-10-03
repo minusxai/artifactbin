@@ -12,6 +12,8 @@
  *   guest owner who made it) — gets the page's credentialed doors (`signedIn` in the data island), so
  *   the store's write check answers for them, as today's reader page does; a guest does not.
  */
+import { framedDocument } from './harness';
+import { pagesOriginFor, pagesSite } from '@/lib/serving/pages-origin';
 import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request, agentCookie } from '@/__tests__/harness';
@@ -44,30 +46,31 @@ const POLL = (ds: string) => '<Helmet><Value name="choice" type="string" default
   + `<Import name="votes" src="ref:${ds}" /><Mutation name="vote">{\`insert into votes.rows (choice) values ($choice)\`}</Mutation></Helmet>`
   + '<div><Button run="$vote">Vote</Button></div>';
 
-describe('a held connection is a credentialed reader on the compiled app page', () => {
+describe('a held connection is a credentialed reader on the document the app page frames', () => {
   it('the guest owner\'s page carries signedIn (the session doors); a guest\'s does not', async () => {
     const t = await mintToken('behaviour');
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'votes', dataset: [{ choice: 'ramen' }], columns: [{ name: 'choice', type: 'string' }], access: 'readwrite', visibility: 'unlisted' } }));
     const ds = ((await made.json()) as { id: string }).id;
     const id = await publish(t.token, { title: 'Poll', markup: POLL(ds) });
 
-    const guest = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    const guest = (await framedDocument(app, `/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } }))!;
     expect(guest.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(islandData(await guest.text()).signedIn).toBe(false);
 
-    const held = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html', cookie: await agentCookie([t.id]) } });
+    const held = (await framedDocument(app, `/a/${id}?reader=compiled`, { headers: { accept: 'text/html', cookie: await agentCookie([t.id]) } }))!;
     expect(held.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const data = islandData(await held.text());
     expect(data.signedIn).toBe(true);
-    expect(data.mutateUrl).toBe(`/a/${id}/mutate`);
+    // On its own origin its doors are absolute, called directly with the pages cookie.
+    expect(data.mutateUrl).toBe(`${pagesOriginFor(id, pagesSite())}/a/${id}/mutate`);
   });
 });
 
-describe('the compiled app page holds its own live stream until the app loads', () => {
+describe('the framed document holds its own live stream', () => {
   it('a prose page (no island module) loads the page behaviour and names its live identity; so does an interactive one', async () => {
     const t = await mintToken('behaviour');
     const prose = await publish(t.token, { title: 'Prose', markup: '<div><h1>Prose</h1><p>Just words.</p></div>' });
-    const page = await app.request(`/a/${prose}?reader=compiled`, { headers: { accept: 'text/html' } });
+    const page = (await framedDocument(app, `/a/${prose}?reader=compiled`, { headers: { accept: 'text/html' } }))!;
     expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const doc = new JSDOM(await page.text()).window.document;
     const scripts = [...doc.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'));
@@ -77,7 +80,7 @@ describe('the compiled app page holds its own live stream until the app loads', 
     expect(doc.body.getAttribute('data-mx-live-edit')).toBeTruthy();
 
     const kit = await publish(t.token, { title: 'Tabs', markup: '<Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">One</TabsContent><TabsContent value="b">Two</TabsContent></Tabs>' });
-    const interactive = new JSDOM(await (await app.request(`/a/${kit}?reader=compiled`, { headers: { accept: 'text/html' } })).text()).window.document;
+    const interactive = new JSDOM(await (await framedDocument(app, `/a/${kit}?reader=compiled`, { headers: { accept: 'text/html' } }))!.text()).window.document;
     expect([...interactive.querySelectorAll('script[type="module"]')].map((s) => s.getAttribute('src'))).toContain(loadCompilerBuild().manifest['@mx/page']);
   });
 });

@@ -56,7 +56,8 @@ export function PopoverContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
     onMount(() => {
       const home = document.createComment('popover-home'); holder.before(home);
       createEffect(() => {
-        const destination = ctx.open() ? island.trustedPortal() : null;
+        // In the document's story root when it is styled there (a framed document), as an unserved popover's portal.
+        const destination = ctx.open() ? overlayDestination(island) : null;
         if (destination) destination.append(holder);
         else home.parentNode?.insertBefore(holder, home.nextSibling);
       });
@@ -160,7 +161,7 @@ export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
     onMount(() => {
       const home = document.createComment('tooltip-home'); holder.before(home);
       createEffect(() => {
-        const destination = ctx.open() ? island.trustedPortal() ?? document.body : null;
+        const destination = ctx.open() ? overlayDestination(island) ?? document.body : null;
         if (destination) destination.append(holder);
         else home.parentNode?.insertBefore(holder, home.nextSibling);
       });

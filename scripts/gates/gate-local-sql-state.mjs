@@ -1,18 +1,18 @@
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
-import { servedTopLevel } from './lib/page-facts.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: reactive JSX, document-local SQL, and Dialog over both document
  * transports. Local state belongs to one loaded document: once the page's
  * engine is loaded, a local-table write and the queries over it run in the
  * page and never reach a route, and it never becomes an artifact or dataset
- * write.
+ * write. Every reader (anonymous or owner) gets the document framed on its own
+ * origin, posting to its own doors: one transport, read inside the frame.
  *
  * usage: node scripts/gates/gate-local-sql-state.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
@@ -54,10 +54,10 @@ const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Import n
 check(!!dataset.id && !!doc.id && !!aclDoc.id, `fixtures published (${dataset.id}, ${doc.id})`);
 if (!dataset.id || !doc.id || !aclDoc.id) throw new Error(`fixture publish failed: ${JSON.stringify({dataset, doc, aclDoc})}`);
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const sink = await startMailSink();
 try {
-const exercise = async (page, framed, documentId) => {
+const exercise = async (page, who, documentId) => {
   const routeBodies = [];
   page.on('request', request => {
     if (request.method() === 'POST' && request.url().includes(`/a/${documentId}/`)) {
@@ -65,21 +65,22 @@ const exercise = async (page, framed, documentId) => {
     }
   });
   await page.goto(`${B}/a/${documentId}?$choice=b`, {waitUntil:'load'});
-  const frame = framed ? await artifactDocument(page) : page.mainFrame();
-  const root = framed ? '#root ' : '';
+  const frame = await documentFrame(page);
+  // The author iframe's `#root` is gone: the story is the framed document's own body.
+  const root = '';
   const named = label => `${root}[aria-label="${label}"]`;
   await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '1', root, {timeout:20_000}).catch(async error => {
     throw new Error(`${error.message}; page=${(await frame.locator('body').innerText()).slice(0, 1000)}`);
   });
   await frame.waitForFunction(() => document.documentElement.hasAttribute('data-mx-ready'));
-  check((await frame.textContent(named('Branch'))) === 'bee', `${framed ? 'framed' : 'top-level'} URL scalar seeds the ternary`);
+  check((await frame.textContent(named('Branch'))) === 'bee', `${who}: URL scalar seeds the ternary`);
   await page.waitForTimeout(500);
   await frame.click(named('Add draft'));
   await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '2', root);
   await frame.click(named('Add draft'));
   await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '3', root);
   await frame.waitForFunction(root => !document.querySelector(`${root}[aria-label="Add draft"]`)?.hasAttribute('disabled'), root);
-  check(true, `${framed ? 'relayed' : 'direct'} repeated local table edits feed the dependent query`);
+  check(true, `${who}: repeated local table edits feed the dependent query`);
   await frame.click(named('Open dialog'));
   await frame.locator(named('Draft dialog')).waitFor({ state: 'visible', timeout: 15_000 });
   const note = frame.locator(named('Note'));
@@ -109,17 +110,20 @@ const exercise = async (page, framed, documentId) => {
   await frame.waitForFunction(root => !document.querySelector(`${root}[aria-label="Draft dialog"]`)?.open, root);
   check(await frame.locator(named('Open dialog')).evaluate(el => el === document.activeElement), 'Escape closes Dialog and restores focus');
   const snapshots = routeBodies.filter(call => call.body?.localTables && Object.keys(call.body.localTables).length);
-  check(snapshots.length === 0 && !routeBodies.some(call => call.url.endsWith('/mutate')), `${framed ? 'framed' : 'top-level'} local writes and the queries over them ran in the page: no local snapshot reached a route (${routeBodies.map(call => call.url.split('/').pop()).join(', ')})`);
-  await page.waitForFunction(() => new URLSearchParams(location.search).get('$count') === '1', null, {timeout:5_000});
+  check(snapshots.length === 0 && !routeBodies.some(call => call.url.endsWith('/mutate')), `${who}: local writes and the queries over them ran in the page: no local snapshot reached a route (${routeBodies.map(call => call.url.split('/').pop()).join(', ')})`);
+  const addressed = await page.waitForFunction(() => new URLSearchParams(location.search).get('$count') === '1', null, {timeout:5_000}).then(() => true, () => false);
+  check(addressed, `${who}: the page address carries the changed URL scalar (page ${new URL(page.url()).search}; the document frame's own address ${new URL(frame.url()).search})`);
   await page.reload({waitUntil:'load'});
-  const reloaded = framed ? await artifactDocument(page) : page.mainFrame();
+  const reloaded = await documentFrame(page);
   await reloaded.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '1', root, {timeout:20_000});
-  check((await reloaded.textContent(named('Count'))) === '1' && (await reloaded.textContent(named('Branch'))) === 'bee', 'reload resets local rows while URL scalar changes persist');
+  const kept = {count: await reloaded.textContent(named('Count')), branch: await reloaded.textContent(named('Branch'))};
+  check(kept.count === '1' && kept.branch === 'bee', `${who}: reload resets local rows while URL scalar changes persist (${JSON.stringify(kept)})`);
 };
 
 const anonymous = await browser.newPage();
-check((await anonymous.goto(`${B}/a/${doc.id}`, {waitUntil:'load'})).status() === 200 && await servedTopLevel(anonymous), 'anonymous public document is top-level');
-await exercise(anonymous, false, doc.id);
+// "top-level" is gone: the app page frames every document on its own origin (lib/serving/document-frame).
+check((await anonymous.goto(`${B}/a/${doc.id}`, {waitUntil:'load'})).status() === 200, 'anonymous public document is served');
+await exercise(anonymous, 'anonymous', doc.id);
 
 const ownerContext = await browser.newContext();
 const owner = await ownerContext.newPage();
@@ -128,7 +132,7 @@ check(await mergeGuestIntoAccount(owner, B, token) === 200, 'owner adopted the g
 const privateDoc = await json(await api('/api/artifacts', {markup:source, visibility:'private'}));
 if (!privateDoc.id) throw new Error(`private fixture publish failed: ${JSON.stringify(privateDoc)}`);
 check((await owner.evaluate(async id => (await fetch(`/api/my/artifacts/${id}/sharing`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({access:'read'})})).status, dataset.id)) === 200, 'stored dataset was made read-only');
-await exercise(owner, true, privateDoc.id);
+await exercise(owner, 'owner', privateDoc.id);
 
 const afterDoc = await json(await fetch(`${B}/api/artifacts/${doc.id}`, {headers}));
 const afterDataset = await json(await fetch(`${B}/api/artifacts/${dataset.id}`, {headers}));

@@ -5,7 +5,8 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  *
  *   usage: node scripts/gates/gate-editor-path.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { expect } from 'playwright/test';
 import { createChecker } from './lib/assert.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -16,7 +17,7 @@ const check = createChecker('editor-path');
 /** A step whose failure invalidates every step after it: report it, then stop. */
 const must = (condition, label) => { if (!check(condition, label)) throw new Error(label); };
 const base = process.argv[2] ?? 'http://localhost:3030';
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const sink = await startMailSink();
 try {
   /* ── 4. THE HUMAN PATH AROUND THE ENGINE ──────────────────────────────────
@@ -73,7 +74,10 @@ try {
     await becomeOwner(humanPage, base, human.token);
     await humanPage.goto(`${base}/a/${human.id}#edit`, { waitUntil: 'load' });
     await humanPage.waitForTimeout(4500);
-    check((await humanPage.mainFrame().locator('svg.marks, canvas').count()) > 0, 'embeds render inside the editor');
+    // The document is framed by the app page on its own origin: its embeds draw inside that frame.
+    const humanFrame = await documentFrame(humanPage);
+    const documentOrigin = new URL(humanFrame.url()).origin;
+    check((await humanFrame.locator('svg.marks, canvas').count()) > 0, 'embeds render inside the editor');
     check((await humanPage.locator('[aria-label="Save"]').count()) === 0, 'the editor has no Save button');
 
     // Versions are the edit panel's History tab on a wide window — the panel
@@ -130,8 +134,11 @@ try {
      */
     const offOrigin = [];
     const cspErrors = [];
-    humanPage.on('requestfailed', (r) => { if (!r.url().startsWith(base)) offOrigin.push(`${r.url()} (${r.failure()?.errorText})`); });
-    humanPage.on('request', (r) => { if (r.resourceType() === 'script' && !r.url().startsWith(base)) offOrigin.push(r.url()); });
+    // Ours: the app's origin, and the document's own origin it is framed from (which serves the editor's
+    // document half, `@mx/frame-editor`, under its own CSP). Anything else — a CDN — is off-origin.
+    const ownOrigin = (url) => url.startsWith(`${new URL(base).origin}/`) || url.startsWith(`${documentOrigin}/`);
+    humanPage.on('requestfailed', (r) => { if (!ownOrigin(r.url())) offOrigin.push(`${r.url()} (${r.failure()?.errorText})`); });
+    humanPage.on('request', (r) => { if (r.resourceType() === 'script' && !ownOrigin(r.url())) offOrigin.push(r.url()); });
     humanPage.on('console', (m) => { if (m.type() === 'error' && /violates the following Content Security Policy directive: "script-src/.test(m.text())) cspErrors.push(m.text()); });
 
     await humanPage.goto(`${base}/a/${human.id}#edit`, { waitUntil: 'load' });
@@ -269,7 +276,7 @@ try {
     await accountPage.waitForTimeout(4500);
     check((await accountPage.locator('[aria-label="Owning token"]').count()) === 0,
       'a signed-in owner opens the editor with nothing to paste');
-    const accountFrame = accountPage.mainFrame();
+    const accountFrame = await documentFrame(accountPage);
     await accountFrame.locator('h1').first().click({ clickCount: 3 });
     await accountPage.keyboard.type('Edited by the session');
     // Blurred, not clicked away: selecting the heading pops the typography bar.

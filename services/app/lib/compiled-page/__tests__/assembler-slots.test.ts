@@ -10,7 +10,7 @@ import { compile, type TopLevelSpec } from 'vega-lite';
 import { assembleReaderPage, isInertSvg, scriptJson } from '../assembler';
 import { speculationRulesOf } from '../speculation';
 import { agentDiscovery, agentDiscoveryTail } from '@/lib/serving';
-import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPA_IDLE_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
+import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage, type DataSnapshot } from '../contract';
 
 const build = { id: 'b'.repeat(16), manifest: { '@mx/rt': '/islands/rt-4444dddd.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
 const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
@@ -25,7 +25,7 @@ const drawn = (svg: string) => ({ svg, table: 't', rows: 'r' });
 const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
   compiled: compiled(), story: '<p>x</p>', css: '', fontPreloads: [], title: 't', theme: null, colorMode: 'dark', snapshot: null,
   overlay: { values: {}, mermaidImages: {}, signedIn: false, doors: { queryUrl: '/a/X/query', assetsUrl: '/a/X/assets' } },
-  chrome: null, spa: null, build, head: null, ...over,
+  build, head: null, ...over,
 });
 const doc = (html: string) => new JSDOM(html).window.document;
 const SVG = '<svg viewBox="0 0 10 10" role="img"><g><rect width="1" height="1"></rect><text x="1">Q&amp;A</text></g></svg>';
@@ -43,7 +43,6 @@ describe('no inline script, whatever the request carries', () => {
   const hostile = '</script><script>alert(1)</script>\u2028\u2029<!--';
   const variants: Array<[string, Partial<AssembleInput>]> = [
     ['/raw', {}],
-    ['/a/:id', { chrome: { artifactId: 'X', title: hostile, author: { username: hostile } }, spa: { entry: '/assets/main.js', preload: ['/assets/v.js'] } }],
     ['hostile overlay', { title: hostile, overlay: { values: { [hostile]: hostile }, mermaidImages: { [hostile]: { src: hostile, type: 'image/svg+xml', palette: hostile } }, signedIn: true, readOnly: hostile, doors: { queryUrl: hostile, assetsUrl: hostile, mutateUrl: hostile, viewerUrl: hostile } } }],
     ['hostile snapshot rows', { snapshot: { ...snapshot({}), results: { tables: { t: { rows: [{ v: hostile }], columns: [{ name: 'v', type: 'string' }] } }, errors: { t: hostile } } } }],
   ];
@@ -91,11 +90,7 @@ describe('the page around the story', () => {
     expect(page.getElementById(ISLAND_DATA_ID)).toBeNull();
   });
 
-  it('orders the SPA last: its preloads and idle entry follow the page\'s own module', () => {
-    const html = assembleReaderPage(input({ chrome: { artifactId: 'X', title: 't', author: null }, spa: { entry: '/assets/main.js', preload: ['/assets/v.js'] } })).html;
-    expect(html.indexOf('/islands/d/aaaaaaaaaaaaaaaa.js')).toBeLessThan(html.indexOf('/assets/v.js'));
-    expect(html.indexOf('/assets/v.js')).toBeLessThan(html.indexOf(SPA_IDLE_ATTR));
-    expect(html).not.toContain('<base');
+  it('sends the page\'s links out of its frame', () => {
     expect(assembleReaderPage(input()).html).toContain('<base target="_top">');
   });
 
@@ -130,7 +125,7 @@ describe('head metadata', () => {
   });
 
   it('carries the agent pointer first in the head, as the last line of the body, and as a Link header', () => {
-    const page = assembleReaderPage(input({ head, spa: { entry: '/assets/main.js', preload: [] } }));
+    const page = assembleReaderPage(input({ head }));
     const html = page.html;
     const pointer = html.indexOf('<link rel="help"');
     expect(pointer).toBeGreaterThan(0);

@@ -187,7 +187,7 @@ describe('compiled document bundle hygiene', () => {
  * comment layer, the JSX parser that writing needs) load when first used, and
  * are prefetched on idle/hover so the first click does not wait.
  */
-const ROUTE_ENTRIES = ['web/solid-spa-idle.ts', 'solid/main.tsx', 'solid/pages/Document.tsx', 'solid/pages/Profile.tsx'];
+const ROUTE_ENTRIES = ['solid/main.tsx', 'solid/pages/Document.tsx', 'solid/pages/Profile.tsx'];
 /*
  * css-tree (+ source-map-js) rewrote the document's CSS IN THE BROWSER — work the
  * server already did. The prepared page carries the rewritten sheet, so the

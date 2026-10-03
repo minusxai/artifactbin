@@ -400,9 +400,9 @@ const kindOfRow = (row: WebAssetRow): WebAssetKind =>
  * UNCHANGED is not a failure and not a refresh: the object is content-addressed,
  * so identical bytes land on the identical key, and saying so is what lets a
  * caller tell "the source really did change" from "we looked". A URL we do NOT
- * hold is reported rather than imported — importing is what publishing a
- * document that names it does, and a refresh door that also imported would be a
- * fetch primitive wearing a refresh's name.
+ * hold is reported rather than imported — a copy is made only where a reader's
+ * view asks for one (`importForDocument`), and a refresh door that also imported
+ * would be a fetch primitive wearing a refresh's name.
  */
 export async function refreshWebAssets(urls: readonly string[], by: WebAssetImporter): Promise<AssetRefreshResult> {
   const out: AssetRefreshResult = { refreshed: [], unchanged: [], failed: [] };
@@ -420,7 +420,7 @@ export async function refreshWebAssets(urls: readonly string[], by: WebAssetImpo
     }
     const held = await webAssetByHash(urlHash(url));
     if (!held) {
-      out.failed.push({ code: 'not_cached', url, fix: 'nothing is stored for that URL — publish a document that names it and it is imported' });
+      out.failed.push({ code: 'not_cached', url, fix: 'nothing is stored for that URL — a copy is made only when a reader\'s view of a document asks for it' });
       continue;
     }
     try {

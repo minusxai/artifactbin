@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import AssetPageHeader from "../components/AssetPageHeader";
 import StepHeader from "../components/StepHeader";
 import PageChrome from "../components/PageChrome";
@@ -157,7 +158,7 @@ export function DatasetEditorPage({
     });
     const legacy = input.tables.filter(t => t.sql !== undefined).map(t => ({
       cell: {
-        id: crypto.randomUUID(),
+        id: runtimeId(),
         name: t.name,
         sql: t.sql!
       },
@@ -170,7 +171,7 @@ export function DatasetEditorPage({
     }));
     setModels([...notebook, ...legacy]);
     setStored(input.tables.filter(t => !t.source && t.sql === undefined && !t.modelCellId).map(t => ({
-      key: crypto.randomUUID(),
+      key: runtimeId(),
       schema: t.schema,
       name: t.name,
       rows: t.rows ? JSON.stringify(t.rows, null, 2) : "",
@@ -255,7 +256,7 @@ export function DatasetEditorPage({
     while (items.some(item => item.cell.name === `query_${suffix}`)) suffix++;
     next.splice(after + 1, 0, {
       cell: {
-        id: crypto.randomUUID(),
+        id: runtimeId(),
         name: `query_${suffix}`,
         sql: ""
       },
@@ -654,7 +655,7 @@ export function DatasetEditorPage({
                         </Button>
                       </div>)}
                     <Button aria-label="Add JSON table" variant="ghost" onClick={() => setStored(items => [...items, {
-                    key: crypto.randomUUID(),
+                    key: runtimeId(),
                     schema: defaultSchema() || "public",
                     name: "",
                     rows: "",

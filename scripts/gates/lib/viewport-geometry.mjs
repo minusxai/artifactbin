@@ -1,6 +1,7 @@
 import {fixtureFetch as fetch} from './fixture-http.mjs';
 /** Real viewport geometry for raw h-screen slides; owned by the layout gate. */
 import { becomeOwner, startDocument } from '../../lib/start-doc.mjs';
+import { DOCUMENT_FRAME, documentFrame } from './page-facts.mjs';
 
 export async function checkViewportGeometry(BASE, browser, check) {
   const api = async (path, init = {}, token) => {
@@ -37,11 +38,12 @@ export async function checkViewportGeometry(BASE, browser, check) {
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
   await page.waitForTimeout(4000); // let the surface settle (MutationObserver-driven syncs)
 
-  // Measure the current inline document in the actual browser viewport.
-  const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 20000 });
-  const docFrame = page.mainFrame();
+  // Measure the document in ITS viewport: the frame the app page draws under its bar (lib/serving/document-frame).
+  const docFrame = await documentFrame(page);
+  const frameEl = await docFrame.waitForSelector('[data-mx-inline-story]', { timeout: 20000 });
   await docFrame.waitForSelector('h1', { timeout: 20000 });
   const frameBox = await frameEl.boundingBox();
+  const viewportBox = await page.locator(DOCUMENT_FRAME).boundingBox();
 
   const measured = await docFrame.evaluate(() => {
     const root = document.querySelector('[data-mx-inline-story]') ?? document.body;
@@ -62,8 +64,8 @@ export async function checkViewportGeometry(BASE, browser, check) {
 
   check(frameBox !== null && frameBox.height > 200, `the inline document has content height (${frameBox?.height}px)`);
   check(
-    Math.abs(measured.viewport - page.viewportSize().height) <= 2,
-    `the document uses the browser viewport, not its content height (${measured.viewport} vs ${page.viewportSize().height})`,
+    !!viewportBox && Math.abs(measured.viewport - viewportBox.height) <= 2,
+    `the document uses its frame's viewport, not its content height (${measured.viewport} vs ${viewportBox?.height})`,
   );
   // A slide fills the READER's viewport — not the whole document's height.
   check(

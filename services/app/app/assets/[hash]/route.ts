@@ -19,12 +19,12 @@
  * sniffed from the bytes at import. None of the three touches a subresource
  * load: an `<img>`, a `<link rel=preload>` and an `@font-face` all still use
  * these bytes, which is what `scripts/gates/gate-web-assets.mjs` proves in a real
- * browser. ACAO for the reason /webfonts carries it: a served document has an
- * opaque origin, so its own font fetch is a CORS request.
+ * browser. ACAO because a served document has an opaque origin, so its own
+ * font fetch is a CORS request.
  *
  * The hash is the whole input, matched against a 64-hex shape before it is a
  * lookup — nothing here concatenates a caller's string into a path — and an
- * unknown hash is a 404 like /webfonts, for the same reason: this is a read
+ * unknown hash is a 404 because this is a read
  * whose key comes from the CALLER, so a miss is routine rather than an anomaly.
  */
 import { objectStore } from '@/lib/object-store';
@@ -89,8 +89,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ hash: strin
   } catch {
     // A row promising bytes the store will not give is corruption or broken
     // credentials — but this is a public asset address, and answering a caller
-    // with a 500 for it would turn our fault into their broken page. 404, like
-    // /webfonts, and for the same reasons written out there.
+    // with a 500 for it would turn our fault into their broken page. 404.
     return new Response('not found', { status: 404 });
   }
   return new Response(new Uint8Array(bytes), {

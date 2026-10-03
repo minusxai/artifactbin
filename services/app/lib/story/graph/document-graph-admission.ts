@@ -4,25 +4,21 @@
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {json} from '../../http/http';
 import {repairJsxSource} from '../../jsx/repair';
-import {sanitizeStoryMarkupCss} from '../../data/story/banned-css';
-import {MAX_EXTERNAL_IMAGES_PER_PUBLISH} from '../../platform/config';
 import {canonicalizeMarkup} from '../document/canonical-source';
-import {remapMarkupStyleViewportUnits,transformOutsideManagedIframes} from '../reader/managed-iframe-source';
 import {createDocumentGraph,graphNodes,graphSource,graphReferences,type DocumentGraph} from './document-graph';
 import {graphFromSource} from './document-graph-source';
-import {prepareGraphPatch,selectGraphKeys,type GraphPatch} from './document-graph-patch';
+import {prepareGraphPatch,type GraphPatch} from './document-graph-patch';
 import {graphValidationScope} from './document-graph-scope';
 import {applyOperationsToNodes,DocumentOperationError} from './document-operation';
-import {collectExternalImageUrls} from '../assets/external-images';
 import {stampNodeIds} from '../document/node-ids';
 import {publishJsx} from '../document/jsx-tier';
-import {MAX_CONTENT_BYTES,type ContentInputCtx,type StoredContent} from '../document/input';
+import {MAX_CONTENT_BYTES,type ContentInputCtx} from '../document/input';
 import type {ReferenceValidationState,ResolvedRef} from '../data/refs';
 
 export interface GraphBaseline {id:string;version:number;document:DocumentGraph;meta:Record<string,unknown>;reservedIds?:string[]}
 export interface GraphAdmissionPlan {
  id:string;patch:GraphPatch;references:ReferenceValidationState[];
- fields:Record<string,unknown>;expectedFields:Record<string,unknown>;meta:Record<string,unknown>;ids:string[];newIds:string[];warnings?:StoredContent['warnings'];
+ fields:Record<string,unknown>;expectedFields:Record<string,unknown>;meta:Record<string,unknown>;ids:string[];newIds:string[];
  aliases:Array<{legacyKey:string;nodeId:string;path:string}>;
 }
 declare const admitted:unique symbol;
@@ -57,19 +53,13 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  // them before taking the diff includes every normalization effect in the patch.
  const normalization=context.normalizeMarkup?.(canonicalizeMarkup(source))??source;
  source=typeof normalization==='string'?normalization:normalization.source;
- source=canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(source,sanitizeStoryMarkupCss)));
+ source=canonicalizeMarkup(source);
  const identity=stampNodeIds(source,{previousSource:graphSource(base.document),reservedIds:base.reservedIds,retireLegacyAliases:true});
  try{candidate=whole?createDocumentGraph(identity.source,base.version+1):graphFromSource(base.document,identity.source,base.version+1);}
  catch(error){if(error instanceof Error)return invalid(error.message);throw error;}
  if(candidate.bytes>MAX_CONTENT_BYTES)return json({error:'too_large',maxBytes:MAX_CONTENT_BYTES},413);
  const scope=graphValidationScope(base.document,candidate);
  if(scope.errors.length)return invalid(scope.errors.join('; '));
- const images=collectExternalImageUrls(identity.source),beforeImages=collectExternalImageUrls(graphSource(base.document));
- if(images.length>MAX_EXTERNAL_IMAGES_PER_PUBLISH)return json({error:'too_many_external_images',details:['Document exceeds the external image limit.']},400);
- if(JSON.stringify([...images].sort())!==JSON.stringify([...beforeImages].sort()))for(const selector of ['tag:img','tag:Video','tag:Iframe']){
-  scope.selectors.push(selector);
-  for(const key of selectGraphKeys(base.document,selector))scope.reads.push({key,facet:'subtreeVersion'});
- }
  const references=new Map<string,ReferenceValidationState>(),loaded=new Map<string,Promise<ResolvedRef|null>>();
  const checkedContext:ContentInputCtx={...context,normalizeMarkup:undefined,loadRef:id=>{
   let pending=loaded.get(id);
@@ -87,7 +77,7 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  const meta={...base.meta,...metadataFields,refs:graphReferences(candidate)} as Record<string,unknown>;
  delete meta.compiledCss;delete meta.cssCompileVersion;delete meta.parsedArtifact;
  const oldIds=new Set(Object.values(base.document.nodes).flatMap(node=>node.selectors.filter(selector=>selector.startsWith('id:')).map(selector=>selector.slice(3))));
- admissions.set(token,{id:base.id,patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),references:[...references.values()],fields:metadataFields,expectedFields:Object.fromEntries(Object.keys(metadataFields).map(key=>[key,base.meta[key]??null])),meta,ids:identity.ids,newIds:identity.ids.filter(id=>!oldIds.has(id)),warnings:published.warnings,aliases:identity.aliases});
+ admissions.set(token,{id:base.id,patch:prepareGraphPatch(base.document,candidate,base.version,{whole,reads:scope.reads,selectors:scope.selectors}),references:[...references.values()],fields:metadataFields,expectedFields:Object.fromEntries(Object.keys(metadataFields).map(key=>[key,base.meta[key]??null])),meta,ids:identity.ids,newIds:identity.ids.filter(id=>!oldIds.has(id)),aliases:identity.aliases});
 
  return token;
 }

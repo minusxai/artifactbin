@@ -9,7 +9,6 @@ import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { validateDeckMap } from '@/lib/viz/deck-spec';
 import { parseRowRef } from '@/lib/story/data/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
-import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter-primitives — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
@@ -54,7 +53,19 @@ export function listHasDangerousScheme(value: string, lowerAttributeName: string
   return urlListUrls(value, lowerAttributeName).some(hasDangerousScheme);
 }
 
+/** The script's components for the validateJsx run in progress (synchronous; see ValidateOptions.scriptComponents). */
+let scriptComponents: ReadonlySet<string> | 'any' = new Set<string>();
+const isScriptComponent = (el: JsxElement): boolean => el.isComponent && (scriptComponents === 'any' ? !JSX_REGISTERED.has(el.tag) : scriptComponents.has(el.tag));
+let JSX_REGISTERED: ReadonlySet<string> = new Set<string>();
+
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
+  scriptComponents = options.scriptComponents ?? new Set<string>();
+  JSX_REGISTERED = new Set(options.components);
+  try { return validateJsxNodes(nodes, options); }
+  finally { scriptComponents = new Set<string>(); }
+}
+
+function validateJsxNodes(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
   const components = new Set(options.components);
   // Case-insensitive: tags are compared lowercased below, so an allowlist may
   // carry canonical SVG casing (`clipPath`) and still match authored variants.
@@ -99,7 +110,7 @@ function walk(
     return;
   }
   if (inFor && node.attributes.some(a=>(['value','checked','options'].includes(a.name) || (a.name === 'run' && node.tag !== 'Button')) && a.value.static && typeof a.value.json === 'string' && /^\$[A-Za-z_]\w*$/.test(a.value.json))) errors.push({message:'Bound controls inside For are not supported; use editable DataTable columns',start:node.start,end:node.end});
-  if (inFor && ['DataTable', 'Iframe'].includes(node.tag)) errors.push({message:'DataTable and Iframe must be outside For templates',start:node.start,end:node.end});
+  if (inFor && node.tag === 'DataTable') errors.push({message:'DataTable must be outside For templates',start:node.start,end:node.end});
   if (node.tag === 'For') {
     const key = node.attributes.find(a => a.name === 'keyBy')?.value;
     const eachValue = node.attributes.find(a => a.name === 'each')?.value;
@@ -140,11 +151,6 @@ function walk(
     for (const message of validateDeckMap({ layers: prop('layers'), basemap: prop('basemap'), initialViewState: prop('initialViewState'), tooltip: prop('tooltip'), legend: prop('legend'), title: prop('title') })) {
       errors.push({ message, tag: node.tag, start: node.start, end: node.end });
     }
-  }
-  if (node.tag === 'Iframe') {
-    try { compileManagedIframe(node); }
-    catch (error) { errors.push({ message: error instanceof Error ? error.message : String(error), tag: node.tag, start: node.start, end: node.end }); }
-    return;
   }
   const childrenInSvg = inSvg || (!node.isComponent && node.tag.toLowerCase() === 'svg');
   for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'For' ? true : node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag, inFor || node.tag === 'For');
@@ -190,11 +196,10 @@ function validateElement(
   /** What an author should reach for instead of a denied tag. */
   const DENIED_ALTERNATIVES: Record<string, string> = {
     form: 'the controls work without a <form> (<input>, <select>, <button>); drive them from the <Helmet> script',
-    iframe: 'use the <Video> component for the sanctioned embed hosts',
-    object: 'use the <Video> component, or <img>/<video> with a ref: source',
-    embed: 'use the <Video> component, or <img>/<video> with a ref: source',
+    object: 'use <iframe src="https://…"> for a player or page, or <img>/<video> with a ref: source',
+    embed: 'use <iframe src="https://…"> for a player or page, or <img>/<video> with a ref: source',
     script: 'a document carries ONE script, in <Helmet><script>{`…`}</script></Helmet>',
-    link: 'no external stylesheets or fonts — style with className, or <Helmet><style>',
+    link: 'put @import url(…) or @font-face in <Helmet><style>{`…`}</style></Helmet>; there is no <link>',
     meta: '<meta name content /> belongs in <Helmet>; http-equiv is the document\'s own to set',
     base: 'the document sets its own base target; relative links already resolve',
     noscript: 'the document always runs its script — write the content directly',
@@ -219,7 +224,7 @@ function validateElement(
 
   // Tag allowlist.
   if (el.isComponent) {
-    if (!components.has(el.tag)) {
+    if (!components.has(el.tag) && !isScriptComponent(el)) {
       // Stable prefix (asserted by callers/tests) + recovery guidance: name the legacy
       // trap when it applies, and ALWAYS list the registered set so the model can pick
       // a real component instead of retrying the same unknown tag.
@@ -262,10 +267,14 @@ function validateElement(
     });
   }
 
+  if (lower === 'iframe') errors.push(...iframeErrors(el));
+
   for (const a of el.attributes) {
     // Spread / non-static attribute values.
     if (!a.value.static) {
       if (el.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') continue;
+      // A script component's prop may be a declared name: it mounts with that signal.
+      if (isScriptComponent(el) && a.value.reactive?.kind === 'signal') continue;
       if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) continue;
       errors.push({
         message: `Attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`,
@@ -308,4 +317,40 @@ function validateElement(
       }
     }
   }
+}
+
+/**
+ * THE AUTHOR'S `<iframe>`: a player or page, framed as written. The document runs on its own origin under its own
+ * CSP (lib/story/styles/document-csp), whose `frame-src` is what decides which hosts actually load — the kit's former
+ * embed hosts by default, plus any the document declares with `<meta name="csp-frame">`. This gate keeps the element
+ * itself narrow: an https `src` (never `srcdoc`, never `data:`/`http:`), no children, and only the attributes that
+ * size, label and permit a player. `id` is every body element's persistent identity, so it is allowed too.
+ */
+const IFRAME_ATTRS = immutableSet(['src', 'title', 'width', 'height', 'allow', 'allowfullscreen', 'loading', 'classname', 'style', 'id']);
+const IFRAME_ATTR_LIST = 'src, title, width, height, allow, allowfullscreen, loading, className, style';
+
+function isHttpsUrl(value: string): boolean {
+  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+}
+
+function iframeErrors(el: JsxElement): ValidationError[] {
+  const errors: ValidationError[] = [];
+  for (const a of el.attributes) {
+    const name = a.name.toLowerCase();
+    // Handlers and name-denied attributes (`srcdoc`) are refused by the general rules below, once.
+    if (IFRAME_ATTRS.has(name) || /^on/i.test(a.name) || DENIED_ATTRS.has(name)) continue;
+    errors.push({ message: `Attribute "${a.name}" is not allowed on <iframe> — it takes only ${IFRAME_ATTR_LIST}`, attr: a.name, tag: el.tag, start: a.start, end: a.end });
+  }
+  const src = el.attributes.find((a) => a.name.toLowerCase() === 'src');
+  const value = src?.value.static && typeof src.value.json === 'string' ? src.value.json : null;
+  if (value === null || !isHttpsUrl(value)) {
+    errors.push({
+      message: '<iframe> needs src="https://…" — an https player or page. YouTube (www.youtube-nocookie.com), Vimeo (player.vimeo.com) and Loom (www.loom.com) frame by default; declare any other host with <meta name="csp-frame" content="https://…" /> in <Helmet>',
+      attr: 'src', tag: el.tag, start: src?.start ?? el.start, end: src?.end ?? el.end,
+    });
+  }
+  if (el.children.some((c) => c.type !== 'text' || c.value.trim() !== '')) {
+    errors.push({ message: '<iframe> takes no children — write it self-closing: <iframe src="https://…" title="…" />', tag: el.tag, start: el.start, end: el.end });
+  }
+  return errors;
 }

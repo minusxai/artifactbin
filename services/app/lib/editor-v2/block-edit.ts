@@ -1,4 +1,5 @@
 /** Structural commands are all-or-none source operations. Geometry is authored data. */
+import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { gridCols } from '@/lib/story-ui/grid-layout';
 import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { setStaticJsxAttr } from '@/lib/data/story/jsx-edit';
@@ -54,7 +55,7 @@ export function editBlock(source: string, command: BlockEdit): string {
                   name: 'id',
                   value: {
                     static: true,
-                    json: `e${crypto.randomUUID().replaceAll('-', '')}`,
+                    json: `e${runtimeId().replaceAll('-', '')}`,
                   },
                   start: 0,
                   end: 0,
@@ -69,7 +70,7 @@ export function editBlock(source: string, command: BlockEdit): string {
         });
     const result = prune(parsed.nodes);
     if (!result.some((n) => (n.type === 'element' && n.tag !== 'Helmet') || (n.type === 'text' && n.value.trim()))) {
-      const placeholder = parseJsx(`<p id="e${crypto.randomUUID().replaceAll('-', '')}"></p>`);
+      const placeholder = parseJsx(`<p id="e${runtimeId().replaceAll('-', '')}"></p>`);
       if (placeholder.ok) result.push(...placeholder.nodes);
     }
     return serializeJsx(result);

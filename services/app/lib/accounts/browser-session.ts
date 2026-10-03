@@ -11,11 +11,27 @@
  * script has to hold the secret even for a moment.
  */
 
+/**
+ * End this browser's pages session (APP__PAGES_HOST): the cookie the documents' own origins read their
+ * reader from lives on the pages domain, which the app's sign-out cannot touch, so the pages apex is
+ * asked directly (server/pages-host DELETE). A page with no pages host names none, and this does nothing.
+ */
+export async function forgetPagesSession(doc: Document = document): Promise<void> {
+  const url = doc.querySelector('meta[name="mx-pages-session"]')?.getAttribute('content');
+  if (!url) return;
+  try {
+    await fetch(url, { method: 'DELETE', credentials: 'include', mode: 'cors' });
+  } catch {
+    /* the cookie expires on its own; the next framed page re-mints or clears it */
+  }
+}
+
 /** Forget every token this browser holds (the anonymous owner's sign-out). */
 export async function forgetTokens(): Promise<void> {
-  try {
-    await fetch('/api/session/token', { method: 'DELETE' });
-  } catch {
-    /* nothing to do — the cookie either cleared or the browser is offline */
-  }
+  await Promise.all([
+    forgetPagesSession(),
+    fetch('/api/session/token', { method: 'DELETE' }).catch(() => {
+      /* nothing to do — the cookie either cleared or the browser is offline */
+    }),
+  ]);
 }

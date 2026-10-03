@@ -1,8 +1,9 @@
 /** The app redirects logged-out home visits to login, even without JavaScript. */
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 const base=process.argv[2]??'http://localhost:12001';
-const browser=await chromium.launch();
+const browser=await launchChromium();
 try{
  for(const javaScriptEnabled of [false,true]){
   const context=await browser.newContext({javaScriptEnabled});const page=await context.newPage();

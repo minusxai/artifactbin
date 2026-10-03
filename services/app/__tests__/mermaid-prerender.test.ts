@@ -131,10 +131,12 @@ describe('a published Mermaid document', () => {
     expect(data.dataflow?.results?.tables.q?.rows).toEqual([{ n: 42 }]);
     const drawing = data.mermaidImages?.[mermaidImageKey(FLOW, 'light')];
     expect(drawing?.src).toMatch(/^\/assets\/mermaid\//);
-    const compiledAnswer = await artifactPageAnswer(reader(`/a/${id}`), id, { page: { spa: null } });
-    const html = compiledAnswer.compiled!.html;
+    // The one renderer (the standalone page the app frames) draws its own surface's stored drawing and the run's answer.
+    const html = await raw(id);
     expect(html).toContain('aria-label="Live number">42<');
-    expect(html).toContain(`src="${drawing!.src}"`);
+    const served = island(html).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src;
+    expect(served).toMatch(/^\/assets\/mermaid\//);
+    expect(html).toContain(`src="${served}"`);
     const stored = (await (await getDb()).query<{ page: { ssr?: unknown; compiled?: { html?: string } } }>(`SELECT page FROM prepared_pages WHERE artifact_id = $1 AND slot = 'head'`, [id])).rows[0]!;
     expect(stored.page.ssr).toBeUndefined();
     expect(stored.page.compiled?.html).not.toContain('aria-label="Live number">42<');
@@ -200,14 +202,13 @@ describe('a published Mermaid document', () => {
     expect(island(engine).mermaidImages).toEqual({});
   });
 
-  it('a harvest that lands after the reader page was prepared is served on the next read, and its preloads drop the engine', async () => {
+  it('a harvest that lands after the reader page was prepared is served on the next read, and the engine stays unnamed', async () => {
     setServices({ browser: drawingBrowser([FLOW]).browser });
     const { id } = await publish([FLOW]);
     // The app's reader page is prepared (and stored) before any drawing exists.
     const first = await artifactPageAnswer(reader(`/a/${id}`, '', { accept: 'text/html' }), id);
     expect(first.status).toBe(200);
     expect((first.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
-    expect(first.story?.lazyCode.mermaid).toEqual(['flowchart']);
     const db = await getDb();
     expect(Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM prepared_pages WHERE artifact_id=$1', [id])).rows[0].n)).toBe(1);
 
@@ -217,14 +218,13 @@ describe('a published Mermaid document', () => {
     const stored = images?.[mermaidImageKey(FLOW, 'light')];
     expect(stored?.palette).toBe(PALETTE.inline);
     // The served story itself carries the stored drawing, and the page names no engine code for it.
-    const compiledNext = await artifactPageAnswer(reader(`/a/${id}`), id, { page: { spa: null } });
-    expect(compiledNext.compiled!.html).toContain(`src="${stored!.src}"`);
-    expect(next.story!.lazyCode.mermaid).toEqual([]);
-    expect(next.story!.lazyCode.mermaidImages).toEqual([stored!.src]);
+    const served = await raw(id);
+    expect(served).toContain(`src="${island(served).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src}"`);
+    expect(island(served).mermaidImages?.[mermaidImageKey(FLOW, 'light')]?.src).toMatch(/^\/assets\/mermaid\//);
     // Asked for by name, the engine draws as before.
     const engine = await artifactPageAnswer(reader(`/a/${id}?mermaid=engine`, '', { accept: 'text/html' }), id);
     expect((engine.body as { surface: { runtime: { data: Record<string, unknown> } } }).surface.runtime.data.mermaidImages).toBeUndefined();
-    expect(engine.story!.html()).not.toContain('/assets/mermaid/');
+    expect(await raw(id, '?mermaid=engine')).not.toContain('src="/assets/mermaid/');
   });
 
   it('shares stored drawings across documents that draw the same thing, and verifies only what is new', async () => {
@@ -325,8 +325,6 @@ describe('a published Mermaid document', () => {
       expect(src, ua).toMatch(/^\/assets\/mermaid\//);
       expect(html, ua).toContain(`src="${src}"`);
       expect(head(html), ua).not.toMatch(/mermaid-render-/);
-      const page = await artifactPageAnswer(reader(`/a/${id}`, ua, { accept: 'text/html' }), id);
-      expect(page.story!.lazyCode, ua).toEqual(expect.objectContaining({ mermaid: [], mermaidImages: [expect.stringMatching(/^\/assets\/mermaid\//)] }));
     }
   });
 

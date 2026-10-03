@@ -23,7 +23,6 @@ import { publishJsx } from './jsx-tier';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/web-ingest/image';
 import { ingestPdfFromUrl } from '@/lib/web-ingest/pdf';
-import type { AssetWarning, WebAssetKind } from '@/lib/serving';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '../data/data-tiers';
 import { publishFile } from '../assets/file-store';
 
@@ -74,13 +73,6 @@ export interface StoredContent {
   /** Title derived from the source's first heading — used only when the body has no title. */
   derivedTitle: string | null;
   /**
-   * External URLs the document names that could NOT be imported (lib/web-assets).
-   * Never a refusal: the document publishes and the reply says what failed and
-   * how to fix it, because losing a whole document over one dead image link is
-   * the worse answer. Absent when everything imported.
-   */
-  warnings?: AssetWarning[];
-  /**
    * Changes the door made to the source on the way in (lib/jsx/repair) — today
    * only the shell-escaped backtick. Present ONLY when something was changed,
    * and present is the point: the door is allowed to repair an agent's markup
@@ -106,7 +98,6 @@ const imageTitleFromUrl = (url: string): string | null => {
 };
 
 export interface ContentInputCtx {
-  prepareMarkup?: (body: Record<string, unknown>, source: string) => Promise<StoredContent | Response>;
   objects?: ContentObjects;
   prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Response>;
   /** Identity normalization after caller-coordinate validation, before compilation. */
@@ -128,26 +119,13 @@ export interface ContentInputCtx {
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
   loadRef?: import('../data/refs').RefLoader;
   /**
-   * Import one external URL into the global asset cache under the caller's
-   * identity (lib/artifacts assetImporterFor), answering null on success or the
-   * warning to report. Absent ⇒ the door fetches nothing (preview: a draft that
-   * previews must publish, and importing belongs to publish alone).
-   */
-  importAsset?: (url: string, kind: WebAssetKind) => Promise<AssetWarning | null>;
-  /**
-   * Resolve one font family the document names, answering a Response only when
-   * it cannot be had. Absent ⇒ no resolution (preview): the door still
-   * validates the NAME, so a draft that previews still publishes.
-   */
-  resolveFont?: (family: string) => Promise<Response | null>;
-  /**
    * "Is the caller already over their stored-byte quota?" — asked BEFORE a
    * tier stores something large, and answered by lib/asset-quota under the
    * caller's identity (account-keyed for a claimed token, token-keyed for an
    * anonymous one). Absent ⇒ nothing is charged (preview: a draft that
    * previews stores nothing, so there is nothing to bill).
    *
-   * A closure rather than a token id, for the reason importAsset is one: this
+   * A closure rather than a token id: this
    * module has no business knowing who is publishing, only whether the door
    * is open. It is a PRE-check and not a reservation — an account a byte under
    * the cap stores its file and is refused the next one, which is the same
@@ -290,5 +268,5 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
 
   // The document — `markup` (story JSX). publishJsx owns
   // theme/template/colorMode validation.
-  return ctx.prepareMarkup ? ctx.prepareMarkup(body, value) : publishJsx(body, value, ctx);
+  return publishJsx(body, value, ctx);
 }

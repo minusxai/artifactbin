@@ -4,11 +4,8 @@
  * override, the live stream of a page with no island module, and the scroll a live reload keeps.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { startPage, CHROME_HIDDEN_CLASS } from '../page';
-import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader/reader-chrome';
-import { captureInitialStory, clearInitialStory } from '@/web/initial-story';
-import { PAGE_TAKEOVER_EVENT } from '@/lib/islands/page-lifetime';
-import { LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
+import { startPage } from '../page';
+import { LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];
@@ -56,7 +53,7 @@ describe('startPage', () => {
     table.dispatchEvent(new Event('scroll'));
     expect(table.getAttribute('data-mx-scrollable')).toBe('end');
   });
-  it('keeps the outline and table wiring live once the SPA takes the page over — nothing there replaces it', () => {
+  it('wires the outline and the tables of a page whose story is replaced after it starts', () => {
     page({ live: false });
     document.querySelector('#mx-story-root')!.innerHTML = '<div class="mx-reading"><nav class="mx-outline"><button class="mx-outline-row" data-mx-target="0" type="button">One</button></nav><div class="mx-doc"><h2 data-mx-ast="0">One</h2><table><tr><td>Wide</td></tr></table></div></div>';
     const heading = document.querySelector<HTMLElement>('h2')!;
@@ -66,7 +63,6 @@ describe('startPage', () => {
     const table = document.querySelector<HTMLTableElement>('table')!;
     Object.defineProperties(table, { scrollWidth: { value: 300 }, clientWidth: { value: 100 }, scrollLeft: { value: 0, writable: true } });
     stops.push(startPage());
-    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
     document.querySelector<HTMLElement>('.mx-outline-row')!.click();
     expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
     table.scrollLeft = 200;
@@ -102,14 +98,13 @@ describe('startPage', () => {
     expect(FakeEventSource.made).toEqual([]);
   });
 
-  it('closes a static compiled page stream when the app takes over for editing', () => {
+  it('closes a static compiled page\'s stream when the page is disposed', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page();
-    stops.push(startPage());
-    captureInitialStory();
+    const stop = startPage();
     const source = FakeEventSource.made.at(-1)!;
     expect(source.closed).toBe(false);
-    clearInitialStory();
+    stop();
     expect(source.closed).toBe(true);
   });
 
@@ -120,6 +115,57 @@ describe('startPage', () => {
     stops.push(startPage(document, framed));
     expect(document.documentElement.classList.contains('mx-framed')).toBe(true);
     expect(FakeEventSource.made).toEqual([]);
+  });
+
+  it('framed: opens the bridge door before any author script, telling the app origin (and only it) that it may attach', () => {
+    page();
+    const posted: Array<[unknown, string]> = [];
+    const parent = { postMessage: (data: unknown, target: string) => { posted.push([data, target]); } };
+    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? parent : Reflect.get(target, key, target)) });
+    stops.push(startPage(document, framed));
+    expect(posted).toContainEqual([{ type: 'mx:frame-bridge', payload: { kind: 'hello' } }, window.location.origin]);
+    posted.length = 0;
+    stops.push(startPage(document, window));
+    expect(posted).toEqual([]);
+  });
+
+  it('framed on its own origin: opens the bridge door to the app origin the server named, and still holds its own stream', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    page();
+    document.body.setAttribute('data-mx-live-direct', '');
+    document.documentElement.setAttribute('data-mx-app-origin', 'https://app.example.test');
+    const posted: Array<[unknown, string]> = [];
+    const parent = { postMessage: (data: unknown, target: string) => { posted.push([data, target]); } };
+    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? parent : Reflect.get(target, key, target)) });
+    try {
+      stops.push(startPage(document, framed));
+      expect(posted).toContainEqual([{ type: 'mx:frame-bridge', payload: { kind: 'hello' } }, 'https://app.example.test']);
+      expect(FakeEventSource.made.length).toBe(1);
+    } finally {
+      document.body.removeAttribute('data-mx-live-direct');
+      document.documentElement.removeAttribute('data-mx-app-origin');
+    }
+  });
+
+  it('framed: a link to an app path asks the app page that frames it, never resolving against the document\'s origin', () => {
+    page();
+    document.querySelector('#mx-story-root')!.innerHTML = '<a href="/a/next" id="next">Next</a><a href="#part" id="part">Part</a>';
+    document.documentElement.setAttribute('data-mx-app-origin', 'https://app.example.test');
+    const posted: Array<[unknown, string]> = [];
+    const parent = { postMessage: (data: unknown, target: string) => { posted.push([data, target]); } };
+    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? parent : Reflect.get(target, key, target)) });
+    const stopJsdom = (event: Event) => event.preventDefault();
+    try {
+      stops.push(startPage(document, framed));
+      window.addEventListener('click', stopJsdom);
+      const click = (id: string) => { const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }); document.getElementById(id)!.dispatchEvent(event); };
+      click('part');
+      click('next');
+      expect(posted.filter(([data]) => (data as { type?: string }).type === 'mx:navigate')).toEqual([[{ type: 'mx:navigate', href: '/a/next' }, 'https://app.example.test']]);
+    } finally {
+      window.removeEventListener('click', stopJsdom);
+      document.documentElement.removeAttribute('data-mx-app-origin');
+    }
   });
 
   it('puts the reader back where a live reload left them, and consumes the anchor', () => {
@@ -135,7 +181,7 @@ describe('startPage', () => {
     expect(window.name, 'one reload, one restore').not.toContain('anchor');
   });
 
-  it('keeps restoring the reader position while the SPA takes over a settling page', () => {
+  it('keeps restoring the reader position while a live reload settles', () => {
     vi.useFakeTimers();
     page({ live: false });
     const target = document.querySelector<HTMLElement>('[data-mx-ast="1"]')!;
@@ -145,7 +191,6 @@ describe('startPage', () => {
     window.name = 'mx:doc:' + JSON.stringify({ anchor: { path: '1', fraction: 0.5 } });
     stops.push(startPage());
     const before = scrollTo.mock.calls.length;
-    window.dispatchEvent(new Event(PAGE_TAKEOVER_EVENT));
     top = 537;
     vi.advanceTimersByTime(100);
     expect(scrollTo.mock.calls.length).toBeGreaterThan(before);
@@ -153,43 +198,9 @@ describe('startPage', () => {
   });
 });
 
-describe('the served reader chrome on the compiled app page', () => {
-  const at = (y: number) => { Object.defineProperty(window, 'scrollY', { value: y, configurable: true }); window.dispatchEvent(new Event('scroll')); };
-  it('follows today\'s rule until the app takes it over: shown on load, a scroll down hides it, a scroll up reveals it, the end shows it', () => {
-    vi.stubGlobal('EventSource', FakeEventSource);
-    vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => { fn(0); return 0; });
-    page();
-    document.body.insertAdjacentHTML('beforeend', '<nav data-mx-reader-chrome="" data-mx-reader-state="shown"></nav>');
-    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 5000, configurable: true });
-    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
-    at(0);
-    stops.push(startPage());
-    const chrome = document.querySelector<HTMLElement>('[data-mx-reader-chrome]')!;
-    expect(chrome.getAttribute('data-mx-reader-state')).toBe('shown');
-    at(600);
-    expect([chrome.getAttribute('data-mx-reader-state'), chrome.classList.contains(CHROME_HIDDEN_CLASS)]).toEqual(['hidden', true]);
-    at(300);
-    expect([chrome.getAttribute('data-mx-reader-state'), chrome.classList.contains(CHROME_HIDDEN_CLASS)]).toEqual(['shown', false]);
-    at(900);
-    expect(chrome.getAttribute('data-mx-reader-state')).toBe('hidden');
-    at(4200);
-    expect(chrome.getAttribute('data-mx-reader-state'), 'the end of the document shows it').toBe('shown');
-    // The app's chrome replaces the served one: nothing here touches it any more.
-    chrome.remove();
-    const app = document.createElement('nav');
-    app.setAttribute('data-mx-reader-chrome', '');
-    document.body.append(app);
-    at(600);
-    expect(app.hasAttribute('data-mx-reader-state')).toBe(false);
-    app.remove();
-  });
-
-  it('names today\'s hidden class', () => {
-    expect(CHROME_HIDDEN_CLASS).toBe(READER_CHROME_HIDDEN_CLASS);
-  });
-
+describe('the page protocol', () => {
   it('keeps the page protocol\'s wire names, which stored pages and the served HTML carry', () => {
-    expect([STORY_ROOT_SELECTOR, LIVE_ID_ATTR, LIVE_EDIT_ATTR, PUBLIC_MX_KEY]).toEqual(['[data-mx-inline-story]', 'data-mx-live-id', 'data-mx-live-edit', '__mxPublicApi']);
+    expect([STORY_ROOT_SELECTOR, LIVE_ID_ATTR, LIVE_EDIT_ATTR]).toEqual(['[data-mx-inline-story]', 'data-mx-live-id', 'data-mx-live-edit']);
     expect(['s0-', 'd-', 's-abc_1'].every((id) => RENDER_ID_PATTERN.test(id))).toBe(true);
     expect(['', 's0 ', '"]', 's0-,x'].some((id) => RENDER_ID_PATTERN.test(id))).toBe(false);
   });

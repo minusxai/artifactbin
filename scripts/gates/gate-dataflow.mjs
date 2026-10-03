@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
-import { servedTopLevel } from './lib/page-facts.mjs';
+import { documentFrame, documentLocator, inlineStory, INLINE_STORY } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 /**
@@ -10,26 +10,27 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  * request per change, engine windows included); private-reader ACL; URL
  * selection round trips and selected exports; the booking document's day
  * click under 50 ms with no request.
- * Artifact markup renders inline in the trusted app. Author code remains in
- * managed sandboxed child frames, whose direct network CSP is tested there.
+ * The app page frames the document on its own origin (`<hex id>.lvh.me`); every
+ * document check reads inside that frame, the address checks read the app page.
+ * The Helmet script runs in the document as a module over the declared names' signals.
  * Usage: node scripts/gates/gate-dataflow.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 /** Every document route serves the compiled reader. */
 const check = createChecker('dataflow');
-/**
- * The document's realm once it is live: the served page itself, once its islands
- * have hydrated (`<html data-mx-ready>`) — the app
- * adopts it only on intent for a reader who cannot edit (docs/phase2-architecture.md), so no app
- * root need ever appear.
- */
+/** The document's frame once it is live: its islands have hydrated (`<html data-mx-ready>`). */
 const liveDocument = async (page) => {
-  await page.locator('html[data-mx-ready] [data-mx-inline-story]').first().waitFor({ timeout: 30_000, state: 'visible' });
-  return page.mainFrame();
+  const doc = await documentFrame(page);
+  await doc.locator('html[data-mx-ready] [data-mx-inline-story]').first().waitFor({ timeout: 30_000, state: 'visible' });
+  return doc;
 };
+/** The document's own origin, where its standalone page is served (lib/serving/pages-origin). */
+const documentOrigin = (id) => { const app = new URL(B); return `${app.protocol}//${Buffer.from(id, 'utf8').toString('hex')}.${PAGES_HOST}${app.port ? `:${app.port}` : ''}`; };
+/** Armed BEFORE a navigation: the framed document's own navigation response (after the pages-session redirect). */
+const documentResponse = (page) => page.waitForResponse((r) => { try { return r.frame() !== page.mainFrame() && r.request().isNavigationRequest() && r.status() === 200; } catch { return false; } }, { timeout: 30_000 });
 /** Armed BEFORE a navigation: resolves once that page has loaded its SQLite engine's wasm (false after 20 s). */
 const engineLoads = (page) => page.waitForResponse((r) => r.url().endsWith('.wasm') && r.ok(), { timeout: 20000 }).then(() => true, () => false);
 
@@ -41,29 +42,42 @@ const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, b
 // ── 1. publish ──────────────────────────────────────────────────────────────
 const ds = await j(await api('/api/artifacts', { dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }] }));
 check(!!ds.id, 'the dataset published');
+/** The page's own script: an effect over the `sales` and `region` signals, rendering into a node the markup does not bind. */
+const DATAFLOW_SCRIPT = [
+  "import { query, signal } from 'page';",
+  "import { createEffect } from 'solid-js';",
+  "const sales = query('$sales'); const [region] = signal('$region');",
+  "const out = document.getElementById('out');",
+  "let initial;",
+  "createEffect(() => {",
+  "  const now = region(); const rows = sales();",
+  "  if (initial === undefined) initial = now;",
+  "  out.textContent = now !== initial ? 'changed:' + now : 'page:' + typeof sales + ' rows=' + rows.length;",
+  "});",
+].join('\n');
 const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" type="string" />
 <Import name="regions_data" src="ref:${ds_}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>
 <Import name="sales_data" src="ref:${ds_}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
-</Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
+<script>{${JSON.stringify(DATAFLOW_SCRIPT)}}</script></Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
 <select aria-label="Region" value="$region" options="$regions" />
-<Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`const out=document.getElementById('out');let initial;mx.subscribe(['sales','region'],snapshot=>{const region=snapshot.signals.region.value;if(initial===undefined)initial=region;if(region!==initial){out.textContent='changed:'+region;return;}const table=snapshot.signals.sales.value;out.textContent='mx:'+typeof mx+' rows='+(table?table.rows.length:0);});\`}</script></Iframe>
+<p id="out">pending</p>
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p>
 <Question title="Revenue by region" data="$sales" viz={{"kind":"table"}} height="300px" /></div>`;
 const doc = await j(await api('/api/artifacts', { markup: doc1(ds.id) }));
 check(!!doc.id, `the dataflow document published (${doc.url ?? doc.error})`);
 const bad = await api('/api/artifacts', { markup: doc1(ds.id).replace('sum(revenue)', 'sum(revenu)') });
 const badBody = await j(bad);
-check(bad.status === 400 && badBody.error === 'invalid_sql' && /<Query name=\\"sales\\"> reads revenu — no such column/.test(JSON.stringify(badBody.details)),
+check(bad.status === 400 && badBody.error === 'invalid_sql' && /<Query> \\"sales\\" reads revenu — no such column/.test(JSON.stringify(badBody.details)),
   'a bad column is refused at publish, the compiler naming the query and the column');
 const retired = await api('/api/artifacts', { markup: `<Question data="ref:${ds.id}" />` });
 const retiredBody = await j(retired);
 check(retired.status === 400 && /<Import name="data" src="ref:[^"]+" \/><Query name="rows">/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Import> + <Query> replacement');
 
 // ── 2 + 3. inline document and scoped authenticated transport ──────────────
-const b = await chromium.launch();
+const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 // Internal HTTP export pages lack this secure-context-only API. Exercise the
-// real runtime and managed-frame initialization under that browser constraint.
+// real runtime and the page script's start under that browser constraint.
 await p.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true }));
 const pageErrors = [];
 p.on('pageerror', (e) => pageErrors.push(e.message));
@@ -75,32 +89,19 @@ p.on('request', (r) => {
   if (r.method() === 'GET' && /[?&]q=/.test(r.url())) directCalls.push(r.url());
 });
 const docEngine = engineLoads(p);
-const resp = await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
-const csp = resp.headers()['content-security-policy'] ?? '';
-check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the reader uses the strict navigable app CSP; author execution is isolated in its child frame');
-check(await servedTopLevel(p), 'no iframe: the public data document IS the page');
+const docResp = documentResponse(p);
+await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
+const csp = (await docResp.catch(() => null))?.headers()['content-security-policy'] ?? '';
+check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the framed document is served under the strict navigable document CSP');
+// "no iframe: the document IS the page" is gone: the app page frames every document on its own origin (lib/serving/document-frame).
 check(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
-const frame = p.mainFrame();
-const managedRealm = async host => {
-  const outer = host.locator('iframe[title="Dataflow script"]');
-  await outer.waitFor({ timeout: 20000 });
-  const wrapper = await outer.contentFrame();
-  const inner = wrapper.locator('iframe');
-  await inner.waitFor({ timeout: 20000 });
-  return (await inner.elementHandle()).contentFrame();
-};
+const frame = await documentFrame(p);
 /*
- * PAINT FIRST moved what an author script finds at startup. The rows are no
- * longer inlined, so `mx.read()` is empty for the round trip it takes to
- * fetch them — a script that needs them SUBSCRIBES, which is what the document
- * above does and what /docs/llm teaches. The script still runs at the first
- * commit; only the data is late.
+ * PAINT FIRST: the page script runs after the islands hydrate, and its effect renders the query rows the
+ * page already holds — then follows every change, because reading a signal inside `createEffect` subscribes.
  */
-const scriptRealm = await managedRealm(frame);
-await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent?.startsWith('mx:'), null, { timeout: 20000 }).catch(() => {});
-check(/^mx:object /.test(await scriptRealm.textContent('#out').catch(() => '')), 'window.mx is defined when the managed author script runs');
-await scriptRealm.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
-check(/^mx:object rows=2/.test(await scriptRealm.textContent('#out').catch(() => '')), 'and its query rows reach the managed script through mx.subscribe');
+await frame.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
+check(/^page:function rows=2/.test(await frame.textContent('#out').catch(() => '')), `the page script's effect renders the query rows from the page signals (${await frame.textContent('#out').catch(() => '')})`);
 check(!pageErrors.some((e) => /hydrat/i.test(e)), 'no hydration error — the author script ran after the first commit');
 const options = await frame.$$eval('select[aria-label="Region"] option', (os) => os.map((o) => o.value + '=' + o.textContent));
 check(JSON.stringify(options) === JSON.stringify(['=All', 'EU=EU', 'NA=NA']), `the bound select lists the query (All + values): ${options.join(' ')}`);
@@ -131,9 +132,8 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$1,200', 'cha
 const busy = await frame.evaluate(() => ({ seen: window.__busySeen, flash: window.__flashSeen, now: document.querySelector('[aria-label="Question embed"]').getAttribute('aria-busy') }));
 check(!busy.flash && busy.now === 'false', `the embed never flashed "loading" during the re-run and is not busy after it (busy seen=${busy.seen}, flash=${busy.flash})`);
 check(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
-// The author realm hears of the change over its own port, a hop after the page has painted it.
-await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 10000 }).catch(() => {});
-check((await scriptRealm.textContent('#out')) === 'changed:NA', `the managed author script saw the change through mx.subscribe (${await scriptRealm.textContent('#out')})`);
+await frame.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 10000 }).catch(() => {});
+check((await frame.textContent('#out')) === 'changed:NA', `the page script's effect saw the bound select's change through the region signal (${await frame.textContent('#out')})`);
 const holds = relayCalls.filter((call) => call.body.hold !== undefined);
 check(directCalls.length === 0 && relayCalls.every((call) => call.body.hold !== undefined) && holds.length === 1 && holds[0].body.hold === 'regions_data',
   `the first paint's rows came with the page (no run request), and the page fetched the dataset it may hold ONCE through the scoped POST (${relayCalls.length} POST: ${JSON.stringify(relayCalls.map((c) => c.body.hold ?? c.body.only))}, ${directCalls.length} GET)`);
@@ -141,25 +141,9 @@ check(relayCalls.length + directCalls.length === callsBeforeChange, `the select 
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});
 check((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'back to All restores the whole result');
-// The trusted main runtime may call its scoped query endpoint; arbitrary author
-// code runs in the managed child and cannot make these direct network calls.
+// The page's own runtime may call its scoped query endpoint.
 const queryStatus = await frame.evaluate(async id => (await fetch(`/a/${id}/query?q=%7B%7D`)).status, doc.id);
-check(queryStatus === 200, `the trusted page can query the public document (${queryStatus})`);
-const reach = await scriptRealm.evaluate(async ({ id, base }) => {
-  // fetch/XHR are convenience asset-proxy wrappers. Beacon bypasses those
-  // wrappers, so these violations demonstrate browser CSP, not a JS guard.
-  const violations = [];
-  const record = event => { if (event.effectiveDirective === 'connect-src') violations.push(event.blockedURI); };
-  document.addEventListener('securitypolicyviolation', record);
-  const targets = [`${base}/a/${id}/query`, `${base}/api/artifacts`, 'https://untrusted.invalid/probe'];
-  for (const target of targets) { try { navigator.sendBeacon(target, '{}'); } catch {} }
-  const deadline = Date.now() + 2000;
-  while (violations.length < targets.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
-  document.removeEventListener('securitypolicyviolation', record);
-  return { violations, targetCount: targets.length };
-}, { id: doc.id, base: B });
-const blockedOrigins = new Set(reach.violations.flatMap(uri => { try { return [new URL(uri).origin]; } catch { return []; } }));
-check(reach.violations.length >= reach.targetCount && blockedOrigins.has(new URL(B).origin) && blockedOrigins.has('https://untrusted.invalid'), `author child direct network is denied by browser connect-src (${JSON.stringify(reach.violations)})`);
+check(queryStatus === 200, `the document can query its own door (${queryStatus})`);
 
 // ── 4. <DataTable> past the display window, read as engine windows ────────
 // A cross join of a 200-row dataset is 40,000 rows; a run ships the first
@@ -177,8 +161,8 @@ const pageCalls = [];
 p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`)) pageCalls.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
 const tableEngine = engineLoads(p);
 await p.goto(`${B}/a/${tdoc.id}`, { waitUntil: 'load' });
-check(await servedTopLevel(p), 'the table document is top-level too');
-const f2 = p.mainFrame();
+// "the table document is top-level too" is gone with the top-level delivery: it is framed like every document.
+const f2 = await documentFrame(p);
 await f2.locator('[aria-label="Data grid"] tbody tr').first().waitFor({ timeout: 20000 });
 await f2.waitForTimeout(600);
 const domRows = await f2.$$eval('[aria-label="Data grid"] tbody tr', (trs) => trs.length);
@@ -232,14 +216,15 @@ reader.on('request', (r) => {
 });
 const privResp = await reader.goto(`${B}/a/${priv.id}`, { waitUntil: 'load' });
 check(privResp.status() === 200, `the admitted reader opens the private document (${privResp.status()})`);
-check((await reader.locator('[data-mx-inline-story]').count()) === 1, 'the admitted private document renders inline after its ACL');
+await inlineStory(reader).catch(() => {});
+check((await documentLocator(reader).locator(INLINE_STORY).count()) === 1, 'the admitted private document renders in its frame after its ACL');
 const pf = await liveDocument(reader);
 await pf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$30', null, { timeout: 20000 }).catch(() => {});
 check((await pf.textContent('[aria-label="Live number"]').catch(() => '')) === '$30', 'the private document renders its server-run data for the reader');
 await pf.selectOption('select[aria-label="Region"]', 'NA');
 await pf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$20', null, { timeout: 15000 }).catch(() => {});
 check((await pf.textContent('[aria-label="Live number"]')) === '$20', 'the reader\'s re-run works through the PAGE');
-check(readerRelay.length >= 1 && readerDirect.length === 0, `…as the relay POST with the session (${readerRelay.length} relayed, ${readerDirect.length} direct)`);
+check(readerRelay.length >= 1 && readerDirect.length === 0, `…as a POST to the document's own door with the pages session (${readerRelay.length} POST, ${readerDirect.length} GET)`);
 
 // ── 5b. THE READER'S SELECTION TRAVELS IN THE LINK (F2) ─────────────────────
 // `?$region=west` is parsed on the SERVER and seeded through the island's
@@ -257,14 +242,14 @@ const udocSrc = `<Helmet><title>URL values gate</title><Value name="region" type
 const udoc = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ markup: udocSrc, visibility: 'public' }) }));
 check(!!udoc.id, `the URL-values document published (${udoc.url ?? udoc.error})`);
 
-// (a) TOP-LEVEL: a stranger's page, no session — served the document itself.
+// (a) a stranger's page, no session.
 const up = await b.newPage({ viewport: { width: 1200, height: 900 } });
 const upErrors = [];
 up.on('pageerror', (e) => upErrors.push(e.message));
 const upQueries = [];
 up.on('request', (r) => { if (r.url().includes(`/a/${udoc.id}/query`)) upQueries.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
 await up.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
-const uf = up.mainFrame();
+const uf = await documentFrame(up);
 await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 check((await uf.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', `the link's selection is what the control shows at first paint (${await uf.$eval('select[aria-label="Region"]', (el) => el.value)})`);
 check((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the numbers are the SELECTED ones, not the defaults corrected a moment later');
@@ -272,19 +257,21 @@ const upRuns = upQueries.filter((q) => q.body?.hold === undefined);
 // The selected numbers arrived in the HTML (lib/story/prepared/served-results.server): the page asks for nothing to show them.
 check(upRuns.length === 0, `the document's first rows came with the page, for the selection: no run request (${upRuns.length} run request(s))`);
 // Key order is the store's: a compiled page's guest snapshot comes back from JSONB, which puts `errors` first.
-check(/"results":\{(?:"errors":\{\},)?"tables":\{"/.test(await (await fetch(`${B}/a/${udoc.id}?$region=west`, { headers: { accept: 'text/html' } })).text()), 'and the served page carries those results for the linked selection');
+// The document is served on its own origin now (the app page only frames it): that page carries the results.
+check(/"results":\{(?:"errors":\{\},)?"tables":\{"/.test(await (await fetch(`${documentOrigin(udoc.id)}/?$region=west`, { headers: { accept: 'text/html' } })).text()), 'and the served document carries those results for the linked selection');
 check(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
 // (b) the address follows the reader
 await uf.selectOption('select[aria-label="Region"]', 'east');
 await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$25', null, { timeout: 15000 }).catch(() => {});
 await up.waitForFunction(() => location.search.includes('east'), null, { timeout: 5000 }).catch(() => {});
-check(up.url().includes('$region=east'), `picking rewrites the address (${new URL(up.url()).search})`);
+check(up.url().includes('$region=east'), `picking rewrites the address (${new URL(up.url()).search}; the document frame's own address: ${new URL(uf.url()).search})`);
 check(!up.url().includes('west'), 'and replaces the old selection rather than appending to it');
 // (c) …and the link it produced is the document it describes
 await up.reload({ waitUntil: 'load' });
-await up.mainFrame().waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$25', null, { timeout: 20000 }).catch(() => {});
-check((await up.mainFrame().$eval('select[aria-label="Region"]', (el) => el.value)) === 'east', 'a reload of the copied address is the same document');
-check((await up.mainFrame().textContent('[aria-label="Live number"]')) === '$25', '…with the same numbers');
+const reloadedUf = await documentFrame(up);
+await reloadedUf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$25', null, { timeout: 20000 }).catch(() => {});
+check((await reloadedUf.$eval('select[aria-label="Region"]', (el) => el.value).catch(() => null)) === 'east', 'a reload of the copied address is the same document');
+check((await reloadedUf.textContent('[aria-label="Live number"]').catch(() => null)) === '$25', '…with the same numbers');
 await up.close();
 
 // (d) The owner's inline document has the same selection/address behavior and
@@ -293,6 +280,8 @@ let frameLoads = 0;
 owner.on('domcontentloaded', () => { frameLoads++; });
 await owner.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
 const ownerFrame = await liveDocument(owner);
+// The document's own window carries a sentinel: only a reload of the frame wipes it.
+await ownerFrame.evaluate(() => { window.__mxNoReload = 1; });
 await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 check(ownerFrame.url().includes('$region=west'), `the owner document receives the link's selection (${new URL(ownerFrame.url()).search})`);
 check((await ownerFrame.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', 'the owner control shows it');
@@ -301,7 +290,8 @@ await ownerFrame.selectOption('select[aria-label="Region"]', 'east');
 await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$25', null, { timeout: 15000 }).catch(() => {});
 await owner.waitForFunction(() => location.search.includes('east'), null, { timeout: 5000 }).catch(() => {});
 check(owner.url().includes('$region=east'), `picking rewrites the page address (${new URL(owner.url()).search})`);
-check(frameLoads === loadsBefore, `…and the document was not reloaded to do it (${frameLoads - loadsBefore} frame navigation(s))`);
+const frameKept = await ownerFrame.evaluate(() => window.__mxNoReload === 1).catch(() => false);
+check(frameLoads === loadsBefore && frameKept, `…and the document was not reloaded to do it (${frameLoads - loadsBefore} page navigation(s), frame sentinel ${frameKept ? 'kept' : 'lost'}; the frame's own address: ${new URL(ownerFrame.url()).search})`);
 
 // (e) the EXPORT photographs the selection — and is not the cached default shot.
 const shot = async (search) => Buffer.from(await (await fetch(`${B}/a/${udoc.id}/export${search}`, { headers: { Authorization: `Bearer ${ownerTok}` } })).arrayBuffer());
@@ -330,11 +320,12 @@ const bookingRequests = [];
 bp.on('request', (r) => bookingRequests.push(r.url()));
 const bookingEngine = engineLoads(bp);
 await bp.goto(`${B}/a/${booking.id}`, { waitUntil: 'load' });
-await bp.locator('main h2').first().waitFor({ timeout: 20000 });
+const bf = await documentFrame(bp);
+await bf.locator('main h2').first().waitFor({ timeout: 20000 });
 check(await bookingEngine, 'the booking page loaded its SQLite engine');
 await bp.waitForTimeout(500);
 /** Click the i-th day and time, in the page, from the click to the heading showing a different day. */
-const clickDay = (i) => bp.evaluate((i) => new Promise((resolve) => {
+const clickDay = (i) => bf.evaluate((i) => new Promise((resolve) => {
   const days = [...document.querySelectorAll('main button')].filter((el) => /\d/.test(el.textContent ?? '') && !/Cancel|:/.test(el.textContent ?? ''));
   const heading = () => document.querySelector('main h2')?.textContent;
   const before = heading();

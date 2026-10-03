@@ -87,17 +87,18 @@ describe('Helmet publish contract', () => {
     expect(details.some((d) => /<\/script/i.test(d.message))).toBe(true);
   });
 
-  it('sanitizes banned CSS inside the Helmet style (external @import stripped, siblings kept)', async () => {
+  it('stores the Helmet style as written: an external @import and its siblings are kept', async () => {
     const t = await mintToken('t');
-    const res = await create(t.token, {
-      markup:
-        '<Helmet><style>{`@import url("https://evil.example/x.css"); h1 { color: red; }`}</style></Helmet>' + BODY,
-    });
+    const style = '<Helmet><style>{`@import url("https://fonts.example/x.css"); h1 { color: red; }`}</style></Helmet>';
+    const res = await create(t.token, { markup: style + BODY });
     expect(res.status).toBe(201);
-    const { markup } = (await res.json()) as { markup: string };
-    expect(markup).not.toContain('evil.example');
-    expect(markup).toContain('color: red');
-    const repeated = await create(t.token, { markup });
+    const body = (await res.json()) as { markup?: string; markup_changed: boolean };
+    // CSS is unconstrained: nothing is stripped, so the write stores what was sent and echoes no change.
+    expect(body.markup_changed).toBe(false);
+    const stored = storedMarkup(body, style + BODY);
+    expect(stored).toContain('@import url("https://fonts.example/x.css");');
+    expect(stored).toContain('h1 { color: red; }');
+    const repeated = await create(t.token, { markup: stored });
     expect(repeated.status, await repeated.clone().text()).toBe(201);
   });
 

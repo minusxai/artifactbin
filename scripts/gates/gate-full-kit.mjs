@@ -20,13 +20,24 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  * usage: node scripts/gates/gate-full-kit.mjs [base]   (default :3040)
  */
-import { chromium } from 'playwright';
+import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
+import { documentFrame, inlineStory } from './lib/page-facts.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
 import { kitchenSinkMarkup } from '../lib/kitchen-sink-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
-const origin = new URL(BASE).origin;
+const { port } = new URL(BASE);
+/**
+ * Our own hosts: the app (`app.lvh.me`), each document's origin (`<hex id>.lvh.me`), the pages apex and the
+ * managed-assets host (`assets.lvh.me`), all on this server's port. Anything else is a request to a stranger.
+ */
+const ownHost = (value) => {
+  try {
+    const url = new URL(value);
+    return url.port === port && (url.hostname === PAGES_HOST || url.hostname.endsWith(`.${PAGES_HOST}`));
+  } catch { return false; }
+};
 const check = createChecker('full-kit');
 
 const mint = await connectAgent(BASE);
@@ -46,7 +57,7 @@ const markup = await kitchenSinkMarkup(publish);
 const doc = await publish({ markup, theme: 'modernist', colorMode: 'dark', title: 'Kitchen sink (unified)' });
 console.log(`   doc: ${BASE}/a/${doc.id}`);
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const context = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 // Login visits Home, whose showcase thumbnails can finish loading after its
 // DOM is ready. Close that page so its requests cannot enter the document gate.
@@ -61,19 +72,12 @@ await page.route(/^https:\/\/buttons\.github\.io\/buttons\.html(?:\?|$)/, route 
 const external = [];
 const requests = [];
 const pageErrors = [];
-const requestChecks = [];
 page.on('request', (r) => {
   const u = r.url();
   requests.push(u);
-  // Only our fixed, response-sandboxed widget document is exempt. Inspect its
-  // URL synchronously: SSR hydration can detach its frame element before the
-  // asynchronous DOM inspection finishes. Other frames remain network-closed.
-  if (!u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:')) requestChecks.push((async () => {
-    const frameUrl = new URL(r.frame().url());
-    const trustedWidget = frameUrl.origin === origin && frameUrl.pathname === '/-/github-star'
-      && (u === 'https://buttons.github.io/buttons.js' || u === 'https://api.github.com/repos/minusxai/artifactbin');
-    if (!trustedWidget) external.push(u);
-  })());
+  // The document now runs on its own origin (`<hex id>.lvh.me`) beside the app, both ours; the old exemption for
+  // the `/-/github-star` widget frame went with that route (the star is the app bar's own, PageChrome).
+  if (!ownHost(u) && !u.startsWith('data:') && !u.startsWith('blob:')) external.push(u);
 });
 page.on('pageerror', (e) => pageErrors.push(String(e)));
 await page.addInitScript(() => {
@@ -82,8 +86,9 @@ await page.addInitScript(() => {
 });
 
 await page.goto(`${BASE}/a/${doc.id}`);
-const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
-const frame = page.mainFrame();
+// The app page frames the document on its own origin: every document check runs inside that frame.
+await inlineStory(page, { timeout: 30000 });
+const frame = await documentFrame(page);
 await frame.waitForSelector('h1', { timeout: 30000 });
 await page.waitForTimeout(6000); // charts hydrate and draw
 
@@ -135,20 +140,8 @@ check(await frame.evaluate("document.querySelectorAll('canvas, svg.marks').lengt
 check(/\$\s?[\d,]+/.test(text), 'inline <Number> computed a value');
 check(await frame.evaluate("!!document.querySelector('[aria-label=\"Question embed\"]')"), 'Question embeds mounted');
 
-// video renders as a click-to-open card: hosted poster, play badge, a link to
-// the watch page — and NEVER a nested frame (the sandbox would kill a player).
-check(await frame.evaluate("!!document.querySelector('[data-slot=\"video\"] a[href^=\"https://www.youtube.com/watch\"]')"), 'Video card links to the watch page');
-check(await frame.evaluate("(document.querySelector('[data-slot=\"video-thumb\"]')?.getAttribute('src') ?? '').startsWith('/a/')"), 'Video poster resolved to the hosted image ref');
-const managed = frame.locator('iframe[title="Isolated gallery region"]');
-await frame.waitForSelector('iframe[title="Isolated gallery region"][data-mx-author-ready]');
-check(await frame.locator('[data-mx-inline-story] iframe').count() === 1
-  && await managed.getAttribute('sandbox') === 'allow-scripts'
-  && await managed.getAttribute('src') === `${origin}/author-frame`,
-  'only the managed opaque gallery wrapper is framed; Video remains a link');
-
 // 3. isolation
 const csp = await frame.evaluate('window.__csp || []');
-await Promise.all(requestChecks);
 check(csp.length === 0, `no CSP violations${csp.length ? `: ${csp.join(', ')}` : ''}`);
 check(external.length === 0, `no external requests${external.length ? `: ${external.slice(0, 3).map(value => { const url = new URL(value); return url.origin + url.pathname; }).join(', ')}` : ''}`);
 check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
@@ -214,7 +207,10 @@ await prosePage.waitForTimeout(3000);
 const manifest = await (await fetch(`${BASE}/islands/manifest.json`)).json();
 const closure = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u) || !manifest.files[u]) continue; seen.add(u); closure(manifest.files[u].imports, seen); } return seen; };
 const allowed = closure([manifest.manifest['@mx/page']]);
-const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p));
+// The owner's app page attaches to the frame for comments (lib/story-runtime/frame-bridge), which loads the editor's
+// document half, `@mx/frame-editor`, and its own lazy chunks (`frame-editor-chunk-*`): no chart code is in that build.
+const frameEditor = (p) => closure([manifest.manifest['@mx/frame-editor']]).has(p) || p.startsWith('/islands/frame-editor-chunk-');
+const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p) && !frameEditor(p));
 check(extra.length === 0, `a prose document never fetches the chart chunk (island files beyond its page behaviour: ${extra.join(', ') || 'none'})`);
 
 // 6. A Popover opens NEXT TO its trigger, not at the viewport's corner (the placement is measured, so only a
@@ -223,16 +219,20 @@ const popover = await publish({ markup: '<h1 className="text-3xl">Popover</h1><p
 for (const viewport of [{ width: 1200, height: 800 }, { width: 390, height: 800 }]) {
   const popPage = await browser.newPage({ viewport });
   await popPage.goto(`${BASE}/a/${popover.id}`);
-  await popPage.waitForSelector('[data-mx-inline-story] h1', { timeout: 20000 });
-  await popPage.waitForTimeout(1500);
-  await popPage.getByRole('button', { name: 'Open popover' }).click();
-  await popPage.waitForFunction(() => { const transform = document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''; return transform !== '' && !transform.includes('%'); }, null, { timeout: 10000 }).catch(() => {}); // an unplaced popover fails the position checks below
-  const box = await popPage.evaluate(() => {
+  const popDoc = await documentFrame(popPage);
+  await popDoc.waitForSelector('[data-mx-inline-story] h1', { timeout: 20000 });
+  // The press must land on a live trigger: wait for the islands to take over (lib/islands/boot `<html data-mx-ready>`).
+  await popDoc.waitForSelector('html[data-mx-ready]', { state: 'attached', timeout: 20000 }).catch(() => {});
+  await popPage.waitForTimeout(500);
+  await popDoc.getByRole('button', { name: 'Open popover' }).click();
+  await popDoc.waitForFunction(() => { const transform = document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''; return transform !== '' && !transform.includes('%'); }, null, { timeout: 10000 }).catch(() => {}); // an unplaced popover fails the position checks below
+  const box = await popDoc.evaluate(() => {
     const t = document.querySelector('[data-slot="popover-trigger"]')?.getBoundingClientRect();
     const c = document.querySelector('[data-slot="popover-content"]')?.getBoundingClientRect();
     return t && c ? { t: { l: t.left, r: t.right, b: t.bottom, w: t.width }, c: { l: c.left, r: c.right, t: c.top, w: c.width }, inStory: !!document.querySelector('[data-mx-inline-story] [data-slot="popover-content"]') } : null;
   });
   const tag = `${viewport.width}px`;
+  if (!box) check.note(`${tag}: ${JSON.stringify(await popDoc.evaluate(() => ({ ready: document.documentElement.hasAttribute('data-mx-ready'), expanded: document.querySelector('[data-slot="popover-trigger"]')?.getAttribute('aria-expanded') ?? null, wrappers: document.querySelectorAll('[data-radix-popper-content-wrapper]').length }))) }`);
   check(!!box, `${tag}: the popover opened`);
   if (box) {
     check(Math.abs(box.c.t - (box.t.b + 4)) <= 2, `${tag}: popover sits just under its trigger (content top ${box.c.t}, trigger bottom ${box.t.b})`);

@@ -122,6 +122,46 @@ it('done() on an address opened as /edit replaces it with the reading address', 
   expect(lifecycle.phase()).toBe('reading');
 });
 
+it('done() on an address that arrived in edit mode drops #edit before the flush settles, so a reload reads', async () => {
+  vi.useFakeTimers();
+  const { lifecycle, history, location } = lifecycleFor({ start: '/a/doc?$x=1#edit' });
+  let release!: () => void;
+  lifecycle.registerFlush(() => new Promise<void>((resolve) => { release = resolve; }));
+  lifecycle.sync();
+  lifecycle.ready();
+  const outcome = lifecycle.done();
+  expect(location.hash).toBe('');
+  expect(location.pathname + location.search).toBe('/a/doc?$x=1');
+  expect(lifecycle.phase()).toBe('leaving');
+  // A reload now opens the reading address: sync() on it never re-enters the editor.
+  lifecycle.sync();
+  expect(lifecycle.phase()).toBe('leaving');
+  release();
+  await settle();
+  expect(await outcome).toBe('restored');
+  expect(history.back).not.toHaveBeenCalled();
+  expect(location.hash).toBe('');
+  expect(lifecycle.phase()).toBe('reading');
+});
+
+it('done() after enter() drops #edit before the flush and pops the pushed entry after it', async () => {
+  vi.useFakeTimers();
+  const { lifecycle, history, location, entries } = lifecycleFor();
+  let release!: () => void;
+  lifecycle.registerFlush(() => new Promise<void>((resolve) => { release = resolve; }));
+  lifecycle.enter(null);
+  lifecycle.ready();
+  const outcome = lifecycle.done();
+  expect(location.hash).toBe('');
+  expect(history.back).not.toHaveBeenCalled();
+  release();
+  await settle();
+  expect(await outcome).toBe('restored');
+  expect(history.back).toHaveBeenCalledTimes(1);
+  expect(entries()).toEqual(['/a/doc']);
+  expect(lifecycle.phase()).toBe('reading');
+});
+
 it('Back while a flush hangs waits at most 3 s, then leaves', async () => {
   vi.useFakeTimers();
   const { lifecycle, history, sent } = lifecycleFor();

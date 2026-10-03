@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import type {DocumentOperation} from '@artifactbin/contracts';
 import {applyOperationsToNodes} from '../graph/document-operation';
 import {createDocumentGraph,graphNodes,graphSource,graphIntegrity,type DocumentGraph} from '../graph/document-graph';
-import {prepareGraphPatch,applyGraphPatch,graphKeySelector,selectGraphKeys} from '../graph/document-graph-patch';
+import {prepareGraphPatch,applyGraphPatch,advanceGraph,graphKeySelector,selectGraphKeys} from '../graph/document-graph-patch';
 const source='<main id="root"><section id="left"><p id="a">Alpha</p></section><section id="right"><p id="b">Beta</p></section></main>';
 const setup=()=>createDocumentGraph(source,1);
 const plan=(base:DocumentGraph,operations:DocumentOperation[])=>prepareGraphPatch(base,createDocumentGraph(applyOperationsToNodes(graphNodes(base),operations),2),1);
@@ -92,4 +92,10 @@ it('indexes selectors once with the same answer as a scan, for every selector an
   for (const selector of [...selectors, 'id:absent']) expect(select(selector)).toEqual(scan(graph, selector));
   select('use:n').push('mutated');
   expect(select('use:n')).toEqual(scan(graph, 'use:n'));
+});
+it('advancing refuses a patch that names an inherited key instead of writing through the prototype',()=>{
+ const base=setup(),change=plan(base,[{kind:'setText',path:[0,0,0,0],value:'Changed'}]);
+ expect(advanceGraph(base,1,change)).not.toBeNull();
+ for(const key of ['__proto__','constructor'])expect(advanceGraph(base,1,{...change,touched:[key]})).toBeNull();
+ expect(Object.getPrototypeOf(base.nodes)).toBe(Object.prototype);
 });

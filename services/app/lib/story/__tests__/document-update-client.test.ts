@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import {createDocumentGraph,graphIntegrity,graphSource} from '../graph/document-graph';
-import {prepareClientDocumentUpdate,prepareClientDocumentPublication} from '../graph/document-update-client';
+import {prepareClientDocumentUpdate,prepareClientDocumentPublication,needsAuthoringContext} from '../graph/document-update-client';
 import {applyGraphPatch} from '../graph/document-graph-patch';
 const source='<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>';
 it('prepares composable client operations without server publication or unrelated cache work',()=>{
@@ -38,11 +38,13 @@ it('refuses ambiguous legacy anchors before normalization can discard them',()=>
  const base={document:createDocumentGraph(source,1),version:1,meta:{}};
  for(const anchor of ['"old"','{"old"}'])expect(()=>prepareClientDocumentUpdate(base,{source:`<main><p data-annotation-anchor=${anchor}>First</p><p data-annotation-anchor=${anchor}>Second</p></main>`,whole:true})).toThrow(/ambiguous|duplicate/i);
 });
-it('reports resource warnings to the author without adding them to the committed operation',async()=>{
+it('needs no authoring context for a web image: it is served as written, never imported',async()=>{
  const base={document:createDocumentGraph(source,1),version:1,meta:{}};
- const warnings=[{code:'bad_status',url:'https://example.com/missing.png',fix:'Check the URL'}],received=vi.fn();
- const update=await prepareClientDocumentPublication(base,{source:source+'<img src="https://example.com/missing.png" />'},async()=>({warnings}),received);
- expect(received).toHaveBeenCalledWith(warnings);expect(update).not.toHaveProperty('warnings');
+ const prepareContext=vi.fn(async()=>({}));
+ const withImage=source.replace('</main>','<img src="https://example.com/photo.png" alt="p" /></main>');
+ expect(needsAuthoringContext(withImage)).toBe(false);
+ const update=await prepareClientDocumentPublication(base,{source:withImage},prepareContext);
+ expect(prepareContext).not.toHaveBeenCalled();expect(update).not.toHaveProperty('warnings');
 });
 
 it.each([false,true])('keeps formatted sibling text edits independent (preserveSource=%s)',preserveSource=>{

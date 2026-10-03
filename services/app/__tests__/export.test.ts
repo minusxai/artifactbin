@@ -45,7 +45,7 @@ const shot = (id: string, format?: string) =>
 const serveRawFor = (id: string) => serveRaw(request(`/a/${id}/raw`), params({ id }));
 
 it('keeps verified capture endpoint and CSP origins on the actual internal request despite public HTTPS forwarding',async()=>{
- const artifact=await create('<Iframe title="capture"><p>inside</p></Iframe>');
+ const artifact=await create('<p>inside</p>');
  const key=mintExportKey(artifact.id);
  const response=await serveRaw(request(`/a/${artifact.id}/raw?chrome=0&key=${encodeURIComponent(key)}`,{headers:{'x-forwarded-proto':'https','x-forwarded-host':'public.example'}}),params({id:artifact.id}));
  const html=await response.text();

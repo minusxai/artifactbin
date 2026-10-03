@@ -35,8 +35,10 @@ describe('the setup planner ships whole', () => {
 describe('questions()', () => {
   it('asks at most the decided things, in order, with defaults', () => {
     const q = questions();
-    expect(q.map((x) => x.key)).toEqual(['publicUrl', 'port', 'email', 'emailFrom', 'database', 'databaseUrl', 'objects', 's3Url']);
-    expect(q.find((x) => x.key === 'publicUrl').default).toBe('http://localhost:3030');
+    expect(q.map((x) => x.key)).toEqual(['publicUrl', 'port', 'pagesHost', 'email', 'emailFrom', 'database', 'databaseUrl', 'objects', 's3Url']);
+    expect(q.find((x) => x.key === 'publicUrl').default).toBe('http://app.lvh.me:3030');
+    expect(q.find((x) => x.key === 'pagesHost').default).toBe('lvh.me');
+    expect(q.find((x) => x.key === 'pagesHost').prompt).toContain('APP__PAGES_HOST');
     expect(q.find((x) => x.key === 'email').secret).toBe(true);
     expect(typeof q.find((x) => x.key === 'emailFrom').when).toBe('function');
     expect(typeof q.find((x) => x.key === 'databaseUrl').when).toBe('function');
@@ -63,7 +65,8 @@ describe('buildEnvFile()', () => {
     expect(text).toMatch(/^#\s*S3_URL=/m);
     expect(text).toMatch(/^OBJECT_STORE__LOCAL_DIR=\.\/data\/objects$/m);
     expect(text).toMatch(/^# EMAIL__DEV_OUTBOX_PATH=$/m);
-    expect(text).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:3030$/m);
+    expect(text).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:3030$/m);
+    expect(text).toMatch(/^APP__PAGES_HOST=lvh\.me$/m);
     expect(text).toMatch(/^APP__PORT=3030$/m);
     expect(text).not.toContain('dev-only-secret');
   });
@@ -80,9 +83,9 @@ describe('buildEnvFile()', () => {
   });
   it('a port override makes the default public URL follow that port', () => {
     const answers = defaultAnswers({ port: 5299 });
-    expect(answers).toMatchObject({ port: 5299, publicUrl: 'http://localhost:5299' });
+    expect(answers).toMatchObject({ port: 5299, publicUrl: 'http://app.lvh.me:5299' });
     const text = buildEnvFile({ port: 5299 }, { generated: gen });
-    expect(text).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:5299$/m);
+    expect(text).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:5299$/m);
     expect(text).toMatch(/^APP__PORT=5299$/m);
   });
 });
@@ -101,16 +104,17 @@ describe('existing environment files', () => {
 
   it('derives editable choices from current names without exposing secrets as defaults', () => {
     expect(existingAnswers(old)).toMatchObject({
-      publicUrl: 'http://localhost:4040', port: 4040, email: 'keep-email',
+      publicUrl: 'http://app.lvh.me:4040', port: 4040, pagesHost: 'lvh.me', email: 'keep-email',
       emailFrom: 'old@example.com', database: 'postgres', databaseUrl: 'postgresql://u:p@db/app',
       objects: 's3', s3Url: 's3://key:secret@objects/bucket',
     });
   });
 
-  it('preserves values and custom settings and fills missing secrets', () => {
+  it('preserves values and custom settings, fills missing secrets, and repairs a missing pages host onto the same site', () => {
     const merged = mergeEnvFile(old, {}, { generated: gen });
     expect(merged).toMatch(/^AUTH__SECRET=keep-auth$/m);
-    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:4040$/m);
+    expect(merged).toMatch(/^APP__PAGES_HOST=lvh\.me$/m);
+    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:4040$/m);
     expect(merged).toMatch(/^EMAIL__FROM=old@example\.com$/m);
     expect(merged).toMatch(/^EMAIL__RESEND_API_KEY=keep-email$/m);
     expect(merged).toMatch(/^MY_CUSTOM_SETTING=keep-me$/m);
@@ -120,7 +124,7 @@ describe('existing environment files', () => {
   it('keeps a loopback public URL coupled to an explicitly changed app port', () => {
     const merged = mergeEnvFile(old, { port: 5050, email: '', objects: 'local' }, { generated: gen, supplied: new Set(['port', 'email', 'objects']) });
     expect(merged).toMatch(/^APP__PORT=5050$/m);
-    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:5050$/m);
+    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:5050$/m);
     expect(merged).toMatch(/^# EMAIL__RESEND_API_KEY=$/m);
     expect(merged).toMatch(/^# S3_URL=/m);
     expect(merged).toMatch(/^OBJECT_STORE__LOCAL_DIR=\.\/data\/objects$/m);
@@ -154,6 +158,30 @@ describe('parseArgs()', () => {
   });
 });
 
+describe('--pages-host', () => {
+  it('alone names development\'s lvh.me, with a value names that host, and refuses anything but a bare hostname', () => {
+    expect(parseArgs(['--pages-host']).answers.pagesHost).toBe('lvh.me');
+    expect(parseArgs(['--pages-host', '--yes'])).toMatchObject({ yes: true, answers: { pagesHost: 'lvh.me' } });
+    expect(parseArgs(['--pages-host', 'Pages.Example.com']).answers.pagesHost).toBe('pages.example.com');
+    for (const bad of ['https://pages.example.com', 'pages.example.com:443', '*.example.com']) expect(parseArgs(['--pages-host', bad]).error, bad).toMatch(/pages host/i);
+  });
+  it('writes APP__PAGES_HOST and moves a loopback app onto the same site, keeping its port', () => {
+    const text = buildEnvFile({ port: 11001, pagesHost: 'lvh.me' }, { generated: gen });
+    expect(text).toMatch(/^APP__PAGES_HOST=lvh\.me$/m);
+    expect(text).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:11001$/m);
+    expect(buildEnvFile({ publicUrl: 'https://app.example.com', pagesHost: 'pages.example.com' }, { generated: gen })).toMatch(/^APP__PUBLIC_BASE_URL=https:\/\/app\.example\.com$/m);
+    // Required: every file setup writes names it, development's lvh.me by default.
+    expect(buildEnvFile({ port: 11001 }, { generated: gen })).toMatch(/^APP__PAGES_HOST=lvh\.me$/m);
+  });
+  it('changes it in an existing file without touching the rest', () => {
+    const before = buildEnvFile({ port: 11001 }, { generated: gen });
+    const after = mergeEnvFile(before.replace(/^APP__PAGES_HOST=.*$/m, 'APP__PAGES_HOST=pages.example.com'), { pagesHost: 'lvh.me' }, { generated: gen, supplied: new Set(['pagesHost']) });
+    expect(after).toMatch(/^APP__PAGES_HOST=lvh\.me$/m);
+    expect(after).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:11001$/m);
+    expect(existingAnswers(after).pagesHost).toBe('lvh.me');
+  });
+});
+
 describe('scripts/setup.mjs (child process)', () => {
   it('--yes writes a 0600 .env, safely reuses it, --force replaces it, and --print masks', () => {
     const out = path.join(TMP, '.env');
@@ -181,17 +209,17 @@ describe('scripts/setup.mjs (child process)', () => {
   it('--port makes the default public URL follow it', () => {
     const printed = run(['--yes', '--print', '--port', '5299']);
     expect(printed.status, printed.stderr).toBe(0);
-    expect(printed.stdout).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:5299$/m);
+    expect(printed.stdout).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:5299$/m);
     expect(printed.stdout).toMatch(/^APP__PORT=5299$/m);
   });
-  it('--port also updates an existing matching localhost public URL and prints the resolved summary', () => {
+  it('--port also updates an existing matching loopback public URL and prints the resolved summary', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-port-update-'));
     const out = path.join(dir, '.env');
     expect(run(['--yes', '--out', out, '--port', '5298']).status).toBe(0);
     const changed = run(['--yes', '--out', out, '--port', '5398']);
     expect(changed.status, changed.stderr).toBe(0);
-    expect(fs.readFileSync(out, 'utf8')).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:5398$/m);
-    expect(changed.stdout).toContain('Public URL: http://localhost:5398');
+    expect(fs.readFileSync(out, 'utf8')).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:5398$/m);
+    expect(changed.stdout).toContain('Public URL: http://app.lvh.me:5398');
     expect(changed.stdout).toContain('App port: 5398');
     expect(changed.stdout).toContain('HMR port: 5399');
     expect(changed.stdout).toContain('Database: embedded PGLite');

@@ -4,11 +4,12 @@
  */
 import type {DocumentGraph,DocumentGraphNode} from '@artifactbin/contracts';
 export type {DocumentGraph,DocumentGraphNode} from '@artifactbin/contracts';
-const randomUUID=()=>globalThis.crypto.randomUUID();
+const randomUUID=()=>runtimeId();
 const byteLength=(value:string)=>new TextEncoder().encode(value).length;
 import type {DocumentPath} from '@artifactbin/contracts';
 import type {JsxNode} from '../../jsx/types';
 import {parseJsx} from '../../jsx/parse';
+import {runtimeId} from '../../story-runtime/runtime-id';
 import {serializeJsx} from '../../jsx/serialize';
 import {graphSelectors} from './document-graph-selectors';
 import {collectRefUses} from '../data/refs';
@@ -53,8 +54,8 @@ export function createDocumentGraph(source:string|JsxNode[],version:number,optio
   const parsed=typeof source==='string'?parseJsx(source):{ok:true as const,nodes:source};
   if(!parsed.ok)throw new Error(parsed.error);
   const nodes:Record<string,DocumentGraphNode>={};
-  const visit=(node:GraphAstNode,parent:string,context:{implicit?:boolean;isolated?:boolean;helmet?:boolean;parentTag?:string}={}):string=>{
-    const {implicit=false,isolated=false,helmet=false,parentTag=''}=context;
+  const visit=(node:GraphAstNode,parent:string,context:{implicit?:boolean;helmet?:boolean;parentTag?:string}={}):string=>{
+    const {implicit=false,helmet=false,parentTag=''}=context;
     if(implicit&&(node.type!=='element'||node.control?.kind!=='fragment'||node.children.length))throw new Error('An AND expression has no editable false branch');
     const key=node.graphKey??randomUUID();
     if(key===GRAPH_ROOT||Object.hasOwn(nodes,key))throw new Error('Duplicate internal node identity');
@@ -66,10 +67,10 @@ export function createDocumentGraph(source:string|JsxNode[],version:number,optio
     if(original!==null&&and&&!implicit)parts.push('');
     const own=plain.type==='element'?{...plain,children:[]}:plain;
     const referenceNode=node.type==='element'&&['Query','Mutation'].includes(node.tag)?node:own;
-    const refs=isolated||node.type!=='element'||node.control?[]:(collectRefUses(serializeJsx([referenceNode]))??[]).map(({id,kind})=>({id,kind}));
-    const record:DocumentGraphNode={ast:encodeDocumentNodes([own]),selectors:isolated?[]:graphSelectors(node),refs,parent,children:[],parts,bytes:byteLength(parts.join('')),units:parts.reduce((sum,p)=>sum+p.length,0),partUnits:parts.map(part=>part.length),subtreeUnits:0,prose:node.type==='text'&&!isolated&&!helmet&&PROSE_HTML_PARENTS.has(parentTag)&&inertProse(node.value),selfVersion:version,childrenVersion:version,subtreeVersion:version};
+    const refs=node.type!=='element'||node.control?[]:(collectRefUses(serializeJsx([referenceNode]))??[]).map(({id,kind})=>({id,kind}));
+    const record:DocumentGraphNode={ast:encodeDocumentNodes([own]),selectors:graphSelectors(node),refs,parent,children:[],parts,bytes:byteLength(parts.join('')),units:parts.reduce((sum,p)=>sum+p.length,0),partUnits:parts.map(part=>part.length),subtreeUnits:0,prose:node.type==='text'&&!helmet&&PROSE_HTML_PARENTS.has(parentTag)&&inertProse(node.value),selfVersion:version,childrenVersion:version,subtreeVersion:version};
     nodes[key]=record;
-    if(node.type==='element')record.children=node.children.map((child,index)=>visit(child,key,{implicit:node.control?.kind==='and'&&index===1,isolated:isolated||node.tag==='Iframe',helmet:helmet||node.tag==='Helmet',parentTag:node.tag}));
+    if(node.type==='element')record.children=node.children.map((child,index)=>visit(child,key,{implicit:node.control?.kind==='and'&&index===1,helmet:helmet||node.tag==='Helmet',parentTag:node.tag}));
     record.subtreeUnits=record.units+record.children.reduce((sum,child)=>sum+nodes[child]!.subtreeUnits,0);
     return key;
   };

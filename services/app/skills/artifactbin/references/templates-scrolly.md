@@ -69,7 +69,7 @@ Skeleton (one pass of the beats; the costume here is a traffic monitor — wear 
 ## Rules
 
 THE FUN KIT (compose 4-6 per story; pace them, never all on one screen):
-- Console topbar: it scrolls away; fixed and sticky are banned.
+- Console topbar: it scrolls away with the story.
 - Two-tone headline: THE one word of the claim in the accent — hero on
   `animate-fade-up`, chapter headlines on `reveal-up`.
 - Ticker band: a full-bleed accent strip of repeating key stats that SCROLLS<!--bundle:skip--> — the

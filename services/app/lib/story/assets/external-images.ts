@@ -1,21 +1,13 @@
 /**
- * WHICH EXTERNAL URLs A DOCUMENT NAMES — the pure half of importing them.
+ * WHICH EXTERNAL URLs A DOCUMENT NAMES. Publish no longer imports them (a web
+ * URL is served as written); this lister remains only for the serve-time lookup
+ * of copies already held (lib/serving web-assets, custom-domains, prepared-page,
+ * draft-preview), pending its removal there.
  *
- * Two positions hold an image the document must own: `<img src>` and
- * `<Video poster>`, the two places refs.ts treats as image refs; ONE holds a
- * PDF, `<File src>`, which is imported the same way under its own cap. A web URL
- * anywhere else keeps whatever meaning the validator gives it (`href` is
- * navigation; other subresource attributes stay rejected as non-self-contained)
- * — and ONE css position holds a face the document self-hosts:
+ * One position holds an image: `<img src>`, the place refs.ts treats as an
+ * image ref; ONE holds a PDF, `<File src>`; and ONE css position holds a face:
  * `@font-face { src: url(https://…) }` inside the author's own `<Helmet>`
  * stylesheet.
- *
- * The DOOR (jsx-tier) collects these and IMPORTS them (lib/web-assets) before
- * validation. It does NOT rewrite the source: the URL an author wrote stays in
- * the stored document, and the serve-time mapping (lib/story/assets/asset-url) points
- * the served copy at ours. Rewriting to `ref:<id>` instead would create an
- * image artifact the agent never asked for and make the document's own markup
- * unrecognisable to whoever wrote it.
  */
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/document/helmet';
@@ -27,7 +19,6 @@ const WEB_URL = /^https?:\/\//i;
 /** [element tag, attribute] pairs that hold an image the document must own. */
 const IMAGE_POSITIONS: ReadonlyArray<readonly [tag: string, attr: string, component: boolean]> = [
   ['img', 'src', false],
-  ['Video', 'poster', true],
 ];
 
 /** The one position that holds a PDF: the card that links it. */
