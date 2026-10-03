@@ -29,17 +29,20 @@
 // `seconds` re-read from CI runs 36875088399, 36875673784 and 36876517464: the slowest of the three
 // `──── name (Ns) ────` lines for each gate (a failed first attempt excluded).
 export const GATE_SPECS = Object.freeze([
-  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 37, timeoutMs: 150_000 },
-  // Opens rendered offline files from file:// (reading, editing, comments, Save, code view offline and
-  // online, agent-edited files), one engine per gate. All three took 74s on run 36879103503 (after 48s of
-  // cross-browser install); alone, 29s/38s/28s on run 36880158113.
-  { name: 'offline-file', needsMail: false, seconds: 29, timeoutMs: 120_000 },
-  { name: 'offline-file-firefox', browsers: ['firefox'], needsMail: false, seconds: 38, timeoutMs: 120_000 },
-  { name: 'offline-file-webkit', browsers: ['webkit'], needsMail: false, seconds: 28, timeoutMs: 120_000 },
-  { name: 'cli-conformance', needsMail: true, seconds: 12, timeoutMs: 180_000 },
-  { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
+  // Journey gates (.agent/gates-proposal.md §3): each absorbs several former gates; `seconds` measured in
+  // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
+  // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
+  // process (formerly offline-file, -firefox, -webkit and screenshot-comments: three shards' cross-browser setup).
+  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 60, timeoutMs: 180_000 },
+  // Guest start, OAuth consent and the login door, claim, fork, folders and CLI acceptance, one persona per leg
+  // (formerly simpler-start, oauth-browser, app-flows AUTH, claim-flow, fork, folders and cli-conformance).
+  { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 45, timeoutMs: 140_000 },
+  // Writes reaching open pages with no reload (formerly live-data, live-reader, app-flows VIEWER and the
+  // watched-then-edit half of inplace-edit section 3).
+  { name: 'live', needsMail: false, seconds: 40, timeoutMs: 120_000 },
+  // Browser sessions and test users through the real CLI, Linux + bubblewrap (formerly browser-sessions, testusers).
+  { name: 'sessions', needsMail: true, seconds: 45, timeoutMs: 140_000 },
   { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
-  { name: 'testusers', needsMail: true, seconds: 10, timeoutMs: 60_000 },
   { name: 'comment-targets', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, seconds: 5, timeoutMs: 60_000 },
   { name: 'app-home', needsMail: false, serialGroup: 'clipboard', seconds: 1, timeoutMs: 120_000 },
@@ -48,7 +51,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'postgres-datasets', needsMail: true, seconds: 14, timeoutMs: 60_000 },
   { name: 'annotations', needsMail: false, seconds: 40, timeoutMs: 120_000 },
   { name: 'app-flows', needsMail: true, seconds: 75, timeoutMs: 210_000 },
-  { name: 'claim-flow', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'collab-edit', needsMail: true, seconds: 37, timeoutMs: 100_000 },
   { name: 'data-ux', needsMail: false, seconds: 16, timeoutMs: 60_000 },
   { name: 'dataflow', needsMail: true, seconds: 13, timeoutMs: 60_000 },
@@ -61,8 +63,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'roadmap-views', needsMail: false, seconds: 8, timeoutMs: 60_000 },
   { name: 'export-slice', needsMail: false, seconds: 13, timeoutMs: 60_000 },
   { name: 'fonts', needsMail: false, seconds: 39, timeoutMs: 150_000 },
-  { name: 'folders', needsMail: true, seconds: 12, timeoutMs: 60_000 },
-  { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'full-kit', needsMail: false, seconds: 33, timeoutMs: 60_000 },
   { name: 'hydration', needsMail: true, seconds: 31, timeoutMs: 190_000 },
   { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 47, timeoutMs: 110_000 },
@@ -75,8 +75,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
   { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },
-  { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
-  { name: 'live-reader', needsMail: false, seconds: 30, timeoutMs: 70_000 },
   // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
   { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
@@ -84,7 +82,6 @@ export const GATE_SPECS = Object.freeze([
   // The four native-scripts briefs end to end on a server it boots with APP__PAGES_HOST=lvh.me (./lib/pages-server):
   // frame, direct query, consent and the fetch door, in-frame editing with the script badge, a comment, afbin export.
   { name: 'native-scripts', needsMail: false, seconds: 45, timeoutMs: 150_000 },
-  { name: 'oauth-browser', needsMail: true, seconds: 3, timeoutMs: 60_000 },
   { name: 'reading-chrome', needsMail: false, seconds: 19, timeoutMs: 90_000 },
   { name: 'web-assets', needsMail: true, seconds: 17, timeoutMs: 60_000 },
   { name: 'pdf', needsMail: false, seconds: 2, timeoutMs: 60_000 },
@@ -94,7 +91,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'secure-arch', needsMail: true, seconds: 14, timeoutMs: 60_000 },
   { name: 'shell-seo', needsMail: false, seconds: 3, timeoutMs: 60_000 },
   { name: 'social-preview', needsMail: false, seconds: 29, timeoutMs: 80_000 },
-  { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 3, timeoutMs: 60_000 },
   { name: 'visibility', needsMail: true, seconds: 9, timeoutMs: 60_000 },
   { name: 'viz-editor', needsMail: true, seconds: 61, timeoutMs: 130_000 },
 ]);

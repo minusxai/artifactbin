@@ -99,7 +99,7 @@ export async function loginViaEmail(page, base, sink, email) {
  * login is otherwise untouched.
  *
  * The bit is read only once the session names THIS account, because a caller
- * may arrive here straight after submitting the code (gate-fork drives the form
+ * may arrive here straight after submitting the code (the fork leg of gate-accounts-and-workspace drives the form
  * where it already is), and a bit read before the cookie is live would read as
  * "nothing to do".
  */

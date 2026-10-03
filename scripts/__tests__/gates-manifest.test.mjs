@@ -94,7 +94,7 @@ describe('the rows tell the truth about their sources', () => {
   it('8. every gate reports through the one verdict dialect, or asserts and throws', () => {
     for (const name of onDisk) {
       const src = source(name);
-      // A per-engine gate runs another gate's file (gate-offline-file-firefox.mjs): that file, itself a
+      // A per-engine gate runs another gate's file (a thin wrapper importing ./gate-<name>.mjs): that file, itself a
       // gate on disk and checked by this same loop, is the one that must report.
       const delegate = /await import\('\.\/gate-([a-z0-9-]+)\.mjs'\)/.exec(src);
       if (delegate) {
@@ -164,7 +164,7 @@ describe('the shards are cut from those rows', () => {
     expect(browsersFor(['annotations', 'dataflow'])).toEqual(['chromium']);
   });
   it('preserves all three engines for screenshot coverage', () => {
-    expect(browsersFor(['annotations', 'screenshot-comments'])).toEqual(['chromium', 'firefox', 'webkit']);
+    expect(browsersFor(['annotations', 'offline-file'])).toEqual(['chromium', 'firefox', 'webkit']);
   });
   it('rejects unknown gates instead of silently underprovisioning', () => {
     expect(() => browsersFor(['missing-gate'])).toThrow(/no row/);
@@ -173,7 +173,7 @@ describe('the shards are cut from those rows', () => {
 
 it('balances the extra cross-browser setup without extending any test timeout', () => {
   expect(shardWeight('annotations')).toBe(specFor('annotations').seconds);
-  expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').seconds + CROSS_BROWSER_SETUP_SECONDS);
+  expect(shardWeight('offline-file')).toBe(specFor('offline-file').seconds + CROSS_BROWSER_SETUP_SECONDS);
 });
 
 it('weighs every gate by a measured duration that fits inside its own timeout', () => {
