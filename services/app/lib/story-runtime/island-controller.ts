@@ -22,6 +22,7 @@ import { updateCompiledStory } from '@/lib/islands/live-update';
 import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
 import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
+import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import {
   STORY_ANNOTATIONS_MESSAGE, type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
   STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECT_MESSAGE, isEditParentMessage,
@@ -153,6 +154,14 @@ export interface IslandStoryController extends StoryController {
 
 export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource, appFetch = sameOriginFetch(win), fragmentSurface = 'app' }: IslandControllerInput): IslandStoryController {
   let nodes = served;
+  /**
+   * The version on screen (the live edit id the page's body names) when `nodes` last described it. The document's
+   * own live stream draws a newer version without telling this controller (lib/islands/live → the morph engine
+   * writes the body's edit id): once the two differ, `nodes` are the page's first version, not the one shown.
+   */
+  const shownVersion = () => win.document.body?.getAttribute(LIVE_EDIT_ATTR) ?? null;
+  let nodesVersion = shownVersion();
+  const nodesDescribeShown = () => { nodesVersion = shownVersion(); };
   /** The reader's own mode, as the app last set it: a new version never stomps it. */
   let mode: 'light' | 'dark' | null = null;
   let disposed = false;
@@ -380,6 +389,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
     await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors, keepTree);
     nodes = pending.nodes;
+    nodesDescribeShown();
     lastDrawn = after;
     shown = { module: versionModuleUrl(pending.document), source: pending.source };
     drawnSequence = pending.sequence;
@@ -416,6 +426,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (!edit.reconcileDraft(before, after, next, null, { sync: edit.canApplyDraft(), beforeSource: shownSource ?? undefined, afterSource })) return false;
     shownSource = afterSource;
     nodes = next;
+    nodesDescribeShown();
     lastDrawn = after;
     edit.setNodes(nodes);
     annotate?.setNodes(nodes);
@@ -486,6 +497,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         if (drawnSequence !== sequence) throw new Error('the saved version was not drawn');
       }
       adoptVersionRecord(win.document, next);
+      nodesDescribeShown();
       // The version's compiled colour never replaces the reader's own choice (as the reader's morph keeps it).
       applyColorMode(root, mode);
       frozen = false;
@@ -552,8 +564,23 @@ export function createIslandController({ win, root, islands, nodes: served, port
         editLoading = true;
         if (!frozen) pauseIslandsForEditing(islands);
         frozen = true;
-        void Promise.all([import('@/lib/story-runtime/edit/session'), import('@/solid/editor/dom-mounter')]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }]) => {
+        const stale = nodesVersion !== shownVersion();
+        void Promise.all([
+          import('@/lib/story-runtime/edit/session'), import('@/solid/editor/dom-mounter'),
+          stale ? import('@/lib/story/document/update-parts') : null, stale ? import('@/lib/story/assets/asset-url') : null,
+        ]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }, parts, assets]) => {
           if (disposed || !editRequested) return;
+          // A newer version is on screen than `nodes` describe (the live stream drew it): the editor opens on the
+          // document the reader is LOOKING AT, read from the source the page opened the editor on (the newest it
+          // knows), parsed as the editor's own drafts are — never on the version the page was first served with.
+          const baseline = initialSource();
+          const current = stale && parts && assets && baseline !== null ? parts.storyUpdatePartsShared(baseline, assets.isWebUrl) : null;
+          if (current) {
+            nodes = current.nodes;
+            nodesDescribeShown();
+            annotate?.setNodes(nodes);
+            selection?.setNodes(nodes);
+          }
           edit = createFrameEditSession({ win, root, channel, requestRender: () => {}, mountCompiled: mountCompiledEditRegions });
           edit.setNodes(nodes);
           await edit.mountCompiledDom();
@@ -666,6 +693,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       if (command.nodes) nodes = command.nodes;
       void updateCompiledStory(win, { mode: () => mode, adopted: true }).then(() => {
         if (disposed) return;
+        nodesDescribeShown();
         annotate?.setNodes(nodes);
         selection?.setNodes(nodes);
       });

@@ -886,6 +886,12 @@ export type FrameBridgeParentPayload =
   | FrameBridgeAttach
   /** The live inputs the controller reads (`editId()`, `initialSource()`), when the page learns newer ones. */
   | { kind: 'context'; editId: string; source: string | null }
+  /**
+   * How far the page's bars reach over the frame's top edge (edit mode's toolbar, drawn over the frame rather than
+   * pushing it down): the document reserves that much above itself and scrolls by the same amount in one task, so
+   * nothing in it moves on screen. Absolute; 0 gives the space back.
+   */
+  | { kind: 'inset'; top: number }
   | { kind: 'send'; command: unknown }
   | { kind: 'update'; command: StoryDocumentUpdate }
   | { kind: 'restored'; call: number }

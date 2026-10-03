@@ -58,6 +58,11 @@ export interface FrameBridgeParentOptions {
 export interface FrameBridgeParent extends IslandStoryController {
   /** The editor's newer head pointer and source, which the frame's controller reads live. */
   setContext(editId: string, source: string | null): void;
+  /**
+   * How far the page's bars reach over the frame's top edge (contract `inset`). Kept, and sent again to every
+   * controller that starts (a document that loads anew starts with none reserved).
+   */
+  setTopInset(px: number): void;
 }
 
 /** The longest `$` query a document may hand the page's address. */
@@ -112,6 +117,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const backlog: FrameBridgeParentPayload[] = [];
   const listeners = new Set<(event: unknown) => void>();
   let restoredCalls = 0;
+  /** The page's bars over the frame's top edge (setTopInset): every new frame controller is told on `ready`. */
+  let inset = 0;
   const restoring = new Map<number, { resolve: () => void; reject: (error: unknown) => void }>();
 
   const envelope = (payload: FrameBridgeParentPayload) => {
@@ -183,6 +190,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         nonce = payload.nonce;
         attached = true;
         for (const queued of backlog.splice(0)) envelope(queued);
+        if (inset) envelope({ kind: 'inset', top: inset });
         options.onReady?.(nonce);
         return;
       case 'event':
@@ -234,6 +242,13 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       return new DOMRect(box.left + frame.clientLeft, box.top + frame.clientTop, frame.clientWidth, frame.clientHeight);
     },
     setContext(editId: string, source: string | null) { post({ kind: 'context', editId, source }); },
+    setTopInset(px: number) {
+      const top = Number.isFinite(px) ? Math.max(0, Math.round(px)) : 0;
+      if (top === inset) return;
+      inset = top;
+      // Not backlogged: `ready` sends the current one (a reloaded document's backlog is dropped, the inset is not).
+      if (attached && !closed) envelope({ kind: 'inset', top });
+    },
     dispose() {
       close('disposed');
       listeners.clear();

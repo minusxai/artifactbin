@@ -73,6 +73,8 @@ export interface FramedStory {
   /** The frame controller's secret, once it runs (null again while a reloaded frame's new controller starts). */
   nonce: Accessor<string | null>;
   frame: HTMLIFrameElement;
+  /** How far the page's bars reach over the frame's top edge: the document reserves it without moving (bridge `inset`). */
+  setTopInset(px: number): void;
 }
 
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
@@ -93,5 +95,5 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     setNonce(null);
     bridge.dispose();
   });
-  return { controller: current, nonce, frame };
+  return { controller: current, nonce, frame, setTopInset: (px) => bridge.setTopInset(px) };
 }
