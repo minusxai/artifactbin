@@ -55,6 +55,16 @@ const toPage = async (page, point) => {
   return { x: point.x + (box?.x ?? 0), y: point.y + (box?.y ?? 0) };
 };
 
+/**
+ * Put the controls panel away with Escape. `openArtifactControls` hands the keyboard to the panel (so Escape reaches
+ * the page, not the frame), and closing it returns focus to its trigger, whose keyboard-focus tooltip then sits over
+ * the rail's header. A pointer user's focus never left the trigger, so it shows none: blur it, as their next click would.
+ */
+const dismissControls = async (page) => {
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; a?.blur?.(); });
+};
+
 const DOC =
   '<Helmet><title>Annotated</title></Helmet>'
   + '<div data-design="tw" className="p-10">'
@@ -125,7 +135,7 @@ const run = async () => {
     check(await page.evaluate(() => location.hash) === '', 'opening the rail moves no hash');
     await openArtifactControls(page);
     check(await page.locator('[aria-label="Edit artifact"]').count() === 1, 'edit stays offered while the rail is open');
-    await page.keyboard.press('Escape');
+    await dismissControls(page);
     const thread = page.locator('[aria-label="Annotation thread"]');
     check((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
     // "The frame stays full-width so the bar inside it does not move" is retired: the bar is the app page's own
@@ -180,7 +190,7 @@ const run = async () => {
     await openArtifactControls(page);
     check(await page.locator('[aria-label="Hide comments"], [aria-label="Show comments"]').count() === 0,
       'artifact controls carry no annotation visibility toggle');
-    await page.keyboard.press('Escape');
+    await dismissControls(page);
 
     // Clicking the compact conversation opens the rail FOCUSED on that thread,
     // ready to continue — a panel, still not a mode.
@@ -254,17 +264,28 @@ const run = async () => {
     // leaving edit mode. The comment's anchor is a real CAS edit and the
     // editor answers a 409 by adopting the server's document, so this is
     // exactly where un-drained typing would be thrown away.
+    // The rail is still open here, so the controls panel opens beside it — and has to paint ABOVE it to be pressed.
     await openArtifactControls(page);
-    await page.locator('[aria-label="Edit artifact"]').click();
+    const editOnTop = await page.locator('[aria-label="Edit artifact"]').evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      let hit = document.elementFromPoint(x, y);
+      while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
+      return !!hit && (hit === el || el.contains(hit));
+    });
+    check(editOnTop, 'the controls panel opened beside the open rail paints above it: Edit artifact can be pressed');
+    if (editOnTop) await page.locator('[aria-label="Edit artifact"]').click();
+    // Covered, the rest of the gate still enters editing the other way a reader can: the bar's own Edit.
+    else { await dismissControls(page); await page.locator('header[aria-label="Page bar"] [aria-label="Edit"]').click(); }
     await until(() => page.evaluate(() => location.hash), (h) => h === '#edit');
     // In edit mode the comments control lives in the settings panel, opened
-    // through the document's own (pinned) chrome — no button in the editor bar.
+    // through the app bar's controls — no button in the editor bar.
     await openArtifactControls(page);
     const editComments = await until(() => page.locator('[aria-label="Toggle comments"]').count(), (n) => n === 1, 5000);
     check(editComments === 1, 'the comments control survives entering edit mode');
     // Put the panel away: its click-away scrim covers the frame, and the
     // paragraph click below must reach the document.
-    await page.keyboard.press('Escape');
+    await dismissControls(page);
     await until(() => page.locator('[aria-label="Artifact controls"]').count(), (n) => n === 0, 5000);
 
     // Clicked-until-it-takes, like every other in-frame click here: the edit
@@ -558,7 +579,7 @@ async function markdownLeg(browser) {
   await openArtifactControls(page);
   await page.locator('[aria-label="Toggle comments"]').click();
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
-  await page.keyboard.press('Escape');
+  await dismissControls(page);
   const thread = page.locator('[aria-label="Annotation thread"]').first();
   await thread.waitFor({ timeout: 8000 });
   await page.locator('[aria-label="Open annotation thread"]').first().click();

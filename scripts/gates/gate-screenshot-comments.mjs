@@ -19,7 +19,10 @@ for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chrom
  // The app is at app.lvh.me and the document on <hex id>.lvh.me (lib/browser.mjs): Chromium is told the mapping by
  // flag, Firefox by its resolver prefs; WebKit has neither and resolves lvh.me (public DNS: loopback).
  const local=[new URL(base).hostname,PAGES_HOST,`${Buffer.from(seed.id,'utf8').toString('hex')}.${PAGES_HOST}`].join(',');
- const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:[...PAGES_BROWSER_ARGS,'--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:name==='firefox'?{firefoxUserPrefs:{'network.dns.localDomains':local,'network.dns.forceResolve':'127.0.0.1'}}:{});
+ // Both origins are plain http here, which is not a secure context off localhost: screen capture needs one (as it
+ // has in production, over https), so Chromium is told to treat these two as secure.
+ const secure=[new URL(base).origin,`http://${Buffer.from(seed.id,'utf8').toString('hex')}.${PAGES_HOST}:${new URL(base).port}`].join(',');
+ const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:[...PAGES_BROWSER_ARGS,`--unsafely-treat-insecure-origin-as-secure=${secure}`,'--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:name==='firefox'?{firefoxUserPrefs:{'network.dns.localDomains':local,'network.dns.forceResolve':'127.0.0.1'}}:{});
  try{
   const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:dpr});const page=await context.newPage();
   await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});const reference=document.createElement('video');reference.muted=true;reference.srcObject=stream;window.__captureReference=reference;void reference.play();return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
