@@ -18,8 +18,8 @@ import { framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
 import { buildDocumentCsp } from '@/lib/story/styles/document-csp';
-import { getDb } from '@/lib/platform/db';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { POST as grantRoute } from '@/app/api/trust/route';
 import { createAppServer } from '../server/app';
 
 useAppHarness();
@@ -45,7 +45,7 @@ async function world() {
   const other = await publish('<h1>Another</h1>', 'private');
   await drainPreparedPageWarmups();
   const actor: Actor = { credential: 'session', userId: user.id, email: 'pages-owner@example.com', emailVerified: true };
-  return { user, actor, secret, other, token: t };
+  return { user, actor, secret, other, token: t, publish };
 }
 
 const as = (url: string, actor: Actor | null, init: RequestInit = {}) => {
@@ -323,24 +323,28 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     await new Promise<void>((resolve) => (fixture ? fixture.close(() => resolve()) : resolve()));
     fixture = null;
   });
-  const declare = async (id: string, connect: string[]) => {
-    const db = await getDb();
-    await db.query('UPDATE artifacts SET meta = meta || $1::jsonb WHERE id = $2', [JSON.stringify({ cspExtensions: { connect } }), id]);
+  /** A private document of the owner's whose Helmet declares `connect` (its publish is the owner's consent). */
+  const declaring = async (w: Awaited<ReturnType<typeof world>>, connect: string[], visibility = 'private') => {
+    const id = await w.publish(`<Helmet><meta name="csp-connect" content="${connect.join(' ')}" /></Helmet><h1>Rates</h1>`, visibility);
+    await drainPreparedPageWarmups();
+    return id;
   };
 
   it('answers a declared host\'s bytes with their type, for the document\'s reader, never forwarding a credential', async () => {
     const w = await world();
     const app = framing();
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
     const seen: Array<{ cookie?: string; authorization?: string }> = [];
     fixture = createServer((req, res) => { seen.push({ cookie: req.headers.cookie, authorization: req.headers.authorization }); res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"rate":1.23}'); });
     await new Promise<void>((resolve) => fixture!.listen(0, '127.0.0.1', () => resolve()));
-    const upstream = `http://127.0.0.1:${(fixture.address() as { port: number }).port}`;
-    // Loopback stands in for the open web here only: the test policy admits it, as the dev switch does.
+    const port = (fixture.address() as { port: number }).port;
+    const upstream = `http://127.0.0.1:${port}`;
+    // Loopback stands in for the open web here only: the test policy admits it (and a declared https origin's http
+    // twin), as the dev switch does.
     setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
-    await declare(w.secret, [upstream]);
-    const self = pagesOriginFor(w.secret, site);
-    const res = await app.request(`${self}/a/${w.secret}/fetch?url=${encodeURIComponent(`${upstream}/rates?base=eur`)}`, { headers: { origin: self, cookie } });
+    const id = await declaring(w, [`https://127.0.0.1:${port}`]);
+    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, id)}`;
+    const self = pagesOriginFor(id, site);
+    const res = await app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(`${upstream}/rates?base=eur`)}`, { headers: { origin: self, cookie } });
     expect(res.status, await res.clone().text()).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/json');
     expect(res.headers.get('access-control-allow-origin')).toBe(self);
@@ -348,18 +352,18 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     expect(await res.json()).toEqual({ rate: 1.23 });
     expect(seen).toEqual([{ cookie: undefined, authorization: undefined }]);
     // A stranger to the private document gets the uniform 404, before anything is fetched.
-    expect((await app.request(`${self}/a/${w.secret}/fetch?url=${encodeURIComponent(`${upstream}/x`)}`, { headers: { origin: self } })).status).toBe(404);
+    expect((await app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(`${upstream}/x`)}`, { headers: { origin: self } })).status).toBe(404);
     expect(seen).toHaveLength(1);
   });
 
   it('refuses an undeclared host, a private or loopback address, and every method but GET', async () => {
     const w = await world();
     const app = framing();
-    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
-    const self = pagesOriginFor(w.secret, site);
-    const door = (url: string, init: RequestInit = {}) => app.request(`${self}/a/${w.secret}/fetch?url=${encodeURIComponent(url)}`, { ...init, headers: { origin: self, cookie, ...(init.headers ?? {}) } });
     setWebIngestPolicyForTests({ allowPrivate: false, allowHttp: false });
-    await declare(w.secret, ['https://api.example.org', 'https://127.0.0.1', 'https://10.0.0.7']);
+    const id = await declaring(w, ['https://api.example.org', 'https://127.0.0.1', 'https://10.0.0.7']);
+    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, id)}`;
+    const self = pagesOriginFor(id, site);
+    const door = (url: string, init: RequestInit = {}) => app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(url)}`, { ...init, headers: { origin: self, cookie, ...(init.headers ?? {}) } });
     const undeclared = await door('https://evil.example.net/steal');
     expect(undeclared.status).toBe(403);
     expect(((await undeclared.json()) as { error: string }).error).toBe('undeclared_host');
@@ -371,6 +375,61 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     const post = await door('https://api.example.org/write', { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } });
     expect(post.status).toBe(405);
     expect(post.headers.get('allow')).toBe('GET');
+  });
+});
+
+describe('a reader\'s consent reaches the document\'s own origin with the pages session (lib/trust/document-trust)', () => {
+  let fixture: Server | null = null;
+  afterEach(async () => {
+    setWebIngestPolicyForTests(null);
+    await new Promise<void>((resolve) => (fixture ? fixture.close(() => resolve()) : resolve()));
+    fixture = null;
+  });
+
+  it('a reader who allowed once gets the declared hosts in the framed document\'s policy, and its /fetch door opens', async () => {
+    const w = await world();
+    const app = framing();
+    fixture = createServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}'); });
+    await new Promise<void>((resolve) => fixture!.listen(0, '127.0.0.1', () => resolve()));
+    const port = (fixture.address() as { port: number }).port;
+    setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+    const PLOTLY = 'https://cdn.plot.ly';
+    const id = await w.publish(`<Helmet><meta name="csp-connect" content="https://127.0.0.1:${port}" /><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Weather</h1>`, 'public');
+    await drainPreparedPageWarmups();
+    const t = await mintToken('pages-reader');
+    const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
+    await claimToken(user.id, t.token);
+    const reader: Actor = { credential: 'session', userId: user.id, email: 'mxmx_test_pages_reader@example.com', emailVerified: true };
+    const self = pagesOriginFor(id, site);
+    /** The reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */
+    const framedAs = async (appCookie: string | null) => {
+      const page = await app.request(as(`${APP}/a/${id}`, reader, { headers: { accept: 'text/html', ...(appCookie ? { cookie: appCookie } : {}) } }));
+      const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&');
+      const exchanged = await app.request(src);
+      const cookie = `afbin_pages=${/afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!}`;
+      const doc = await app.request(`${self}/`, { headers: { cookie } });
+      expect(doc.status).toBe(200);
+      const script = (doc.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src ')) ?? '';
+      const fetched = await app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(`http://127.0.0.1:${port}/now`)}`, { headers: { origin: self, cookie } });
+      return { script, fetched };
+    };
+
+    const before = await framedAs(null);
+    expect(before.script).not.toContain(PLOTLY);
+    expect(before.fetched.status).toBe(403);
+    expect(((await before.fetched.json()) as { error: string }).error).toBe('host_not_allowed');
+
+    const granted = await grantRoute(request('/api/trust', { method: 'POST', json: { artifactId: id, grant: 'once' }, origin: 'same', actor: reader }));
+    expect(granted.status, await granted.clone().text()).toBe(200);
+    const trust = /((?:__Host-)?afbin_trust=[^;]+)/.exec(granted.headers.get('set-cookie') ?? '')![1]!;
+    const after = await framedAs(trust);
+    expect(after.script.split(' ')).toContain(PLOTLY);
+    expect(after.fetched.status, await after.fetched.clone().text()).toBe(200);
+    expect(await after.fetched.json()).toEqual({ ok: true });
+
+    // The grant rides the ticket the app page minted: the document's own request carries no trust cookie at all.
+    const forged = await app.request(`${self}/`, { headers: { cookie: trust } });
+    expect((forged.headers.get('content-security-policy') ?? '')).not.toContain(PLOTLY);
   });
 });
 

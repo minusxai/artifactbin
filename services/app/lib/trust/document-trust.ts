@@ -48,6 +48,12 @@ export interface TrustQuery {
   viewer: TrustViewer | null;
   /** The reader's request, for this browser session's once-grants and denies. Absent ⇒ none consulted. */
   request?: Request;
+  /**
+   * On a document's OWN origin (APP__PAGES_HOST) the session cookie above is the app origin's and never arrives:
+   * what the app page carried across with its reader's pages ticket (`pagesRequestOf(request).carried`,
+   * made by `carriedTrust`) stands in for it.
+   */
+  carried?: Readonly<Record<string, unknown>> | null;
 }
 
 /* ------------------------------------------------------------------ declarations and publishers */
@@ -183,6 +189,29 @@ function sessionSetCookie(session: SessionTrust): string {
     .filter(Boolean).join('; ');
 }
 
+/** The key the once-grants ride under in a pages session's `carried` (lib/accounts/pages-sessions PagesCarried). */
+export const CARRIED_TRUST_KEY = 'trust';
+
+/**
+ * What the app page hands a document's own origin with its reader's pages ticket (lib/serving/artifact-page
+ * framedDocumentSrc): this browser session's once-grants and denies for this reader, as read from the app origin's
+ * cookie. Every document's, not one: the pages cookie is shared by all of a reader's frames, and each framed load
+ * replaces it. Server-minted data in a server-side row — never read from the document's request.
+ */
+export function carriedTrust(request: Request, viewer: TrustViewer | null): Record<string, unknown> {
+  const subject = subjectOf(viewer);
+  const entries = readSession(request, subject);
+  return entries.length ? { [CARRIED_TRUST_KEY]: { s: subject, g: entries.map((e) => [e.id, e.hash, e.decision === 'deny' ? 'd' : 'a']) } } : {};
+}
+
+/** The once-grants a pages session carried for this subject (fail closed on any other shape). */
+function carriedEntries(carried: TrustQuery['carried'], subject: string): SessionEntry[] {
+  const held = carried?.[CARRIED_TRUST_KEY] as { s?: unknown; g?: unknown } | undefined;
+  if (!held || held.s !== subject || !Array.isArray(held.g)) return [];
+  return held.g.flatMap((entry): SessionEntry[] => Array.isArray(entry) && typeof entry[0] === 'string' && typeof entry[1] === 'string' && (entry[2] === 'a' || entry[2] === 'd')
+    ? [{ id: entry[0], hash: entry[1], decision: entry[2] === 'd' ? 'deny' : 'allow' }] : []);
+}
+
 /** The Set-Cookie value that records (or, with `decision: null`, forgets) this session's choice on one document. */
 export function sessionTrustCookie(request: Request, viewer: TrustViewer | null, artifactId: string, change: { hash: string; decision: Decision } | { decision: null }): string {
   const subject = subjectOf(viewer);
@@ -237,7 +266,7 @@ export async function revokeTrust(userId: string, artifactId: string): Promise<v
 
 interface Standing { request: CspRequest; published: CspExtensions }
 
-async function standingOf({ artifact, viewer, request }: TrustQuery): Promise<Standing> {
+async function standingOf({ artifact, viewer, request, carried }: TrustQuery): Promise<Standing> {
   const extensions = declaredAt(artifact.id, artifact.version, artifact.source);
   if (!hasCspExtensions(extensions)) return { request: { extensions, asking: emptyCspExtensions(), status: 'none', denied: false }, published: emptyCspExtensions() };
   const published = await hostsPublishedBy(artifact, viewer, extensions);
@@ -245,7 +274,9 @@ async function standingOf({ artifact, viewer, request }: TrustQuery): Promise<St
   const answered = (status: CspRequest['status'], denied = false): Standing =>
     ({ request: { extensions, asking: status === 'blocked' ? asking : emptyCspExtensions(), status, denied }, published });
   if (!hasCspExtensions(asking)) return answered('publisher');
-  const session = readSession(request, subjectOf(viewer)).find((entry) => entry.id === artifact.id && entry.hash === extensionsHash(extensions));
+  const subject = subjectOf(viewer);
+  const session = [...readSession(request, subject), ...carriedEntries(carried, subject)]
+    .find((entry) => entry.id === artifact.id && entry.hash === extensionsHash(extensions));
   let denied = session?.decision === 'deny';
   let allowed = session?.decision === 'allow';
   if (viewer?.userId) {

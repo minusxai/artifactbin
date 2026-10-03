@@ -55,7 +55,10 @@ describe('buildDocumentCsp', () => {
     expect(directive(extended, 'script-src')!.split(' ').at(-1)).toBe('https://cdn.example.org');
     expect(directive(extended, 'style-src')!.split(' ').at(-1)).toBe('https://css.example.org');
     expect(directive(extended, 'img-src')!.split(' ').at(-1)).toBe('https://img.example.org');
-    for (const bad of ['http://api.example.org', 'https://api.example.org/path', "'unsafe-inline'", 'https:', '*', 'https://*.example.org', 'https://a.example.org; script-src *']) {
+    // A wildcard the publish grammar admits (a whole leading label) is a CSP host-source as written.
+    const wild = buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: [], script: [], style: [], img: ['https://*.example.org'], frame: [], media: [] } });
+    expect(directive(wild, 'img-src')!.split(' ').at(-1)).toBe('https://*.example.org');
+    for (const bad of ['http://api.example.org', 'https://api.example.org/path', "'unsafe-inline'", 'https:', '*', 'https://*', 'https://*.org', 'https://API.example.org', 'https://a.example.org; script-src *']) {
       expect(() => buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: [bad], script: [], style: [], img: [], frame: [], media: [] } }), bad).toThrow(/https origin/);
     }
   });

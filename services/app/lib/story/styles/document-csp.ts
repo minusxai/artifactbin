@@ -13,28 +13,14 @@
  *    origin path-exact, and the same CDNs — never the app's other routes;
  *  - `frame-ancestors`: the app alone.
  *
- * `extensions` are https origins a document declares for itself (brief C supplies them), appended
- * per directive — except `connect`: a declared host is reached through the document's `/fetch` door. Anything that is not a bare https origin is refused, never quoted into the header.
+ * `extensions` are the https origins a document declares in its Helmet (`csp-*` metas, lib/story/document/csp-extensions)
+ * that this reader trusts (lib/trust/document-trust `cspExtensionsFor`), appended per directive — except `connect`: a
+ * declared host is reached through the document's `/fetch` door. Each is re-checked with the publish grammar
+ * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
 import { EMBED_HOSTS, FONT_FILES, FONT_STYLES, MODULE_CDNS } from './document-sources';
-
-/**
- * Extra https origins per directive, appended after the fixed sources. Structurally brief C's
- * `CspExtensions` (lib/story/document/csp-extensions), which replaces this declaration at merge.
- */
-export interface DocumentCspExtensions {
-  /** Reached through the document's `/fetch` door (app/a/[id]/fetch), never added to `connect-src`. */
-  connect: readonly string[];
-  script: readonly string[];
-  /** Stylesheets, and the fonts they load (`style-src` and `font-src`). */
-  style: readonly string[];
-  img: readonly string[];
-  frame: readonly string[];
-  media: readonly string[];
-}
-
-export const NO_DOCUMENT_CSP_EXTENSIONS: DocumentCspExtensions = Object.freeze({ connect: [], script: [], style: [], img: [], frame: [], media: [] });
+import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/story/document/csp-extensions';
 
 export interface DocumentCspInput {
   /** The document's own origin (`https://<hex>.<pages host>`). */
@@ -45,7 +31,7 @@ export interface DocumentCspInput {
   id: string;
   /** A configured public asset origin (APP__ASSETS_ORIGIN), admitted for its bytes. */
   assetOrigin?: string | null;
-  extensions?: DocumentCspExtensions;
+  extensions?: CspExtensions;
 }
 
 
@@ -55,16 +41,16 @@ export const fetchPath = (id: string): string => `/a/${id}/fetch`;
 
 function httpsOrigins(list: readonly string[]): string[] {
   return list.map((entry) => {
-    let origin: string | null = null;
-    try { const url = new URL(entry); origin = url.protocol === 'https:' && url.origin === entry ? url.origin : null; } catch { /* refused below */ }
-    if (!origin || origin.includes('*')) throw new Error(`document CSP extension ${JSON.stringify(entry)} is not an https origin`);
-    return origin;
+    const parsed = parseCspOrigin(entry);
+    // Canonical only: what the publish grammar writes back is exactly what may stand in the header.
+    if (!parsed.ok || parsed.origin !== entry) throw new Error(`document CSP extension ${JSON.stringify(entry)} is not an https origin`);
+    return parsed.origin;
   });
 }
 
 const join = (...parts: ReadonlyArray<string | readonly string[]>): string => parts.flat().filter(Boolean).join(' ');
 
-export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions = NO_DOCUMENT_CSP_EXTENSIONS }: DocumentCspInput): string {
+export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions = EMPTY_CSP_EXTENSIONS }: DocumentCspInput): string {
   new URL(self); // a malformed origin is a thrown error, never a policy
   const appOrigin = new URL(app).origin;
   const asset = assetOrigin ? [new URL(assetOrigin).origin] : [];

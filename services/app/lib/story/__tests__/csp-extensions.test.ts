@@ -5,7 +5,8 @@ import { splitHelmet } from '../document/helmet';
 import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../document/csp-extensions';
 import { validateMarkupStructure } from '../document/local-validation';
 import { prepareJsx } from '../document/jsx-tier';
-import { appendCspExtensions, buildDocumentCsp } from '@/lib/trust/document-csp-stub';
+import { buildDocumentCsp } from '@/lib/story/styles/document-csp';
+import { appendCspExtensions } from '@/lib/story/styles/markup-csp';
 
 const helmetOf = (metas: string) => {
   const source = `<Helmet>${metas}</Helmet><p>x</p>`;
@@ -137,7 +138,38 @@ describe('sets', () => {
   });
 });
 
-describe('appending to the served policy (stub until brief A)', () => {
+describe('the served document policy (lib/story/styles/document-csp)', () => {
+  const base = { self: 'https://616263.pages.example.com', app: 'https://app.example.com', id: 'abc' };
+  const directive = (csp: string, name: string) => csp.split('; ').find((d) => d.startsWith(`${name} `)) ?? '';
+  it('is the default policy on an empty set', () => {
+    expect(buildDocumentCsp({ ...base, extensions: EMPTY_CSP_EXTENSIONS })).toBe(buildDocumentCsp(base));
+  });
+
+  it('appends each declared origin to its own directive; a connection goes through the /fetch door, never connect-src', () => {
+    const csp = buildDocumentCsp({ ...base, extensions: { ...EMPTY_CSP_EXTENSIONS, connect: ['https://api.open-meteo.com'], script: ['https://cdn.plot.ly'], img: ['https://images.example.com'], media: ['https://media.example.com'] } });
+    expect(directive(csp, 'script-src').split(' ').at(-1)).toBe('https://cdn.plot.ly');
+    expect(directive(csp, 'img-src').split(' ').at(-1)).toBe('https://images.example.com');
+    expect(directive(csp, 'media-src').split(' ').at(-1)).toBe('https://media.example.com');
+    expect(csp).not.toContain('open-meteo');
+    expect(directive(csp, 'connect-src')).toContain('https://app.example.com/a/abc/fetch');
+  });
+
+  it('csp-style extends fonts too, and a declared frame host joins the embed hosts', () => {
+    const csp = buildDocumentCsp({ ...base, extensions: { ...EMPTY_CSP_EXTENSIONS, style: ['https://fonts.example.com'], frame: ['https://www.example-embed.com'] } });
+    expect(directive(csp, 'style-src').split(' ').at(-1)).toBe('https://fonts.example.com');
+    expect(directive(csp, 'font-src').split(' ').at(-1)).toBe('https://fonts.example.com');
+    expect(directive(csp, 'frame-src').split(' ').at(-1)).toBe('https://www.example-embed.com');
+  });
+
+  it('takes every origin the publish grammar accepts, a wildcard label included', () => {
+    const parsed = helmetOf('<meta name="csp-img" content="https://*.example.com" />').result;
+    expect(parsed.ok).toBe(true);
+    const csp = buildDocumentCsp({ ...base, extensions: parsed.extensions });
+    expect(directive(csp, 'img-src').split(' ').at(-1)).toBe('https://*.example.com');
+  });
+});
+
+describe('appending to the app origin\'s /raw policy (lib/story/styles/markup-csp)', () => {
   const policy = "default-src 'none'; script-src 'self' https://esm.sh; connect-src 'self'; style-src 'self'; font-src 'self'; frame-src 'none'; form-action 'none'";
   it('is the identity on an empty set', () => {
     expect(appendCspExtensions(policy, EMPTY_CSP_EXTENSIONS)).toBe(policy);
@@ -152,11 +184,5 @@ describe('appending to the served policy (stub until brief A)', () => {
   it('csp-style extends fonts too, and a declared frame host replaces a lone none', () => {
     expect(appendCspExtensions(policy, { ...EMPTY_CSP_EXTENSIONS, style: ['https://fonts.example.com'], frame: ['https://www.youtube-nocookie.com'] }))
       .toBe("default-src 'none'; script-src 'self' https://esm.sh; connect-src 'self'; style-src 'self' https://fonts.example.com; font-src 'self' https://fonts.example.com; frame-src https://www.youtube-nocookie.com; form-action 'none'");
-  });
-
-  it('buildDocumentCsp keeps the signature brief A ships', () => {
-    const header = buildDocumentCsp({ self: 'https://abc.pages.example.com', extensions: { ...EMPTY_CSP_EXTENSIONS, connect: ['https://api.open-meteo.com'] } });
-    expect(header).toMatch(/connect-src https:\/\/abc\.pages\.example\.com [^;]* https:\/\/api\.open-meteo\.com/);
-    expect(buildDocumentCsp({ self: 'https://abc.pages.example.com' })).not.toContain('open-meteo');
   });
 });

@@ -61,7 +61,7 @@ import { assetsPath, mutatePath, queryPath } from '@/lib/story/styles';
 import { archivedReadOnly } from './archived-version';
 import type { ReaderChromeInput } from '@/lib/story/reader';
 import { displayTitle } from '@/lib/story/document';
-import { cspRequestFor } from '@/lib/trust/document-trust';
+import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 
 /** The story the app page inlines for this answer (server/app withInitialStory). */
 export interface InitialStory {
@@ -128,9 +128,10 @@ export async function framedDocumentSrc(request: Request, id: string, site: Page
   const actor = await sessionActor(request);
   if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return null;
   const origin = pagesOriginFor(artifact.id, site);
-  // TODO(brief C): carry the reader's app-origin "Allow once" grant here, e.g. `{ cspOnce: <grant read from request> }`;
-  // the document's origin reads it back as `pagesRequestOf(request).carried` (app/a/[id]/raw).
-  return { src: pagesSessionUrl(site, `${origin}/${search}`, await issuePagesTicket(actor, {})), origin };
+  // The reader's "Allow once" grants live in an app-origin cookie the document's origin never sees: they ride the
+  // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
+  const carried = carriedTrust(request, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null });
+  return { src: pagesSessionUrl(site, `${origin}/${search}`, await issuePagesTicket(actor, carried)), origin };
 }
 
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {

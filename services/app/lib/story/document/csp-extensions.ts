@@ -143,6 +143,20 @@ export function cspExtensionsOf(content: Pick<HelmetContent, 'meta'>, helmet?: J
   return errors.length ? { ok: false, errors, extensions } : { ok: true, extensions };
 }
 
+/**
+ * Does a declared origin (as `parseCspOrigin` writes it) admit `origin` (a URL's `.origin`)? Exact, or for
+ * `https://*.example.com[:port]` any subdomain at any depth on the same port — what a CSP host-source matches.
+ */
+export function cspOriginMatches(declared: string, origin: string): boolean {
+  if (declared === origin) return true;
+  const wild = /^https:\/\/\*\.([^/:]+)(:\d+)?$/.exec(declared);
+  if (!wild) return false;
+  let url: URL;
+  try { url = new URL(origin); } catch { return false; }
+  if (url.protocol !== 'https:' || url.origin !== origin) return false;
+  return url.hostname.endsWith(`.${wild[1]}`) && (url.port ? `:${url.port}` : '') === (wild[2] ?? '');
+}
+
 /** Does this set ask for anything at all? */
 export const hasCspExtensions = (extensions: CspExtensions): boolean => CSP_DIRECTIVES.some((d) => extensions[d].length > 0);
 

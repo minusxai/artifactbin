@@ -41,7 +41,7 @@ import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/document';
-import { assetsPath, buildDocumentCsp, markupCsp, mutatePath, queryPath } from '@/lib/story/styles';
+import { appendCspExtensions, assetsPath, buildDocumentCsp, markupCsp, mutatePath, queryPath } from '@/lib/story/styles';
 import { pagesRequestOf } from '@/lib/serving/pages-origin';
 import { readUrlValues } from '@/lib/story/data';
 import { getUserById } from '@/lib/accounts';
@@ -60,7 +60,6 @@ import { documentStyleSheets } from '@/lib/story/styles';
 import type { ReaderChromeInput } from '@/lib/story/reader';
 import { readerChromeFonts } from '@/lib/story/styles';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
-import { appendCspExtensions } from '@/lib/trust/document-csp-stub';
 
 // The markup document's policy — per document, built in lib/story/styles/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -438,19 +437,21 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           }),
         });
         if (answer.mode === 'compiled') {
-          // What this reader trusts the document to reach beyond the default policy (its Helmet
-          // `csp-*` metas): the owner's own, or a reader's grant; nothing for anyone else, a capture included.
-          // TODO(brief A): buildDocumentCsp({ self, extensions }) replaces markupCsp + appendCspExtensions here.
-          const extensions = capture ? undefined : await cspExtensionsFor({ artifact: row, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId }, request });
+          // What this reader trusts the document to reach beyond the default policy (its Helmet `csp-*` metas): the
+          // hosts they published, or every declared one once they allowed the rest; nothing for a capture. On its own
+          // origin the reader's "Allow once" grants arrive with the pages session (`pages.carried`).
+          const extensions = capture ? undefined : await cspExtensionsFor({
+            artifact: row, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId },
+            // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
+            ...(pages ? { carried: pages.carried ?? null } : { request }),
+          });
           return new Response(answer.html, {
             status: 200,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
               // On its own origin the document needs no sandbox: the origin is its alone (lib/story/styles/document-csp).
               'Content-Security-Policy': pages
-                // TODO(brief C): extensions: cspExtensionsFor({ artifact: { id, version, source } of `row`, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId }, request })
-                // from '@/lib/trust/document-trust' (its "Allow once" grant arrives as `pages.carried`).
-                ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN })
+                ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
                 : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions),
               ...answer.headers,
               [READER_MODE_HEADER]: 'compiled',

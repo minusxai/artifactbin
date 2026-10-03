@@ -28,6 +28,7 @@
 import { BASEMAP_PATH } from '@/lib/serving/basemap';
 import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
 import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from './document-sources';
+import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/story/document/csp-extensions';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
   "default-src 'none'",
@@ -164,7 +165,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const viewer = options.compiled ? ` ${self}${viewerPath(id)} ${self}${storyFragmentPath(id)}` : '';
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // The hosted library directory stays explicit for documents that import a
@@ -175,4 +176,29 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   });
   const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
   return [...sources, connect+assetConnect, ...BEHAVIOUR_DIRECTIVES].join('; ');
+}
+
+/** The policy directives each declared set extends. Fonts ride on `csp-style`: a stylesheet host serves its faces. */
+const EXTENDED_DIRECTIVES: Record<CspDirective, readonly string[]> = {
+  connect: ['connect-src'], script: ['script-src'], style: ['style-src', 'font-src'], img: ['img-src'], frame: ['frame-src'], media: ['media-src'],
+};
+
+/**
+ * The `/raw` copy's policy (`markupCsp`) with the hosts this reader trusts the document to reach (its Helmet `csp-*`
+ * metas, lib/trust/document-trust `cspExtensionsFor`) appended per directive. Where APP__PAGES_HOST frames documents
+ * on their own origin, that origin's policy (./document-csp `buildDocumentCsp`) takes them instead; this serves the
+ * same consent to the app origin's standalone copy. Identity on an empty set. A directive the policy does not carry is
+ * left alone: adding it would narrow its `default-src` fallback, never widen.
+ */
+export function appendCspExtensions(policy: string, extensions: CspExtensions = EMPTY_CSP_EXTENSIONS): string {
+  if (CSP_DIRECTIVES.every((d) => extensions[d].length === 0)) return policy;
+  return policy.split(/;\s*/).map((directive) => {
+    const [name, ...sources] = directive.trim().split(/\s+/);
+    const kinds = CSP_DIRECTIVES.filter((d) => EXTENDED_DIRECTIVES[d].includes(name ?? ''));
+    if (!kinds.length) return directive;
+    const added = [...new Set(kinds.flatMap((kind) => extensions[kind]))].filter((origin) => !sources.includes(origin));
+    if (!added.length) return directive;
+    // 'none' cannot stand beside a source: the declared origins replace it.
+    return sources.length === 1 && sources[0] === "'none'" ? `${name} ${added.join(' ')}` : `${directive} ${added.join(' ')}`;
+  }).join('; ');
 }
