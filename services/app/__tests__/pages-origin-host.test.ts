@@ -463,6 +463,42 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const forged = await app.request(`${self}/`, { headers: { cookie: trust } });
     expect((forged.headers.get('content-security-policy') ?? '')).not.toContain(PLOTLY);
   });
+
+  it('a guest who allowed once gets the declared hosts in the framed document\'s policy, in a session that is nobody\'s', async () => {
+    const w = await world();
+    const app = framing();
+    const PLOTLY = 'https://cdn.plot.ly';
+    const id = await w.publish(`<Helmet><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Chart</h1>`, 'public');
+    await drainPreparedPageWarmups();
+    const self = pagesOriginFor(id, site);
+    /** A signed-out reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */
+    const framedAsGuest = async (appCookie: string | null) => {
+      const page = await app.request(`${APP}/a/${id}`, { headers: { accept: 'text/html', ...(appCookie ? { cookie: appCookie } : {}) } });
+      const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+      const exchanged = await app.request(src.href);
+      expect(exchanged.status).toBe(302);
+      const pages = /afbin_pages=([^;]*)/.exec(exchanged.headers.get('set-cookie') ?? '')?.[1] || null;
+      const doc = await app.request(`${self}/`, { headers: pages ? { cookie: `afbin_pages=${pages}` } : {} });
+      expect(doc.status).toBe(200);
+      const script = (doc.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src ')) ?? '';
+      return { ticket: src.searchParams.has('ticket'), pages, script };
+    };
+
+    const before = await framedAsGuest(null);
+    expect(before.ticket).toBe(false);
+    expect(before.script).not.toContain(PLOTLY);
+
+    const granted = await grantRoute(request('/api/trust', { method: 'POST', json: { artifactId: id, grant: 'once' }, origin: 'same' }));
+    expect(granted.status, await granted.clone().text()).toBe(200);
+    const trust = /((?:__Host-)?afbin_trust=[^;]+)/.exec(granted.headers.get('set-cookie') ?? '')![1]!;
+    const after = await framedAsGuest(trust);
+    // The once-grant rides a ticket of its own: a guest's page that carries something mints one.
+    expect(after.ticket).toBe(true);
+    expect(after.script.split(' ')).toContain(PLOTLY);
+    // The session it made is nobody's: the doors read the guest as anonymous, it only holds what was carried.
+    expect(after.pages).not.toBeNull();
+    expect(await pagesSessionActor(after.pages)).toBeNull();
+  });
 });
 
 describe('development on lvh.me', () => {

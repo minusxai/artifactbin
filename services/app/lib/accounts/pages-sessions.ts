@@ -14,10 +14,14 @@
  *
  * `pagesSessionActor(cookie)` reads the reader back for a document door; a token behind the session is
  * re-resolved, so a revoked token ends it at once. `endPagesSession(cookie)` is logout's half.
+ *
+ * A guest (nobody signed in, no agent cookie) gets a ticket only when the app page has something to carry for them
+ * (an "Allow once" grant): its session is NOBODY's (`credential: 'none'`, the doors read it as anonymous) and holds
+ * only what was carried.
  */
 import crypto from 'node:crypto';
 import { createCodeStore } from '@artifactbin/utils';
-import type { Actor } from '@artifactbin/contracts';
+import { ANONYMOUS, type Actor } from '@artifactbin/contracts';
 import { getDb } from '../platform/db';
 import { resolveTokenById, sha256 } from './tokens';
 import type { RequestActor } from './viewer';
@@ -30,7 +34,10 @@ export const PAGES_TICKET_TTL_MS = 60_000;
 export const PAGES_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const TICKET_KIND = 'pages_ticket';
 
-interface ActorSnapshot { credential: 'session' | 'agent-cookie'; userId: string | null; tokenId: string | null; email: string | null; emailVerified: boolean | null }
+interface ActorSnapshot { credential: 'session' | 'agent-cookie' | 'none'; userId: string | null; tokenId: string | null; email: string | null; emailVerified: boolean | null }
+/** A guest's snapshot: nobody, there only to carry the app page's decisions across. */
+const NOBODY: ActorSnapshot = { credential: 'none', userId: null, tokenId: null, email: null, emailVerified: null };
+const CREDENTIALS: ReadonlySet<unknown> = new Set(['session', 'agent-cookie', 'none']);
 
 const randomSecret = (bytes: number): string => crypto.randomBytes(bytes).toString('base64url');
 const codes = async () => createCodeStore(await getDb());
@@ -64,11 +71,13 @@ function snapshotOf(actor: RequestActor, browserSession: boolean): ActorSnapshot
 export type PagesCarried = Readonly<Record<string, unknown>>;
 
 /**
- * A one-time ticket for this reader, or null when there is nobody to hand across (a guest). `browserSession`
+ * A one-time ticket for this reader, or null when there is nothing to hand across (a guest the app page carries
+ * nothing for). A guest with something carried gets a ticket for nobody (`credential: 'none'`). `browserSession`
  * says the app page is being served to a browser session's scripted browser (see `snapshotOf`).
  */
 export async function issuePagesTicket(actor: RequestActor, carried: PagesCarried = {}, now = Date.now(), options: { browserSession?: boolean } = {}): Promise<string | null> {
-  const snapshot = snapshotOf(actor, options.browserSession === true);
+  const nobody = !actor.viewer?.userId && !actor.tokenId;
+  const snapshot = snapshotOf(actor, options.browserSession === true) ?? (nobody && Object.keys(carried).length ? NOBODY : null);
   if (!snapshot) return null;
   const ticket = randomSecret(24);
   await (await codes()).issue({ kind: TICKET_KIND, secret: ticket, payload: { ...snapshot, carried: { ...carried } }, ttlMs: PAGES_TICKET_TTL_MS, now });
@@ -79,7 +88,9 @@ export async function issuePagesTicket(actor: RequestActor, carried: PagesCarrie
 export async function exchangePagesTicket(ticket: string, now = Date.now()): Promise<{ cookie: string; maxAgeSeconds: number } | null> {
   if (!/^[A-Za-z0-9_-]{16,128}$/.test(ticket)) return null;
   const payload = await (await codes()).claimByHash({ kind: TICKET_KIND, code: ticket, now }) as (Partial<ActorSnapshot> & { carried?: PagesCarried }) | null;
-  if (!payload || (payload.credential !== 'session' && payload.credential !== 'agent-cookie')) return null;
+  if (!payload || !CREDENTIALS.has(payload.credential)) return null;
+  // Nobody's session exists only to carry something: never an empty one.
+  if (payload.credential === 'none' && !Object.keys(payload.carried ?? {}).length) return null;
   const cookie = randomSecret(32);
   const db = await getDb();
   // Hygiene rides the write path, as the code store's does: no background job.
@@ -91,12 +102,13 @@ export async function exchangePagesTicket(ticket: string, now = Date.now()): Pro
   return { cookie, maxAgeSeconds: Math.floor(PAGES_SESSION_TTL_MS / 1000) };
 }
 
-/** The reader a pages cookie names, as the actor the doors read — or null (no row, expired, its token revoked). */
+/** The reader a pages cookie names, as the actor the doors read — or null (no row, expired, its token revoked, a guest's). */
 export async function pagesSessionActor(cookie: string | null | undefined, now = Date.now()): Promise<Actor | null> {
-  return (await pagesSessionOf(cookie, now))?.actor ?? null;
+  const actor = (await pagesSessionOf(cookie, now))?.actor;
+  return actor && actor.credential !== 'none' ? actor : null;
 }
 
-/** The pages session a cookie names: its reader and what the app page carried across — or null. */
+/** The pages session a cookie names: its reader (ANONYMOUS for a guest's) and what the app page carried across — or null. */
 export async function pagesSessionOf(cookie: string | null | undefined, now = Date.now()): Promise<{ actor: Actor; carried: PagesCarried } | null> {
   if (!cookie || !/^[A-Za-z0-9_-]{16,128}$/.test(cookie)) return null;
   const db = await getDb();
@@ -104,21 +116,23 @@ export async function pagesSessionOf(cookie: string | null | undefined, now = Da
     'SELECT credential, user_id, token_id, email, email_verified, carried FROM pages_sessions WHERE id_hash = $1 AND expires_at > $2',
     [sha256(cookie), new Date(now).toISOString()],
   )).rows[0];
-  if (!row || (row.credential !== 'session' && row.credential !== 'agent-cookie')) return null;
+  if (!row || !CREDENTIALS.has(row.credential)) return null;
+  const carried = typeof row.carried === 'string' ? JSON.parse(row.carried) as unknown : row.carried;
+  const held: PagesCarried = carried && typeof carried === 'object' && !Array.isArray(carried) ? carried as PagesCarried : {};
+  if (row.credential === 'none') return { actor: ANONYMOUS, carried: held };
   if (row.token_id) {
     const token = await resolveTokenById(row.token_id);
     if (!token || (token.userId ?? null) !== (row.user_id ?? token.userId ?? null)) return null;
   }
-  const carried = typeof row.carried === 'string' ? JSON.parse(row.carried) as unknown : row.carried;
   return {
     actor: {
-      credential: row.credential,
+      credential: row.credential as 'session' | 'agent-cookie',
       ...(row.user_id ? { userId: row.user_id } : {}),
       ...(row.token_id ? { tokenId: row.token_id } : {}),
       ...(row.email ? { email: row.email } : {}),
       ...(row.email_verified !== null ? { emailVerified: row.email_verified } : {}),
     },
-    carried: carried && typeof carried === 'object' && !Array.isArray(carried) ? carried as PagesCarried : {},
+    carried: held,
   };
 }
 

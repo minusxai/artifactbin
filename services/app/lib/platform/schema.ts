@@ -909,7 +909,7 @@ const PAGES_SESSIONS: Table = {
   name: 'pages_sessions',
   columns: [
     { name: 'id_hash', type: 'TEXT', notNull: true }, // sha256 hex of the cookie value; plaintext never stored
-    // 'session' | 'agent-cookie' — how the app page's reader was authenticated.
+    // 'session' | 'agent-cookie' — how the app page's reader was authenticated; 'none' — a guest's, holding only `carried`.
     { name: 'credential', type: 'TEXT', notNull: true },
     { name: 'user_id', type: 'TEXT' },
     { name: 'token_id', type: 'TEXT' },
