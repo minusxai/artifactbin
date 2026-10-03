@@ -134,14 +134,15 @@ async function dispatchFileEvent(page, kind, b64) {
  * `localhost` (secure by definition) and is now `app.lvh.me` over http, with the document framed on its own origin
  * (`<hex id>.lvh.me`), so both are named secure for this browser — exactly what `localhost` was — and both are
  * granted the clipboard. Real Chrome where it is installed — the clipboard is what these sections are about, and it
- * is the browser people actually paste in; a machine without it gets Playwright's own Chromium.
+ * is the browser people actually paste in; a machine without it gets Playwright's own full Chromium.
  */
 async function clipboardBrowser(docId) {
   const app = new URL(B);
   const origins = [app.origin, `${app.protocol}//${Buffer.from(docId, 'utf8').toString('hex')}.${PAGES_HOST}${app.port ? `:${app.port}` : ''}`];
   const args = [`--unsafely-treat-insecure-origin-as-secure=${origins.join(',')}`];
+  // The full browser, never the headless shell: the shell ignores the secure-origin switch.
   const chrome = await launchChromium({ channel: 'chrome', headless: true, args })
-    .catch(() => launchChromium({ headless: true, args }));
+    .catch(() => launchChromium({ channel: 'chromium', headless: true, args }));
   const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
   for (const origin of origins) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
   return { chrome, context };
