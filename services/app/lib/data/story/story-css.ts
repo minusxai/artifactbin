@@ -6,8 +6,8 @@
  * stylesheet. At save time the server compiles exactly the utilities the story uses into a
  * per-story CSS blob (see story-css.server.ts), persisted on the content as `compiledCss` —
  * a SERVER-MANAGED field: it is not part of the authored StoryContent schema, and is
- * recomputed on every save. At render time `buildStoryDocument` emits it into the document
- * <head> as `<style data-mx-tw>` (lib/story/document.ts).
+ * recomputed on every save. At render time the document builder emits it into the document
+ * <head> as `<style data-mx-tw>` (lib/story/styles/document-styles.ts).
  *
  * Legacy stories (no marker) get `compiledCss: null` — the marker gate exists so Tailwind's
  * preflight reset can never leak into a story that styles itself with its own <style> blocks.

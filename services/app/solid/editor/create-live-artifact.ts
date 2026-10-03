@@ -18,8 +18,7 @@
  *
  * `options` is read LIVE (a Solid props object, not a spread copy): the
  * subscription itself only re-opens when `backend`/`id`/`initialEditId`/
- * `initialVersion`/`enabled` change (the `on([...])` dependency list below,
- * React's old dependency array made explicit) — `isOwnFrame`/`onData`/
+ * `initialVersion`/`enabled` change (the `on([...])` dependency list below) — `isOwnFrame`/`onData`/
  * `onAnnotations`/`since` are read fresh inside the subscription's callbacks
  * with no ref-mirroring needed, since a live getter already reads the latest.
  */
@@ -39,9 +38,16 @@ export interface LiveArtifactOptions {
   /**
    * "This frame is the echo of a write I made" — the editor's own accepted
    * writes come back down the stream carrying the whole document, and it has
-   * already applied them locally.
+   * already applied them locally. A promise means "cannot tell yet" (the write's reply is still on the wire, and
+   * its ping overtook it): the ping is held until it settles, so a page never fetches its own write.
    */
-  isOwnFrame?: (editId: string) => boolean;
+  isOwnFrame?: (editId: string) => boolean | PromiseLike<boolean>;
+  /**
+   * Settles when a frame may be fetched. The frame is the whole document (megabytes, parsed on the page
+   * thread), so an editor holds it until the user stops typing; pings arriving meanwhile fold into the one
+   * fetch that follows. Absent: fetch at once.
+   */
+  whenIdle?: () => Promise<void>;
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
   onData?: (event: ArtifactDataEvent) => void;
   /** The ANNOTATIONS on this document changed (owner-credentialed connections only). */
@@ -73,6 +79,12 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
         let fetching = false;
         let attempt = 0;
         let retry: ReturnType<typeof setTimeout> | undefined;
+        /** Answer `isOwnFrame` for this head: at once when the caller knows, once it settles when it does not. */
+        const placeOwn = (editId: string, then: (own: boolean) => void) => {
+          const own = options.isOwnFrame?.(editId) ?? false;
+          if (typeof own === 'boolean') { then(own); return; }
+          void Promise.resolve(own).then((mine) => { if (alive) then(mine); }, () => { if (alive) then(false); });
+        };
         const surface = (frame: ArtifactLiveEvent, by: string | null | undefined) => {
           seenVersion = frame.version;
           setLive({ id, frame: { ...frame, by: frame.by ?? by ?? null } });
@@ -86,25 +98,27 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
           if (!alive || fetching || !wanted) return;
           clearTimeout(retry);
           retry = undefined;
-          const target = wanted;
           fetching = true;
-          void backend
-            .liveFrame()
-            .then((frame) => {
-              fetching = false;
-              if (!alive) return;
-              // Refused, or a head older than the one announced (a lagging read): not yet seen, retry.
-              if (!frame || frame.version < target.version) throw new Error('frame not available yet');
-              attempt = 0;
-              if (frame.version >= seenVersion) surface(frame, target.by);
-              if (wanted === target) wanted = null;
-              else fetchWanted();
-            })
-            .catch(() => {
+          void (async () => {
+            // Held until the caller is idle; the head to fetch is the newest announced by then.
+            await options.whenIdle?.();
+            const target = wanted;
+            if (!alive || !target) return;
+            const frame = await backend.liveFrame();
+            if (!alive) return;
+            // Refused, or a head older than the one announced (a lagging read): not yet seen, retry.
+            if (!frame || frame.version < target.version) throw new Error('frame not available yet');
+            attempt = 0;
+            if (frame.version >= seenVersion) surface(frame, target.by);
+            if (wanted === target) wanted = null;
+          })().then(
+            () => { fetching = false; fetchWanted(); },
+            () => {
               fetching = false;
               if (!alive) return;
               retry = setTimeout(fetchWanted, liveBackoffDelay(attempt++));
-            });
+            },
+          );
         };
         /*
          * The stream carries PINGS; the document is fetched. A ping names the
@@ -118,13 +132,17 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
             onPing: (ping) => {
               if (!Number.isInteger(ping.version)) return;
               if (ping.version < seenVersion) return;
-              if (options.isOwnFrame?.(ping.editId)) { seenVersion = ping.version; return; }
-              if (ping.version === initialVersion && ping.editId === initialEditId) return;
-              if (wanted && wanted.version > ping.version) return;
-              wanted = ping;
-              // A fresh announcement retries now rather than waiting out the backoff.
-              if (retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; }
-              fetchWanted();
+              placeOwn(ping.editId, (own) => {
+                // Re-checked: a held ping may have been overtaken while its owner was being decided.
+                if (ping.version < seenVersion) return;
+                if (own) { seenVersion = ping.version; return; }
+                if (ping.version === initialVersion && ping.editId === initialEditId) return;
+                if (wanted && wanted.version > ping.version) return;
+                wanted = ping;
+                // A fresh announcement retries now rather than waiting out the backoff.
+                if (retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; }
+                fetchWanted();
+              });
             },
             /*
              * The page came back (visible, online) and the stream looked alive: one out-of-band read
@@ -136,10 +154,13 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
               // A frame fetch is waiting out its backoff (it failed while offline): the page is back, try now.
               if (wanted && retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; fetchWanted(); return; }
               if (fetching || wanted) return;
-              void backend.liveFrame().then((frame) => {
+              void Promise.resolve(options.whenIdle?.()).then(() => (alive ? backend.liveFrame() : null)).then((frame) => {
                 if (!alive || !frame || frame.version <= seenVersion || wanted || fetching) return;
-                if (options.isOwnFrame?.(frame.editId)) { seenVersion = frame.version; return; }
-                surface(frame, null);
+                placeOwn(frame.editId, (own) => {
+                  if (frame.version <= seenVersion || wanted || fetching) return;
+                  if (own) { seenVersion = frame.version; return; }
+                  surface(frame, null);
+                });
               }).catch(() => { /* the stream's own reconnect covers an unreachable server */ });
             },
             onData: (frame) => {

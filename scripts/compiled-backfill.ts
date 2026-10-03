@@ -4,7 +4,7 @@
  *
  *   AUTH__SECRET=<the server's> npx tsx scripts/compiled-backfill.ts --db <database url> --base <server origin>
  *     [--all] [--stale] [--where compiler_version!=<fingerprint>] [--island-build <id>]
- *     [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]
+ *     [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--health-ms 500] [--dry-run]
  *
  * From the repository root, against a RUNNING server of the deploy being backfilled. The script only
  * decides what to warm: each version is prepared and compiled by that server, through its own reader
@@ -31,6 +31,11 @@
  *   2. Run `--dry-run`, then rerun without it. Repeat after interruption: rows that no longer match
  *      the filter are skipped. Use `--all` to include archived versions.
  *
+ * SELF-PACING. Before each version the run asks the server's `/api/health`; while it answers slower than
+ * `--health-ms` (default 500 ms) or not at all, no new version is sent (it waits 1 s, doubling to 10 s,
+ * and logs the pause), so the backfill never piles work onto a server its readers are waiting on.
+ * `--health-ms 0` turns it off.
+ *
  * The last line is the census from the database: selected versions stored, compiled, and
  * recorded failures by reason (`compile-error`, `unported` — both expected to be 0). Exit status 1 when
  * any request failed or any failure is recorded.
@@ -44,9 +49,9 @@ async function main() {
   const { values } = parseArgs({ options: {
     db: { type: 'string' }, base: { type: 'string' }, all: { type: 'boolean' }, concurrency: { type: 'string' },
     limit: { type: 'string' }, timeout: { type: 'string' }, 'dry-run': { type: 'boolean' },
-    where: { type: 'string' }, stale: { type: 'boolean' }, 'island-build': { type: 'string' }, 'format-below': { type: 'string' },
+    'health-ms': { type: 'string' }, where: { type: 'string' }, stale: { type: 'boolean' }, 'island-build': { type: 'string' }, 'format-below': { type: 'string' },
   } });
-  const usage = 'usage: AUTH__SECRET=<the server\'s> compiled-backfill.ts --db <url> --base <server origin> [--all] [--stale] [--where compiler_version!=<x>] [--island-build <id>] [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--dry-run]';
+  const usage = 'usage: AUTH__SECRET=<the server\'s> compiled-backfill.ts --db <url> --base <server origin> [--all] [--stale] [--where compiler_version!=<x>] [--island-build <id>] [--format-below N] [--concurrency 3] [--limit N] [--timeout 180] [--health-ms 500] [--dry-run]';
   const db = values.db ?? process.env.DATABASE_URL;
   const base = values.base ?? process.env.APP__PUBLIC_BASE_URL;
   if (!db || !base) throw new Error(usage);
@@ -79,6 +84,7 @@ async function main() {
       ...(values.concurrency ? { concurrency: Number(values.concurrency) } : {}),
       ...(values.limit ? { limit: Number(values.limit) } : {}),
       ...(values.timeout ? { timeoutMs: Number(values.timeout) * 1000 } : {}),
+      ...(values['health-ms'] ? { healthMs: Number(values['health-ms']) } : {}),
       log: (line) => console.log(line),
     });
     if (values['dry-run']) {

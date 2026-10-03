@@ -53,6 +53,80 @@ it('drops a ping the caller identifies as its own accepted write', async () => {
   expect(live()).toBeNull();
 });
 
+it('holds a ping the caller cannot place yet (its save is on the wire) and fetches nothing when it was its own', async () => {
+  const liveFrame = vi.fn(async () => frame(4));
+  const { backend, ping } = liveBackend(liveFrame);
+  let settle!: (own: boolean) => void;
+  const { result: live } = renderHook(() => createLiveArtifact({
+    backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, isOwnFrame: () => new Promise<boolean>((r) => { settle = r; }),
+  }));
+  ping({ version: 4, editId: 'mine' });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(liveFrame, 'nothing fetched while undecided').not.toHaveBeenCalled();
+  settle(true);
+  await new Promise((r) => setTimeout(r, 0));
+  expect(liveFrame).not.toHaveBeenCalled();
+  expect(live()).toBeNull();
+});
+
+it('fetches a held ping once the caller places it as someone else\'s write', async () => {
+  const liveFrame = vi.fn(async () => frame(4, 'theirs'));
+  const { backend, ping } = liveBackend(liveFrame);
+  let settle!: (own: boolean) => void;
+  const { result: live } = renderHook(() => createLiveArtifact({
+    backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, isOwnFrame: () => new Promise<boolean>((r) => { settle = r; }),
+  }));
+  ping({ version: 4, editId: 'theirs' });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(liveFrame).not.toHaveBeenCalled();
+  settle(false);
+  await vi.waitFor(() => expect(live()?.version).toBe(4));
+  expect(liveFrame).toHaveBeenCalledOnce();
+});
+
+it('a remote ping during typing is fetched only after typing goes quiet', async () => {
+  const liveFrame = vi.fn(async () => frame(4, 'theirs'));
+  const { backend, ping } = liveBackend(liveFrame);
+  let quiet!: () => void;
+  const { result: live } = renderHook(() => createLiveArtifact({
+    backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, whenIdle: () => new Promise<void>((r) => { quiet = r; }),
+  }));
+  ping({ version: 4, editId: 'theirs' });
+  await new Promise((r) => setTimeout(r, 0));
+  expect(liveFrame, 'not fetched while the user types').not.toHaveBeenCalled();
+  quiet();
+  await vi.waitFor(() => expect(live()?.version).toBe(4));
+  expect(liveFrame).toHaveBeenCalledOnce();
+});
+
+it('a remote ping after typing stops is fetched at once', async () => {
+  const liveFrame = vi.fn(async () => frame(4, 'theirs'));
+  const { backend, ping } = liveBackend(liveFrame);
+  const { result: live } = renderHook(() => createLiveArtifact({
+    backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, whenIdle: () => Promise.resolve(),
+  }));
+  ping({ version: 4, editId: 'theirs' });
+  await vi.waitFor(() => expect(live()?.version).toBe(4));
+  expect(liveFrame).toHaveBeenCalledOnce();
+});
+
+it('a ping that arrives while a held fetch waits is folded into it: one fetch, the newest head', async () => {
+  const liveFrame = vi.fn(async () => frame(5, 'theirs-2'));
+  const { backend, ping } = liveBackend(liveFrame);
+  let quiet!: () => void;
+  const { result: live } = renderHook(() => createLiveArtifact({
+    backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, whenIdle: () => new Promise<void>((r) => { quiet = r; }),
+  }));
+  ping({ version: 4, editId: 'theirs' });
+  await new Promise((r) => setTimeout(r, 0));
+  ping({ version: 5, editId: 'theirs-2' });
+  await new Promise((r) => setTimeout(r, 0));
+  quiet();
+  await vi.waitFor(() => expect(live()?.version).toBe(5));
+  await new Promise((r) => setTimeout(r, 0));
+  expect(liveFrame).toHaveBeenCalledOnce();
+});
+
 it('never rewinds the seen-version floor, even for a frame it declined to fetch', async () => {
   const liveFrame = vi.fn(async () => frame(5));
   const { backend, ping } = liveBackend(liveFrame);

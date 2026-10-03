@@ -22,6 +22,7 @@ import type {DocumentUpdate} from '@artifactbin/contracts';
 import { createLiveEdits } from '@/solid/editor/create-live-edits';
 import { httpBackend } from '@/test/helpers/artifact-backend';
 import * as updateClient from '@/lib/story/graph/document-update-client';
+import { prepareClientDocumentUpdate } from '@/lib/story/graph/document-update-client';
 
 /** Every save preparation (no worker under test: the authoring client prepares in place), with the source it prepared. */
 const preparations = vi.hoisted(() => [] as Array<string | undefined>);
@@ -345,6 +346,133 @@ describe('adopting a remote document', () => {
  * returns a precise, self-correcting message ("a document may carry only one
  * <Helmet>"), and the author is the one person who can act on it.
  */
+describe('the editor knows its own save before it has finished applying it', () => {
+  // The stream announces a save to every page, this one included, and that ping can overtake the reply. A page
+  // that cannot place it fetches the whole document (megabytes) for its own keystrokes, in the middle of typing.
+  it('a ping that overtakes the save reply is placed once the reply lands: this page\'s own edit, not news', async () => {
+    let respond!: (r: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((r) => { respond = r; }));
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const own = hook.result.isOwnEdit('edit-2');
+    const other = hook.result.isOwnEdit('edit-elsewhere');
+    expect(own, 'undecided while the save is on the wire').not.toBe(false);
+    respond(okResponse({ edit_id: 'edit-2', version: 2, markup: '<p>a</p>' }));
+    await expect(Promise.resolve(own)).resolves.toBe(true);
+    await expect(Promise.resolve(other)).resolves.toBe(false);
+  });
+
+  it('knows the reply\'s edit id while typing still holds the save back from being applied', async () => {
+    let typing = false;
+    const { hook } = setup({ isUserEditing: () => typing });
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    typing = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(hook.result.state.editId, 'the reply is held while the user types').toBe('edit-1');
+    expect(hook.result.isOwnEdit('edit-2')).toBe(true);
+    expect(hook.result.isOwnEdit('edit-elsewhere')).toBe(false);
+    typing = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(hook.result.state.editId).toBe('edit-2');
+  });
+
+  it('a ping during a save that fails is not this page\'s', async () => {
+    let fail!: (e: Error) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    const own = hook.result.isOwnEdit('edit-2');
+    fail(new TypeError('Failed to fetch'));
+    await expect(Promise.resolve(own)).resolves.toBe(false);
+  });
+});
+
+describe('a remote document waits for typing to go quiet before it is even fetched', () => {
+  // Fetching a remote frame is megabytes landing on the page thread: never while the user types.
+  it('a remote ping during typing is fetched only after typing goes quiet', async () => {
+    const { hook } = setup();
+    let idle = false;
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    void hook.result.whenIdle().then(() => { idle = true; });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    act(() => { hook.result.queue({ source: '<p>ab</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(idle, 'still typing: nothing fetched').toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(fetchMock, 'the typing was saved').toHaveBeenCalledOnce();
+    expect(idle, 'quiet and saved: fetch now').toBe(true);
+  });
+
+  it('a remote ping after typing stops is fetched at once', async () => {
+    const { hook } = setup();
+    act(() => { hook.result.queue({ source: '<p>a</p>' }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    let idle = false;
+    void hook.result.whenIdle().then(() => { idle = true; });
+    await act(async () => { await Promise.resolve(); });
+    expect(idle).toBe(true);
+  });
+
+  it('waits out uncommitted typing the editor reports, too', async () => {
+    let typing = true;
+    const { hook } = setup({ isUserEditing: () => typing });
+    let idle = false;
+    void hook.result.whenIdle().then(() => { idle = true; });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(idle).toBe(false);
+    typing = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(idle).toBe(true);
+  });
+});
+
+describe('a save that lands on a newer head waits for typing to go quiet before the editor shows the head', () => {
+  it('a save that lands on a newer head does not rebuild the editor while typing; it reconciles once typing goes quiet and keeps the typed text', async () => {
+    const base = '<p id="a">one</p><p id="b">two</p>';
+    const typed = base.replace('one', 'one typed');
+    const more = base.replace('one', 'one typed more');
+    const { hook, adopted } = setup({ initialSource: base });
+    // The server: a collaborator's patch to #b lands first (version 2), then this editor's save (version 3).
+    const start = snapshots.get('edit-1')!.document;
+    const meta = { title: null, description: null, meta: {} };
+    const remotePatch = prepareClientDocumentUpdate({ ...meta, document: start, version: 1 }, { source: base.replace('two', 'two remote') }).patch;
+    const atTwo = applyGraphPatch(start, 1, remotePatch)!;
+    let answer!: (r: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    act(() => { hook.result.queue({ source: typed }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const atThree = applyGraphPatch(atTwo, 2, sent.document_update.patch)!;
+    snapshots.set('edit-3', { document: atThree, version: 3, ids: true });
+    // Typing goes on while the save is on the wire, and its answer lands mid-typing.
+    act(() => { hook.result.queue({ source: more }); });
+    await act(async () => {
+      answer({ ok: true, status: 200, json: async () => ({ edit_id: 'edit-3', version: 3, patch: sent.document_update.patch, remote_patches: [{ version: 2, patch: remotePatch }] }) } as Response);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(adopted, 'no rebuild while typing').toEqual([]);
+    expect(fetchMock, 'the head was not read: the patches were replayed').toHaveBeenCalledOnce();
+    // The next save is based on the reconciled head: the collaborator's text is kept, the newer typing is sent.
+    fetchMock.mockImplementationOnce(async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ edit_id: 'edit-4', version: 4, patch: body.document_update.patch }) } as Response;
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const next = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(next.edit_id).toBe('edit-3');
+    expect(sourceOf(next)).toBe(more.replace('two', 'two remote'));
+    // Quiet: the editor adopts the head once, with the typed text and the collaborator's.
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(adopted).toEqual([more.replace('two', 'two remote')]);
+    expect(hook.result.state.status).toBe('');
+  });
+});
+
 describe('a refused save tells the author what to fix', () => {
   const refusal = (details: Array<{ message: string }>) =>
     errResponse(400, { error: 'invalid_jsx', details });
@@ -458,11 +586,14 @@ it('rebases a pending undo over an unrelated edit included in the save response'
   await act(async()=>{await vi.advanceTimersByTimeAsync(600);});
   act(()=>hook.result.queue({source:base}));
   const accepted=submitted.replace('two','remote two');
+  fetchMock.mockResolvedValueOnce(okResponse({edit_id:'edit-3',version:3,markup:base.replace('two','remote two')}));
   accept(okResponse({edit_id:'edit-2',version:2,markup:accepted}));
   await act(async()=>{await hook.result.flushNow();});
   const next=JSON.parse(fetchMock.mock.calls[1][1].body);
   expect(sourceOf(next)).toBe(base.replace('two','remote two'));
-  expect(adopted[0]).toBe(base.replace('two','remote two'));
+  // The editor shows the head once the undo is saved and nothing is owed.
+  await act(async()=>{await vi.advanceTimersByTimeAsync(200);});
+  expect(adopted).toEqual([base.replace('two','remote two')]);
 });
 
 it('retries a preserved draft against a fresh head without overwriting unrelated remote text',async()=>{
@@ -502,11 +633,13 @@ it('defers an accepted remote rebase until composition finishes, preserving both
  await act(async()=>{await vi.advanceTimersByTimeAsync(500);});
  composing=true;
  act(()=>hook.result.queue({source:sent.replace('one!','one!日本語')}));
+ fetchMock.mockResolvedValueOnce(okResponse({edit_id:'edit-3',version:3,markup:accepted.replace('one!','one!日本語')}));
  await act(async()=>{respond(okResponse({edit_id:'edit-2',version:2,markup:accepted}));await Promise.resolve();});
  expect(adopted).toEqual([]);
  composing=false;
- await act(async()=>{await vi.advanceTimersByTimeAsync(50);});
- expect(adopted).toContain(accepted.replace('one!','one!日本語'));
+ await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
+ expect(sourceOf(JSON.parse(fetchMock.mock.calls[1][1].body))).toBe(accepted.replace('one!','one!日本語'));
+ expect(adopted).toEqual([accepted.replace('one!','one!日本語')]);
 });
 
 it('keeps a locally invalid draft without labelling it offline or retrying forever',async()=>{

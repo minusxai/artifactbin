@@ -1,7 +1,6 @@
 /**
  * The managed `<Iframe>`'s child document: a locked CSP (scripts inline only, assets from the managed asset
- * origin when one is configured) and the author-script bootstrap. Framework-free, shared by today's React
- * view (./managed-iframe) and the compiled page's island (lib/islands/kit/embed).
+ * origin when one is configured) and the author-script bootstrap. Framework-free, shared by the compiled page's island (lib/islands/kit/embed).
  */
 import {AUTHOR_SCRIPT_BOOTSTRAP} from './author-script-bootstrap';
 

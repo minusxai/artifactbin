@@ -1,9 +1,8 @@
 /* @jsxImportSource solid-js */
 /**
- * THE TRASH (web/pages/Trash.tsx) in Solid — what this account has deleted and not yet lost.
+ * THE TRASH — what this account has deleted and not yet lost.
  *
- * The React page recomputes everything below from state on each render. A Solid component body
- * runs ONCE, so every derived value is an accessor or a memo; reading a signal at the top level
+ * A Solid component body runs ONCE, so every derived value is an accessor or a memo; reading a signal at the top level
  * (outside JSX, a memo or an effect) would freeze its first value.
  */
 import { createMemo, createSignal, For, Index, Show, type JSX } from 'solid-js';

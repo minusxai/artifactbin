@@ -2,6 +2,32 @@
 
 `CLAUDE.md` imports this file. Setup: [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## CHECK TIERS — READ THIS BEFORE RUNNING ANY COMMAND
+
+Every check is either FAST or SLOW.
+
+A FAST check finishes in seconds and catches almost every error. A SLOW check takes one to several
+minutes, 15 to 50 times longer than a FAST one, and exists only to confirm a finished change before
+merge.
+
+**FAST tier — after every change:** `npm run validate`, `npm test -- --files <paths>`, the running
+dev app, `npm run afbin`.
+
+**SLOW tier — EXACTLY ONCE, at the very end, immediately before merge. NEVER after an individual
+edit. NEVER "just to check". NEVER mid-task:** gate containers, pushing for PR CI, bare `npm test`.
+
+- **DO NOT run a gate container after an edit. DO NOT push to make CI check an edit.** Finish the
+  ENTIRE change on FAST-tier checks, then run the SLOW tier ONE time.
+- **Gates belong to PR CI.** It runs all 12 gate shards, the build and every test shard. A local
+  gate container is NOT a routine check; run it only if CI's gate shard failed or you changed the
+  reader/hydration.
+- **Bare `npm test` is NOT an inner-loop check.** Touch a shared module and it defers (exit 2).
+  Mid-task, a deferral means you ran the wrong command: drop back to `--files` and keep working.
+- **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
+  the exact user scenario verified end to end on the built artifact → merge.
+- If you catch yourself pushing, polling CI, or running a gate per edit: **STOP. You are doing it
+  wrong.** Batch the work and run the SLOW tier once at the end.
+
 ## Working rules
 
 - Design modules before implementation (Ousterhout): state the affected boundaries and contracts.
@@ -12,9 +38,9 @@
   Report what actually ran; never claim red/green or end-to-end evidence you did not observe.
 - Probe risky assumptions; record evidence and unknowns in the plan. Order milestones by
   plan-changing risks and finish with runnable checks.
-- **Routine checks: `npm run validate` and `npm test`.** For TDD, use
-  `npm test -- --files <paths>`. Run affected checks before handoff; repeat after relevant changes
-  or failures, not after every edit. Verify user-facing changes on the task's running app (`npm run
+- **Routine checks: `npm run validate` and `npm test -- --files <paths>`.** These are the FAST
+  tier, after every change. Bare `npm test`, gate containers and PR CI are the SLOW tier: ONCE,
+  pre-merge, NEVER per edit (see CHECK TIERS). Verify user-facing changes on the task's running app (`npm run
   dev`, port from `APP__PORT` in `.env`; a worktree has its own block). If you changed `services/cli`
   or the skill, test it with `npm run afbin -- <args>`: it builds the branch's CLI and runs it against
   that same dev server, with its own state in `~/.artifactbin-dev/<port>`, so the released `afbin` and
@@ -30,6 +56,9 @@
   alone does not start CI. Report deferral accurately; require selected checks before merging.
   Full suites, Docker/Chromium integration, the whole gate set and production builds are
   CI-only. Collect CI failures and fix them together; never blindly retry unchanged code.
+  **Deferral mid-task means you ran the wrong command, not that it is time to push.** Drop back to
+  `npm test -- --files <paths>` and keep working. Deferral at the end of a complete, FAST-tier-clean
+  change is the normal handoff: commit, push ONCE, open the PR, and let CI run the suite.
 - **Reuse handoff evidence:** in the same worktree, use `npm run validate -- --reuse` and
   `npm test -- --reuse` with the original test arguments. Successful receipts last one hour and
   require matching sources, command, environment, runtime, installed lock and generated inputs.
@@ -65,26 +94,31 @@
 
 Run these from the repository root. Keep this list current.
 
-- `npm ci` — install the pinned workspace dependencies.
+- `npm ci` — install the pinned workspace dependencies (~10 s warm cache).
 - `npm run setup` — create or repair local settings.
-- `npm run dev` — full local composition; default http://localhost:3030.
+- `npm run dev` — full local composition; default http://localhost:3030 (~4 s to first response).
 - `npm run dev:app` — app with local SQL/browser, without the proxy; same default port.
-- `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server.
+- `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server (~15 s first
+  build, then instant).
 - `npm run eval -- --tasks <name>` — the agent eval against this checkout's dev server
   (`--deployment` to point elsewhere).
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
-- `npm run validate` — name guard and incremental TypeScript (native `tsgo` where its platform binary is
+- `npm run validate` — FAST, ~1 s warm. Name guard and incremental TypeScript (native `tsgo` where its platform binary is
   installed, here and in CI; tsc otherwise), including unused declarations;
   shared utils/contracts also use `noUncheckedIndexedAccess` for downstream compatibility.
 - `npm test` — affected api/node/ui/islands + CLI tests, at most 50 files combined. Exit 2: use PR CI,
-  never widen. `-- <ref>` selects branch changes; `-- --files <paths>` selects TDD tests;
+  never widen. `-- --files <paths>` is FAST (seconds) and is the inner-loop form; bare `npm test`
+  and `-- <ref>` are SLOW-tier, pre-merge only. `-- <ref>` selects branch changes;
   `-- --reuse` reuses matching evidence. Config/package edits may defer everything; that is expected.
-- `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — the named browser gates in
-  a Linux container, built and served as CI does; the output and exit status are the gates'.
-- CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:islands`, `test:integration`,
-  `build`, `test:gates`. Never use them to bypass deferral.
-- `npm run build:islands -w services/app` — build the shared reader islands and manifest.
-- `node scripts/gate-container.mjs hydration` — verify the compiled reader handover in a Linux container.
+- `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — **SLOW, about a minute
+  per run. PRE-MERGE ONLY. NEVER AFTER AN EDIT.** The named browser gates in a Linux container,
+  built and served as CI does; the output and exit status are the gates'. PR CI runs the same gates;
+  do not run this unless CI's gate shard failed or you changed the reader/hydration.
+- CI-only (a full PR run is ~3 min): `npm run test:all`, `test:api`, `test:node`, `test:ui`,
+  `test:islands`, `test:integration`, `build`, `test:gates`. Never use them to bypass deferral.
+- `npm run build:islands -w services/app` — build the shared reader islands and manifest (~15 s).
+- `node scripts/gate-container.mjs hydration` — **SLOW, PRE-MERGE ONLY.** Verify the compiled reader
+  handover in a Linux container, only when you changed the reader/islands or CI's gate shard failed.
 - `npm run generate:routes`, `generate-story-ui-classes`, `render:schema` —
   generated inputs.
 - `npm run generate:theme-previews`, `generate:og` — theme previews and unfurl images.
@@ -120,4 +154,6 @@ completes that brief without further delegation. Use isolated worktrees, data di
 blocks; never two implementers in one checkout. Browser gates run in containers via
 `scripts/gate-container.mjs`, up to N at once (engine CPUs ÷ container CPUs, 3 on a 14-CPU Colima;
 `GATES__CONTAINER_SLOTS` overrides); host `node scripts/gates/gate-*.mjs` runs are discouraged.
+**Gates are SLOW-tier. An implementer runs them ONCE at the end of the brief, NEVER per edit.
+Every brief must say so verbatim.**
 Keep PRs scoped per repository. Handoff: [docs/agent-workflows.md](docs/agent-workflows.md).

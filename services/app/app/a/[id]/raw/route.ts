@@ -136,7 +136,7 @@ export interface DomainPost { hostname: string; ownerId: string }
  * the page that asks is served it, for the live morph (lib/islands/morph/engine) — `raw`, this route's
  * own reader copy, or `app`, the app page's story (its isolated sheet, its inline drawings). Only the
  * route sets it (the router passes params alone), so no request can ask for it here. Same admission,
- * same compiled inputs, same sandbox; never a view, never today's renderer (a fallback is an answer the
+ * same compiled inputs, same sandbox; never a view, never a fallback renderer (a fallback is an answer the
  * page reloads on), and readable from the `/raw` copy's opaque origin by an anonymous reader.
  */
 export interface StoryFragmentRequest { surface: StorySurface }
@@ -381,7 +381,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           drawings: domain || engineRequested(request.url) ? null : appStory ? 'inline' : 'document',
           colorMode: byExportKey && !domain ? captureColor(request.url) : null,
           signedIn: actor.credential === 'session' && !!viewer?.userId,
-          // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as today's /raw does.
+          // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as /raw always has.
           holder: null,
           // A capture's rows are settled, but its managed iframe still needs the scoped asset door.
           doors: capture ? { queryUrl: '', assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {
@@ -400,7 +400,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
           // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
           behaviors: capture ? [] : ['page'],
-          // `chrome=0` draws the document without its own chrome (a deck's rail and present bar), as today's does.
+          // `chrome=0` draws the document without its own chrome (a deck's rail and present bar).
           documentChrome: chrome,
           capture: !chrome,
           head: chrome
@@ -412,9 +412,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             }
             : null,
           ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
-          // Its style rides in the sheets, where today's document has it.
+          // Its style rides in the sheets, where the standalone document has it.
           footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
-          // Today's standalone document's stylesheets, byte for byte (lib/story/styles/document-styles); the app
+          // The standalone document's stylesheets, byte for byte (lib/story/styles/document-styles); the app
           // page's story carries its one isolated sheet instead (the assembler's `css`).
           sheets: appStory ? null : documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,

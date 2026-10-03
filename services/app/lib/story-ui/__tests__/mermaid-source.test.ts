@@ -1,7 +1,7 @@
 /**
  * Which diagram a `<Mermaid code>` draws — decided from its source alone, the
- * way Mermaid 12 decides it, so a served document can preload exactly the
- * code that kind loads (lib/story/document/lazy-code, scripts/build-server-reader.mjs).
+ * way Mermaid 12 decides it, so the renderer loads exactly the code that
+ * kind needs.
  *
  * The rule under test is Mermaid's own: strip comments, then the FIRST detector
  * in its registration order that matches the leading keyword wins. The order

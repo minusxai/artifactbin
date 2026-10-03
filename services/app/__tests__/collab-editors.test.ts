@@ -39,8 +39,10 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { roleFor as requestRoleFor } from '@/lib/accounts';
-import { canReadArtifact, effectiveRole as roleFor, getArtifactById,getVersionFor } from '@/lib/artifacts';
+import { canReadArtifact, committedHeadsSettled, effectiveRole as roleFor, getArtifactById,getVersionFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
+import { getDb } from '@/lib/platform/db';
+import { storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadata';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
@@ -600,20 +602,96 @@ describe('the browser edit answer', () => {
     expect(graphSource(advanced)).toBe(read.markup);
     expect(answer.edit_id).toBe(read.edit_id);
 
-    // An edit prepared on the older head lands on a newer one: the editor's graph is not that head, so it gets the whole document.
-    const stale = documentEditBody(base, { source: '<div id="d"><p id="a">one</p><p id="b">two, typed</p></div>' });
-    const late = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: stale }), params({ id }));
-    expect(late.status, await late.clone().text()).toBe(200);
-    const full = await late.json();
-    expect(full.patch).toBeUndefined();
-    expect(full.markup).toContain('two, typed');
-    expect(full.markup).toContain('one, typed');
-    expect(full.document.kind).toBe('graph');
-
     // ?echo=full keeps the bearer route's answer for any caller that wants the document.
     const now = await head(id);
-    const echoed = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits?echo=full`, { method: 'POST', json: documentEditBody(now, { source: (full.markup as string).replace('one, typed', 'one') }) }), params({ id }));
+    const echoed = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits?echo=full`, { method: 'POST', json: documentEditBody(now, { source: (now.source as string).replace('one, typed', 'one') }) }), params({ id }));
     expect(echoed.status).toBe(200);
     expect((await echoed.json()).document.kind).toBe('graph');
+  });
+
+  it('a patch on a newer head answers without the document: replaying the patches between and its own gives exactly the stored head', async () => {
+    const w = await world('<div id="d"><p id="a">one</p><p id="b">two</p><p id="c">three</p></div>');
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const id = w.doc.id;
+    const base = await head(id);
+    // Two collaborators commit to other nodes first; the editor's save was prepared on `base`.
+    for (const [from, to] of [['one', 'one, remote'], ['three', 'three, remote']]) {
+      const now = await head(id);
+      const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: documentEditBody(now, { source: (now.source as string).replace(from, to) }) }), params({ id }));
+      expect(res.status, await res.clone().text()).toBe(200);
+    }
+    const sent = documentEditBody(base, { source: '<div id="d"><p id="a">one</p><p id="b">two, typed</p><p id="c">three</p></div>' });
+    const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: sent }), params({ id }));
+    expect(res.status, await res.clone().text()).toBe(200);
+    const text = await res.text();
+    const answer = JSON.parse(text);
+    for (const key of ['document', 'markup', 'state', 'mutations']) expect(answer, key).not.toHaveProperty(key);
+    expect(answer).toMatchObject({ version: base.version + 3, patch: sent.document_update.patch });
+    expect(answer.remote_patches.map((step: { version: number }) => step.version)).toEqual([base.version + 1, base.version + 2]);
+    let graph = base.document as never;
+    for (const step of [...answer.remote_patches, { version: answer.version, patch: answer.patch }]) graph = advanceGraph(graph, step.version - 1, step.patch)! as never;
+    const read = await (await getMineRoute(await request(`/api/my/artifacts/${id}`, {}), params({ id }))).json();
+    expect(graph).toEqual(read.document);
+    expect(graphSource(graph)).toBe(read.markup);
+    expect(read.markup).toContain('one, remote');
+    expect(read.markup).toContain('three, remote');
+    expect(read.markup).toContain('two, typed');
+    expect(answer.edit_id).toBe(read.edit_id);
+
+    // A version between with no logged patch (a replacement, a conversion) leaves nothing to replay: the answer still
+    // withholds the document, and says nothing about the versions between, so the editor reads the head itself.
+    const from = await head(id);
+    const remote = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: documentEditBody(from, { source: (from.source as string).replace('three, remote', 'three, again') }) }), params({ id }));
+    expect(remote.status, await remote.clone().text()).toBe(200);
+    await (await getDb()).query(`DELETE FROM artifact_edits WHERE artifact_id=$1 AND (document_state->>'version')::int=$2`, [id, from.version + 1]);
+    const late = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: documentEditBody(from, { source: (from.source as string).replace('two, typed', 'two, typed again') }) }), params({ id }));
+    expect(late.status, await late.clone().text()).toBe(200);
+    const lateAnswer = await late.json();
+    expect(lateAnswer.document).toBeUndefined();
+    expect(lateAnswer.remote_patches).toBeUndefined();
+    expect(lateAnswer.version).toBe(from.version + 2);
+  });
+
+  it('withholds the new document: no markup, state or mutations, and the head is settled after the answer exactly as an answered commit settles it', async () => {
+    const DATA = (n: number) => `<Helmet><Value name="n" type="number" default={${n}} /><Query name="q">{\`select $n * 21 as n\`}</Query></Helmet><div><p id="a">Answer <Number data="$q" col="n" /></p><Mermaid title="D0" code={${JSON.stringify('flowchart LR\n  a[Request] --> b[Read]')}} /></div>`;
+    const w = await world(DATA(2));
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const twin = await create(w.ta.token, { markup: DATA(2), visibility: 'public' });
+    const edit = async (id: string, echo: string) => {
+      const base = await head(id);
+      const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits${echo}`, { method: 'POST', json: documentEditBody(base, { source: (base.source as string).replace('default={2}', 'default={3}') }) }), params({ id }));
+      expect(res.status, await res.clone().text()).toBe(200);
+      return { base, text: await res.text() };
+    };
+    const { base, text } = await edit(w.doc.id, '');
+    const answer = JSON.parse(text);
+    for (const key of ['document', 'markup', 'state', 'mutations']) expect(answer, key).not.toHaveProperty(key);
+    expect(answer).toMatchObject({ id: w.doc.id, version: base.version + 1, edit_id: expect.any(String) });
+    expect(answer).toHaveProperty('theme');
+    expect(answer.patch).toBeDefined();
+    expect(text.length).toBeLessThan(JSON.stringify(base.document).length);
+
+    // The twin takes the same edit on the answered path, which settles inline; both heads end the same.
+    // The withheld answer is the full answer's head, every other key included (a new column rides along).
+    const full = JSON.parse((await edit(twin.id, '?echo=full')).text);
+    const without = (keys: string[], drop: string[]) => keys.filter((k) => !drop.includes(k)).sort();
+    expect(without(Object.keys(answer), ['patch'])).toEqual(without(Object.keys(full), ['document', 'markup', 'state', 'mutations']));
+    await committedHeadsSettled();
+    const [settled, answered] = [await getArtifactById(w.doc.id), await getArtifactById(twin.id)];
+    // The two documents differ only in their stamped node ids (same length), so the stored records are the same
+    // compiled dataflow, each certified against its own head's source.
+    const record = (row: typeof settled) => storedCompiledDataflow(row!.meta, row!.source!);
+    expect(record(settled)).not.toBeNull();
+    expect(record(settled)).toEqual(record(answered));
+    const db = await getDb();
+    const harvests = async (id: string) => (await db.query<{ version: number }>('SELECT version FROM mermaid_harvests WHERE artifact_id=$1 ORDER BY version', [id])).rows.map((r) => r.version);
+    expect(await harvests(w.doc.id)).toContain(settled!.version);
+    expect(await harvests(twin.id)).toContain(answered!.version);
+
+    // The first edit after a quiet spell archives the version it replaced, copied as stored: the archive is exactly
+    // the pre-edit head, document and all.
+    const archived = await getVersionFor({ userId: base.user_id, tokenId: base.token_id }, w.doc.id, base.version);
+    expect(archived?.source).toBe(base.source);
+    expect((await db.query<{ document: unknown }>('SELECT document FROM artifact_versions WHERE artifact_id=$1 AND version=$2', [w.doc.id, base.version])).rows[0]?.document).toEqual(base.document);
   });
 });

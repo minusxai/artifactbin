@@ -62,7 +62,7 @@ export function ProfilePage(): JSX.Element {
  * segment would overlap it and, being listed first, win the match for every one-segment alias
  * (folders included), same as `/a/:id` does with `ArtifactRoute` in solid/App.tsx.
  *
- * Resolution is id-anchored, same grammar as web/pages/Profile.tsx's React twin (lib/urls
+ * Resolution is id-anchored, same grammar as the rest of the app (lib/urls
  * parsePrettyPath) — the difference is what Solid does once it has the id: `initialDocumentStory()`
  * (the same discriminator `ArtifactRoute` uses for `/a/:id`) says whether THIS load served a compiled
  * document, so a compiled document is adopted by the reader (`DocumentPage`) and anything else — a

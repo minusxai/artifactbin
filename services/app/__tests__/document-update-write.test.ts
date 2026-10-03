@@ -33,6 +33,24 @@ it('checks permissions, mutates JSONB and records compact history in one query',
  expect(logs[0]!.document_state.beforeNodes).not.toHaveProperty('$root');
  const stranger={tokenId:'other',userId:null};const denied=vi.spyOn(db,'query');expect(await commitDocumentUpdate(db,stranger,editorScope(stranger),id,update)).toBeNull();expect(denied.mock.calls).toHaveLength(1);denied.mockRestore();
 });
+it('carries only the changed nodes of the old row into history unless the commit archives a version',async()=>{
+ const {db,actor,id,base}=await setup(),scope=editorScope(actor);
+ const head=async()=>{const r=(await db.query<{document:DocumentGraph;version:number}>('SELECT document,version FROM artifacts WHERE id=$1',[id])).rows[0]!;return {document:r.document,version:r.version,meta:(await getArtifactById(id))!.meta};};
+ expect((await commitDocumentUpdate(db,actor,scope,id,prepareClientDocumentUpdate(base,{operations:[{kind:'setText',path:[0,0,0],value:'One'}]})))?.applied).toBe(true);
+ // Inside the archive window: the old row is not archived, and the history still restores it exactly.
+ const one=await head();
+ expect((await commitDocumentUpdate(db,actor,scope,id,prepareClientDocumentUpdate(one,{operations:[{kind:'setText',path:[0,1,0],value:'Two'},{kind:'setAttribute',path:[0,0],name:'title',value:'T'}]})))?.applied).toBe(true);
+ const log=(await db.query<{document_state:DocumentOperationHistory}>('SELECT document_state FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq DESC LIMIT 1',[id])).rows[0]!.document_state;
+ const two=await head();
+ expect(documentBeforeOperation(applyGraphPatch(one.document,one.version,log.forward)!,log)).toEqual(one.document);
+ expect((await db.query('SELECT version FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',[id])).rows).toEqual([{version:1}]);
+ // Past the window the commit archives the WHOLE previous document, never the slim copy.
+ await db.query("UPDATE artifacts SET document_archived_at=now()-interval '1 hour' WHERE id=$1",[id]);
+ expect((await commitDocumentUpdate(db,actor,scope,id,prepareClientDocumentUpdate(two,{operations:[{kind:'setText',path:[0,1,0],value:'Three'}]})))?.applied).toBe(true);
+ const archived=(await db.query<{document:DocumentGraph}>('SELECT document FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,two.version])).rows[0]!.document;
+ expect(archived).toEqual(two.document);
+ expect(graphSource(archived)).toContain('Two');
+});
 it('accepts independently prepared mixed edits and rejects conflicting edits with no partial history',async()=>{
  const {db,actor,id,base}=await setup();
  const a=prepareClientDocumentUpdate(base,{operations:[{kind:'setAttribute',path:[0,0],name:'title',value:'A'}]}),b=prepareClientDocumentUpdate(base,{operations:[{kind:'setAttribute',path:[0,1],name:'title',value:'B'}]});

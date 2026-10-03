@@ -16,11 +16,11 @@
  *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`);
  * 7. when the page data names the version's author script, loads the lazy author host (./author-host,
  *    a standalone chunk) and runs the script in its sandboxed frame against this store, after the
- *    islands have hydrated — as today's runtime runs it after its first commit. Edit mode and dispose
+ *    islands have hydrated — as the former runtime runs it after its first commit. Edit mode and dispose
  *    revoke it (the editor starts its own).
  * 8. when the page may hold data (`hold`, `sqliteWasm`): gives the store the page's own SQLite engine
  *    (./sqlite-engine, bundled alone and loaded behind the first paint — the store asks for it once the
- *    first run is on its way), so what the reader holds is answered in the page, as today's reader does.
+ *    first run is on its way), so what the reader holds is answered in the page, as the former reader does.
  * 9. top-level only: the link follows the reader — a moved `<Value>` rewrites the page's own `$` params
  *    (./url-sync), loaded after hydration.
  *
@@ -183,7 +183,13 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   }
   // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
   let stopUrl = () => {};
-  if (store && win.parent === win) void import('./url-sync').then(({ startUrlSync }) => { if (!disposed) stopUrl = startUrlSync(win, store); }, () => {});
+  /** The link follows the reader while reading; editing pauses it (no value moves) and reading again resumes it. */
+  const followUrl = () => {
+    if (store && win.parent === win) void import('./url-sync').then(({ startUrlSync }) => {
+      if (!disposed && mode === 'read') { stopUrl(); stopUrl = startUrlSync(win, store); }
+    }, () => {});
+  };
+  followUrl();
 
   let mode: IslandDocumentMode = 'read';
   let ready = false;
@@ -214,7 +220,9 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
          * The stream opens from the snapshot's marks, so a dataset written while editing re-runs at once.
          */
         mode = 'read';
+        runtime.setPaused(false);
         openLive(data.results?.since ?? null);
+        followUrl();
         if (store && win.parent === win) void import('./mx-host').then(({ installPublicMx }) => {
           installPublicMx(root, store, win, () => !disposed && mode === 'read');
         }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
@@ -228,7 +236,11 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
-      disposeIslands();
+      stopUrl();
+      stopUrl = () => {};
+      // PAUSED, never disposed: the islands keep their DOM and state (a chart stays drawn, nothing hydrates
+      // again), and the editor's first draft keeps the running tree when it keeps every component in it.
+      runtime.setPaused(true);
       mode = next;
       emit({ type: 'mode', mode });
     },

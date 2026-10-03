@@ -34,7 +34,7 @@ export function DialogClose(props: TriggerProps) {
 }
 /**
  * `<DialogContent run="$add" args={{…}}>`: the dialog is a FORM that performs the named `<Mutation>` on
- * submit (today's DialogContentAdapter and components/kit/dialog): its fields sit in a `display:contents`
+ * submit (the former DialogContentAdapter): its fields sit in a `display:contents`
  * fieldset disabled while the write is in flight or refused, a refusal the reader cannot act on says why
  * (`role="status"`: a guest's `$_me` write is "Unavailable while signed out."), a saved write closes the
  * dialog, and a failed one is shown in a `role="alert"` with the dialog left open.

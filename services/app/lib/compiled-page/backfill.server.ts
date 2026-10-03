@@ -18,6 +18,14 @@ export interface BackfillOptions {
   timeoutMs?: number;
   filters?: readonly BackfillSelector[];
   log?: (line: string) => void;
+  /**
+   * Self-pacing: before each version, the server's `/api/health` is asked; while it answers slower than
+   * this (ms), or not at all, no new version is sent (waits 1 s, doubling to 10 s). 0 turns it off.
+   * Default 500.
+   */
+  healthMs?: number;
+  /** The pause between health checks (tests). */
+  sleep?: (ms: number) => Promise<void>;
 }
 export interface BackfillTarget { id: string; version: number; head: boolean }
 export interface BackfillReport {
@@ -88,6 +96,25 @@ async function warm(options: BackfillOptions, target: BackfillTarget, recompile:
     return response.headers.get(READER_MODE_HEADER) === 'compiled' ? { kind: 'compiled' } : { kind: 'error', error: 'unexpected reader mode' };
   } catch (error) { return { kind: 'error', error: error instanceof Error ? error.message : String(error) }; }
 }
+/** Wait until the server answers its health check within `healthMs`: a backfill never adds load to a struggling server. */
+async function paced(options: BackfillOptions, report: { paused: number }): Promise<void> {
+  const limit = options.healthMs ?? 500;
+  if (limit <= 0) return;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let wait = 1_000; ; wait = Math.min(wait * 2, 10_000)) {
+    const began = performance.now();
+    let healthy = false;
+    try {
+      const response = await options.fetch(new URL('/api/health', options.base).href, { signal: AbortSignal.timeout(Math.max(limit * 4, 2_000)) });
+      await response.arrayBuffer();
+      healthy = response.ok && performance.now() - began <= limit;
+    } catch { /* no answer: unhealthy */ }
+    if (healthy) return;
+    if (report.paused++ % 10 === 0) options.log?.(`server health slower than ${limit} ms: pausing ${wait} ms`);
+    await sleep(wait);
+  }
+}
+
 export async function backfillCompiledPages(options: BackfillOptions): Promise<BackfillReport> {
   const all = await targetsOf(options.db, !!options.all, Math.max(1, Math.min(options.limit ?? 1_000_000, 10_000_000)));
   const before = await storedState(options.db);
@@ -97,8 +124,11 @@ export async function backfillCompiledPages(options: BackfillOptions): Promise<B
   options.log?.(`${selected.length} version(s) selected; ${report.done} skipped`);
   if (options.dryRun) return report;
   let next = 0;
+  const pacing = { paused: 0 };
   const worker = async (): Promise<void> => {
     while (next < selected.length) {
+      await paced(options, pacing);
+      if (next >= selected.length) return;
       const target = selected[next++]!;
       const outcome = await warm(options, target, !!before.get(keyOf(target.id, slotOf(target)))?.compiled);
       report.warmed++;

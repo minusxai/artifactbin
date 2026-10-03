@@ -16,6 +16,13 @@ export interface Column {
    * revoked token, measured).
    */
   renamedFrom?: string;
+  /**
+   * The TOAST compression this column's large values are stored with. `lz4`
+   * is set where the server supports it (PostgreSQL built with lz4) and left at
+   * the default where it does not (PGLite): a guarded block, a no-op once set.
+   * It applies to values written after it; existing rows keep theirs.
+   */
+  compression?: 'lz4';
 }
 export interface Index {
   name: string;

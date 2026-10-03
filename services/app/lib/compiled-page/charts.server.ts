@@ -11,7 +11,7 @@
  * the hover guide.
  *
  * A chart it cannot draw faithfully is REFUSED (thrown), never approximated:
- * the island then draws it in the browser exactly as today. Refused: an unknown
+ * the island then draws it in the browser. Refused: an unknown
  * or unresolvable viz, a spec vega reports errors for, a spec that still needs
  * a CSS custom property (`var(--…)`) only the page can resolve, a map with
  * street tiles or geo boundaries (network assets), and any SVG that carries a
@@ -34,6 +34,9 @@ import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { DrawnChart } from './contract';
 import { DRAWING_CLASS } from '@/lib/islands/chart';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
+
+/** The largest drawing served in the HTML; a chart that draws more (thousands of marks) is drawn by its island. */
+export const MAX_DRAWING_BYTES = 512 * 1024;
 
 /** QuestionEmbed's title bar (`px-3 py-2 text-sm` + a 1px border): the chart below it gets the rest of the embed's height. */
 const TITLE_BAR_PX = 37;
@@ -201,6 +204,8 @@ export async function drawChart(input: DrawChartInput): Promise<DrawnChart> {
     await view.runAsync();
     if (errors.length) throw errors[0] instanceof Error ? errors[0] : new Error(String(errors[0]));
     const svg = responsive(scopeIds(await view.toSVG()));
+    // Megabytes of marks are stored, parsed and assembled into every reader's HTML: the island draws them instead.
+    if (svg.length > MAX_DRAWING_BYTES) throw new Error(`the drawing is ${svg.length} bytes, over ${MAX_DRAWING_BYTES}`);
     if (!svgIsSafe(svg)) throw new Error('the drawing carries markup a reader page may not');
     return { svg, table: input.name ?? '', rows: rowsDigest(table.rows) };
   } finally {
@@ -306,7 +311,7 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
         ...(options.palette !== undefined ? { palette: options.palette } : {}),
       });
     } catch {
-      // Not drawable on the server: the island draws it, as every chart is drawn today.
+      // Not drawable on the server: the island draws it, as every undrawn chart is.
     }
   }
   return drawings;

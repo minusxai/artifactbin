@@ -90,7 +90,7 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
     check(verdict.captured && verdict.served > 0, `${label}: the compiled story was served as the body's own root (${verdict.served} elements)`);
     check(verdict.adopted && verdict.same, `${label}: the app adopted THAT element into its root, not a copy`);
     check(verdict.lost === 0, `${label}: every served element is still in the adopted story (${verdict.lost} lost)`);
-    check(verdict.reactOwned === 0, `${label}: React owns none of the island story (${verdict.reactOwned} owned)`);
+    check(verdict.reactOwned === 0, `${label}: no React fiber on the island story (a guard against React returning) (${verdict.reactOwned} owned)`);
     check(verdict.mode === 'read', `${label}: the islands are still running, in read mode (${verdict.mode})`);
     check(!verdict.servedChrome, `${label}: the served chrome gave way to the app's`);
     check(errors.length === 0, `${label}: no page error (${errors.length}: ${errors[0] ?? ''})`);

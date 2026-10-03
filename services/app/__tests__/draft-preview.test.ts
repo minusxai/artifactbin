@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { POST as preview } from '@/app/a/[id]/draft-preview/route';
+import { GET as editSheet, POST as preview } from '@/app/a/[id]/draft-preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
@@ -34,6 +34,24 @@ describe('the editor draft preview door', () => {
     const document = new JSDOM(((await answer.json()) as { html: string }).html).window.document;
     expect(document.querySelector('img')?.getAttribute('src')).toContain(`/a/${imageId}/raw`);
     expect((await getArtifactById(id))?.source).not.toContain(imageId);
+  });
+  it("answers an editor the whole sheet a draft of the head compiles with, and nobody else", async () => {
+    const { token } = await mintToken('draft-preview-sheet');
+    const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_sheet_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    await claimToken(user.id, token);
+    const source = '<div><p class="text-lg">Before</p></div>';
+    const made = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: { title: 'Draft', markup: source, visibility: 'private' } }));
+    const id = ((await made.json()) as { id: string }).id;
+    const row = (await getArtifactById(id))!;
+    const answer = await editSheet(request(`/a/${id}/draft-preview`, { token }), params(id));
+    expect(answer.status).toBe(200);
+    const { css } = (await answer.json()) as { css: string };
+    const draft = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: { editId: row.edit_id, source } }), params(id));
+    const drafted = new JSDOM(((await draft.json()) as { html: string }).html).window.document.querySelector('style[data-mx-story-css]')?.textContent;
+    // The first compile reply of an unchanged draft finds this sheet already in place: nothing to swap.
+    expect(css).toBe(drafted);
+    const stranger = await mintToken('draft-preview-sheet-stranger');
+    expect((await editSheet(request(`/a/${id}/draft-preview`, { token: stranger.token }), params(id))).status).toBe(404);
   });
   it('renders a query document through its matching server island build', async () => {
     const { token } = await mintToken('draft-preview-query');

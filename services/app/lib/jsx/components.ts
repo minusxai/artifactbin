@@ -2,7 +2,7 @@ import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 
 /**
  * The component names allowed in a NEW-format (`format:'jsx'`) story body: the live embeds
- * plus the real shadcn/ui registry (lib/story-ui). Names only — no React
+ * plus the real shadcn/ui registry (lib/story-ui). Names only — no component
  * import, so server-side validation stays headless. The legacy invented components
  * (STORY_COMPONENT_NAMES) are deliberately absent: new stories must use shadcn.
  */

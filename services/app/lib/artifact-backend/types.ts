@@ -74,10 +74,15 @@ export interface LoadedArtifact extends ArtifactHead {
 
 /** The body of an /edits (or /revert) answer, as use-live-edits reads it. */
 export interface FlushResponse {
-  /** The whole graph: a whole replacement, or a patch that landed on a newer head than it was prepared against. */
+  /** The whole graph: a whole replacement, or an answer that asked for it (`?echo=full`). */
   document?: DocumentGraph;
   /** Otherwise the patch itself, applied at `version - 1`; the editor advances the graph it prepared against. */
   patch?: GraphPatch;
+  /**
+   * The patch landed on a newer head: the patches of the versions between (each applied at `version - 1`), in order.
+   * Absent with `patch` on a newer head: the editor reads the head itself.
+   */
+  remote_patches?: Array<{ version: number; patch: GraphPatch }>;
   title?: string | null; theme?: string | null; template?: string | null; colorMode?: string | null;
   edit_id: string;
   version: number;

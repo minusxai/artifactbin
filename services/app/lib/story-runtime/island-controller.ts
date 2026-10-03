@@ -19,6 +19,7 @@ import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
+import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
 import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
@@ -39,37 +40,13 @@ export function moveInto(host: HTMLElement, story: HTMLElement): void {
   host.appendChild(story);
 }
 
-/** Stop island behavior for editing while retaining its last painted DOM as the compiled draft. */
-export function freezeIslandPaint(root: HTMLElement, islands: IslandDocument | null): void {
-  if (!islands) return;
-  const painted = [...root.querySelectorAll<HTMLElement>('[data-hk], [aria-label="Question embed"]')]
-    .filter((element) => !element.parentElement?.closest('[data-hk], [aria-label="Question embed"]'))
-    .map((element) => {
-      const copy = element.cloneNode(true) as HTMLElement;
-      const originals = element.querySelectorAll('canvas');
-      const canvases = copy.querySelectorAll('canvas');
-      for (let index = 0; index < originals.length; index++) {
-        const original = originals[index], canvas = canvases[index];
-        if (!original || !canvas) continue;
-        canvas.width = original.width;
-        canvas.height = original.height;
-        try { canvas.getContext('2d')?.drawImage(original, 0, 0); } catch { /* a tainted canvas keeps its frame */ }
-      }
-      return { element, parent: element.parentNode, next: element.nextSibling, html: element.innerHTML,
-        drawing: !!element.querySelector('svg.marks, [aria-label="Question embed"] svg, [aria-label="Question embed"] canvas'), copy };
-    });
-  islands.setMode('edit');
-  for (const { element, parent, next, html, drawing, copy } of painted) {
-    // A chart controller may clear its *root* after disposal. Detach that whole
-    // root from the edited document so a delayed cleanup owns only the old node.
-    if (drawing && parent) {
-      if (element.parentNode === parent) parent.replaceChild(copy, element);
-      else parent.insertBefore(copy, next?.isConnected ? next : null);
-    } else {
-      if (!element.isConnected && parent) parent.insertBefore(element, next?.isConnected ? next : null);
-      if (element.innerHTML !== html) element.replaceChildren(...copy.childNodes);
-    }
-  }
+/**
+ * Pause the islands for editing (lib/islands/boot `setMode('edit')`): they stay mounted with their DOM and state, a
+ * chart stays drawn, and the editor's first draft keeps the running tree when it keeps every component in it (the
+ * morph engine's `draftTreeKept`), exactly as every later draft does.
+ */
+export function pauseIslandsForEditing(islands: IslandDocument | null): void {
+  islands?.setMode('edit');
 }
 
 const CHART = '[aria-label="Question embed"]';
@@ -247,9 +224,24 @@ export function createIslandController({ win, root, islands, nodes: served, port
     visit(source);
     return found;
   };
-  const stablePathsFor = (next: JsxNode[], previous = nodes): Set<string> => {
+  /**
+   * Components without an id the draft draws unchanged: by their path in the draft → their path on the page. One at
+   * the same place with the same markup first; then one whose place moved (a paragraph added above a chart) but whose
+   * markup did not, matched in document order with the first unclaimed component of the same markup on the page.
+   */
+  const stablePathsFor = (next: JsxNode[], previous = nodes): Map<string, string> => {
     const before = componentPaths(previous), after = componentPaths(next);
-    return new Set([...after].filter(([path, text]) => before.get(path) === text).map(([path]) => path));
+    const stable = new Map<string, string>();
+    for (const [path, text] of after) if (before.get(path) === text) stable.set(path, path);
+    const claimed = new Set(stable.values());
+    const free = new Map<string, string[]>();
+    for (const [path, text] of before) if (!claimed.has(path)) free.set(text, [...(free.get(text) ?? []), path]);
+    for (const [path, text] of after) {
+      if (stable.has(path)) continue;
+      const old = free.get(text)?.shift();
+      if (old !== undefined) stable.set(path, old);
+    }
+    return stable;
   };
   /**
    * One draft is drawn at a time. The draw spans awaits (the engine, the draft's island module), and a
@@ -281,12 +273,41 @@ export function createIslandController({ win, root, islands, nodes: served, port
     if (edit && !edit.canApplyDraft()) return 250;
     return null;
   };
+  /**
+   * The served page carries the reader's cut of the story sheet; every compile reply carries the whole sheet. Writing
+   * the whole one once on entering edit mode, while typing pauses, keeps the first reply from swapping it (a sheet
+   * swap restyles the whole page inside that reply's draw). A draft drawn first already wrote it.
+   */
+  let editSheetWritten = false;
+  let editSheetLoading = false;
+  const loadEditSheet = () => {
+    // A page without a story sheet has nothing a reply could swap.
+    if (editSheetWritten || editSheetLoading || !id || !docSheet(win.document)) return;
+    editSheetLoading = true;
+    void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.ok ? response.json() as Promise<{ css?: unknown }> : null)
+      .then((payload) => {
+        if (!payload || typeof payload.css !== 'string') return;
+        const css = payload.css;
+        const write = () => {
+          if (disposed || editSheetWritten || !editRequested) return;
+          const quiet = win.performance.now() - lastInputAt;
+          if (quiet < TYPING_QUIET_MS) { win.setTimeout(write, TYPING_QUIET_MS - quiet); return; }
+          editSheetWritten = true;
+          const sheet = docSheet(win.document);
+          if (sheet && sheet.textContent !== css) sheet.textContent = css;
+        };
+        write();
+      })
+      .catch(() => { /* the first compile reply writes the sheet instead */ })
+      .finally(() => { editSheetLoading = false; });
+  };
   const drawDraft = async () => {
     const pending = pendingDraft;
     if (!pending || disposed || !drafting() || pending.sequence !== draftSequence) return;
     // The page's SHARED parse (update-parts storyUpdatePartsShared): the draft's source was parsed at the hand-over
     // that sent it, and the source on screen at the one before, so neither is parsed whole again when the reply lands.
-    const [{ disposeChangedDraftIslands, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
+    const [{ disposeChangedDraftIslands, draftTreeKept, hydrateDraftIslands, loadDraftModule, morphDraftDom, versionModuleUrl }, { storyUpdatePartsShared: storyUpdateParts }] = await Promise.all([
       import('@/lib/islands/morph/engine'), import('@/lib/story/document/update-parts'),
     ]);
     if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
@@ -301,30 +322,49 @@ export function createIslandController({ win, root, islands, nodes: served, port
     // commit or composition. It waits, and a newer draft that lands meanwhile replaces it.
     const wait = drawBlockedFor();
     if (wait !== null) { retryDraw(wait); return; }
-    // Fetch the draft's module while the editor is still mounted. From here to the remount nothing
-    // awaits: a keystroke typed during a slow module fetch otherwise lands on no editor, and the
-    // caret comes back where it was when the fetch began (mid-word).
+    // Which components stay is decided from the two trees alone, before the draw's own tasks.
+    const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
+    // Fetch the draft's module while the editor is still mounted. From the hold to the remount nothing
+    // awaits but one yield the hold is undone across when input lands in it: a keystroke typed during a slow
+    // module fetch otherwise lands on no editor, and the caret comes back where it was when the fetch began.
     const module = await loadDraftModule(win, root, pending.document);
-    if (disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending) return;
+    const stale = () => disposed || !drafting() || pending.sequence !== draftSequence || pendingDraft !== pending;
+    if (stale()) return;
+    // Which editors the draft keeps is decided ahead, a few regions a task (comparing every kept table with the
+    // draft's was one long task at slow CPUs); the hold below then only makes the stand-ins.
+    for (;;) {
+      const until = win.performance.now() + PARSE_SLICE_MS;
+      if (!edit || edit.prepareHold(pending.nodes, pending.root, () => win.performance.now() < until)) break;
+      await nextTask(win);
+      if (stale()) return;
+    }
     const late = drawBlockedFor();
     if (late !== null) { retryDraw(late); return; }
+    // Editors whose region this draft draws exactly as it is stay mounted (focus, caret and history with them) and
+    // the morph puts them where the draft has them; only the regions it changed are rebuilt.
+    const keptEditors = edit?.holdUnchanged(pending.nodes, pending.root) ?? new Map<string, HTMLElement>();
+    // The hold is its own task, the morph and remount the next: together they were one long task at slow CPUs.
+    // Typing, a newer draft or leaving meanwhile undoes the hold (the editors run on as they were).
+    await nextTask(win);
+    if (stale()) { edit?.releaseHeld(); return; }
+    const blocked = drawBlockedFor();
+    if (blocked !== null) { edit?.releaseHeld(); retryDraw(blocked); return; }
     pendingDraft = null;
     if (quietDraftTimer !== null) { win.clearTimeout(quietDraftTimer); quietDraftTimer = null; }
     redrawOwed = false;
     shownSource = pending.source;
     shownParts = afterParts ? partsKey(afterParts) : null;
-    const stableIds = stableIdsFor(after, before), stablePaths = stablePathsFor(after, before);
     const sheet = docSheet(win.document);
     // Written only when it changed: rewriting the same sheet re-styles the whole page, which the editors' removal
     // below then paid at once (most of a reply's apply on a table-heavy page).
     if (pending.sheet && sheet && sheet.textContent !== pending.sheet.textContent) sheet.textContent = pending.sheet.textContent;
-    // Editors whose region this draft draws exactly as it is stay mounted (focus, caret and history with them) and
-    // the morph puts them where the draft has them; only the regions it changed are rebuilt.
-    const keptEditors = edit?.holdUnchanged(pending.nodes, pending.root) ?? new Map<string, HTMLElement>();
+    editSheetWritten = true;
     edit?.unmountCompiledDom();
-    disposeChangedDraftIslands(root, stableIds, stablePaths);
+    // Every component the draft's whole-document tree hydrates is kept as it is: the running tree goes on running.
+    const keepTree = draftTreeKept(pending.root, stableIds, stablePaths);
+    disposeChangedDraftIslands(root, stableIds, stablePaths, keepTree);
     morphDraftDom(root, pending.root, stableIds, stablePaths, keptEditors);
-    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors);
+    await hydrateDraftIslands(win, root, pending.document, stableIds, stablePaths, undefined, module, keptEditors, keepTree);
     nodes = pending.nodes;
     lastDrawn = after;
     shown = { module: versionModuleUrl(pending.document), source: pending.source };
@@ -370,8 +410,9 @@ export function createIslandController({ win, root, islands, nodes: served, port
   };
   /** Parse a compiled page and queue it as the draft to draw (the newest wins). */
   const queueDraw = async (html: string, nodes: JsxNode[], source: string | null, sequence: number) => {
-    const next = new DOMParser().parseFromString(html, 'text/html');
-    if (disposed || sequence !== draftSequence || !drafting()) return;
+    // Parsed in slices: one parse of a table-heavy page was a single long task right as the reply landed.
+    const next = await parseHtmlInSlices(win, html, () => !disposed && sequence === draftSequence && drafting());
+    if (!next || disposed || sequence !== draftSequence || !drafting()) return;
     const nextRoot = next.querySelector<HTMLElement>('[data-mx-inline-story]');
     if (!nextRoot) throw new Error('draft preview carried no story');
     pendingDraft = { document: next, root: nextRoot, sheet: next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'), nodes, source, sequence };
@@ -484,6 +525,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
           // The editor and the page both say so on Done: the first ends the session and starts the return to reading.
           if (!wasEditing) return;
           edit?.dispose(); edit = null;
+          // Back to reading draws the reader's sheet again: the next edit session writes the whole one anew.
+          editSheetWritten = false;
           // Editing paused to preview a version: that version draws on, and Done (`restored`) returns to the head.
           if (previewing) return;
           draftSequence++; pendingDraft = null; nextCompile = null; if (quietDraftTimer !== null) win.clearTimeout(quietDraftTimer); quietDraftTimer = null;
@@ -493,13 +536,14 @@ export function createIslandController({ win, root, islands, nodes: served, port
         previewing = false;
         if (edit || editLoading) return;
         editLoading = true;
-        if (!frozen) freezeIslandPaint(root, islands);
+        if (!frozen) pauseIslandsForEditing(islands);
         frozen = true;
         void Promise.all([import('@/lib/story-runtime/edit/session'), import('@/solid/editor/dom-mounter')]).then(async ([{ createFrameEditSession }, { mountCompiledEditRegions }]) => {
           if (disposed || !editRequested) return;
           edit = createFrameEditSession({ win, root, channel, requestRender: () => {}, mountCompiled: mountCompiledEditRegions });
           edit.setNodes(nodes);
           await edit.mountCompiledDom();
+          loadEditSheet();
         }).catch((error) => { if (!disposed) console.error('Failed to mount compiled editor', error); }).finally(() => { editLoading = false; });
         return;
       }
@@ -543,7 +587,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         const source = command.source;
         // A previewed version is drawn like a draft but is not what Done saves: the head comes back after it.
         previewing = !!command.preview;
-        if (previewing && !frozen) { freezeIslandPaint(root, islands); frozen = true; }
+        if (previewing && !frozen) { pauseIslandsForEditing(islands); frozen = true; }
         if (!previewing) latestSource = source;
         // A new look (theme, colour mode) or a previewed version is a page the editors cannot show by themselves.
         if (previewing || ('redraw' in command && command.redraw === true)) redrawOwed = true;

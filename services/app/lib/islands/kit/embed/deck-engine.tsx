@@ -147,7 +147,7 @@ function MapLegend(props: { scales: readonly ColorScale[] }) {
 /**
  * Draw the map into `box` (the island's figure: its class, role, label and height are the island's) and
  * return its disposer. The engine's own content is the view, the zoom/reset controls, the legend and the
- * basemap attribution, in today's order.
+ * basemap attribution, in the former order.
  */
 export function mountDeckEngine(box: HTMLElement, props: DeckEngineProps): () => void {
   const leave = () => hideVegaTooltip(box.ownerDocument);

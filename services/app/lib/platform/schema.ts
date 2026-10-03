@@ -178,7 +178,9 @@ const ARTIFACTS: Table = {
     { name: 'description', type: 'TEXT' },
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/document/input.ts); no CHECK on purpose
     { name: 'source', type: 'TEXT' }, // legacy markup and non-markup formats; cleared after document conversion
-    { name: 'document', type: 'JSONB' }, // canonical markup AST; old TEXT rows migrate lazily
+    // canonical markup AST; old TEXT rows migrate lazily. lz4: every document commit rewrites the whole value
+    // (a table-heavy document is megabytes), and pglz compresses it ~3x slower.
+    { name: 'document', type: 'JSONB', compression: 'lz4' },
     { name: 'document_archived_at', type: 'TIMESTAMPTZ' }, // coalescing guard carried on the locked head
     { name: 'meta', type: 'JSONB', notNull: true, default: "'{}'" }, // stories: {theme}
     { name: 'version', type: 'INTEGER', notNull: true, default: '1' },

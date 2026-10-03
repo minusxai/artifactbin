@@ -14,6 +14,7 @@ import { createModuleStore } from '../modules.server';
 import type { CompileInput } from '../contract';
 import { corpus, type CorpusDoc } from './p3-static/corpus';
 import { inputOf } from './p3-static/harness';
+import { KIT_FOUR_MARKUP, KIT_REPORT_MARKUP } from './kit-four-fixture';
 
 const edge = (key: string, body: string): CorpusDoc => ({ key, group: 'tag', template: null, markup: `<div data-design="tw" className="px-6" id="root">${body}</div>` });
 const LONG = `${'word  with\ttabs and nbsp &amp; &lt;b&gt; '.repeat(40)}end`;
@@ -33,6 +34,10 @@ const EDGES: CorpusDoc[] = [
   edge('voids', '<p>a<br />b<wbr />c</p><hr className="my-2" /><table><colgroup><col span={2} /></colgroup><tbody><tr><td>1</td><td>2</td></tr></tbody></table><video controls src="https://example.com/v.mp4"><source src="https://example.com/v.webm" type="video/webm" /><track kind="captions" /></video>'),
   edge('kit-text', `<Card><CardContent>${LONG}</CardContent><CardFooter>a\n  b\n\tc</CardFooter></Card><Table><TableBody><TableRow><TableCell>${LONG}</TableCell><TableCell>  two  spaces  </TableCell><TableCell>{"lit & <b>"}{7}</TableCell><TableCell>x<b>y</b>{"z"}</TableCell><TableCell> </TableCell><TableCell></TableCell></TableRow></TableBody></Table><Badge>one</Badge><Badge>{"a"}{"b"}</Badge>`),
   edge('kit-fallback', '<section><Progress value={30} /><Button variant="outline">go</Button><Separator decorative={false} /><Icon name="check" /></section><Separator orientation="vertical" decorative={false} /><Alert variant="destructive"><AlertTitle>t</AlertTitle><AlertDescription>d <Icon name="x" /></AlertDescription></Alert>'),
+  edge('kit-four', '<Grid>\n  <GridItem x={0} y={0} w={4} h={1}>  a  b  </GridItem>\n  <GridItem x={4} y={0} w={4} h={1}></GridItem>\n</Grid><Grid mode="flow"></Grid><GridItem w={3}><b>orphan</b></GridItem>'
+    + '<Button>  spaced   text  </Button><Button type="button" aria-label="Go &amp; see">{"lit"}<Icon name="check" /> after</Button><Button size="icon" variant="link" data-x="1" style={{ marginTop: 2 }}>s</Button>'
+    + '<Video src="https://vimeo.com/76979871" interactive={false} /><Video src="https://youtu.be/aqz-KE-bpKQ" poster="ref:NOPE" title="a &quot;quoted&quot; title" />'
+    + '<SlideDeck><Slide>untitled</Slide><Slide title="Two"><Grid><GridItem x={0} y={0} w={12} h={2}><Button>in</Button><Video src="https://youtu.be/aqz-KE-bpKQ" /></GridItem></Grid></Slide></SlideDeck>'),
   edge('mixed', '<Helmet><Value name="who" type="string" default="Ada" /></Helmet><section><h2>Static</h2><p>Hello {$who}</p><ul><li>one</li><li>two <Badge>b</Badge></li></ul><Card><p>in card</p><span>and</span></Card></section>'),
 ];
 
@@ -63,8 +68,24 @@ describe('static chunks', () => {
     }
     // The chunks are exercised, not bypassed — the kit's among them.
     expect(chunks).toBeGreaterThan(100);
-    expect([...kitChunks]).toEqual(expect.arrayContaining(['table', 'table-row', 'table-cell', 'card', 'card-content', 'badge', 'icon', 'separator', 'alert']));
+    expect([...kitChunks]).toEqual(expect.arrayContaining(['table', 'table-row', 'table-cell', 'card', 'card-content', 'badge', 'icon', 'separator', 'alert', 'button', 'video']));
   }, 240_000);
+
+  it('pre-renders static Grid/GridItem, Button, Video and Slide: the served bytes and the browser module are the JSX\'s', async () => {
+    const input = await inputOf({ key: 'kit-four', group: 'tag', template: null, markup: KIT_FOUR_MARKUP });
+    const { chunked, jsx, fast, reference } = await compileBoth(input);
+    expect(fast.html).toBe(reference.html);
+    expect(fast.module?.sha).toBe(reference.module?.sha);
+    expect(chunked.browserIslands).toBe(jsx.browserIslands);
+    expect(chunked.islandRefs).toEqual(jsx.islandRefs);
+    const html = chunked.staticHtml.join('');
+    for (const mark of ['data-slot="button"', 'data-slot="video"', 'data-slot="video-link"', 'data-mx-slide=""', 'data-mx-slide-title="Slide 5"', '--g-cols:12', '--gi-w:6', 'id="g9e"', 'id="deck"']) expect(html, mark).toContain(mark);
+    // The skeleton keeps no JSX for them, the deck rail's miniatures included: what is left is the live value.
+    for (const tag of ['<Grid', '<Button', '<Video', '<Slide', '<SlideDeck', '<Card', '--g-cols', 'mx-preview-']) expect(chunked.skeleton, tag).not.toContain(tag);
+    expect(html).toContain('id="mx-preview-');
+    expect(chunked.skeleton.length).toBeLessThan(10_000);
+    expect(jsx.skeleton.slice(jsx.skeleton.indexOf('<div class="mx-doc">'))).toContain('<Video');
+  }, 120_000);
 
   it('keeps a heavy static document out of the module Babel transforms', async () => {
     const table = (t: number, rows: number) => `<h2 className="mt-8">Table ${t}</h2><p>Notes for table ${t}: alpha &amp; beta.</p><table className="text-sm"><thead><tr><th>A</th><th>B</th><th>C</th></tr></thead><tbody>${
@@ -99,15 +120,7 @@ describe('static chunks', () => {
   }, 60_000);
 
   it('compiles a kit-table report (28 kit Tables × 30 rows and a chart) in two seconds, its tables as static chunks', async () => {
-    const cell = (t: number, r: number, c: number, body: string, cls = '') => `<TableCell${cls ? ` className="${cls}"` : ''} id="c${t}_${r}_${c}">${body}</TableCell>`;
-    const row = (t: number, r: number) => `<TableRow id="r${t}_${r}">${cell(t, r, 0, `Item ${r} golf`)}${cell(t, r, 1, String(r * 17), 'text-right tabular-nums')}${cell(t, r, 2, `<Badge variant="secondary" id="b${t}_${r}">ok</Badge>`)}${cell(t, r, 3, `note ${r} with <strong>bold</strong> &amp; text`)}</TableRow>`;
-    const table = (t: number) => `<h2 className="mt-8 text-xl font-semibold" id="h${t}">Section ${t}</h2><p className="text-sm text-muted-foreground" id="p${t}">Notes for ${t}: alpha &amp; beta.</p>`
-      + `<Card id="k${t}"><CardContent id="kc${t}"><Table id="t${t}"><TableHeader id="th${t}"><TableRow id="tr${t}">${['Name', 'Value', 'State', 'Notes'].map((h, i) => `<TableHead id="hd${t}_${i}">${h}</TableHead>`).join('')}</TableRow></TableHeader>`
-      + `<TableBody id="tb${t}">${Array.from({ length: 30 }, (_, r) => row(t, r)).join('')}</TableBody></Table></CardContent></Card>`;
-    const markup = `<Helmet><Import name="sales" src="ref:SALES1" /><Query name="monthly">{\`select month, sum(revenue) as revenue from sales.rows group by 1 order by 1\`}</Query></Helmet>`
-      + `<div data-design="tw" className="px-6" id="root"><h1 className="text-3xl font-bold" id="title">Report</h1>`
-      + `<Question title="Revenue" data="$monthly" height="300px" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} id="q1" />`
-      + `${Array.from({ length: 28 }, (_, t) => table(t)).join('')}</div>`;
+    const markup = KIT_REPORT_MARKUP;
     const input = await inputOf({ key: 'kit-report', group: 'tag', markup, template: null });
     const build = loadCompilerBuild();
     // The process's first compile loads the build's server half; the measured one is this document's first.

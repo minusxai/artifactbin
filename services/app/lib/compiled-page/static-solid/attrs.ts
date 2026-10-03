@@ -3,7 +3,7 @@
  *
  * `domAttrs` asks React's server renderer to write one start tag and parses it back. This writes the same list
  * from React DOM 19's own rules (react-dom-server `pushAttribute`, `pushStyleAttribute`, and the per-element
- * cases of `pushStartInstance`), so a static element's attributes stay byte-identical to today's render once
+ * cases of `pushStartInstance`), so a static element's attributes stay byte-identical to the former React render once
  * React is gone. What it returns is the same contract: `[name, value]` pairs in React's order, values decoded
  * (the JSX that carries them re-escapes them). `attrs.test.ts` holds it equal to `domAttrs` over a prop matrix.
  */

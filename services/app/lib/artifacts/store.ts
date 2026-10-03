@@ -1,6 +1,6 @@
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility, writerFor } from './access';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
-import type { DocumentUpdate } from '@artifactbin/contracts';
+import type { DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { commitDocumentUpdate } from '../story/graph/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../story/graph/index';
@@ -797,6 +797,11 @@ function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; t
  */
 export interface EditInput {
   documentUpdate?:DocumentUpdate;
+  /**
+   * The caller answers with the patch, not the document, when the patch lands where it was prepared (the browser
+   * editor's save): the commit then never returns or decodes the new document, and the outcome says `withheld`.
+   */
+  patchEcho?: true;
   operations?:DocumentOperation[];
   text?: ProseOperation;
   annotationOps?: AnnotationOperation[];
@@ -820,7 +825,11 @@ export interface EditInput {
  */
 export type EditOutcome =
   /** `warnings`: external URLs the candidate named that would not import (lib/web-assets). */
-  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[] }
+  /**
+   * `withheld`: the row carries no document or source. `remotePatches`: the patch landed on a newer head than its
+   * base; these are the logged patches of the versions between, in order (absent when the log cannot yield them all).
+   */
+  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[]; withheld?: true; remotePatches?: RemotePatch[] }
   | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
   | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' | 'empty_batch' | 'too_many_edits' | 'too_large'; editIndex?: number }
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
@@ -852,7 +861,67 @@ async function storeCompiledRecord(db: Queryable, row: ArtifactRow): Promise<Art
   return stored.rowCount ? { ...row, meta } : row;
 }
 
+/**
+ * What a commit that WITHHELD its document still owes, done after the reply: the new head's source exists only in the
+ * database, and decoding it (megabytes on a table-heavy document) is what the save must not wait for. So the head is
+ * read once here, off the write's path, and gets exactly what an answered commit gets inline: its dataflow record
+ * (storeCompiledRecord, guarded on the version), its diagram harvest, then the warm prepared page. A head that has
+ * moved on is skipped: the newer commit settles its own head, and readers compile and queue on a miss anyway.
+ * Serial, in commit order, and never inside a transaction (one PGLite connection).
+ */
+let settling: Promise<void> = Promise.resolve();
+function settleCommittedHead(id: string, version: number): void {
+  // Chained on a microtask, not a timer: a test's fake clock must never strand it. Its first step is a query, so the
+  // reply is written while the document is read.
+  settling = settling.then(async () => {
+    try {
+      const db = await getDb();
+      const head = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id=$1 AND version=$2 AND ${LIVE_ARTIFACT_SQL}`, [id, version])).rows[0];
+      if (!head) return;
+      const row = await storeCompiledRecord(db, head);
+      await queueMermaidHarvest(row);
+      if (row.format === 'markup') warmPreparedPage(row.id, undefined, row);
+    } catch (error) {
+      console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
+    }
+  });
+}
+
+/** Resolves once every withheld commit so far has been settled (tests, and a graceful shutdown). */
+export function committedHeadsSettled(): Promise<void> {
+  return settling;
+}
+
 const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
+
+/** One logged commit's patch, admitted at `version - 1` (lib/story/graph advanceGraph replays it). */
+export interface RemotePatch { version: number; patch: GraphPatch }
+/** Beyond this many versions between, the editor reads the head instead. */
+const MAX_REMOTE_PATCHES = 50;
+
+/**
+ * The patches every commit between `baseVersion` and `headVersion` (both exclusive) applied, read from the edit log
+ * (`document_state.forward`, logged by the commit that admitted it). Replayed in order on the graph at `baseVersion`
+ * they give the graph the newer head was built on, without sending or decoding the document. Null when any version
+ * between has no logged patch (a replacement, a conversion), or there are too many: the caller then reads the head.
+ */
+async function patchesSince(db: Queryable, id: string, baseVersion: number, headVersion: number): Promise<RemotePatch[] | null> {
+  const count = headVersion - baseVersion - 1;
+  if (count <= 0) return count === 0 ? [] : null;
+  if (count > MAX_REMOTE_PATCHES) return null;
+  const rows = (await db.query<{ version: number | null; kind: string | null; forward: GraphPatch | null; replaced: boolean }>(
+    `SELECT (document_state->>'version')::int AS version,document_state->>'kind' AS kind,document_state->'forward' AS forward,
+      COALESCE(document_state->'replacement','null'::jsonb)<>'null'::jsonb AS replaced
+     FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq DESC LIMIT $2`, [id, count + 8])).rows;
+  const byVersion = new Map(rows.filter((r) => r.version !== null && r.version > baseVersion && r.version < headVersion).map((r) => [r.version!, r]));
+  const patches: RemotePatch[] = [];
+  for (let version = baseVersion + 1; version < headVersion; version++) {
+    const row = byVersion.get(version);
+    if (!row || row.kind !== 'operations' || row.replaced || !row.forward) return null;
+    patches.push({ version, patch: row.forward });
+  }
+  return patches;
+}
 
 /**
  * AN EDIT NEVER MIXES DATA SYNTAXES. A document the migration has not reached
@@ -878,13 +947,14 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     const update=input.documentUpdate;
     if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.aliases?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
     if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
-    let committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,currentSyntax:!opts.dryRun});
+    const withholdDocument=!!input.patchEcho&&!opts.dryRun;
+    let committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,currentSyntax:!opts.dryRun,withholdDocument});
     if(!committed)return null;
     // Only an editor gets here with a head: the commit already applied the scope.
     if(!committed.applied&&!opts.dryRun&&committed.head.format==='markup'&&!hasCurrentDataSyntax(committed.head.meta)){
       const converted=await convertForEdit(db,id);
       if(converted)return {applied:false,reason:'doc_changed',head:headOf(converted)};
-      committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate);
+      committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{withholdDocument});
       if(!committed)return null;
     }
     if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
@@ -895,6 +965,11 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id)return json({error:'private_requires_account'},400);
     if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
     if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
+    if(committed.withheld){
+      settleCommittedHead(committed.row.id,committed.row.version);
+      const remotePatches=committed.row.version===update.patch.baseVersion+1?null:await patchesSince(db,id,update.patch.baseVersion,committed.row.version);
+      return {applied:true,row:committed.row,withheld:true,...(remotePatches?{remotePatches}:{})};
+    }
     const row=await storeCompiledRecord(db,committed.row);
     // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.
     if(row.format==='markup')warmPreparedPage(row.id);

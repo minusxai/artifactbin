@@ -123,7 +123,7 @@ export interface RouteEntry { path: string; dir: string; methods: string[]; modu
 export const ROUTES: RouteEntry[] = [
   { path: "/a/:id/assets", dir: "/a/[id]/assets", methods: ["GET"], module: r0 },
   { path: "/a/:id/download", dir: "/a/[id]/download", methods: ["GET"], module: r1 },
-  { path: "/a/:id/draft-preview", dir: "/a/[id]/draft-preview", methods: ["POST"], module: r2 },
+  { path: "/a/:id/draft-preview", dir: "/a/[id]/draft-preview", methods: ["GET","POST"], module: r2 },
   { path: "/a/:id/events/authorize", dir: "/a/[id]/events/authorize", methods: ["GET"], module: r3 },
   { path: "/a/:id/events/frame", dir: "/a/[id]/events/frame", methods: ["GET"], module: r4 },
   { path: "/a/:id/events", dir: "/a/[id]/events", methods: ["GET"], module: r5 },

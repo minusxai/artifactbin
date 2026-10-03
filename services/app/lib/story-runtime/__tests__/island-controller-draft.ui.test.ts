@@ -13,6 +13,7 @@ const engine = vi.hoisted(() => {
     // Resolves at once unless a test holds it (a slow production module fetch).
     loadDraftModule: () => new Promise<null>((resolve) => { if (state.loads.length === 0 && !hold.on) resolve(null); else state.loads.push(() => resolve(null)); }),
     disposeChangedDraftIslands: () => {},
+    draftTreeKept: () => false,
     blocker: null as string | null,
     readRestoreBlocker: () => engine.blocker,
     versionModuleUrl: (doc: Document) => doc.querySelector('script[type="module"]')?.getAttribute('src') ?? null,
@@ -40,6 +41,8 @@ const editSession = vi.hoisted(() => ({
     setNodes: () => {}, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
     reconcileDraft: (_before: unknown, _after: unknown, _next: unknown, draft: HTMLElement | null) => { editSession.reconciled.push(draft); return editSession.reconcile; },
     holdUnchanged: () => new Map<string, HTMLElement>(),
+    releaseHeld: () => {},
+    prepareHold: () => true,
     unmountCompiledDom: () => { editSession.unmounts++; },
     mountCompiledDom: async () => { editSession.mounts++; },
   },
@@ -406,6 +409,23 @@ describe('island controller editor drafts', () => {
     const { source } = JSON.parse(String(init.body)) as { source: string };
     return new Response(JSON.stringify({ html: `<div data-mx-inline-story>${source}</div>` }), { status: 200 });
   };
+
+  it("entering edit mode writes the whole story sheet once, before any draft, so the first reply swaps none", async () => {
+    const sheet = document.createElement('style');
+    sheet.setAttribute('data-mx-story-css', '');
+    sheet.textContent = '.reader-cut{}';
+    document.head.append(sheet);
+    try {
+      const { controller, fetch } = await editingController(async (url, init) => {
+        if (!init?.method) return new Response(JSON.stringify({ css: '.reader-cut{}.every-recipe{}' }), { status: 200 });
+        return compiled(url, init);
+      });
+      await settle(() => sheet.textContent === '.reader-cut{}.every-recipe{}');
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(String(fetch.mock.calls[0]?.[0])).toBe('/a/doc/draft-preview');
+      controller.dispose();
+    } finally { sheet.remove(); }
+  });
 
   it('typing: held until it pauses, then adopted by the live editor with NO compile, no morph and no remount', async () => {
     editSession.reconcile = true;

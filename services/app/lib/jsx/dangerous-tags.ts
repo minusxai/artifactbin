@@ -6,7 +6,7 @@
  * drifts, and the drift is silent.
  *
  * This is a SAVE-time gate (`validateJsx`) and the ONLY one: read time
- * re-renders the stored tree with real React SSR, which re-checks nothing.
+ * re-renders the stored tree through the compiler, which re-checks nothing.
  * That is deliberate rather than a gap, and the reason is worth stating
  * plainly:
  *

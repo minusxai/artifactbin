@@ -5,8 +5,8 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  * Gate: a document's own typeface must not arrive after the reader does.
  *
  * The fault this pins: story @font-face rules are injected CLIENT-side into
- * the surface root, so the browser could not discover a font until React had
- * hydrated and mounted the iframe — then downloaded a 1.8 MB TTF over a
+ * the surface root, so the browser could not discover a font until the app had
+ * hydrated and mounted the document — then downloaded a 1.8 MB TTF over a
  * `max-age=0` URL that had to be revalidated on EVERY view. Measured on
  * production: text painted in Georgia and reflowed into Noto Serif 1.5 s
  * later, and still 0.7 s later on a fully warm cache.
@@ -202,7 +202,7 @@ await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
 const measure = async () => {
   await p.goto(`${B}/a/${st.id}`, { waitUntil: 'commit' });
   /*
-   * Wait for the frame to be AT the document, not merely to exist. React mounts
+   * Wait for the frame to be AT the document, not merely to exist. The app mounts
    * the iframe on `about:blank` and points it at /raw a moment later; binding to
    * the context that early means the real navigation destroys it underneath the
    * probe ("Execution context was destroyed"). Locally those moments are close

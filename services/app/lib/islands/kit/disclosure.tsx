@@ -90,7 +90,7 @@ function PopoverPopper(p: { ctx: PopupState; side?: Side; align?: Align; sideOff
 }
 type PopupState = State & { trigger: () => HTMLElement | undefined; setTrigger: (el: HTMLElement) => void; panel: () => HTMLElement | undefined; setPanel: (el: HTMLElement) => void; announce: () => void };
 /**
- * TOOLTIP — today's story tooltip: the trigger is the popper
+ * TOOLTIP — the former story tooltip: the trigger is the popper
  * anchor (no `type`, `data-state` closed / delayed-open / instant-open, described by the content while open,
  * the placed side/align once placed); the content is portaled out of the document — to the trusted portal when
  * the page has one, else the body, as Radix's Portal does — inside a theme host, placed by Radix's popper
@@ -207,7 +207,7 @@ export function PopoverDescription(props: JSX.HTMLAttributes<HTMLParagraphElemen
 /**
  * Radix Avatar: the image is drawn only once the browser has loaded it (a detached `Image` probes the
  * address); until then — and for an address that fails — the fallback shows. The served markup is the
- * fallback, as today's server render is.
+ * fallback, as the former server render is.
  */
 type ImageStatus = 'idle' | 'loading' | 'loaded' | 'error';
 const AvatarContext = createContext<{ status: () => ImageStatus; setStatus: (status: ImageStatus) => void }>();

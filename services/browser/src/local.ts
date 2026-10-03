@@ -150,7 +150,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       },req.selector,{timeout});
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
       // Readiness covers lazy placeholders and Vega's asynchronous work. Two
-      // frames ensure a React handoff cannot expose a transient empty state.
+      // frames ensure an app handoff cannot expose a transient empty state.
       const waitForCharts=async()=>{
         for(;;){
           // Playwright treats a returned Promise as truthy; the polled predicate
