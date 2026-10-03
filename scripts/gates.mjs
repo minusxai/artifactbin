@@ -150,7 +150,7 @@ async function bootServer(index, mailOutbox, authSecret) {
       APP__PAGES_HOST: PAGES_HOST,
       // Managed iframe assets are served by the same disposable app through a
       // dedicated first-party hostname, matching the production trust split.
-      APP__ASSETS_ORIGIN: `http://assets.localhost:${port}`,
+      APP__ASSETS_ORIGIN: `http://assets.${PAGES_HOST}:${port}`,
       // Production mode refuses to boot without it; CI hands its gates job one per run and so do we
       // (scripts/gates.servers.mjs runSecret). Every server in the run shares the one value.
       AUTH__SECRET: authSecret,
