@@ -4,7 +4,7 @@
  * draws an area whose anchor is the blocks' lowest common ancestor. Escape
  * hands back a null selection so the page can stand down.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 import { type JsxNode } from '@/lib/jsx';
 import { STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_MESSAGE } from '@/lib/story-runtime/contract';
@@ -200,13 +200,20 @@ describe('drawing an area to comment on', () => {
     expect(band()).not.toBeNull();                    // the band is drawn while dragging
     // …in BLUE, apart from the amber outline of the anchor it will sit inside.
     expect((band() as HTMLElement).style.outline).toContain('59, 130, 246');
+    const posted = env.posted.push.bind(env.posted);
+    let bandAtCapture: Element | null | undefined;
+    vi.spyOn(env.posted, 'push').mockImplementation((...messages) => {
+      if (messages.some(message => message.type === STORY_SELECTION_MESSAGE)) bandAtCapture = band();
+      return posted(...messages);
+    });
     mouse('pointerup', pb, 300, 190);
+    expect(bandAtCapture).toBeNull();
     const picked = selections().at(-1)!.selection as { path: string; tag: string; quote?: string; range?: unknown };
     expect(picked).toMatchObject({ path: '0', tag: 'section', range: { v: 1, kind: 'area', box: { x: 0.2, y: 0.05, w: 0.5, h: 0.4 } } });
     expect(picked.quote).toBeUndefined();
     expect(document.getElementById('sec')).toHaveAttribute('data-mx-annotate-selected');
-    // The drawn area stays visible while its comment is composed…
-    expect(band()).not.toBeNull();
+    // Screenshot handoff must not repaint the band before the host suppresses capture chrome.
+    expect(band()).toBeNull();
     // Capture temporarily suppresses paint, including the composing band.
     env.session.update({...state('off'),pins:[]});
     expect(band()).toBeNull();

@@ -203,6 +203,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   let drawing: { startX: number; startY: number; target: EventTarget | null } | null = null;
   /** The drawn area whose comment is being composed — repainted from its anchor on every sync, gone with the selection. */
   let composingArea: { path: string; box: AnnotationBox } | null = null;
+  let captureHandoff = false;
   /** The rects painted for AREA threads this sync — the layout rect is the box, not the node. */
   let paintedAreas = new Map<string, AnnotationRect>();
   /** Highlight names this session registered, so it can take back exactly its own. */
@@ -343,6 +344,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   /** The composing area follows its anchor and leaves with the selection. */
   const paintComposingArea = () => {
+    // A screenshot selection hands the clean content to the host before it can send mode=off.
+    // Keep the area geometry, but never repaint a blue frame during that handoff.
+    if (captureHandoff) { removeBand(); return; }
     if (!composingArea || !state || state.mode === 'off' || selectedPath !== composingArea.path) {
       composingArea = null;
       if (!drawing) removeBand();
@@ -504,6 +508,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     const selection = el ? describeCommentSelection(el, nodes) : null;
     if (selection && extra.range && (selection.tag !== 'For' || isTargetRange(selection.range))) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
     if(selection && extra.captureRect)selection.captureRect=extra.captureRect;
+    captureHandoff = Boolean(selection && extra.captureRect && pick === 'area');
     selectedPath = selection?.path ?? null;
     applyState();
     post({ type: STORY_SELECTION_MESSAGE, selection });
@@ -738,6 +743,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   return {
     update(message) {
+      captureHandoff = false; // The host now owns capture suppression and subsequent composer paint.
       state = message;
       setPick(message.mode === 'off' || message.canComment === false ? null : message.pick ?? null);
       if (message.mode === 'off') selectedPath = null;

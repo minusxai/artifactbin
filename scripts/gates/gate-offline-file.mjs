@@ -757,7 +757,10 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
       await page.getByRole('img', { name: 'Screenshot attached to comment' }).last().waitFor();
     });
     const thumbnail = page.getByRole('img', { name: 'Screenshot attached to comment' }).last();
-    check(await thumbnail.evaluate(img => img.complete && img.naturalWidth > 0), `${name}: persisted thumbnail`);
+    await step('persisted thumbnail', async () => {
+      // Visibility precedes image decoding; wait for the persisted bytes, not only the img element.
+      await expect.poll(() => thumbnail.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+    });
     await step('the screenshot opens', async () => {
       await page.getByRole('button', { name: 'Open comment screenshot' }).last().click();
       await expect(page.getByRole('dialog', { name: 'Comment screenshot' })).toBeVisible();

@@ -1,3 +1,4 @@
+import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
 import {servePreview} from './preview-runtime';
@@ -282,6 +283,16 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
+  if(command==='runs'){
+   const action=positionals[0];let id=positionals[1];
+   if(action==='start'){
+    const ref=await artifactReference(workspace,id,client.connection.server,false,selectedAddresses);
+    if(ref.version!==undefined)throw new CliError('invalid_reference','runs start executes the published head; omit @version.');
+    id=ref.id;
+   }
+   const input=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
+   emit(await runCommand(client,action,id,{input,requestId:typeof flags.request==='string'?flags.request:undefined,after:typeof flags.after==='string'?flags.after:undefined,limit:typeof flags.limit==='string'?flags.limit:undefined}));return 0;
+  }
   if(command==='sessions'){
    const code=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
    const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(typeof flags.as==='string'?{viewer:viewerChoice(flags.as)}:{}),progress:stderr});
