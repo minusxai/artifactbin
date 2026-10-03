@@ -125,6 +125,43 @@ describe('boot', () => {
     expect(document.getElementById('island')?.textContent).toBe('41East');
   });
 
+  it('exposes the declared names as window.page on a page with no script, removes it for editing and restores it on reading', async () => {
+    // A root-relative module id: the test runner loads it through its own module graph.
+    const runtimeUrl = new URL('../page-runtime.ts', import.meta.url).pathname;
+    page({ ...snapshot, vendor: { '@mx/page-runtime': runtimeUrl } });
+    expect(window.page).toBeUndefined();
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    await vi.waitFor(() => expect(window.page).toBeDefined());
+    const api = window.page!;
+    expect(Object.keys(api).sort()).toEqual(['mutation', 'query', 'signal', 'value']);
+    expect(api.value('region')?.value, 'a Value reads the store').toBe('West');
+    expect(api.query('total')?.value, 'a Query is its rows').toEqual([{ n: 41 }]);
+    expect(api.signal('total')).toBe(api.query('total'));
+    expect(api.value('missing')).toBeUndefined();
+    api.value('region')!.value = 'East';
+    expect(booted.store?.getState().values.region, 'writing the signal writes the store').toBe('East');
+    expect(document.getElementById('island')?.textContent).toBe('41East');
+
+    booted.setMode('edit');
+    expect(window.page, 'editing removes the session API').toBeUndefined();
+    booted.setMode('read');
+    await vi.waitFor(() => expect(window.page).toBeDefined());
+    expect(window.page!.value('region')?.value).toBe('East');
+    booted.dispose();
+    booted = null;
+    expect(window.page, 'dispose removes it').toBeUndefined();
+  });
+
+  it('exposes no window.page when the page names no runtime or declares no data', async () => {
+    page(snapshot);
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    page(null);
+    const bare = boot({ ISLANDS: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(window.page).toBeUndefined();
+    bare.dispose();
+  });
+
   it('signals ready on a page whose module has no islands and no data', () => {
     page(null);
     const ready = vi.fn();

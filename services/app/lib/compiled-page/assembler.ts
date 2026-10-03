@@ -199,15 +199,16 @@ function islandData(input: AssembleInput): IslandPageData {
     appPage: input.spa !== null,
     ...(overlay.doors ?? {}),
     ...((overlay.assetsUrl ?? overlay.doors?.assetsUrl) ? { assetsUrl: overlay.assetsUrl ?? overlay.doors?.assetsUrl } : {}),
-    ...(overlay.managedAssets ? { managedAssets: overlay.managedAssets } : {}),
     signedIn: overlay.signedIn,
     hold: [...(overlay.hold ?? [])],
     ...(overlay.sqliteWasm ? { sqliteWasm: overlay.sqliteWasm } : {}),
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
-    // The version's author script rides as DATA (escaped by scriptJson), for boot's lazy author host to
-    // hand to its sandboxed frame; it is never a script of this page (contract CompiledPage.authorScript).
-    ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript, vendor: vendorUrls(input.build.manifest) } : {}),
+    // The version's author script rides as DATA (escaped by scriptJson): boot hands it to the page runtime,
+    // which runs it as a module of this document (contract CompiledPage.authorScript). The runtime's chunk
+    // (`vendor`) is named whenever the page declares data too, for boot's `window.page`.
+    ...(input.compiled.authorScript ? { authorScript: input.compiled.authorScript } : {}),
+    ...(input.compiled.authorScript || input.compiled.plan ? { vendor: vendorUrls(input.build.manifest) } : {}),
   };
 }
 

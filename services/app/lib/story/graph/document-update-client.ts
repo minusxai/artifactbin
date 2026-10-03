@@ -81,7 +81,7 @@ export function needsAuthoringContext(source:string):boolean {
  if(assets.images.length||assets.fonts.length||assets.pdfs.length)return true;
  const parsed=parseJsx(source);if(!parsed.ok)return false;
  const needs=(nodes:JsxNode[]):boolean=>nodes.some(node=>{
-  if(node.type!=='element'||node.tag==='Iframe')return false;
+  if(node.type!=='element')return false;
   if(['Icon','Query','Mutation','Question'].includes(node.tag))return true;
   if(node.tag==='meta'&&node.attributes.some(a=>a.name==='name'&&a.value.static&&String(a.value.json).startsWith('font-')))return true;
   if(node.attributes.some(a=>a.value.static&&typeof a.value.json==='string'&&a.value.json.startsWith('ref:')))return true;

@@ -10,8 +10,8 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  * request per change, engine windows included); private-reader ACL; URL
  * selection round trips and selected exports; the booking document's day
  * click under 50 ms with no request.
- * Artifact markup renders inline in the trusted app. Author code remains in
- * managed sandboxed child frames, whose direct network CSP is tested there.
+ * Artifact markup renders inline in the trusted app; the Helmet script runs in
+ * the document as a module over the declared names' Preact signals.
  * Usage: node scripts/gates/gate-dataflow.mjs [base]
  */
 import { chromium } from 'playwright';
@@ -41,12 +41,24 @@ const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, b
 // ── 1. publish ──────────────────────────────────────────────────────────────
 const ds = await j(await api('/api/artifacts', { dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }] }));
 check(!!ds.id, 'the dataset published');
+/** The page's own script: an effect over the `sales` and `region` signals, rendering into a node the markup does not bind. */
+const DATAFLOW_SCRIPT = [
+  "import { sales, region } from 'page';",
+  "import { effect } from '@preact/signals';",
+  "const out = document.getElementById('out');",
+  "let initial;",
+  "effect(() => {",
+  "  const now = region.value; const rows = sales.value;",
+  "  if (initial === undefined) initial = now;",
+  "  out.textContent = now !== initial ? 'changed:' + now : 'page:' + typeof sales + ' rows=' + rows.length;",
+  "});",
+].join('\n');
 const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" type="string" />
 <Import name="regions_data" src="ref:${ds_}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>
 <Import name="sales_data" src="ref:${ds_}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
-</Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
+<script>{${JSON.stringify(DATAFLOW_SCRIPT)}}</script></Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
 <select aria-label="Region" value="$region" options="$regions" />
-<Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`const out=document.getElementById('out');let initial;mx.subscribe(['sales','region'],snapshot=>{const region=snapshot.signals.region.value;if(initial===undefined)initial=region;if(region!==initial){out.textContent='changed:'+region;return;}const table=snapshot.signals.sales.value;out.textContent='mx:'+typeof mx+' rows='+(table?table.rows.length:0);});\`}</script></Iframe>
+<p id="out">pending</p>
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p>
 <Question title="Revenue by region" data="$sales" viz={{"kind":"table"}} height="300px" /></div>`;
 const doc = await j(await api('/api/artifacts', { markup: doc1(ds.id) }));
@@ -63,7 +75,7 @@ check(retired.status === 400 && /<Import name="data" src="ref:[^"]+" \/><Query n
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 // Internal HTTP export pages lack this secure-context-only API. Exercise the
-// real runtime and managed-frame initialization under that browser constraint.
+// real runtime and the page script's start under that browser constraint.
 await p.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true }));
 const pageErrors = [];
 p.on('pageerror', (e) => pageErrors.push(e.message));
@@ -77,30 +89,16 @@ p.on('request', (r) => {
 const docEngine = engineLoads(p);
 const resp = await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
 const csp = resp.headers()['content-security-policy'] ?? '';
-check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the reader uses the strict navigable app CSP; author execution is isolated in its child frame');
+check(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the reader uses the strict navigable app CSP');
 check(await servedTopLevel(p), 'no iframe: the public data document IS the page');
 check(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
 const frame = p.mainFrame();
-const managedRealm = async host => {
-  const outer = host.locator('iframe[title="Dataflow script"]');
-  await outer.waitFor({ timeout: 20000 });
-  const wrapper = await outer.contentFrame();
-  const inner = wrapper.locator('iframe');
-  await inner.waitFor({ timeout: 20000 });
-  return (await inner.elementHandle()).contentFrame();
-};
 /*
- * PAINT FIRST moved what an author script finds at startup. The rows are no
- * longer inlined, so `mx.read()` is empty for the round trip it takes to
- * fetch them — a script that needs them SUBSCRIBES, which is what the document
- * above does and what /docs/llm teaches. The script still runs at the first
- * commit; only the data is late.
+ * PAINT FIRST: the page script runs after the islands hydrate, and its effect renders the query rows the
+ * page already holds — then follows every change, because reading `.value` inside `effect` subscribes.
  */
-const scriptRealm = await managedRealm(frame);
-await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent?.startsWith('mx:'), null, { timeout: 20000 }).catch(() => {});
-check(/^mx:object /.test(await scriptRealm.textContent('#out').catch(() => '')), 'window.mx is defined when the managed author script runs');
-await scriptRealm.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
-check(/^mx:object rows=2/.test(await scriptRealm.textContent('#out').catch(() => '')), 'and its query rows reach the managed script through mx.subscribe');
+await frame.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
+check(/^page:object rows=2/.test(await frame.textContent('#out').catch(() => '')), `the page script's effect renders the query rows from the page signals (${await frame.textContent('#out').catch(() => '')})`);
 check(!pageErrors.some((e) => /hydrat/i.test(e)), 'no hydration error — the author script ran after the first commit');
 const options = await frame.$$eval('select[aria-label="Region"] option', (os) => os.map((o) => o.value + '=' + o.textContent));
 check(JSON.stringify(options) === JSON.stringify(['=All', 'EU=EU', 'NA=NA']), `the bound select lists the query (All + values): ${options.join(' ')}`);
@@ -131,9 +129,8 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$1,200', 'cha
 const busy = await frame.evaluate(() => ({ seen: window.__busySeen, flash: window.__flashSeen, now: document.querySelector('[aria-label="Question embed"]').getAttribute('aria-busy') }));
 check(!busy.flash && busy.now === 'false', `the embed never flashed "loading" during the re-run and is not busy after it (busy seen=${busy.seen}, flash=${busy.flash})`);
 check(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
-// The author realm hears of the change over its own port, a hop after the page has painted it.
-await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 10000 }).catch(() => {});
-check((await scriptRealm.textContent('#out')) === 'changed:NA', `the managed author script saw the change through mx.subscribe (${await scriptRealm.textContent('#out')})`);
+await frame.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 10000 }).catch(() => {});
+check((await frame.textContent('#out')) === 'changed:NA', `the page script's effect saw the bound select's change through the region signal (${await frame.textContent('#out')})`);
 const holds = relayCalls.filter((call) => call.body.hold !== undefined);
 check(directCalls.length === 0 && relayCalls.every((call) => call.body.hold !== undefined) && holds.length === 1 && holds[0].body.hold === 'regions_data',
   `the first paint's rows came with the page (no run request), and the page fetched the dataset it may hold ONCE through the scoped POST (${relayCalls.length} POST: ${JSON.stringify(relayCalls.map((c) => c.body.hold ?? c.body.only))}, ${directCalls.length} GET)`);
@@ -141,25 +138,9 @@ check(relayCalls.length + directCalls.length === callsBeforeChange, `the select 
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});
 check((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'back to All restores the whole result');
-// The trusted main runtime may call its scoped query endpoint; arbitrary author
-// code runs in the managed child and cannot make these direct network calls.
+// The page's own runtime may call its scoped query endpoint.
 const queryStatus = await frame.evaluate(async id => (await fetch(`/a/${id}/query?q=%7B%7D`)).status, doc.id);
 check(queryStatus === 200, `the trusted page can query the public document (${queryStatus})`);
-const reach = await scriptRealm.evaluate(async ({ id, base }) => {
-  // fetch/XHR are convenience asset-proxy wrappers. Beacon bypasses those
-  // wrappers, so these violations demonstrate browser CSP, not a JS guard.
-  const violations = [];
-  const record = event => { if (event.effectiveDirective === 'connect-src') violations.push(event.blockedURI); };
-  document.addEventListener('securitypolicyviolation', record);
-  const targets = [`${base}/a/${id}/query`, `${base}/api/artifacts`, 'https://untrusted.invalid/probe'];
-  for (const target of targets) { try { navigator.sendBeacon(target, '{}'); } catch {} }
-  const deadline = Date.now() + 2000;
-  while (violations.length < targets.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
-  document.removeEventListener('securitypolicyviolation', record);
-  return { violations, targetCount: targets.length };
-}, { id: doc.id, base: B });
-const blockedOrigins = new Set(reach.violations.flatMap(uri => { try { return [new URL(uri).origin]; } catch { return []; } }));
-check(reach.violations.length >= reach.targetCount && blockedOrigins.has(new URL(B).origin) && blockedOrigins.has('https://untrusted.invalid'), `author child direct network is denied by browser connect-src (${JSON.stringify(reach.violations)})`);
 
 // ── 4. <DataTable> past the display window, read as engine windows ────────
 // A cross join of a 200-row dataset is 40,000 rows; a run ships the first

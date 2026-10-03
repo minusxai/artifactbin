@@ -33,7 +33,6 @@ export interface PrepareStoryInput {
   mutateUrl?: string | null;
   mentionStatuses?: StoryIslandData['mentionStatuses'];
   assetsUrl?: string | null;
-  managedAssets?: StoryIslandData['managedAssets'];
   readOnly?: string | null;
   mermaidImages?: StoryIslandData['mermaidImages'];
   mermaidImageLookup?: MermaidImageLookup | null;
@@ -46,7 +45,7 @@ export async function prepareStoryRuntime(input: PrepareStoryInput): Promise<Pre
 }
 
 /** The island's reader half: what a request, not the document, decides. */
-export type ReaderIslandInput = Pick<PrepareStoryInput, 'refData' | 'dataflow' | 'viewer' | 'queryUrl' | 'mutateUrl' | 'mentionStatuses' | 'assetsUrl' | 'managedAssets' | 'readOnly' | 'mermaidImages'>;
+export type ReaderIslandInput = Pick<PrepareStoryInput, 'refData' | 'dataflow' | 'viewer' | 'queryUrl' | 'mutateUrl' | 'mentionStatuses' | 'assetsUrl' | 'readOnly' | 'mermaidImages'>;
 
 /**
  * The island fields a REQUEST decides (who reads, their `$` values and what
@@ -68,7 +67,6 @@ export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData
     ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}),
     ...(input.mentionStatuses?{mentionStatuses:input.mentionStatuses}:{}),
     ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}),
-    ...(input.managedAssets ? { managedAssets: input.managedAssets } : {}),
     // A SNAPSHOT render refuses every write by name (StoryIslandData.readOnly).
     ...(input.readOnly ? { readOnly: input.readOnly } : {}),
     // The version's prerendered diagrams (lib/mermaid-images). A REQUEST's, not the version's: a

@@ -1,3 +1,2 @@
-/** The page's asset door (`IslandPageData.managedAssets`) and the asset kinds a store may import through it. */
-export interface ManagedAssetsConfig {origin: string; resolveUrl: string}
+/** The asset kinds a store may import through the page's asset door (`DataflowStore.importAsset`). */
 export type ManagedAssetKind='image'|'font'|'pdf'|'script'|'binary';

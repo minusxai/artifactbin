@@ -15,7 +15,7 @@ import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/datasets/local-state';
-import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
+import type { ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -185,7 +185,6 @@ export interface StoryIslandData {
    * render that is not a served document, where a bound image renders static.
    */
   assetsUrl?: string | null;
-  managedAssets?: ManagedAssetsConfig;
   /**
    * WHY THIS RENDER CAN NEVER WRITE, in the words a person reads on the button.
    *
@@ -194,7 +193,7 @@ export interface StoryIslandData {
    * archived view (lib/archived-version), where the reason is "Version N is
    * read-only". It refuses every `<Mutation>` up front, whatever the datasets
    * would have said, so a button is disabled before it is pressed and
-   * `mx.describe()` reports it as the unavailable reason.
+   * a `page` mutation rejects with it as the message.
    *
    * It is not the absence of `mutateUrl`: that is already true here, and on its
    * own it makes the runtime say "This view cannot save changes" — accurate,

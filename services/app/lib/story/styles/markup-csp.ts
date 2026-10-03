@@ -37,10 +37,8 @@ const SOURCE_DIRECTIVES = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https:",
   "media-src 'self' data: blob: https:",
-  // The runtime's fixed same-origin HTTP wrapper; authored raw frames remain invalid JSX.
+  // Same-origin frames only; a raw <iframe> remains invalid markup.
   "frame-src 'self'",
-  // Raw <iframe> remains invalid markup. The trusted runtime owns this HTTP
-  // wrapper; its own frame-src 'none' prevents the inner author navigating.
 ] as const;
 
 /** What the document may DO — content-independent. */
@@ -95,10 +93,8 @@ export const mutatePath = (id: string): string => `/a/${id}/mutate`;
  * …and the document-scoped endpoint where a
  * document imports an image URL only its reader can compute
  * (app/a/[id]/assets). It belongs here because this is the registry of a
- * document's own addresses. Legacy images use it as their src; configured
- * managed frames additionally resolve URLs through its JSON GET API from the
- * trusted parent runtime. Only that configured policy adds it to connect-src;
- * the author child receives cached asset URLs, never this resolver endpoint.
+ * document's own addresses. Legacy images use it as their src; a configured
+ * asset origin also adds it to connect-src.
  */
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
@@ -168,10 +164,8 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: https:`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
-    // Firefox evaluates inherited 'self' against the opaque srcdoc realm for
-    // dynamic imports. Keep the compatibility library directory explicit;
-    // the inner managed frame still restricts scripts to cached bundle URLs.
-    // This grants neither API fetches nor navigation to the main origin.
+    // The hosted library directory stays explicit for documents that import a
+    // pinned bundle by URL. This grants neither API fetches nor navigation.
     const script=options.compiled&&d.startsWith('script-src ')?COMPILED_SCRIPT_SRC:d;
     const source=script.startsWith('script-src ')?script+` ${self}/libraries/`:script;
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;

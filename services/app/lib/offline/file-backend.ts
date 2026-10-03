@@ -234,7 +234,7 @@ function authoringInputs(source: string): Set<string> {
   if (!parsed.ok) return out;
   const walk = (nodes: JsxNode[]) => {
     for (const node of nodes) {
-      if (node.type !== 'element' || node.tag === 'Iframe') continue;
+      if (node.type !== 'element') continue;
       for (const attr of node.attributes) {
         if (attr.value.static && typeof attr.value.json === 'string' && attr.value.json.startsWith('ref:')) out.add(`ref:${attr.value.json}`);
       }

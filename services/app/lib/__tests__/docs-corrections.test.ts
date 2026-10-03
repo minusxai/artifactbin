@@ -27,10 +27,13 @@ describe('the publishing skill', () => {
   it('does not send a bearer agent to /api/my (a browser-only surface, 401 for tokens)', () => {
     expect(doc).not.toMatch(/PATCH[^\n]*\/api\/my\//);
   });
-  it('the script sandbox names all four connect-src endpoints, not "no network" / "the one URL"', () => {
+  it('the authored script runs in the document over the page signals, not in a sandbox limited to the document endpoints', () => {
     expect(doc).not.toMatch(/the one URL its CSP admits/);
     expect(doc).not.toMatch(/no network\./);
-    for (const p of ['/query', '/events', '/mutate', '/geojson/']) expect(doc).toContain(p);
+    expect(doc).not.toContain('cannot make arbitrary network requests');
+    expect(doc).toContain('The Helmet script runs in the document as an ES module');
+    expect(doc).toContain('imports the declared names from `page` as Preact signals');
+    expect(doc).toContain('may fetch https URLs that allow cross-origin reads');
   });
   it('the comment command teaches reopening through --state open', () => {
     expect(doc).toContain('--state');

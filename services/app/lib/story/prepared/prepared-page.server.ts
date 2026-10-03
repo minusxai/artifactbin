@@ -30,7 +30,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
-import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform/config';
+import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import type { ArtifactRow, Viewer } from '@/lib/artifacts';
 import { declarationsForRow, holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/artifacts/dataflow';
 import { LIVE_ARTIFACT_SQL, type RoleActor } from '@/lib/artifacts/access';
@@ -102,7 +102,7 @@ export interface ReaderContext {
   viewer: RoleActor | null;
   /** The page's query string — the reader's `$` values. */
   search: string;
-  /** The origin the page is served on (managed assets resolve through it). */
+  /** The origin the page is served on. Nothing in the reader overlay reads it since the managed asset door was removed. */
   origin: string;
   /**
    * `engine`: serve no stored diagram drawings (`?mermaid=engine`, what the
@@ -156,7 +156,7 @@ async function fingerprint(deps: PreparedDeps): Promise<string> {
 
 /** The per-reader half of the island, through the one writer (readerIslandData). */
 async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declared' | 'data'>, reader: ReaderContext): Promise<ReaderIslandInput & { colorMode?: 'light' | 'dark' }> {
-  const { at, viewer, search, origin } = reader;
+  const { at, viewer, search } = reader;
   const declared = page.declared;
   const [refData, mentionStatuses, identity, hold, mermaidImages] = await Promise.all([
     refDataForRow(row), savedMentionStates(row), viewerIdentityFor(row, viewer?.userId ?? null),
@@ -170,7 +170,6 @@ async function readerInputFor(row: ArtifactRow, page: Pick<PreparedPage, 'declar
     dataflow: declared ? { ...declared, values: readUrlValues(search, declared.flow), hold } : null,
     queryUrl: queryPath(row.id), assetsUrl: assetsPath(row.id),
     ...(!at && declared?.flow.mutations?.length ? { mutateUrl: mutatePath(row.id) } : {}),
-    ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${origin}${assetsPath(row.id)}` } } : {}),
     // A snapshot render refuses every write by name, and carries no write door at all (above).
     ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
   };
