@@ -54,10 +54,11 @@ export const GATE_SPECS = Object.freeze([
   { name: 'dataflow', needsMail: true, seconds: 13, timeoutMs: 60_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
   // run 36838282615 that held a runner to itself and set the run's critical path. editor-path also
-  // carries hydration's compiled-page edit leg; editor-exits carries mobile's editor sections.
-  { name: 'editor-engine', needsMail: false, serialGroup: 'clipboard', seconds: 45, timeoutMs: 140_000 },
-  { name: 'editor-path', needsMail: true, seconds: 50, timeoutMs: 150_000 },
-  { name: 'editor-exits', needsMail: false, seconds: 50, timeoutMs: 150_000 },
+  // carries hydration's compiled-page edit leg; editor-exits carries mobile's editor sections. Measured in
+  // one gate container (`--servers 1`, 4 CPUs): 28s/43s/41s; editor-engine's timeout stays 3x its 45s CI time.
+  { name: 'editor-engine', needsMail: false, serialGroup: 'clipboard', seconds: 28, timeoutMs: 140_000 },
+  { name: 'editor-path', needsMail: true, seconds: 43, timeoutMs: 150_000 },
+  { name: 'editor-exits', needsMail: false, seconds: 41, timeoutMs: 130_000 },
   { name: 'editable-table', needsMail: true, seconds: 36, timeoutMs: 120_000 },
   { name: 'roadmap-views', needsMail: false, seconds: 8, timeoutMs: 60_000 },
   { name: 'export-slice', needsMail: false, seconds: 13, timeoutMs: 60_000 },
@@ -68,7 +69,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 47, timeoutMs: 110_000 },
   // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
   { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
-  { name: 'inplace-edit', needsMail: false, seconds: 45, timeoutMs: 140_000 },
+  // Reading → editing → agent write → exit, and typing that survives a remote edit: 35s in one gate container.
+  { name: 'inplace-edit', needsMail: false, seconds: 35, timeoutMs: 110_000 },
   // Frames a document on its own origin, so it boots its own production server with APP__PAGES_HOST=lvh.me
   // (scripts/gates/lib/pages-server; the runner's servers have none). Measured 10s against a dev server; its boot adds ~10s.
   { name: 'frame-editor', needsMail: false, seconds: 20, timeoutMs: 90_000 },
