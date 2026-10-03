@@ -5,7 +5,7 @@ import {packageRoot} from './package-root.mjs';
 import {cp,mkdir,readFile,rm,writeFile,stat} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {EXTERNALS} from '../../../scripts/build/runtime-externals.mjs';
+import {CLI_RUNTIME_EXTERNALS} from '../../../scripts/build/runtime-externals.mjs';
 import {runtimePackageFile} from './runtime-package-files.mjs';
 import {archiveDirectory} from './runtime-archive.mjs';
 const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..'),repo=resolve(cli,'../..');
@@ -35,8 +35,8 @@ async function install(name,from,parent=runtime){
   await install(dependency,directory,destination);
  }
 }
-// Vite is development-only.
-for(const name of [...EXTERNALS.filter(name=>name!=='vite'),'sharp'])await install(name,repo);
+// Execution packages live on the runner; CLI hosts only submit source to it.
+for(const name of [...CLI_RUNTIME_EXTERNALS,'sharp'])await install(name,repo);
 const {version}=JSON.parse(await readFile(join(cli,'package.json'),'utf8'));
 const archive=`afbin-runtime-${process.platform}-${process.arch}.gz`;
 const manifest=await archiveDirectory(runtime,{prefix:'node_modules/@artifactbin/host-runtime',out:join(cli,'dist',archive),url:`https://github.com/minusxai/artifactbin/releases/download/afbin-v${version}/${archive}`});

@@ -1,20 +1,14 @@
-/**
- * WHAT THE BUNDLE DOES NOT CARRY — one list, two consumers.
- *
- * `scripts/build/build-server.mjs` leaves these out of the bundle (native addons,
- * packages that resolve their own files from real paths, and vite, which is
- * dev only), and the image must therefore ship exactly these as real
- * `node_modules`; `services/cli/scripts/build-host.mjs` reads the same list to
- * install them beside the standalone host. Naming them a second time
- * by hand is what drifted once: the bundle stopped carrying vega, nothing told
- * the copy step, and the image's server died at its first line with
- * `Cannot find package 'vega-lite'`.
+/** Packages requiring real paths rather than inclusion in the server bundle.
+ * CLI hosts submit execution remotely: they do not load the runner/compiler.
+ * Keep those dependencies in the server boundary but out of the CLI archive.
  */
+const EXECUTION_EXTERNALS = [
+  'esbuild', 'isolated-vm', '@earendil-works/pi-agent-core', '@earendil-works/pi-ai',
+  'abort-controller', 'fast-text-encoding', 'core-js',
+];
 export const EXTERNALS = [
   'pg', '@electric-sql/pglite',
-  // The offline downloader packs the compiled browser module at request time;
-  // esbuild launches its native service from real package paths.
-  'esbuild', 'isolated-vm', '@earendil-works/pi-agent-core', '@earendil-works/pi-ai', 'abort-controller', 'fast-text-encoding', 'core-js',
+  ...EXECUTION_EXTERNALS,
   'playwright', 'playwright-core',
   // The SQLite engine reads its own sqlite3.wasm beside its module.
   '@sqlite.org/sqlite-wasm',
@@ -28,3 +22,5 @@ export const EXTERNALS = [
   'nunjucks',
   'vite',
 ];
+
+export const CLI_RUNTIME_EXTERNALS = EXTERNALS.filter(name => name !== 'vite' && !EXECUTION_EXTERNALS.includes(name));
