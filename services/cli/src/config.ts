@@ -71,7 +71,7 @@ async function readEnvFile(path: string): Promise<Record<string, string>> {
 /** The one origin rule (`@artifactbin/contracts`), as a refusal: the server list and this client read the same one. */
 export function normalizeServer(value: string): string {
   const origin = normalizeOrigin(value);
-  if (!origin) throw new Error("Use an HTTPS server origin, or HTTP localhost for development.");
+  if (!origin) throw new Error("Use an HTTPS server origin, or HTTP on a local development host (localhost, 127.0.0.1, [::1], *.localhost, *.lvh.me, *.test).");
   return origin;
 }
 /** Client defaults never read server settings or implicitly follow a login. */

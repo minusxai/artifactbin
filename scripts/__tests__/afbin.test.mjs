@@ -15,7 +15,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-import { afbinPort, cliBuildStale, devHome, healthRefusal, runAfbin, serverFlag } from '../lib/afbin-run.mjs';
+import { afbinPort, afbinServer, cliBuildStale, devHome, healthRefusal, runAfbin, serverFlag } from '../lib/afbin-run.mjs';
 import { containmentExpectation, containmentObserved } from '../gates/lib/session-containment.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../..');
@@ -117,7 +117,22 @@ describe('npm run afbin', () => {
         // The throwaway home still follows this checkout's port: only the destination moved.
         expect(run.spawned[0].options.env.ARTIFACTBIN_HOME).toBe(devHome(7601, '/home/owner'));
       }
-      expect(serverFlag(['status'], 7601)).toEqual(['--server', 'http://localhost:7601']);
+      expect(serverFlag(['status'], 'http://localhost:7601')).toEqual(['--server', 'http://localhost:7601']);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('selects the origin the server calls itself: APP__PUBLIC_BASE_URL when APP__PAGES_HOST is set, else localhost', async () => {
+    const root = await fakeCheckout();
+    const run = recorder();
+    try {
+      const pages = { APP__PORT: '12401', APP__PAGES_HOST: 'lvh.me', APP__PUBLIC_BASE_URL: 'http://app.lvh.me:12401' };
+      expect(afbinServer(pages, 12401)).toBe('http://app.lvh.me:12401');
+      await runAfbin({ argv: ['status'], env: pages, root, home: '/home/owner', ...run.options });
+      expect(run.spawned[0].args.slice(1)).toEqual(['status', '--server', 'http://app.lvh.me:12401']);
+      // No pages host, or no usable public base URL: this checkout's localhost, as before.
+      expect(afbinServer({ APP__PUBLIC_BASE_URL: 'http://app.lvh.me:12401' }, 12401)).toBe('http://localhost:12401');
+      expect(afbinServer({ APP__PAGES_HOST: 'lvh.me' }, 12401)).toBe('http://localhost:12401');
+      expect(afbinServer({ APP__PAGES_HOST: 'lvh.me', APP__PUBLIC_BASE_URL: 'not a url' }, 12401)).toBe('http://localhost:12401');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
