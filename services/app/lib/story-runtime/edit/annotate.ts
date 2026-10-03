@@ -608,10 +608,22 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
    * circles INSIDE it are drawing, not blocks, and a band that grazes one
    * must anchor to the picture, not to a stroke of it.
    */
+  /** An element's box; a `display:contents` element (a For's wrapper) has none, so the union of its children's stands in. */
+  const boxOf = (el: HTMLElement): DOMRect => {
+    const own = el.getBoundingClientRect();
+    if (own.width > 0 || own.height > 0 || !el.children.length) return own;
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const child of el.children) {
+      const r = child.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      left = Math.min(left, r.left); top = Math.min(top, r.top); right = Math.max(right, r.right); bottom = Math.max(bottom, r.bottom);
+    }
+    return left === Infinity ? own : new DOMRect(left, top, right - left, bottom - top);
+  };
   const areaCandidates = (): Array<{ path: string; rect: AnnotationRect }> =>
     [...scope.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}]`)]
       .filter((el) => !el.closest('.mx-rail, .mx-present') && !el.parentElement?.closest('svg') && describeSelection(el, nodes))
-      .map((el) => ({ path: el.getAttribute(AST_PATH_ATTR)!, rect: el.getBoundingClientRect() }));
+      .map((el) => ({ path: el.getAttribute(AST_PATH_ATTR)!, rect: boxOf(el) }));
 
   const onAreaPointerDown = (event: PointerEvent) => {
     if (root && !root.contains(event.target as Node)) return;

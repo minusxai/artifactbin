@@ -251,8 +251,8 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
       const refuse = (reason: string) => manual.push({ declaration: name, reason: `the _signals mutation ${reason}; set= takes literals and $values only`, start: el.start, end: el.end });
       if (typeof set === 'string') { refuse(set); continue; }
       if (el.attributes.some((a) => a.name === 'reset' || a.name === 'expectedAffected')) { refuse('has reset= or expectedAffected='); continue; }
-      // A script may run it by a name it computes, so any mx.mutate call keeps it.
-      if (scriptText.includes('mutate(')) { refuse('may be run by the script (it calls mx.mutate)'); continue; }
+      // The script runs a mutation by importing its name from `page`; a script that names it keeps it.
+      if (new RegExp(`\\b${name}\\b`).test(scriptText)) { refuse('may be run by the script (it names the mutation)'); continue; }
       const sites: JsxElement[] = [];
       const visit = (nodes: JsxNode[]) => { for (const n of elements(nodes)) { if (staticString(n, 'run') === `$${name}`) sites.push(n); visit(n.children); } };
       visit(parsed.nodes);

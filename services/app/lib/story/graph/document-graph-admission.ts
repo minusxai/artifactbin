@@ -64,7 +64,7 @@ async function admitGraphCandidate(base:GraphBaseline,candidate:DocumentGraph,co
  if(scope.errors.length)return invalid(scope.errors.join('; '));
  const images=collectExternalImageUrls(identity.source),beforeImages=collectExternalImageUrls(graphSource(base.document));
  if(images.length>MAX_EXTERNAL_IMAGES_PER_PUBLISH)return json({error:'too_many_external_images',details:['Document exceeds the external image limit.']},400);
- if(JSON.stringify([...images].sort())!==JSON.stringify([...beforeImages].sort()))for(const selector of ['tag:img','tag:Video','tag:Iframe']){
+ if(JSON.stringify([...images].sort())!==JSON.stringify([...beforeImages].sort()))for(const selector of ['tag:img','tag:Video']){
   scope.selectors.push(selector);
   for(const key of selectGraphKeys(base.document,selector))scope.reads.push({key,facet:'subtreeVersion'});
  }

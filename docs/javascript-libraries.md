@@ -1,84 +1,9 @@
-# Hosted JavaScript libraries
+# JavaScript libraries
 
 The document's Helmet `<script>` imports a library directly, by npm name
 (`import * as THREE from 'three'`, resolved at publish to `https://esm.sh/three`)
-or by full URL; the agent skill teaches this in `references/markup-scripts.md`.
-The rest of this page describes the older managed `<Iframe>` path, which the
-skill no longer teaches: the platform packages the frame's markup, styles and
-scripts into an opaque sandboxed child, and the script tags it declares are
-resolved through the asset pipeline before anything mounts. The deployment
-serves its own pinned bundles at `<origin>/libraries/<name>-<version>/index.js`,
-so the URL an author writes belongs to the server they publish to, not to any
-one host.
-
-```jsx
-<Iframe title="3D model" height={450}>
-  <canvas id="scene" width="800" height="450" />
-  <script id="three-bundle" type="module" src="https://your-server.example/libraries/three-0.185.1/index.js" />
-  <script>{`
-    const THREE = await import(document.getElementById('three-bundle').src);
-    const bytes = await (await fetch('ref:Abc123')).arrayBuffer();
-    const model = await new THREE.GLTFLoader().parseAsync(bytes, '');
-  `}</script>
-</Iframe>
-```
-
-Declared URLs must be absolute; a bare path is refused. `fetch('ref:<id>')`
-inside the frame resolves a published file to a document-scoped, anonymously
-served copy. Public and unlisted assets resolve; private, deleted and missing
-ones are refused even for the owner, because a document's permissions never
-confer asset access. A loaded asset is not retroactively erased from a
-reader's memory.
-
-Resolving anything outside the frame's own bytes requires the deployment to
-configure `APP__ASSETS_ORIGIN` — a distinct cached-byte hostname. Without it
-the resolver refuses external assets outright rather than letting author code
-reach a CDN. See [serving and security](serving-and-security.md).
-
-## Adding a library
-
-1. Install an exact npm **dev dependency** in `services/app/package.json`
-   (`npm install --save-dev --save-exact <package>@<version> -w services/app`).
-   The build bundles it into a static browser module; production does not need
-   the original npm package.
-2. Add an ESM wrapper under `services/app/lib/libraries/`. Export the public
-   surface authors should receive, including any supported addons.
-3. Add its name, npm package, exact version, and wrapper filename to
-   `services/app/lib/libraries/registry.json`.
-4. Run `node services/app/scripts/build-libraries.mjs`. The generic library build checks the version
-   pin and bundles the wrapper's dependency graph into
-   `/libraries/<name>-<version>/index.js`.
-5. Add a browser gate proving it works under the artifact sandbox and in
-   export. Packages that require workers, WASM, external assets or browser
-   permissions need explicit support; a registry entry does not grant them.
-
-The registry produces the author-facing URL map. Library code is absent from
-the app and story entry graphs. Static modules have CORS for opaque-origin
-documents; the sandbox and no-third-party policy remain in force. Asset
-fetches use a path-exact `/a/<document>/resolve` CSP allowance, plus blob/data
-for embedded buffers and textures. The resolver never accepts arbitrary URLs.
-
-The first entry is Three.js 0.185.1 with OrbitControls and GLTFLoader. It
-supports procedural scenes and self-contained GLBs, including embedded PNG
-textures. External model dependencies and additional decoder workers are not
-included. Authors own rendering, resizing, animation and GPU cleanup. Export
-uses the existing bounded settling window; long asynchronous scene preparation
-may exceed that window; there is no new scene-readiness protocol in this version.
-
-## File transport
-
-`POST /api/artifacts?format=file&filename=scene.glb` accepts bytes with a supported extension; see [file uploads](file-uploads.md). The session twin is `/api/my/artifacts`. JSON API accepts
-`{file: {filename, contentType, base64}}`. Responses include the usual id and
-URL, plus filename, contentType, bytes and rawUrl. Files can be replaced through
-the existing JSON PUT flow, forked and shared like other artifacts.
-
-Accepted extensions and MIME types live in `lib/story/assets/file-types.ts`.
-Files preserve bytes in content-addressed object storage. The raw upload is
-bounded while reading (default 50 MB, `FILES__MAX_BYTES`), uses existing count
-and byte quotas, and defaults to unlisted for account-owned uploads. Direct
-downloads are streamed with attachment disposition, nosniff and a sandbox CSP.
-The file page offers a download rather than interpreting arbitrary content.
-
-Validation: `scripts/gates/gate-libraries.mjs` uploads a textured GLB, verifies real
-WebGL pixels and PNG export, checks lazy loading and repeated imports, and
-confirms missing-reference and sandbox behavior.
+or by full https URL; the agent skill teaches this in `references/markup-scripts.md`.
+The script runs in the document itself (lib/islands/page-runtime) as a module built at
+publish (lib/story/document/author-module.server), so a library needs no registry,
+no pinned bundle and no managed frame. The document's CSP decides which hosts a
+script may load from; see docs/serving-and-security.md.
