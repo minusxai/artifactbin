@@ -1,11 +1,11 @@
 ---
 name: live-sessions
-description: Operate live artifacts with JavaScript, Playwright and mx.
+description: Operate live artifacts with JavaScript, Playwright and window.page.
 ---
 # Live artifact sessions
 
-Read declarations with `afbin pull ARTIFACT_ID --output source.jsx`, or inspect
-`mx.describe()` in a live page. Operate the instance without editing its source:
+Read the declared names with `afbin pull ARTIFACT_ID --output source.jsx`. Operate
+the instance without editing its source:
 
 ```sh
 afbin sessions script new --input actions.js --json
@@ -57,12 +57,10 @@ scripts, including inspection and recovery after an ordinary script error.
 ```js
 const page = await context.newPage();
 await page.goto('/a/abc123'); // a URL, not a filesystem path
-await page.waitForFunction(() => Boolean(window.mx));
-const description = await page.evaluate(() => window.mx.describe());
-// Signal values belong to mx. Assigning window.count does not set a signal.
-await page.evaluate(() => window.mx.set({count: 2}));
-const snapshot = await page.evaluate(() => window.mx.read(['count'], {wait:true}));
-return {description, snapshot};
+await page.waitForFunction(() => Boolean(window.page));
+// Assigning window.count sets nothing: the declared signal is window.page.value('count').
+await page.evaluate(() => { window.page.value('count').value = 2; });
+return await page.evaluate(() => window.page.query('results').ready);
 ```
 
 An OLDER version is the same address plus `?version=N`:
@@ -83,41 +81,36 @@ Independent operations may use `await Promise.all([...])`; scripts in one sessio
 run sequentially. Playwright functions passed to `page.evaluate()` run in the page:
 pass outer variables as its argument, not through closures.
 
-The complete data interface is:
+`window.page` holds the declared names as the Preact signals the page's own
+script imports from `page` ([scripts](markup-scripts.md)):
 
 ```js
-await mx.describe();
-await mx.read(['count', 'results'], {wait: true});
-await mx.set({count: 2});
-await mx.mutate('save', {count: 3});
-const stop = mx.subscribe(['count', 'results'], snapshot => { /* render */ });
-stop();
+window.page.value('count').value;          // a Value: read it
+window.page.value('count').value = 3;      // write it; queries re-run
+window.page.query('results').value;        // a Query or table Value: its rows
+await window.page.query('results').ready;  // the next settled rows
+await window.page.mutation('save')({count: 3});  // resolves after commit
+window.page.signal('results');             // either, by name
 ```
 
-Call these inside `page.evaluate()`. `set` takes one object patch. `subscribe`
-returns a synchronous stop function; snapshots hold only the requested names.
-Subscribe to all signals one renderer needs together. Wait for `window.mx` after
-navigation before calling it. On a script error, resume the existing page IDs;
-opening another loses continuity. Write a recovery script that uses those pages;
-do not rerun the original script just to inspect its result.
+Call these inside `page.evaluate()` and return plain data, never a signal. An
+undeclared name gives `undefined`. Wait for `window.page` after navigation; a
+page that declares nothing has none. On a script error, resume the existing page
+IDs; opening another loses continuity. Write a recovery script that uses those
+pages; do not rerun the original script just to inspect its result.
 
-Catch API errors inside the page to return their structured fields: Playwright
-drops custom Error properties across its evaluation boundary.
+A refused write or failed query rejects with the server's message. Catch it
+inside the page: Playwright keeps only the message across its boundary.
 
 ```js
 return await page.evaluate(async () => {
-  try { return await mx.set({count: 2}); }
-  catch (error) { return {error: {code: error.code, message: error.message}}; }
+  try { await window.page.mutation('save')(); return 'saved'; }
+  catch (error) { return {error: error.message}; }
 });
 ```
 
-`window.mx` is for driving a page from a session; the page's own `<Helmet>`
-script uses the `page` signals instead ([scripts](markup-scripts.md)). Read
-names from `describe()`. Use
-`page.evaluate(() => window.mx.read(['count','results'], {wait:true}))`; selected
-values are at `snapshot.signals.NAME.value`. `set` changes scalar signals;
-`mutate` runs declared row writes. Neither changes artifact source. A local-table
-mutation belongs to this live instance; a dataset mutation persists in the dataset.
+Neither a write nor a mutation changes artifact source. A local-table mutation
+belongs to this live instance; a dataset mutation persists in the dataset.
 Use ordinary Playwright locators for interactions: every control, and every
 component the script mounts, is in the main page. Inspect the controls and their
 accessible names; use `selectOption` for native selects, or click a custom
@@ -134,14 +127,14 @@ return await page.locator('body').ariaSnapshot();
 The kit's `<Select label="Region">` is a button with a listbox, not an HTML
 `<select>`. The example below assumes the label is exactly Region; use the
 accessible name from the snapshot. To change a known scalar directly,
-`page.evaluate(() => mx.set({region: 'West'}))` needs no locator. To exercise
-the UI:
+`page.evaluate(() => { window.page.value('region').value = 'West'; })` needs no
+locator. To exercise the UI:
 
 ```js
 const [page] = context.pages();
 await page.getByRole('button', {name: 'Region', exact: true}).click();
 await page.getByRole('option', {name: 'West', exact: true}).click();
-return await page.evaluate(() => mx.read(['region'], {wait: true}));
+return await page.evaluate(() => window.page.value('region').value);
 ```
 
 A script error preserves pages. A timeout that destroys the worker returns
@@ -163,8 +156,9 @@ const page = await context.newPage();
 await page.goto('/a/abc123');
 await page.getByLabel('Amount').fill('48.50');
 await page.getByRole('button', {name: 'Add expense'}).click();
-const after = await page.evaluate(() => mx.read(['tab'], {wait: true}));
-if (!after.signals.tab.value.length) await output.image(await page.screenshot());
+await page.waitForFunction(() => Boolean(window.page));
+const after = await page.evaluate(() => window.page.query('tab').ready);
+if (!after.length) await output.image(await page.screenshot());
 return after;
 ```
 

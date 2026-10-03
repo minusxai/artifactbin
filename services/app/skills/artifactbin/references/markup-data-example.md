@@ -203,10 +203,10 @@ booking its booker's. Put the returned id in `src="ref:…"` first.
 ```js
 const page = await context.newPage();
 await page.goto('/a/<copy-id>');
-await page.waitForFunction(() => Boolean(window.mx));
+await page.waitForFunction(() => Boolean(window.page));
 await page.getByRole('button', {name: '09:00', exact: true}).click();
 await page.getByRole('button', {name: 'Cancel 09:00', exact: true}).waitFor();
-return await page.evaluate(() => mx.read(['mine'], {wait: true}));
+return await page.evaluate(() => window.page.query('mine').ready);
 ```
 
 ```sh

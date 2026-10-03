@@ -1,21 +1,24 @@
-# Unified mx and live browser sessions
+# Live browser sessions and `window.page`
 
-The runtime owns one five-method data capability: `describe`, `read`, `set`,
-`mutate`, and `subscribe`, installed as `window.mx` on the public artifact page
-for browser sessions. It owns no cached read API. The page's own author script
-does not use it: it imports the declared names from `page` as Preact signals
-(`lib/islands/page-runtime.ts`).
-Signals include scalar values, local tables, and query results. Only scalars can
-be set; declared mutations own row writes. Mutation arguments apply to one call.
+A browser session drives a public artifact page through `window.page`, which
+the island boot (`lib/islands/boot.ts`) installs on a top-level page that
+declares data, while it reads. It is the page runtime's bindings
+(`lib/islands/page-runtime.ts` `bindPage`), the very Preact signals the page's
+own `<Helmet>` script imports from `page`: `value(name)` is a writable signal for
+a scalar Value, `query(name)` the read-only rows of a Query or table Value (with
+`loading`, `error` and `ready`), `mutation(name)` an async function that resolves
+after commit and rejects with the server's message, and `signal(name)` either.
+Editing removes it and reading again restores it. There is no cached read API
+and no subscription API beside the signals.
 
 The session service owns authentication scope, leases, execution receipts, and
 script serialization. Each isolated worker owns an actual Playwright browser,
 context, and pages across calls. The CLI submits async function bodies and polls
 receipts. It prints recovery IDs before waiting. `context` is standard Playwright;
 `pages` is a frozen map of stable page IDs; `output.image(bytes)` attaches PNG/JPEG.
-Open artifacts with `await page.goto('/a/<id>')`, call mx through
+Open artifacts with `await page.goto('/a/<id>')`, call `window.page` through
 `page.evaluate()`, and use normal locators and screenshots. Independent page work
-can use `Promise.all`. Source editing is not an mx operation.
+can use `Promise.all`. Source editing is not a session operation.
 
 ```
 afbin sessions script new --input actions.js --json
@@ -27,10 +30,11 @@ afbin sessions close SESSION_ID --json
 ```js
 const page = await context.newPage();
 await page.goto('/a/abc123');
-await page.waitForFunction(() => Boolean(window.mx));
-const description = await page.evaluate(() => window.mx.describe());
+await page.waitForFunction(() => Boolean(window.page));
+await page.evaluate(() => { window.page.value('region').value = 'West'; });
+const rows = await page.evaluate(() => window.page.query('sales').ready);
 await output.image(await page.screenshot());
-return description;
+return rows;
 ```
 
 Session routes use `/api/browser-sessions`; existing remote terminal resources

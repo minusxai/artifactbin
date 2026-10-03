@@ -14,10 +14,12 @@
  *    islands, so a page with a module always signals ready;
  * 6. top-level only: holds the document's live stream (./live, from the snapshot's `since`) and
  *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`);
- * 7. when the page data names the version's author script, loads the lazy author host (./author-host,
- *    a standalone chunk) and runs the script in its sandboxed frame against this store, after the
- *    islands have hydrated — as the former runtime runs it after its first commit. Edit mode and dispose
- *    revoke it (the editor starts its own).
+ * 7. when the page data names the version's author script, loads the page runtime (`@mx/page-runtime`, the
+ *    chunk the page data's `vendor` names) and runs the script in this document against this store, after
+ *    the islands have hydrated. Edit mode and dispose stop it (the editor starts its own).
+ * 7b. top-level only, whenever the page declares data: exposes the declared names as `window.page`
+ *    (`value`, `query`, `mutation`, `signal`, the same signals the script imports from `page`) for browser
+ *    sessions to drive the page. Edit mode and dispose remove it; reading again restores it.
  * 8. when the page may hold data (`hold`, `sqliteWasm`): gives the store the page's own SQLite engine
  *    (./sqlite-engine, bundled alone and loaded behind the first paint — the store asks for it once the
  *    first run is on its way), so what the reader holds is answered in the page, as the former reader does.
@@ -39,6 +41,11 @@ import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './mod
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
+import type { PageBindings } from './page-runtime';
+
+/** What `window.page` holds: the page's declared names as signals, for a browser session to drive the page. */
+export type PublicPage = Pick<PageBindings, 'value' | 'query' | 'mutation' | 'signal'>;
+declare global { interface Window { page?: PublicPage } }
 
 /**
  * One island of the per-document module: its hydration key prefix (`IslandRef.renderId`), its component,
@@ -196,6 +203,33 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   let disposed = false;
   let stopAuthor = () => {};
   let authorGeneration = 0;
+  /** The page runtime chunk of the serving build (the page data's `vendor`), or null when the page names none. */
+  const loadPageRuntime = async (): Promise<typeof import('./page-runtime') | null> => {
+    const runtimeUrl = readPageData(doc).vendor?.['@mx/page-runtime'];
+    return runtimeUrl ? (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime') : null;
+  };
+  let unexposePage = () => {};
+  let pageGeneration = 0;
+  /**
+   * `window.page`: the declared names as the page runtime binds them over this store (the bindings are cached
+   * per store, so these are the very signals the author's script imports). Top-level only, while reading.
+   */
+  const exposePage = async () => {
+    const generation = ++pageGeneration;
+    unexposePage();
+    if (!store || win.parent !== win) return;
+    const runtime = await loadPageRuntime();
+    if (!runtime || generation !== pageGeneration || disposed || mode !== 'read') return;
+    const bindings = runtime.bindPage(store);
+    const api: PublicPage = Object.freeze({ value: bindings.value, query: bindings.query, mutation: bindings.mutation, signal: bindings.signal });
+    win.page = api;
+    unexposePage = () => {
+      unexposePage = () => {};
+      if (win.page === api) delete win.page;
+      bindings.dispose();
+    };
+  };
+  const stopPage = () => { ++pageGeneration; unexposePage(); };
   /**
    * Run the version's script IN THIS DOCUMENT: the page runtime (`@mx/page-runtime`, a chunk of the serving build
    * named by the page data) binds the declared names as signals over this store, loads the module with its vendor
@@ -206,9 +240,8 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     stopAuthor();
     if (!source) return;
     const vendor = readPageData(doc).vendor ?? {};
-    const runtimeUrl = vendor['@mx/page-runtime'];
-    if (!runtimeUrl) { console.error('[islands] the page names a script but no runtime for it'); return; }
-    const runtime = (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime');
+    const runtime = await loadPageRuntime();
+    if (!runtime) { console.error('[islands] the page names a script but no runtime for it'); return; }
     if (generation !== authorGeneration || disposed || mode !== 'read') return;
     const stop = await runtime.startAuthorModule({ source, store, root, vendor });
     if (generation !== authorGeneration || disposed || mode !== 'read') { stop(); return; }
@@ -226,19 +259,21 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
         /*
          * Back to reading IN PLACE (the page's controller has already drawn the saved version on this
          * context, lib/story-runtime/island-controller `restoreRead`, and synced the page's records): the
-         * document's stream, the public API and the version's author script resume as boot started them.
+         * document's stream, `window.page` and the version's author script resume as boot started them.
          * The stream opens from the snapshot's marks, so a dataset written while editing re-runs at once.
          */
         mode = 'read';
         runtime.setPaused(false);
         openLive(data.results?.since ?? null);
         followUrl();
+        void exposePage().catch((error: unknown) => console.error('[islands] window.page did not load', error));
         const script = readPageData(doc).authorScript;
         void restartAuthor(typeof script === 'string' && script ? script : null).catch((error: unknown) => console.error('[islands] author host failed', error));
         emit({ type: 'mode', mode });
         return;
       }
       stopAuthor();
+      stopPage();
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
@@ -256,6 +291,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
       if (disposed) return;
       disposed = true;
       stopAuthor();
+      stopPage();
       disposeIslands();
       stopLive();
       stopUrl();
@@ -293,6 +329,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     if (page && !data.hold?.length) page.engine.prepare(flow!, []);
     const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
     if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
+    void exposePage().catch((error: unknown) => console.error('[islands] window.page did not load', error));
   }
   return islandDocument;
 }

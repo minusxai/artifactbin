@@ -194,7 +194,7 @@ export interface StoryIslandData {
    * archived view (lib/archived-version), where the reason is "Version N is
    * read-only". It refuses every `<Mutation>` up front, whatever the datasets
    * would have said, so a button is disabled before it is pressed and
-   * `mx.describe()` reports it as the unavailable reason.
+   * a `page` mutation rejects with it as the message.
    *
    * It is not the absence of `mutateUrl`: that is already true here, and on its
    * own it makes the runtime say "This view cannot save changes" — accurate,

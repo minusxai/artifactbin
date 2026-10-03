@@ -267,14 +267,15 @@ export interface IslandPageData {
   readOnly: string | null;
   /**
    * The version's author script (CompiledPage.authorScript), present only when it has one: `boot`
-   * then loads the lazy author host, which runs it in the sandboxed author frame against this page's
-   * store — never in this document.
+   * then loads the page runtime (`vendor['@mx/page-runtime']`), which runs it as a module of this
+   * document against this page's store.
    */
   authorScript?: string | null;
   /**
    * The script's bare imports → this build's chunks (`preact`, `@preact/signals`, … and `@mx/page-runtime` itself),
-   * present with `authorScript`: the runtime resolves the module's imports against the serving build, so the
-   * script and the runtime share one Preact.
+   * present with `authorScript` or a declared dataflow: the runtime resolves the module's imports against the
+   * serving build, so the script and the runtime share one Preact, and boot loads the same runtime for
+   * `window.page`.
    */
   vendor?: Readonly<Record<string, string>>;
 }

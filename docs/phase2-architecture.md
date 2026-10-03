@@ -118,7 +118,7 @@ the app loader; it keeps its CSP sandbox.
 `createDocumentTransport`, seeds it from the snapshot's `results`, and hydrates each island in
 place by its hydration-key prefix (`rt.island(renderId, Component)` in the prototype): the parent's
 other children are handed back as the same nodes, so static siblings are never touched. The store is
-the one source of document data for islands, the author's `window.mx`, and later the app.
+the one source of document data for islands, the author's `page` signals (and a session's `window.page`), and later the app.
 
 ### 2.4 Revalidate
 
