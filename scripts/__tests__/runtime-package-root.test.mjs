@@ -27,3 +27,12 @@ test('trimmed PGLite supports fresh persistence, rollback and restart without ex
   expect(result.stderr).toBe('');expect(result.status).toBe(0);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('runtime packaging finds npm packages whose names also identify Node builtins',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-builtin-package-'));
+ try{for(const name of ['buffer','string_decoder']){
+  const directory=join(root,'node_modules',name);await mkdir(directory,{recursive:true});
+  const pkg={name,version:'1.0.0'};await writeFile(join(directory,'package.json'),JSON.stringify(pkg));
+  expect(await packageRoot(name,root)).toEqual({directory:await realpath(directory),pkg});
+ }}finally{await rm(root,{recursive:true,force:true});}
+});

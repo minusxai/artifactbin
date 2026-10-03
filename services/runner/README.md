@@ -114,7 +114,7 @@ Fast checks:
 
 ```sh
 npm run validate
-npm test -- --files services/app/__tests__/runner-service.test.ts services/app/__tests__/runner-orchestration.test.ts services/app/__tests__/hosted-runner.test.ts services/app/__tests__/runner-api.test.ts
+npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/hosted-runner.test.ts services/app/__tests__/runner-api.test.ts
 ```
 
 The runner CI repeats these against the production worker image and checks OS

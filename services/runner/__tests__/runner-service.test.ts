@@ -1,7 +1,7 @@
 import {afterEach, describe, expect, it} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
-import {createRunner} from '../../runner/src/local';
-import {runnerHttp} from '../../runner/src/http';
+import {createRunner} from '../src/local';
+import {runnerHttp} from '../src/http';
 import {runnerClient} from '../../utils/src/runner-client';
 import {inProcess,overHttp,signActor} from '@artifactbin/utils';
 import {serve} from '@hono/node-server';

@@ -1,9 +1,9 @@
 import {afterEach,expect,it} from 'vitest';
 import {PGlite} from '@electric-sql/pglite';
-import {createRunner} from '../../runner/src/local';
-import {createAgentCoordinator,type TransactionalDatabase} from '../../runner/src/coordinator';
-import {createScheduler} from '../../runner/src/scheduler';
-import {hostCapabilities} from '../../runner/src/capabilities';
+import {createRunner} from '../src/local';
+import {createAgentCoordinator,type TransactionalDatabase} from '../src/coordinator';
+import {createScheduler} from '../src/scheduler';
+import {hostCapabilities} from '../src/capabilities';
 import {fixtureModel} from '../../../docs/proposals/runner-validation/path.mjs';
 const closing:Array<()=>Promise<unknown>>=[];afterEach(async()=>{for(const fn of closing.splice(0).reverse())await fn();});
 async function setup(){const db=new PGlite();closing.push(()=>db.close());const model=await fixtureModel();closing.push(()=>model.close());const calls:string[]=[];
