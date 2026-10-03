@@ -121,22 +121,22 @@ export function cspExtensionsOf(content: Pick<HelmetContent, 'meta'>, helmet?: J
     const directive = meta.name.slice(META_PREFIX.length) as CspDirective;
     const span = spanOf(helmet, meta.name);
     if (!CSP_DIRECTIVES.includes(directive)) {
-      errors.push({ message: `<meta name="${meta.name}"> is not a policy a document can extend — use ${CSP_DIRECTIVES.map(metaName).join(', ')}`, tag: 'meta', attr: 'name', value: meta.name, ...span });
+      errors.push({ message: `the Helmet meta ${meta.name} is not a policy a document can extend — use ${CSP_DIRECTIVES.map(metaName).join(', ')}`, tag: 'meta', attr: 'name', value: meta.name, ...span });
       continue;
     }
     const written = meta.content.trim().split(/\s+/).filter(Boolean);
     if (written.length === 0) {
-      errors.push({ message: `<meta name="${meta.name}"> lists no origins — name each https origin, separated by spaces`, tag: 'meta', attr: 'content', value: meta.content, ...span });
+      errors.push({ message: `the Helmet meta ${meta.name} lists no origins — name each https origin, separated by spaces`, tag: 'meta', attr: 'content', value: meta.content, ...span });
       continue;
     }
     const origins: string[] = [];
     for (const value of written) {
       const parsed = parseCspOrigin(value);
-      if (!parsed.ok) errors.push({ message: `<meta name="${meta.name}"> "${value}" ${parsed.reason}`, tag: 'meta', attr: 'content', value, ...span });
+      if (!parsed.ok) errors.push({ message: `the Helmet meta ${meta.name}: "${value}" ${parsed.reason}`, tag: 'meta', attr: 'content', value, ...span });
       else if (!origins.includes(parsed.origin)) origins.push(parsed.origin);
     }
     if (origins.length > MAX_CSP_ORIGINS_PER_DIRECTIVE) {
-      errors.push({ message: `<meta name="${meta.name}"> names ${origins.length} origins; the cap is ${MAX_CSP_ORIGINS_PER_DIRECTIVE}`, tag: 'meta', attr: 'content', value: meta.content, ...span });
+      errors.push({ message: `the Helmet meta ${meta.name} names ${origins.length} origins; the cap is ${MAX_CSP_ORIGINS_PER_DIRECTIVE}`, tag: 'meta', attr: 'content', value: meta.content, ...span });
     }
     extensions[directive] = origins.slice(0, MAX_CSP_ORIGINS_PER_DIRECTIVE);
   }

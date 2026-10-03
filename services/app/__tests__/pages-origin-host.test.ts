@@ -4,7 +4,7 @@
  * document's origin serves only that document and its doors, and a pages Origin may call only its own
  * document's doors — anywhere. With the setting off, nothing changes.
  */
-import { createServer, type Server } from 'node:http';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
@@ -317,10 +317,10 @@ describe('with APP__PAGES_HOST unset', () => {
 });
 
 describe('the document\'s /fetch door: a script reaches the hosts its document declares, through us', () => {
-  let fixture: Server | null = null;
+  let fixture: RunningServer | null = null;
   afterEach(async () => {
     setWebIngestPolicyForTests(null);
-    await new Promise<void>((resolve) => (fixture ? fixture.close(() => resolve()) : resolve()));
+    await fixture?.close();
     fixture = null;
   });
   /** A private document of the owner's whose Helmet declares `connect` (its publish is the owner's consent). */
@@ -334,9 +334,8 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     const w = await world();
     const app = framing();
     const seen: Array<{ cookie?: string; authorization?: string }> = [];
-    fixture = createServer((req, res) => { seen.push({ cookie: req.headers.cookie, authorization: req.headers.authorization }); res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"rate":1.23}'); });
-    await new Promise<void>((resolve) => fixture!.listen(0, '127.0.0.1', () => resolve()));
-    const port = (fixture.address() as { port: number }).port;
+    fixture = await withHttpServer((req, res) => { seen.push({ cookie: req.headers.cookie, authorization: req.headers.authorization }); res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"rate":1.23}'); });
+    const port = fixture.port;
     const upstream = `http://127.0.0.1:${port}`;
     // Loopback stands in for the open web here only: the test policy admits it (and a declared https origin's http
     // twin), as the dev switch does.
@@ -379,19 +378,18 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
 });
 
 describe('a reader\'s consent reaches the document\'s own origin with the pages session (lib/trust/document-trust)', () => {
-  let fixture: Server | null = null;
+  let fixture: RunningServer | null = null;
   afterEach(async () => {
     setWebIngestPolicyForTests(null);
-    await new Promise<void>((resolve) => (fixture ? fixture.close(() => resolve()) : resolve()));
+    await fixture?.close();
     fixture = null;
   });
 
   it('a reader who allowed once gets the declared hosts in the framed document\'s policy, and its /fetch door opens', async () => {
     const w = await world();
     const app = framing();
-    fixture = createServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}'); });
-    await new Promise<void>((resolve) => fixture!.listen(0, '127.0.0.1', () => resolve()));
-    const port = (fixture.address() as { port: number }).port;
+    fixture = await withHttpServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}'); });
+    const port = fixture.port;
     setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
     const PLOTLY = 'https://cdn.plot.ly';
     const id = await w.publish(`<Helmet><meta name="csp-connect" content="https://127.0.0.1:${port}" /><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Weather</h1>`, 'public');

@@ -96,10 +96,10 @@ check(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.u
 const frame = p.mainFrame();
 /*
  * PAINT FIRST: the page script runs after the islands hydrate, and its effect renders the query rows the
- * page already holds — then follows every change, because reading `.value` inside `effect` subscribes.
+ * page already holds — then follows every change, because reading a signal inside `createEffect` subscribes.
  */
 await frame.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
-check(/^page:object rows=2/.test(await frame.textContent('#out').catch(() => '')), `the page script's effect renders the query rows from the page signals (${await frame.textContent('#out').catch(() => '')})`);
+check(/^page:function rows=2/.test(await frame.textContent('#out').catch(() => '')), `the page script's effect renders the query rows from the page signals (${await frame.textContent('#out').catch(() => '')})`);
 check(!pageErrors.some((e) => /hydrat/i.test(e)), 'no hydration error — the author script ran after the first commit');
 const options = await frame.$$eval('select[aria-label="Region"] option', (os) => os.map((o) => o.value + '=' + o.textContent));
 check(JSON.stringify(options) === JSON.stringify(['=All', 'EU=EU', 'NA=NA']), `the bound select lists the query (All + values): ${options.join(' ')}`);

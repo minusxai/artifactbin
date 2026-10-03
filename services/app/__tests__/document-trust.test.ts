@@ -21,6 +21,7 @@ import type { Actor } from '@artifactbin/contracts';
 const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const METEO = 'https://api.open-meteo.com';
+const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const PLOTLY = 'https://cdn.plot.ly';
 const OTHER = 'https://elsewhere.example.com';
 const asks = (connect: string, script?: string) =>
@@ -115,7 +116,7 @@ describe('/api/trust', () => {
     expect(setCookie, 'a session cookie: it ends with the browser session').not.toMatch(/Max-Age|Expires/i);
     const cookie = trustCookie(once);
 
-    expect(await servedCsp(id, { cookie })).toMatch(new RegExp(`connect-src [^;]*${METEO.replace(/[.]/g, '\\.')}`));
+    expect(await servedCsp(id, { cookie })).toMatch(new RegExp(`connect-src [^;]*${escaped(METEO)}`));
     expect(await servedCsp(id), 'another browser was never asked').not.toContain(METEO);
     expect(await servedCsp(id, { cookie: cookie.replace(/.$/, (c) => (c === 'a' ? 'b' : 'a')) }), 'a tampered cookie is no grant').not.toContain(METEO);
     const other = await publish(owner.token, asks(METEO));

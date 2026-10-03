@@ -122,11 +122,29 @@ const highlightApi = (win: Window): { registry: HighlightRegistry; Highlight: Hi
 const highlightNameFor = (id: string): string => ANNOTATION_HIGHLIGHT_PREFIX + id.replace(/[^A-Za-z0-9_-]/g, '-');
 
 /**
+ * An element's box. A `display:contents` element (a For's wrapper, whose rows are its children) has no box of
+ * its own, so the union of its children's stands in: a band drawn over the rows, or an area pinned to the list,
+ * measures against the rows it shows.
+ */
+export function boxOf(el: Element): DOMRect {
+  const own = el.getBoundingClientRect();
+  if (own.width > 0 || own.height > 0 || !el.children.length) return own;
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  for (const child of el.children) {
+    const r = child.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) continue;
+    left = Math.min(left, r.left); top = Math.min(top, r.top); right = Math.max(right, r.right); bottom = Math.max(bottom, r.bottom);
+  }
+  return left === Infinity ? own : new DOMRect(left, top, right - left, bottom - top);
+}
+
+/**
  * The union of a set of ranges' boxes — one rect per thread, still. `Range`'s
  * own `getBoundingClientRect` is CSSOM View: every browser has it and jsdom
  * does not, so a missing method means "cannot measure", which falls back to the
  * node rect exactly like a range that was not found.
  */
+
 function unionRect(ranges: Range[]): { x: number; y: number; top: number; width: number; height: number } | null {
   const rects = ranges
     .filter((range) => typeof range.getBoundingClientRect === 'function')
@@ -294,7 +312,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const el = elementForPin(pin);
       if (!el) continue;
       if (isTargetRange(pin.range) && !el.hasAttribute(COMMENT_TARGET_ATTR)) continue;
-      const rect = rectFromBox(el.getBoundingClientRect(), range.box);
+      const rect = rectFromBox(boxOf(el), range.box);
       paintedAreas.set(pin.id, rect);
       if (pin.layoutOnly) continue;
       const overlay = doc.createElement('div');
@@ -334,7 +352,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if (!el) { composingArea = null; removeBand(); return; }
     const band = bandElement();
     band.style.outlineStyle = 'solid';
-    placeOverlay(band, rectFromBox(el.getBoundingClientRect(), composingArea.box));
+    placeOverlay(band, rectFromBox(boxOf(el), composingArea.box));
   };
 
   /**
@@ -393,7 +411,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       // drawn AREA; the node is what a comment is about only when we could not.
       const words = painted.get(pin.id);
       const union = words ? unionRect(words) : null;
-      let rect = paintedAreas.get(pin.id) ?? union ?? el.getBoundingClientRect();
+      let rect = paintedAreas.get(pin.id) ?? union ?? boxOf(el);
       if (rect.width === 0 && rect.height === 0 && isTargetRange(pin.range)) {
         const children = [...el.querySelectorAll<HTMLElement>(`[${COMMENT_TARGET_ATTR}]`)].map((child) => child.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
         if (children.length) {const x=Math.min(...children.map((r)=>r.x));const y=Math.min(...children.map((r)=>r.y));rect={x,y,width:Math.max(...children.map((r)=>r.right))-x,height:Math.max(...children.map((r)=>r.bottom))-y};}
@@ -608,18 +626,6 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
    * circles INSIDE it are drawing, not blocks, and a band that grazes one
    * must anchor to the picture, not to a stroke of it.
    */
-  /** An element's box; a `display:contents` element (a For's wrapper) has none, so the union of its children's stands in. */
-  const boxOf = (el: HTMLElement): DOMRect => {
-    const own = el.getBoundingClientRect();
-    if (own.width > 0 || own.height > 0 || !el.children.length) return own;
-    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-    for (const child of el.children) {
-      const r = child.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) continue;
-      left = Math.min(left, r.left); top = Math.min(top, r.top); right = Math.max(right, r.right); bottom = Math.max(bottom, r.bottom);
-    }
-    return left === Infinity ? own : new DOMRect(left, top, right - left, bottom - top);
-  };
   const areaCandidates = (): Array<{ path: string; rect: AnnotationRect }> =>
     [...scope.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}]`)]
       .filter((el) => !el.closest('.mx-rail, .mx-present') && !el.parentElement?.closest('svg') && describeSelection(el, nodes))
@@ -676,7 +682,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     const path = areaTarget(areaCandidates(), rect);
     const el = path ? elementFor(path) : null;
     if (!el || !path) return;
-    const box = boxFromRects(el.getBoundingClientRect(), rect);
+    const box = boxFromRects(boxOf(el), rect);
     if (!box) return;
     composingArea = { path, box };
     reportSelection(el, { range: { v: 1, kind: 'area', box }, captureRect:rect });

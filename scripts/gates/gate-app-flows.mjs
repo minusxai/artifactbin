@@ -18,7 +18,7 @@
  *
  * Exits non-zero on the first failing section's summary.
  */
-import { horizontalOverflow, servedTopLevel } from './lib/page-facts.mjs';
+import { horizontalOverflow } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
@@ -165,46 +165,8 @@ await loginViaEmail(p, B, sink, EMAIL);
 check(await signedIn(), 'log back in with a fresh code works');
 
 // ───────────────────────────── VIEWER ─────────────────────────────
-console.log('█ SANDBOX');
-// Two shapes, one guarantee. For the OWNER the document is a child frame of the
-// app, which is only safe while that frame keeps an OPAQUE origin — the parent
-// holds the session cookie, and author JS must not reach it. For everyone else
-// the document is served top-level, where the same opacity is what stops it
-// touching the app at all (proved end-to-end in gate-secure-arch).
-//
-// A fresh context, holding only the token that owns this document: the AUTH
-// section above signed a DIFFERENT user in, and a signed-in non-owner is a
-// reader — served the document, with no frame to probe.
-const ownerCtx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
-const op = await ownerCtx.newPage();
-await becomeOwner(op, B, T);
-await op.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
-await op.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'attached' });
-{
-  const probe = await op.evaluate(() => {
-    const f = document.querySelector('iframe[title="Isolated artifact script"]');
-    if (!f) return { missing: true };
-    let readable = true;
-    try { readable = !!f.contentDocument; } catch { readable = false; }
-    return { sandbox: f.getAttribute('sandbox') || '', readable };
-  });
-  check(!probe.missing && probe.sandbox.includes('allow-scripts') && !probe.sandbox.includes('allow-same-origin'),
-     'author code renders in a child frame sandboxed without allow-same-origin');
-  check(probe.readable === false, 'the author script frame is opaque to the app page');
-}
-
-// And the reader's copy — same document, no frame, still opaque.
-{
-  const readerCtx = await browser.newContext();
-  const rp = await readerCtx.newPage();
-  await rp.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
-  check(await servedTopLevel(rp), 'a reader is served the document itself, with no app frame');
-  const script = await (await rp.waitForSelector('iframe[title="Isolated artifact script"]', { state: 'attached' })).contentFrame();
-  const opaque = await script.evaluate(() => { try { void localStorage.length; return false; } catch { return true; } });
-  check(opaque, 'author code retains an opaque origin — storage is unreachable inside it');
-  await readerCtx.close();
-}
-await ownerCtx.close();
+// The author's script runs natively in the document, which is served on its own origin and framed
+// by the app page (APP__PAGES_HOST); that isolation is gate-pages-origin's subject, not this gate's.
 
 console.log('█ VIEWER');
 // dataDoc belongs to token T, and ownership resolves SESSION FIRST — so while
