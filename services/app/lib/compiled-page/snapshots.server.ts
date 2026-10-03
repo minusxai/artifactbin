@@ -60,7 +60,6 @@ import { DatasetError } from '@/lib/datasets/errors';
 import type { Scalar } from '@/lib/story/data';
 import { marksOf } from '@/lib/story/prepared/served-results.server';
 import { preparedPageFor } from '@/lib/story/prepared/prepared-page.server';
-import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { drawSnapshotCharts } from './charts.server';
 import { prepareWorkers } from '@/lib/story/prepared/prepare-workers.server';
 import type { ServedResults } from '@/lib/story-runtime/contract';
@@ -279,7 +278,7 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string
   // The shared queries' tables and errors, and NOTHING else the run attaches: its mutation access, user
   // options and person cards are computed for whoever the run is for (the viewer overlay's to answer).
   const results = sharedResults({ tables: pick(state.tables, answered), errors: pick(state.errors, answered) });
-  const { page } = await preparedPageFor(row, null, PUBLIC_BASE_URL);
+  const { page } = await preparedPageFor(row, null);
   // Drawing with vega is CPU-bound and never yields (a heavy chart set held the request thread ~15 s): on a prepare thread when this process has them.
   const chartOptions = { colorMode: page.data.colorMode, template: page.data.template };
   const threads = prepareWorkers();

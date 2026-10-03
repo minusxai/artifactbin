@@ -30,7 +30,6 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
-import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import type { ArtifactRow, Viewer } from '@/lib/artifacts';
 import { declarationsForRow, holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/artifacts/dataflow';
 import { LIVE_ARTIFACT_SQL, type RoleActor } from '@/lib/artifacts/access';
@@ -102,8 +101,6 @@ export interface ReaderContext {
   viewer: RoleActor | null;
   /** The page's query string — the reader's `$` values. */
   search: string;
-  /** The origin the page is served on. Nothing in the reader overlay reads it since the managed asset door was removed. */
-  origin: string;
   /**
    * `engine`: serve no stored diagram drawings (`?mermaid=engine`, what the
    * harvest itself loads). Otherwise the version's stored drawings for the
@@ -214,7 +211,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
 }
 
 /** Parse, isolate and render one version. The only place a served document is compiled. */
-async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string, compiler: ReturnType<typeof compilerBuild>): Promise<PreparedPage> {
+async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: ReturnType<typeof compilerBuild>): Promise<PreparedPage> {
   const meta = (row.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null; compiledCss?: string | null; cssCompileVersion?: string | null; refs?: Array<{ id: string; kind: string }> };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const source = row.source ?? '';
@@ -249,7 +246,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, origin: string
     deps: { datasets, assets: assetUrls, fonts: parts.docFonts.families },
   };
   // Only the version's compiled output is stored; request data is rendered by its pinned SSR module.
-  const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '', origin });
+  const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '' });
   if (compiler) page.compiled = await compiledFor(row, page, anonymous.refData, compiler);
   return page;
 }
@@ -297,8 +294,8 @@ async function store(row: ArtifactRow, slot: string, page: PreparedPage, onlyKey
 }
 
 /** Prepare and compile one version now, under this deployment's stylesheet version. */
-async function prepareNow(row: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<PreparedPage> {
-  const page = await build(row, at, origin, compilerBuild());
+async function prepareNow(row: ArtifactRow, at: ArchivedRender | null): Promise<PreparedPage> {
+  const page = await build(row, at, compilerBuild());
   page.cssVersion = preparedCssVersion();
   return page;
 }
@@ -307,9 +304,9 @@ async function prepareNow(row: ArtifactRow, at: ArchivedRender | null, origin: s
  * Re-prepare a stored page whose stylesheet is older than this deployment's (css-version.server) and write it
  * over that same entry. The reader that found it was served the stored page; the backfill waits for this.
  */
-export async function reprepareStoredPage(stored: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<{ row: ArtifactRow; page: PreparedPage }> {
+export async function reprepareStoredPage(stored: ArtifactRow, at: ArchivedRender | null): Promise<{ row: ArtifactRow; page: PreparedPage }> {
   const row = await servedRow(stored, at);
-  const page = await prepareNow(row, at, origin);
+  const page = await prepareNow(row, at);
   await store(row, slotOf(at), page, keyOf(row));
   return { row, page };
 }
@@ -318,11 +315,11 @@ export async function reprepareStoredPage(stored: ArtifactRow, at: ArchivedRende
 const RESTYLES_QUEUED = 256;
 const restyles = new Map<string, () => Promise<unknown>>();
 let restyling: Promise<void> | null = null;
-function queueRestyle(stored: ArtifactRow, at: ArchivedRender | null, origin: string): void {
+function queueRestyle(stored: ArtifactRow, at: ArchivedRender | null): void {
   if (!warming) return;
   const key = `${stored.id}\u0000${slotOf(at)}`;
   if (restyles.has(key) || restyles.size >= RESTYLES_QUEUED) return;
-  restyles.set(key, () => reprepareStoredPage(stored, at, origin));
+  restyles.set(key, () => reprepareStoredPage(stored, at));
   restyling ??= Promise.resolve().then(async () => {
     for (let next = restyles.entries().next(); !next.done; next = restyles.entries().next()) {
       const [id, job] = next.value;
@@ -336,7 +333,7 @@ function queueRestyle(stored: ArtifactRow, at: ArchivedRender | null, origin: st
  * The stored entry for this version when it is current, else a fresh one, written back. A current entry
  * prepared under an older stylesheet (`stale`) is served as stored while it is re-prepared in the background.
  */
-export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | null, origin: string): Promise<{ row: ArtifactRow; page: PreparedPage; stale?: true }> {
+export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | null): Promise<{ row: ArtifactRow; page: PreparedPage; stale?: true }> {
   const row = await servedRow(stored, at);
   const key = keyOf(row);
   const slot = slotOf(at);
@@ -345,10 +342,10 @@ export async function preparedPageFor(stored: ArtifactRow, at: ArchivedRender | 
   if (found && found.page_key === key && found.page.compiled) {
     const page = { ...found.page, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version };
     if (found.css_version === preparedCssVersion()) return { row, page };
-    queueRestyle(stored, at, origin);
+    queueRestyle(stored, at);
     return { row, page, stale: true };
   }
-  const page = await prepareNow(row, at, origin);
+  const page = await prepareNow(row, at);
   await store(row, slot, page);
   return { row, page };
 }
@@ -410,7 +407,7 @@ export async function servedPage(row: ArtifactRow, page: PreparedPage, reader: R
  * of edits prepares the last head once), every failure swallowed — a warm-up
  * that fails is a first reader who misses, nothing more.
  */
-const queued = new Map<string, { origin: string; row?: ArtifactRow }>();
+const queued = new Map<string, { row?: ArtifactRow }>();
 let worker: Promise<void> | null = null;
 let warming = false;
 
@@ -423,21 +420,21 @@ let warming = false;
 export function enablePreparedPageWarmups(): void { warming = true; }
 
 /** `row`: the head the caller already read and decoded (lib/artifacts settleCommittedHead), so it is not read again. */
-export function warmPreparedPage(id: string, origin: string = PUBLIC_BASE_URL, row?: ArtifactRow): void {
+export function warmPreparedPage(id: string, row?: ArtifactRow): void {
   if (!warming) return;
-  queued.set(id, { origin, ...(row ? { row } : {}) });
+  queued.set(id, row ? { row } : {});
   if (worker) return;
   // A microtask, not a timer: a test's fake clock must never strand the queue.
   worker = Promise.resolve().then(async () => {
     while (queued.size) {
-      const [next, { origin: from, row: held }] = queued.entries().next().value!;
+      const [next, { row: held }] = queued.entries().next().value!;
       queued.delete(next);
       try {
         // Decoded, never MIGRATED: a warm-up writes nothing but its own cache (a first reader's
         // read still performs the lazy representation migration it always has).
         const db = await getDb();
         const row = held ?? (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [next])).rows[0];
-        if (row?.format === 'markup') await preparedPageFor(row, null, from);
+        if (row?.format === 'markup') await preparedPageFor(row, null);
       } catch (error) {
         console.warn('[prepared-page] warm-up failed', next, error);
       }

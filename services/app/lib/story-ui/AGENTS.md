@@ -13,9 +13,13 @@ where the author script runs in [serving and security](../../../../docs/serving-
   URL schemes or component vocabulary; account for authored HTML spellings versus compiled JSX prop names.
 - The publish path (`lib/story/document/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
   Inline style policy and authored style blocks have different rules. Do not relax one because another
-  layer also sanitizes. The author script runs in the document itself as a module built at publish
-  (`lib/story/document/author-module.server`, run by `lib/islands/page-runtime`); there is no author
-  frame and no managed `<Iframe>`.
+  layer also sanitizes.
+- The final model: each document is served on its own origin, framed by the app page, and calls its
+  own data doors directly under the document CSP (plus the hosts its Helmet declares and its reader
+  allowed). Its Helmet script is a Solid module built at publish (`lib/story/document/author-module.server`)
+  and run in the document by `lib/islands/page-runtime`; it binds declared names with `signal`, `query`
+  and `mutation` from `page`, and an exported component mounts at a markup tag (`data-mx-mount`) over
+  its fallback, which edit mode shows read-only. There is no author frame, `mx` bridge or managed `<Iframe>`.
 - `lib/jsx/serialize.ts` must preserve entity escaping and static template-literal children: SQL and
   CSS containing quotes, angle brackets or braces must survive repeated edit/serialize/parse cycles.
 - Component names must agree between `component-names.ts`, the compiler's `KIT` table and JSX validation.

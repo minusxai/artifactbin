@@ -43,12 +43,21 @@ and shares do not, and the original is never touched. The copy's footer says whe
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
-Pages run behind a strict CSP: styles are allowed, executable inline scripts
-are refused on compiled standalone pages, the only external destinations are
-HTTPS (the author script's modules, stylesheets, fonts, images and `fetch`),
-and a `sandbox` directive gives each artifact an opaque
-origin so it can't touch the app's storage. Documents are always
-self-contained — but you don't have to make them so by hand.
+**Where a document runs.** Every document is served on its own origin, one
+per document id under the pages host, and the app page at `/a/<id>` frames it
+with its chrome around the frame. That origin is not the app's, so nothing in
+the document can read the app's cookies, storage or account APIs. The document
+calls its own data doors (`/a/<id>/query`, `/mutate`, `/events`) directly:
+the server admits a call only when its origin names the same document as its
+path and the reader behind it may read (or write) that document. Each response
+carries the document's CSP: styles are allowed, executable inline scripts are
+refused on compiled pages, and scripts and connections reach this origin plus
+the ESM CDN the script's imports resolve to. A document that needs more hosts
+declares them in its Helmet (`<meta name="csp-connect" content="https://…">`,
+likewise `csp-script`, `csp-style`, `csp-img`); they are checked at publish and
+apply for a reader once that reader allows them (an owner's own documents are
+trusted). Documents are always self-contained — but you don't have to make them
+so by hand.
 
 **Compiled reader.** Published documents are prepared as static HTML with
 small interactive islands. `/a/<id>` serves that HTML with reader chrome;
@@ -62,16 +71,18 @@ Interactive pages load only their needed same-origin, content-addressed chunks.
 The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
 not executable inline script, and author strings never become generated code.
 
-The author script runs in the document itself, inside that opaque origin. It
-is built into an ES module at publish (`lib/story/document/author-module.server.ts`:
+The author script is Solid, running in the document itself on the document's
+origin, with the same reach as the page. It is built into an ES module at publish (`lib/story/document/author-module.server.ts`:
 Solid JSX to DOM code, bare npm names to `https://esm.sh/<name>`), carried as data in
 the page's JSON island, and loaded by the page runtime
 (`lib/islands/page-runtime.ts`) from a `blob:` URL, with its `solid-js`
 imports pointed at the page's own build (the kit's one Solid). Its `page` module
-binds only the declared names: Values and Queries as signals over the page's
-store, Mutations through the same permission-checked `/mutate` door as the
-kit's controls. Account APIs, cookies and the app's storage stay out of reach.
-There is no author frame and no managed `<Iframe>`.
+binds only the declared names: Values and Queries as Solid signals over the
+page's store, Mutations through the same permission-checked `/mutate` door as
+the kit's controls. Components it exports mount where the markup names them,
+over their server-rendered fallback. There is no author frame, no `mx` bridge
+and no managed `<Iframe>`; `scripts/migrate-scripts.mjs` rewrites a document
+written for them.
 
 **Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
 at publish — against the artifacts it may read, by the SQLite engine the
