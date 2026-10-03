@@ -13,7 +13,7 @@ import { validateMarkupStructure } from '@/lib/story/document/local-validation';
 import { authorModuleNames, buildAuthorModule } from '@/lib/story/document/author-module.server';
 
 const fixture = (name: string) => readFileSync(path.join(import.meta.dirname, 'fixtures/migrate-scripts', name), 'utf8');
-const PAIRS = ['page-signals', 'mx-bridge', 'iframe', 'iframe-library', 'preact-component'];
+const PAIRS = ['page-signals', 'mx-bridge', 'mx-set-chain', 'iframe', 'iframe-scoped', 'iframe-library', 'preact-component'];
 
 describe('each fixture migrates to its after file, and the after file is a fixpoint', () => {
   it.each(PAIRS)('%s', (name) => {
@@ -63,6 +63,39 @@ describe('the rules', () => {
     // Inside the Helmet's template literal, the note's backticks are escaped.
     expect(source).toContain('/* MIGRATE: \\`mx.describe()\\` has no equivalent');
     expect(unresolved).toEqual([expect.stringContaining('`mx.describe()` has no equivalent')]);
+  });
+
+  it('calls a setter plainly where `mx.set` was chained as a promise: a dead `.catch` dropped, a live `.then` kept over a resolved promise, a mutation\'s chain kept', () => {
+    const { source, unresolved, applied } = migrateDocumentScripts(fixture('mx-set-chain.before.jsx'));
+    expect(unresolved).toEqual([]);
+    expect(source).toContain('      setCount(1);\n'); // a no-op `.catch(() => {})` goes silently
+    expect(source).toContain("setLabel('a') /* migrated: set is synchronous; its .catch handler was dropped */;");
+    expect(source).toContain('await setCount(3) /* migrated: set is synchronous; its .catch handler was dropped */;');
+    expect(source).toContain('      setCount(4);\n'); // no-op `.then` and `.finally` go too
+    expect(source).toContain("Promise.resolve(batch(() => { setCount(2); setLabel('b'); })).then(() => { button.textContent = 'saved'; })");
+    expect(source).toContain("save({ count: 5 }).catch((error) => { button.textContent = error.message; });"); // a mutation is async
+    expect(source).not.toMatch(/set[A-Z]\w*\([^;]*\)\.(then|catch|finally)\(/);
+    expect(applied).toEqual(expect.arrayContaining([expect.stringContaining('a setter returns no promise')]));
+  });
+
+  it('scopes an inlined frame\'s document lookups and its body to the frame\'s root, one root per frame', () => {
+    const { source, unresolved, applied } = migrateDocumentScripts(fixture('iframe-scoped.before.jsx'));
+    expect(unresolved).toEqual([]);
+    expect(source).toContain("const video = document.getElementById('clip-a').querySelector('video');");
+    expect(source).toContain("document.getElementById('clip-a').classList.add('ready');");
+    expect(source).toContain("document.getElementById('clip-a').querySelectorAll('.state')");
+    expect(source).toContain("const video = document.getElementById('migrated-frame-1').querySelector('video');");
+    expect(source).toContain("document.getElementById('migrated-frame-1').classList.add('ready')");
+    expect(source).not.toMatch(/document\.(querySelector|querySelectorAll|body)\b/);
+    expect(source).toContain('#clip-a.ready video { outline: 2px solid green; } #clip-a.wide { max-width: none; } #clip-a .state');
+    expect(source).toContain('#migrated-frame-1.ready video');
+    expect(applied).toEqual(expect.arrayContaining([expect.stringContaining('scoped to the frame\'s root')]));
+  });
+
+  it('scopes a frame root id that needs quoting as a string literal, and leaves a shadowed `document` alone', () => {
+    const { source } = migrateDocumentScripts(`<Helmet><title>t</title></Helmet><Iframe id="it's" title="T"><p>x</p><script>{\`document.querySelector('p').remove(); { const document = window.other; document.querySelector('q'); }\`}</script></Iframe>`);
+    expect(source).toContain("document.getElementById('it\\\\'s').querySelector('p').remove();");
+    expect(source).toContain("const document = window.other; document.querySelector('q');");
   });
 
   it('inlines a managed Iframe: children into the body, style scoped into the Helmet, script merged in a block', () => {
@@ -123,7 +156,7 @@ describe('the rules', () => {
 });
 
 describe('what it writes publishes under the Solid contract', () => {
-  it.each(['page-signals', 'mx-bridge', 'iframe'])('%s validates and its script builds', async (name) => {
+  it.each(['page-signals', 'mx-bridge', 'mx-set-chain', 'iframe', 'iframe-scoped'])('%s validates and its script builds', async (name) => {
     const after = fixture(`${name}.after.jsx`);
     const { errors, split } = validateMarkupStructure(after);
     expect(errors).toEqual([]);
@@ -139,5 +172,13 @@ describe('scoping an inlined frame\'s CSS', () => {
     expect(scopeCss('@media (min-width: 1px){ body{a:b} } @keyframes k{from{a:b}} @font-face{font-family:x}', '#f'))
       .toBe('@media (min-width: 1px){ #f{a:b} } @keyframes k{from{a:b}} @font-face{font-family:x}');
     expect(scopeCss('/* c */ p::before{content:"}{"}', '#f')).toBe('/* c */ #f p::before{content:"}{"}');
+  });
+
+  it('makes a qualified body, html or :root the scope itself, and an html compound over body one compound with it', () => {
+    expect(scopeCss('body.ready{a:b} body#x{a:b} body[data-x]{a:b} body .x{a:b} body > .x{a:b} body.ready .x{a:b}', '#r'))
+      .toBe('#r.ready{a:b} #r#x{a:b} #r[data-x]{a:b} #r .x{a:b} #r > .x{a:b} #r.ready .x{a:b}');
+    expect(scopeCss('html.wide body{a:b} :root.dark body.ready .x{a:b} html > body.y{a:b} html.wide p{a:b} html body.ready{a:b}', '#r'))
+      .toBe('#r.wide{a:b} #r.dark.ready .x{a:b} #r.y{a:b} #r.wide p{a:b} #r.ready{a:b}');
+    expect(scopeCss('bodyish{a:b} .body{a:b}', '#r')).toBe('#r bodyish{a:b} #r .body{a:b}');
   });
 });

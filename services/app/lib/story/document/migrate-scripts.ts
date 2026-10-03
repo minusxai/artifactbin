@@ -12,11 +12,16 @@
  *    `batch`, `createSignal`, `untrack` from 'solid-js' (a local signal becomes Solid's pair, its `.value` the same way);
  *  - the `mx` bridge: `mx.set({...})` → setters, `mx.mutate('name', args)` → a `mutation('$name')` binding,
  *    `mx.read([...])` / `mx.subscribe([...], fn)` → a small adapter that hands the old snapshot shape over the bindings;
+ *    a setter returns no promise, so a `.then`/`.catch`/`.finally` chain on `mx.set` is dropped (a `.catch` never ran:
+ *    a handler with a body leaves a `/* migrated: … *\/` comment), unless a `.then`/`.finally` handler does something,
+ *    when the chain is kept over `Promise.resolve(…)`; a mutation is async, so a chain on it stays;
  *  - a managed `<Iframe>` of static HTML, `<style>` and `<script>` → its children inlined into the body (in a `<div>`
  *    keeping the Iframe's id), its style scoped to that div in the Helmet style (its `height` a min-height there: a body
  *    element takes no inline style), its script merged into the Helmet script in a block of its own, marked
  *    `{/* migrated from Iframe *\/}`; the frame's `<title>` was its tab title and is dropped. A frame with no script
- *    adds no script.
+ *    adds no script. Its script's `document.querySelector`/`querySelectorAll`/`getElementsBy{ClassName,TagName}` and
+ *    `document.body` saw the frame's document: they are scoped to the frame's `<div>` (`document.getElementById(id)`),
+ *    as its CSS's `body`, `html` and `:root` are (`body.ready` → `#id.ready`, `html.wide body` → `#id.wide`).
  *
  * Anything else it leaves as it is, with a `MIGRATE:` comment where it stands (`/* … *\/` in the script, `{/* … *\/}`
  * in markup), and reports. It is a fixpoint: a migrated document, or one already on the Solid contract, comes back
@@ -46,10 +51,25 @@ const PREACT_TO_SOLID: Readonly<Record<string, string>> = { effect: 'createEffec
 const COMPONENT_LIBRARIES = new Set(['preact', 'preact/hooks', 'preact/compat', 'react', 'react-dom', 'react-dom/client']);
 const MX_METHODS = new Set(['read', 'set', 'subscribe', 'mutate', 'describe']);
 const IFRAME_NOTE = 'migrated from Iframe';
+/** Lookups on a frame's `document` that an element answers the same way, scoped to the inlined frame's root. */
+const FRAME_LOOKUPS = new Set(['querySelector', 'querySelectorAll', 'getElementsByClassName', 'getElementsByTagName']);
+const PROMISE_METHODS = new Set(['then', 'catch', 'finally']);
+const SET_IS_SYNC = '/* migrated: set is synchronous; its .catch handler was dropped */';
 
 const capitalize = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1);
 const escapeTemplate = (text: string): string => text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 const lineOf = (code: string, offset: number): number => code.slice(0, offset).split('\n').length;
+/** A single-quoted JavaScript string literal. */
+const jsString = (text: string): string => `'${JSON.stringify(text).slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'")}'`;
+/** A promise handler that does nothing: absent, or a function with an empty body or one returning nothing. */
+const isNoopHandler = (node: t.Node | undefined): boolean => {
+  if (!node) return true;
+  if (node.type !== 'ArrowFunctionExpression' && node.type !== 'FunctionExpression') return false;
+  const body = node.body;
+  if (body.type === 'BlockStatement') return !body.body.length;
+  return body.type === 'NullLiteral' || (body.type === 'Identifier' && body.name === 'undefined')
+    || (body.type === 'UnaryExpression' && body.operator === 'void' && body.argument.type === 'NumericLiteral');
+};
 
 /** Apply non-overlapping edits (an insertion may share a start with a replacement: it lands before it). */
 function applyEdits(text: string, edits: Edit[]): string {
@@ -137,6 +157,8 @@ interface Piece {
   ast: t.File;
   /** An Iframe's classic script: wrapped in a block, its imports hoisted. */
   framed: boolean;
+  /** The id of the `<div>` an Iframe's script was inlined with: its document lookups are scoped to it. */
+  root?: string;
 }
 
 interface PieceResult { code: string; changed: boolean; imports: string[] }
@@ -179,13 +201,17 @@ const keyName = (key: t.Node): string | null =>
 function migratePiece(piece: Piece, registry: Registry): PieceResult {
   const { code, ast } = piece;
   if (!piece.framed && !isLegacy(ast)) return { code, changed: false, imports: [] };
-  const edits: Edit[] = [];
+  let edits: Edit[] = [];
   const imports: string[] = [];
+  /** Notes, reported once the code they stand in is known to survive (a dropped promise chain takes its own). */
+  const notes: Array<{ pos: number; message: string }> = [];
   const note = (pos: number, message: string) => {
-    registry.note(`${message} (script line ${lineOf(code, pos)})`);
+    notes.push({ pos, message });
     const edit = noteEdit(code, pos, message);
     if (edit) edits.push(edit);
   };
+  /** Code an edit removes whole (`[start, end)`), with that edit: nothing else may rewrite inside it. */
+  const dropped: Array<{ start: number; end: number; by: Edit }> = [];
   /** Remove a whole statement with the line break and indentation after it. */
   const removeStatement = (node: t.Node) => {
     let end = node.end!;
@@ -331,13 +357,35 @@ function migratePiece(piece: Piece, registry: Registry): PieceResult {
           parts.push({ setter: binding.setter!, value: property.value });
         }
         if (parts.length > 1) registry.solid.add('batch');
+        // `mx.set(…).then(…).catch(…)`: the old bridge returned a promise, a setter does not.
+        const chain: Array<{ method: string; args: t.CallExpression['arguments'] }> = [];
+        let outer: NodePath = path;
+        for (;;) {
+          const member = outer.parentPath;
+          const call = member?.parentPath;
+          if (outer.node.extra?.parenthesized || !member?.isMemberExpression() || member.node.object !== outer.node || member.node.computed
+            || member.node.property.type !== 'Identifier' || !PROMISE_METHODS.has(member.node.property.name)
+            || !call?.isCallExpression() || call.node.callee !== member.node) break;
+          chain.push({ method: member.node.property.name, args: call.node.arguments });
+          outer = call;
+        }
+        // A `.then`/`.finally` handler that does something ran after the old set resolved: keep it, over a resolved promise.
+        const live = chain.some((link) => link.method !== 'catch' && !isNoopHandler(link.args[0]));
+        const deadCatch = chain.some((link) => (link.method === 'catch' && !isNoopHandler(link.args[0])) || (link.method === 'then' && !isNoopHandler(link.args[1])));
+        const wrap = live ? 'Promise.resolve(' : '';
         parts.forEach((part, i) => {
           const before = i === 0 ? path.node.start! : parts[i - 1]!.value.end!;
-          const opener = parts.length > 1 ? (i === 0 ? `batch(() => { ${part.setter}(` : `); ${part.setter}(`) : `${part.setter}(`;
+          const opener = parts.length > 1 ? (i === 0 ? `${wrap}batch(() => { ${part.setter}(` : `); ${part.setter}(`) : `${wrap}${part.setter}(`;
           edits.push({ start: before, end: part.value.start!, text: opener });
         });
-        edits.push({ start: parts.at(-1)!.value.end!, end: path.node.end!, text: parts.length > 1 ? '); })' : ')' });
+        const close = `${parts.length > 1 ? '); })' : ')'}${wrap ? ')' : ''}`;
+        if (chain.length && !live) {
+          const edit = { start: parts.at(-1)!.value.end!, end: outer.node.end!, text: `${close}${deadCatch ? ` ${SET_IS_SYNC}` : ''}` };
+          edits.push(edit);
+          dropped.push({ start: path.node.end!, end: outer.node.end!, by: edit });
+        } else edits.push({ start: parts.at(-1)!.value.end!, end: path.node.end!, text: close });
         registry.applied.add('`mx.set({...})` → the Values\' setters');
+        if (chain.length) registry.applied.add('`mx.set(…).then/.catch/.finally` → the setter called plainly (a setter returns no promise); a `.then`/`.finally` that does something kept over `Promise.resolve(…)`');
         return;
       }
       if (method === 'mutate') {
@@ -373,15 +421,24 @@ function migratePiece(piece: Piece, registry: Registry): PieceResult {
     },
   });
 
-  // A frame's own document is the page's now.
-  if (piece.framed) traverse(ast, {
-    MemberExpression(path) {
-      const { object, property } = path.node;
-      if (object.type === 'Identifier' && object.name === 'document' && !path.node.computed && property.type === 'Identifier' && (property.name === 'body' || property.name === 'documentElement')) {
-        note(statementOf(path).node.start!, `\`document.${property.name}\` was the frame's; it is the page's now`);
-      }
-    },
-  });
+  // A frame's own document is the page's now: its lookups and its body are scoped to the frame's root.
+  if (piece.framed) {
+    const root = piece.root ? `document.getElementById(${jsString(piece.root)})` : null;
+    traverse(ast, {
+      MemberExpression(path) {
+        const { object, property } = path.node;
+        if (object.type !== 'Identifier' || object.name !== 'document' || path.node.computed || property.type !== 'Identifier' || path.scope.hasBinding('document')) return;
+        const assigned = path.parentPath.isAssignmentExpression() && path.parentPath.node.left === path.node;
+        if (root && FRAME_LOOKUPS.has(property.name)) edits.push({ start: object.start!, end: object.end!, text: root });
+        else if (root && property.name === 'body' && !assigned) edits.push({ start: path.node.start!, end: path.node.end!, text: root });
+        else if (property.name === 'body' || property.name === 'documentElement') {
+          note(statementOf(path).node.start!, `\`document.${property.name}\` was the frame's; it is the page's now`);
+          return;
+        } else return;
+        registry.applied.add('an inlined frame\'s `document.querySelector`/`querySelectorAll`/`body` → scoped to the frame\'s root');
+      },
+    });
+  }
 
   // Exported Preact-style components: destructured props were signals there, getters here.
   for (const statement of ast.program.body) {
@@ -392,6 +449,10 @@ function migratePiece(piece: Piece, registry: Registry): PieceResult {
     if (param?.type === 'ObjectPattern') note(statement.start!, 'a component destructures its props; read `props.x` (a getter, already the value) instead');
   }
 
+  // What a dropped promise chain held goes with it: its rewrites and its notes.
+  const inside = (start: number, end: number) => dropped.some((d) => start >= d.start && end <= d.end);
+  if (dropped.length) edits = edits.filter((edit) => dropped.some((d) => d.by === edit) || !inside(edit.start, edit.end));
+  for (const { pos, message } of notes) if (!dropped.some((d) => pos > d.start && pos < d.end)) registry.note(`${message} (script line ${lineOf(code, pos)})`);
   if (!edits.length) return { code, changed: false, imports };
   return { code: applyEdits(code, edits), changed: true, imports };
 }
@@ -420,7 +481,14 @@ function adapterLines(registry: Registry): string[] {
   ];
 }
 
-/** `body`, `html` and `:root` become the scope; every other selector is prefixed with it. Nested at-rules are scoped too. */
+/** A compound selector's qualifiers after its type (`.a#b[c]:d(e)::f`), as the scope's own. */
+const QUALIFIERS = /^(?:[.#][\w-]+|\[[^\]]*\]|::?[\w-]+(?:\([^)]*\))?)*/;
+
+/**
+ * `body`, `html` and `:root` become the scope, their qualifiers its own (`body.ready` → `#f.ready`, `html.wide body` →
+ * `#f.wide`: the frame's html and body are one element now); every other selector is prefixed with it. Nested at-rules
+ * are scoped too.
+ */
 export function scopeCss(css: string, scope: string): string {
   let out = '';
   let i = 0;
@@ -447,8 +515,19 @@ export function scopeCss(css: string, scope: string): string {
     const lead = /^\s*/.exec(selector)![0];
     const body = selector.slice(lead.length);
     if (!body) return selector;
-    const root = /^(?:html\s+body|html|body|:root)(?![\w-])/.exec(body);
-    return root ? `${lead}${scope}${body.slice(root[0].length)}` : `${lead}${scope} ${body}`;
+    const top = /^(?:html|:root|body)(?![\w-])/.exec(body);
+    if (!top) return `${lead}${scope} ${body}`;
+    let rest = body.slice(top[0].length);
+    let qualifiers = QUALIFIERS.exec(rest)![0];
+    rest = rest.slice(qualifiers.length);
+    const inner = top[0] === 'body' ? null : /^(?:\s*>\s*|\s+)body(?![\w-])/.exec(rest);
+    if (inner) {
+      rest = rest.slice(inner[0].length);
+      const more = QUALIFIERS.exec(rest)![0];
+      qualifiers += more;
+      rest = rest.slice(more.length);
+    }
+    return `${lead}${scope}${qualifiers}${rest}`;
   };
   const splitSelectors = (prelude: string): string[] => {
     const parts: string[] = [];
@@ -615,7 +694,7 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     for (const code of frame.scripts) {
       const ast = parseScript(code);
       if (!ast) { unresolvedParse.push(parseFailure(`the script of <Iframe> "${frame.label}"`)); continue; }
-      const piece = { code, ast, framed: true };
+      const piece: Piece = { code, ast, framed: true, root: frame.id };
       list.push(piece);
       namesOf(ast, taken);
     }
