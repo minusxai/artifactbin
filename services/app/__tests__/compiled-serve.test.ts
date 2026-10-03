@@ -126,6 +126,20 @@ describe('the reader mode on /raw', () => {
     expect(changed.island_build).toBe(original.build);
   });
 
+  it('an edited document is served compiled again, with the edit', async () => {
+    const who = await owner();
+    const id = await publish(who.token, { title: 'Edited', markup: '<article><h1>Edited</h1><p id="para">Before the edit.</p></article>' });
+    expect((await raw(id)).headers.get(READER_MODE_HEADER)).toBe('compiled');
+    const edited = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: who.token, json: { markup: '<article><h1>Edited</h1><p id="para">Edited from the compiled page.</p></article>' } }), params(id));
+    expect(edited.status).toBe(200);
+    await drainPreparedPageWarmups();
+    const again = await raw(id);
+    expect(again.headers.get(READER_MODE_HEADER)).toBe('compiled');
+    expect(storyText(await again.text())).toContain('Edited from the compiled page.');
+    const page = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
+    expect(page.headers.get(READER_MODE_HEADER)).toBe('compiled');
+  });
+
   it('a hand-bumped minimum recompiles the stored page', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Format', markup: '<h1>Format</h1>' });
