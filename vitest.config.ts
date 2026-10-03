@@ -146,6 +146,7 @@ export default defineConfig({
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
             'services/browser/__tests__/session-pages.test.ts',
+            'scripts/__tests__/reserved-ids-proof.test.mjs',
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
           ],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
@@ -172,6 +173,9 @@ export default defineConfig({
             'services/browser/__tests__/internal-assets.test.ts',
             // Launches real Chromium: integration only, like contract.test.ts.
             'services/browser/__tests__/session-pages.test.ts',
+            // The identity-reservation proofs (formerly reserved-ids-proof.yml): 12 CLI processes and
+            // a disposable Postgres (same `skipIf` on the image as postgres.test.ts).
+            'scripts/__tests__/reserved-ids-proof.test.mjs',
             ...SERVER_BOOT_TESTS,
           ],
           exclude: ['**/node_modules/**'],
