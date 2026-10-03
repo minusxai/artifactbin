@@ -94,6 +94,8 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
       Program(program) {
         const binders = new Map<string, PageExport>();
         const createSignals = new Set<string>();
+        /** Locals bound by a page call: `region` and `setRegion` from `signal('$region')`, `monthly` from `query('$monthly')`. */
+        const accessors = new Map<string, { kind: PageExport; setter?: string }>();
         for (const stmt of program.get('body')) {
           if (!stmt.isImportDeclaration()) continue;
           const source = stmt.node.source.value;
@@ -134,6 +136,17 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
             if (name === null) errors.push(at(call.node.loc?.start, `${kind}(${JSON.stringify(literal)}): write the name as the markup does, with its $: ${kind}('$${literal}')`));
             else if (!declared) errors.push(at(call.node.loc?.start, `${kind}('$${name}'): the Helmet declares no ${name}`));
             else if (declared !== kind) errors.push(at(call.node.loc?.start, `${kind}('$${name}'): ${name} is ${kinds[declared].want}; ${kinds[declared].hint(name)}`));
+            else {
+              const decl = call.parentPath;
+              if (decl?.isVariableDeclarator()) {
+                const id = decl.node.id;
+                if (id.type === 'Identifier') accessors.set(id.name, { kind });
+                else if (id.type === 'ArrayPattern' && id.elements[0]?.type === 'Identifier') {
+                  const setter = id.elements[1]?.type === 'Identifier' ? id.elements[1].name : undefined;
+                  accessors.set(id.elements[0].name, { kind, setter });
+                }
+              }
+            }
           },
           CallExpression(path) {
             const callee = path.node.callee;
@@ -142,6 +155,35 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
             const text = arg?.type === 'StringLiteral' ? arg.value : arg?.type === 'TemplateLiteral' && arg.expressions.length === 0 ? arg.quasis[0]!.value.cooked ?? '' : null;
             if (text?.startsWith('$')) {
               errors.push(at(path.node.loc?.start, `createSignal(${JSON.stringify(text)}) makes a local signal holding that string, bound to nothing; bind the declared Value with signal('${text}') from 'page'`));
+            }
+          },
+        });
+        // Second pass, with the bound locals known: a binding is an accessor, never a `.value` box, and an exported
+        // component reads its props as `props.x` (destructuring freezes them, the Solid trap the models fall into).
+        program.traverse({
+          MemberExpression(path) {
+            const { object, property } = path.node;
+            if (property.type !== 'Identifier' || property.name !== 'value') return;
+            const base = object.type === 'Identifier' ? object
+              : object.type === 'MemberExpression' && object.object.type === 'Identifier' && object.property.type === 'Identifier' && ['loading', 'error'].includes(object.property.name) ? object.object : null;
+            if (!base || !accessors.has(base.name) || path.scope.getBinding(base.name)?.kind !== 'const' && path.scope.getBinding(base.name)?.kind !== 'let') return;
+            const bound = accessors.get(base.name)!;
+            const sub = object.type === 'MemberExpression' && object.property.type === 'Identifier' ? `.${object.property.name}` : '';
+            const read = `${base.name}${sub}()`;
+            const write = bound.setter ? `; write with ${bound.setter}(v)` : '';
+            errors.push(at(path.node.loc?.start, `${base.name}${sub}.value: ${base.name} is a Solid accessor, not a signal object; read with ${read}${write}`));
+          },
+          ExportNamedDeclaration(path) {
+            const decl = path.node.declaration;
+            const fns: Array<{ name: string; params: unknown[]; loc: { line: number; column: number } | undefined }> = [];
+            if (decl?.type === 'FunctionDeclaration' && decl.id) fns.push({ name: decl.id.name, params: decl.params, loc: decl.loc?.start });
+            if (decl?.type === 'VariableDeclaration') for (const d of decl.declarations) {
+              if (d.id.type === 'Identifier' && d.init && (d.init.type === 'ArrowFunctionExpression' || d.init.type === 'FunctionExpression')) fns.push({ name: d.id.name, params: d.init.params, loc: d.loc?.start });
+            }
+            for (const fn of fns) {
+              if (/^[A-Z]/.test(fn.name) && (fn.params[0] as { type?: string } | undefined)?.type === 'ObjectPattern') {
+                errors.push(at(fn.loc, `${fn.name}({ … }): a Solid component reads its props as props.name; destructuring them freezes their first value. Write ${fn.name}(props)`));
+              }
             }
           },
         });
@@ -207,6 +249,10 @@ async function build(script: string, names: AuthorModuleNames): Promise<AuthorMo
         }
         if (/^solid-js(\/|$)/.test(spec)) {
           errors.push(`import "${spec}": a page script imports Solid as ${Object.keys(VENDOR).join(', ')}`);
+          return { path: spec, external: true };
+        }
+        if (/^(preact|react|react-dom)(\/|$)|^@preact\//.test(spec)) {
+          errors.push(`import "${spec}": a page script is Solid; there is no Preact or React here. Use createSignal, createEffect, createMemo, For and Show from 'solid-js', and signal('$name')/query('$name')/mutation('$name') from 'page'`);
           return { path: spec, external: true };
         }
         if (/^[@\w][\w./@-]*$/.test(spec)) return { path: `https://esm.sh/${spec}`, external: true };

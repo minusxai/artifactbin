@@ -102,6 +102,20 @@ describe('buildAuthorModule', () => {
     await built(`import { createSignal } from 'solid-js'; const [label] = createSignal('price in $');`);
   });
 
+  it('refuses the Preact habits a model falls back to: a Preact or React import, .value on a binding, destructured component props', async () => {
+    expect(await refused("import { signal } from 'page'; import { effect } from '@preact/signals'; const [r] = signal('$region'); effect(() => r());"))
+      .toMatch(/import "@preact\/signals": a page script is Solid/);
+    expect(await refused("import { signal } from 'page'; const [region, setRegion] = signal('$region'); region.value = 'east';"))
+      .toMatch(/region\.value: region is a Solid accessor.*read with region\(\); write with setRegion\(v\)/);
+    expect(await refused("import { query } from 'page'; const monthly = query('$monthly'); const busy = monthly.loading.value;"))
+      .toMatch(/monthly\.loading\.value.*read with monthly\.loading\(\)/);
+    expect(await refused("import { query } from 'page'; const rows = query('$monthly'); export function Grid({ rows }) { return <div>{rows.length}</div>; }"))
+      .toMatch(/Grid\(\{ … \}\): a Solid component reads its props as props\.name/);
+    // The same shapes, written the Solid way, build.
+    const ok = await built("import { signal, query } from 'page'; import { createEffect } from 'solid-js'; const [region, setRegion] = signal('$region'); const monthly = query('$monthly'); createEffect(() => { if (!monthly.loading()) setRegion(region()); }); export function Grid(props) { return <div>{props.rows.length}</div>; }");
+    expect(ok.exports).toContain('Grid');
+  });
+
   it('refuses a Solid name the vendor chunk does not offer, a relative import and a syntax error, with the line', async () => {
     expect(await refused(`import { createResource } from 'solid-js';`)).toMatch(/'solid-js' offers .* createResource is not among them/);
     expect(await refused(`import { Portal } from 'solid-js/web';`)).toMatch(/Portal is not among them/);
