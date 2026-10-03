@@ -171,7 +171,7 @@ describe('Intel release acceptance consumes the tested binary',()=>{
     expect(proof.steps.some(step=>/npm run build/.test(step.run??''))).toBe(false);
     const bundledProof=ci.jobs.cli.steps.find(step=>step.name==='File preview from the actual executable');
     expect(bundledProof.if).toContain("matrix.os != 'macos-15-intel'");
-    for(const job of ['test','timings'])expect(ci.jobs[job].needs).toContain('cli-preview');
+    for(const job of ['test'])expect(ci.jobs[job].needs).toContain('cli-preview');
   });
 });
 

@@ -869,27 +869,38 @@ describe('CI job shape', () => {
 
   it('reports every job duration, and on a pull request fails the run over budget', () => {
     const { jobs } = ci();
-    // Everything that does work; not the roll-up (`test`) or what waits on it, which only add their
-    // own length to the run's wall clock.
-    const named = Object.keys(jobs).filter((job) => !['timings', 'test', 'notify-consumer'].includes(job));
-    expect(jobs.timings.needs).not.toContain('test');
-    expect(jobs.timings.needs).not.toContain('notify-consumer');
-    expect(jobs.timings.needs).toEqual(expect.arrayContaining(named));
-    expect(jobs.timings.if).toBe('always()');
+    // Folded into the roll-up (`test`), which already waits on every job that does work: one runner and
+    // one setup fewer than the separate `job timings` job it was. Not `notify-consumer` (it waits on
+    // `test`), and not `warm-caches`: waiting on it would put a 15-minute job on merge → production.
+    expect(jobs).not.toHaveProperty('timings');
+    const named = Object.keys(jobs).filter((job) => !['test', 'notify-consumer', 'warm-caches'].includes(job));
+    expect(jobs.test.needs).not.toContain('notify-consumer');
+    expect(jobs.test.needs).not.toContain('warm-caches');
+    expect(jobs.test.needs).toEqual(expect.arrayContaining(named));
+    expect(jobs.test.if).toBe('always()');
+    const step = jobs.test.steps.find((candidate) => (candidate.run ?? '').includes('/actions/runs/'));
+    expect(step.if).toBe('always()');
     // A summary on main, a gate on a pull request — where the branch can still be fixed.
-    expect(jobs.timings['continue-on-error']).toBe("${{ github.event_name != 'pull_request' }}");
+    expect(step['continue-on-error']).toBe("${{ github.event_name != 'pull_request' }}");
     // Reading the run's own job list needs a scope the workflow does not grant by default.
-    expect(jobs.timings.permissions.actions).toBe('read');
-    const report = jobs.timings.steps.at(-1).run;
+    expect(jobs.test.permissions.actions).toBe('read');
+    expect(jobs.test.permissions.contents).toBe('read');
+    const report = step.run;
     expect(report).toContain('GITHUB_STEP_SUMMARY');
     expect(report).toContain('/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs');
     expect(report).toContain('exit 1');
+    // The roll-up is still running while it reads the list; it does not measure itself.
+    expect(report).toContain('select(.name != "test")');
     // The slowest STEP is named, because "gates took 300s" is not something anyone can act on.
     expect(report).toContain('.steps[]');
-    expect(Number(jobs.timings.steps.at(-1).env.BUDGET_S)).toBeLessThanOrEqual(240);
-    // Never part of the merge gate itself: absent from the planner's job list and the roll-up's needs.
+    expect(Number(step.env.BUDGET_S)).toBeLessThanOrEqual(240);
+    // After the roll-up's verdict and before the tested tree is recorded: an over-budget pull request
+    // never leaves the artifact that IS the pass.
+    const at = (text) => jobs.test.steps.findIndex((candidate) => (candidate.run ?? '').includes(text));
+    expect(jobs.test.steps.indexOf(step)).toBeGreaterThan(at('scripts/ci/ci.mjs check'));
+    expect(jobs.test.steps.indexOf(step)).toBeLessThan(at('scripts/ci/ci.mjs record-tree'));
+    // Never a job of its own in the planner's list.
     expect(CI_JOBS).not.toContain('timings');
-    expect(jobs.test.needs).not.toContain('timings');
   });
 
   it('lints the workflows where a typo is cheap to find', () => {
