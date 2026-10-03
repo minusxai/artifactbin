@@ -132,13 +132,16 @@ server fetches it once, stores a copy, and serves it from this origin:
   `@font-face { src: url(https://…) }` in the document's own stylesheet.
 - `{ "imageUrl": … }`, `{ "pdfUrl": … }` or `{ "csvUrl": … }` on create, when
   you want the file to be an artifact with an id of its own.
-- `<meta name="font-display" content="Lobster" />` in `<Helmet>` — any
-  Google family, downloaded once, served from here.
 
-Nothing is ever hotlinked: readers never touch the origin host, documents
+Nothing imported is hotlinked: readers never touch the origin host, documents
 can't rot when it dies, and no reader's IP leaks to a third party. A URL that
 will not fetch is a warning on the publish reply, never a refused document —
 that one picture falls back to its alt text.
+
+Fonts named by `<meta name="font-display" content="Lobster" />` (also `font-body`,
+`font-mono`) in `<Helmet>` are not imported: the served stylesheet `@import`s Google
+Fonts, whose two hosts the document's policy admits (`lib/story/styles/document-csp.ts`).
+Bundled theme faces are served from this origin.
 
 The copy lives at `/assets/<sha256 of the URL>`, shared across every document
 and every user, so a popular URL is fetched exactly once. It is served

@@ -37,7 +37,7 @@ import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch'] as const;
 /** Public, content-addressed (or static) bytes any origin may load: the runtime, fonts, boundaries, images. */
-const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|webfonts|story|assets)\/|^\/favicon\.ico$/;
+const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$/;
 
 const NO_STORE = { 'cache-control': 'no-store' };
 

@@ -6,7 +6,7 @@
  * and belongs in the store's read cache. A PDF is neither: it is up to 25 MB,
  * it is read when a person opens it, and a whole read of one would both cost
  * its own size in memory for the life of the response and evict essentially
- * the entire 32 MB cache the datasets, ref images and webfonts depend on (both
+ * the entire 32 MB cache the datasets and ref images depend on (both
  * measured in the spike, S4). So the bytes go in with `put` and come out with
  * `getStream`, and this module is the only place that knows it.
  *

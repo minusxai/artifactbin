@@ -40,7 +40,6 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { lookupWebAssets } from '@/lib/serving/web-assets';
-import { webFontAssets } from '@/lib/webfonts';
 import { collectExternalAssetUrls } from '../assets/external-images';
 import { storedCompiledDataflow } from '../data/parsed-artifact-metadata';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
@@ -93,7 +92,7 @@ export interface PreparedPage {
   /** The stylesheet version (css-version.server) `css` was prepared under: the row's `css_version`, set when read. */
   cssVersion?: string | null;
 }
-interface PreparedDeps { datasets: string[]; assets: string[]; fonts: string[] }
+interface PreparedDeps { datasets: string[]; assets: string[] }
 
 /** What a request (never the document) decides about its render. */
 export interface ReaderContext {
@@ -147,7 +146,6 @@ async function fingerprint(deps: PreparedDeps): Promise<string> {
     const held = await lookupWebAssets(deps.assets);
     parts.push([...held.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([url, r]) => [url, r.object_key, r.width, r.height, r.placeholder, r.small_object_key, r.small_width]));
   }
-  if (deps.fonts.length) parts.push(await webFontAssets(deps.fonts));
   return parts.length ? sha(JSON.stringify(parts)) : '';
 }
 
@@ -243,7 +241,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: Retu
     css, overrides, base: parts.baseRecipe, authorCss: runtime.authorCss, authorScript: runtime.authorScript,
     theme: runtime.theme, title: runtime.title, fontPreloads: runtime.fontPreloads ?? [],
     lazyCode: lazyCodeOf(nodes), declared: declared ?? null,
-    deps: { datasets, assets: assetUrls, fonts: parts.docFonts.families },
+    deps: { datasets, assets: assetUrls },
   };
   // Only the version's compiled output is stored; request data is rendered by its pinned SSR module.
   const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '' });

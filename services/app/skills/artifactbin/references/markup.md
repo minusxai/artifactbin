@@ -99,11 +99,11 @@ names, npm libraries, exported components — [scripts](markup-scripts.md).
   --input --ring --radius --chart-1..5`, `--font-body --font-display --font-mono`.<!--/bundle:skip-->
 <!--bundle:skip-->
 - **Web fonts**: `<meta name="font-display" content="Lobster" />` (also
-  `font-body`, `font-mono`) names a Google family, served from this origin;
-  an unknown family fails the publish. An `@font-face` `url(https://…)` in
-  your `<style>` is imported the same way. Or load one the CSS way:
+  `font-body`, `font-mono`) names a Google family; the page imports it from
+  Google Fonts for you. Or write that
   `@import url(https://fonts.googleapis.com/css2?family=…)` at the top of
-  the style block.
+  the style block. An `@font-face` `url(https://…)` in your `<style>` is
+  imported the same way as an image.
 - **Other hosts**: `<meta name="csp-connect" content="https://api.x.com" />`, also
   `csp-script|style|img|media|frame`; readers are asked — [scripts](markup-scripts.md).
 <!--/bundle:skip-->

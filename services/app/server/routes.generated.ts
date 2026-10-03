@@ -120,7 +120,6 @@ import * as r116 from '@/app/health/route';
 import * as r117 from '@/app/llms.txt/route';
 import * as r118 from '@/app/people/[id]/route';
 import * as r119 from '@/app/tiles/[...tile]/route';
-import * as r120 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -244,5 +243,4 @@ export const ROUTES: RouteEntry[] = [
   { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r117 },
   { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r118 },
   { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r119 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r120 },
 ];

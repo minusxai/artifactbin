@@ -1,13 +1,10 @@
 import {fixtureFetch as fetch} from './fixture-http.mjs';
-/** Font-family resolution and the editor URL-import door share the asset gate's fixture/browser. */
+/** The font metas and the editor URL-import door share the asset gate's fixture/browser. */
 import { startDocument, becomeOwner } from '../../lib/start-doc.mjs';
 
 export async function checkWebImport(B, browser, WEB, ok) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
-  // ── a Google font names a family; the reader must never reach gstatic ───────
-  const gstatic = [];
-  page.on('request', (r) => { if (/gstatic|googleapis/.test(r.url())) gstatic.push(r.url()); });
-
+  // ── a Google font names a family; the document's own font sheet imports it ─
   const fontDoc = await startDocument(B);
   // The combined asset fixture also exercises normalization. Check the
   // no-rewrite response on the original simple image shape, then reuse this
@@ -31,22 +28,28 @@ export async function checkWebImport(B, browser, WEB, ok) {
       markup: '<Helmet><meta name="font-display" content="Lobster" /></Helmet><div className="p-8"><h1 id="h" className="text-5xl font-bold">Lobster headline</h1></div>',
     }),
   });
+  ok(fontPut.status === 200, `a font meta publishes without fetching anything (${fontPut.status})`);
   if (fontPut.status === 200) {
     await page.goto(`${B}/a/${fontDoc.id}`, { waitUntil: 'load' });
-    await page.waitForTimeout(2500);
-    const family = await page.evaluate(() => {
-      const h = document.querySelector('#h');
-      return h ? getComputedStyle(h).fontFamily : '';
-    });
-    ok(/Lobster/.test(family), `the heading asks for the imported family (${family})`);
-    const faces = await page.evaluate(() => [...document.querySelectorAll('style')]
-      .map((s) => s.textContent ?? '').join('\n').match(/\/webfonts\/[0-9a-f]{32}\.woff2/g)?.length ?? 0);
-    ok(faces > 0, `its @font-face rules point at THIS origin (${faces} face(s))`);
-    ok(gstatic.length === 0, `the reader made NO request to Google (${gstatic.length})`);
-  } else {
-    // A deployment with no outbound access to Google cannot resolve the family;
-    // say so rather than failing a gate about OUR behaviour.
-    console.log(`   (skipped the font leg: the deployment could not resolve the family — ${fontPut.status})`);
+    // The document renders in the app page or, on a pages server, in its own-origin frame.
+    let read = null;
+    for (let i = 0; i < 40 && !read; i++) {
+      for (const frame of page.frames()) {
+        read = await frame.evaluate(() => {
+          const h = document.querySelector('#h');
+          if (!h) return null;
+          return { family: getComputedStyle(h).fontFamily };
+        }).catch(() => null);
+        if (read) break;
+      }
+      if (!read) await page.waitForTimeout(250);
+    }
+    ok(/Lobster/.test(read?.family ?? ''), `the heading asks for the named family (${read?.family})`);
+    // The served document's own font sheet, whichever surface the app page draws it in.
+    const raw = await (await fetch(`${B}/a/${fontDoc.id}/raw`, { headers: { Authorization: `Bearer ${fontDoc.token}` } })).text();
+    ok(/<style data-mx-font-vars>@import url\(https:\/\/fonts\.googleapis\.com\/css2\?family=Lobster:/.test(raw),
+      'the served font sheet opens with the Google Fonts import');
+    ok(!raw.includes('/webfonts/'), 'no face is served from a copied /webfonts address');
   }
 
   // ── the HUMAN door: the editor's insert-image popover takes a URL ───────────

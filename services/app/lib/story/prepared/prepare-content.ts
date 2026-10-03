@@ -9,7 +9,7 @@ export interface PreparedContent {
   objects: PreparedObject[];
   markup?: PreparedMarkup;
 }
-type PreparationContext = Omit<ContentInputCtx, 'objects' | 'importAsset' | 'resolveFont' | 'prepareMarkup'>;
+type PreparationContext = Omit<ContentInputCtx, 'objects' | 'importAsset' | 'prepareMarkup'>;
 
 /** No publication effects: bytes live only in this request's private plan. */
 export async function prepareContentInput(body: Record<string, unknown>, ctx: PreparationContext = {}, options: {allowRemoteInputs?: boolean} = {}): Promise<PreparedContent | Response> {
@@ -32,7 +32,7 @@ export async function prepareContentInput(body: Record<string, unknown>, ctx: Pr
 }
 
 /** The only persistent half of a prepared publication. */
-export async function applyPreparedContent(prepared: PreparedContent, effects: Pick<ContentInputCtx, 'importAsset' | 'resolveFont'> = {}): Promise<StoredContent | Response> {
+export async function applyPreparedContent(prepared: PreparedContent, effects: Pick<ContentInputCtx, 'importAsset'> = {}): Promise<StoredContent | Response> {
   const content = prepared.markup ? await applyPreparedJsx(prepared.markup, effects) : prepared.content;
   if (content instanceof Response) return content;
   for (const object of prepared.objects) await objectStore().put(object.key, object.bytes, object.contentType);

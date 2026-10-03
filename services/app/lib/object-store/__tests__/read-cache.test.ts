@@ -1,10 +1,10 @@
 /**
  * ONE CACHE, AT THE LAYER THE BYTES COME FROM.
  *
- * Every key this app reads is IMMUTABLE — content-addressed (`dataset/`,
- * `image/`, `webfont/` are `kind/sha256`) or addressed by an allocated
+ * Every key this app reads is IMMUTABLE — content-addressed (`dataset/` and
+ * `image/` are `kind/sha256`) or addressed by an allocated
  * immutable id (`exports/objects/<id>.<ext>`). So the store itself is where a read cache
- * belongs: one place, serving datasets, ref images, webfonts and export bytes
+ * belongs: one place, serving datasets, ref images and export bytes
  * alike, rather than a separate cache per caller (which is how a dataset-only
  * cache would have grown into four).
  *
@@ -12,7 +12,7 @@
  * three from S3 on EVERY render and every `/query` — 3.6s to first byte, and
  * `select 1` through the document's own transport at 4.5s.
  *
- * The bound is BYTES, not entries: these range from a 2 KB webfont to a 27 MB
+ * The bound is BYTES, not entries: these range from a 2 KB image to a 27 MB
  * sheet, so counting entries bounds nothing.
  */
 import { describe, expect, it, beforeEach } from 'vitest';

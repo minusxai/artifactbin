@@ -22,7 +22,8 @@
  *     ships one; `not-italic` undoes it.
  * Each slot resolves to the document's own `font-*` meta (lib/story/styles/document-fonts)
  * or the theme's family; a themeless document paints the system stacks. Only
- * the latin file is named — the other subsets are unicode-range lazy.
+ * a bundled family is preloaded, and only its latin file — the other subsets are
+ * unicode-range lazy, and a Google family's files are named by its own stylesheet.
  *
  * Text a first screen does not render is not counted: `hidden`, Helmet head
  * content, a conditional branch, and the closed parts of a disclosure (a tab
@@ -42,8 +43,6 @@ export interface FirstScreenFontsInput {
   nodes: JsxNode[];
   /** The document's `font-*` metas — each replaces its slot's family. */
   docFonts?: DocumentFonts;
-  /** The imported families' faces (lib/webfonts), already resolved. */
-  importedFaces?: readonly StoryFontAsset[];
 }
 
 /**
@@ -143,17 +142,12 @@ function familyFor(slot: Slot, theme: string | null | undefined, docFonts?: Docu
   return slot === 'mono' ? (t.fonts.mono ?? t.fonts.body) : t.fonts[slot];
 }
 
-/** The latin file a family paints a style in: its italic where it ships one, else the upright (a synthesized slant). */
-function latinFace(family: string, style: Style, importedFaces: readonly StoryFontAsset[]): StoryFontAsset | null {
-  const bundled = STORY_FAMILY_ASSETS[family];
-  if (bundled) {
-    const upright = bundled.find((a) => a.preload === true);
-    if (!upright) return null;
-    if (style === 'italic') return bundled.find((a) => a.style === 'italic' && a.unicodeRange === upright.unicodeRange) ?? upright;
-    return upright;
-  }
-  // An imported family is copied with its latin upright flagged (lib/webfonts).
-  return importedFaces.find((a) => a.family === family && a.preload === true) ?? null;
+/** The latin file a bundled family paints a style in: its italic where it ships one, else the upright (a synthesized slant). */
+function latinFace(family: string, style: Style): StoryFontAsset | null {
+  const upright = STORY_FAMILY_ASSETS[family]?.find((a) => a.preload === true);
+  if (!upright) return null;
+  if (style === 'italic') return STORY_FAMILY_ASSETS[family]!.find((a) => a.style === 'italic' && a.unicodeRange === upright.unicodeRange) ?? upright;
+  return upright;
 }
 
 function facesFor(pairs: Iterable<`${Slot}:${Style}`>, input: Omit<FirstScreenFontsInput, 'nodes'>): StoryFontAsset[] {
@@ -161,7 +155,7 @@ function facesFor(pairs: Iterable<`${Slot}:${Style}`>, input: Omit<FirstScreenFo
   for (const pair of pairs) {
     const [slot, style] = pair.split(':') as [Slot, Style];
     const family = familyFor(slot, input.theme, input.docFonts);
-    const face = family ? latinFace(family, style, input.importedFaces ?? []) : null;
+    const face = family ? latinFace(family, style) : null;
     if (face && !faces.has(face.url)) faces.set(face.url, face);
   }
   return [...faces.values()];
@@ -177,7 +171,10 @@ export function firstScreenFonts(input: FirstScreenFontsInput): StoryFontAsset[]
  * paints: its labels are set in the mono slot (lib/story-runtime/chrome-css),
  * upright. Only /raw draws that chrome; the app page draws its own.
  */
-export function readerChromeFonts(input: Omit<FirstScreenFontsInput, 'nodes'>): StoryFontAsset[] {
+export function readerChromeFonts(input: Omit<FirstScreenFontsInput, 'nodes'> & {
+  /** Ignored: retained only until lib/serving/artifact-page stops passing it (a contract request). */
+  importedFaces?: unknown;
+}): StoryFontAsset[] {
   return facesFor(['mono:normal'], input);
 }
 

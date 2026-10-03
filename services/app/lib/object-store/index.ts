@@ -64,7 +64,7 @@ export interface ObjectStore {
    * The bytes as a STREAM — nothing buffered whole, nothing cached.
    *
    * `get` is the right read for everything the cache below exists for: a
-   * dataset, a ref image, a webfont are each read many times and are small
+   * dataset and a ref image are each read many times and are small
    * enough to hold. A PDF is neither. Measured in the spike: one 25 MB object
    * through `get` is +25 MB of RSS for the life of the response, and it would
    * be admitted to a 32 MB cache — evicting essentially everything the rest of
@@ -85,9 +85,9 @@ export interface ObjectStore {
  * THE ONE READ CACHE, AND IT BELONGS HERE.
  *
  * Every key this app reads is IMMUTABLE: content-addressed (`kind/sha256` for
- * datasets, ref images and webfonts) or version-addressed
+ * datasets and ref images) or version-addressed
  * (export objects use allocated immutable IDs). So caching at the STORE serves every reader —
- * the document build, `/query`, mutate, the `ref:` image route, `/webfonts`
+ * the document build, `/query`, mutate, the `ref:` image route —
  * instead of one cache per caller, which is how a
  * dataset-only cache becomes four caches nobody can reason about.
  *
@@ -100,7 +100,7 @@ export interface ObjectStore {
  * again rather than being wrong until restart. A WRITE or DELETE forgets the
  * key, so the immutability above is a reason this is cheap, not a rule the
  * cache depends on. The budget is in BYTES, because these range from a 2 KB
- * webfont to a 27 MB sheet and counting entries would bound nothing.
+ * image to a 27 MB sheet and counting entries would bound nothing.
  */
 const READ_CACHE_BYTES = 32 * 1024 * 1024;
 

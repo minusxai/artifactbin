@@ -410,7 +410,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // The one app origin that frames this copy, for the frame side of the app bridge (brief B).
           ...(pages ? { appOrigin: pages.site.app } : {}),
           chrome: reader && !fragment ? await rawChrome(artifact, actor, at, design.colorMode ?? prepared.page.data.colorMode) : null,
-          chromeFonts: reader && !fragment ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url) : [],
+          chromeFonts: reader && !fragment ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts }).map((face) => face.url) : [],
           spa: null,
           // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
           // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
@@ -433,7 +433,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // page's story carries its one isolated sheet instead (the assembler's `css`).
           sheets: appStory ? null : documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,
-            importedFaces: prepared.page.base.faces, docFonts: prepared.page.base.fonts, authorCss: prepared.page.authorCss,
+            docFonts: prepared.page.base.fonts, authorCss: prepared.page.authorCss,
           }),
         });
         if (answer.mode === 'compiled') {
