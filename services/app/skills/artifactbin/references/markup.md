@@ -82,8 +82,8 @@ Write it anywhere; it is hoisted to the top when stored.
 </Helmet>
 ```
 
-The `<script>` is an ES module in the document: Preact signals over the
-declared names, npm libraries, exported components — [scripts](markup-scripts.md).
+The `<script>` is an ES module in the document: Solid bound to the declared
+names, npm libraries, exported components — [scripts](markup-scripts.md).
 
 - **Custom CSS lives in that `<style>` block**; an inline `style={{…}}` is fine
   for a one-off. Scope rules to your own class names (bare element selectors

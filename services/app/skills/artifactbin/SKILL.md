@@ -20,7 +20,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - Local files: `afbin add <files> --json` assigns reference IDs; preview/push auto-register named files. Push runs `afbin validate` and publishes unpublished IDs.
 - Every body element has a persistent `id` for its lifetime. Move it with the same id; never reuse an id.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
-- Markup for content, data and layout: the kit covers text, data, charts, tables, controls and motion. The Helmet `<script>` (Preact + signals, any npm library) for behaviour; its exported components mount by name.
+- Markup for content, data and layout: the kit covers text, data, charts, tables, controls and motion. The Helmet `<script>` (Solid, any npm library) for behaviour; its exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Another artifact is a deliberate fork: copy the file and remove those five fields.
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the theme carries the palette.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.

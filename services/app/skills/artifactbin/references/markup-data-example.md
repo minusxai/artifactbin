@@ -206,7 +206,7 @@ await page.goto('/a/<copy-id>');
 await page.waitForFunction(() => Boolean(window.page));
 await page.getByRole('button', {name: '09:00', exact: true}).click();
 await page.getByRole('button', {name: 'Cancel 09:00', exact: true}).waitFor();
-return await page.evaluate(() => window.page.query('mine').ready);
+return await page.evaluate(() => window.page.ready('mine'));
 ```
 
 ```sh

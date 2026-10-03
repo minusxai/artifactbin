@@ -2,14 +2,16 @@
 
 A browser session drives a public artifact page through `window.page`, which
 the island boot (`lib/islands/boot.ts`) installs on a top-level page that
-declares data, while it reads. It is the page runtime's bindings
-(`lib/islands/page-runtime.ts` `bindPage`), the very Preact signals the page's
-own `<Helmet>` script imports from `page`: `value(name)` is a writable signal for
-a scalar Value, `query(name)` the read-only rows of a Query or table Value (with
-`loading`, `error` and `ready`), `mutation(name)` an async function that resolves
-after commit and rejects with the server's message, and `signal(name)` either.
-Editing removes it and reading again restores it. There is no cached read API
-and no subscription API beside the signals.
+declares data, while it reads. It reads and writes the page runtime's bindings
+(`lib/islands/page-runtime.ts` `bindPage`, `exposePage`), the very Solid signals
+the page's own `<Helmet>` script binds from `page`, as plain data: `get(name)` is
+a Value's current value or a Query's (or table Value's) current rows, `set(name,
+value)` writes a scalar Value (queries re-run), `ready(name)` a Query's next
+settled rows, and `mutation(name)` an async function that waits for the page's
+access check, resolves after commit and rejects with the server's message. An
+undeclared name gives `undefined` (`set` and `ready` throw). Editing removes it
+and reading again restores it. There is no cached read API and no subscription
+API beside the signals.
 
 The session service owns authentication scope, leases, execution receipts, and
 script serialization. Each isolated worker owns an actual Playwright browser,
@@ -31,8 +33,8 @@ afbin sessions close SESSION_ID --json
 const page = await context.newPage();
 await page.goto('/a/abc123');
 await page.waitForFunction(() => Boolean(window.page));
-await page.evaluate(() => { window.page.value('region').value = 'West'; });
-const rows = await page.evaluate(() => window.page.query('sales').ready);
+await page.evaluate(() => { window.page.set('region', 'West'); });
+const rows = await page.evaluate(() => window.page.ready('sales'));
 await output.image(await page.screenshot());
 return rows;
 ```

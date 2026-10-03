@@ -18,7 +18,7 @@ describe('the installed short skill',()=>{
   * CONTENT of that first push, not the encouragement.
   *
   * The second bullet splits the work: markup carries content, data and layout, and the Helmet
-  * script (Preact + signals, any npm library) carries behaviour, its exported components mounted
+  * script (Solid, any npm library) carries behaviour, its exported components mounted
   * by name. Both are asserted on the BULLET, not the page, so a stray sentence elsewhere cannot
   * satisfy them, and on the shipped `teaching.json` too — the generated bundle is the copy the CLI
   * actually hands an agent.
@@ -44,7 +44,7 @@ describe('the installed short skill',()=>{
   expect(fewTurns.length).toBeLessThan(600);
   const native=bullet('- Markup for content, data and layout');
   expect(native).toBeDefined();
-  for(const text of ['text, data, charts, tables, controls and motion','Helmet `<script>`','Preact + signals','any npm library','for behaviour','its exported components mount by name'])expect(native).toContain(text);
+  for(const text of ['text, data, charts, tables, controls and motion','Helmet `<script>`','(Solid, any npm library)','any npm library','for behaviour','its exported components mount by name'])expect(native).toContain(text);
   // The managed frame is gone: the brief must not send an agent to it.
   expect(sheet).not.toContain('<Iframe>');
   // The bundle the CLI ships carries the same two bullets: a copy edit without

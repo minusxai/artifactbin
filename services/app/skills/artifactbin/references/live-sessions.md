@@ -58,9 +58,9 @@ scripts, including inspection and recovery after an ordinary script error.
 const page = await context.newPage();
 await page.goto('/a/abc123'); // a URL, not a filesystem path
 await page.waitForFunction(() => Boolean(window.page));
-// Assigning window.count sets nothing: the declared signal is window.page.value('count').
-await page.evaluate(() => { window.page.value('count').value = 2; });
-return await page.evaluate(() => window.page.query('results').ready);
+// Assigning window.count sets nothing: the declared Value is window.page.set('count', …).
+await page.evaluate(() => { window.page.set('count', 2); });
+return await page.evaluate(() => window.page.ready('results'));
 ```
 
 An OLDER version is the same address plus `?version=N`:
@@ -81,20 +81,19 @@ Independent operations may use `await Promise.all([...])`; scripts in one sessio
 run sequentially. Playwright functions passed to `page.evaluate()` run in the page:
 pass outer variables as its argument, not through closures.
 
-`window.page` holds the declared names as the Preact signals the page's own
-script imports from `page` ([scripts](markup-scripts.md)):
+`window.page` reads and writes the declared names, the same signals the page's
+own script binds from `page` ([scripts](markup-scripts.md)), as plain data:
 
 ```js
-window.page.value('count').value;          // a Value: read it
-window.page.value('count').value = 3;      // write it; queries re-run
-window.page.query('results').value;        // a Query or table Value: its rows
-await window.page.query('results').ready;  // the next settled rows
+window.page.get('count');                  // a Value: read it
+window.page.set('count', 3);               // write it; queries re-run
+window.page.get('results');                // a Query or table Value: its rows
+await window.page.ready('results');        // the next settled rows
 await window.page.mutation('save')({count: 3});  // resolves after commit
-window.page.signal('results');             // either, by name
 ```
 
-Call these inside `page.evaluate()` and return plain data, never a signal. An
-undeclared name gives `undefined`. Wait for `window.page` after navigation; a
+Call these inside `page.evaluate()`. An undeclared name gives `undefined`
+(`set` and `ready` throw). Wait for `window.page` after navigation; a
 page that declares nothing has none. On a script error, resume the existing page
 IDs; opening another loses continuity. Write a recovery script that uses those
 pages; do not rerun the original script just to inspect its result.
@@ -127,14 +126,14 @@ return await page.locator('body').ariaSnapshot();
 The kit's `<Select label="Region">` is a button with a listbox, not an HTML
 `<select>`. The example below assumes the label is exactly Region; use the
 accessible name from the snapshot. To change a known scalar directly,
-`page.evaluate(() => { window.page.value('region').value = 'West'; })` needs no
+`page.evaluate(() => { window.page.set('region', 'West'); })` needs no
 locator. To exercise the UI:
 
 ```js
 const [page] = context.pages();
 await page.getByRole('button', {name: 'Region', exact: true}).click();
 await page.getByRole('option', {name: 'West', exact: true}).click();
-return await page.evaluate(() => window.page.value('region').value);
+return await page.evaluate(() => window.page.get('region'));
 ```
 
 A script error preserves pages. A timeout that destroys the worker returns
@@ -157,7 +156,7 @@ await page.goto('/a/abc123');
 await page.getByLabel('Amount').fill('48.50');
 await page.getByRole('button', {name: 'Add expense'}).click();
 await page.waitForFunction(() => Boolean(window.page));
-const after = await page.evaluate(() => window.page.query('tab').ready);
+const after = await page.evaluate(() => window.page.ready('tab'));
 if (!after.length) await output.image(await page.screenshot());
 return after;
 ```

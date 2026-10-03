@@ -64,11 +64,11 @@ not executable inline script, and author strings never become generated code.
 
 The author script runs in the document itself, inside that opaque origin. It
 is built into an ES module at publish (`lib/story/document/author-module.server.ts`:
-JSX to Preact, bare npm names to `https://esm.sh/<name>`), carried as data in
+Solid JSX to DOM code, bare npm names to `https://esm.sh/<name>`), carried as data in
 the page's JSON island, and loaded by the page runtime
-(`lib/islands/page-runtime.ts`) from a `blob:` URL, with its `preact` and
-`@preact/signals` imports pointed at the page's own build. Its `page` module
-exposes only the declared names: Values and Queries as signals over the page's
+(`lib/islands/page-runtime.ts`) from a `blob:` URL, with its `solid-js`
+imports pointed at the page's own build (the kit's one Solid). Its `page` module
+binds only the declared names: Values and Queries as signals over the page's
 store, Mutations through the same permission-checked `/mutate` door as the
 kit's controls. Account APIs, cookies and the app's storage stay out of reach.
 There is no author frame and no managed `<Iframe>`.

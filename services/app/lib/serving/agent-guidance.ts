@@ -80,7 +80,7 @@ export const MARKUP_FIELD_GUIDANCE = [
   'Static JSX document. Markup for content, data and layout (kit layouts, charts, controls, conditions, Dialog); the Helmet <script> for behaviour.',
   MARKUP_STYLE_RULE,
   'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
-  'onClick= is rejected; inline style= is allowed. ONE <Helmet> holds <style> and a <script>: an ES module in the document, declared names imported from page as Preact signals.',
+  'onClick= is rejected; inline style= is allowed. ONE <Helmet> holds <style> and a <script>: an ES module in the document, declared names bound as Solid signals with signal/query/mutation from page.',
   'Read `afbin help markup` or the installed references/markup.md first.',
   'Data: <Import name="d" src="ref:<id>" /><Query name="q">{`select … from d.rows`}</Query> (SQLite) in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',

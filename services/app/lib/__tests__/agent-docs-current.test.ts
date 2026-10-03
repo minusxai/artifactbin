@@ -85,7 +85,7 @@ describe('the reference teaches what a document CAN do', () => {
 });
 
 /**
- * The Helmet script runs IN the document as an ES module over Preact signals: the hidden author
+ * The Helmet script runs IN the document as an ES module on the kit's Solid: the hidden author
  * frame, its `mx` API and the managed `<Iframe>` are gone, and authored CSS is no longer stripped.
  * The scripts reference teaches the contract the page runtime implements, and its example must
  * clear the same door an agent's push does (module build, mount validation, second-save identity).
@@ -96,13 +96,20 @@ describe('the scripts reference teaches the in-document module', () => {
 
   it('names the page module, the import table, the ownership rule and the trap', () => {
     for (const text of [
-      "from 'page'", '`@preact/signals`', '`preact`, `preact/hooks`', '`react`, `react-dom` | `preact/compat`',
+      "import { signal, query, mutation } from 'page'", "signal('$region')", "query('$monthly')", "mutation('$bump')",
+      '`solid-js`', '`solid-js/web`', '`solid-js/store`', "The three `solid-js` specifiers are the page's own Solid, the kit's instance",
       'https://esm.sh/<name>', 'Relative imports do not exist', 'invalid_script',
       'a node bound in markup (`value="$region"`, `{$clicks}`, `data="$monthly"`) changes through its signal; every other node the script may touch freely',
-      'reading `.value` outside an `effect`', 'is a one-time copy and subscribes to nothing',
-      'monthly.loading.value', 'monthly.error.value', 'await monthly.ready',
+      'reading `region()` outside an effect, a memo or JSX is a one-time copy and subscribes to nothing', 'So is destructuring `props`',
+      'monthly.loading()', 'monthly.error()', 'await monthly.ready', '`createSignal(\'$region\')` (a local signal bound to nothing)',
+      'const item = () => props.item[0];',
+      'props.item is the current rows array (tracked; read it inside JSX, a memo or an effect), not a function; a literal prop such as color is a plain value',
       "import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'",
     ]) expect(flat, text).toContain(text);
+  });
+
+  it('teaches no part of the retired Preact contract', () => {
+    expect(scripts).not.toMatch(/preact|@preact\/signals|\.value\b|\beffect\(|useState|from 'react'/i);
   });
 
   it('teaches no part of the retired frame API', () => {
