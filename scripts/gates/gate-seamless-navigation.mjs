@@ -35,9 +35,9 @@ try {
   const page = await browser.newPage();
   const doc = () => documentLocator(page);
   const heading = (name) => doc().getByRole('heading', { name, exact: true });
-  const seen = (locator, timeout = 6_000) => locator.waitFor({ timeout }).then(() => true, () => false);
+  const seen = (locator, timeout = 5_000) => locator.waitFor({ timeout }).then(() => true, () => false);
   const onApp = (pathname) => { const url = new URL(page.url()); return url.origin === new URL(base).origin && url.pathname === pathname; };
-  const viewReport = (id, timeout = 5_000) => page.waitForResponse((response) =>
+  const viewReport = (id, timeout = 3_000) => page.waitForResponse((response) =>
     new URL(response.url()).pathname === `/api/page/artifact/${id}/view` && response.request().method() === 'POST', { timeout })
     .then((response) => response.status(), () => null);
 
@@ -56,8 +56,9 @@ try {
 
   // ── a link inside the document takes the tab to the next document's app page ──
   const nextView = viewReport(second.id);
+  const fromA = page.url();
   await doc().getByRole('link', { name: 'Next artifact' }).click();
-  await page.waitForLoadState('load').catch(() => {});
+  await page.waitForURL((url) => url.href !== fromA, { timeout: 10_000 }).catch(() => {});
   const reachedB = await seen(heading('Artifact B'));
   check(onApp(`/a/${second.id}`) && reachedB, `a document link opens the next document's app page (${page.url()})`);
   const nextStatus = await nextView;
@@ -69,7 +70,7 @@ try {
   if (!reachedB) { await page.goto(`${base}/a/${second.id}`); await seen(heading('Artifact B'), 20_000); }
 
   await doc().getByRole('link', { name: 'Go home' }).click();
-  await page.waitForURL(`${base}/login`, { timeout: 6_000 }).catch(() => {});
+  await page.waitForURL(`${base}/login`, { timeout: 3_000 }).catch(() => {});
   check(onApp('/login') && await seen(page.getByRole('textbox', { name: 'Email', exact: true })), `a document link to / takes the tab to the app's home (${page.url()})`);
   await page.goBack();
   check(await seen(heading('Artifact B')), 'Back returns to the second document');

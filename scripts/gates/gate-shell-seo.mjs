@@ -3,8 +3,8 @@
  *
  * What only a browser (and a raw fetch) can prove:
  *   1. a session-less fetch of /a/<id> — a crawler — gets html carrying the
- *      document's text (the app page names the document in its head and carries
- *      its page data; the document itself renders in its frame on its own origin)
+ *      document's text in its MARKUP, not only in page data a script reads (the
+ *      document itself renders in its frame on its own origin)
  *   2. the same html carries the unfurl tags (title + og:image)
  *   3. it is the SAME markup for everyone — no user-agent branch
  *   4. a reader with JS DISABLED still reads the document (the frame the server
@@ -46,21 +46,9 @@ const doc = await publish({
 });
 console.log(`   doc: ${BASE}/a/${doc.id}`);
 
-// 1 + 2. What a crawler fetches: no JS, no browser, no session — the document.
-const pageHtml = await (await fetch(`${BASE}/a/${doc.id}`)).text();
-check(pageHtml.includes(PHRASE), "what a crawler fetches carries the document's text");
-check(pageHtml.includes('Crawlable heading'), 'and its heading');
-check(/<title>[^<]*Crawlable doc/.test(pageHtml), 'the page title is the document title');
-check(pageHtml.includes(`/a/${doc.id}/export`), 'og:image points at the export card');
-check(/property="og:title"|name="og:title"/.test(pageHtml), 'og:title is present');
-
-// 3. Same markup for everyone: a "crawler" user-agent gets byte-identical html.
-const asBot = await (await fetch(`${BASE}/a/${doc.id}`, {
-  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-})).text();
-// Compare the MARKUP, not the framework payload: the <script> tags carry
-// per-request state that differs between any two fetches — including two by
-// the same agent.
+// The MARKUP, not the framework payload: the <script> tags carry per-request
+// state that differs between any two fetches — including two by the same
+// agent — and a crawler indexes the page's markup, not its page data.
 //
 // Scanned, not regexped, and NOT a sanitizer: this drops script elements from
 // two responses so the rest can be compared. A regexp of this shape reads as
@@ -83,6 +71,19 @@ const dropScripts = (h) => {
   }
 };
 const strip = (h) => dropScripts(h).replace(/\s+/g, ' ').trim();
+
+// 1 + 2. What a crawler fetches: no JS, no browser, no session — the document.
+const pageHtml = await (await fetch(`${BASE}/a/${doc.id}`)).text();
+check(strip(pageHtml).includes(PHRASE), "what a crawler fetches carries the document's text (in its markup, not only its page data)");
+check(strip(pageHtml).includes('Crawlable heading'), 'and its heading');
+check(/<title>[^<]*Crawlable doc/.test(pageHtml), 'the page title is the document title');
+check(pageHtml.includes(`/a/${doc.id}/export`), 'og:image points at the export card');
+check(/property="og:title"|name="og:title"/.test(pageHtml), 'og:title is present');
+
+// 3. Same markup for everyone: a "crawler" user-agent gets byte-identical html.
+const asBot = await (await fetch(`${BASE}/a/${doc.id}`, {
+  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+})).text();
 check(strip(asBot) === strip(pageHtml), 'a crawler UA gets the same page — nothing is cloaked');
 
 const browser = await launchChromium();
