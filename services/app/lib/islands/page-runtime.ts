@@ -124,7 +124,7 @@ const BIND_ATTR = 'data-mx-bind';
 type ComponentModule = Record<string, unknown>;
 
 function mountComponents(root: ParentNode, mod: ComponentModule, bindings: PageBindings): () => void {
-  const mounted: Element[] = [];
+  const mounted: Array<[Element, ChildNode[]]> = [];
   for (const el of root.querySelectorAll(`[${MOUNT_ATTR}]`)) {
     const name = el.getAttribute(MOUNT_ATTR) ?? '';
     const component = mod[name];
@@ -137,12 +137,14 @@ function mountComponents(root: ParentNode, mod: ComponentModule, bindings: PageB
       const sig = bindings.signal(declared);
       if (sig) props[prop] = sig; else console.error(`[page] <${name} ${prop}> binds $${declared}, which is not declared`);
     }
-    // The server-rendered children were the fallback; the component replaces them rather than being diffed against them.
+    // The server-rendered children are the fallback: kept aside while the component renders, put back when it
+    // unmounts (edit mode stops the script), so the mount never shows as a hole.
+    const fallback = [...el.childNodes];
     el.replaceChildren();
     render(h(component as ComponentType<Record<string, unknown>>, props), el);
-    mounted.push(el);
+    mounted.push([el, fallback]);
   }
-  return () => { for (const el of mounted) if (el.isConnected) render(null, el); };
+  return () => { for (const [el, fallback] of mounted) if (el.isConnected) { render(null, el); el.replaceChildren(...fallback); } };
 }
 
 export interface AuthorModuleStart {
