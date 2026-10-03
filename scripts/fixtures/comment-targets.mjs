@@ -31,7 +31,7 @@ export const commentTargetsMarkup = `<Helmet>
   </section>
   <section className="space-y-3">
     <h2 className="text-2xl font-semibold">2. Try the lifecycle</h2>
-    <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+    <ol id="lifecycle" className="list-decimal pl-6 space-y-2 text-muted-foreground">
       <li>Open comments and select a repeated card and a table cell.</li>
       <li>Save a comment, then hover its sidebar entry to highlight the matching content.</li>
       <li>Reorder and rebuild. The comment should stay with the same item.</li>

@@ -116,24 +116,6 @@ try {
   await cardText.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());
 
 
-  // Real pointer drag over a static node, then ensure the composer remains above app content.
-  const intro=page.locator('#intro');
-  await select();
-  await page.getByRole('button',{name:'Screenshot',exact:true}).click();
-  await expect(page.getByRole('status',{name:'Screenshot tool active'})).toHaveText(/drag an area/);
-  await intro.scrollIntoViewIfNeeded();
-  const bounds=await intro.boundingBox();assert(bounds);
-  await page.mouse.move(bounds.x+4,bounds.y+4);await page.mouse.down();
-  await page.mouse.move(bounds.x+Math.min(120,bounds.width-4),bounds.y+Math.min(20,bounds.height-2),{steps:8});
-  await page.mouse.up();
-  const composer=page.getByLabel('Annotation composer',{exact:true});await composer.waitFor();
-  assert(await composer.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(el.getRootNode().elementFromPoint(r.x+r.width/2,r.y+r.height/2));}));
-  await save('A drawn markup area');
-  const areaComment=(await annotations()).find(item=>item.thread[0].body==='A drawn markup area');
-  assert.equal(areaComment.range.kind,'area');
-  console.log('PASS area selection with parent composer layering');
-  if(await page.getByRole('button',{name:'Close comments',exact:true}).isVisible())await page.getByRole('button',{name:'Close comments',exact:true}).click();
-
   const unkeyed=page.locator('#index-cards');
   const unkeyedAlice=unkeyed.locator('p').filter({hasText:'Alice Chen'}).first();
   await select();await unkeyedAlice.click();await save('Unkeyed list owner comment');
@@ -164,6 +146,23 @@ try {
   await page.reload();await expect(page.locator('#index-cards')).toHaveAttribute('data-mx-annotated','');
   await expect(page.locator('#index-cards [data-mx-comment-target], #index-cards [data-mx-annotated]')).toHaveCount(0);
   console.log('PASS optional For keys render by index and persist only owner-level comments across reorder/reload');
+
+  // Real pointer drag over a static node, then ensure the composer remains above app content.
+  const intro=page.locator('#lifecycle');
+  await select();
+  await page.getByRole('button',{name:'Screenshot',exact:true}).click();
+  await expect(page.getByRole('status',{name:'Screenshot tool active'})).toHaveText(/drag an area/);
+  await intro.scrollIntoViewIfNeeded();
+  const bounds=await intro.boundingBox();assert(bounds);
+  await page.mouse.move(bounds.x+4,bounds.y+4);await page.mouse.down();
+  await page.mouse.move(bounds.x+Math.min(120,bounds.width-4),bounds.y+Math.min(20,bounds.height-2),{steps:8});
+  await page.mouse.up();
+  const composer=page.getByLabel('Annotation composer',{exact:true});await composer.waitFor();
+  assert(await composer.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(el.getRootNode().elementFromPoint(r.x+r.width/2,r.y+r.height/2));}));
+  await save('A drawn markup area');
+  const areaComment=(await annotations()).find(item=>item.thread[0].body==='A drawn markup area');
+  assert.equal(areaComment.range.kind,'area');
+  console.log('PASS area selection with parent composer layering');
 
   await context.close();
 
