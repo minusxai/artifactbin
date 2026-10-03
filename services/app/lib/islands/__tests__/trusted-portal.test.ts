@@ -7,11 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { trustedPortalOf } from '../trusted-portal';
 import { createIslandRuntime } from '../rt';
 import { createDataflowStore } from '@/lib/story-runtime/store';
+import { createTrustedOverlayHost } from '@/lib/story-runtime/trusted-overlay-host';
 
-/** The structure TrustedUi's `attach` builds. */
-function trustedUi(): HTMLElement {
+/** The structure TrustedUi's `attach` builds (a layered overlay's host names its layer). */
+function trustedUi(layer?: string): HTMLElement {
   const host = document.createElement('div');
   host.setAttribute('data-trusted-ui', '');
+  if (layer) host.setAttribute('data-trusted-layer', layer);
   const shadow = host.attachShadow({ mode: 'open' });
   const root = document.createElement('div');
   root.setAttribute('data-trusted-ui-root', '');
@@ -37,6 +39,22 @@ describe('trustedPortal', () => {
     expect(rt.context.trustedPortal()).toBeNull();
     const portal = trustedUi();
     expect(rt.context.trustedPortal()).toBe(portal);
+  });
+
+  it('answers the navigation layer by name, not the first trusted root in the page (the consent bar\'s, above the frame)', () => {
+    trustedUi();
+    trustedUi('discussion');
+    const navigation = trustedUi('navigation');
+    expect(trustedPortalOf(document)).toBe(navigation);
+  });
+
+  it('answers the navigation layer drawn by createTrustedOverlayHost', () => {
+    const bar = createTrustedOverlayHost();
+    const navigation = createTrustedOverlayHost({ overlay: true, layer: 'navigation' });
+    expect(navigation.host.getAttribute('data-trusted-layer')).toBe('navigation');
+    expect(trustedPortalOf(document)).toBe(navigation.portal);
+    bar.dispose();
+    navigation.dispose();
   });
 
   it('never answers an author element that merely carries the attribute', () => {

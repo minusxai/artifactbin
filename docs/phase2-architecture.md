@@ -2,7 +2,7 @@
 
 Status: shipped. This describes the compiled reader as it runs: a publish-time compiler turns each
 document version into static HTML with small Solid islands, served the same way to every reader path.
-Its three size targets are checked by the page-speed lab.
+Its four size targets are checked by the page-speed lab.
 
 Targets (brotli/wire bytes, checked by `scripts/build/size-targets.mjs` against the page-speed lab):
 
@@ -11,6 +11,7 @@ Targets (brotli/wire bytes, checked by `scripts/build/size-targets.mjs` against 
 | 1 | JS before ready, pages with nothing interactive (prose, deck) | 275 KB | ≤ 10 KB |
 | 2 | JS before ready, interactive pages (kit, dashboard, every component) | 275–300 KB | ≤ 85 KB |
 | 3 | Production prose page, total transferred | 481 KB | ≤ 250 KB |
+| 4 | App shell JS before the document frame is ready (every page kind) | 7.6 KB (44.9 KB after #327) | ≤ 50 KB |
 
 Design decisions: a publish-time compiler to Solid islands (Solid 1.9); a vendored interactive kit that
 mirrors Radix's DOM conventions, so authored and compiled markup keep one shape (no solid-ui or
@@ -48,7 +49,7 @@ is typed against the framework-free store (`lib/story-runtime/store`), never aga
 | App handover | `web/initial-story.ts`, `solid/document/create-island-story.ts`, `solid/pages/Document.tsx`, `lib/islands/handover.ts` | The Solid app adopts the live island document without re-rendering it (`IslandDocument`, in `lib/islands/contract.ts`) (§7). |
 | Link hints | `lib/compiled-page/links.ts`, `speculation.ts` | `<a href>` to same-deployment artifacts, collected at compile → `<link rel=prefetch>` and speculation rules emitted by the assembler. |
 | Handover gate | `scripts/gates/gate-hydration.mjs` | Checks that the compiled story survives island hydration and app adoption, then yields to the editor. |
-| Size targets | `scripts/build/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The three targets, pass/fail per target from a lab result JSON; `--strict` fails the page-speed workflow (not `ci.yml`). |
+| Size targets | `scripts/build/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The four targets, pass/fail per target from a lab result JSON; `--strict` fails the page-speed workflow (not `ci.yml`). |
 
 Routes translate results to HTTP; every module above returns data or a string and never a `Response`.
 
@@ -382,7 +383,8 @@ parameter selects another runtime.
   app adoption and edit handover. `x-mx-reader` confirms the compiled response.
 - `scripts/build/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (raw route),
   target 2 from `jsBeforeReady` on kit, dashboard and kitchen (raw route), target 3 from the total
-  wire bytes of prose (view route); the raw route is the document's own page, which the app page frames, and
+  wire bytes of prose (view route), target 4 from `jsBeforeReady` on prose, deck, kit, dashboard and kitchen
+  (view route): the app shell's own script bytes, which never include the framed document's; the raw route is the document's own page, which the app page frames, and
   the view route's ready is the app shell's own; one line per target, `pass`/`fail`/`no data`; `--strict` fails on
   a missed target. `page-speed.yml` runs it on the head result into the job summary with `--strict`;
   that fails the page-speed workflow, which is informational and does not gate `ci.yml`.
