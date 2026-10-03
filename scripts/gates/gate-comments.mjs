@@ -1,8 +1,9 @@
 /**
- * Gate: ANNOTATIONS — the owner pins feedback to a node, the agent answers.
+ * Gate: COMMENTS — the owner pins feedback to a node, the agent answers.
  *
+ * One journey over a shared fixture set (folded in from the former annotations and comment-targets gates).
  * The loop no unit test can make, because every seam is a browser fact: the
- * owner selects text INSIDE the sandboxed frame, the composer is PAGE chrome
+ * owner selects text INSIDE the document's frame, the composer is PAGE chrome
  * fed by that report, the tint is a real element the frame renders, and the
  * agent's HTTP resolve must reach the still-open tab over the live stream and
  * take it with it — no reload anywhere. Commenting is a LAYER: no mode is
@@ -13,9 +14,15 @@
  * sees none of it (they get the bare document, which carries no pins and no
  * chrome at all) — including the view-mode SELECTION BUBBLE, which is browser
  * fact all the way down: a Selection inside an opaque frame, chrome the frame
- * draws against it, and a capability only the page may grant.
+ * draws against it, and a capability only the page may grant. Pins on declarative
+ * content (a keyed repeat, a table cell, an unkeyed list) follow their item through
+ * reorder, removal, restoration and a reload.
  *
- *   usage: node scripts/gates/gate-annotations.mjs [base]
+ * The signed-in COMMENTER's own journey (a stranger given `can comment` by the link selects words in the frame,
+ * is offered annotate and not edit, and the owner sees the count arrive) needs a mail login, so it rides
+ * gate-collab-roles with the rest of the role checks; this gate needs no mail.
+ *
+ *   usage: node scripts/gates/gate-comments.mjs [base]
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -23,9 +30,11 @@ import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
+import { expect } from 'playwright/test';
+import { commentTargetsMarkup } from '../fixtures/comment-targets.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const check = createChecker('annotations');
+const check = createChecker('comments');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function until(read, want, budgetMs = 8000) {
@@ -75,17 +84,20 @@ const DOC =
   + '<section className="max-w-2xl"><p id="figure">Revenue grew 40% in Q3.</p><ul id="list"><li>one</li><li>two</li></ul></section>'
   + '</div>';
 
-const run = async () => {
+/** The shared fixture set: every document this journey reads, published up front and at once. */
+const publish = async (markup, extra = {}) => {
   const { id, token } = await startDocument(BASE);
   const put = await fetch(`${BASE}/api/artifacts/${id}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markup: DOC }),
+    body: JSON.stringify({ markup, ...extra }),
   });
   if (!put.ok) throw new Error(`publish failed (${put.status}): ${await put.text()}`);
+  return { id, token };
+};
 
-  const browser = await launchChromium();
-  try {
+async function ownerLeg(browser, { id, token }) {
+  {
     // ── the owner's tab ────────────────────────────────────────────────────
     const owner = await browser.newContext();
     const page = await owner.newPage();
@@ -366,15 +378,35 @@ const run = async () => {
       'a reader selecting text is offered nothing at all');
     await strangerCtx.close();
     await owner.close();
+  }
+}
 
-    // ── the comment keeps the exact selection ─────────────────────────────
-    await quoteLeg(browser);
-    // ── an agent's reply is READ as markdown ──────────────────────────────
-    await markdownLeg(browser);
-    // ── a long reply folds; a resolved card reads as resolved ─────────────
-    await foldLeg(browser);
-    // ── a block is PICKED, not selected ───────────────────────────────────
-    await pickLeg(browser);
+/*
+ * Two lanes over one browser, then the fold leg ALONE: its measurement is scroll geometry that read 88px low under
+ * load (see foldLeg), so it never shares the machine with another of this gate's pages. A lane that throws is a
+ * failed check, and the other lane still reports.
+ */
+const run = async () => {
+  const [main, quote, md, fold, pick, targets] = await Promise.all([
+    publish(DOC), publish(QUOTE_DOC), publish(MD_DOC), publish(FOLD_DOC), publish(DOC),
+    publish(commentTargetsMarkup, { title: 'Dynamic comment acceptance', visibility: 'unlisted' }),
+  ]);
+  const browser = await launchChromium();
+  const lane = async (name, legs) => {
+    for (const [leg, fixture] of legs) {
+      try { await leg(browser, fixture); } catch (error) { check(false, `${name}: ${leg.name} could not finish (${String(error?.stack ?? error).split('\n').slice(0, 4).join(' | ')})`); }
+    }
+  };
+  try {
+    await Promise.all([
+      // the owner's loop (select → rail → agent resolve live → comment mid-edit → a stranger sees nothing),
+      // then the comment that keeps the exact words, then an agent's reply read as markdown
+      lane('owner lane', [[ownerLeg, main], [quoteLeg, quote], [markdownLeg, md]]),
+      // pins that follow declarative items, then a block PICKED and an area drawn
+      lane('pick lane', [[targetsLeg, targets], [pickLeg, pick]]),
+    ]);
+    // a long reply folds; a resolved card reads as resolved
+    await lane('fold', [[foldLeg, fold]]);
   } finally {
     await browser.close();
   }
@@ -400,11 +432,8 @@ const QUOTE_DOC =
 const FIRST_TEXT = 'Revenue grew 40% in Q3, ahead of plan.';
 const SECOND_TEXT = 'Costs fell 8% over the same period.';
 
-async function quoteLeg(browser) {
-  const { id, token } = await startDocument(BASE);
+async function quoteLeg(browser, { id, token }) {
   const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: QUOTE_DOC }) });
-  if (!published.ok) throw new Error(`quote leg publish failed (${published.status}): ${await published.text()}`);
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -547,11 +576,8 @@ const AGENT_REPLY = [
   '- added a test',
 ].join('\n');
 
-async function markdownLeg(browser) {
-  const { id, token } = await startDocument(BASE);
+async function markdownLeg(browser, { id, token }) {
   const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: MD_DOC }) });
-  if (!published.ok) throw new Error(`markdown leg publish failed (${published.status}): ${await published.text()}`);
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -646,11 +672,8 @@ const FOLD_DOC =
 const LONG_AGENT_REPLY = Array.from({ length: 60 }, (_, i) => `line ${i + 1} of the agent's answer`).join('\n');
 const HUMAN_LAST_WORD = 'ship it — thanks';
 
-async function foldLeg(browser) {
-  const { id, token } = await startDocument(BASE);
+async function foldLeg(browser, { id, token }) {
   const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: FOLD_DOC }) });
-  if (!published.ok) throw new Error(`fold leg publish failed (${published.status}): ${await published.text()}`);
 
   // A PHONE: the rail is a half-height bottom sheet there, which is where a
   // long comment costs the most.
@@ -810,11 +833,8 @@ async function foldLeg(browser) {
  * frame PAINTS (computed style, not just a stamp), a click the frame takes
  * for itself, and the page's composer opening on what was picked.
  */
-async function pickLeg(browser) {
-  const { id, token } = await startDocument(BASE);
+async function pickLeg(browser, { id, token }) {
   const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: DOC }) });
-  if (!published.ok) throw new Error(`pick leg publish failed (${published.status}): ${await published.text()}`);
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -902,6 +922,11 @@ async function pickLeg(browser) {
   await page.mouse.up();
   const areaComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   check(areaComposer === 1, 'releasing the drag opens the composer');
+  // From the former comment-targets gate: the composer a drawn area opens paints ABOVE the app's content.
+  check(await page.getByLabel('Annotation composer', { exact: true }).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return el.contains(el.getRootNode().elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+  }), 'the area composer is layered above the app content: its centre hits the composer');
   // The breadcrumb's TARGET crumb (the composer's icon badge carries the accent colour too).
   const crumb = await page.locator('[role="dialog"][aria-label="Annotation composer"] span.truncate.text-accent').first().textContent();
   check(crumb === 'section', `the anchor is the lowest common ancestor of what was drawn over (got ${crumb})`);
@@ -919,6 +944,127 @@ async function pickLeg(browser) {
   check(overlay === 1, 'the saved area is painted back as an overlay box');
   check(await frame.locator('[data-mx-annotate-band]').count() === 0, 'and the composing band is gone');
   await ctx.close();
+}
+
+/**
+ * PINS THAT FOLLOW THE ITEM, on declarative content (from the former comment-targets gate): a keyed repeat, a
+ * DataTable cell and an unkeyed list, each commented by a real pick, then reordered, renamed, removed, restored and
+ * reloaded. The wire SHAPES of those targets (`repeat` scope keys, `{kind:'table',rowKey,columnKey}`, an unkeyed
+ * owner's null range) moved to services/app/lib/story/__tests__/comment-target.test.ts; what stays is what the
+ * frame paints. Its words-and-area comments on the unkeyed list asserted only wire shapes and are dropped with them.
+ */
+async function targetsLeg(browser, seed) {
+  const headers = { Authorization: `Bearer ${seed.token}`, 'Content-Type': 'application/json' };
+  const annotations = async () => {
+    const response = await fetch(`${BASE}/api/artifacts/${seed.id}/annotations`, { headers });
+    if (!response.ok) throw new Error(`annotations: ${response.status}`);
+    return (await response.json()).annotations;
+  };
+  /** A playwright `expect` (or a waitFor) as a verdict rather than a throw. */
+  const holds = (promise) => promise.then(() => true, () => false);
+
+  const context = await browser.newContext({ viewport: { width: 1280, height: 960 } });
+  const page = await context.newPage();
+  // This leg exercises anchoring. Capture itself is exercised by screenshot-comments.
+  await page.addInitScript(() => { if (navigator.mediaDevices) Object.defineProperty(navigator.mediaDevices, 'setCaptureHandleConfig', { value: undefined }); });
+  page.on('response', async (response) => { if (response.status() >= 400 && response.url().includes('/annotations')) console.error('Annotation request failed:', response.status(), await response.text()); });
+  await becomeOwner(page, BASE, seed.token);
+  await page.goto(`${BASE}/a/${seed.id}`);
+  // The document runs in its own frame on its own origin; the rail, composer and tools are the app page's.
+  const doc = documentLocator(page);
+  // `Locator.and` cannot pair two locators inside a frame, so "is this one marked" is asked of its attribute.
+  const annotated = (locator, timeout = 30000) => expect(locator).toHaveAttribute('data-mx-annotated', /.*/, { timeout });
+  const cardText = doc.locator('p[data-mx-comment-owner="order-cards"]').filter({ hasText: 'Alice Chen' }).first();
+  await cardText.waitFor();
+  await openArtifactControls(page);
+  await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
+  await page.getByLabel('Annotation sidebar', { exact: true }).waitFor();
+  const select = async () => {
+    if (await page.getByRole('button', { name: 'Select', exact: true }).count() === 0) {
+      await openArtifactControls(page);
+      await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
+    }
+    const button = page.getByRole('button', { name: 'Select', exact: true });
+    if (await button.getAttribute('aria-pressed') !== 'true') await button.click();
+  };
+  const save = async (body) => {
+    await page.getByRole('dialog', { name: 'Annotation composer', exact: true }).waitFor();
+    const fallback = page.getByRole('button', { name: 'Continue without screenshot', exact: true });
+    if (await fallback.isVisible()) await fallback.click();
+    await page.getByLabel('Annotation comment', { exact: true }).fill(body);
+    await page.getByRole('button', { name: 'Save annotation', exact: true }).click();
+    await page.getByLabel('Annotation composer', { exact: true }).waitFor({ state: 'hidden' });
+    // Leave the resumed tool before testing ordinary document interactions.
+    const cancelPick = page.getByRole('button', { name: 'Cancel picking', exact: true });
+    if (await cancelPick.isVisible()) await cancelPick.click();
+  };
+
+  // ── a keyed repeat: the pin follows the order key through reverse and rename ──
+  await select(); await cardText.click(); await save('Keep this comment on the repeated customer');
+  await doc.getByRole('button', { name: 'Reverse JSX rows', exact: true }).click();
+  await doc.getByRole('button', { name: 'Rename JSX Alice', exact: true }).click();
+  await cardText.filter({ hasText: 'updated' }).waitFor();
+  const repeatPinned = await holds(annotated(cardText, 10000));
+  if (!repeatPinned) console.error('Compiled repeat pin state:', JSON.stringify({
+    cards: await doc.locator('[data-mx-comment-owner="order-cards"]').evaluateAll((nodes) => nodes.map((node) => ({
+      text: node.textContent, target: node.getAttribute('data-mx-comment-target'), annotated: node.hasAttribute('data-mx-annotated'),
+    }))),
+    owner: await doc.locator('#order-cards').getAttribute('data-mx-annotated'),
+  }));
+  check(repeatPinned, 'a For repeat comment stays on its keyed item after the rows reverse and the item is renamed');
+
+  // ── a DataTable cell: the pin leaves with its row and returns with it ──
+  const cell = doc.locator('td[data-mx-comment-owner="order-table"]').filter({ hasText: 'Alice Chen' }).first();
+  await select(); await cell.click(); await save('Keep this comment on the table customer');
+  const tableComment = (await annotations()).find((item) => item.thread[0].body === 'Keep this comment on the table customer');
+  await doc.getByRole('button', { name: 'Remove JSX Alice', exact: true }).click();
+  const detached = await holds(cell.waitFor({ state: 'detached' }));
+  if (!detached) console.error('Compiled removed row state:', JSON.stringify({
+    cells: await doc.locator('td[data-mx-comment-owner="order-table"]').evaluateAll((nodes) => nodes.map((node) => ({ text: node.textContent, target: node.getAttribute('data-mx-comment-target') }))),
+    cards: await doc.locator('p[data-mx-comment-owner="order-cards"]').allTextContents(),
+    errors: [...await page.getByRole('alert').allTextContents(), ...await doc.getByRole('alert').allTextContents()],
+  }));
+  check(detached, 'removing the row takes the commented table cell with it');
+  await doc.getByRole('button', { name: 'Restore JSX Alice', exact: true }).click();
+  check(await holds(annotated(cell)), 'restoring the row brings the table-cell pin back');
+  check((await annotations()).find((item) => item.id === tableComment?.id)?.anchor?.nodeId === 'order-table',
+    'the table comment keeps its owner node through removal and restoration');
+
+  // ── an unkeyed list: comments stay on the whole list when rows move ──
+  // (Picked BEFORE the one reload below, so that reload proves all three reconnect.)
+  const unkeyed = doc.locator('#index-cards');
+  const unkeyedAlice = unkeyed.locator('p').filter({ hasText: 'Alice Chen' }).first();
+  await select(); await unkeyedAlice.click(); await save('Unkeyed list owner comment');
+  // Wait for the re-run to redraw the rows: a selection made before it lands is on text it replaces.
+  const unkeyedOrder = () => unkeyed.locator('p').allTextContents();
+  const orderBefore = await unkeyedOrder();
+  await doc.getByRole('button', { name: 'Reverse JSX rows', exact: true }).click();
+  check(await holds(expect.poll(unkeyedOrder).not.toEqual(orderBefore)), 'reversing the rows redraws the unkeyed list');
+  check(await holds(expect(unkeyed).toHaveAttribute('data-mx-annotated', '')), 'the unkeyed list itself stays commented after the reorder');
+  check(await holds(expect(unkeyed.locator('[data-mx-comment-target], [data-mx-annotated]')).toHaveCount(0)),
+    'no row of an unkeyed list carries a target or a pin');
+
+  // ── a fresh launch: every pin reconnects ──
+  await page.reload();
+  check(await holds(doc.locator('td[data-mx-comment-owner="order-table"][data-mx-annotated]').filter({ hasText: 'Alice Chen' }).waitFor()),
+    'the table-cell comment reconnects after a fresh launch');
+  check(await holds(annotated(cardText)), 'the repeat comment reconnects after a fresh launch');
+  check(await holds(expect(doc.locator('#index-cards')).toHaveAttribute('data-mx-annotated', '')), 'the unkeyed list comment reconnects after a fresh launch');
+  check(await holds(expect(doc.locator('#index-cards [data-mx-comment-target], #index-cards [data-mx-annotated]')).toHaveCount(0)),
+    '…still on the list owner, never a row');
+  check((await annotations()).length === 3, 'all three comments persisted');
+
+  // ── a saved markup comment must not steal the first click of a word selection ──
+  await cardText.click();
+  check(await holds(expect(page.getByLabel('Reply to annotation', { exact: true })).toHaveCount(0)), 'a click on a commented item opens no thread');
+  check(await holds(expect(cardText).not.toHaveCSS('cursor', 'pointer')), 'a commented item shows no pointer cursor');
+  await cardText.dblclick({ position: { x: 15, y: 8 } });
+  check(await holds(expect(page.getByLabel('Reply to annotation', { exact: true })).toHaveCount(0)), 'a double-click to select its words opens no thread either');
+  await doc.getByRole('button', { name: 'Comment on selected text', exact: true }).click();
+  await save('Different words on an already commented markup node');
+  check((await annotations()).some((item) => item.thread[0].body === 'Different words on an already commented markup node'),
+    'different words on an already commented node take their own comment');
+  await context.close();
 }
 
 run().then(() => check.done()).catch((err) => { console.error(err); process.exit(1); });
