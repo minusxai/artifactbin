@@ -77,6 +77,8 @@ export interface InPlaceEditOptions {
   /** Delete/Backspace pressed with a selection, or Escape. */
   onEditKey?: (key: 'Delete' | 'Backspace' | 'Escape', selection: StoryEditSelection | null) => void;
   onHistory?: (direction: 'undo' | 'redo') => void;
+  /** "Edit script" on a script component's mount badge: open the Helmet script at that component's export. */
+  onOpenScript?: (component: string) => void;
   /** A slide was renamed from the deck's own rail. */
   onSlideTitle?: (path: string, title: string) => void;
   /**
@@ -143,6 +145,9 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
           switch (event.data.type) {
             case 'mx:history':
               options.onHistory?.(event.data.direction);
+              break;
+            case 'mx:open-script':
+              if (typeof event.data.component === 'string') options.onOpenScript?.(event.data.component);
               break;
             case 'mx:block-edit': {
               const next = editBlock(sourceRef.current, event.data.command);

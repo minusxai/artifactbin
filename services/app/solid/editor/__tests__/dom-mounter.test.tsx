@@ -518,3 +518,58 @@ describe('a kept editor under a new path', () => {
     root.remove();
   });
 });
+
+describe('a script component mount in edit mode', () => {
+  // `<Sparkline>` is no kit component: the script exports it, and the compiler emits its mount (no AST path of its
+  // own) with the children as the server-rendered fallback, which is what edit mode shows while the script is stopped.
+  const source = '<div id="r"><p id="intro">Intro</p><Sparkline rows={$monthly}><p id="fallback">Loading chart…</p></Sparkline></div>';
+  const setup = () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-mx-ast="0" id="r"><p data-mx-ast="0.0" id="intro">Intro</p>'
+      + '<div data-mx-mount="Sparkline" data-mx-props="{}" data-mx-bind=\'{"rows":"monthly"}\'><p data-mx-ast="0.1.0" id="fallback">Loading chart…</p></div></div>';
+    document.body.append(root);
+    return root;
+  };
+
+  it('badges the mount with what renders it and an Edit script control that names the component', () => {
+    const root = setup();
+    const onOpenScript = vi.fn();
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow: vi.fn(), onOpenScript });
+    const badge = root.querySelector<HTMLElement>('[role="group"][aria-label="Sparkline · rendered by the script"]');
+    expect(badge).not.toBeNull();
+    expect(badge!.closest('[data-mx-mount]')?.getAttribute('data-mx-mount')).toBe('Sparkline');
+    expect(badge!.textContent).toContain('Sparkline · rendered by the script');
+    const button = [...badge!.querySelectorAll('button')].find((b) => b.textContent === 'Edit script');
+    expect(button).toBeDefined();
+    button!.click();
+    expect(onOpenScript).toHaveBeenCalledWith('Sparkline');
+    mounted.dispose();
+    root.remove();
+  });
+
+  it('keeps the fallback out of inline editing: no prose editor, no editable host, inert while edit mode lasts', () => {
+    const root = setup();
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow: vi.fn() });
+    const fallback = root.querySelector<HTMLElement>('#fallback')!;
+    // The intro paragraph outside the mount is a prose region like any other; the fallback is not.
+    expect(root.querySelector('[data-mx-edit-region="0.0"]')).not.toBeNull();
+    expect(fallback.closest('[data-mx-edit-region], .ProseMirror')).toBeNull();
+    expect(fallback.isContentEditable || fallback.getAttribute('contenteditable') === 'true').toBe(false);
+    expect(fallback.hasAttribute('inert')).toBe(true);
+    // Editor chrome, which selection and arrow navigation skip.
+    expect(root.querySelector('[role="group"][aria-label$="rendered by the script"]')!.hasAttribute('data-mx-node-chrome')).toBe(true);
+    mounted.dispose();
+    root.remove();
+  });
+
+  it('leaves the mount exactly as served when edit mode ends, so the script mounts over its own fallback again', () => {
+    const root = setup();
+    const mount = root.querySelector('[data-mx-mount]')!;
+    const served = mount.innerHTML;
+    const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow: vi.fn() });
+    expect(mount.innerHTML).not.toBe(served);
+    mounted.dispose();
+    expect(mount.innerHTML).toBe(served);
+    root.remove();
+  });
+});

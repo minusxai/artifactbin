@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { createSignal } from 'solid-js';
-import { STORY_FLOW_EDIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_FLOW_EDIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_OPEN_SCRIPT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
 import { createInPlaceEdit } from '../create-in-place-edit';
 import { createEditorSource } from '../create-editor-source';
 import { renderHook } from '@/solid/__tests__/helpers';
@@ -161,4 +161,16 @@ it('carries typed prose into the source as typing, so its draft waits for a paus
     { source: '<p id="a">alpha!</p>', typing: true },
     { source: '<p id="a"><strong>alpha!</strong></p>', typing: false },
   ]);
+});
+
+it('opens the script for a mount badge only on a message carrying the session nonce', () => {
+  const { runtimeRef, emit, emitUnsigned } = fakeRuntime();
+  const onOpenScript = vi.fn();
+  renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: '<p>draft</p>' }, editing: true, sessionNonce: NONCE, onSourceEdited: () => {}, onOpenScript,
+  }));
+  emitUnsigned({ type: STORY_OPEN_SCRIPT_MESSAGE, component: 'Forged' });
+  expect(onOpenScript).not.toHaveBeenCalled();
+  emit({ type: STORY_OPEN_SCRIPT_MESSAGE, component: 'Sparkline' });
+  expect(onOpenScript).toHaveBeenCalledWith('Sparkline');
 });
