@@ -6,9 +6,8 @@ order: 4
 ---
 ## Read first
 
-For flowcharts, state machines and sequence diagrams, prefer the first-class
-`<Mermaid>` component. It handles layout, the document theme and exports;
-its static `code` string stays editable through ordinary document edits.
+For flowcharts, state machines and sequence diagrams, use `<Mermaid>`: it
+handles layout, theme and exports.
 
 ```jsx
 <Mermaid title="Shift workflow" code={`flowchart TD
@@ -19,31 +18,24 @@ its static `code` string stays editable through ordinary document edits.
 `} />
 ```
 
-Use `stateDiagram-v2` or `sequenceDiagram` for those diagram types. Code is
-limited to 20,000 characters; diagram configuration/frontmatter is refused.
-The app owns strict rendering, theme and resource limits; click callbacks
-are disabled. Syntax errors show a readable error and keep the source; in edit
-mode, select a diagram to change its source and title in the inspector.
-The theme paints node kinds apart: steps `[text]` sit on the muted surface,
-decisions `{text}` take the accent outline, rounded `(text)` and circle
-`((text))` nodes take the accent tint — so mark start/end nodes rounded.
-Do not draw UI wireframes in Mermaid: use spatial HTML/CSS screen panels.
+Also `stateDiagram-v2` and `sequenceDiagram`. Code is at most 20,000
+characters; configuration/frontmatter is refused; click callbacks are off.
+The theme paints steps `[text]` muted, decisions `{text}` with the accent
+outline, rounded `(text)` and circle `((text))` nodes with the accent tint, so
+mark start/end nodes rounded. UI wireframes are HTML/CSS panels, not Mermaid.
 
 ## Inline SVG
 
-A minimal drawing subset renders inline for motifs and small diagrams — a
-frame ruler, a route map, a sparkline decoration:
-
+A drawing subset for motifs and small diagrams:
 `<svg viewBox="0 0 640 48" className="w-full">` with
 `g path line polyline polygon rect circle ellipse text tspan defs
 linearGradient radialGradient stop clipPath title desc` (canonical camelCase
-for `clipPath`/`linearGradient`/`radialGradient`). Use `currentColor` and
-token-driven classes so the drawing follows the theme; gradients and clips
+for `clipPath`/`linearGradient`/`radialGradient`). Use `currentColor` so the drawing follows the theme; gradients and clips
 must reference LOCAL ids only (`fill="url(#g)"` — external `url(…)` targets
 are rejected). No `use`/`image`/`foreignObject`/SMIL.
 
-An `<svg>` keeps its OWN `<title>` — the graphic's accessibility label, a
-different element from the document title in `<Helmet>`; one per icon is fine.
+An `<svg>` keeps its own `<title>` (its accessible label, not the document
+title).
 
 A `<For>` inside `<svg>` repeats shapes as a `<g>` (its `className` and
 `id` land there); its template takes SVG tags only. Bars from a query:

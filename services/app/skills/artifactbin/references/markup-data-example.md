@@ -1,8 +1,8 @@
 ---
 name: markup-data-example
 description: >-
-  A complete booking page, explained part by part: the data half, every $ value,
-  the view half, set= versus run=, where queries run, and how to publish and test it.
+  A complete booking page with every $ value it reads, and how to publish it
+  and test it as two people.
 ---
 ## Read first
 
@@ -88,44 +88,7 @@ change the parts; the rules are in [data](markup-data.md).
 </main>
 ```
 
-### The data half
-
-`<Import name="bookings">` is the dataset, read in SQL as `bookings.rows`; put
-your dataset's id in place of `BookRows1` (see Publish it).
-
-```jsx
-  <Value name="day" type="date" />
-  <Value name="note" type="string" url={false} />
-```
-
-Two page values: `day`, the picked day (null at first), and `note`, a text box
-kept out of the link.
-
-Four queries, each a function of what it reads. `days` lists the next
-weekdays from built-ins alone. `picked` reads `$day` and the `days` query
-by name (`from days`), so no day picked means the first one. `slots` builds 18
-half-hour slots for the picked day and joins them to the bookings. `mine` lists
-the reader's own bookings from today on.
-
-```sql
-    from grid left join bookings.rows b on b.day = grid.day and b.slot = grid.slot
-```
-
-Two mutations, each an action. `book` inserts a row only while the slot is
-free; `expectedAffected={1}` turns "nothing written" into a refusal the button
-shows, and `reset="note"` empties the box once a booking commits.
-
-```sql
-    where not exists (select 1 from bookings.rows where day = $_row.day and slot = $_row.slot)
-```
-
-`cancel` deletes a row only when it is the reader's own:
-
-```sql
-    delete from bookings.rows where id = $_row.id and booked_by = $_me.id
-```
-
-### Every $ value, and where it comes from
+Every `$` value, and where it comes from:
 
 | Written | What it is | Where it comes from |
 |---|---|---|
@@ -137,38 +100,13 @@ shows, and `reset="note"` empties the box once a booking commits.
 | `$_me.id` | the reader's account id; null for a guest | the platform |
 | `$_now`, `$_tz` | the instant (UTC) and the reader's zone | the platform |
 
-In `book`, `$note` is the one argument: a plain `$name` is that page value.
-Names starting with `_` are built in and read-only.
-
-### The view half
-
-The body binds names and holds no SQL. `<For each={$days}>` repeats per row;
-`{$_row.dow}` shows a field. The `<Input>` writes `$note` as the reader types.
-`{($_row.is_open) && (…)}` shows a button only when the row says so. The
-DataTable lists `$mine`, a Cancel button in a `<Column>`.
-
-### set= versus run=
-
-```jsx
-    <Button set={{"day": "$_row.day"}} variant="outline">{$_row.dow} {$_row.num} {$_row.mon}</Button>
-```
-
-`set=` changes page values on click: instant, no SQL, nothing saved; queries
-reading `$day` re-run.
-
-```jsx
-    {($_row.is_open) && (<Button run="$book">{$_row.slot}</Button>)}
-```
-
-`run=` runs a mutation, which writes the dataset. The row the button sits in
-is its `$_row`; `$note` comes from the page. A guest's button stays disabled,
-because `book` binds `$_me.id`.
-
-### Where the queries run
-
-You do not choose: in the reader's browser when the reader may hold the data it
-reads, otherwise on the server, on the same SQLite and `$_now`. The rows are
-the same.
+A plain `$name` in SQL is that page value; names starting with `_` are built
+in and read-only. `set=` changes page values on click (no SQL, nothing saved);
+`run=` runs a mutation against the dataset with the button's row as `$_row`.
+A guest's `book` button stays disabled because `book` binds `$_me.id`.
+`expectedAffected={1}` turns "nothing written" into a refusal the button
+shows. Queries run in the reader's browser when the reader may hold the data,
+otherwise on the server; the rows are the same.
 
 ## Publish it
 
@@ -198,7 +136,8 @@ booking its booker's. Put the returned id in `src="ref:…"` first.
 
 ## Test it as two people
 
-`book.js` books a slot (a different one per person) and waits:
+`book.js` books a slot (a different one per person); run it as two test users
+on a copy, one session at a time ([apps](apps.md)):
 
 ```js
 const page = await context.newPage();
@@ -217,6 +156,5 @@ afbin sessions close <session-id> --json
 afbin sessions script new --as <tu2> --input book.js --json
 ```
 
-Both book and cancel on the copy, never the other's booking. On the ORIGINAL,
-`--as guest`, both stay disabled.
-[Live sessions](live-sessions.md).
+Each books and cancels only their own slot; `--as guest` on the original
+finds both buttons disabled. [Live sessions](live-sessions.md).

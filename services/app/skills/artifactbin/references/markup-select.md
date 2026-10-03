@@ -2,11 +2,12 @@
 name: markup-select
 description: Standalone multi-select filters and JSON-array values.
 ---
-## Standalone multi-select
+## Read first
 
-`multiple valueFormat="json"` works on a standalone Select as well as a cell
-editor. Bind a **string** Value containing a JSON array of strings; `"[]"`
-means no selections. Here an empty selection means all rows:
+A standalone `<Select multiple valueFormat="json">` binds a **string** Value
+holding a JSON array of strings; `"[]"` means no selection.
+
+## Standalone multi-select
 
 ```jsx
 <Helmet>
@@ -23,8 +24,5 @@ means no selections. Here an empty selection means all rows:
 <DataTable data="$filtered" />
 ```
 
-Done or dismissal commits the selection and re-runs dependent queries; Escape
-cancels the draft. `allowCreate` permits new strings. Use JSON, not comma splitting:
-commas inside a choice are data. The Value travels in the link by default;
-use `url={false}` for a temporary form field. For a shared app, read its rows and
-option list from a stored dataset instead of the tiny inline demonstration table.
+Done or dismissal commits and re-runs dependent queries; Escape cancels.
+`allowCreate` permits new strings. Use `url={false}` for a temporary field.
