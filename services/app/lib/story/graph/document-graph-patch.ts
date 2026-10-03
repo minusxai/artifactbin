@@ -88,6 +88,8 @@ export function applyGraphPatch(current:DocumentGraph,version:number,patch:Graph
 export function advanceGraph(current:DocumentGraph,version:number,patch:GraphPatch):DocumentGraph|null {
   const nodes:DocumentGraph['nodes']={...current.nodes},claimedIds:DocumentGraph['claimedIds']={...current.claimedIds},revision=version+1,own=new Set<string>();
   const writable=(key:string):DocumentGraphNode|null=>{
+    // Own node keys only: an inherited name such as __proto__ is never a node, and never written through.
+    if(key==='__proto__'||!Object.hasOwn(nodes,key))return null;
     const node=nodes[key];if(!node)return null;
     if(!own.has(key)){nodes[key]=structuredClone(node);own.add(key);}
     return nodes[key]!;

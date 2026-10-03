@@ -765,7 +765,7 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
   for (const m of flow.mutations) for (const name of m.reset ?? []) {
     const kind = kinds.get(name);
     if (kind !== 'scalar') {
-      errors.push(err(`<Mutation name="${m.name}"> reset="… ${name} …" names ${kind ? describe(kind) : 'nothing declared'} — reset clears scalar <Value>s${kind ? '' : hint}`, m, MUTATION_TAG, 'reset'));
+      errors.push(err(`<Mutation> "${m.name}" reset names "${name}", which is ${kind ? describe(kind) : 'not declared'} — reset clears scalar <Value>s${kind ? '' : hint}`, m, MUTATION_TAG, 'reset'));
     }
   }
   return errors;

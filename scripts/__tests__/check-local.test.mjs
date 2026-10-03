@@ -69,7 +69,7 @@ describe('successful local check evidence', () => {
   it('runs several commands concurrently, prints their output in order and returns the first failure', () => fixture(async ({ opts }) => {
     const printed = [];
     const spy = vi.spyOn(process.stdout, 'write').mockImplementation(chunk => { printed.push(String(chunk)); return true; });
-    const step = (text, status, delay) => [process.execPath, '-e', `setTimeout(() => { console.log(${JSON.stringify(text)}); process.exit(${status}); }, ${delay})`];
+    const step = (text, status, delay) => [process.execPath, '-e', `setTimeout(() => { console.log(process.argv[1]); process.exit(${status}); }, ${delay})`, text];
     let status;
     const started = Date.now();
     try { status = await runCheck({ ...opts, reuse: false, commands: [step('first', 0, 1000), step('second', 3, 1000), step('third', 0, 1000)] }); }

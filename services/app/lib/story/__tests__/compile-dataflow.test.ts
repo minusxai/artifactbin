@@ -65,12 +65,12 @@ describe('queries', () => {
 
   it('name both queries of a cycle, and a query that reads itself', async () => {
     const cycle = await errorsOf(doc(`<Query name="a">{\`select * from b\`}</Query><Query name="b">{\`select * from a\`}</Query>`));
-    expect(cycle.join('\n')).toMatch(/<Query name="b"> reads a, which reads b back .*a → b → a/);
-    expect(await errorsOf(doc(`<Query name="a">{\`select * from a\`}</Query>`))).toEqual(['<Query name="a"> reads itself — a query cannot depend on its own result']);
+    expect(cycle.join('\n')).toMatch(/<Query> "b" reads a, which reads b back .*a → b → a/);
+    expect(await errorsOf(doc(`<Query name="a">{\`select * from a\`}</Query>`))).toEqual(['<Query> "a" reads itself — a query cannot depend on its own result']);
   });
 
   it('say which column does not exist', async () => {
-    expect(await errorsOf(doc(`${IMPORT}<Query name="slots">{\`select b.slott from bookings.rows b\`}</Query>`))).toEqual(['<Query name="slots"> reads b.slott — no such column (did you mean slot?)']);
+    expect(await errorsOf(doc(`${IMPORT}<Query name="slots">{\`select b.slott from bookings.rows b\`}</Query>`))).toEqual(['<Query> "slots" reads b.slott — no such column (did you mean slot?)']);
   });
 
   it('refuse the removed syntax by name', async () => {
@@ -79,7 +79,7 @@ describe('queries', () => {
     expect((await errorsOf(doc(`<Query name="q">{\`select * from public.rows\`}</Query>`)))[0]).toMatch(/public\.rows is removed: <Import/);
     expect((await errorsOf(doc(`<Query name="q">{\`select * from ref_BookRows1\`}</Query>`)))[0]).toMatch(/<Import name="…" src="ref:BookRows1"/);
     expect((await errorsOf(doc(`<Query name="q" source="ref:BookRows1">{\`select * from public.rows\`}</Query>`)))[0]).toMatch(/not reached/);
-    expect((await errorsOf(doc(`<Import name="pg" src="ref:PgConn001" />`)))[0]).toMatch(/is never imported: run the query inside it with <Query name="…" source="ref:PgConn001">/);
+    expect((await errorsOf(doc(`<Import name="pg" src="ref:PgConn001" />`)))[0]).toMatch(/is never imported: run the query inside it with a <Query> whose source is ref:PgConn001/);
   });
 
   it('refuse the clock: $_now is the current time', async () => {
@@ -90,7 +90,7 @@ describe('queries', () => {
   });
 
   it('bind only declared values and the built-ins a query may read', async () => {
-    expect(await errorsOf(doc(`<Query name="q">{\`select $x as x\`}</Query>`))).toEqual(['<Query name="q"> binds $x, which is not a declared <Value> — declare <Value name="x" type="…" />']);
+    expect(await errorsOf(doc(`<Query name="q">{\`select $x as x\`}</Query>`))).toEqual(['<Query> "q" binds $x, which is not a declared <Value> — declare a <Value> named "x" with its type']);
     expect((await errorsOf(doc(`<Query name="q">{\`select $_me as me\`}</Query>`)))[0]).toMatch(/binds \$_me, the reader as a row — bind its id: \$_me\.id/);
     expect((await errorsOf(doc(`<Query name="q">{\`select $_row.id as id\`}</Query>`)))[0]).toMatch(/binds \$_row\.id — only a <Mutation> reads the row its control sits in/);
     expect((await errorsOf(doc(`<Value name="t" type="table" value={[{"a":1}]} /><Query name="q">{\`select $t as t\`}</Query>`)))[0]).toMatch(/binds \$t, but "t" is a table/);
@@ -153,7 +153,7 @@ describe('mutations', () => {
   });
 
   it('refuse a write to a query, a folder listing, a built-in, or a read', async () => {
-    expect((await errorsOf(doc(`<Query name="days">{\`select 1 as d\`}</Query><Mutation name="cancel">{\`delete from days\`}</Mutation>`)))[0]).toBe('<Mutation name="cancel"> writes days, which is a query — a <Mutation> writes an imported table (<import>.rows) or a table <Value>');
+    expect((await errorsOf(doc(`<Query name="days">{\`select 1 as d\`}</Query><Mutation name="cancel">{\`delete from days\`}</Mutation>`)))[0]).toBe('<Mutation> "cancel" writes days, which is a query — a <Mutation> writes an imported table (<import>.rows) or a table <Value>');
     expect((await errorsOf(doc(`<Import name="files" src="ref:Folder001" /><Mutation name="m">{\`delete from files.rows\`}</Mutation>`)))[0]).toMatch(/a folder's listing is read-only/);
     expect((await errorsOf(doc(`<Mutation name="m">{\`delete from _members\`}</Mutation>`)))[0]).toMatch(/_members, which is built in and read-only/);
     expect((await errorsOf(doc(`${IMPORT}<Mutation name="m">{\`select * from bookings.rows\`}</Mutation>`)))[0]).toMatch(/only reads — a <Mutation> is one INSERT, UPDATE or DELETE/);

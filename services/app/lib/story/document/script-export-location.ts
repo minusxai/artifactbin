@@ -20,7 +20,7 @@ export function scriptExportLocation(source: string, component: string): ScriptE
   const body = script?.type === 'element' ? script.children.find((child) => child.type === 'expression') : undefined;
   if (!body) return null;
   const text = source.slice(body.start, body.end);
-  const name = component.replace(/\$/g, '\\$');
+  const name = component.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const declared = new RegExp(`\\bexport\\s+(?:default\\s+)?(?:async\\s+)?(?:function\\s*\\*?|const|let|var|class)\\s+${name}(?![\\w$])`).exec(text);
   const listed = declared ? null : new RegExp(`\\bexport\\s*\\{[^}]*?(?:^|[\\s,{])${name}(?![\\w$])[^}]*\\}`).exec(text);
   const found = declared ?? listed;

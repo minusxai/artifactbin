@@ -137,5 +137,5 @@ it('executes stored source queries and still refuses DuckDB-only SQL at publish,
  expect(result.status,await result.clone().text()).toBe(200);
  expect((await result.json()).tables.legacy.rows).toEqual([{median:2.5}]);
  // DuckDB-only syntax is SQLite's own refusal of the statement, located at the Query.
- expect(await publish(`<Import name="legacy_data" src="ref:${id}" /><Query name="legacy">{\`select median(hours::double) as median from legacy_data.rows\`}</Query>`)).toMatch(/<Query name=\\"legacy\\">.*unrecognized token/);
+ expect(await publish(`<Import name="legacy_data" src="ref:${id}" /><Query name="legacy">{\`select median(hours::double) as median from legacy_data.rows\`}</Query>`)).toMatch(/<Query> \\"legacy\\" unrecognized token/);
 });
