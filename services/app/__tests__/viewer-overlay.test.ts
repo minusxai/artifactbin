@@ -4,8 +4,8 @@
  * guest's refusal and the admitted reader's rows, the write checks are the reader's own, and a
  * document's owner through the agent cookie is admitted exactly as the query door admits them.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { agentCookie, useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as viewerRoute } from '@/app/a/[id]/viewer/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
@@ -19,8 +19,8 @@ import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.ser
 import type { ViewerOverlay } from '@/lib/compiled-page/contract';
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const asSession = (u: { id: string; email: string } | null) => { sessionUser.id = u?.id ?? ''; sessionUser.email = u?.email ?? ''; };
 beforeEach(() => asSession(null));

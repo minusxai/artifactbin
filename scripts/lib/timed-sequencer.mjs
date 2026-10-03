@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { BaseSequencer } from 'vitest/node';
 
-const TIMINGS = path.resolve(import.meta.dirname, '../test-timings.json');
+const TIMINGS = path.resolve(import.meta.dirname, '../ci/test-timings.json');
 
 /** @typedef {{ files: Record<string, Record<string, number>>, reserve?: Record<string, Record<string, number>> }} Timings */
 

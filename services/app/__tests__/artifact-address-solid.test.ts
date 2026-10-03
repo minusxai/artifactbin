@@ -5,8 +5,8 @@
  * document itself is rendered only by the standalone compiled page (`/raw`), which is what a capture photographs, and
  * a compile that cannot be served there is a 500 — there is no other renderer.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { artifactPageAnswer, pagesSite } from '@/lib/serving';
@@ -15,8 +15,8 @@ import { mintExportKey } from '@/lib/serving';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/serving';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
+beforeEach(() => setSession(null));
 
 const PAGES = { pages: pagesSite() };
 const raw = (id: string, search = '') => rawRoute(request(`/a/${id}/raw${search}`), { params: Promise.resolve({ id }) });

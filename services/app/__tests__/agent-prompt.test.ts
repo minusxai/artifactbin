@@ -3,7 +3,7 @@
  * agent" button. The session-only route returns the existing-document paste;
  * the agent uses the account token it already holds.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { existingPaste } from '@/lib/serving';
@@ -11,13 +11,13 @@ import { existingPaste } from '@/lib/serving';
 
 import { mintToken } from '@/lib/accounts';
 import { createUser } from '@/lib/accounts';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id } } : null) }));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

@@ -3,8 +3,8 @@
  * the point of the exercise; "Unknown person" would hide the very thing the
  * account came to check.
  */
-import { beforeEach, expect, it, vi } from 'vitest';
-import { agentCookie, request, useAppHarness } from './harness';
+import { beforeEach, expect, it } from 'vitest';
+import { agentCookie, request, useAppHarness, setSession } from './harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PATCH as patchArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
@@ -20,8 +20,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 const PAGE = readFileSync(path.resolve(process.cwd(), '__tests__/fixtures/splitwise-2RbE7f.jsx'), 'utf8');

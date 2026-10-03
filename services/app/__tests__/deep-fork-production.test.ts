@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PATCH as patchArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
@@ -18,13 +18,11 @@ import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { viewersWritePolicy } from '@artifactbin/utils';
-import { agentCookie, request, useAppHarness } from './harness';
+import { agentCookie, request, useAppHarness, setSession } from './harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 const PAGE = readFileSync(path.resolve(process.cwd(), '__tests__/fixtures/splitwise-2RbE7f.jsx'), 'utf8');

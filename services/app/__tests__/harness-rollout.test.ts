@@ -82,4 +82,7 @@ describe('the harness owns the four mechanisms', () => {
     const missing = files.filter(({ rel, text }) => opensDb(text) && !/\buseAppHarness\(/.test(text) && !exemptions(text).has('reset') && !rel.startsWith('lib/__tests__/db')).map(({ rel }) => rel);
     expect(missing).toEqual([]);
   });
+  it('7. no test file mocks @/auth — a session is the harness\'s setSession, so the file keeps the shared api graph', () => {
+    expect(files.filter(({ text }) => /\bvi\.(?:mock|doMock)\(\s*['"]@\/auth['"]/.test(text)).map(({ rel }) => rel)).toEqual([]);
+  });
 });

@@ -4,7 +4,7 @@
  * is answered by `/api/page/*` — under the same session, the same ACL and the
  * same uniform 404s the pages had. One endpoint per page, one shape each.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { GET as homePage } from '@/app/api/page/home/route';
 import { GET as accountPage } from '@/app/api/page/account/route';
@@ -18,13 +18,13 @@ import { link, unlink } from '@/lib/accounts';
 
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
 const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
 

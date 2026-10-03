@@ -712,12 +712,12 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(prepare).toBeGreaterThan(-1);
     expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
   });
-  it('spreads the API test files over ten shards without dropping a shard', () => {
+  it('spreads the API test files over four shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/8)');
+    expect(jobs.api.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(jobs.api.name).toBe('api tests (${{ matrix.shard }}/4)');
     expect(jobs.api.steps.find(step => (step.run ?? '').includes('vitest run --project=api')).run)
-      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/8');
+      .toBe('npx vitest run --project=api --project=api-isolated --shard=${{ matrix.shard }}/4');
   });
   it('restores the test global setup\'s builds before every Vitest shard and the app build run', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));

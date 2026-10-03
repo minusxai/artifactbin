@@ -10,8 +10,8 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * Denials are uniform 404s BEFORE any other work: a private doc must be
  * indistinguishable from a missing one.
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
@@ -24,13 +24,10 @@ import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
+beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));
 
 // Owns the session mock for this file: id + email, settable per test.
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () =>
-    sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null,
-}));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

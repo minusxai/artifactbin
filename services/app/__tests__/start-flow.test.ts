@@ -215,12 +215,5 @@ describe('POST /api/start', () => {
     }
   });
 
-  it('carries no in-process valve — the proxy\'s door is the only count', async () => {
-    // The app handler serves the create; the proxy in front counts it. Driven
-    // in-process (no proxy), no call here is ever refused on a budget.
-    for (let i = 0; i < 15; i++) {
-      const res = await startRoute(request('/api/start', { method: 'POST' }));
-      expect(res.status, `start ${i + 1} of 15`).toBe(201);
-    }
-  });
+  // Its in-process valve (none: the proxy's door is the only count) is users.test.ts 'carries no in-process valve'.
 });

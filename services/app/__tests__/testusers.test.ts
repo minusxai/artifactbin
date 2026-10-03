@@ -2,8 +2,8 @@
  * TEST USERS: minted by an account, capped, erased with everything they own.
  * The operation family is the surface; `afbin testuser` and `--as` translate to it.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { agentCookie, useAppHarness } from './harness';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { agentCookie, useAppHarness, setSession } from './harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
@@ -19,10 +19,8 @@ import { TESTUSER_LIMITS } from '@artifactbin/contracts';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const jreq = (path: string, method: string, body?: unknown, token?: string, cookie?: string) =>

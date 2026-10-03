@@ -37,7 +37,9 @@ const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_B
  * process environment. Both outlive the file in a worker's module graph and environment, so without
  * isolation they would leak into every later file on that worker; these run in `api-isolated`, one
  * fresh graph per file. Every other api file shares one graph per worker (`api`, isolate: false).
- * Found by reading the files, so a new mock or env write moves its file by itself.
+ * Found by reading the files, so a new mock or env write moves its file by itself. A signed-in session is not a
+ * mock: the harness names it (`setSession`, services/app/__tests__/harness.ts) and clears it before every test and
+ * after every file, so a file that only needs a session shares the graph.
  */
 const LEAKS_PAST_ITS_FILE = /\bvi\.(?:mock|doMock|resetModules|stubEnv)\(|process\.env(?:\.\w+|\[[^\]]+\])\s*(?:=[^=]|\?\?=)|delete process\.env/;
 const leaking = (include: string[], exclude: string[]) => globSync(include, { cwd: import.meta.dirname, exclude })

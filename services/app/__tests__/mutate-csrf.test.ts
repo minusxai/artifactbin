@@ -18,7 +18,7 @@
  * Bearer credentials do not need the cookie CSRF check. Credentialless
  * requests, including opaque-origin documents, cannot authorize mutations.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my/profile/route';
@@ -27,15 +27,13 @@ import { getArtifactById } from '@/lib/artifacts';
 
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
-import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
+import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 
 const mutationRequest = (path: string, init: { token?: string; cookie?: string; origin?: string; body?: unknown } = {}) =>
   request(path, { method: 'POST', token: init.token, cookie: init.cookie, origin: init.origin, headers: { 'Content-Type': 'text/plain' }, json: init.body ?? {} });

@@ -1,6 +1,6 @@
 /**
  * THE HARNESS CONTRACT. One PGLite per file; every table wiped per test in
- * FK-safe order derived from the schema; the rate limiter reset; nothing hand-listed. These pins are what let route
+ * FK-safe order derived from the schema; the rate limiter reset; a named session cleared; nothing hand-listed. These pins are what let route
  * tests that would each boot their own PGLite share one boot without order dependence.
  */
 import { describe, expect, it } from 'vitest';
@@ -8,7 +8,8 @@ import { createArtifact } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
 import { createUser } from '@/lib/accounts';
 import { SCHEMA_STATEMENTS } from '@/lib/platform';
-import { useAppHarness } from './harness';
+import { auth } from '@/auth';
+import { setSession, useAppHarness } from './harness';
 
 const h = useAppHarness();
 /** Every test records the instance it saw; in ANY order they must all be the same object (one PGLite per file). */
@@ -40,5 +41,15 @@ describe('the wipe is derived from the schema, not hand-listed', () => {
       const n = await db.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM ${table}`);
       expect(n.rows[0]?.n, table).toBe('0');
     }
+  });
+});
+
+describe('a session a test names does not outlive it', () => {
+  it('setSession answers auth() for the test that named it', async () => {
+    setSession({ user: { id: 'harness-session', email: null } });
+    expect(await auth()).toEqual({ user: { id: 'harness-session', email: null } });
+  });
+  it('the next test starts with no session, whatever ran before it', async () => {
+    expect(await auth()).toBeNull();
   });
 });
