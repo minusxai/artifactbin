@@ -1,5 +1,12 @@
 import {it,expect,vi} from 'vitest';
+import {execFileSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
 import {observeFixtureWrite} from '../gates/lib/fixture-http.mjs';
+it('loads the real fixture compiler from a standalone client working directory',()=>{
+ const entry=new URL('../gates/lib/fixture-http.mjs',import.meta.url).href;
+ const script=`const module=await import(${JSON.stringify(entry)}); if(typeof module.fixtureFetch!=='function')process.exit(1);`;
+ expect(()=>execFileSync(process.execPath,['--input-type=module','-e',script],{cwd:tmpdir(),timeout:10000,stdio:'pipe'})).not.toThrow();
+});
 it('reads the fixture head for conditional replacement without replacing an explicit stale guard',async()=>{
  const raw=vi.fn(async(_url,init)=>init?.method==='GET'?Response.json({version:7,state:'fresh'}):Response.json({ok:true}));
  await observeFixtureWrite(raw,'https://example.test/api/artifacts/abc123',{method:'PUT',headers:{Authorization:'Bearer test'},body:JSON.stringify({markup:'<h1>next</h1>',expectedVersion:2})});

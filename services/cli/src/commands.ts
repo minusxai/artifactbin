@@ -25,7 +25,7 @@ export const flags: Record<string,Flag> = {
  execution:{value:'ID',description:'Read a browser session execution receipt without replaying the script.'},
  as:{value:'WHO',description:'Act as somebody else: a test user id from afbin testuser new, or guest on a session. fork --as <testuser-id> gives the copy to that test user, inside its sandbox; sessions script new --as guest|<testuser-id> chooses who a NEW session\'s pages browse as, once, when it is created. Omit --as and everything runs as you.'},
  all:{description:'Erase every test user this account holds; testuser delete only.'},
- request:{value:'ID',description:'Correlate a reply to the managed agent request.'},
+ request:{value:'ID',description:'Stable idempotency identity for runs start, or correlation for a managed agent reply.'},
  phase:{value:'PHASE',description:'Record acknowledged, completed or blocked with a reply.'},
  history:{value:'PATH',description:'Snapshot a UTF-8 context handoff for the background agent.'},
  foreground:{description:'Keep the local terminal attached instead of launching in the background.'},
@@ -43,6 +43,7 @@ export const flags: Record<string,Flag> = {
  body:{value:'TEXT',description:'Post this comment text.'},thread:{value:'ID',description:'Select an existing thread for a reply or state change.'},state:{value:'STATE',description:'Set the selected thread to open or resolved; fixed names ignore case.'},
  node:{value:'ID',description:'Anchor a new thread to this node.'},quote:{value:'TEXT',description:'Anchor a new thread to this quote.'},
  limit:{value:'N',description:'Maximum results in this page (1–100).'},cursor:{value:'CURSOR',description:'Continue from a returned next_cursor.'},
+ after:{value:'SEQUENCE',description:'Read run events after this sequence (default 0).'},
  input:{value:'PATH',description:'Read command input from a local file; use - for stdin.'},
  harness:{value:'NAME',repeat:true,description:'Select a skill installation target: claude, codex, pi, opencode; repeat to select several, or use none.'},
  access:{value:'ACCESS',description:'Publish or change a dataset\'s row access: read (the default) or readwrite, which a document writing to it requires.'},
@@ -93,6 +94,7 @@ export const commands: Command[] = [
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in. Set ARTIFACTBIN_SKILLS=off in the environment to install no skill at all and leave every harness folder untouched \u2014 what a checkout\u2019s development loop (npm run afbin) runs under.',min:0,max:0,flags:['harness','service'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
+ {name:'runs',usage:'start <artifact> | status|events|cancel <run-id>',description:'Execute a published Lambda artifact and inspect its output, receipt and events. Read afbin help lambdas.',min:2,max:2,flags:['input','request','after','limit'],examples:['afbin runs start abc123 --request weekly-1 --input input.json --json','afbin runs status run_123 --json','afbin runs events run_123 --after 0 --json','afbin runs cancel run_123 --json']},
  {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions script new --as tu_9fA2b --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
  {name:'mention',usage:'<ref> <@username> [<@username> ...]',description:'Resolve eligible @usernames to stable mentions. Save the returned markup or post the comment to notify them.',min:2,max:31,flags:['include-access'],examples:['afbin mention a1B2c3 @alex --json']},
  {name:'invite',usage:'<ref> <@username> [<@username> ...]',description:'Invite people by username to an artifact. Auto-accept follows recipient preferences; never forces membership.',min:2,max:31,flags:['include-access'],examples:['afbin invite a1B2c3 @alex @sam --json']},
@@ -179,6 +181,19 @@ export function parseCommand(argv:string[]):ParsedCommand {
  }
  if(command.name==='query'&&f['dry-run']&&!f.write)throw new CliError('invalid_arguments','query --dry-run validates a mutation; add --write.','Reads have no side effects; run them directly.');
  if(command.name==='comment'&&f['dry-run']&&f.body===undefined&&f.input===undefined&&!f.state)throw new CliError('invalid_comment','--dry-run checks a proposed comment; add --body, --input or --state.');
+ if(command.name==='runs'){
+  const [action,id]=result.positionals;
+  if(!['start','status','events','cancel'].includes(action))throw new CliError('invalid_arguments','Choose runs start, status, events or cancel.');
+  if(action==='start'){
+   if(typeof f.request!=='string'||!f.request.trim()||f.request.length>128)throw new CliError('invalid_arguments','runs start requires --request with a stable nonempty ID (up to 128 characters).','Retry the same artifact, input and request ID after an uncertain response.');
+   if(f.after!==undefined||f.limit!==undefined)throw new CliError('invalid_arguments','--after and --limit apply only to runs events.');
+  }else{
+   if(!/^[A-Za-z0-9_-]{1,128}$/.test(id))throw new CliError('invalid_arguments','Use the runId returned by runs start.');
+   if(f.input!==undefined||f.request!==undefined)throw new CliError('invalid_arguments','--input and --request apply only to runs start.');
+   if(action!=='events'&&(f.after!==undefined||f.limit!==undefined))throw new CliError('invalid_arguments','--after and --limit apply only to runs events.');
+  }
+  if(f.after!==undefined&&(!/^\d+$/.test(String(f.after))||!Number.isSafeInteger(Number(f.after))))throw new CliError('invalid_arguments','--after must be a nonnegative integer sequence.');
+ }
  if(command.name==='sessions'){
   const [op,target]=result.positionals;
   if(!['script','status','close'].includes(op)|| (target==='new'&&op!=='script') || (op==='script'&&!f.input) || (op!=='script'&&f.input) || (op!=='status'&&f.execution))throw new CliError('invalid_arguments','Use sessions script new|session_id --input actions.js, status session_id [--execution id], or close session_id.');

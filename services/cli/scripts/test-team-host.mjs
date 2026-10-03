@@ -41,7 +41,7 @@ try{
   try{if((await fetch(origin+'/health')).ok){ready=true;break;}}catch{}await sleep(500);
  }
  if(!ready)throw new Error('Team host failed readiness: '+log);
- const gate=fileURLToPath(new URL('../../../scripts/gates/gate-cli-conformance.mjs',import.meta.url));
+ const gate=fileURLToPath(new URL('../../../scripts/gate-cli-conformance.mjs',import.meta.url));
  await completed(process.execPath,[gate,origin],{env:{...env,PLAYWRIGHT_BROWSERS_PATH:process.env.PLAYWRIGHT_BROWSERS_PATH??join(homedir(),'.cache/ms-playwright'),CONFORMANCE__CLI:executable}});
 }catch(error){console.error(log);throw error;}finally{
  await stopTeamHost(server);
