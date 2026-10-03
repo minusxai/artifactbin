@@ -1,11 +1,10 @@
 /**
  * Gate: A SHARED LINK IS LIVE.
  *
- * Hand someone a link and let an agent write — the whole product. It did not
- * work: a reader is served the document itself, top-level, and the live stream
- * belonged to the app's page, which a reader never gets. They sat on the
- * version they loaded until they reloaded by hand, and nothing anywhere said
- * so.
+ * Hand someone a link and let an agent write — the whole product. The reader
+ * gets the app page, which frames the document on its own origin; the document
+ * holds its own live stream there, so a write reaches them without a reload of
+ * their own.
  *
  * Two documents, because they take different routes to the same promise: one
  * with a chart (it hydrates, so it re-renders itself in place) and one of pure
@@ -16,12 +15,12 @@
  *
  *   usage: node scripts/gates/gate-live-reader.mjs [base]
  */
-import { servedTopLevel } from './lib/page-facts.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
-import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('live-reader');
@@ -54,6 +53,31 @@ async function publish(markup) {
   }) };
 }
 
+/*
+ * The document is framed by the app page on its own origin (lib/serving/document-frame); it scrolls inside its
+ * frame and holds its own live stream. Every read below is of the document's frame, re-found each time: a
+ * document that reloads to take a write is a new Frame, and a held one would be detached.
+ */
+const docEval = async (page, fn, arg) => (await documentFrame(page, { timeout: 5000 })).evaluate(fn, arg);
+/** Wait until the document's text matches `re`; true when it did. */
+async function docText(page, re, timeout) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const text = await docEval(page, () => document.body?.textContent ?? '').catch(() => '');
+    if (re.test(text)) return true;
+    await sleep(200);
+  }
+  return false;
+}
+const STORY = '[data-mx-inline-story]:not([data-mx-initial-story])';
+const storyHas = (page, cls) => docEval(page, ([sel, c]) => !!document.querySelector(sel)?.classList.contains(c), [STORY, cls]).catch(() => false);
+/** Wait (briefly) for the story element to carry `cls`: the app page's choice reaches the frame by postMessage. */
+async function storyBecomes(page, cls, timeout = 5000) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) { if (await storyHas(page, cls)) return true; await sleep(150); }
+  return storyHas(page, cls);
+}
+
 const browser = await launchChromium();
 
 // ── 1. A document that hydrates: adopted in place ───────────────────────────
@@ -65,14 +89,14 @@ const browser = await launchChromium();
   let reloads = 0;
   page.on('framenavigated', (f) => { if (f === page.mainFrame()) reloads++; });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
-  check(await servedTopLevel(page), 'the reader gets the document itself, not the app shell');
+  if (!await docText(page, /the first version/, 20000)) throw new Error('the reader never saw the first version');
+  // "the reader gets the document itself, not the app shell" is gone: the app page frames every document on its own origin.
   await sleep(3000);
 
   // Where they are, and what they are looking at.
-  await page.evaluate(() => window.scrollTo(0, Math.round((document.documentElement.scrollHeight - window.innerHeight) * 0.45)));
+  await docEval(page, () => window.scrollTo(0, Math.round((document.documentElement.scrollHeight - window.innerHeight) * 0.45)));
   await sleep(800);
-  const before = await page.evaluate(() => ({
+  const before = await docEval(page, () => ({
     y: window.scrollY,
     chart: (() => { const el = document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas'); if (el) el.__probe = 'keep'; return !!el; })(),
     navigations: 0,
@@ -80,11 +104,10 @@ const browser = await launchChromium();
   const loadsBefore = reloads;
 
   await doc.write(withChart('THE AGENT REWROTE THIS'));
-  await page.waitForFunction(() => /THE AGENT REWROTE THIS/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
-    .catch(() => {});
+  await docText(page, /THE AGENT REWROTE THIS/, 25000);
   await sleep(1500);
 
-  const after = await page.evaluate(() => ({
+  const after = await docEval(page, () => ({
     text: document.body.textContent ?? '',
     y: window.scrollY,
     chartKept: document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe ?? null,
@@ -104,17 +127,16 @@ const browser = await launchChromium();
   const ctx = await browser.newContext();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
+  if (!await docText(page, /the first version/, 20000)) throw new Error('the prose reader never saw the first version');
   await sleep(2000);
-  await page.evaluate(() => window.scrollTo(0, Math.round((document.documentElement.scrollHeight - window.innerHeight) * 0.45)));
+  await docEval(page, () => window.scrollTo(0, Math.round((document.documentElement.scrollHeight - window.innerHeight) * 0.45)));
   await sleep(800);
-  const before = await page.evaluate(() => window.scrollY);
+  const before = await docEval(page, () => window.scrollY);
 
   await doc.write(prose('THE AGENT REWROTE THIS TOO'));
-  await page.waitForFunction(() => /THE AGENT REWROTE THIS TOO/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
-    .catch(() => {});
+  await docText(page, /THE AGENT REWROTE THIS TOO/, 25000);
   await sleep(2500);
-  const after = await page.evaluate(() => ({ text: document.body.textContent ?? '', y: window.scrollY }));
+  const after = await docEval(page, () => ({ text: document.body.textContent ?? '', y: window.scrollY }));
   check(/THE AGENT REWROTE THIS TOO/.test(after.text), 'a prose document reaches its reader too');
   check(Math.abs(after.y - before) < 120, `and the reload kept their place (${before} → ${after.y})`);
   await ctx.close();
@@ -126,21 +148,18 @@ const browser = await launchChromium();
   const ctx = await browser.newContext();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  await page.waitForFunction(() => /mode probe/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
+  if (!await docText(page, /mode probe/, 20000)) throw new Error('the reader never saw the mode probe');
   await sleep(2500);
-  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('light')), 'an unthemed document opens in the author default (light)');
-  // The reader's chrome opens hidden; a scroll up is the gesture that reveals it.
-  await revealReaderChrome(page);
+  check(await storyHas(page, 'light'), 'an unthemed document opens in the author default (light)');
+  // The app page's bar is always on screen (solid/document/DocumentChrome): nothing to reveal first.
   await openArtifactControls(page);
   await page.getByLabel('Dark mode', {exact: true}).click();
-  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')), 'the top-right toggle flips the document dark');
+  check(await storyBecomes(page, 'dark'), 'the top-right toggle flips the document dark');
 
   await doc.write(withChart('MODE WRITE LANDED'));
-  await page.waitForFunction(() => /MODE WRITE LANDED/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
-    .catch(() => {});
+  await docText(page, /MODE WRITE LANDED/, 25000);
   await sleep(1200);
-  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
-    "an agent write updates the document but does not stomp the reader's mode");
+  check(await storyHas(page, 'dark'), "an agent write updates the document but does not stomp the reader's mode");
   await ctx.close();
 }
 
@@ -150,18 +169,16 @@ const browser = await launchChromium();
   const ctx = await browser.newContext();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  await page.waitForFunction(() => /mode prose probe/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
+  if (!await docText(page, /mode prose probe/, 20000)) throw new Error('the reader never saw the prose mode probe');
   await sleep(2000);
-  await revealReaderChrome(page);
   await openArtifactControls(page);
   await page.getByLabel('Dark mode', {exact: true}).click();
+  await storyBecomes(page, 'dark');
 
   await doc.write(prose('MODE PROSE REWRITTEN'));
-  await page.waitForFunction(() => /MODE PROSE REWRITTEN/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
-    .catch(() => {});
+  await docText(page, /MODE PROSE REWRITTEN/, 25000);
   await sleep(2000);
-  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
-    "a no-runtime document's reload carries the reader's mode in window.name");
+  check(await storyHas(page, 'dark'), "a no-runtime document's reload carries the reader's mode in window.name");
   await ctx.close();
 }
 

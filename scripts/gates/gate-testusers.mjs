@@ -107,7 +107,7 @@ try {
   const joined = await cli(['sessions', 'script', 'new', '--as', testuser.id], `${driver}
     const page = await context.newPage(); const nav = await page.goto(${JSON.stringify(`/a/${copy}`)});
     const ready = await until(page).then(() => true, () => false);
-    if (!ready) return { debug: { status: nav?.status(), url: page.url(), body: (await page.content()).slice(0, 1500) } };
+    if (!ready) return { debug: { status: nav?.status(), url: page.url(), frames: page.frames().map(f => f.url()), body: (await page.content()).slice(0, 1500) } };
     const receipt = await mutate(page, 'join');
     await page.getByRole('button', { name: 'Join this tab' }).waitFor();
     const balances = await people(page);
@@ -117,7 +117,9 @@ try {
     await output.image(await page.screenshot());
     return { receipt, people: balances, refused };
   `);
-  assert.equal(joined.status, 'completed', JSON.stringify(joined)); sessions.push(joined.session_id);
+  // Recorded before the verdict: a failed run still closes its session, so a retry is not refused for capacity.
+  if (joined.session_id) sessions.push(joined.session_id);
+  assert.equal(joined.status, 'completed', JSON.stringify(joined));
   assert(joined.result.receipt, JSON.stringify(joined.result));
   assert.equal(joined.result.receipt.committed, true, JSON.stringify(joined.result.receipt));
   assert.deepEqual(joined.result.people, [testuser.id]);
@@ -135,7 +137,8 @@ try {
     const body = await page.locator('body').innerText();
     return { people: people_, body };
   `);
-  assert.equal(mine.status, 'completed', JSON.stringify(mine)); sessions.push(mine.session_id);
+  if (mine.session_id) sessions.push(mine.session_id);
+  assert.equal(mine.status, 'completed', JSON.stringify(mine));
   assert.equal(mine.result.people.length, 2);
   assert(mine.result.body.includes(testuser.label), `the copy names ${testuser.label}; body was: ${mine.result.body.slice(0, 400)}`);
   assert(!mine.result.body.includes('Unknown person'), 'no row renders as an unknown person');
