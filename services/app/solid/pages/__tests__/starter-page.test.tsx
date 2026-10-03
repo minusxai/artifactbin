@@ -70,17 +70,23 @@ it('says how to copy by hand when the clipboard refuses', async () => {
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not copy. Select and copy the instructions above.'));
 });
 
+/** The app bar's panel opens in the page's trusted overlay (lib/islands/trusted-portal), above the comments rail. */
+const controls = (): HTMLElement => {
+  const roots = [...document.querySelectorAll('[data-trusted-ui]')].map((host) => host.shadowRoot as unknown as HTMLElement);
+  return within(roots.find((root) => root.querySelector('[aria-label="Artifact controls"]')) ?? document.body).getByRole('region', { name: 'Artifact controls' });
+};
+
 it('wears the document page\'s bar and its artifact controls, with editing only for writers', () => {
   open();
   expect(screen.getByRole('banner', { name: 'Page bar' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  const panel = within(screen.getByRole('region', { name: 'Artifact controls' }));
+  const panel = within(controls());
   expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
   cleanup(); document.body.replaceChildren();
   open(answer('viewer'));
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  expect(within(screen.getByRole('region', { name: 'Artifact controls' })).queryByRole('button', { name: 'Edit artifact' })).toBeNull();
+  expect(within(controls()).queryByRole('button', { name: 'Edit artifact' })).toBeNull();
 });
 
 it('opens the editor on the compiled placeholder: #edit and Edit both cross to /edit', () => {

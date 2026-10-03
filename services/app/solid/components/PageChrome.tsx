@@ -4,6 +4,8 @@ import { createContext, createEffect, createSignal, For, on, onCleanup, Show, us
 import { Bell, BookOpen, ChevronRight, CircleUser, FileText, LogIn, LogOut, Moon, SlidersVertical, Sun, User, X } from 'lucide-solid';
 import { GitHubIcon } from './brand-icons';
 import { useLocation } from '@solidjs/router';
+import { Portal } from 'solid-js/web';
+import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { crumbsFor } from '@/lib/workspace/breadcrumb';
 import { CHROME_IDENTITY } from '@/lib/accounts/chrome-identity';
 import { githubStarMarkup, wireGithubStar } from '@/lib/serving/github-star';
@@ -110,7 +112,13 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
         <Tooltip content="menu"><button type="button" aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)} class={BAR_BUTTON}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></button></Tooltip>
       </div>
     </header>
-    <Show when={panel()}>
+    {/*
+      * The panels open in the page's trusted overlay where it has one (the document page's "navigation" layer,
+      * lib/islands/trusted-portal), like every other popover there: the comments rail is a top-layer overlay, and the
+      * top layer ignores z-index, so a panel left on the ordinary page would paint under the rail and its rows could
+      * not be pressed. A page without trusted UI keeps them on its body.
+      */}
+    <Show when={panel()}><Portal mount={trustedPortalOf(document) ?? document.body}>
       <button type="button" aria-label="Close panel" class="fixed inset-0 z-40 cursor-default border-0 bg-black/25 p-0" onClick={close} />
       <Show when={panel() === 'menu'}>
         <PageMenuPanel close={close} />
@@ -119,7 +127,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
         <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>
       </section></Show>
       <Show when={panel() === 'notifications'}><NotificationsPanel close={close} /></Show>
-    </Show>
+    </Portal></Show>
   </>;
 }
 
