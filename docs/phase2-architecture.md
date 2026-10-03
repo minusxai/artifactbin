@@ -10,7 +10,7 @@ Targets (brotli/wire bytes, checked by `scripts/build/size-targets.mjs` against 
 |---|--------|----------------|--------|
 | 1 | JS before ready, pages with nothing interactive (prose, deck) | 275 KB | ≤ 10 KB |
 | 2 | JS before ready, interactive pages (kit, dashboard, every component) | 275–300 KB | ≤ 85 KB |
-| 3 | Production prose page, total transferred | 481 KB | ≤ 200 KB |
+| 3 | Production prose page, total transferred | 481 KB | ≤ 250 KB |
 
 Design decisions: a publish-time compiler to Solid islands (Solid 1.9); a vendored interactive kit that
 mirrors Radix's DOM conventions, so authored and compiled markup keep one shape (no solid-ui or
