@@ -31,18 +31,19 @@
 // `seconds` re-read from CI runs 36875088399, 36875673784 and 36876517464: the slowest of the three
 // `──── name (Ns) ────` lines for each gate (a failed first attempt excluded).
 export const GATE_SPECS = Object.freeze([
-  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 37, timeoutMs: 150_000 },
-  // Opens rendered offline files from file:// (reading, editing, comments, Save, code view offline and
-  // online, agent-edited files), one engine per gate. All three took 74s on run 36879103503 (after 48s of
-  // cross-browser install); alone, 29s/38s/28s on run 36880158113.
-  { name: 'offline-file', needsMail: false, seconds: 29, timeoutMs: 120_000 },
-  { name: 'offline-file-firefox', browsers: ['firefox'], needsMail: false, seconds: 38, timeoutMs: 120_000 },
-  { name: 'offline-file-webkit', browsers: ['webkit'], needsMail: false, seconds: 28, timeoutMs: 120_000 },
-  { name: 'cli-conformance', needsMail: true, seconds: 12, timeoutMs: 180_000 },
-  { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
-  { name: 'testusers', needsMail: true, seconds: 10, timeoutMs: 60_000 },
-  { name: 'app-flows', needsMail: true, seconds: 75, timeoutMs: 210_000 },
-  { name: 'claim-flow', needsMail: true, seconds: 6, timeoutMs: 60_000 },
+  // Journey gates (.agent/gates-proposal.md §3): each absorbs several former gates; `seconds` measured in
+  // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
+  // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
+  // process (formerly offline-file, -firefox, -webkit and screenshot-comments: three shards' cross-browser setup).
+  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 29, timeoutMs: 90_000 },
+  // Guest start, OAuth consent and the login door, claim, fork, folders and CLI acceptance, one persona per leg
+  // (formerly simpler-start, oauth-browser, app-flows AUTH, claim-flow, fork, folders and cli-conformance).
+  { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 22, timeoutMs: 70_000 },
+  // Writes reaching open pages with no reload (formerly live-data, live-reader, app-flows VIEWER and the
+  // watched-then-edit half of inplace-edit section 3).
+  { name: 'live', needsMail: false, seconds: 14, timeoutMs: 60_000 },
+  // Browser sessions and test users through the real CLI, Linux + bubblewrap (formerly browser-sessions, testusers).
+  { name: 'sessions', needsMail: true, seconds: 35, timeoutMs: 110_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
   // run 36838282615 that held a runner to itself and set the run's critical path. editor-path also
   // carries hydration's compiled-page edit leg; editor-exits carries mobile's editor sections. Measured in
@@ -51,12 +52,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'editor-engine', needsMail: false, serialGroup: 'clipboard', seconds: 28, timeoutMs: 140_000 },
   { name: 'editor-path', needsMail: true, seconds: 43, timeoutMs: 150_000 },
   { name: 'editor-exits', needsMail: false, seconds: 41, timeoutMs: 130_000 },
-  { name: 'folders', needsMail: true, seconds: 12, timeoutMs: 60_000 },
-  { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   // Reading → editing → agent write → exit, and typing that survives a remote edit: 35s in one gate container.
   { name: 'inplace-edit', needsMail: false, seconds: 35, timeoutMs: 110_000 },
-  { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
-  { name: 'live-reader', needsMail: false, seconds: 30, timeoutMs: 70_000 },
   // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
   { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
@@ -69,8 +66,6 @@ export const GATE_SPECS = Object.freeze([
   // full-kit, the compiled handover from hydration, libraries and fonts (proposal row 14). Needs esm.sh.
   // Measured 28s in a gate container.
   { name: 'kit-and-fonts', needsMail: false, seconds: 28, timeoutMs: 90_000 },
-  { name: 'oauth-browser', needsMail: true, seconds: 3, timeoutMs: 60_000 },
-  { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 3, timeoutMs: 60_000 },
   // Measured in one gate-container run (4 CPUs, two servers, beside each other): viz-editor 50s, comments 13s,
   // collab-roles 14s, exports 34s.
   // Builds a chart by clicking, reloads, edits again, then a session-only owner and a grid (beside the journey).
@@ -151,7 +146,7 @@ export function browsersFor(names) {
  * Twelve bins of <=~75s of wall each (two servers per runner) from ~1,250s of measured gate work, two of
  * them held alone by CI_ISOLATED_GATES; ten left ~89s of work on the shared bins (run 36879103503).
  */
-export const CI_GATE_SHARDS = 12;
+export const CI_GATE_SHARDS = 8;
 
 /**
  * Gates that each get a CI runner to themselves. Both FAIL under a neighbour's browser load and then

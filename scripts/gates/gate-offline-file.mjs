@@ -1,66 +1,46 @@
 /**
- * THE OFFLINE FILE, OPENED THE WAY A READER OPENS IT: a double-clicked `.html`
- * from file://, in Chromium, Firefox or WebKit (one per gate, below), with no server anywhere.
+ * Gate: THE OFFLINE FILE AND THE SCREENSHOT COMMENT, IN THREE ENGINES AT ONCE.
  *
- * Publishes the checked-in dashboard fixture to the gate's isolated server,
- * downloads its compiled Solid offline file, writes it to a temp dir and
- * asserts in each browser engine:
+ * A double-clicked `.html` from file:// shares no server with anything, so Chromium, Firefox and WebKit open it
+ * CONCURRENTLY, one lane per engine, in this one process (it was three gates on three shards, each paying for
+ * the cross-browser install). Each engine's lane, in order:
+ *
+ * READING (the downloaded file, no server anywhere):
  *  - the title and body render, from inside the file;
- *  - the table shows the snapshot's rows, and changing the Select runs the
- *    query LIVE on the file's own SQLite engine over the rows it holds (the
- *    fixture precomputes nothing for it), under a CSP that admits only
+ *  - the table shows the snapshot's rows, and changing the Select runs the query LIVE on the file's own SQLite
+ *    engine over the rows it holds (the fixture precomputes nothing for it), under a CSP that admits only
  *    'wasm-unsafe-eval' beyond the inline scripts;
- *  - the text input feeding a query over data the file does NOT hold is
- *    frozen: disabled with OFFLINE_FILTER_REASON (and its hint says so on
- *    focus);
+ *  - the text input feeding a query over data the file does NOT hold is frozen: disabled with
+ *    OFFLINE_FILTER_REASON (and its hint says so on focus);
  *  - the <Mutation> button says OFFLINE_MUTATION_REASON, never an access check;
  *  - the Vega chart draws its bars from the snapshot, then from the live run;
- *  - a browser without DecompressionStream gets the plain "needs a current
- *    browser" message instead of a broken page;
- *  - nothing but file:/data: is requested, no Content-Security-Policy
- *    violation fires (a blocked fetch never reaches the request log, so this
- *    is the check that would catch one), and no page error is thrown.
+ *  - a browser without DecompressionStream gets the plain "needs a current browser" message;
+ *  - nothing but file:/data: is requested, no Content-Security-Policy violation fires (a blocked fetch never
+ *    reaches the request log, so this is the check that would catch one), and no page error is thrown.
  *
- * And then, with the Solid editor in each engine, what a reader DOES with the
- * file (lib/offline/file-backend, lib/offline/solid-entry):
- *  - Save starts disabled ("No changes to save"); Edit asks "What should we
- *    call you?" the first time; a heading edited in place shows on the page,
- *    marks the file unsaved, and Save downloads a file;
- *  - what needs artifactbin says why in place: version history, an image by
- *    URL, the query notebook's tables;
- *  - THAT saved file, opened on its own, has the edit, and "Changes" lists it
- *    under the name; invalid markup typed in code view shows the validator's
- *    reason and is not applied;
- *  - a second reader (a fresh browser profile) comments on a selection in the
- *    saved copy — the name prompt comes first — replies and resolves, saves,
- *    and the copy they saved reopens with the thread, the name and its status;
- *  - Chromium's save picker is written to when it exists (stubbed: Playwright
- *    cannot drive the native dialog);
- *  - still zero requests, CSP violations and page errors on every page — but
- *    one: code view asks for its extras (CodeMirror, prettier) from the file's
- *    origin, which the gate refuses, so it keeps the plain editor and says so,
- *    and "View formatted" is disabled with its reason.
+ * EDITING (lib/offline/file-backend, lib/offline/solid-entry): Save starts disabled; Edit asks "What should we
+ * call you?"; a heading edited in place marks the file unsaved and Save downloads it; what needs artifactbin says
+ * why in place (history, image URL, the query notebook); the saved file reopens with the edit and "Changes" by
+ * name; invalid markup in code view is refused; a second reader comments on the saved copy, replies, resolves and
+ * saves, and that copy reopens with the thread; Chromium's save picker is written to (stubbed). Code view offline
+ * asks for its extras once from the file's origin, which is refused, so it keeps the plain editor and says so.
  *
- * Code view ONLINE, per engine: the file's origin is served by the gate
- * (Playwright routes; nothing real is contacted) with the built extras; the
- * SRI-pinned script loads, CodeMirror mounts, "View formatted" formats, and the
- * extras are the one request the file made. In Chromium, tampered bytes are
- * refused by SRI and code view keeps the plain editor.
+ * CODE VIEW ONLINE: the file's origin is served by the gate (Playwright routes; nothing real is contacted) with
+ * the built extras; the SRI-pinned script loads, CodeMirror mounts, "View formatted" formats, and the extras are
+ * the one request. In Chromium, tampered bytes are refused by SRI and code view keeps the plain editor.
  *
- * And a file EDITED BY AN AGENT, per engine: the top-level "source" string
- * changed inside the JSON with a JSON round-trip and nothing else. It opens
- * rebuilt from the new source with "Changed outside the file" in Changes; an
- * invalid source keeps the last good render under a banner naming the error.
+ * EDITED BY AN AGENT: the top-level "source" changed inside the JSON and nothing else. It opens rebuilt with
+ * "Changed outside the file" in Changes; an invalid source keeps the last good render under a banner.
  *
- * The base URL seeds and downloads the fixture before any file:// browser
- * opens it. Every browser request to the file's origin is intercepted.
+ * WHICH ENGINES TRAVEL: a prose file carries no document module, a Mermaid file carries Mermaid and neither SQLite
+ * nor Vega, and both open from file:// under the same network refusal.
  *
- * ONE ENGINE PER GATE: `node scripts/gates/gate-offline-file.mjs [base] [engine]`, Chromium when no engine is
- * named. gate-offline-file-firefox.mjs and gate-offline-file-webkit.mjs run this file for their engine,
- * so CI runs the three on separate shards (74s together on run 36879103503, behind 48s of browser install) and
- * only the shard that needs Firefox's or WebKit's system packages installs them.
+ * THE SCREENSHOT COMMENT (formerly gate-screenshot-comments): Chromium's real tab capture at DPR 1 and 2.2 (the crop
+ * corner is the content's pixel), the upload fallback in Firefox and WebKit, the brush, and the comment's
+ * screenshot persisting through a reload. The document is framed on its own origin on the gate's server.
+ *
+ *   usage: node scripts/gates/gate-offline-file.mjs [base]
  */
-import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { brotliCompressSync, gunzipSync } from 'node:zlib';
@@ -68,20 +48,29 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
-import { chromium, firefox, webkit } from 'playwright';
+import { firefox, webkit } from 'playwright';
 import { expect } from 'playwright/test';
+import sharp from 'sharp';
+import { createChecker } from './lib/assert.mjs';
+import { lane } from './lib/lane.mjs';
+import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
+import { documentLocator } from './lib/page-facts.mjs';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { startDocument, becomeOwner } from '../lib/start-doc.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const APP = path.join(ROOT, 'services/app');
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const ENGINE_NAME = process.argv[3] ?? 'chromium';
-const ENGINES = [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]].filter(([name]) => name === ENGINE_NAME);
-if (ENGINES.length !== 1) throw new Error(`gate-offline-file: unknown engine ${ENGINE_NAME} (chromium, firefox or webkit)`);
+const check = createChecker('offline-file');
+/** Chromium through the one launcher (lib/browser.mjs); the other two engines need no host mapping for file://. */
+const ENGINES = [['chromium', { launch: (options) => launchChromium(options) }], ['firefox', firefox], ['webkit', webkit]];
 const work = path.join(os.tmpdir(), `afbin-offline-gate-${process.pid}`);
 mkdirSync(work, { recursive: true });
 process.on('exit', () => rmSync(work, { recursive: true, force: true }));
+
+// ── one download, before any browser opens it ────────────────────────────────
 
 // The bundle, built if this checkout has not built it (a no-op on a cache hit).
 execFileSync(process.execPath, ['scripts/build-offline.mjs', '--cache'], { cwd: APP, stdio: 'inherit' });
@@ -93,7 +82,7 @@ await esbuild.build({
   bundle: true, format: 'esm', platform: 'node', outfile: shim, alias: { '@': APP }, logLevel: 'warning',
 });
 const {
-  renderArtifactFileHtml, parseArtifactFile, artifactFileCsp, ARTIFACT_FILE_UNSUPPORTED,
+  parseArtifactFile, artifactFileCsp, ARTIFACT_FILE_UNSUPPORTED,
   OFFLINE_FILTER_REASON, OFFLINE_MUTATION_REASON, OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON,
 } = await import(pathToFileURL(shim).href);
 const RICH_EDITOR_OFFLINE = 'The rich code editor needs a connection the first time. Using the plain editor.';
@@ -110,20 +99,23 @@ const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application
 const publish = async (body) => {
   const response = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers, body: JSON.stringify(body) });
   const answer = await response.json();
-  assert.equal(response.status, 201, JSON.stringify(answer));
+  if (response.status !== 201) throw new Error(`publish → ${response.status} ${JSON.stringify(answer)}`);
   return answer.id;
 };
+const download = async (id) => {
+  const response = await fetch(`${BASE}/a/${id}/download`, { headers: { Authorization: `Bearer ${token}` } });
+  if (response.status !== 200) throw new Error(`download ${id} → ${response.status} ${await response.text()}`);
+  return response.text();
+};
 const fixture = JSON.parse(readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/artifact-file.json'), 'utf8'));
-const rows = fixture.snapshot.held.sales_data.rows.rows;
-const salesId = await publish({ dataset: rows, visibility: 'unlisted', access: 'readwrite' });
-const targetsId = await publish({ dataset: rows, visibility: 'unlisted', access: 'read' });
+const heldRows = fixture.snapshot.held.sales_data.rows.rows;
+const salesId = await publish({ dataset: heldRows, visibility: 'unlisted', access: 'readwrite' });
+const targetsId = await publish({ dataset: heldRows, visibility: 'unlisted', access: 'read' });
 const source = readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/dashboard.jsx'), 'utf8')
   .replace('ref:Ds1a2b', `ref:${salesId}`).replace('ref:Tg9z8y', `ref:${targetsId}`);
-const documentId = await publish({ markup: source, visibility: 'unlisted' });
-const download = await fetch(`${BASE}/a/${documentId}/download`, { headers: { Authorization: `Bearer ${token}` } });
-assert.equal(download.status, 200, await download.clone().text());
-const exported = await download.text();
-const file = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([\s\S]*?)<\/script>/.exec(exported)[1]));
+const exported = await download(await publish({ markup: source, visibility: 'unlisted' }));
+const FILE_JSON = /(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/;
+const file = parseArtifactFile(JSON.parse(FILE_JSON.exec(exported)[2]));
 // The second dataset is intentionally not held by this copy. Its free-text
 // filter is frozen while the first import remains live in SQLite.
 file.snapshot.frozen = ['note'];
@@ -131,6 +123,57 @@ delete file.snapshot.held.targets_data;
 file.island.dataflow.hold = ['sales_data'];
 const extrasUrl = new URL(manifest.extras.path, file.origin).href;
 console.log(`extras: ${(manifest.extras.raw / 1024).toFixed(0)} KB raw at ${extrasUrl}`);
+
+// One downloaded file carries this document's compiled module and engines.
+const coreHtml = exported.replace(FILE_JSON, (_all, open, _json, close) => `${open}${JSON.stringify(file).replace(/</g, '\\u003c')}${close}`);
+const corePath = path.join(work, 'Regional sales (solid).html');
+writeFileSync(corePath, coreHtml);
+const coreUrl = pathToFileURL(corePath).href;
+console.log(`solid file: ${(Buffer.byteLength(coreHtml) / 1024).toFixed(0)} KB`);
+console.log(`CSP: ${artifactFileCsp(file.origin)}`);
+
+const baseRows = file.snapshot.state.tables.sales.rows;
+// What the live query must answer: the held rows, filtered — nothing precomputed says so.
+check(Array.isArray(file.snapshot.variants) && file.snapshot.variants.length === 0, 'the fixture precomputes nothing for the region: the file runs it');
+const westRows = heldRows.filter((row) => row.region === 'west');
+const headingId = /<h1 [^>]*id="([^"]+)"/.exec(file.source)[1];
+
+/** What a coding agent does: a JSON round-trip of the `#afbin-file` block, changing `source` and nothing else. */
+const agentEdited = (html, edit) => html.replace(FILE_JSON, (_all, open, json, close) => {
+  const value = JSON.parse(json); value.source = edit(value.source);
+  return `${open}${JSON.stringify(value).replace(/</g, '\\u003c')}${close}`;
+});
+const agentFiles = {
+  valid: path.join(work, 'agent-valid.html'),
+  invalid: path.join(work, 'agent-invalid.html'),
+  query: path.join(work, 'agent-query.html'),
+};
+writeFileSync(agentFiles.valid, agentEdited(coreHtml, (s) => s.replace('Regional sales</h1>', 'Sales, edited by an agent</h1>')));
+writeFileSync(agentFiles.invalid, agentEdited(coreHtml, (s) => s.replace('<Button run', '<p>{$missing}</p>\n  <Button run')));
+writeFileSync(agentFiles.query, agentEdited(coreHtml, (s) => s.replace('select region, month, revenue from sales_data.rows where', 'select region, month, revenue * 2 as revenue from sales_data.rows where')));
+
+// The compiled page decides which engines travel with each file. A prose
+// document has no browser module; a Mermaid document can draw without SQLite
+// or Vega. Both must still open from file:// under the same network refusal.
+const engineFiles = [];
+for (const [label, markup] of [
+  ['prose', '<h1>Offline prose</h1><p>A file that needs no document engine.</p>'],
+  ['mermaid', '<h1>Offline diagram</h1><Mermaid title="Flow" code={"flowchart TD\\n A[Draft] --> B[Saved]"} />'],
+]) {
+  const html = await download(await publish({ markup, visibility: 'unlisted' }));
+  const code = /<script type="application\/octet-stream" id="afbin-compiled-code">([^<]*)<\/script>/.exec(html)?.[1];
+  const packed = code ? gunzipSync(Buffer.from(code, 'base64')).toString('utf8') : '';
+  check(!!code === (label === 'mermaid'), `${label}: compiled document module`);
+  check(!/id="afbin-wasm"/.test(html), `${label}: no SQLite engine`);
+  check(!/Axes cannot be shared in concatenated/.test(packed), `${label}: no Vega engine`);
+  if (label === 'mermaid') check(/mermaidAPI/.test(packed), 'Mermaid carries its drawing engine');
+  const target = path.join(work, `${label}.html`);
+  writeFileSync(target, html);
+  console.log(`${label} file: ${Buffer.byteLength(html)} raw / ${brotliCompressSync(html).length} br bytes`);
+  engineFiles.push({ label, url: pathToFileURL(target).href });
+}
+
+// ── the browser side, shared by every lane ───────────────────────────────────
 
 /**
  * The file's origin, as the gate serves it: refused (offline), or answering
@@ -147,127 +190,6 @@ async function serveOrigin(context, mode) {
     });
   });
 }
-/*
- * One downloaded file carries this document's compiled module and engines.
- */
-const files = ['solid'].map((kind) => {
-  const htmlPath = path.join(work, `Regional sales (${kind}).html`);
-  const html = exported.replace(/(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/,
-    (_all, open, _json, close) => `${open}${JSON.stringify(file).replace(/</g, '\\u003c')}${close}`);
-  writeFileSync(htmlPath, html);
-  console.log(`${kind} file: ${(Buffer.byteLength(html) / 1024).toFixed(0)} KB`);
-  return { kind, url: pathToFileURL(htmlPath).href };
-});
-console.log(`CSP: ${artifactFileCsp(file.origin)}`);
-
-const baseRows = file.snapshot.state.tables.sales.rows;
-// What the live query must answer: the held rows, filtered — nothing precomputed says so.
-assert.deepEqual(file.snapshot.variants, [], 'the fixture precomputes nothing for the region: the file runs it');
-const westRows = file.snapshot.held.sales_data.rows.rows.filter((row) => row.region === 'west');
-const failures = [];
-
-for (const { kind, url } of files) for (const [engine_, engine] of ENGINES) {
-  const name = `${engine_} (${kind})`;
-  const browser = await engine.launch();
-  const started = Date.now();
-  try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    await serveOrigin(context, 'offline');
-    const page = await context.newPage();
-    const requests = [];
-    const pageErrors = [];
-    const consoleErrors = [];
-    page.on('request', (request) => { if (!/^(file|data):/.test(request.url())) requests.push(request.url()); });
-    page.on('pageerror', (error) => pageErrors.push(error.stack ?? String(error)));
-    page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
-    await page.addInitScript(() => {
-      window.__cspViolations = [];
-      document.addEventListener('securitypolicyviolation', (event) => {
-        window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
-      });
-    });
-    await page.goto(url);
-
-    // Title and body, from inside the file.
-    await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
-    assert.equal(await page.title(), file.metadata.title, 'document title');
-    await expect(page.getByText('Revenue by region and month')).toBeVisible();
-    await expect(page.getByRole('status')).toHaveCount(0); // the "Opening …" placeholder is gone
-    const bar = page.getByRole('banner', { name: 'Offline copy' });
-    await expect(bar).toContainText(`Offline copy of ${file.metadata.title}`);
-    await expect(bar).toContainText('data as of');
-    await expect(bar.getByRole('link', { name: 'Open live version' })).toHaveAttribute('href', file.liveUrl);
-
-    // The chart draws, from the same rows: one bar per month, summed.
-    const chart = page.getByLabel('Question embed').first();
-    const expectBars = async (rows) => {
-      const sums = new Map();
-      for (const row of rows) sums.set(row.month, (sums.get(row.month) ?? 0) + row.revenue);
-      await expect(chart.locator('[data-mx-chart-state="ready"]')).toHaveCount(1, { timeout: 20_000 });
-      await expect(chart.locator('.mark-rect path')).toHaveCount(sums.size);
-      for (const [month, sum] of sums) await expect(chart.locator(`[aria-label="month: ${month}; Sum of revenue: ${sum}"]`)).toHaveCount(1);
-    };
-    await expectBars(baseRows);
-
-    // The snapshot's rows, then a LIVE query's: the engine loads from the file's own bytes behind the first paint.
-    const table = page.getByRole('table').first();
-    const bodyRows = table.getByRole('row').filter({ hasNot: page.getByRole('columnheader') });
-    await expect(bodyRows).toHaveCount(baseRows.length);
-    for (const row of baseRows) await expect(table).toContainText(String(row.month));
-    await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: 'Region', exact: true }).click();
-    await page.getByRole('option', { name: 'west', exact: true }).click();
-    await expect(bodyRows).toHaveCount(westRows.length);
-    for (const text of await bodyRows.allTextContents()) assert.match(text, /west/, `${name}: a filtered row is not west: ${text}`);
-    await expectBars(westRows);
-
-    // The frozen Value: disabled, described, and its hint shows the reason.
-    const frozen = page.getByRole('textbox', { name: 'Region pattern' });
-    await expect(frozen).toBeDisabled();
-    await expect(frozen).toHaveAttribute('aria-description', OFFLINE_FILTER_REASON);
-    await page.locator(`[tabindex="0"][aria-description="${OFFLINE_FILTER_REASON}"]`).focus();
-    await expect(page.getByRole('tooltip')).toContainText(OFFLINE_FILTER_REASON);
-
-    // The write: refused by name, never "Checking edit access…".
-    const add = page.getByRole('button', { name: 'Add a row' });
-    await expect(add).toBeDisabled();
-    await expect(add).toHaveAttribute('aria-description', OFFLINE_MUTATION_REASON);
-    await expect(page.getByText(OFFLINE_MUTATION_REASON, { exact: true })).toHaveCount(0);
-    await page.locator('[data-slot="tooltip-trigger"]').filter({has:add}).click();
-    await expect(page.getByRole('tooltip')).toHaveText(OFFLINE_MUTATION_REASON);
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('tooltip')).toHaveCount(0);
-    await expect(page.getByText('Checking edit access…')).toHaveCount(0);
-
-    // Nothing left the file.
-    const violations = await page.evaluate(() => window.__cspViolations);
-    assert.deepEqual(requests, [], `${name}: network requests`);
-    assert.deepEqual(violations, [], `${name}: CSP violations`);
-    assert.deepEqual(pageErrors, [], `${name}: page errors`);
-    // A browser without DecompressionStream: the boot script's plain message, and nothing else runs.
-    const old = await context.newPage();
-    const oldErrors = [];
-    old.on('pageerror', (error) => oldErrors.push(String(error)));
-    await old.addInitScript(() => { delete globalThis.DecompressionStream; });
-    await old.goto(url);
-    await expect(old.getByRole('alert')).toHaveText(ARTIFACT_FILE_UNSUPPORTED);
-    await expect(old.getByRole('heading', { name: 'Regional sales' })).toBeVisible();
-    assert.deepEqual(oldErrors, [], `${name}: page errors without DecompressionStream`);
-
-    console.log(`${name}: title, body, top bar, snapshot rows (${baseRows.length}) → live west query (${westRows.length}), frozen input, mutation reason, chart, 0 requests, 0 CSP violations, 0 page errors, unsupported-browser message — passed in ${((Date.now() - started) / 1000).toFixed(1)}s${consoleErrors.length ? ` (console errors: ${consoleErrors.join(' | ')})` : ''}`);
-  } catch (error) {
-    failures.push(new Error(`${name}: ${error.message}`));
-    console.log(`${name}: FAILED — ${error.message}`);
-  } finally {
-    await browser.close();
-  }
-}
-// ── editing, commenting and saving, from file:// ──────────────────────────────
-
-const core = files.find((f) => f.kind === 'solid');
-const headingId = /<h1 [^>]*id="([^"]+)"/.exec(file.source)[1];
-const downloads = {};
-
 /** A page that records what must stay empty: requests off the file, CSP violations, page errors. */
 async function watchedPage(context, sink) {
   const page = await context.newPage();
@@ -291,7 +213,10 @@ async function newContext(browser, { picker = false, origin = 'offline' } = {}) 
   }, { picker });
   return context;
 }
-const violations = (page) => page.evaluate(() => window.__cspViolations);
+const violations = (page) => page.evaluate(() => window.__cspViolations ?? []);
+const empty = (list) => Array.isArray(list) && list.length === 0;
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const show = (value) => JSON.stringify(value).slice(0, 300);
 
 /** Select the first `length` characters of the heading's text, as a reader's drag does. */
 async function selectHeading(page, length) {
@@ -317,348 +242,548 @@ async function saveByDownload(page, to) {
   const scheme = download.url().split(':')[0];
   // The saved copy is the same shell with the same code: it parses, and it is a complete file.
   const html = readFileSync(to, 'utf8');
-  assert.match(html, /<script type="application\/octet-stream" id="afbin-code">/);
+  if (!/<script type="application\/octet-stream" id="afbin-code">/.test(html)) throw new Error('the saved file is not a complete file');
   return { html, scheme, name: download.suggestedFilename() };
 }
-const savedFile = (html) => {
-  const json = /<script type="application\/json" id="afbin-file">([\s\S]*?)<\/script>/.exec(html)[1];
-  return parseArtifactFile(JSON.parse(json));
-};
+const savedFile = (html) => parseArtifactFile(JSON.parse(FILE_JSON.exec(html)[2]));
 const saveButton = (page) => page.getByRole('button', { name: 'Save', exact: true });
+const openedAs = path.basename(decodeURIComponent(new URL(coreUrl).pathname));
 
-for (const [engineName, engine] of ENGINES) {
-  const name = `${engineName} (solid, editing)`;
-  const browser = await engine.launch();
+// ── one engine's lane ────────────────────────────────────────────────────────
+
+/** Reading the downloaded file. */
+async function reading(engineName, browser) {
+  const name = `${engineName} (solid)`;
+  const { step, run } = lane(check, name);
   const started = Date.now();
+  await run(async () => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await serveOrigin(context, 'offline');
+    const page = await context.newPage();
+    const requests = [];
+    const pageErrors = [];
+    const consoleErrors = [];
+    page.on('request', (request) => { if (!/^(file|data):/.test(request.url())) requests.push(request.url()); });
+    page.on('pageerror', (error) => pageErrors.push(error.stack ?? String(error)));
+    page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+    await page.addInitScript(() => {
+      window.__cspViolations = [];
+      document.addEventListener('securitypolicyviolation', (event) => {
+        window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
+      });
+    });
+    await page.goto(coreUrl);
+
+    await step('title and body, from inside the file', async () => {
+      await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText('Revenue by region and month')).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0); // the "Opening …" placeholder is gone
+    });
+    check((await page.title()) === file.metadata.title, `${name}: document title`);
+    await step('the top bar says offline copy, data as of, and links the live version', async () => {
+      const bar = page.getByRole('banner', { name: 'Offline copy' });
+      await expect(bar).toContainText(`Offline copy of ${file.metadata.title}`);
+      await expect(bar).toContainText('data as of');
+      await expect(bar.getByRole('link', { name: 'Open live version' })).toHaveAttribute('href', file.liveUrl);
+    });
+
+    // The chart draws, from the same rows: one bar per month, summed.
+    const chart = page.getByLabel('Question embed').first();
+    const expectBars = async (rows) => {
+      const sums = new Map();
+      for (const row of rows) sums.set(row.month, (sums.get(row.month) ?? 0) + row.revenue);
+      await expect(chart.locator('[data-mx-chart-state="ready"]')).toHaveCount(1, { timeout: 20_000 });
+      await expect(chart.locator('.mark-rect path')).toHaveCount(sums.size);
+      for (const [month, sum] of sums) await expect(chart.locator(`[aria-label="month: ${month}; Sum of revenue: ${sum}"]`)).toHaveCount(1);
+    };
+    await step('the chart draws its bars from the snapshot', () => expectBars(baseRows));
+
+    // The snapshot's rows, then a LIVE query's: the engine loads from the file's own bytes behind the first paint.
+    const table = page.getByRole('table').first();
+    const bodyRows = table.getByRole('row').filter({ hasNot: page.getByRole('columnheader') });
+    await step(`the table shows the snapshot's rows (${baseRows.length})`, async () => {
+      await expect(bodyRows).toHaveCount(baseRows.length);
+      for (const row of baseRows) await expect(table).toContainText(String(row.month));
+    });
+    await page.waitForTimeout(1000);
+    await step(`changing the Select runs the query live (${westRows.length} west rows)`, async () => {
+      await page.getByRole('button', { name: 'Region', exact: true }).click();
+      await page.getByRole('option', { name: 'west', exact: true }).click();
+      await expect(bodyRows).toHaveCount(westRows.length);
+    });
+    const notWest = (await bodyRows.allTextContents()).filter((text) => !/west/.test(text));
+    check(notWest.length === 0, `${name}: a filtered row is not west: ${notWest.join(' | ')}`);
+    await step('the chart redraws from the live run', () => expectBars(westRows));
+
+    await step('the frozen Value: disabled, described, and its hint shows the reason', async () => {
+      const frozen = page.getByRole('textbox', { name: 'Region pattern' });
+      await expect(frozen).toBeDisabled();
+      await expect(frozen).toHaveAttribute('aria-description', OFFLINE_FILTER_REASON);
+      await page.locator(`[tabindex="0"][aria-description="${OFFLINE_FILTER_REASON}"]`).focus();
+      await expect(page.getByRole('tooltip')).toContainText(OFFLINE_FILTER_REASON);
+    });
+
+    await step('the write: refused by name, never "Checking edit access…"', async () => {
+      const add = page.getByRole('button', { name: 'Add a row' });
+      await expect(add).toBeDisabled();
+      await expect(add).toHaveAttribute('aria-description', OFFLINE_MUTATION_REASON);
+      await expect(page.getByText(OFFLINE_MUTATION_REASON, { exact: true })).toHaveCount(0);
+      await page.locator('[data-slot="tooltip-trigger"]').filter({ has: add }).click();
+      await expect(page.getByRole('tooltip')).toHaveText(OFFLINE_MUTATION_REASON);
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('tooltip')).toHaveCount(0);
+      await expect(page.getByText('Checking edit access…')).toHaveCount(0);
+    });
+
+    // Nothing left the file.
+    const csp = await violations(page);
+    check(empty(requests), `${name}: network requests ${show(requests)}`);
+    check(empty(csp), `${name}: CSP violations ${show(csp)}`);
+    check(empty(pageErrors), `${name}: page errors ${show(pageErrors)}`);
+    // A browser without DecompressionStream: the boot script's plain message, and nothing else runs.
+    const old = await context.newPage();
+    const oldErrors = [];
+    old.on('pageerror', (error) => oldErrors.push(String(error)));
+    await old.addInitScript(() => { delete globalThis.DecompressionStream; });
+    await old.goto(coreUrl);
+    await step('unsupported-browser message without DecompressionStream', async () => {
+      await expect(old.getByRole('alert')).toHaveText(ARTIFACT_FILE_UNSUPPORTED);
+      await expect(old.getByRole('heading', { name: 'Regional sales' })).toBeVisible();
+    });
+    check(empty(oldErrors), `${name}: page errors without DecompressionStream ${show(oldErrors)}`);
+    check.note(`${name}: reading in ${((Date.now() - started) / 1000).toFixed(1)}s${consoleErrors.length ? ` (console errors: ${consoleErrors.join(' | ')})` : ''}`);
+    await context.close();
+  });
+}
+
+/** Editing, commenting and saving, from file://. Returns the download's URL scheme. */
+async function editing(engineName, browser) {
+  const name = `${engineName} (solid, editing)`;
+  const { step, run } = lane(check, name);
   const sink = { requests: [], pageErrors: [] };
-  const seen = [];
-  try {
+  await run(async () => {
     // ── Asha edits the heading and saves ─────────────────────────────────────
     const asha = await newContext(browser);
     const page = await watchedPage(asha, sink);
-    await page.goto(core.url);
-    await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
-    await expect(saveButton(page)).toBeDisabled();
-    await expect(saveButton(page)).toHaveAccessibleDescription(NOTHING_TO_SAVE);
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
-    await answerName(page, 'Asha');
-    await expect(page.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
-    await selectHeading(page, 'Regional'.length);
-    // One edit transaction keeps WebKit's selection stable while the offline editor rerenders.
-    await page.keyboard.insertText('Quarterly');
-    await expect(page.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible();
-    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible({ timeout: 10_000 });
-    await expect(saveButton(page)).toBeEnabled();
-    seen.push('edit in place');
+    await page.goto(coreUrl);
+    await step('Save starts disabled: "No changes to save"', async () => {
+      await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
+      await expect(saveButton(page)).toBeDisabled();
+      await expect(saveButton(page)).toHaveAccessibleDescription(NOTHING_TO_SAVE);
+    });
+    await step('edit in place: name prompt, heading edited, unsaved, Save enabled', async () => {
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      await answerName(page, 'Asha');
+      await expect(page.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+      await selectHeading(page, 'Regional'.length);
+      // One edit transaction keeps WebKit's selection stable while the offline editor rerenders.
+      await page.keyboard.insertText('Quarterly');
+      await expect(page.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible();
+      await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible({ timeout: 10_000 });
+      await expect(saveButton(page)).toBeEnabled();
+    });
 
     // What needs artifactbin says so where its control is.
-    const history = page.getByRole('tab', { name: 'History' }).first();
-    await expect(history).toBeDisabled();
-    await expect(history).toHaveAccessibleDescription(HISTORY_REASON);
-    await page.getByRole('button', { name: 'Insert', exact: true }).click();
-    await page.getByRole('button', { name: 'Image…' }).click();
-    const imageUrl = page.getByRole('textbox', { name: 'Image URL' });
-    await expect(imageUrl).toBeDisabled();
-    await expect(imageUrl).toHaveAccessibleDescription(OFFLINE_ASSET_REASON);
-    await expect(page.getByRole('button', { name: 'Import image from URL' })).toBeDisabled();
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByRole('tab', { name: 'Show data' }).click();
-    await expect(page.getByText(`shape unavailable — ${OFFLINE_QUERY_REASON}`).first()).toBeVisible();
-    await page.getByRole('tab', { name: 'Edit on the page' }).click();
-    seen.push('history, image URL and query notebook reasons');
+    await step('history, image URL and query notebook reasons', async () => {
+      const history = page.getByRole('tab', { name: 'History' }).first();
+      await expect(history).toBeDisabled();
+      await expect(history).toHaveAccessibleDescription(HISTORY_REASON);
+      await page.getByRole('button', { name: 'Insert', exact: true }).click();
+      await page.getByRole('button', { name: 'Image…' }).click();
+      const imageUrl = page.getByRole('textbox', { name: 'Image URL' });
+      await expect(imageUrl).toBeDisabled();
+      await expect(imageUrl).toHaveAccessibleDescription(OFFLINE_ASSET_REASON);
+      await expect(page.getByRole('button', { name: 'Import image from URL' })).toBeDisabled();
+      await page.getByRole('button', { name: 'Close', exact: true }).click();
+      await page.getByRole('tab', { name: 'Show data' }).click();
+      await expect(page.getByText(`shape unavailable — ${OFFLINE_QUERY_REASON}`).first()).toBeVisible();
+      await page.getByRole('tab', { name: 'Edit on the page' }).click();
+    });
 
-    await page.getByRole('button', { name: 'Done editing' }).click();
-    const first = await saveByDownload(page, path.join(work, `saved-${engineName}.html`));
-    downloads[engineName] = first.scheme;
-    assert.equal(first.name, path.basename(decodeURIComponent(new URL(core.url).pathname)), `${name}: Save suggests the name the file was opened as`);
-    await expect(saveButton(page)).toBeDisabled();
-    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toHaveCount(0);
-    assert.deepEqual(await violations(page), [], `${name}: CSP violations while editing`);
-    seen.push(`Save → ${first.scheme}: download`);
+    const saved = path.join(work, `saved-${engineName}.html`);
+    const first = await step('Save downloads the file, then nothing is unsaved', async () => {
+      await page.getByRole('button', { name: 'Done editing' }).click();
+      const result = await saveByDownload(page, saved);
+      await expect(saveButton(page)).toBeDisabled();
+      await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toHaveCount(0);
+      return result;
+    });
+    check.note(`${engineName}: Save → ${first.scheme}: download`);
+    check(first.name === openedAs, `${name}: Save suggests the name the file was opened as`);
+    check(empty(await violations(page)), `${name}: CSP violations while editing`);
 
     // ── that saved file, opened on its own ───────────────────────────────────
     const reopened = await watchedPage(asha, sink);
-    await reopened.goto(pathToFileURL(path.join(work, `saved-${engineName}.html`)).href);
-    await expect(reopened.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
-    await expect(reopened.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
-    await expect(reopened.getByRole('alertdialog')).toHaveCount(0); // no crash-buffer offer for a copy just saved
-    await reopened.getByRole('button', { name: /^Changes/ }).click();
-    const changes = reopened.getByRole('region', { name: 'Changes in this file' });
-    await expect(changes).toContainText('Asha');
-    await expect(changes).toContainText("Edited text in 'Quarterly sales'");
-    await reopened.getByRole('button', { name: /^Changes/ }).click();
-    seen.push('reopened: edit and Changes by name');
+    await reopened.goto(pathToFileURL(saved).href);
+    await step('reopened: the edit, and Changes by name', async () => {
+      await expect(reopened.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
+      await expect(reopened.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
+      await expect(reopened.getByRole('alertdialog')).toHaveCount(0); // no crash-buffer offer for a copy just saved
+      await reopened.getByRole('button', { name: /^Changes/ }).click();
+      const changes = reopened.getByRole('region', { name: 'Changes in this file' });
+      await expect(changes).toContainText('Asha');
+      await expect(changes).toContainText("Edited text in 'Quarterly sales'");
+      await reopened.getByRole('button', { name: /^Changes/ }).click();
+    });
 
     // Invalid markup in code view: the validator's reason, and nothing applied.
-    await reopened.getByRole('button', { name: 'Edit', exact: true }).click(); // the name is remembered: no prompt
-    await expect(reopened.getByRole('dialog', { name: 'What should we call you?' })).toHaveCount(0);
-    assert.deepEqual(sink.requests, [], `${name}: requests before code view`);
-    await reopened.getByRole('tab', { name: 'Edit the source' }).click();
-    // Offline, code view is the plain editor, and says so in place; the one request was its extras.
+    await step('the name is remembered: no prompt', async () => {
+      await reopened.getByRole('button', { name: 'Edit', exact: true }).click();
+      await expect(reopened.getByRole('dialog', { name: 'What should we call you?' })).toHaveCount(0);
+    });
+    check(empty(sink.requests), `${name}: requests before code view ${show(sink.requests)}`);
     const plain = reopened.getByRole('textbox', { name: 'Markup source' });
-    await expect(plain).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
-    await expect(reopened.getByText(RICH_EDITOR_OFFLINE, { exact: true })).toBeVisible();
-    await expect(reopened.locator('.cm-editor')).toHaveCount(0);
-    const viewFormatted = reopened.getByRole('button', { name: 'View formatted' });
-    await expect(viewFormatted).toBeDisabled();
-    await expect(viewFormatted).toHaveAccessibleDescription(FORMATTING_OFFLINE);
-    assert.deepEqual(sink.requests, [extrasUrl], `${name}: code view asked for its extras, once`);
+    await step('offline code view: plain editor with its reason, View formatted disabled', async () => {
+      await reopened.getByRole('tab', { name: 'Edit the source' }).click();
+      // Offline, code view is the plain editor, and says so in place; the one request was its extras.
+      await expect(plain).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
+      await expect(reopened.getByText(RICH_EDITOR_OFFLINE, { exact: true })).toBeVisible();
+      await expect(reopened.locator('.cm-editor')).toHaveCount(0);
+      const viewFormatted = reopened.getByRole('button', { name: 'View formatted' });
+      await expect(viewFormatted).toBeDisabled();
+      await expect(viewFormatted).toHaveAccessibleDescription(FORMATTING_OFFLINE);
+    });
+    check(same(sink.requests, [extrasUrl]), `${name}: code view asked for its extras, once ${show(sink.requests)}`);
     sink.requests.length = 0;
-    seen.push('offline code view: plain editor with its reason, View formatted disabled');
-    await plain.fill(`${await plain.inputValue()}\n<p>{$missing}</p>`);
-    await expect(reopened.getByRole('status').filter({ hasText: /not saved — .*\$missing.* refers to nothing declared/ })).toBeVisible({ timeout: 10_000 });
-    await expect(saveButton(reopened)).toBeDisabled();
-    await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
-    assert.deepEqual(await violations(reopened), [], `${name}: CSP violations in the reopened copy`);
-    seen.push('invalid code refused, not applied');
+    await step('invalid code refused, not applied', async () => {
+      await plain.fill(`${await plain.inputValue()}\n<p>{$missing}</p>`);
+      await expect(reopened.getByRole('status').filter({ hasText: /not saved — .*\$missing.* refers to nothing declared/ })).toBeVisible({ timeout: 10_000 });
+      await expect(saveButton(reopened)).toBeDisabled();
+      await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
+    });
+    check(empty(await violations(reopened)), `${name}: CSP violations in the reopened copy`);
 
     // ── Ravi, somewhere else, comments on the copy he was sent ───────────────
     const ravi = await newContext(browser);
     const second = await watchedPage(ravi, sink);
-    await second.goto(pathToFileURL(path.join(work, `saved-${engineName}.html`)).href);
+    await second.goto(pathToFileURL(saved).href);
     const doc = second.locator('[data-mx-inline-story]');
-    await doc.locator(`#${headingId}`).waitFor({ timeout: 20_000 });
-    const bubble = second.locator('[data-mx-selection-actions]');
-    for (let i = 0; i < 40 && !(await bubble.isVisible().catch(() => false)); i++) {
-      await doc.locator(`#${headingId}`).click({ clickCount: 3, timeout: 2000 }).catch(() => {});
-      await second.waitForTimeout(250);
-    }
-    await second.getByRole('button', { name: 'Comment on selected text' }).click();
-    await second.getByRole('textbox', { name: 'Annotation comment' }).fill('Is "Quarterly" right for a monthly table?');
-    await second.getByRole('button', { name: 'Save annotation' }).click();
-    await answerName(second, 'Ravi');
-    await expect(doc.locator(`#${headingId}[data-mx-annotated]`)).toHaveCount(1, { timeout: 10_000 });
-    await second.getByRole('button', { name: /^Comments/ }).click();
-    const thread = second.getByLabel('Annotation thread', { exact: true }).first();
-    await expect(thread).toContainText('Ravi');
-    await expect(thread).toContainText('monthly table');
-    await second.getByRole('textbox', { name: 'Reply to annotation' }).first().fill('Checked: it is the Q3 view.');
-    await second.getByRole('button', { name: 'Send reply' }).first().click();
-    await expect(thread).toContainText('Checked: it is the Q3 view.');
-    await second.getByRole('button', { name: 'Resolve annotation' }).first().click();
-    await expect(second.getByLabel('Resolved annotation thread')).toHaveCount(1, { timeout: 10_000 });
-    const withThread = await saveByDownload(second, path.join(work, `commented-${engineName}.html`));
-    assert.deepEqual(await violations(second), [], `${name}: CSP violations while commenting`);
+    const commented = path.join(work, `commented-${engineName}.html`);
+    const withThread = await step('comment → name prompt → reply → resolve → Save', async () => {
+      await doc.locator(`#${headingId}`).waitFor({ timeout: 20_000 });
+      const bubble = second.locator('[data-mx-selection-actions]');
+      for (let i = 0; i < 40 && !(await bubble.isVisible().catch(() => false)); i++) {
+        await doc.locator(`#${headingId}`).click({ clickCount: 3, timeout: 2000 }).catch(() => {});
+        await second.waitForTimeout(250);
+      }
+      await second.getByRole('button', { name: 'Comment on selected text' }).click();
+      await second.getByRole('textbox', { name: 'Annotation comment' }).fill('Is "Quarterly" right for a monthly table?');
+      await second.getByRole('button', { name: 'Save annotation' }).click();
+      await answerName(second, 'Ravi');
+      await expect(doc.locator(`#${headingId}[data-mx-annotated]`)).toHaveCount(1, { timeout: 10_000 });
+      await second.getByRole('button', { name: /^Comments/ }).click();
+      const thread = second.getByLabel('Annotation thread', { exact: true }).first();
+      await expect(thread).toContainText('Ravi');
+      await expect(thread).toContainText('monthly table');
+      await second.getByRole('textbox', { name: 'Reply to annotation' }).first().fill('Checked: it is the Q3 view.');
+      await second.getByRole('button', { name: 'Send reply' }).first().click();
+      await expect(thread).toContainText('Checked: it is the Q3 view.');
+      await second.getByRole('button', { name: 'Resolve annotation' }).first().click();
+      await expect(second.getByLabel('Resolved annotation thread')).toHaveCount(1, { timeout: 10_000 });
+      return saveByDownload(second, commented);
+    });
+    check(empty(await violations(second)), `${name}: CSP violations while commenting`);
     const written = savedFile(withThread.html);
-    assert.equal(written.threads.length, 1, `${name}: the saved copy carries the thread`);
-    assert.equal(written.threads[0].status, 'resolved');
-    assert.deepEqual(written.threads[0].thread.map((c) => c.author.label), ['Ravi', 'Ravi']);
-    assert.deepEqual(written.journal.map((e) => e.by), ['Asha'], `${name}: Asha's edit travels with the file`);
-    seen.push('comment → name prompt → reply → resolve → Save');
+    check(written.threads.length === 1, `${name}: the saved copy carries the thread`);
+    check(written.threads[0]?.status === 'resolved', `${name}: the saved thread is resolved`);
+    check(same(written.threads[0]?.thread.map((c) => c.author.label), ['Ravi', 'Ravi']), `${name}: both comments carry Ravi's name`);
+    check(same(written.journal.map((e) => e.by), ['Asha']), `${name}: Asha's edit travels with the file`);
 
     const third = await watchedPage(ravi, sink);
-    await third.goto(pathToFileURL(path.join(work, `commented-${engineName}.html`)).href);
-    await expect(third.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
-    await third.getByRole('button', { name: /^Comments/ }).click();
-    const resolved = third.getByLabel('Resolved annotation thread');
-    await expect(resolved).toHaveCount(1, { timeout: 10_000 });
-    await expect(resolved).toContainText('Ravi');
-    await expect(third.getByLabel('Annotation thread', { exact: true })).toHaveCount(0);
-    assert.deepEqual(await violations(third), [], `${name}: CSP violations in the commented copy`);
-    seen.push('reopened: resolved thread with the name');
+    await third.goto(pathToFileURL(commented).href);
+    await step('reopened: resolved thread with the name', async () => {
+      await expect(third.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
+      await third.getByRole('button', { name: /^Comments/ }).click();
+      const resolved = third.getByLabel('Resolved annotation thread');
+      await expect(resolved).toHaveCount(1, { timeout: 10_000 });
+      await expect(resolved).toContainText('Ravi');
+      await expect(third.getByLabel('Annotation thread', { exact: true })).toHaveCount(0);
+    });
+    check(empty(await violations(third)), `${name}: CSP violations in the commented copy`);
 
     // ── the save picker, where the browser has one ───────────────────────────
     if (engineName === 'chromium') {
       const picked = await newContext(browser, { picker: true });
       const pickerPage = await watchedPage(picked, sink);
-      await pickerPage.goto(core.url);
-      await pickerPage.getByRole('button', { name: 'Edit', exact: true }).click();
-      await answerName(pickerPage, 'Mei');
-      await expect(pickerPage.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
-      await selectHeading(pickerPage, 'Regional'.length);
-      await pickerPage.keyboard.type('Picked');
-      await expect(saveButton(pickerPage)).toBeEnabled({ timeout: 10_000 });
-      await saveButton(pickerPage).click();
-      await expect(saveButton(pickerPage)).toBeDisabled({ timeout: 10_000 });
+      await pickerPage.goto(coreUrl);
+      await step('save picker written with the file name', async () => {
+        await pickerPage.getByRole('button', { name: 'Edit', exact: true }).click();
+        await answerName(pickerPage, 'Mei');
+        await expect(pickerPage.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+        await selectHeading(pickerPage, 'Regional'.length);
+        await pickerPage.keyboard.type('Picked');
+        await expect(saveButton(pickerPage)).toBeEnabled({ timeout: 10_000 });
+        await saveButton(pickerPage).click();
+        await expect(saveButton(pickerPage)).toBeDisabled({ timeout: 10_000 });
+      });
       const { html, suggested } = await pickerPage.evaluate(() => ({ html: window.__written, suggested: window.__pickerName }));
-      assert.equal(suggested, path.basename(decodeURIComponent(new URL(core.url).pathname)));
-      assert.ok(savedFile(html).source.includes('>Picked sales</h1>'), `${name}: the picker received the edited file`);
-      assert.deepEqual(await violations(pickerPage), [], `${name}: CSP violations with the picker`);
-      seen.push('save picker written with the file name');
+      check(suggested === openedAs, `${name}: the picker suggests the name the file was opened as`);
+      check(typeof html === 'string' && savedFile(html).source.includes('>Picked sales</h1>'), `${name}: the picker received the edited file`);
+      check(empty(await violations(pickerPage)), `${name}: CSP violations with the picker`);
+      await picked.close();
     }
 
-    assert.deepEqual(sink.requests, [], `${name}: network requests`);
-    assert.deepEqual(sink.pageErrors, [], `${name}: page errors`);
-    console.log(`${name}: ${seen.join(', ')}, 0 requests, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
-  } catch (error) {
-    failures.push(new Error(`${name}: ${error.message}`));
-    console.log(`${name}: FAILED after [${seen.join(', ')}] — ${error.message}`);
-  } finally {
-    await browser.close();
-  }
+    check(empty(sink.requests), `${name}: network requests ${show(sink.requests)}`);
+    check(empty(sink.pageErrors), `${name}: page errors ${show(sink.pageErrors)}`);
+    await asha.close();
+    await ravi.close();
+  });
 }
-// ── code view online: the extras from the file's origin ──────────────────────
 
-for (const [engineName, engine] of ENGINES) {
+/** Code view online: the extras from the file's origin. */
+async function codeViewOnline(engineName, browser) {
   const name = `${engineName} (solid, code view online)`;
-  const browser = await engine.launch();
-  const started = Date.now();
+  const { step, run } = lane(check, name);
   const sink = { requests: [], pageErrors: [] };
-  const seen = [];
-  try {
+  await run(async () => {
     const context = await newContext(browser, { origin: 'online' });
     const page = await watchedPage(context, sink);
-    await page.goto(core.url);
-    await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
-    await answerName(page, 'Lin');
-    await expect(page.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
-    assert.deepEqual(sink.requests, [], `${name}: nothing requested before code view`);
-    await page.getByRole('tab', { name: 'Edit the source' }).click();
-    await page.locator('.cm-editor').first().waitFor({ timeout: 30_000 });
+    await page.goto(coreUrl);
+    await step('Edit opens with the name prompt', async () => {
+      await expect(page.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      await answerName(page, 'Lin');
+      await expect(page.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+    });
+    check(empty(sink.requests), `${name}: nothing requested before code view ${show(sink.requests)}`);
+    await step('SRI script loaded, CodeMirror mounted', async () => {
+      await page.getByRole('tab', { name: 'Edit the source' }).click();
+      await page.locator('.cm-editor').first().waitFor({ timeout: 30_000 });
+      await expect(page.locator('script[data-afbin-extras]')).toHaveCount(1);
+      await expect(page.getByText(RICH_EDITOR_OFFLINE)).toHaveCount(0);
+    });
     const tag = page.locator('script[data-afbin-extras]');
-    await expect(tag).toHaveCount(1);
-    assert.equal(await tag.getAttribute('src'), extrasUrl);
-    assert.equal(await tag.getAttribute('integrity'), manifest.extras.integrity);
-    assert.equal(await tag.getAttribute('crossorigin'), 'anonymous');
-    await expect(page.getByText(RICH_EDITOR_OFFLINE)).toHaveCount(0);
-    seen.push('SRI script loaded, CodeMirror mounted');
-    await page.getByRole('button', { name: 'View formatted' }).click();
-    await expect(page.getByText('Formatted preview · read-only')).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator('.cm-editor')).toHaveCount(2, { timeout: 20_000 });
-    await expect(page.getByRole('alert').filter({ hasText: 'Couldn’t format' })).toHaveCount(0);
-    seen.push('View formatted');
-    assert.deepEqual(sink.requests, [extrasUrl], `${name}: the extras were the one request`);
-    assert.deepEqual(await violations(page), [], `${name}: CSP violations`);
+    check((await tag.getAttribute('src')) === extrasUrl, `${name}: the extras script is the build's own URL`);
+    check((await tag.getAttribute('integrity')) === manifest.extras.integrity, `${name}: the extras script is pinned by its SRI hash`);
+    check((await tag.getAttribute('crossorigin')) === 'anonymous', `${name}: the extras script is loaded crossorigin=anonymous`);
+    await step('View formatted', async () => {
+      await page.getByRole('button', { name: 'View formatted' }).click();
+      await expect(page.getByText('Formatted preview · read-only')).toBeVisible({ timeout: 20_000 });
+      await expect(page.locator('.cm-editor')).toHaveCount(2, { timeout: 20_000 });
+      await expect(page.getByRole('alert').filter({ hasText: 'Couldn’t format' })).toHaveCount(0);
+    });
+    check(same(sink.requests, [extrasUrl]), `${name}: the extras were the one request ${show(sink.requests)}`);
+    check(empty(await violations(page)), `${name}: CSP violations`);
+    await context.close();
 
     if (engineName === 'chromium') {
       // Bytes that do not match the file's hash: refused by SRI, and code view keeps the plain editor.
       const tampered = await newContext(browser, { origin: 'tampered' });
       const other = await watchedPage(tampered, { requests: [], pageErrors: sink.pageErrors });
-      await other.goto(core.url);
-      await other.getByRole('button', { name: 'Edit', exact: true }).click();
-      await answerName(other, 'Lin');
-      await other.getByRole('tab', { name: 'Edit the source' }).click();
-      await expect(other.getByRole('textbox', { name: 'Markup source' })).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
-      await expect(other.locator('.cm-editor')).toHaveCount(0);
-      assert.equal(await other.evaluate(() => typeof globalThis.__afbinExtras), 'undefined', `${name}: tampered extras never ran`);
-      seen.push('tampered extras refused by SRI');
+      await other.goto(coreUrl);
+      await step('tampered extras refused by SRI: code view keeps the plain editor', async () => {
+        await other.getByRole('button', { name: 'Edit', exact: true }).click();
+        await answerName(other, 'Lin');
+        await other.getByRole('tab', { name: 'Edit the source' }).click();
+        await expect(other.getByRole('textbox', { name: 'Markup source' })).toHaveAccessibleDescription(RICH_EDITOR_OFFLINE, { timeout: 20_000 });
+        await expect(other.locator('.cm-editor')).toHaveCount(0);
+      });
+      check(await other.evaluate(() => typeof globalThis.__afbinExtras) === 'undefined', `${name}: tampered extras never ran`);
+      await tampered.close();
     }
-    assert.deepEqual(sink.pageErrors, [], `${name}: page errors`);
-    console.log(`${name}: ${seen.join(', ')}, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
-  } catch (error) {
-    failures.push(new Error(`${name}: ${error.message}`));
-    console.log(`${name}: FAILED after [${seen.join(', ')}] — ${error.message}`);
-  } finally {
-    await browser.close();
-  }
+    check(empty(sink.pageErrors), `${name}: page errors ${show(sink.pageErrors)}`);
+  });
 }
 
-// ── a file edited by an agent: only the top-level "source" changed ────────────
-
-/** What a coding agent does: a JSON round-trip of the `#afbin-file` block, changing `source` and nothing else. */
-const agentEdited = (html, edit) => html.replace(
-  /(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/,
-  (_all, open, json, close) => { const value = JSON.parse(json); value.source = edit(value.source); return `${open}${JSON.stringify(value).replace(/</g, '\\u003c')}${close}`; },
-);
-const coreHtml = readFileSync(new URL(core.url), 'utf8');
-const agentFiles = {
-  valid: path.join(work, 'agent-valid.html'),
-  invalid: path.join(work, 'agent-invalid.html'),
-  query: path.join(work, 'agent-query.html'),
-};
-writeFileSync(agentFiles.valid, agentEdited(coreHtml, (source) => source.replace('Regional sales</h1>', 'Sales, edited by an agent</h1>')));
-writeFileSync(agentFiles.invalid, agentEdited(coreHtml, (source) => source.replace('<Button run', '<p>{$missing}</p>\n  <Button run')));
-writeFileSync(agentFiles.query, agentEdited(coreHtml, (source) => source.replace('select region, month, revenue from sales_data.rows where', 'select region, month, revenue * 2 as revenue from sales_data.rows where')));
-
-for (const [engineName, engine] of ENGINES) {
+/** A file edited by an agent: only the top-level "source" changed. */
+async function editedByAnAgent(engineName, browser) {
   const name = `${engineName} (solid, edited by an agent)`;
-  const browser = await engine.launch();
-  const started = Date.now();
+  const { step, run } = lane(check, name);
   const sink = { requests: [], pageErrors: [] };
-  const seen = [];
-  try {
+  await run(async () => {
     const context = await newContext(browser);
     const page = await watchedPage(context, sink);
     await page.goto(pathToFileURL(agentFiles.valid).href);
-    await expect(page.getByRole('heading', { name: 'Sales, edited by an agent' })).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
-    await page.getByRole('button', { name: /^Changes/ }).click();
-    await expect(page.getByRole('region', { name: 'Changes in this file' })).toContainText(CHANGED_OUTSIDE);
-    await page.getByRole('button', { name: /^Changes/ }).click();
-    await expect(saveButton(page)).toBeEnabled();
-    const saved = await saveByDownload(page, path.join(work, `agent-saved-${engineName}.html`));
+    const saved = await step('rebuilt from the new source, journal line, Save writes it', async () => {
+      await expect(page.getByRole('heading', { name: 'Sales, edited by an agent' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+      await page.getByRole('button', { name: /^Changes/ }).click();
+      await expect(page.getByRole('region', { name: 'Changes in this file' })).toContainText(CHANGED_OUTSIDE);
+      await page.getByRole('button', { name: /^Changes/ }).click();
+      await expect(saveButton(page)).toBeEnabled();
+      return saveByDownload(page, path.join(work, `agent-saved-${engineName}.html`));
+    });
     const written = savedFile(saved.html);
-    assert.ok(written.source.includes('>Sales, edited by an agent</h1>'), `${name}: the saved file keeps the agent's text`);
-    assert.ok(JSON.stringify(written.island.nodes).includes('Sales, edited by an agent'), `${name}: and the rebuilt render`);
-    assert.deepEqual(written.journal.map((e) => e.summary), [CHANGED_OUTSIDE]);
-    assert.deepEqual(await violations(page), [], `${name}: CSP violations`);
-    seen.push('rebuilt from the new source, journal line, Save writes it');
+    check(written.source.includes('>Sales, edited by an agent</h1>'), `${name}: the saved file keeps the agent's text`);
+    check(JSON.stringify(written.island.nodes).includes('Sales, edited by an agent'), `${name}: and the rebuilt render`);
+    check(same(written.journal.map((e) => e.summary), [CHANGED_OUTSIDE]), `${name}: the journal says the file was changed outside`);
+    check(empty(await violations(page)), `${name}: CSP violations`);
 
     const invalid = await watchedPage(context, sink);
     await invalid.goto(pathToFileURL(agentFiles.invalid).href);
-    await expect(invalid.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
-    const banner = invalid.getByRole('alert').filter({ hasText: 'changed outside this file' });
-    await expect(banner).toContainText(/\$missing.* refers to nothing declared/);
-    await expect(invalid.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
-    await expect(invalid.getByRole('table').first()).toBeVisible();
-    assert.deepEqual(await violations(invalid), [], `${name}: CSP violations with an invalid source`);
-    seen.push('invalid source: banner with the error over the last good render');
+    await step('invalid source: banner with the error over the last good render', async () => {
+      await expect(invalid.getByRole('heading', { name: 'Regional sales' })).toBeVisible({ timeout: 20_000 });
+      const banner = invalid.getByRole('alert').filter({ hasText: 'changed outside this file' });
+      await expect(banner).toContainText(/\$missing.* refers to nothing declared/);
+      await expect(invalid.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
+      await expect(invalid.getByRole('table').first()).toBeVisible();
+    });
+    check(empty(await violations(invalid)), `${name}: CSP violations with an invalid source`);
 
     const changedQuery = await watchedPage(context, sink);
     await changedQuery.goto(pathToFileURL(agentFiles.query).href);
-    await expect(changedQuery.getByText(OFFLINE_QUERY_REASON, { exact: true }).first()).toBeVisible({ timeout: 20_000 });
-    await expect(changedQuery.getByRole('table').first().getByText('2026-07')).toHaveCount(0);
-    assert.deepEqual(await violations(changedQuery), [], `${name}: CSP violations after an agent changes the query`);
-    seen.push('changed query: no stale rows');
+    await step('changed query: no stale rows', async () => {
+      await expect(changedQuery.getByText(OFFLINE_QUERY_REASON, { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+      await expect(changedQuery.getByRole('table').first().getByText('2026-07')).toHaveCount(0);
+    });
+    check(empty(await violations(changedQuery)), `${name}: CSP violations after an agent changes the query`);
 
-    assert.deepEqual(sink.requests, [], `${name}: network requests`);
-    assert.deepEqual(sink.pageErrors, [], `${name}: page errors`);
-    console.log(`${name}: ${seen.join(', ')}, 0 requests, 0 CSP violations, 0 page errors — passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
-  } catch (error) {
-    failures.push(new Error(`${name}: ${error.message}`));
-    console.log(`${name}: FAILED after [${seen.join(', ')}] — ${error.message}`);
-  } finally {
-    await browser.close();
-  }
+    check(empty(sink.requests), `${name}: network requests ${show(sink.requests)}`);
+    check(empty(sink.pageErrors), `${name}: page errors ${show(sink.pageErrors)}`);
+    await context.close();
+  });
 }
-console.log(`downloads: ${Object.entries(downloads).map(([engineName, scheme]) => `${engineName} ${scheme}:`).join(', ')}`);
 
-// The compiled page decides which engines travel with each file. A prose
-// document has no browser module; a Mermaid document can draw without SQLite
-// or Vega. Both must still open from file:// under the same network refusal.
-for (const [label, markup] of [
-  ['prose', '<h1>Offline prose</h1><p>A file that needs no document engine.</p>'],
-  ['mermaid', '<h1>Offline diagram</h1><Mermaid title="Flow" code={"flowchart TD\\n A[Draft] --> B[Saved]"} />'],
-]) {
-  const id = await publish({ markup, visibility: 'unlisted' });
-  const response = await fetch(`${BASE}/a/${id}/download`, { headers: { Authorization: `Bearer ${token}` } });
-  assert.equal(response.status, 200, await response.clone().text());
-  const html = await response.text();
-  const code = /<script type="application\/octet-stream" id="afbin-compiled-code">([^<]*)<\/script>/.exec(html)?.[1];
-  const packed = code ? gunzipSync(Buffer.from(code, 'base64')).toString('utf8') : '';
-  assert.equal(!!code, label === 'mermaid', `${label}: compiled document module`);
-  assert.doesNotMatch(html, /id="afbin-wasm"/, `${label}: no SQLite engine`);
-  assert.doesNotMatch(packed, /Axes cannot be shared in concatenated/, `${label}: no Vega engine`);
-  if (label === 'mermaid') assert.match(packed, /mermaidAPI/, 'Mermaid carries its drawing engine');
-  const target = path.join(work, `${label}.html`);
-  writeFileSync(target, html);
-  console.log(`${label} file: ${Buffer.byteLength(html)} raw / ${brotliCompressSync(html).length} br bytes`);
-  for (const [engineName, engine] of ENGINES) {
-    const browser = await engine.launch();
-    try {
+/** The prose and Mermaid files: which engines travel, and an offline paint. */
+async function engineChoice(engineName, browser) {
+  for (const { label, url } of engineFiles) {
+    const name = `${engineName} ${label}`;
+    const { step, run } = lane(check, name);
+    await run(async () => {
       const context = await browser.newContext();
       await serveOrigin(context, 'offline');
       const page = await context.newPage();
-      const requests = [], pageErrors = [], csp = [];
-      page.on('request', request => { if (!/^(file|data):/.test(request.url())) requests.push(request.url()); });
-      page.on('pageerror', error => pageErrors.push(String(error)));
-      await page.addInitScript(() => document.addEventListener('securitypolicyviolation', event => {
+      const requests = [], pageErrors = [];
+      page.on('request', (request) => { if (!/^(file|data):/.test(request.url())) requests.push(request.url()); });
+      page.on('pageerror', (error) => pageErrors.push(String(error)));
+      await page.addInitScript(() => document.addEventListener('securitypolicyviolation', (event) => {
         window.__cspViolations ??= [];
         window.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
       }));
-      await page.goto(pathToFileURL(target).href);
-      await expect(page.getByRole('heading', { name: label === 'prose' ? 'Offline prose' : 'Offline diagram' })).toBeVisible({ timeout: 20_000 });
-      if (label === 'mermaid') await expect(page.locator('[data-mx-mermaid-state="ready"]')).toHaveCount(1, { timeout: 20_000 });
-      csp.push(...await page.evaluate(() => window.__cspViolations ?? []));
-      assert.deepEqual(requests, [], `${engineName} ${label}: network requests`);
-      assert.deepEqual(pageErrors, [], `${engineName} ${label}: page errors`);
-      assert.deepEqual(csp, [], `${engineName} ${label}: CSP violations`);
-      console.log(`${engineName} ${label}: offline paint, 0 requests, 0 CSP violations, 0 page errors`);
-    } finally { await browser.close(); }
+      await page.goto(url);
+      await step('offline paint', async () => {
+        await expect(page.getByRole('heading', { name: label === 'prose' ? 'Offline prose' : 'Offline diagram' })).toBeVisible({ timeout: 20_000 });
+        if (label === 'mermaid') await expect(page.locator('[data-mx-mermaid-state="ready"]')).toHaveCount(1, { timeout: 20_000 });
+      });
+      const csp = await violations(page);
+      check(empty(requests), `${name}: network requests ${show(requests)}`);
+      check(empty(pageErrors), `${name}: page errors ${show(pageErrors)}`);
+      check(empty(csp), `${name}: CSP violations ${show(csp)}`);
+      await context.close();
+    });
   }
 }
 
-if (failures.length) throw new AggregateError(failures, 'Offline file checks failed');
-console.log(`offline file gate passed in ${ENGINE_NAME} with the ${files.map((f) => f.kind).join(' and ')} bundle; editing, comments, Save, code view offline and online, and agent-edited files`);
+// ── the screenshot comment, on the gate's server ─────────────────────────────
+
+const input = await sharp({ create: { width: 200, height: 100, channels: 3, background: { r: 220, g: 30, b: 30 } } }).png().toBuffer();
+
+/** Real tab capture in Chromium; the upload fallback elsewhere; brush; persisted through a reload. */
+async function screenshotComment(engineName, dpr, selectionWidth, selectionHeight) {
+  const name = `${engineName} (DPR ${dpr}) screenshot comment`;
+  const { step, must, run } = lane(check, name);
+  let browser;
+  await run(async () => {
+    // Each case needs an unannotated pixel reference; prior comments paint overlays.
+    const seed = await startDocument(BASE);
+    const published = await fetch(`${BASE}/api/artifacts/${seed.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${seed.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Screenshot capture gate', markup: '<Helmet><style>{`#capturebox{width:400px;height:240px;background:rgb(220,30,30);margin:100px 40px}`}</style></Helmet><div id="capturebox"><p>Screenshot capture fixture</p></div>', visibility: 'unlisted' }) });
+    must(published.ok, `publish: ${published.status}`);
+    const docHost = `${Buffer.from(seed.id, 'utf8').toString('hex')}.${PAGES_HOST}`;
+    // The app is at app.lvh.me and the document on <hex id>.lvh.me (lib/browser.mjs): Chromium is told the mapping by
+    // flag, Firefox by its resolver prefs; WebKit has neither and resolves lvh.me (public DNS: loopback).
+    const local = [new URL(BASE).hostname, PAGES_HOST, docHost].join(',');
+    // Both origins are plain http here, which is not a secure context off localhost: screen capture needs one (as it
+    // has in production, over https), so Chromium is told to treat these two as secure.
+    const secure = [new URL(BASE).origin, `http://${docHost}:${new URL(BASE).port}`].join(',');
+    browser = engineName === 'chromium'
+      ? await launchChromium({ channel: 'chromium', args: [`--unsafely-treat-insecure-origin-as-secure=${secure}`, '--enable-usermedia-screen-capturing', '--auto-select-tab-capture-source-by-title=Screenshot capture gate', '--allow-http-screen-capture', '--autoplay-policy=no-user-gesture-required'] })
+      : engineName === 'firefox'
+        ? await firefox.launch({ firefoxUserPrefs: { 'network.dns.localDomains': local, 'network.dns.forceResolve': '127.0.0.1' } })
+        : await webkit.launch();
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: dpr });
+    const page = await context.newPage();
+    await page.addInitScript(() => { window.__captureTrace = []; const native = navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices); if (native) navigator.mediaDevices.getDisplayMedia = async (...args) => { try { const stream = await native(...args); window.__captureTrace.push({ event: 'stream', surface: stream.getVideoTracks()[0]?.getSettings().displaySurface }); const reference = document.createElement('video'); reference.muted = true; reference.srcObject = stream; window.__captureReference = reference; void reference.play(); return stream; } catch (e) { window.__captureTrace.push({ event: 'error', message: e.message }); throw e; } }; });
+    await becomeOwner(page, BASE, seed.token);
+    await page.goto(`${BASE}/a/${seed.id}`);
+    // The document is framed on its own origin; the rail, tools and composer are the app page's.
+    const doc = documentLocator(page);
+    await step('Select is the default comment tool', async () => {
+      await doc.locator('#capturebox').waitFor();
+      await openArtifactControls(page);
+      await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Select', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    });
+    check(same(await page.evaluate(() => window.__captureTrace), []), `${name}: Select must not request screen sharing`);
+    await step('the Screenshot tool is active', async () => {
+      await page.getByRole('button', { name: 'Screenshot', exact: true }).click();
+      await expect(page.getByRole('status', { name: 'Screenshot tool active' })).toHaveText(/drag an area/, { timeout: 20000 });
+    });
+    const box = await doc.locator('#capturebox').boundingBox();
+    must(box, 'the capture box has a box');
+    let referencePixel = [220, 30, 30];
+    if (engineName === 'chromium') {
+      await step('the tab capture stream plays', () => expect.poll(() => page.evaluate(() => window.__captureReference?.readyState ?? 0)).toBeGreaterThanOrEqual(2));
+      referencePixel = await page.evaluate(({ x, y }) => { const v = window.__captureReference, c = document.createElement('canvas'); c.width = innerWidth; c.height = innerHeight; c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); return Array.from(c.getContext('2d').getImageData(x + 35, y + 65, 1, 1).data).slice(0, 3); }, box);
+    }
+    await page.mouse.move(box.x + 30, box.y + 60); await page.mouse.down(); await page.mouse.move(box.x + 30 + selectionWidth, box.y + 60 + selectionHeight, { steps: 12 }); await page.mouse.up();
+    const selectionFinished = Date.now();
+    if (engineName !== 'chromium') {
+      await step('without capture, Save waits for an uploaded screenshot', async () => {
+        await expect(page.getByLabel('Save annotation', { exact: true })).toBeDisabled();
+        await page.getByLabel('Upload screenshot', { exact: true }).setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: input });
+      });
+    }
+    const editor = page.getByRole('dialog', { name: 'Annotation composer', exact: true });
+    const canvas = editor.getByLabel('Screenshot drawing canvas');
+    await step('the composer opens on the screenshot', async () => {
+      try { await editor.waitFor({ timeout: 20000 }); } catch (error) { console.error(name, { alerts: await page.getByRole('alert').allTextContents(), status: await page.getByRole('status').allTextContents(), trace: await page.evaluate(() => window.__captureTrace), timings: await page.evaluate(() => performance.getEntriesByType('measure').filter(e => e.name.startsWith('comment-screenshot:')).map(e => e.toJSON())), composer: await page.getByRole('dialog', { name: 'Annotation composer' }).count() }); throw error; }
+      await expect(canvas).toHaveAttribute('aria-busy', 'false');
+      await editor.getByLabel('Annotation comment', { exact: true }).pressSequentially(`Screenshot from ${engineName} at DPR ${dpr}`);
+      await expect(page.getByRole('dialog')).toHaveCount(1);
+      await expect(page.getByRole('button', { name: 'Use screenshot' })).toHaveCount(0);
+    });
+    if (engineName === 'chromium') check.note(`chromium (DPR ${dpr}): release-to-editor ${Date.now() - selectionFinished}ms; crop/encode ${await page.evaluate(() => performance.getEntriesByName('comment-screenshot:capture').at(-1)?.duration.toFixed(1))}ms`);
+    // Exact crop corner must contain content, not a selection outline or app panel.
+    const pixel = await canvas.evaluate(c => Array.from(c.getContext('2d').getImageData(5, 5, 1, 1).data));
+    check(pixel.slice(0, 3).every((value, i) => Math.abs(value - referencePixel[i]) <= 3), `${name}: content pixel ${pixel}; unmarked reference ${referencePixel}`);
+    await step('the brush paints a stroke', async () => {
+      await editor.getByLabel('Brush color', { exact: true }).fill('#00ff00');
+      await editor.getByLabel('Brush thickness').fill('8');
+      const drawing = await canvas.boundingBox();
+      if (!drawing) throw new Error('the drawing canvas has no box');
+      await page.mouse.move(drawing.x + 30, drawing.y + 30); await page.mouse.down(); await page.mouse.move(drawing.x + 130, drawing.y + 50, { steps: 10 }); await page.mouse.up();
+      await expect(editor.getByRole('button', { name: 'Undo stroke' })).toBeEnabled();
+      // Strokes paint on requestAnimationFrame; wait for the pixels, not just the undo button.
+      await expect.poll(() => canvas.evaluate(c => { const pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let count = 0; for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 30 && pixels[i + 1] > 200 && pixels[i + 2] < 30) count++; return count; })).toBeGreaterThan(100);
+      await expect(editor.getByLabel('Annotation comment', { exact: true })).toHaveValue(`Screenshot from ${engineName} at DPR ${dpr}`);
+    });
+    await step('the comment saves and its screenshot persists through a reload', async () => {
+      await page.getByLabel('Save annotation', { exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0);
+      await page.reload();
+      await openArtifactControls(page); await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
+      await expect(doc.locator('#capturebox')).toHaveCSS('background-color', 'rgb(220, 30, 30)');
+      await page.getByRole('img', { name: 'Screenshot attached to comment' }).last().waitFor();
+    });
+    const thumbnail = page.getByRole('img', { name: 'Screenshot attached to comment' }).last();
+    check(await thumbnail.evaluate(img => img.complete && img.naturalWidth > 0), `${name}: persisted thumbnail`);
+    await step('the screenshot opens', async () => {
+      await page.getByRole('button', { name: 'Open comment screenshot' }).last().click();
+      await expect(page.getByRole('dialog', { name: 'Comment screenshot' })).toBeVisible();
+    });
+  });
+  await browser?.close();
+}
+
+// ── the three engines, concurrently ──────────────────────────────────────────
+
+const SCREENSHOT_CASES = { chromium: [[1, 200, 100], [2.2, 235, 235]], firefox: [[1, 200, 100]], webkit: [[1, 200, 100]] };
+const started = Date.now();
+await Promise.all(ENGINES.map(async ([engineName, engine]) => {
+  const at = Date.now();
+  const browser = await engine.launch();
+  try {
+    await reading(engineName, browser);
+    await editing(engineName, browser);
+    await codeViewOnline(engineName, browser);
+    await editedByAnAgent(engineName, browser);
+    await engineChoice(engineName, browser);
+  } finally {
+    await browser.close();
+  }
+  for (const [dpr, width, height] of SCREENSHOT_CASES[engineName]) await screenshotComment(engineName, dpr, width, height);
+  check.note(`${engineName} lane: ${((Date.now() - at) / 1000).toFixed(1)}s`);
+}));
+check.note(`three engines in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+check.done();

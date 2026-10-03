@@ -26,6 +26,19 @@ describe('docs addresses', () => {
     expect((await app.request('/mcp',{method:'POST'})).status).toBe(404);
   });
 
+  // The start-link brief, its claim door and the public anonymous mint are GONE, not merely unadvertised: the CLI's
+  // device approval is the only door to a credential (moved here from the browser gate that started documents).
+  it('the retired start-link and anonymous-mint doors are 404', async () => {
+    // A REAL document, so the 404 is the door's absence and not a missing artifact's.
+    const started = await app.request('/api/start', { method: 'POST' });
+    expect(started.status).toBe(201);
+    const { id } = await started.json() as { id: string };
+    expect((await app.request(`/a/${id}`)).status, 'the document itself is served').toBe(200);
+    expect((await app.request(`/a/${id}/start?k=anything`)).status, 'the start-link brief').toBe(404);
+    expect((await app.request(`/a/${id}/start`, { method: 'POST' })).status, 'its claim door').toBe(404);
+    expect((await app.request('/api/tokens/anonymous', { method: 'POST' })).status, 'the public anonymous mint').toBe(404);
+  });
+
   it('/docs-human is the page for people, and /docs/human is retired with the rest of /docs', async () => {
     const human = await app.request('/docs-human', { headers: BROWSER });
     expect(human.status).toBe(200);

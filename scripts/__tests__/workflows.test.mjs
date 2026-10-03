@@ -148,7 +148,7 @@ describe('source host compatibility matrix', () => {
     expect(candidate?.['working-directory']).toBe('candidate');
     expect(candidate?.run).toContain('afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('services/cli/dist/afbin.mjs');
-    expect(candidate?.run).toContain('scripts/gates.mjs --servers=1 --only=cli-conformance');
+    expect(candidate?.run).toContain('scripts/gates.mjs --servers=1 --only=accounts-and-workspace');
     expect(readFileSync(ciPath, 'utf8')).not.toContain('build-public-packages.mjs');
   });
 });
