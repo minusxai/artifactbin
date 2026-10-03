@@ -55,11 +55,11 @@ const monthly = query('$monthly');
 const rename = mutation('$rename');
 
 export default async function(input) {
-  setRegion(input.region ?? 'west');
+  setRegion(input?.region ?? 'west');
   await monthly.ready;
   const before = monthly();
   // An explicit mutation commits before resolving; permission failures throw.
-  if (input.renameTo) {
+  if (input?.renameTo) {
     await rename({ from: region(), to: input.renameTo });
     setRegion(input.renameTo);
     await monthly.ready;
