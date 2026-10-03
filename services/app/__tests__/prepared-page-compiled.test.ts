@@ -4,10 +4,10 @@
  * failure in the same row as the prepared page, keyed with the compiler build. Real publish handler on the harness's
  * isolated database.
  */
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
@@ -16,8 +16,8 @@ import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { DOCUMENT_MODULE_PATH, type CompiledPage, type StoredCompile } from '@/lib/compiled-page/contract';
 import { createAppServer } from '@/server/app';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
+beforeEach(() => setSession(null));
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
 const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');

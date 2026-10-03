@@ -11,9 +11,9 @@
  * Real routes, the harness's database, the reader switch in shadow for this file.
  */
 import { framedDocument } from './harness';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
@@ -25,8 +25,8 @@ import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { IslandPageData } from '@/lib/islands/contract';
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 
 const asSession = (u: { id: string; email: string } | null) => { sessionUser.id = u?.id ?? ''; sessionUser.email = u?.email ?? ''; };

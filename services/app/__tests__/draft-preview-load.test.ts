@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as saveEdits } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
@@ -20,8 +20,8 @@ vi.mock('@/lib/story/prepared/draft-preview.server', () => ({
     return `<!doctype html><p>${input.source.length}</p>`;
   },
 }));
-vi.mock('@/auth', () => ({ auth: async () => null }));
 useAppHarness();
+beforeEach(() => setSession(null));
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

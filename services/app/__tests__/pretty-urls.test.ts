@@ -6,8 +6,8 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * docs, a redirect for owned ones. The ACL runs BEFORE any redirect, so a
  * probe never learns the owner's username from a private doc.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 import { artifactPage as ArtifactPage } from '@/test/helpers/pages';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
@@ -18,11 +18,9 @@ import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

@@ -6,7 +6,7 @@
  * A claimed artifact is not a draft. A browser holding nothing gets exactly today's answer. A signed-in
  * account's answer does not change.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as homePage } from '@/app/api/page/home/route';
 import { createArtifact } from '@/lib/artifacts';
 
@@ -14,12 +14,12 @@ import { createArtifact } from '@/lib/artifacts';
 import { mintToken, revokeToken } from '@/lib/accounts';
 import { claimTokenById, createUser } from '@/lib/accounts';
 import { agentCookie, request } from './harness';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, setSession } from '@/__tests__/harness';
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 
 const body = (r: Response) => r.json() as Promise<Record<string, unknown>>;
 const draft = (tokenId: string, title: string) =>

@@ -7,11 +7,11 @@
  * inline budget at zero for this file (every inline compile is "over budget").
  */
 import { framedDocument } from './harness';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
@@ -21,10 +21,10 @@ import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.ser
 import { READER_MODE_HEADER } from '@/lib/compiled-page/contract';
 import { compiledPageFailures } from '@/lib/compiled-page/serve.server';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 // Every inline compile takes longer than this; compiled-only waits for it.
 vi.mock('@/lib/compiled-page/contract', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/compiled-page/contract')>()), COMPILE_INLINE_BUDGET_MS: 0 }));
 const harness = useAppHarness();
+beforeEach(() => setSession(null));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');

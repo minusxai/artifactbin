@@ -5,8 +5,8 @@
  * already stored, and reports the census from the database. Real routes and the harness's database; the
  * server is the app's own handler, reached as the script reaches it over HTTP.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -23,8 +23,8 @@ import { STORY_BASE_SHEETS } from '@/lib/story/styles/story-base-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
+beforeEach(() => setSession(null));
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 const BASE = 'http://localhost';
 

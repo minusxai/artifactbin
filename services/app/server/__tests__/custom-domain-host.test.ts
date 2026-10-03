@@ -21,9 +21,8 @@ vi.mock('@/lib/platform/config', async (original) => ({
   get CUSTOM_DOMAINS_TARGET() { return settings.target; },
   get PUBLIC_BASE_URL() { return 'https://app.example.test'; },
 }));
-vi.mock('@/auth', () => ({ auth: async () => (settings.session ? { user: { id: settings.session } } : null) }));
 
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { fakeBrowser } from '@artifactbin/utils';
 import { getArtifactById } from '@/lib/artifacts';
@@ -40,6 +39,7 @@ import { claimToken, createUser, setUsername } from '@/lib/accounts';
 import { createAppServer } from '../app';
 
 useAppHarness();
+beforeEach(() => setSession(() => (settings.session ? { user: { id: settings.session } } : null)));
 
 const APP = 'https://app.example.test';
 const HOST = 'https://blog.example.org';

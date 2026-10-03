@@ -8,8 +8,8 @@
  * optional overrides applied after the copy; the reply is create-shaped plus
  * `forked_from`; every refusal is the existing vocabulary.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAppHarness } from './harness';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useAppHarness, setSession } from './harness';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
@@ -20,10 +20,8 @@ import { claimToken, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const jreq = (path: string, method: string, body?: unknown, token?: string) =>

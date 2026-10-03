@@ -1,14 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as editSheet, POST as preview } from '@/app/a/[id]/draft-preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 useAppHarness();
+beforeEach(() => setSession(null));
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 

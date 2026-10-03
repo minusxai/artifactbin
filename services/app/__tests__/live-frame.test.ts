@@ -14,7 +14,7 @@ import {observedSourceBody} from './prepared-document';
  * signature moves) — under the read ACL, cached per (id, edit_id). A relay
  * that can only forward `{channel, edit_id}` is now enough.
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as authorizeRoute } from '@/app/a/[id]/events/authorize/route';
@@ -26,13 +26,13 @@ import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
 import { resetFrameCache, frameBuilds } from '@/lib/story/data/frame';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const jreq = (path: string, method = 'GET', body?: unknown, token?: string) =>
   new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });

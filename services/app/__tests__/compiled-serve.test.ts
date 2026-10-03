@@ -4,12 +4,12 @@
  * names itself (`x-mx-reader`), emits no inline script and drops `'unsafe-inline'` from the raw CSP;
  * `/a/:id` is HTML-first. Real routes and the harness's database.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { observedRequest } from '@/__tests__/conditional-request';
@@ -28,8 +28,8 @@ import { drainCompiledUpgrades, storyOf } from '@/lib/compiled-page/serve.server
 import type { CompiledPage } from '@/lib/compiled-page/contract';
 import { objectStore } from '@/lib/object-store';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
+beforeEach(() => setSession(null));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>x</title></head><body><div id="root"></div></body></html>' });
 const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');

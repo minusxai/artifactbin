@@ -5,19 +5,19 @@
  * Old names are RELEASED on rename — every URL is anchored on the file id,
  * so nothing breaks and squatting a stale name buys nothing.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my/profile/route';
 
 import {
   createUser, ensureUsername, getUserByUsername, setUsername, usernameFromEmail, USERNAME_RE,
 } from '@/lib/accounts';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
 
 
 const sessionUser = { id: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id } } : null) }));
 
 beforeEach(async () => {
   sessionUser.id = '';

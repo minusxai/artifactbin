@@ -11,7 +11,7 @@
 import { framedDocument } from './harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
@@ -42,9 +42,9 @@ vi.mock('@/lib/story/styles/inline-css', async (original) => {
   };
 });
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const asSession = (u: { id: string; email: string } | null) => { sessionUser.id = u?.id ?? ''; sessionUser.email = u?.email ?? ''; };
 const resetSpies = () => { spies.parse = 0; spies.css = 0; spies.nodes = 0; spies.render = 0; };

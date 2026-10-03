@@ -21,9 +21,9 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * SQL predicate, so a route this file does not reach is guarded by the same
  * scope the reached ones are.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import { useAppHarness } from './harness';
+import { useAppHarness, setSession } from './harness';
 import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as annotateBearerRoute } from '@/app/api/artifacts/[id]/annotations/route';
@@ -46,10 +46,8 @@ import { storedCompiledDataflow } from '@/lib/story/data/parsed-artifact-metadat
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const jreq = async(path:string,method:string,body?:unknown,token?:string)=>{

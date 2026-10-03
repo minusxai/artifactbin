@@ -1,11 +1,13 @@
 /**
  * THE APP TEST HARNESS. One deep module behind every route-level test: one PGLite per FILE,
  * every table wiped before each test (FK-safe order derived from the schema, never a hand-written list), the
- * rate limiter reset, the database released at the end, and the typed request/actor/cookie helpers.
+ * rate limiter reset, the test's session (`setSession`) cleared, the database released at the end, and the typed
+ * request/actor/cookie helpers.
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
+import { overrideSession, type Session } from '@/auth';
 import { AGENT_COOKIE, encodeAgentSession } from '@/lib/accounts/agent-session';
 import { resetRateLimit } from '@/lib/accounts/auth';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
@@ -120,6 +122,16 @@ export async function settleBackgroundWrites(): Promise<void> {
   await (await getDb()).query('SELECT 1');
 }
 
+/**
+ * Who `auth()` says is signed in for a direct handler call (no proxy stamps a session there): a session, a
+ * function asked on every call (a file's own mutable "current user"), or null for nobody, whatever the request
+ * carries. `useAppHarness` clears it before every test and after the file, so it never outlives either; a file
+ * that keeps one for all its tests installs it in its own `beforeEach`.
+ */
+export function setSession(session: Session | (() => Session | null) | null): void {
+  overrideSession(typeof session === 'function' ? session : () => session);
+}
+
 export interface AppHarness {
   /** The one open database of this file — an escape hatch for tests whose behaviour includes a direct row assertion. */
   db(): ReturnType<typeof getDb>;
@@ -158,9 +170,12 @@ export function useAppHarness(): AppHarness {
     const present = await db.query<{ present: boolean }>('SELECT to_regclass($1) IS NOT NULL AS present', [`${EVENTS_SCHEMA}.events`]);
     if (present.rows[0]?.present) await db.query(`DELETE FROM ${EVENTS_SCHEMA}.events`);
     resetRateLimit();
+    overrideSession(undefined);
   });
 
   afterAll(async () => {
+    // The api project shares one module graph per worker: the next file starts with no session named.
+    overrideSession(undefined);
     await drainPreparedPageWarmups();
     await drainSnapshotRevalidations();
     // The export cache holds the database it was opened on; the next file on this worker (the api

@@ -15,7 +15,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  *     differently from "no such id".
  *  4. The wire must not carry the owner's internal account id.
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { artifactPage as ArtifactPage, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
@@ -26,15 +26,13 @@ import { mintExportKey } from '@/lib/serving';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { resetLiveSubscriptions } from '@/lib/story/realtime/live';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'notFound'> {
