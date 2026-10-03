@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEffect, createRoot, For } from 'solid-js';
-import { bindPage, mountComponents, type PageBindings } from '../page-runtime';
+import { bindPage, mountComponents, pageProxyUrl, type PageBindings } from '../page-runtime';
 import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
 import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
 import { ACCESS_PENDING } from '@/lib/story-runtime/store';
@@ -135,5 +135,15 @@ describe('a mounted component', () => {
     expect(document.getElementById('fallback')).not.toBeNull();
     expect(error).toHaveBeenCalledWith(expect.stringContaining('exports no component named Missing'));
     error.mockRestore();
+  });
+});
+
+describe('proxy(url)', () => {
+  it('is the document\'s own /fetch door on the origin it runs on, for an https URL only', () => {
+    expect(pageProxyUrl('Ab3xK9', 'https://api.open-meteo.com/v1/forecast?lat=1&lon=2', 'https://416233784b39.lvh.me'))
+      .toBe('https://416233784b39.lvh.me/a/Ab3xK9/fetch?url=https%3A%2F%2Fapi.open-meteo.com%2Fv1%2Fforecast%3Flat%3D1%26lon%3D2');
+    expect(pageProxyUrl('Ab3xK9', 'https://esm.sh/')).toBe(`${window.location.origin}/a/Ab3xK9/fetch?url=https%3A%2F%2Fesm.sh%2F`);
+    for (const bad of ['http://api.example.com/x', '/a/other/query', 'not a url', 42]) expect(() => pageProxyUrl('Ab3xK9', bad), String(bad)).toThrow(/https:\/\/ URL/);
+    expect(() => pageProxyUrl(null, 'https://api.example.com/x')).toThrow(/published document/);
   });
 });

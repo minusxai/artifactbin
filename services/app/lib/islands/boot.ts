@@ -84,6 +84,21 @@ export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam
 const EMPTY_PAGE: IslandPageData = { values: {}, results: null, appPage: false, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
 
 /** The page data island, or the empty page when it is absent or unreadable (the islands still hydrate). */
+/**
+ * This document's id, for the script's `proxy`: the live identity on `<body>`, else the id its doors name (a capture
+ * carries no live identity but still has its assets door). Null when neither says.
+ */
+export function documentIdOf(doc: Document): string | null {
+  const live = doc.body?.getAttribute(LIVE_ID_ATTR);
+  if (live) return live;
+  const data = readPageData(doc);
+  for (const door of [data.queryUrl, data.assetsUrl, data.viewerUrl]) {
+    const id = door ? /\/a\/([^/?#]+)\//.exec(door)?.[1] : null;
+    if (id) return decodeURIComponent(id);
+  }
+  return null;
+}
+
 export function readPageData(doc: Document): IslandPageData {
   const text = doc.getElementById(ISLAND_DATA_ID)?.textContent;
   if (!text) return EMPTY_PAGE;
@@ -215,7 +230,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     const runtime = (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime');
     if (generation !== authorGeneration || disposed || mode !== 'read') return;
     const hide = exposes ? runtime.exposePage(win, store!) : () => {};
-    const stop = source ? await runtime.startAuthorModule({ source, store, root, vendor }) : () => {};
+    const stop = source ? await runtime.startAuthorModule({ source, store, root, vendor, id: documentIdOf(doc) }) : () => {};
     if (generation !== authorGeneration || disposed || mode !== 'read') { stop(); hide(); return; }
     stopAuthor = () => { stopAuthor = () => {}; stop(); hide(); };
   };

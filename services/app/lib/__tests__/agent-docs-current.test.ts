@@ -105,7 +105,10 @@ describe('the scripts reference teaches the in-document module', () => {
       'const item = () => props.item[0];',
       'props.item is the current rows array (tracked; read it inside JSX, a memo or an effect), not a function; a literal prop such as color is a plain value',
       "import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'",
+      // A document connects only to its own origin: another host is read through its /fetch door.
+      "fetch(proxy('https://api.example.com/x'))", 'read a `csp-connect` host through the document, GET only', '403 until the reader allows it',
     ]) expect(flat, text).toContain(text);
+    expect(flat).not.toContain('`fetch` reaches HTTPS URLs');
   });
 
   it('teaches no part of the retired Preact contract', () => {

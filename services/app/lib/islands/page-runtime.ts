@@ -7,6 +7,9 @@
  *    `query('$monthly')` is an accessor of rows with `loading` and `error` accessors and a `ready` promise beside it;
  *    `mutation('$rename')` is an async function that waits for the page's access check, resolves after commit and
  *    rejects with the server's message. One store subscription pushes every change into the signals in one `batch`.
+ *  - `proxy(url)` (`import { proxy } from 'page'`): the document's own `/a/<id>/fetch?url=` door for an https URL, which
+ *    the server fetches for the script when the document declares the host (`<meta name="csp-connect">`) and the reader
+ *    allowed it — a document's policy connects only to its own origin and the module CDNs (lib/story/styles/document-csp).
  *  - `exposePage(win, store)`: the same bindings as `window.page` (`get`, `set`, `ready`, `mutation`) for browser sessions.
  *  - `startAuthorModule(...)`: loads the version's module (built at publish, lib/story/document/author-module.server)
  *    with its `solid-js` imports pointed at this build's chunks, hands it the bindings through the `page` module's
@@ -257,9 +260,23 @@ export function mountComponents(root: ParentNode, mod: ComponentModule, bindings
   };
 }
 
+/**
+ * `page.proxy(url)`: where a document's script fetches another host — its own `/fetch` door on the origin it runs on
+ * (its own origin when framed, else the app's). GET only; the door checks the host was declared and allowed.
+ */
+export function pageProxyUrl(id: string | null | undefined, url: unknown, origin: string = globalThis.location?.origin ?? ''): string {
+  if (!id) throw new Error('page: proxy() runs only inside a published document');
+  let target: URL | null = null;
+  try { target = typeof url === 'string' ? new URL(url) : null; } catch { /* refused below */ }
+  if (!target || target.protocol !== 'https:') throw new Error(`page: proxy(${JSON.stringify(url)}) takes an https:// URL, e.g. proxy('https://api.example.com/x')`);
+  return `${origin}/a/${encodeURIComponent(id)}/fetch?url=${encodeURIComponent(target.href)}`;
+}
+
 export interface AuthorModuleStart {
   /** The module as built at publish: bare vendor specifiers, the `page` module inlined. */
   source: string;
+  /** The document's id, for `proxy` (absent: `proxy` refuses). */
+  id?: string | null;
   store: DataflowStore | null;
   root: ParentNode;
   /** Vendor specifier → this build's chunk URL (IslandPageData.vendor). */
@@ -278,7 +295,8 @@ export function resolveVendorImports(source: string, vendor: Readonly<Record<str
 /** Run the version's module in this document. Returns the stop function: unmounts its components and drops its bindings. */
 export async function startAuthorModule(input: AuthorModuleStart): Promise<() => void> {
   const bindings = bindPage(input.store);
-  (globalThis as Record<string, unknown>)[PAGE_GLOBAL] = bindings;
+  // What the generated `page` module reads at import: the store's binders, and `proxy` for this document.
+  (globalThis as Record<string, unknown>)[PAGE_GLOBAL] = { ...bindings, proxy: (url: unknown) => pageProxyUrl(input.id, url) };
   const code = resolveVendorImports(input.source, input.vendor);
   const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
   let mod: ComponentModule;

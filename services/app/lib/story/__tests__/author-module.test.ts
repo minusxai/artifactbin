@@ -20,9 +20,10 @@ const refused = async (script: string) => {
 };
 
 describe('the page module generator', () => {
-  it('exports exactly signal, query and mutation, each reading the runtime bindings by the name it is given', () => {
+  it('exports exactly signal, query, mutation and proxy, each reading the runtime bindings by the name it is given', () => {
     const source = pageModuleSource();
-    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation']);
+    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation', 'proxy']);
+    expect(source).toContain('b.proxy(ref)');
     expect(source).toContain(`globalThis[${JSON.stringify(PAGE_GLOBAL)}]`);
     expect(source).toContain('b.signal(ref)');
   });
@@ -90,8 +91,13 @@ describe('buildAuthorModule', () => {
     expect(await refused(`import { query } from 'page'; const q = query; q('$monthly');`)).toMatch(/call query\('\$name'\) directly/);
   });
 
+  it('takes proxy(url) without a declared name: it is a URL, checked by the door at run time', async () => {
+    const module = await built(`import { proxy } from 'page';\nexport function Rates() { return fetch(proxy('https://api.example.com/rates')).then((r) => r.json()); }`);
+    expect(module.exports).toEqual(['Rates']);
+  });
+
   it('refuses the retired per-name imports with the binder to use instead', async () => {
-    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
+    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, proxy, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
     expect(await refused(`import page from 'page';`)).toMatch(/import from 'page' by name/);
   });
 

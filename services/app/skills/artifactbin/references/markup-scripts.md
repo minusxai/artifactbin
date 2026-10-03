@@ -85,7 +85,7 @@ In Helmet script text, split `</script` as `'</scr' + 'ipt'`.
 
 | Specifier | Gives |
 | --- | --- |
-| `page` | `signal`, `query`, `mutation` (below) |
+| `page` | `signal`, `query`, `mutation` (below); `proxy` (Other hosts) |
 | `solid-js` | `createSignal`, `createEffect`, `createMemo`, `createRoot`, `batch`, `untrack`, `on`, `onMount`, `onCleanup`, `For`, `Show`, `Switch`, `Match`, `mergeProps`, `splitProps` |
 | `solid-js/web` | `render`, and what JSX compiles to |
 | `solid-js/store` | `createStore`, `reconcile` |
@@ -137,8 +137,7 @@ still has no handlers.
 ## Libraries
 
 Import a library by its npm name or by URL. To pin a version, pin it in every
-specifier of that package (`three@0.170.0`, `three@0.170.0/examples/…`). `fetch` reaches HTTPS URLs
-that allow cross-origin reads.
+specifier of that package (`three@0.170.0`, `three@0.170.0/examples/…`).
 
 ```jsx
 <canvas id="scene" className="block h-[420px] w-full" />
@@ -159,9 +158,8 @@ that allow cross-origin reads.
 
 ## Other hosts
 
-When a script needs a host outside the default policy, declare it in the
-Helmet, https origins only (no paths; a wildcard only as a leading `*.`;
-at most 10 per meta):
+Declare a host outside the default policy in the Helmet: https origins, no
+paths, a wildcard only as a leading `*.`, at most 10 per meta:
 
 ```jsx
 <Helmet>
@@ -175,3 +173,7 @@ other `csp-` name is `invalid_csp`. Publishing a host is your consent;
 every other reader, the owner included, is asked (once, always for this
 document, or never), and until then requests to it fail, so handle a
 failed `fetch`.
+
+Fetching other hosts: read a `csp-connect` host through the document, GET
+only: `fetch(proxy('https://api.example.com/x'))`, `proxy` from `page`;
+403 until the reader allows it.
