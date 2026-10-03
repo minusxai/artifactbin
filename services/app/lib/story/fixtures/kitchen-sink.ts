@@ -6,7 +6,7 @@
  * registry component is missing here, the same pattern as the registry-names
  * drift gate.
  *
- * Seeded against a running server by scripts/gates/gate-full-kit.mjs, which creates
+ * Seeded against a running server by scripts/gates/gate-kit-and-fonts.mjs, which creates
  * the dataset/recipe/image refs first and splices their real ids in.
  */
 

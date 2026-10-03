@@ -5,8 +5,8 @@
  * After publish the app harvests every diagram to SVG in the background
  * (lib/mermaid-images); a reader is then served the stored drawing and loads
  * no Mermaid code. That is only a speed-up if nothing changes for the reader,
- * so this gate proves it where fonts are the CI runner's: for every kind in
- * scripts/fixtures/mermaid/kinds.mjs, on both reader surfaces (the served
+ * so this gate proves it where fonts are the CI runner's: for one kind per class in
+ * scripts/fixtures/mermaid/kinds.mjs (see STORED_CLASSES), on both reader surfaces (the served
  * document `/a/<id>/raw` and the app's reader `/a/<id>`), in both colour modes,
  * with author CSS overriding the theme, and inside a grid tile, the page drawn
  * with the engine (`?mermaid=engine`, what every reader got before, and what
@@ -33,11 +33,28 @@ const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('mermaid-prerender');
 
 const diagram = (sample) => `<Mermaid title=${JSON.stringify(sample.kind)} code={${JSON.stringify(sample.code)}} />`;
-const STORED = MERMAID_KIND_SAMPLES.filter((s) => s.stored);
-const UNSTORED = MERMAID_KIND_SAMPLES.filter((s) => !s.stored);
-/** Every kind that is stored, in prose; the engine should never load for this one. */
+/*
+ * ONE KIND PER CLASS (proposal §3 row 18). The harvest draws every diagram on a page once per surface and mode,
+ * so the page's size IS the gate's duration. A class is what decides whether a stored drawing can equal the
+ * engine's: the layout engine and renderer for a stored kind — dagre (flowchart), elk (flowchart-elk), the
+ * sequence renderer, cytoscape (mindmap), d3 arcs (pie), d3 axes (xychart), a langium-parsed beta grammar
+ * (packet) — and, for a kind that is never stored, each distinct reason in scripts/fixtures/mermaid/kinds.mjs.
+ * Every other kind's stored bytes and fonts block are mermaid-prerender.test.ts:185–194's (per-kind bytes).
+ */
+const STORED_CLASSES = ['flowchart', 'flowchart-elk', 'sequence', 'mindmap', 'pie', 'xychart', 'packet'];
+const UNSTORED_CLASSES = ['gitGraph (named commits)', 'c4', 'wardley', 'cynefin', 'gantt', 'gitGraph (generated commit ids)', 'journey'];
+const sampleOf = (kind) => {
+  const sample = MERMAID_KIND_SAMPLES.find((s) => s.kind === kind);
+  if (!sample) throw new Error(`scripts/fixtures/mermaid/kinds.mjs has no sample named ${kind}`);
+  return sample;
+};
+const STORED = STORED_CLASSES.map(sampleOf);
+const UNSTORED = UNSTORED_CLASSES.map(sampleOf);
+for (const sample of STORED) if (!sample.stored) throw new Error(`${sample.kind} is no longer stored: pick another kind for its class`);
+for (const sample of UNSTORED) if (sample.stored) throw new Error(`${sample.kind} is now stored: pick another kind for its reason`);
+/** One stored kind per class, in prose; the engine should never load for this one. */
 const KINDS_DOC = `<div data-design="tw" className="p-10"><h1>Every kind</h1>${STORED.map(diagram).join('')}</div>`;
-/** The kinds that must stay with the engine — beside one that is stored, so the gate can see the harvest has run. */
+/** One kind per reason it must stay with the engine — beside one that is stored, so the gate can see the harvest has run. */
 const SENTINEL = STORED.find((s) => s.kind === 'pie');
 const UNSTORED_DOC = `<div data-design="tw" className="p-10"><h1>Engine kinds</h1>${[SENTINEL, ...UNSTORED].map(diagram).join('')}</div>`;
 /** Diagrams in a system font beside a stored one (the pie, in the theme's web fonts): the harvest ran, and kept only the pie. */

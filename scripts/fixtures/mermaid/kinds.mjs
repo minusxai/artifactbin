@@ -1,9 +1,10 @@
 /**
  * One small diagram of every kind Mermaid 12 draws through the kit
  * (lib/story-ui/mermaid-source MERMAID_DIAGRAMS), for the prerender fidelity
- * gate (scripts/gate-mermaid-prerender.mjs). `stored` says whether the harvest
- * keeps a drawing of it, and when it does not, why — the gate fails when a
- * kind is stored that should not be, or goes unstored without a reason here.
+ * gate (scripts/gates/gate-mermaid-prerender.mjs), which draws one kind per
+ * class from here. `stored` says whether the harvest keeps a drawing of it, and
+ * when it does not, why — the gate fails when a sampled kind is stored that
+ * should not be, or goes unstored without a reason here.
  */
 export const MERMAID_KIND_SAMPLES = [
   { kind: 'flowchart', code: 'flowchart LR\n  A[Request] --> B[SSR HTML]\n  B --> C[Runtime JS]\n  C --> D{Hydrate?}\n  D -->|yes| E[Interactive]', stored: true },
