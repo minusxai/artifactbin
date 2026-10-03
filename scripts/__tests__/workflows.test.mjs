@@ -24,7 +24,7 @@ describe('the public repository boundary', () => {
 
 describe('workflow supply-chain pins', () => {
   it('uses immutable full commit SHAs for every third-party action', () => {
-    for (const file of ['ci.yml', 'cli-runtime.yml', 'release-cli.yml']) {
+    for (const file of ['ci.yml', 'cli-runtime.yml', 'release-cli.yml', 'codeql.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
       const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
       if (file !== 'release-cli.yml') expect(refs.length, file).toBeGreaterThan(0);
@@ -171,5 +171,22 @@ describe('Intel release acceptance consumes the tested binary',()=>{
     const bundledProof=ci.jobs.cli.steps.find(step=>step.name==='File preview from the actual executable');
     expect(bundledProof.if).toContain("matrix.os != 'macos-15-intel'");
     for(const job of ['test','timings'])expect(ci.jobs[job].needs).toContain('cli-preview');
+  });
+});
+
+const workflow = (file) => yaml.parse(readFileSync(path.join(root, '.github/workflows', file), 'utf8'));
+
+describe('code scanning runs after merge, not on every pull request', () => {
+  it('analyses JavaScript/TypeScript and Actions on pushes to main and weekly, never on a pull request', () => {
+    const codeql = workflow('codeql.yml');
+    expect(codeql.on).not.toHaveProperty('pull_request');
+    expect(codeql.on.push.branches).toEqual(['main']);
+    expect(codeql.on.schedule).toHaveLength(1);
+    const analyze = codeql.jobs.analyze;
+    expect(analyze.strategy.matrix.language).toEqual(['actions', 'javascript-typescript']);
+    expect(analyze.permissions['security-events']).toBe('write');
+    const uses = analyze.steps.map((step) => step.uses ?? '');
+    expect(uses.some((use) => use.startsWith('github/codeql-action/init@'))).toBe(true);
+    expect(uses.some((use) => use.startsWith('github/codeql-action/analyze@'))).toBe(true);
   });
 });
