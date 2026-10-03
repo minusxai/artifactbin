@@ -225,6 +225,21 @@ export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure
 export type KitFamily = (typeof KIT_FAMILIES)[number];
 
 /**
+ * WHAT AN AUTHOR SCRIPT MAY IMPORT FROM SOLID: each specifier is an entry of the island build
+ * (lib/islands/vendor/*, scripts/build/build-islands.mjs), the SAME Solid the kit runs on, and exports exactly
+ * these names (the build refuses a vendor chunk whose exports differ). Curated, not `export *`: esbuild splits by
+ * file, so every Solid export a vendor entry keeps alive lands in the shared chunk every interactive page loads.
+ * The web list covers every helper Solid's JSX transform emits for `generate: 'dom'` without hydration; the
+ * publish build (lib/story/document/author-module.server) refuses an import of any other name.
+ */
+export const AUTHOR_VENDOR_EXPORTS = {
+  'solid-js': ['For', 'Index', 'Match', 'Show', 'Switch', 'batch', 'children', 'createComputed', 'createContext', 'createEffect', 'createMemo', 'createRenderEffect', 'createRoot', 'createSelector', 'createSignal', 'createUniqueId', 'getOwner', 'mergeProps', 'on', 'onCleanup', 'onMount', 'runWithOwner', 'splitProps', 'untrack', 'useContext'],
+  'solid-js/web': ['Dynamic', 'Portal', 'addEventListener', 'className', 'classList', 'createComponent', 'delegateEvents', 'dynamicProperty', 'effect', 'getOwner', 'insert', 'memo', 'mergeProps', 'render', 'setAttribute', 'setAttributeNS', 'setBoolAttribute', 'setProperty', 'setStyleProperty', 'spread', 'style', 'template', 'untrack', 'use'],
+  'solid-js/store': ['createStore', 'produce', 'reconcile', 'unwrap'],
+} as const satisfies Record<string, readonly string[]>;
+export type AuthorVendorSpecifier = keyof typeof AUTHOR_VENDOR_EXPORTS;
+
+/**
  * The page's data island (`<script type="application/json">`, written by the
  * assembler, read by the island runtime's boot): everything a reader's islands
  * start from before any request.
@@ -265,10 +280,10 @@ export interface IslandPageData {
    */
   authorScript?: string | null;
   /**
-   * The script's bare imports → this build's chunks (`preact`, `@preact/signals`, … and `@mx/page-runtime` itself),
-   * present with `authorScript` or a declared dataflow: the runtime resolves the module's imports against the
-   * serving build, so the script and the runtime share one Preact, and boot loads the same runtime for
-   * `window.page`.
+   * The script's bare imports → this build's chunks (`solid-js`, `solid-js/web`, `solid-js/store`, AUTHOR_VENDOR_EXPORTS,
+   * and `@mx/page-runtime` itself), present with `authorScript` or a declared dataflow: the runtime resolves the
+   * module's imports against the serving build, so the script, the runtime and the kit share one Solid, and boot
+   * loads the same runtime for `window.page`.
    */
   vendor?: Readonly<Record<string, string>>;
 }

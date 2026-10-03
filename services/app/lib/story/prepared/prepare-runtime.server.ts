@@ -3,7 +3,7 @@ import type { PreparedStoryRuntime } from './prepared-runtime';
 import { storyBodyFor } from '../document/body';
 import { assetLookupFrom } from '../assets/asset-url';
 import { EMPTY_HELMET_CONTENT, type HelmetContent } from '../document/helmet';
-import { buildAuthorModule } from '../document/author-module.server';
+import { authorModuleNames, buildAuthorModule } from '../document/author-module.server';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { glyphsForNodes } from '../assets/icon-glyphs';
 import { documentFonts } from '../styles/document-fonts';
@@ -79,9 +79,7 @@ export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData
 /** The Helmet script as the module the page runs (lib/story/document/author-module.server); a draft whose script does not build carries none. */
 async function authorModuleCode(helmet: HelmetContent): Promise<string | null> {
   if (!helmet.script) return null;
-  const built = await buildAuthorModule(helmet.script, {
-    values: helmet.values.map((v) => v.name), queries: helmet.queries.map((q) => q.name), mutations: helmet.mutations.map((m) => m.name),
-  });
+  const built = await buildAuthorModule(helmet.script, authorModuleNames(helmet));
   if (!built.ok) { console.warn('[prepare] the author script does not build:', built.errors.join('; ')); return null; }
   return built.module.code;
 }

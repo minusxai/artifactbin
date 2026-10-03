@@ -24,7 +24,7 @@ import { splitHelmet } from '@/lib/story/document/helmet';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { RETIRED_STORY_THEMES } from '@/lib/data/story/story-themes';
-import { buildAuthorModule, type AuthorModule } from './author-module.server';
+import { authorModuleNames, buildAuthorModule, type AuthorModule } from './author-module.server';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
@@ -144,9 +144,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   if (!split) return json({error:'invalid_jsx',details:structural.errors},400);
   let authorModule: AuthorModule | null = null;
   if (split.content.script) {
-    const built = await buildAuthorModule(split.content.script, {
-      values: split.content.values.map((v) => v.name), queries: split.content.queries.map((q) => q.name), mutations: split.content.mutations.map((m) => m.name),
-    });
+    const built = await buildAuthorModule(split.content.script, authorModuleNames(split.content));
     if (!built.ok) return json({ error: 'invalid_script', details: built.errors.map((message) => ({ message })) }, 400);
     authorModule = built.module;
     structural = validateMarkupStructure(source, { scriptComponents: new Set(authorModule.exports) });

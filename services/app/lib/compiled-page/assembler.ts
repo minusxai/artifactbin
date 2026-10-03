@@ -28,7 +28,7 @@
  * the ones the first screen paints with.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
-import type { IslandPageData } from '@/lib/islands/contract';
+import { AUTHOR_VENDOR_EXPORTS, type IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
@@ -213,7 +213,7 @@ function islandData(input: AssembleInput): IslandPageData {
 }
 
 /** What a script may import bare, each at the serving build's chunk (IslandPageData.vendor; build-islands AUTHOR_VENDOR_SPECIFIERS). */
-const AUTHOR_VENDOR = ['preact', 'preact/hooks', 'preact/compat', 'preact/jsx-runtime', '@preact/signals', '@mx/page-runtime'] as const;
+const AUTHOR_VENDOR = [...Object.keys(AUTHOR_VENDOR_EXPORTS), '@mx/page-runtime'];
 function vendorUrls(manifest: Readonly<Record<string, string>>): Record<string, string> {
   return Object.fromEntries(AUTHOR_VENDOR.flatMap((spec) => (manifest[spec] ? [[spec, manifest[spec]!]] : [])));
 }

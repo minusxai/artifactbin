@@ -63,14 +63,14 @@ function glyphCatalog() {
 /** The contract's constants, read from the TypeScript so there is one table (both files import only types). */
 function readContracts() {
   const out = esbuild.buildSync({
-    stdin: { contents: "export { KIT_FAMILIES } from './lib/islands/contract'; export { ISLANDS_PATH } from './lib/compiled-page/contract';", resolveDir: APP, loader: 'ts' },
+    stdin: { contents: "export { KIT_FAMILIES, AUTHOR_VENDOR_EXPORTS } from './lib/islands/contract'; export { ISLANDS_PATH } from './lib/compiled-page/contract';", resolveDir: APP, loader: 'ts' },
     bundle: true, format: 'cjs', platform: 'node', write: false, logLevel: 'silent', alias: { '@': APP },
   });
   const module = { exports: {} };
   new Function('module', 'exports', out.outputFiles[0].text)(module, module.exports);
   return module.exports;
 }
-const { KIT_FAMILIES, ISLANDS_PATH } = readContracts();
+const { KIT_FAMILIES, AUTHOR_VENDOR_EXPORTS, ISLANDS_PATH } = readContracts();
 
 /** A runtime module by its base name: `.tsx` when the owning track wrote JSX, else `.ts`. */
 const islandModule = (base) => {
@@ -90,18 +90,17 @@ const ENTRIES = [
   // Image bindings load only on pages that author a data-selected image.
   { specifier: '@mx/kit/image', name: 'kit-image', file: () => islandModule('kit/image') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
-  // The author script's runtime (lib/islands/page-runtime): the declared names as signals over the page's store, and
-  // the mounts for the components the script exports. Preact and its signals are vendored as entries of THIS graph so
-  // the script's `import ... from 'preact'` (rewritten to these URLs when it loads) and the runtime share one instance.
+  // The author script's runtime (lib/islands/page-runtime): the declared names as Solid signals over the page's store,
+  // and the mounts for the components the script exports. The script's `solid-js`, `solid-js/web` and `solid-js/store`
+  // are entries of THIS graph (lib/islands/vendor, contract AUTHOR_VENDOR_EXPORTS), so its imports (rewritten to these
+  // URLs when it loads), the runtime and every kit island share one Solid: one reactive graph.
   { specifier: '@mx/page-runtime', name: 'page-runtime', file: () => islandModule('page-runtime') },
-  { specifier: 'preact', name: 'preact', file: () => islandModule('vendor/preact') },
-  { specifier: 'preact/hooks', name: 'preact-hooks', file: () => islandModule('vendor/preact-hooks') },
-  { specifier: 'preact/compat', name: 'preact-compat', file: () => islandModule('vendor/preact-compat') },
-  { specifier: 'preact/jsx-runtime', name: 'preact-jsx-runtime', file: () => islandModule('vendor/preact-jsx-runtime') },
-  { specifier: '@preact/signals', name: 'preact-signals', file: () => islandModule('vendor/preact-signals') },
+  { specifier: 'solid-js', name: 'solid', file: () => islandModule('vendor/solid') },
+  { specifier: 'solid-js/web', name: 'solid-web', file: () => islandModule('vendor/solid-web') },
+  { specifier: 'solid-js/store', name: 'solid-store', file: () => islandModule('vendor/solid-store') },
 ];
 /** The specifiers an author module may import bare; each resolves to its chunk of the page's build (page-runtime rewrites them). */
-export const AUTHOR_VENDOR_SPECIFIERS = Object.freeze(['preact', 'preact/hooks', 'preact/compat', 'preact/jsx-runtime', '@preact/signals']);
+export const AUTHOR_VENDOR_SPECIFIERS = Object.freeze(Object.keys(AUTHOR_VENDOR_EXPORTS));
 export const ISLAND_SPECIFIERS = Object.freeze(ENTRIES.map((e) => e.specifier));
 
 /**
@@ -234,10 +233,26 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
 
   const ssrHalf = await serverHalf;
   const offlineHalf = await offlineHalfBuild;
-  // Exactly one framework: an island that reached a React file would carry a second runtime.
+  // Exactly one framework: an island that reached a React or Preact file would carry a second runtime ...
   const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs, ...offlineHalf.inputs, ...standalone.flatMap((b) => b.inputs)])].sort();
-  const react = inputs.filter((i) => /node_modules\/(react|react-dom)\//.test(i));
-  if (react.length) throw new Error(`build-islands: React reached the island graph (${react.slice(0, 3).join(', ')})`);
+  const react = inputs.filter((i) => /node_modules\/(react|react-dom|preact|@preact\/[\w-]+)\//.test(i));
+  if (react.length) throw new Error(`build-islands: a second framework reached the island graph (${react.slice(0, 3).join(', ')})`);
+  // ... and exactly one Solid: one copy of each of its files (no nested install, no dev build beside the production one).
+  const solidFiles = inputs.filter((i) => /node_modules\/(.*\/)?solid-js\//.test(i));
+  const solidKinds = new Map();
+  for (const file of solidFiles) {
+    const kind = file.replace(/^.*node_modules\/solid-js\//, '').replace(/\/(dev|server|solid|web|store)\.js$/, '/*.js');
+    solidKinds.set(kind, [...(solidKinds.get(kind) ?? []), file]);
+  }
+  const twice = [...solidKinds.values()].find((files) => files.length > 1);
+  if (twice) throw new Error(`build-islands: two copies of Solid reached the island graph (${twice.join(', ')})`);
+  // The author vendor chunks export exactly the curated names the publish build allows (contract AUTHOR_VENDOR_EXPORTS).
+  for (const [specifier, names] of Object.entries(AUTHOR_VENDOR_EXPORTS)) {
+    const entry = ENTRIES.find((e) => e.specifier === specifier);
+    const output = Object.values(result.metafile.outputs).find((o) => o.entryPoint === toPosix(path.relative(ROOT, entry.file())));
+    const exported = [...(output?.exports ?? [])].sort();
+    if (exported.join() !== [...names].sort().join()) throw new Error(`build-islands: the ${specifier} vendor chunk exports ${exported.join(', ')}; contract AUTHOR_VENDOR_EXPORTS names ${[...names].sort().join(', ')}`);
+  }
 
   // Rename every output to `<name>-<sha256(bytes)[0..16]>.js`. esbuild's own [hash] already folds in the
   // hashes of the chunks a file imports, so hashing the bytes as esbuild wrote them is a content address

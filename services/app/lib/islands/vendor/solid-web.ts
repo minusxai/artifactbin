@@ -1,0 +1,2 @@
+/** The author script's `solid-js/web`: the island build's one Solid, exactly contract AUTHOR_VENDOR_EXPORTS (build-islands checks). */
+export { Dynamic, Portal, addEventListener, className, classList, createComponent, delegateEvents, dynamicProperty, effect, getOwner, insert, memo, mergeProps, render, setAttribute, setAttributeNS, setBoolAttribute, setProperty, setStyleProperty, spread, style, template, untrack, use } from 'solid-js/web';
