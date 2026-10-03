@@ -2,7 +2,7 @@
 import { InstallArtifact } from '../document/InstallArtifact';
 import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { useLocation } from '@solidjs/router';
+import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
@@ -11,6 +11,7 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { loginHref } from '@/lib/http/login-href';
 import { takeBootstrap } from '@/web/bootstrap';
 import { adoptServedFrame } from '@/web/served-frame';
+import { reportArtifactView } from '@/web/artifact-view-report';
 import { useSession } from '../lib/session';
 import { NotFoundPage } from './NotFound';
 import type { AnnotationWire } from '@/lib/annotations/store';
@@ -24,6 +25,7 @@ import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DocumentPeople } from '../document/DocumentPeople';
 import { createFramedStory, framedDocumentFor, type FramedStory } from '../document/create-framed-story';
+import { answerFrameNavigation } from '../document/frame-navigation';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
 import { moveInto } from '@/lib/story-runtime/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
@@ -81,10 +83,13 @@ const whenIdle = (task: () => void): (() => void) => {
  * into this page, and the document runs there — its islands, its script, its own live stream and its doors. This
  * page is the app's: its bar (solid/document/DocumentChrome), the consent slot above the frame, the comments rail,
  * the editor's chrome. Comments, selections, the reader's colour choice and editing reach the document through the
- * bridge (solid/document/create-framed-story); the address's `#hash` goes to its page behaviour.
+ * bridge (solid/document/create-framed-story); the address's `#hash` goes to its page behaviour. A link to an app path
+ * inside the document comes back here and this page follows it (solid/document/frame-navigation). Showing the
+ * document is its view (web/artifact-view-report).
  */
 export function DocumentPage(): JSX.Element {
   const location = useLocation();
+  const navigate = useNavigate();
   const { session } = useSession();
   const page = takeBootstrap<DocumentAnswer>(location.pathname, 'artifact');
   const rawId = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
@@ -270,6 +275,10 @@ export function DocumentPage(): JSX.Element {
       editId: () => editorPart()?.editId ?? page.surface?.editId ?? '',
       source: () => editorPart()?.source ?? null,
     });
+    // The document's links to app paths take this page (another document by a full load, an app page by the router).
+    const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
+    // The document is on screen: one view (a prerendered page counts when it is shown).
+    reportArtifactView(window, id);
     window.addEventListener('hashchange', forwardHash);
     framed.frame.addEventListener('load', forwardHash);
     // The served frame may have loaded before the app did: forward now as well.
@@ -293,6 +302,7 @@ export function DocumentPage(): JSX.Element {
     lifecycle.sync();
     const stopIdle = editable() ? whenIdle(prefetchEditor) : null;
     onCleanup(() => {
+      stopNavigation();
       framed.frame.removeEventListener('load', forwardHash);
       window.removeEventListener('hashchange', forwardHash);
       window.removeEventListener('hashchange', lifecycle.sync);

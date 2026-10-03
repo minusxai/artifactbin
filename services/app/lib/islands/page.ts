@@ -14,6 +14,7 @@
  *     and released the moment they take over (lib/story-runtime/anchor-restore).
  *  4b. Framed: the bridge's door (lib/story-runtime/frame-bridge/door), opened here because this runs before the
  *     author's script — the editor's document half (`@mx/frame-editor`) loads only when the page attaches through it.
+ *  4c. Framed: a link to an app path takes the app page, not the frame (lib/story-runtime/frame-bridge/links).
  *
  * A module script runs after the document is parsed, so every element it touches exists; it runs
  * before `boot` (the assembler writes behaviour scripts ahead of the per-document module).
@@ -26,6 +27,7 @@ import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
 import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
 import { frameAppOrigin, openFrameDoor } from '@/lib/story-runtime/frame-bridge/door';
+import { followAppLinks } from '@/lib/story-runtime/frame-bridge/links';
 import { startIslandLive } from './live';
 import { LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR } from './contract';
 
@@ -94,6 +96,8 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   // The editor's document half, on its own lazy file (scripts/build/build-islands FRAME_EDITOR): never in a reader's
   // closure. Opened before the author's script runs; the app page attaches whenever it is ready (frame-bridge/parent).
   if (framed) stops.push(openFrameDoor(win, frameAppOrigin(doc, win), () => import('./frame-editor')));
+  // A link to an app path takes the app page, never the frame on the document's origin (frame-bridge/links).
+  if (framed) stops.push(followAppLinks(win, frameAppOrigin(doc, win)));
   if (framed && !direct) {
     stops.push(relayFrameScroll(win, doc));
     return () => { for (const stop of stops.splice(0)) stop(); };

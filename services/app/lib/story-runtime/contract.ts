@@ -342,6 +342,17 @@ export const STORY_FRAME_HASH_MESSAGE = 'mx:frame-hash';
  */
 export const STORY_URL_VALUES_MESSAGE = 'mx:url-values';
 export interface StoryUrlValuesMessage { type: typeof STORY_URL_VALUES_MESSAGE; search: string }
+
+/**
+ * A document framed on its own origin → the app page: the reader followed a link to an APP path (root-relative, or
+ * absolute on either origin), which would otherwise resolve against the document's origin. `{ type, href }`, `href`
+ * a root-relative path with its query and hash. The app page performs the navigation on itself and answers
+ * STORY_NAVIGATING_MESSAGE first; a frame that hears no answer takes the top itself (lib/story-runtime/frame-bridge/links).
+ */
+export const STORY_NAVIGATE_MESSAGE = 'mx:navigate';
+/** The app page → its framed document: "I am taking this navigation" (`{ type, href }`, the href it was asked for). */
+export const STORY_NAVIGATING_MESSAGE = 'mx:navigating';
+export interface StoryNavigateMessage { type: typeof STORY_NAVIGATE_MESSAGE | typeof STORY_NAVIGATING_MESSAGE; href: string }
 export interface StoryScrollMessage {
   type: typeof STORY_SCROLL_MESSAGE;
   scrollY: number;
