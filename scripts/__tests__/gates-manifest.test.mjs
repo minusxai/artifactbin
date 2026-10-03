@@ -161,10 +161,10 @@ describe('the shards are cut from those rows', () => {
 
  describe('browser provisioning follows the selected gates', () => {
   it('keeps Chromium-only shards free of unused engines', () => {
-    expect(browsersFor(['annotations', 'dataflow'])).toEqual(['chromium']);
+    expect(browsersFor(['comments', 'dataflow'])).toEqual(['chromium']);
   });
   it('preserves all three engines for screenshot coverage', () => {
-    expect(browsersFor(['annotations', 'screenshot-comments'])).toEqual(['chromium', 'firefox', 'webkit']);
+    expect(browsersFor(['comments', 'screenshot-comments'])).toEqual(['chromium', 'firefox', 'webkit']);
   });
   it('rejects unknown gates instead of silently underprovisioning', () => {
     expect(() => browsersFor(['missing-gate'])).toThrow(/no row/);
@@ -172,7 +172,7 @@ describe('the shards are cut from those rows', () => {
  });
 
 it('balances the extra cross-browser setup without extending any test timeout', () => {
-  expect(shardWeight('annotations')).toBe(specFor('annotations').seconds);
+  expect(shardWeight('comments')).toBe(specFor('comments').seconds);
   expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').seconds + CROSS_BROWSER_SETUP_SECONDS);
 });
 

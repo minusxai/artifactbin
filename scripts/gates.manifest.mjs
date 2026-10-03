@@ -40,16 +40,13 @@ export const GATE_SPECS = Object.freeze([
   { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
   { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
   { name: 'testusers', needsMail: true, seconds: 10, timeoutMs: 60_000 },
-  { name: 'comment-targets', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, seconds: 5, timeoutMs: 60_000 },
   { name: 'app-home', needsMail: false, serialGroup: 'clipboard', seconds: 1, timeoutMs: 120_000 },
   { name: 'seamless-navigation', needsMail: true, seconds: 5, timeoutMs: 60_000 },
   { name: 'libraries', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   { name: 'postgres-datasets', needsMail: true, seconds: 14, timeoutMs: 60_000 },
-  { name: 'annotations', needsMail: false, seconds: 40, timeoutMs: 120_000 },
   { name: 'app-flows', needsMail: true, seconds: 75, timeoutMs: 210_000 },
   { name: 'claim-flow', needsMail: true, seconds: 6, timeoutMs: 60_000 },
-  { name: 'collab-edit', needsMail: true, seconds: 37, timeoutMs: 100_000 },
   { name: 'data-ux', needsMail: false, seconds: 16, timeoutMs: 60_000 },
   { name: 'dataflow', needsMail: true, seconds: 13, timeoutMs: 60_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
@@ -59,7 +56,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'editor-exits', needsMail: false, seconds: 42, timeoutMs: 120_000 },
   { name: 'editable-table', needsMail: true, seconds: 36, timeoutMs: 120_000 },
   { name: 'roadmap-views', needsMail: false, seconds: 8, timeoutMs: 60_000 },
-  { name: 'export-slice', needsMail: false, seconds: 13, timeoutMs: 60_000 },
   { name: 'fonts', needsMail: false, seconds: 39, timeoutMs: 150_000 },
   { name: 'folders', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
@@ -73,7 +69,6 @@ export const GATE_SPECS = Object.freeze([
   // (scripts/gates/lib/pages-server; the runner's servers have none). Measured 10s against a dev server; its boot adds ~10s.
   { name: 'frame-editor', needsMail: false, seconds: 20, timeoutMs: 90_000 },
   { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
-  { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },
   { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
   { name: 'live-reader', needsMail: false, seconds: 30, timeoutMs: 70_000 },
@@ -93,10 +88,19 @@ export const GATE_SPECS = Object.freeze([
   { name: 'pages-origin', needsMail: true, seconds: 30, timeoutMs: 120_000 },
   { name: 'secure-arch', needsMail: true, seconds: 14, timeoutMs: 60_000 },
   { name: 'shell-seo', needsMail: false, seconds: 3, timeoutMs: 60_000 },
-  { name: 'social-preview', needsMail: false, seconds: 29, timeoutMs: 80_000 },
   { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 3, timeoutMs: 60_000 },
   { name: 'visibility', needsMail: true, seconds: 9, timeoutMs: 60_000 },
-  { name: 'viz-editor', needsMail: true, seconds: 61, timeoutMs: 130_000 },
+  // Measured in one gate-container run (4 CPUs, two servers, beside each other): viz-editor 50s, comments 13s,
+  // collab-roles 14s, exports 34s.
+  // Builds a chart by clicking, reloads, edits again, then a session-only owner and a grid (beside the journey).
+  // The slow-network rebind leg was dropped (it repeated the refused-switch leg).
+  { name: 'viz-editor', needsMail: true, seconds: 50, timeoutMs: 150_000 },
+  // One journey: the former annotations and comment-targets gates (two lanes in one browser, the fold leg alone).
+  { name: 'comments', needsMail: false, seconds: 13, timeoutMs: 60_000 },
+  // One journey: the former collab-edit and link-access gates — four signed-in people and a logged-out visitor.
+  { name: 'collab-roles', needsMail: true, seconds: 14, timeoutMs: 60_000 },
+  // One journey: the former export-slice and social-preview gates, plus the one PNG/JPEG/card/?chrome=0 set.
+  { name: 'exports', needsMail: false, seconds: 34, timeoutMs: 110_000 },
 ]);
 
 /**
@@ -158,11 +162,11 @@ export const CI_GATE_SHARDS = 12;
 /**
  * Gates that each get a CI runner to themselves. Both FAIL under a neighbour's browser load and then
  * pass alone in the runner's retry: inplace-edit ("typing did not move the reader (145 → 995)", then
- * "passed alone in 62s") doubled shard 4/10 to 134s on run 36875673784, and collab-edit retried on two
+ * "passed alone in 62s") doubled shard 4/10 to 134s on run 36875673784, and collab-edit (now collab-roles) retried on two
  * of three runs (36876517464, 36875088399), +33s each. Alone they cannot lose that race, so the shard's
  * time is the gate's own: no retry to pad for.
  */
-export const CI_ISOLATED_GATES = Object.freeze(['inplace-edit', 'collab-edit']);
+export const CI_ISOLATED_GATES = Object.freeze(['inplace-edit', 'collab-roles']);
 
 /** The extra a shard pays to apt-install Firefox/WebKit system packages: 91s on CI run 35740918148. */
 export const CROSS_BROWSER_SETUP_SECONDS = 91;

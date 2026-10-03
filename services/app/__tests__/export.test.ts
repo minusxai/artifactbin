@@ -92,7 +92,7 @@ describe('GET /a/:id/export', () => {
   /**
    * These are the exact bytes the fake BrowserService reports. Real PNG/JPEG
    * encoding and crop geometry are asserted by scripts/gates/gate-full-kit.mjs and
-   * scripts/gates/gate-export-slice.mjs against a running server.
+   * scripts/gates/gate-exports.mjs against a running server.
    */
   it(
     'resolves a document export to image bytes through its scoped asset redirect',
@@ -228,7 +228,7 @@ describe('readable = exportable includes BEARER-readable', () => {
 // The PIXEL claims — a full export runs past the fold, a slide shot is one
 // screen, slide 2 differs from slide 1 — need a live server to render against
 // (here the exporter has no app to photograph), so they live in the browser
-// gate: scripts/gates/gate-export-slice.mjs. What stays here is what the route
+// gate: scripts/gates/gate-exports.mjs. What stays here is what the route
 // decides on its own: parsing, and the refusals.
 describe('GET /a/:id/export?slide=N', () => {
   const DECK = '<SlideDeck><Slide title="one"><h1>First slide</h1></Slide><Slide title="two"><h1>Second slide</h1></Slide></SlideDeck>';
