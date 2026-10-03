@@ -5,8 +5,9 @@
  * document half (ProseMirror over the compiled DOM, lib/story-runtime/island-controller) runs INSIDE the frame,
  * loaded on demand through the door the page behaviour opens before the author's script
  * (lib/story-runtime/frame-bridge); the app half (toolbar, save path, comments) stays on the page and talks to it
- * over postMessage. Until documents have their own origin, `?mx-frame-edit=1` frames the sandboxed `/a/<id>/raw`
- * copy (solid/document/create-framed-story `framedDocumentFor`).
+ * over postMessage. The document is served on its own origin (APP__PAGES_HOST) and the app page adopts the frame the
+ * server drew (solid/document/create-framed-story `framedDocumentFor`), so this gate drives a server that serves pages
+ * (./lib/pages-server: its own, or a `--pages-host` dev server it is handed).
  *
  * The owner enters edit mode, types into a paragraph inside the frame, bolds a word from the PAGE's toolbar,
  * undoes it with Mod-Z pressed INSIDE the frame, and leaves: the stored source changed exactly as typed, every
@@ -21,9 +22,11 @@ import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
+import { pagesServer } from './lib/pages-server.mjs';
 
-const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('frame-editor');
+const pages = await pagesServer(process.argv[2], 'frame-editor');
+const BASE = pages.app;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const until = async (probe, ok, timeout) => {
   const end = Date.now() + timeout;
@@ -66,22 +69,23 @@ const put = await api(start.id, start.token, '', { method: 'PUT', body: JSON.str
 if (!put.ok) throw new Error(`PUT → ${put.status} ${await put.text()}`);
 const before = await head(start);
 
-const browser = await chromium.launch();
+const SELF = pages.origin(start.id);
+const browser = await chromium.launch({ args: pages.browserArgs });
 const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   page.on('console', (message) => { if (message.type() === 'error') errors.push(`[console ${message.location()?.url ?? ''}] ${message.text()}`.slice(0, 400)); });
   page.on('pageerror', (error) => errors.push(`[pageerror] ${String(error)}`.slice(0, 400)));
   await becomeOwner(page, BASE, start.token);
-  await page.goto(`${BASE}/a/${start.id}?mx-frame-edit=1`, { waitUntil: 'load' });
+  await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
 
-  const iframe = page.locator('iframe[title="Document"]');
+  const iframe = page.locator('iframe[data-mx-document-frame]');
   await iframe.waitFor({ timeout: 15000 });
-  const frame = () => page.frames().find((f) => /\/raw(\?|$)/.test(f.url()));
+  const frame = () => page.frames().find((f) => f.url().startsWith(SELF));
   await until(() => frame()?.locator('#lede').count() ?? 0, (n) => n === 1, 15000);
   check(!!frame(), `the app page frames the document (${frame()?.url() ?? 'no frame'})`);
-  check(await page.locator('[aria-label="Artifact viewport"] [data-mx-inline-story]').count() === 0, 'and holds no adopted copy of its story');
-  check(await frame().evaluate(() => window.origin) === 'null', 'the framed copy runs at an opaque origin');
+  check(await page.locator('[aria-label="Artifact viewport"] #lede').count() === 0, 'and holds no adopted copy of its story');
+  check(await frame().evaluate(() => window.origin) === SELF, `the framed document runs on its own origin (${SELF})`);
 
   // ── ENTER ──
   await openArtifactControls(page);
@@ -174,5 +178,6 @@ try {
   check(errors.length === 0, `no console errors${errors.length ? `:\n    ${errors.join('\n    ')}` : ''}`);
 } finally {
   await browser.close();
+  pages.stop();
 }
 check.done();

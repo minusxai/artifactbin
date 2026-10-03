@@ -69,8 +69,9 @@ export const GATE_SPECS = Object.freeze([
   // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
   { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
   { name: 'inplace-edit', needsMail: false, seconds: 66, timeoutMs: 180_000 },
-  // Measured 10s alone against a dev server (not yet in CI); the floor timeout.
-  { name: 'frame-editor', needsMail: false, seconds: 10, timeoutMs: 60_000 },
+  // Frames a document on its own origin, so it boots its own production server with APP__PAGES_HOST=lvh.me
+  // (scripts/gates/lib/pages-server; the runner's servers have none). Measured 10s against a dev server; its boot adds ~10s.
+  { name: 'frame-editor', needsMail: false, seconds: 20, timeoutMs: 90_000 },
   { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
   { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },
@@ -80,6 +81,9 @@ export const GATE_SPECS = Object.freeze([
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
   { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
   { name: 'mobile', needsMail: false, seconds: 21, timeoutMs: 100_000 },
+  // The four native-scripts briefs end to end on a server it boots with APP__PAGES_HOST=lvh.me (./lib/pages-server):
+  // frame, direct query, consent and the fetch door, in-frame editing with the script badge, a comment, afbin export.
+  { name: 'native-scripts', needsMail: false, seconds: 45, timeoutMs: 150_000 },
   { name: 'oauth-browser', needsMail: true, seconds: 3, timeoutMs: 60_000 },
   { name: 'reading-chrome', needsMail: false, seconds: 19, timeoutMs: 90_000 },
   { name: 'reader-chrome', needsMail: true, serialGroup: 'clipboard', seconds: 24, timeoutMs: 110_000 },
