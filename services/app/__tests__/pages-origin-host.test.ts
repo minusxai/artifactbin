@@ -67,7 +67,7 @@ async function pagesCookie(app: ReturnType<typeof framing>, actor: Actor, id: st
 const query = (_id: string) => JSON.stringify({ values: {}, only: ['counted'] });
 
 describe('the app page frames the document on its own origin', () => {
-  it('draws the chrome and one sandboxed frame whose first URL spends a ticket, under the strict policy that frames only the pages origins', async () => {
+  it('draws one sandboxed frame whose first URL spends a ticket, under the strict policy that frames only the pages origins', async () => {
     const w = await world();
     const res = await framing().request(as(`${APP}/a/${w.secret}`, w.actor, { headers: { accept: 'text/html' } }));
     expect(res.status).toBe(200);
@@ -84,7 +84,8 @@ describe('the app page frames the document on its own origin', () => {
     expect(html).not.toContain('Private plan</h1>');
     expect(html).not.toContain(`id="${ISLAND_DATA_ID}"`);
     expect(html).not.toMatch(/\/islands\/d\/[0-9a-f]{16}\.js/);
-    expect(html).toContain('data-mx-reader-chrome');
+    // The bar around it is the app's own (solid/document/DocumentChrome), drawn by the app, not the server.
+    expect(html).not.toContain('data-mx-reader-chrome');
     const csp = res.headers.get('content-security-policy')!;
     expect(csp.split('; ').find((d) => d.startsWith('frame-src'))).toBe(`frame-src 'self' ${APEX} https://*.pages.example.test`);
     expect(csp.split('; ').find((d) => d.startsWith('script-src'))).not.toMatch(/blob:|https:/);
@@ -295,24 +296,6 @@ describe('the origin gate', () => {
       expect(res.status).toBe(200);
       expect(res.headers.get('access-control-allow-credentials')).toBeNull();
     }
-  });
-});
-
-describe('with APP__PAGES_HOST unset', () => {
-  it('serves the document inside the app page under the in-page document policy, and a pages hostname is nobody\'s', async () => {
-    const w = await world();
-    const app = createAppServer({ indexHtml: async () => SHELL, pagesSite: null });
-    const res = await app.request(as(`${APP}/a/${w.secret}`, w.actor, { headers: { accept: 'text/html' } }));
-    const html = await res.text();
-    expect(html).toContain('Private plan');
-    expect(html).not.toContain('data-mx-document-frame');
-    const csp = res.headers.get('content-security-policy')!;
-    expect(csp.split('; ').find((d) => d.startsWith('script-src'))).toMatch(/'self' 'wasm-unsafe-eval' blob: https:/);
-    expect(csp.split('; ').find((d) => d.startsWith('frame-src'))).toBe("frame-src 'self'");
-    const self = pagesOriginFor(w.secret, site);
-    const elsewhere = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, 'content-type': 'text/plain' }, body: query(w.secret) });
-    expect(elsewhere.status).toBe(404);
-    expect(elsewhere.headers.get('access-control-allow-credentials')).toBeNull();
   });
 });
 

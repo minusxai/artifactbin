@@ -3,7 +3,7 @@ import { createSignal, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
 import { loginHref } from '@/lib/http/login-href';
 import { Tooltip } from '../components/Tooltip';
-import { sendReaction } from './reader-chrome-adapter';
+import { sendReaction } from './reactions';
 
 export interface LikeActionProps {
   id: string; accountSession: boolean; initial: { liked: boolean; count: number };
@@ -18,7 +18,7 @@ export function LikeAction(props: LikeActionProps): JSX.Element {
     if (!props.accountSession) { navigate(loginHref(location, 'like')); return; }
     if (busy()) return;
     setBusy(true);
-    // The rail's like press sends through the same door (reader-chrome-adapter): a sign-in refusal goes to login.
+    // The bar's like press sends through the same door (./reactions): a sign-in refusal goes to login.
     const answer = await sendReaction<{ liked: boolean; count: number }>(`/api/my/artifacts/${encodeURIComponent(props.id)}/like`, state().liked, 'like', navigate);
     setBusy(false);
     if (answer) { setState(answer); props.onChange?.(answer); }

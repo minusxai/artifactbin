@@ -173,15 +173,6 @@ export function firstScreenFonts(input: FirstScreenFontsInput): StoryFontAsset[]
 }
 
 /**
- * The faces the served document's reader chrome (lib/story/reader/reader-chrome)
- * paints: its labels are set in the mono slot (lib/story-runtime/chrome-css),
- * upright. Only /raw draws that chrome; the app page draws its own.
- */
-export function readerChromeFonts(input: Omit<FirstScreenFontsInput, 'nodes'>): StoryFontAsset[] {
-  return facesFor(['mono:normal'], input);
-}
-
-/**
  * The head tags for font preloads. `crossorigin` is load-bearing: a font is
  * always fetched in CORS mode, and a preload without it warms an entry the
  * real request cannot use — the font would download twice.

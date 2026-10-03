@@ -12,7 +12,7 @@
  * document's own `font-*` metas.
  */
 import { describe, expect, it } from 'vitest';
-import { firstScreenFonts, readerChromeFonts } from '../styles/first-screen-fonts';
+import { firstScreenFonts } from '../styles/first-screen-fonts';
 import { storyBodyFor } from '../document/body';
 import { documentFonts } from '../styles/document-fonts';
 import { STORY_FONT_THEMES, type StoryFontAsset } from '@/lib/data/story/story-fonts';
@@ -129,15 +129,5 @@ describe('firstScreenFonts — per theme, from the nodes', () => {
       expect(faces.length, t.name).toBe(new Set(faces.map((f) => f.url)).size);
       for (const f of faces) expect(STORY_FONT_THEMES[t.name], `${t.name} -> ${f.url}`).toContainEqual(f);
     }
-  });
-});
-
-describe('readerChromeFonts — the served document\'s own chrome', () => {
-  it('is set in the theme mono slot (the body face where a theme has no mono)', () => {
-    expect(urls(readerChromeFonts({ theme: 'industry' }))).toEqual([latin('JetBrains Mono')]);
-    expect(urls(readerChromeFonts({ theme: 'terminal' }))).toEqual([latin('JetBrains Mono')]);
-    expect(urls(readerChromeFonts({ theme: 'organic' }))).toEqual([latin('Inter')]);
-    expect(urls(readerChromeFonts({ theme: 'manuscript' }))).toEqual([latin('Noto Serif')]);
-    expect(urls(readerChromeFonts({ theme: null }))).toEqual([]);
   });
 });

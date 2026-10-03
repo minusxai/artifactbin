@@ -22,6 +22,10 @@ async function main(): Promise<void> {
   if (!dev && !readEnv(env, 'APP__PUBLIC_BASE_URL')) {
     throw new Error('[boot] APP__PUBLIC_BASE_URL is required in production (every published link is minted from it). Set it to the URL people reach this on.');
   }
+  // Every document is served on its own origin (lib/serving/pages-origin): there is no other renderer to fall back to.
+  if (!readEnv(env, 'APP__PAGES_HOST')) {
+    throw new Error('[boot] APP__PAGES_HOST is required: every document is served on its own origin, <hex id>.<pages host>, framed by the app page. Development: APP__PAGES_HOST=lvh.me with APP__PUBLIC_BASE_URL=http://app.lvh.me:<port> — or run: npm run setup');
+  }
   /** `npm run dev:app`: the app alone, no authentication composition (see the header). */
   const appOnly = process.argv.includes('--app-only');
   const port = Number(env.APP__PORT ?? (env.APP__PUBLIC_BASE_URL ? new URL(env.APP__PUBLIC_BASE_URL).port : '') ?? 3030) || 3030;
@@ -120,7 +124,7 @@ async function main(): Promise<void> {
   let hmrPort: number | null = null;
   if (dev) {
     const { createServer } = await import('vite');
-    const { APP_HMR_PORT_SETTING, PAGES_HOST, resolveHmrPort } = await import('@/lib/platform/config');
+    const { APP_HMR_PORT_SETTING, requirePagesHost, resolveHmrPort } = await import('@/lib/platform/config');
     hmrPort = resolveHmrPort(APP_HMR_PORT_SETTING, port);
     vite = await createServer({
       configFile: path.resolve(import.meta.dirname, 'vite.config.mts'),
@@ -128,7 +132,7 @@ async function main(): Promise<void> {
       // derive it from our own port so two checkouts never fight over it.
       // With documents on their own origins (APP__PAGES_HOST), Vite must answer the pages hostnames it
       // fronts (its DNS-rebinding guard refuses unknown hosts) and leave CORS to the app's origin gate.
-      server: { middlewareMode: true, ws: { port: hmrPort }, ...developmentPagesHosts(PAGES_HOST, baseURL) },
+      server: { middlewareMode: true, ws: { port: hmrPort }, ...developmentPagesHosts(requirePagesHost(), baseURL) },
       appType: 'custom',
       // Vite pre-bundles what the SPA imports; the server-only trees (vega, sqlite-wasm,
       // playwright, PGLite) are the app's, never the browser's.

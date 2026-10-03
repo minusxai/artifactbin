@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createContext, createEffect, createSignal, For, on, onCleanup, Show, useContext, type JSX, type Setter } from 'solid-js';
+import { createContext, createEffect, createSignal, For, on, onCleanup, Show, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
 /** Shared Solid app chrome. One owner closes one panel before another opens. */
 import { Bell, BookOpen, ChevronRight, CircleUser, FileText, LogIn, LogOut, Moon, SlidersVertical, Sun, User, X } from 'lucide-solid';
 import { GitHubIcon } from './brand-icons';
@@ -13,7 +13,7 @@ import { loginHref } from '@/lib/http/login-href';
 import { useSession } from '../lib/session';
 import { Tooltip } from './Tooltip';
 import { PeopleInbox } from './PeopleInbox';
-import { useInbox } from '../lib/notifications';
+import { useOptionalInbox } from '../lib/notifications';
 import { Avatar } from './Avatar';
 import { closeOnEscape } from '../lib/close-on-escape';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
@@ -27,7 +27,7 @@ export default function ArtifactPageChrome(props: { authed: boolean; anon: boole
   </aside>;
 }
 
-type Panel = 'menu' | 'controls' | 'notifications' | null;
+export type Panel = 'menu' | 'controls' | 'notifications' | null;
 /** A route may suppress the app bar while it owns the whole viewport (the 404 page). */
 export const ChromeVisibilityContext = createContext<Setter<boolean>>();
 export function useChromeVisibility(): Setter<boolean> | undefined { return useContext(ChromeVisibilityContext); }
@@ -43,20 +43,38 @@ function Star(props: { mobile: boolean }): JSX.Element {
  * What an artifact page adds to the one bar (`PageChromeProps`): its `title` as the
  * crumb, the controls panel's `label` ("Artifact controls"), bar `actions` beside the star, and
  * `controls` — the artifact's own rows under the appearance picker.
+ *
+ * A document page (solid/document/DocumentChrome) also replaces the crumbs with its own `byline` (the
+ * author, the title, the follow and membership pills), owns which panel is open (`panel`/`setPanel`, so a
+ * carried intent or a pill can open one), hears the reader's colour choice (`mode`/`onMode`: the document
+ * in its frame takes it too) and drops the star while it is being edited (`star: false`).
  */
 export interface PageChromeProps {
   title?: string | null;
   label?: string;
   actions?: JSX.Element;
   controls?: (close: () => void) => JSX.Element;
+  byline?: JSX.Element;
+  panel?: Accessor<Panel>;
+  setPanel?: (next: Panel) => void;
+  mode?: Accessor<'light' | 'dark'>;
+  onMode?: (next: 'light' | 'dark') => void;
+  star?: boolean;
 }
 
 export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const location = useLocation();
   const { session } = useSession();
-  const inbox = useInbox();
-  const [panel, setPanel] = createSignal<Panel>(null);
-  const [mode, setMode] = createSignal<'light' | 'dark'>(typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  // The app shell provides the inbox; a page rendered on its own (a test) has none and shows no unread mark.
+  const inbox = useOptionalInbox();
+  const [ownPanel, setOwnPanel] = createSignal<Panel>(null);
+  const panel = () => (props.panel ? props.panel() : ownPanel());
+  const setPanel = (next: Panel | ((current: Panel) => Panel)) => {
+    const value = typeof next === 'function' ? next(panel()) : next;
+    if (props.setPanel) props.setPanel(value); else setOwnPanel(value);
+  };
+  const [ownMode, setMode] = createSignal<'light' | 'dark'>(typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  const mode = () => (props.mode ? props.mode() : ownMode());
   const person = () => session()?.kind === 'account' ? session()?.user : null;
   const crumbs = () => crumbsFor(location.pathname, props.title);
   const label = () => props.label ?? 'Page controls';
@@ -67,9 +85,9 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const close = () => setPanel(null);
   const pick = (next: 'light' | 'dark') => {
     setMode(next);
-    chooseTheme(next);
+    if (props.onMode) props.onMode(next); else chooseTheme(next);
   };
-  const unread = () => Boolean(inbox.state()?.unread);
+  const unread = () => Boolean(inbox?.state()?.unread);
   // Whatever closes a panel (Escape, scrim, its own close button, a link) returns focus to the bar button that opened it.
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
   createEffect(() => { if (panel()) onCleanup(closeOnEscape(close)); });
@@ -78,12 +96,14 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
       <a href="/" aria-label="Home" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised"><img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} /></a>
       <a href="/" class="min-w-0 truncate font-mono text-[13px] font-medium text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
       <nav aria-label="Current page" class="hidden min-w-0 items-center gap-2 font-mono text-fg sm:flex" style={{ 'font-size': `${CHROME_IDENTITY.fontSize}px`, 'font-weight': CHROME_IDENTITY.fontWeight }}>
-        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
-        <Show when={!crumbs().length}><span aria-hidden="true" class="text-faint">·</span><span class="truncate font-normal text-muted">Google Docs for agents</span></Show>
-        <For each={crumbs()}>{crumb => <span class="flex min-w-0 items-center gap-2"><ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" /><Show when={crumb.href} fallback={<span class="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>}><a href={crumb.href} class="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a></Show></span>}</For>
+        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length || props.byline ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
+        <Show when={props.byline} fallback={<>
+          <Show when={!crumbs().length}><span aria-hidden="true" class="text-faint">·</span><span class="truncate font-normal text-muted">Google Docs for agents</span></Show>
+          <For each={crumbs()}>{crumb => <span class="flex min-w-0 items-center gap-2"><ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" /><Show when={crumb.href} fallback={<span class="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>}><a href={crumb.href} class="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a></Show></span>}</For>
+        </>}>{props.byline}</Show>
       </nav>
       <div class="ml-auto flex shrink-0 items-center gap-1">
-        <Star mobile={false} /><Star mobile={true} />
+        <Show when={props.star !== false}><Star mobile={false} /><Star mobile={true} /></Show>
         {props.actions}
         <Show when={person()}><Tooltip content="Notifications"><button type="button" aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class={`${BAR_BUTTON} relative`}><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" /></Show></button></Tooltip></Show>
         <Tooltip content={controlsName()}><button type="button" aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)} class={`${BAR_BUTTON} ${panel() === 'controls' ? 'text-accent' : ''}`}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</button></Tooltip>

@@ -17,7 +17,7 @@ const doc = (head: AssembleHead | null = null): string => {
     compiled, story: compiled.html, css: '', fontPreloads: [], title: 'Stored title',
     theme: null, colorMode: 'light', snapshot: null,
     overlay: { values: {}, mermaidImages: {}, signedIn: false, doors: null },
-    chrome: null, spa: null, build, head,
+    build, head,
   };
   return assembleReaderPage(input).html;
 };

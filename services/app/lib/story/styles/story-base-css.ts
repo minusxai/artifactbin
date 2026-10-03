@@ -16,7 +16,7 @@
  */
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
-import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
+import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { getStoryFontCss, storyFontFaceCss, type StoryFontAsset } from '@/lib/data/story/story-fonts';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
@@ -36,12 +36,12 @@ const STORY_ROOT_RULE = ':root { --mx-vh: 100vh; color: var(--foreground, Canvas
  * The fixed sheets a base sheet is made of: what a prepared page's stored stylesheet version hashes
  * (lib/story/prepared/css-version.server), so changing any of them re-prepares the stored pages that carry it.
  */
-export const STORY_BASE_SHEETS: readonly string[] = [STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_CHROME_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS];
+export const STORY_BASE_SHEETS: readonly string[] = [STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, DOCUMENT_NAV_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS];
 
 export function storyBaseCss(recipe: StoryBaseCssRecipe): string {
   return [
     STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
-    recipe.chrome ? STORY_CHROME_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
+    recipe.chrome ? DOCUMENT_NAV_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
     getStoryFontCss(recipe.theme ?? undefined), storyFontFaceCss(recipe.faces), documentFontCss(recipe.fonts),
   ].join('\n');
 }

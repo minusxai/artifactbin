@@ -13,6 +13,7 @@
  *  4. the cookie reaches artifact routes with TOKEN scope — the same reach the
  *     localStorage token had, and no more.
  */
+import { pagesSite } from '@/lib/serving/pages-origin';
 import { describe, expect, it, vi } from 'vitest';
 import { DELETE as sessionDelete, POST as exchangeRoute } from '@/app/api/session/token/route';
 import { GET as listMine } from '@/app/api/my/artifacts/route';
@@ -20,7 +21,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as agentPrompt } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { IN_PAGE_DOCUMENT_CSP, createAppServer } from '@/server/app';
+import { appPagePolicy, createAppServer } from '@/server/app';
 import { AGENT_COOKIE, decodeAgentSessionEnvelope, encodeAgentSession } from '@/lib/accounts';
 import { existingPaste } from '@/lib/serving';
 import { mintToken, resolveTokenById, revokeToken } from '@/lib/accounts';
@@ -296,7 +297,7 @@ describe('one viewer, every surface', () => {
     const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
     let served=await app.request(request(`/a/${doc.id}`,{cookie}));
     if(served.status===302)served=await app.request(served.headers.get('location')!,{headers:{cookie}});
-    expect(served.status).toBe(200);expect(served.headers.get('content-security-policy')).toBe(IN_PAGE_DOCUMENT_CSP);
+    expect(served.status).toBe(200);expect(served.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
   });
 });
 

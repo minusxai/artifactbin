@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, onMount, Show, type JSX } from 
 import { Navigate } from '@solidjs/router';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
 import type { HomeCore, HomeInsights } from '@/web/home-resource';
-import { clearInitialStory } from '@/web/initial-story';
+import { dropServedFrame } from '@/web/served-frame';
 import { PAGE_COLUMN } from '../components/ui';
 import GetStarted from '../components/GetStarted';
 import ClaimBanner from '../components/ClaimBanner';
@@ -32,7 +32,7 @@ export function HomePage(): JSX.Element {
   const empty = () => Boolean(account() && account()!.artifacts.length === 0 && account()!.shared.length === 0 && !detail()?.stats?.assets);
   const failed = () => wrongAccount() || Boolean(core.error());
   const greeting = () => { const name = session()?.user?.email?.split('@')[0] ?? ''; return `${name ? `hi ${name}, l` : 'l'}et’s create your first artifact!`; };
-  onMount(clearInitialStory);
+  onMount(dropServedFrame);
   return <Show when={!(session() && session()!.kind !== 'account') && !(home() && !home()!.signedIn)} fallback={<Navigate href="/login" />}>
     <Show when={account()} fallback={<main class={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}><Show when={failed()} fallback={<WorkspaceSkeleton />}><div role="alert"><p>Could not load your workspace.</p><button type="button" aria-label="Retry workspace" onClick={session() ? load : reload}>Try again</button></div></Show></main>}>
       {workspace => <main class={`${empty() ? PAGE_COLUMN : HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>

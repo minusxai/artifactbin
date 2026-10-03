@@ -137,8 +137,6 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
    // (read-only otherwise), for a document whose rows a baked SSR render did not settle.
    doors: {queryUrl: `/query?file=${file}`, assetsUrl: `/image?file=${file}`},
   },
-  chrome: null,
-  spa: null,
   build,
   head: null,
  });

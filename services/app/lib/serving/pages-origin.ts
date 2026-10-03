@@ -10,11 +10,10 @@
  * `http://<hex>.lvh.me:11001` and production gets `https://<hex>.pages.example.com`. Hosts are matched
  * by hostname alone: behind a proxy the port the process sees is not the one the browser addressed.
  *
- * Pure: the site is an argument (tests build their own); `PAGES_SITE` is this deployment's, or null
- * when the setting is off.
+ * Pure: the site is an argument (tests build their own); `pagesSite()` is this deployment's.
  */
 import { ID_RE } from '@/lib/platform/ids-shape';
-import { PAGES_HOST, PUBLIC_BASE_URL } from '@/lib/platform/config';
+import { PUBLIC_BASE_URL, requirePagesHost } from '@/lib/platform/config';
 
 export interface PagesSite {
   /** The pages hostname, lowercase, no port (`pages.example.com`, `lvh.me`). */
@@ -27,15 +26,17 @@ export interface PagesSite {
   app: string;
 }
 
-/** The pages site for a pages host under a public URL, or null when there is no pages host. */
-export function pagesSiteFor(host: string | null, publicBaseUrl: string): PagesSite | null {
-  if (!host) return null;
+/** The pages site for a pages host under a public URL. */
+export function pagesSiteFor(host: string, publicBaseUrl: string): PagesSite {
   const url = new URL(publicBaseUrl);
   return { host, scheme: url.protocol, port: url.port, app: url.origin };
 }
 
-/** This deployment's pages site, or null (APP__PAGES_HOST unset: documents are served inside the app page). */
-export const PAGES_SITE: PagesSite | null = pagesSiteFor(PAGES_HOST, PUBLIC_BASE_URL);
+let deployed: PagesSite | null = null;
+/** This deployment's pages site (APP__PAGES_HOST, required: unset throws, naming the setting). */
+export function pagesSite(): PagesSite {
+  return (deployed ??= pagesSiteFor(requirePagesHost(), PUBLIC_BASE_URL));
+}
 
 /** The DNS label a document id rides as: its UTF-8 bytes in lowercase hex. */
 export const pagesLabel = (id: string): string => Buffer.from(id, 'utf8').toString('hex');

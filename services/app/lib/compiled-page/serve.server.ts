@@ -52,7 +52,6 @@ import type { ArchivedRender } from '@/lib/serving';
 import { mermaidImagesFor } from '@/lib/mermaid-images/store';
 import type { ServedResults, StoredMermaidImage } from '@/lib/story-runtime/contract';
 import type { Scalar } from '@/lib/story/data';
-import type { ReaderChromeInput } from '@/lib/story/reader';
 import { recompilePage, type PreparedPage } from '@/lib/story/prepared/prepared-page.server';
 import { SERVED_RESULTS_BUDGET_MS, tokenOf } from '@/lib/story/prepared/served-results.server';
 import { readUrlValues } from '@/lib/story/data';
@@ -97,11 +96,6 @@ export interface CompiledReaderRequest {
   readOnly?: string | null;
   /** The document's live identity (`<body data-mx-live-id data-mx-live-edit>`); null on a capture or an archived render. */
   live: { id: string; editId: string } | null;
-  /** Server-rendered reader chrome (the app page), or null (`/raw`, captures, a domain post). */
-  chrome: ReaderChromeInput | null;
-  /** Extra first-screen font files the chrome paints with (lib/story/styles/first-screen-fonts readerChromeFonts). */
-  chromeFonts?: readonly string[];
-  spa: AssembleInput['spa'];
   head: AssembleHead | null;
   /**
    * A CAPTURE's own settled run (the exporter photographs this page): its answers instead of the guest
@@ -124,11 +118,6 @@ export interface CompiledReaderRequest {
    * Default true.
    */
   documentChrome?: boolean;
-  /**
-   * The app page FRAMES the document on its own origin (AssembleInput.frame): the page carries the
-   * chrome and one frame, and none of the story, its snapshot or its code.
-   */
-  frame?: AssembleInput['frame'];
   /** The app origin that frames a document served on its own origin (AssembleInput.appOrigin). */
   appOrigin?: string | null;
 }
@@ -451,30 +440,6 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       return refuse('unported', 'the stored compile does not carry the version\'s author script');
     }
 
-    if (reader.frame) {
-      // Nothing of the document runs here: its frame loads it, its snapshot and its code, on its own origin.
-      const assembled = assembleReaderPage({
-        compiled: { ...compiled, behaviors: [] },
-        story: '',
-        css: page.css,
-        fontPreloads: [...(reader.chromeFonts ?? [])],
-        title: page.title,
-        theme: page.theme,
-        colorMode: reader.colorMode ?? page.data.colorMode,
-        snapshot: null,
-        overlay: { values: {}, mermaidImages: {}, signedIn: reader.signedIn, doors: null },
-        chrome: reader.chrome,
-        spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT && !usable.pinned ? reader.spa : null,
-        build,
-        head: reader.head,
-        live: null,
-        footer: null,
-        sheets: null,
-        frame: reader.frame,
-      });
-      return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
-    }
-
     const flow = page.declared?.flow ?? null;
     // Prepared state is useful for a version that cannot run. A healthy reader starts from defaults
     // and the guest snapshot, then lets its page engine take over; seeding `state` suppresses that run.
@@ -515,15 +480,13 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
         ? (bare ? withoutDeckChrome(story) : story).replace(/<img\b[^>]*>/g, (tag) => tag.replace(/\s(?:srcSet|srcset|sizes)="[^"]*"/g, ''))
         : bare ? withoutDeckChrome(story) : story,
       css: page.css,
-      fontPreloads: [...page.fontPreloads, ...(reader.chromeFonts ?? [])],
+      fontPreloads: page.fontPreloads,
       title: page.title,
       theme: page.theme,
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
       overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), readOnly: reader.readOnly ?? null, hold, sqliteWasm },
-      chrome: reader.chrome,
-      spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT && !usable.pinned ? reader.spa : null,
       build,
       head: reader.head,
       live: reader.live,

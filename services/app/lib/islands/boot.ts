@@ -81,7 +81,7 @@ export interface IslandMorphSeam {
 }
 export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
 
-const EMPTY_PAGE: IslandPageData = { values: {}, results: null, appPage: false, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
+const EMPTY_PAGE: IslandPageData = { values: {}, results: null, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
 
 /** The page data island, or the empty page when it is absent or unreadable (the islands still hydrate). */
 /**

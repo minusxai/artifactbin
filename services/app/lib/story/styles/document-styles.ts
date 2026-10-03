@@ -9,7 +9,7 @@
  * Style order mirrors the engine's injection order (compiled Tailwind → bare typography floor →
  * fonts), author CSS last so it sees everything it may override.
  */
-import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
+import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR, type StoryFontAsset } from '@/lib/data/story/story-fonts';
@@ -51,7 +51,7 @@ export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[]
     // nothing else styles it back (lib/story-surface/bare-controls).
     { attr: 'data-mx-bare-controls', css: STORY_BARE_CONTROLS_CSS },
     // The document's own navigation keeps its styles on a bare page too; only the reader chrome's MARKUP is withheld.
-    input.chrome ? { attr: 'data-mx-chrome', css: STORY_CHROME_CSS } : null,
+    input.chrome ? { attr: 'data-mx-chrome', css: DOCUMENT_NAV_CSS } : null,
     input.bare ? { attr: 'data-mx-domain-footer', css: DOMAIN_FOOTER_CSS } : null,
     { attr: 'data-mx-embed', css: STORY_EMBED_CSS },
     // Every table its own scroll box, every document, capture included (STORY_TABLE_CSS).

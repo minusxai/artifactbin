@@ -5,12 +5,12 @@ import '../web/heal-address';
 import { captureInstallPrompt } from '@/lib/serving/pwa-install';
 import { render } from 'solid-js/web';
 import '@/web/heal-address';
-import { captureInitialStory } from '@/web/initial-story';
+import { captureServedFrame } from '@/web/served-frame';
 import { configureTrustedUiFromShell } from '@/lib/serving/trusted-ui-styles';
 import { App } from './App';
 
 captureInstallPrompt(window);
-captureInitialStory();
+captureServedFrame();
 // The app's own sheet, re-scoped into every trusted shadow root (solid/components/TrustedUi).
 configureTrustedUiFromShell(document);
 render(() => <App />, document.getElementById('root')!);

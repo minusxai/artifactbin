@@ -8,6 +8,7 @@
  * the same refusals, the same viewer identity — and nothing a slow query can
  * hold the HTML behind. Real handlers on the harness's isolated database.
  */
+import { framedDocument } from './harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -72,7 +73,8 @@ async function dashboard() {
   await drainPreparedPageWarmups();
   return { ...who, sales, id };
 }
-const html = async (id: string, search = '') => (await app.request(`/a/${id}${search}`, { headers: { accept: 'text/html' } })).text();
+/** The document the app page at `/a/<id><search>` frames, as its reader loads it on its own origin. */
+const html = async (id: string, search = '') => (await framedDocument(app, `/a/${id}${search}`, { headers: { accept: 'text/html' } }))!.text();
 const pageJson = async (id: string, search = '') => (await artifactPage(request(`/api/page/artifact/${id}${search}`), params(id))).json();
 const resultOf = (html: string) => {
   const script = new JSDOM(html).window.document.getElementById(ISLAND_DATA_ID);

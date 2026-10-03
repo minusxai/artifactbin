@@ -19,13 +19,7 @@
  */
 import {agentDiscovery} from '@/lib/serving';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
-import { canReadArtifact, dataflowForRow, getArtifactById, linkRoleOf, type ArtifactRow } from '@/lib/artifacts';
-import { withIntent, type Intent } from '@/lib/http';
-import { count, has } from '@/lib/accounts';
-import { countOpenAnnotations } from '@/lib/annotations';
-import { roleFor, type RequestActor } from '@/lib/accounts';
-import { canAnnotate, canEdit, roleBehindLogin } from '@/lib/artifacts';
-import { forkedFromCredit } from '@/lib/story/reader/fork-credit.server';
+import { canReadArtifact, dataflowForRow, getArtifactById } from '@/lib/artifacts';
 import { trackEvent } from '@/lib/platform';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { verifyExportKey } from '@/lib/serving';
@@ -44,8 +38,6 @@ import { declaresMutations } from '@/lib/story/document';
 import { appendCspExtensions, assetsPath, buildDocumentCsp, markupCsp, mutatePath, queryPath } from '@/lib/story/styles';
 import { pagesRequestOf } from '@/lib/serving/pages-origin';
 import { readUrlValues } from '@/lib/story/data';
-import { getUserById } from '@/lib/accounts';
-import { avatarUrl } from '@/lib/accounts';
 import { displayTitle } from '@/lib/story/document';
 import { CARD_RENDER_GENERATION } from '@/lib/serving';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -57,8 +49,6 @@ import type { StorySurface } from '@/lib/compiled-page/story-fragment';
 import { compiledPageFor, domainFooter } from '@/lib/compiled-page/serve.server';
 import { preparedPageFor, recompilePage, reprepareStoredPage } from '@/lib/story/prepared/prepared-page.server';
 import { documentStyleSheets } from '@/lib/story/styles';
-import type { ReaderChromeInput } from '@/lib/story/reader';
-import { readerChromeFonts } from '@/lib/story/styles';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
 
 // The markup document's policy — per document, built in lib/story/styles/markup-csp:
@@ -72,44 +62,6 @@ const COMMON = {
 };
 
 const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
-
-/** Request-specific reader furniture around the compiled story. */
-async function rawChrome(row: ArtifactRow, actor: RequestActor, at: { version: number; head: number } | null, ground: 'light' | 'dark'): Promise<ReaderChromeInput> {
-  const viewerId = actor.viewer?.userId ?? null;
-  const role = await roleFor(row, actor);
-  const [creator, source, reader, likes, liked, follows, following, comments] = await Promise.all([
-    row.user_id ? getUserById(row.user_id) : Promise.resolve(null),
-    forkedFromCredit(row.forked_from),
-    actor.credential === 'session' && viewerId ? getUserById(viewerId) : Promise.resolve(null),
-    count('like', row.id),
-    viewerId ? has(viewerId, 'like', row.id) : Promise.resolve(false),
-    row.user_id && row.user_id !== viewerId ? count('follow', row.user_id) : Promise.resolve(0),
-    viewerId && row.user_id && row.user_id !== viewerId ? has(viewerId, 'follow', row.user_id) : Promise.resolve(false),
-    canAnnotate(role) ? countOpenAnnotations(row.id) : Promise.resolve(0),
-  ]);
-  const door = (intent: Intent) => viewerId
-    ? `/a/${row.id}${withIntent('', intent)}`
-    : `/login?callbackUrl=${encodeURIComponent(`/a/${row.id}${withIntent('', intent)}`)}`;
-  const unlock = roleBehindLogin(linkRoleOf(row));
-  return {
-    artifactId: row.id, title: displayTitle(row), ground, visibility: row.visibility,
-    author: creator ? { username: creator.username ?? null, id: creator.id, image: avatarUrl(creator), forkedFrom: source } : { username: null, forkedFrom: source },
-    viewer: reader ? { id: reader.id, name: reader.username || reader.email || '', image: avatarUrl(reader) } : null,
-    ownerBreadcrumb: role === 'owner' && !at, share: role === 'owner' && !at,
-    archived: at ? { version: at.version, head: at.head } : null,
-    edit: canEdit(role) && !at,
-    reactions: at ? null : {
-      like: { count: likes, liked, href: door('like') },
-      follow: row.user_id && row.user_id !== viewerId ? { count: follows, following, href: door('follow') } : null,
-      comment: { count: comments, href: door('comment') },
-    },
-    signIn: !at && !viewerId && (unlock === 'commenter' || unlock === 'editor')
-      ? { unlocks: unlock, callbackUrl: `/a/${row.id}${withIntent('', 'comment')}` } : null,
-    login: !viewerId ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${row.id}`)}` } : null,
-    fork: at ? null : { href: door('fork') },
-  };
-}
-
 
 /**
  * A POST ON ITS OWNER'S CUSTOM DOMAIN (server/custom-host). Only the host
@@ -304,12 +256,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     }
 
     /*
-     * markup: the SSR'd standalone document, sandboxed by the headers above —
-     * the document BY ITSELF, at its own address. The app page renders the same
-     * document inline instead (server/app `withInitialStory`), so what reaches
-     * here is an explicit request for the bytes and the export's own capture
-     * (lib/export shoots `raw?chrome=0&key=`). Source read-back is the API's
-     * `markup:`.
+     * markup: the SSR'd standalone document — the ONE renderer. On the document's
+     * own origin it is what the app page frames (lib/serving/document-frame); on
+     * the app's origin, sandboxed by the headers above, it is an explicit request
+     * for the bytes and the export's own capture (lib/export shoots
+     * `raw?chrome=0&key=`). Source read-back is the API's `markup:`.
      *
      * A FOLDER IS NOT HERE. It has no content, so there is no document to
      * serve: its listing is app data the page endpoint answers and the app
@@ -352,8 +303,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // document's own rail/present bar and attribution footer would land in
       // every OG card).
       const chrome = domain ? true : new URL(request.url).searchParams.get('chrome') !== '0';
-      // The app's own reader chrome, doors and agent pointers — never on a custom domain, and never on the
-      // document's own origin, where the app page frames this copy and draws the chrome around it.
+      // The app's agent pointers — never on a custom domain, and never on the document's own origin, where
+      // the app page that frames this copy carries them.
       const reader = chrome && !domain && !pages;
       // A signed capture is fetched over the exporter's internal transport.
       // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
@@ -409,9 +360,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id, ...(pages ? { direct: true } : {}) } : null,
           // The one app origin that frames this copy, for the frame side of the app bridge (brief B).
           ...(pages ? { appOrigin: pages.site.app } : {}),
-          chrome: reader && !fragment ? await rawChrome(artifact, actor, at, design.colorMode ?? prepared.page.data.colorMode) : null,
-          chromeFonts: reader && !fragment ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url) : [],
-          spa: null,
           // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
           // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
           behaviors: capture ? [] : ['page'],

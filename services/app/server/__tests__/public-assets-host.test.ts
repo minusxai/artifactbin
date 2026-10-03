@@ -36,7 +36,7 @@ it('allows the export redirect host in app image policy, including development p
   const response=await app.request('https://example.test/account');
   expect(response.status).toBe(200);
   const directives=response.headers.get('content-security-policy')!.split('; ');
-  expect(directives.find(d=>d.startsWith('img-src'))?.split(' ')).toEqual(['img-src',"'self'",'data:','blob:','https:',imageOrigin]);
+  expect(directives.find(d=>d.startsWith('img-src'))?.split(' ')).toEqual(['img-src',"'self'",'data:','blob:',imageOrigin]);
   for(const directive of ['script-src','connect-src','frame-src','worker-src']){
    expect(directives.find(d=>d.startsWith(directive))?.split(' ')).not.toContain(imageOrigin);
   }

@@ -107,7 +107,8 @@ it('advertises the same app from regular and pretty artifact pages, without expo
   const html = await (await app.request(`/a/${w.public.id}`)).text();
   const manifest = `rel="manifest" href="/a/${w.public.id}/app/manifest.webmanifest"`;
   expect(html).toContain(manifest);
-  expect(html).toContain('aria-label="Install app"');
+  // The Install control is the app bar's (solid/document/DocumentChrome), drawn from the page data.
+  expect(html).toContain('"pwaEnabled":true');
   const canonical = JSON.parse(/<script type="application\/json" id="mx-page-data">([\s\S]*?)<\/script>/.exec(html)![1]!).address;
   expect(await (await app.request(canonical)).text()).toContain(manifest);
   const privatePage = await app.request(`/a/${w.private.id}`, { headers: { accept: 'text/html' } });

@@ -16,7 +16,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as webfontRoute } from '@/app/webfonts/[file]/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { createAppServer } from '@/server/app';
 
 
 import { mintToken } from '@/lib/accounts';
@@ -91,11 +90,6 @@ describe('a document asks for a Google font by Helmet metadata', () => {
     expect(html).toMatch(/<link rel="preload" href="\/webfonts\/[0-9a-f]{32}\.woff2" as="font" type="font\/woff2" crossorigin>/);
     // The display var now names the family, so headings actually change.
     expect(html).toContain('--font-display: "Lobster"');
-    const app = createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
-    const initial = await (await app.request(`/a/${id}`)).text();
-    const head = initial.split('</head>')[0];
-    // The app page asks for the faces it paints at high priority, ahead of its code (server/app withReaderHeadOrder).
-    expect(head).toMatch(/<link fetchpriority="high" rel="preload" href="\/webfonts\/[0-9a-f]{32}\.woff2" as="font" type="font\/woff2" crossorigin>/);
   });
 
   it('/webfonts serves the copied bytes — immutable, CORS-open, no app CSP', async () => {

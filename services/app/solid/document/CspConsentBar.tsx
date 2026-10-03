@@ -50,10 +50,6 @@ export function CspConsentBar(props: {
   accountSession: boolean;
   /** Seam for tests; defaults to reloading the document frame (or the page). */
   reload?: () => void;
-  /** Fixed under the app bar at `top` (an unframed document); in the layout when the page frames the document. */
-  top?: number;
-  /** Rendered in the slot above the frame (Document's `[data-mx-frame-slot]`): it takes its own row, the frame shrinks. */
-  inline?: boolean;
 }): JSX.Element {
   const [request, setRequest] = createSignal(props.request);
   const [busy, setBusy] = createSignal(false);
@@ -75,10 +71,8 @@ export function CspConsentBar(props: {
   };
   const button = 'cursor-pointer rounded border border-edge px-2 py-1 font-mono text-xs hover:bg-raised disabled:opacity-60';
   return <Show when={request().status === 'blocked'}>
-    <section role="region" aria-label="Document network access" style={props.inline ? undefined : { top: `${props.top ?? 0}px` }}
-      class={props.inline
-        ? 'border-b border-edge bg-surface px-3 py-2 text-sm text-fg'
-        : 'fixed left-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded border border-edge bg-surface px-3 py-2 text-sm text-fg shadow-sm'}>
+    {/* In the slot above the frame (Document's `[data-mx-frame-slot]`): it takes its own row, the frame shrinks. */}
+    <section role="region" aria-label="Document network access" class="border-b border-edge bg-surface px-3 py-2 text-sm text-fg">
       <Show when={!request().denied} fallback={
         <p class="flex flex-wrap items-center gap-2 text-xs text-muted">
           <span>Blocked: this document cannot reach {listed(allHosts(request().asking))}.</span>

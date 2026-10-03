@@ -37,9 +37,8 @@ export const VERSION_PARAM = 'version';
 
 /**
  * What a refused write says to the person who pressed it. The chrome line that
- * says WHICH version this is lives with the chrome that draws it
- * (lib/story/reader/reader-chrome archivedBanner) — this module stays off the reader's
- * bundle, and that one is already on it.
+ * says WHICH version this is lives with the bar that draws it
+ * (solid/document/DocumentChrome archivedBanner).
  */
 export const archivedReadOnly = (version: number): string => `Version ${version} is read-only`;
 

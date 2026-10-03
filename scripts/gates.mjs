@@ -143,6 +143,9 @@ async function bootServer(index, mailOutbox, authSecret) {
       NODE_ENV: 'production',
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,
+      // Required (every document on its own origin). `*.localhost` is loopback in Chromium; a gate that needs the
+      // pages cookie on a same-site frame boots its own server instead (./gates/lib/pages-server).
+      APP__PAGES_HOST: 'pages.localhost',
       // Managed iframe assets are served by the same disposable app through a
       // dedicated first-party hostname, matching the production trust split.
       APP__ASSETS_ORIGIN: `http://assets.localhost:${port}`,

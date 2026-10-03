@@ -1,21 +1,21 @@
 /**
- * THE FRAMED DOCUMENT'S MOUNT — create-island-story's twin for a document the app page FRAMES instead of adopting.
+ * THE FRAMED DOCUMENT'S MOUNT — the document page's one way to hold its document.
  *
  * The document runs in an iframe on its own origin (APP__PAGES_HOST, lib/serving/pages-origin); this page reaches it
- * only through the bridge (lib/story-runtime/frame-bridge/parent). It answers the same `{ controller, nonce }` as
- * createIslandStory, so the page's runtimeRef, edit lifecycle, annotation layer, selection actions and editor use the
- * bridge's stand-in exactly where they use the in-page controller. `nonce` stays null until the frame's controller
- * runs (and again while a reloaded frame's new controller starts).
+ * only through the bridge (lib/story-runtime/frame-bridge/parent). It answers `{ controller, nonce }`, so the page's
+ * runtimeRef, edit lifecycle, annotation layer, selection actions and editor use the bridge's stand-in for the
+ * document's controller. `nonce` stays null until the frame's controller runs (and again while a reloaded frame's
+ * new controller starts).
  *
- * THE FRAME CONDITION is `framedDocumentFor`, the one place it is decided: the server drew the story as one frame
- * (lib/compiled-page/assembler `frame`, `iframe[data-mx-document-frame]`) and named the document's own origin in the
- * page data (`surface.framedOrigin`). The frame is the server's — it may have loaded before this code ran — so this
- * adopts it and never draws or removes one; the page owns its layout.
+ * THE FRAME CONDITION is `framedDocumentFor`: the server drew one frame into the page (lib/serving/document-frame,
+ * `iframe[data-mx-document-frame]`) and named the document's own origin in the page data (`surface.framedOrigin`).
+ * The frame is the server's — it may have loaded before this code ran — so this adopts it and never draws or removes
+ * one; the page owns its layout.
  */
-import { createEffect, createSignal, on, onCleanup } from 'solid-js';
+import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import type { JsxNode } from '@/lib/jsx/types';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
-import type { IslandStory } from './create-island-story';
+import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
 
 /** The served frame a consent grant reloads (brief C's CspConsentBar) and the bridge attaches to. */
 export const DOCUMENT_FRAME_SELECTOR = 'iframe[data-mx-document-frame]';
@@ -53,7 +53,11 @@ export interface FramedStoryOptions {
   source: () => string | null;
 }
 
-export interface FramedStory extends IslandStory {
+export interface FramedStory {
+  /** The bridge's stand-in for the document's controller: the page's runtimeRef, edit lifecycle, annotation layer and editor use it. */
+  controller: Accessor<IslandStoryController | null>;
+  /** The frame controller's secret, once it runs (null again while a reloaded frame's new controller starts). */
+  nonce: Accessor<string | null>;
   frame: HTMLIFrameElement;
 }
 
