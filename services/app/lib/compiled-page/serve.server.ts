@@ -129,6 +129,8 @@ export interface CompiledReaderRequest {
    * chrome and one frame, and none of the story, its snapshot or its code.
    */
   frame?: AssembleInput['frame'];
+  /** The app origin that frames a document served on its own origin (AssembleInput.appOrigin). */
+  appOrigin?: string | null;
 }
 
 export type CompiledReaderAnswer =
@@ -527,6 +529,7 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
       live: reader.live,
       footer: reader.footer ?? null,
       sheets: reader.sheets ?? null,
+      appOrigin: reader.appOrigin ?? null,
     });
     return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
   } catch (error) {

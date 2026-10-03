@@ -406,6 +406,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           ...(capture ? { assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {}),
           ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
           live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id, ...(pages ? { direct: true } : {}) } : null,
+          // The one app origin that frames this copy, for the frame side of the app bridge (brief B).
+          ...(pages ? { appOrigin: pages.site.app } : {}),
           chrome: reader && !fragment ? await rawChrome(artifact, actor, at, design.colorMode ?? prepared.page.data.colorMode) : null,
           chromeFonts: reader && !fragment ? readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url) : [],
           spa: null,

@@ -513,6 +513,12 @@ export interface AssembleInput {
    */
   frame?: { src: string; title: string } | null;
   /**
+   * A document served on its OWN origin (APP__PAGES_HOST) names the app origin that frames it, as
+   * `data-mx-app-origin` on `<html>`: the frame side of the app bridge reads it before any author code
+   * runs, and refuses every message from anywhere else.
+   */
+  appOrigin?: string | null;
+  /**
    * A line of page furniture after the story root (and after the chrome), never inside it: a domain
    * post's attribution back to the app. Its CSS joins the head's styles.
    */

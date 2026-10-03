@@ -129,7 +129,8 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     `<!doctype html><html class="${escapeHtml(input.colorMode)}"`
     // The standalone document's sheets name the theme on the DOCUMENT element (`:root:where([data-theme])`).
     + (input.sheets && input.theme ? ` data-theme="${escapeHtml(input.theme)}"` : '')
-    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
+    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}`
+    + `${input.appOrigin ? ` data-mx-app-origin="${escapeHtml(input.appOrigin)}"` : ''}>`
     + `<head>${head}</head><body${liveAttrs(input.live ?? null)}>${body}</body></html>`;
 
   const headers: Record<string, string> = {};

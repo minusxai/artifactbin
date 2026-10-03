@@ -112,6 +112,24 @@ export interface ArtifactPageOptions {
 
 const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_found' } });
 
+/**
+ * A document frame's first URL for this request's reader (APP__PAGES_HOST): the pages apex exchange with
+ * a one-time ticket (none for a guest), redirecting to the document's own origin — or null when the reader
+ * may not read the document or it is not a document. `search` carries the reader's `$` values across.
+ * The app page draws its frame with it; brief B's framed story asks for a fresh one (app/api/page/frame).
+ */
+export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<{ src: string; origin: string } | null> {
+  if (!ID_RE.test(id)) return null;
+  const artifact = await getArtifactById(id);
+  if (!artifact || artifact.format !== 'markup') return null;
+  const actor = await sessionActor(request);
+  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return null;
+  const origin = pagesOriginFor(artifact.id, site);
+  // TODO(brief C): carry the reader's app-origin "Allow once" grant here, e.g. `{ cspOnce: <grant read from request> }`;
+  // the document's origin reads it back as `pagesRequestOf(request).carried` (app/a/[id]/raw).
+  return { src: pagesSessionUrl(site, `${origin}/${search}`, await issuePagesTicket(actor, {})), origin };
+}
+
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
   if (!ID_RE.test(id)) return notFound();
   const admitted = options.admitted?.id === id ? options.admitted : null;
@@ -268,13 +286,9 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   // A capture photographs the document itself, and an archived version is read in place: neither is framed.
   const pages = options.pages && compiledMode && !exporting && !at && artifact.format === 'markup' ? options.pages : null;
   const framedOrigin = pages ? pagesOriginFor(artifact.id, pages) : null;
-  const frame = pages && framedOrigin ? {
-    // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
-    // TODO(brief C): carry the reader's app-origin "Allow once" grant here, e.g. `{ cspOnce: <grant read from request> }`;
-    // the document's origin reads it back as `pagesRequestOf(request).carried` (app/a/[id]/raw).
-    src: pagesSessionUrl(pages, `${framedOrigin}/${new URL(request.url).search}`, await issuePagesTicket(actor, {})),
-    title: row.title || prepared?.page.title || 'Document',
-  } : null;
+  // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
+  const framedSrc = pages ? await framedDocumentSrc(request, artifact.id, pages, new URL(request.url).search) : null;
+  const frame = framedSrc ? { src: framedSrc.src, title: row.title || prepared?.page.title || 'Document' } : null;
   if (compiledMode && prepared) {
     const answer = await compiledPageFor(prepared.row, prepared.page, {
       at,

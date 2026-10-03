@@ -23,7 +23,7 @@ describe('buildDocumentCsp', () => {
   it('connects to its own origin, this document\'s app-origin doors path-exact, and the module CDNs only', () => {
     const connect = directive(csp, 'connect-src')!.split(' ');
     expect(connect.slice(0, 2)).toEqual(['connect-src', "'self'"]);
-    for (const door of ['query', 'mutate', 'events']) expect(connect).toContain(`${APP}/a/Ab3xK9/${door}`);
+    for (const door of ['query', 'mutate', 'events', 'fetch']) expect(connect).toContain(`${APP}/a/Ab3xK9/${door}`);
     for (const cdn of ['https://esm.sh', 'https://cdn.jsdelivr.net', 'https://unpkg.com']) expect(connect).toContain(cdn);
     // Never the app's other routes, and never any https host.
     expect(connect).not.toContain(APP);
@@ -45,9 +45,10 @@ describe('buildDocumentCsp', () => {
     expect(csp).not.toMatch(/(^|; )sandbox/);
   });
 
-  it('appends https origins a document declares, per directive, and refuses anything else', () => {
+  it('appends https origins a document declares, per directive — never a connection, which goes through its /fetch door — and refuses anything else', () => {
     const extended = buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: ['https://api.example.org'], script: ['https://cdn.example.org'], style: ['https://css.example.org'], img: ['https://img.example.org'] } });
-    expect(directive(extended, 'connect-src')!.split(' ').at(-1)).toBe('https://api.example.org');
+    expect(directive(extended, 'connect-src')).toBe(directive(csp, 'connect-src'));
+    expect(extended).not.toContain('https://api.example.org');
     expect(directive(extended, 'script-src')!.split(' ').at(-1)).toBe('https://cdn.example.org');
     expect(directive(extended, 'style-src')!.split(' ').at(-1)).toBe('https://css.example.org');
     expect(directive(extended, 'img-src')!.split(' ').at(-1)).toBe('https://img.example.org');

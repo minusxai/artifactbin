@@ -14,7 +14,7 @@
  *  - `frame-ancestors`: the app alone.
  *
  * `extensions` are https origins a document declares for itself (brief C supplies them), appended
- * per directive. Anything that is not a bare https origin is refused, never quoted into the header.
+ * per directive — except `connect`: a declared host is reached through the document's `/fetch` door. Anything that is not a bare https origin is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
 import { EMBED_HOSTS, FONT_FILES, FONT_STYLES, MODULE_CDNS } from './document-sources';
@@ -46,6 +46,8 @@ export interface DocumentCspInput {
 
 
 const eventsPath = (id: string): string => `/a/${id}/events`;
+/** The door a script reaches its declared hosts through (app/a/[id]/fetch). */
+export const fetchPath = (id: string): string => `/a/${id}/fetch`;
 
 function httpsOrigins(list: readonly string[]): string[] {
   return list.map((entry) => {
@@ -66,12 +68,14 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     connect: httpsOrigins(extensions.connect), script: httpsOrigins(extensions.script),
     style: httpsOrigins(extensions.style), img: httpsOrigins(extensions.img),
   };
-  const appDoors = [queryPath(id), mutatePath(id), eventsPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
+  const appDoors = [queryPath(id), mutatePath(id), eventsPath(id), fetchPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
   return [
     "default-src 'none'",
     join('script-src', "'self'", 'blob:', "'wasm-unsafe-eval'", MODULE_CDNS, asset, ext.script),
     // `blob:`/`data:`: the local URLs GLB loaders build — no network destination.
-    join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:', ext.connect),
+    // Never a declared host (`extensions.connect`): a script reaches those through its own `/fetch`
+    // door (app/a/[id]/fetch), so the reader's address never leaves for them.
+    join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:'),
     join('style-src', "'self'", "'unsafe-inline'", FONT_STYLES, ext.style),
     join('font-src', "'self'", 'data:', FONT_FILES, asset),
     join('img-src', "'self'", 'https:', 'data:', 'blob:', asset, ext.img),

@@ -89,6 +89,18 @@ export function docAssetImportRateLimited(id: string, now = Date.now()): boolean
   return hourlyAttemptsExhausted(`doc-assets:${id}`, docAssetCap ?? DOC_ASSET_IMPORTS_PER_HOUR, now);
 }
 
+/**
+ * A document's script reaching a declared host through us (app/a/[id]/fetch): per document AND reader,
+ * because the thing protected is this server's outbound fetching on that document's behalf, and one
+ * reader's busy dashboard must not exhaust another's.
+ */
+const DOC_FETCHES_PER_HOUR = 600;
+let docFetchCap: number | null = null;
+export function setDocumentFetchCapForTests(cap: number | null): void { docFetchCap = cap; }
+export function documentFetchRateLimited(id: string, reader: string, now = Date.now()): boolean {
+  return hourlyAttemptsExhausted(`doc-fetch:${id}:${reader}`, docFetchCap ?? DOC_FETCHES_PER_HOUR, now);
+}
+
 export function resetWebIngestRateLimit(): void {
   webIngestTimes.clear();
 }

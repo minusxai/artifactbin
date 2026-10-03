@@ -4,7 +4,8 @@
  * document's origin serves only that document and its doors, and a pages Origin may call only its own
  * document's doors — anywhere. With the setting off, nothing changes.
  */
-import { describe, expect, it } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -13,7 +14,12 @@ import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, mintToke
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/serving/pages-origin';
+import { framedDocumentSrc } from '@/lib/serving/artifact-page';
+import { POST as internalMint } from '@/app/api/internal/tokens/route';
+import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
 import { buildDocumentCsp } from '@/lib/story/styles/document-csp';
+import { getDb } from '@/lib/platform/db';
+import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { createAppServer } from '../server/app';
 
 useAppHarness();
@@ -100,6 +106,19 @@ describe('the app page frames the document on its own origin', () => {
   });
 });
 
+describe('a fresh frame URL (app/api/page/frame, for an app page that builds its own frame)', () => {
+  it('carries a one-time ticket for this reader to the document\'s origin, and nothing for a reader who may not read it', async () => {
+    const w = await world();
+    const fresh = await framedDocumentSrc(as(`${APP}/api/page/frame/${w.secret}`, w.actor), w.secret, site);
+    expect(fresh?.origin).toBe(pagesOriginFor(w.secret, site));
+    const src = new URL(fresh!.src);
+    expect(src.searchParams.get('next')).toBe(`${fresh!.origin}/`);
+    const res = await framing().request(fresh!.src);
+    expect(res.headers.get('set-cookie')).toMatch(/^afbin_pages=[A-Za-z0-9_-]{40,};/);
+    expect(await framedDocumentSrc(as(`${APP}/api/page/frame/${w.secret}`, null), w.secret, site)).toBeNull();
+  });
+});
+
 describe('the pages session', () => {
   it('sets an HttpOnly, Secure, Lax cookie for the whole pages domain from a single-use ticket, and redirects only to a document origin', async () => {
     const w = await world();
@@ -169,6 +188,7 @@ describe('a document\'s own origin', () => {
     expect(html).toContain('Private plan');
     expect(html).not.toContain('data-mx-reader-chrome=""');
     expect(html).toContain('data-mx-live-direct=""');
+    expect(html).toMatch(new RegExp(`<html [^>]*data-mx-app-origin="${APP.replaceAll('.', '\\.')}"`));
     const data = island(html)!;
     expect(data).toMatchObject({ direct: true, signedIn: true, queryUrl: `${self}/a/${w.secret}/query` });
     // Nobody's cookie, or no cookie: the uniform 404 a private document answers.
@@ -264,5 +284,72 @@ describe('with APP__PAGES_HOST unset', () => {
     const elsewhere = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, 'content-type': 'text/plain' }, body: query(w.secret) });
     expect(elsewhere.status).toBe(404);
     expect(elsewhere.headers.get('access-control-allow-credentials')).toBeNull();
+  });
+});
+
+describe('the document\'s /fetch door: a script reaches the hosts its document declares, through us', () => {
+  let fixture: Server | null = null;
+  afterEach(async () => {
+    setWebIngestPolicyForTests(null);
+    await new Promise<void>((resolve) => (fixture ? fixture.close(() => resolve()) : resolve()));
+    fixture = null;
+  });
+  const declare = async (id: string, connect: string[]) => {
+    const db = await getDb();
+    await db.query('UPDATE artifacts SET meta = meta || $1::jsonb WHERE id = $2', [JSON.stringify({ cspExtensions: { connect } }), id]);
+  };
+
+  it('answers a declared host\'s bytes with their type, for the document\'s reader, never forwarding a credential', async () => {
+    const w = await world();
+    const app = framing();
+    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const seen: Array<{ cookie?: string; authorization?: string }> = [];
+    fixture = createServer((req, res) => { seen.push({ cookie: req.headers.cookie, authorization: req.headers.authorization }); res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"rate":1.23}'); });
+    await new Promise<void>((resolve) => fixture!.listen(0, '127.0.0.1', () => resolve()));
+    const upstream = `http://127.0.0.1:${(fixture.address() as { port: number }).port}`;
+    // Loopback stands in for the open web here only: the test policy admits it, as the dev switch does.
+    setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+    await declare(w.secret, [upstream]);
+    const self = pagesOriginFor(w.secret, site);
+    const res = await app.request(`${self}/a/${w.secret}/fetch?url=${encodeURIComponent(`${upstream}/rates?base=eur`)}`, { headers: { origin: self, cookie } });
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/json');
+    expect(res.headers.get('access-control-allow-origin')).toBe(self);
+    expect(res.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
+    expect(await res.json()).toEqual({ rate: 1.23 });
+    expect(seen).toEqual([{ cookie: undefined, authorization: undefined }]);
+    // A stranger to the private document gets the uniform 404, before anything is fetched.
+    expect((await app.request(`${self}/a/${w.secret}/fetch?url=${encodeURIComponent(`${upstream}/x`)}`, { headers: { origin: self } })).status).toBe(404);
+    expect(seen).toHaveLength(1);
+  });
+
+  it('refuses an undeclared host, a private or loopback address, and every method but GET', async () => {
+    const w = await world();
+    const app = framing();
+    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const self = pagesOriginFor(w.secret, site);
+    const door = (url: string, init: RequestInit = {}) => app.request(`${self}/a/${w.secret}/fetch?url=${encodeURIComponent(url)}`, { ...init, headers: { origin: self, cookie, ...(init.headers ?? {}) } });
+    setWebIngestPolicyForTests({ allowPrivate: false, allowHttp: false });
+    await declare(w.secret, ['https://api.example.org', 'https://127.0.0.1', 'https://10.0.0.7']);
+    const undeclared = await door('https://evil.example.net/steal');
+    expect(undeclared.status).toBe(403);
+    expect(((await undeclared.json()) as { error: string }).error).toBe('undeclared_host');
+    for (const url of ['https://127.0.0.1/admin', 'https://10.0.0.7/']) {
+      const res = await door(url);
+      expect(res.status, url).toBe(403);
+      expect(((await res.json()) as { error: string }).error, url).toBe('forbidden_address');
+    }
+    const post = await door('https://api.example.org/write', { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } });
+    expect(post.status).toBe(405);
+    expect(post.headers.get('allow')).toBe('GET');
+  });
+});
+
+describe('development on lvh.me', () => {
+  it('mints a connection bound to the same-site development app (lvh.me names are loopback), and nothing else on http', async () => {
+    const w = await world();
+    const mint = (audience: string) => internalMint(as('http://app.lvh.me:11001/api/internal/tokens', w.actor, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ expiresInHours: 1, audience, scope: ARTIFACT_SCOPE }) }));
+    expect((await mint('http://app.lvh.me:11001/api')).status).toBe(201);
+    expect((await mint('http://lvh.me.example.com/api')).status).toBe(400);
   });
 });

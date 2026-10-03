@@ -2,7 +2,7 @@
 export { accountProfile, updateAccountProfile } from './account-profile';
 export { hasAdminCredential } from './admin-auth';
 export { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, decodeAgentSessionEnvelope, encodeAgentSession, liveAgentSession, withToken, withoutToken } from './agent-session';
-export { browserActor, refusesCrossSite, resetRateLimit, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
+export { browserActor, documentFetchRateLimited, refusesCrossSite, resetRateLimit, setDocumentFetchCapForTests, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
 export { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from './avatars';
 export { createGuestOwner, mergeGuestUsers } from './guest-owner';
 export { membershipInbox, updateMembershipInbox } from './membership-inbox';

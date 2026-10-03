@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer, resolveDevOutboxPath } from '../src/mail';
+import { DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer, resolveDevOutboxPath, usesDevOutbox } from '../src/mail';
 
 describe('resendMailer', () => {
   it('posts the Resend shape — the login code in the subject and the text, never logged', async () => {
@@ -42,6 +42,11 @@ describe('resendMailer', () => {
     await expect(hosted.send({ ...message, otp: '999999' })).rejects.toBeInstanceOf(MailNotConfigured);
     expect(readFileSync(file, 'utf8')).not.toContain('999999');
   });
+  it('counts lvh.me and its names as loopback (documents on their own origins in development), and nothing that merely contains it', () => {
+    for (const url of ['http://app.lvh.me:11001', 'http://lvh.me:3030']) expect(usesDevOutbox(url), url).toBe(true);
+    for (const url of ['https://lvh.me.example.com', 'https://evil-lvh.me', 'https://app.example.com']) expect(usesDevOutbox(url), url).toBe(false);
+  });
+
   it('refuses to send without a key, and reports a failed send with its status', async () => {
     await expect(resendMailer({ from: 'x' }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toBeInstanceOf(MailNotConfigured);
     const f = (async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
