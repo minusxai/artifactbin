@@ -889,6 +889,9 @@ async function pickLeg(browser) {
   await page.getByRole('status',{name:'Screenshot tool active'}).waitFor();
   const screenshotReady = await until(() => page.getByRole('status',{name:'Screenshot tool active'}).textContent(), text => /drag/i.test(text ?? ''), 5000);
   check(/drag/i.test(screenshotReady ?? ''), 'the screenshot pill says to drag');
+  // The pill is the PAGE's; the drag is taken by the document once the page's message arms it there (one bridge hop
+  // later), so the press waits for the frame to be picking an area — what a reader's hand takes longer than anyway.
+  await frame.locator('[data-mx-annotate-picking="area"]').first().waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
   await page.mouse.move(from.x + 8, from.y + 4);
