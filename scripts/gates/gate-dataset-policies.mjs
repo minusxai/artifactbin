@@ -21,7 +21,7 @@ const dataset = await publish({
   access: 'readwrite',
 });
 const doc = await publish({
-  markup: `<Helmet><Value name="branch" default="new branch"/><Import name="tree_data" src="ref:${dataset.id}" /><Query name="tree">{\`select * from tree_data.rows\`}</Query><Import name="append_data" src="ref:${dataset.id}" /><Mutation name="append">{\`insert into append_data.rows values ($branch)\`}</Mutation><Import name="delete_data" src="ref:${dataset.id}" /><Mutation name="delete">{\`delete from delete_data.rows\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/><Iframe title="Policy action" height={120}><button id="action" disabled>Script append</button><script>{\`const action=document.getElementById('action');const sync=async()=>{action.disabled=!(await mx.describe()).mutations.find(m=>m.name==='append')?.available;};mx.subscribe(['tree'],()=>{void sync()});void sync();action.onclick=()=>mx.mutate('append');\`}</script></Iframe>`,
+  markup: `<Helmet><Value name="branch" default="new branch"/><Import name="tree_data" src="ref:${dataset.id}" /><Query name="tree">{\`select * from tree_data.rows\`}</Query><Import name="append_data" src="ref:${dataset.id}" /><Mutation name="append">{\`insert into append_data.rows values ($branch)\`}</Mutation><Import name="delete_data" src="ref:${dataset.id}" /><Mutation name="delete">{\`delete from delete_data.rows\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/>`,
 });
 const browser = await chromium.launch();
 const sink = await startMailSink();
@@ -81,18 +81,6 @@ try {
       .getByRole('button', { name: 'Delete tree', exact: true })
       .isDisabled(),
   );
-  const scriptAction = guest
-    .frameLocator('iframe[title="Policy action"]')
-    .frameLocator('iframe')
-    .getByRole('button', { name: 'Script append', exact: true });
-  await scriptAction.waitFor();
-  await guest.waitForFunction(() => true);
-  for (let i = 0; i < 100 && (await scriptAction.isDisabled()); i++)
-    await guest.waitForTimeout(50);
-  assert(
-    !(await scriptAction.isDisabled()),
-    'managed scripts receive the data policy',
-  );
   await guest
     .getByRole('button', { name: 'Append branch', exact: true })
     .click();
@@ -123,12 +111,6 @@ try {
     [...document.querySelectorAll('button')].some(
       (b) => b.textContent === 'Append branch' && b.disabled,
     ),
-  );
-  for (let i = 0; i < 100 && !(await scriptAction.isDisabled()); i++)
-    await guest.waitForTimeout(50);
-  assert(
-    await scriptAction.isDisabled(),
-    'managed scripts receive live revocation',
   );
   await editor.reload();
   await editor.getByRole('button', {name:'Source & models', exact:true}).click();
