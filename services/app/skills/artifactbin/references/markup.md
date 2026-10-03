@@ -104,6 +104,8 @@ names, npm libraries, exported components — [scripts](markup-scripts.md).
   your `<style>` is imported the same way. Or load one the CSS way:
   `@import url(https://fonts.googleapis.com/css2?family=…)` at the top of
   the style block.
+- **Other hosts**: `<meta name="csp-connect" content="https://api.x.com" />` (also
+  `csp-script`, `csp-style`, `csp-img`); readers allow them — [scripts](markup-scripts.md).
 <!--/bundle:skip-->
 - **Theme tokens first**: `text-muted-foreground`, `bg-muted`, `border-border`,
   `bg-background` follow the active theme; hardcoded palettes fight it. ONE
