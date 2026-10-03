@@ -883,7 +883,7 @@ export function generate(input: GenerateInput): Generated {
       const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, preview.values);
       const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
       const props = preview.rewrite({ ...wrapper, id: ownerId || undefined,
-        ...(!ctx.svg ? { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
+        ...(!ctx.svg ? { style: { display: 'contents', ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
       const tag = ctx.svg ? 'g' : 'div';
       return element(tag, elementAttrs(tag, props), '');
     }
@@ -967,7 +967,7 @@ export function generate(input: GenerateInput): Generated {
       const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, ctx.preview.values);
       const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
       const props = ctx.preview.rewrite({ ...wrapper, id: ownerId || undefined,
-        ...(!ctx.svg ? { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
+        ...(!ctx.svg ? { style: { display: 'contents', ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
       const tag = ctx.svg ? 'g' : 'div';
       return `<${tag}${jsxAttrs(elementAttrs(tag, props))}></${tag}>`;
     }

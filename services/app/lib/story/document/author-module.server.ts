@@ -89,7 +89,8 @@ async function build(script: string, names: AuthorModuleNames): Promise<AuthorMo
   };
   try {
     const result = await bundle({
-      stdin: { contents: script, loader: 'jsx', sourcefile: 'helmet-script.jsx', resolveDir: '/' },
+      // absWorkingDir: the module's leading path comment is then the same on every machine (the served bytes are compared).
+      absWorkingDir: '/', stdin: { contents: script, loader: 'jsx', sourcefile: 'helmet-script.jsx', resolveDir: '/' },
       bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022', metafile: true,
       jsx: 'automatic', jsxImportSource: 'preact', logLevel: 'silent', plugins: [plugin], outfile: 'author-module.js',
     });
