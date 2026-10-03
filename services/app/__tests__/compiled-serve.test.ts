@@ -545,11 +545,11 @@ describe('a version with an author script', () => {
 
   it('boots even with no island, so its store and its script start', async () => {
     const who = await owner();
-    const id = await publish(who.token, { title: 'Scripted prose', markup: '<Helmet><Value name="n" type="number" default={0} /><script>{`import { n } from "page"; n.value = 1;`}</script></Helmet><h1>Only prose</h1>' });
+    const id = await publish(who.token, { title: 'Scripted prose', markup: '<Helmet><Value name="n" type="number" default={0} /><script>{`import { signal } from "page"; const [n, setN] = signal("$n"); setN(n() + 1);`}</script></Helmet><h1>Only prose</h1>' });
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const { data, doc } = authorOnly(await res.text());
-    expect(data?.authorScript).toContain('n.value = 1');
+    expect(data?.authorScript).toContain('setN(n() + 1)');
     expect([...doc.querySelectorAll('script[type="module"]')].some((s) => /^\/islands\/d\/[0-9a-f]{16}\.js(?:\?b=[0-9a-f]{16})?$/.test(s.getAttribute('src') ?? '')), 'the per-document module that boots').toBe(true);
   });
 

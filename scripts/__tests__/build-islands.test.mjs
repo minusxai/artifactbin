@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
+import { AUTHOR_VENDOR_SPECIFIERS, CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
@@ -31,7 +31,9 @@ describe('buildIslands', () => {
   const first = { ...written, closure: (urls) => closureOf(written.files, urls) };
   it('names every specifier a compiled page may import', () => {
     expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
-    expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js')), 'generated code reaches Solid only through @mx/rt').toEqual([]);
+    // Generated code reaches Solid only through @mx/rt; the bare Solid specifiers are the author script's vendor entries.
+    expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js'))).toEqual(['solid-js', 'solid-js/web', 'solid-js/store']);
+    expect([...AUTHOR_VENDOR_SPECIFIERS].sort()).toEqual(['solid-js', 'solid-js/store', 'solid-js/web']);
   });
 
   it('writes content-addressed chunks, a manifest and a 16-hex build id', () => {
@@ -46,6 +48,8 @@ describe('buildIslands', () => {
     // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
     const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
     expect(withSolidWeb).toHaveLength(1);
+    // ... and the author script's `solid-js/web`, the page runtime and rt all reach that one chunk.
+    for (const specifier of ['@mx/rt', '@mx/page-runtime', 'solid-js/web']) expect(first.closure([first.manifest[specifier]]), specifier).toContain(withSolidWeb[0]);
     expect(first.offline).toMatch(/^\/islands\/offline-[0-9a-f]{16}\.json\.gzip$/);
   });
 

@@ -1,2 +1,2 @@
 /** The author script's `solid-js`: the island build's one Solid, exactly contract AUTHOR_VENDOR_EXPORTS (build-islands checks). */
-export { For, Index, Match, Show, Switch, batch, children, createComputed, createContext, createEffect, createMemo, createRenderEffect, createRoot, createSelector, createSignal, createUniqueId, getOwner, mergeProps, on, onCleanup, onMount, runWithOwner, splitProps, untrack, useContext } from 'solid-js';
+export { For, Match, Show, Switch, batch, createEffect, createMemo, createRoot, createSignal, mergeProps, on, onCleanup, onMount, splitProps, untrack } from 'solid-js';

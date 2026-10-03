@@ -228,14 +228,16 @@ export type KitFamily = (typeof KIT_FAMILIES)[number];
  * WHAT AN AUTHOR SCRIPT MAY IMPORT FROM SOLID: each specifier is an entry of the island build
  * (lib/islands/vendor/*, scripts/build/build-islands.mjs), the SAME Solid the kit runs on, and exports exactly
  * these names (the build refuses a vendor chunk whose exports differ). Curated, not `export *`: esbuild splits by
- * file, so every Solid export a vendor entry keeps alive lands in the shared chunk every interactive page loads.
- * The web list covers every helper Solid's JSX transform emits for `generate: 'dom'` without hydration; the
- * publish build (lib/story/document/author-module.server) refuses an import of any other name.
+ * file, so every Solid export a vendor entry keeps alive lands in the shared chunk every interactive page loads
+ * (measured: `Portal` and `Dynamic` ~600 B brotli, `produce`/`unwrap` ~120 B, context, `Index`, `createUniqueId`
+ * and `createRenderEffect` ~150 B, so they are left out and rt+boot and the kit closure keep their budgets). The
+ * web list covers every helper Solid's JSX transform emits for `generate: 'dom'` without hydration; the publish
+ * build (lib/story/document/author-module.server) refuses an import of any other name.
  */
 export const AUTHOR_VENDOR_EXPORTS = {
-  'solid-js': ['For', 'Index', 'Match', 'Show', 'Switch', 'batch', 'children', 'createComputed', 'createContext', 'createEffect', 'createMemo', 'createRenderEffect', 'createRoot', 'createSelector', 'createSignal', 'createUniqueId', 'getOwner', 'mergeProps', 'on', 'onCleanup', 'onMount', 'runWithOwner', 'splitProps', 'untrack', 'useContext'],
-  'solid-js/web': ['Dynamic', 'Portal', 'addEventListener', 'className', 'classList', 'createComponent', 'delegateEvents', 'dynamicProperty', 'effect', 'getOwner', 'insert', 'memo', 'mergeProps', 'render', 'setAttribute', 'setAttributeNS', 'setBoolAttribute', 'setProperty', 'setStyleProperty', 'spread', 'style', 'template', 'untrack', 'use'],
-  'solid-js/store': ['createStore', 'produce', 'reconcile', 'unwrap'],
+  'solid-js': ['For', 'Match', 'Show', 'Switch', 'batch', 'createEffect', 'createMemo', 'createRoot', 'createSignal', 'mergeProps', 'on', 'onCleanup', 'onMount', 'splitProps', 'untrack'],
+  'solid-js/web': ['addEventListener', 'classList', 'className', 'createComponent', 'delegateEvents', 'effect', 'insert', 'memo', 'mergeProps', 'render', 'setAttribute', 'setAttributeNS', 'setBoolAttribute', 'setProperty', 'setStyleProperty', 'spread', 'style', 'template', 'use'],
+  'solid-js/store': ['createStore', 'reconcile'],
 } as const satisfies Record<string, readonly string[]>;
 export type AuthorVendorSpecifier = keyof typeof AUTHOR_VENDOR_EXPORTS;
 
