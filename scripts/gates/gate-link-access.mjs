@@ -9,14 +9,14 @@
  * The before/after is the whole point — the SAME person, the SAME link, one
  * setting apart:
  *
- *   1. link = `can view`     → a signed-in stranger gets the SERVED DOCUMENT:
- *                              no shell, no iframe, no comment control
+ *   1. link = `can view`     → a signed-in stranger reads the framed document,
+ *                              with no comment control
  *   2. owner flips it to `can comment`
- *   3. same link, reloaded   → the SHELL, with the comments control and NO
+ *   3. same link, reloaded   → the comments control appears, and NO
  *                              edit affordance (commenter is not editor)
  *   4. they select words in the frame and leave a comment
  *   5. the owner, who never reloaded, watches the count arrive over the stream
- *   6. logged OUT on that same link → the bare document again: ANONYMOUS CAPS
+ *   6. logged OUT on that same link → the document, no comments: ANONYMOUS CAPS
  *      AT VIEWER, because every write here is attributed and a URL is not an
  *      identity. This is also what keeps the crawler's fast path intact.
  *   7. flipped back to `can view` → the stranger loses all of it on reload
@@ -31,6 +31,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { documentFrame, documentLocator, INLINE_STORY } from './lib/page-facts.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
@@ -58,8 +59,13 @@ const DOC = '<div data-design="tw" className="p-10">'
   + '<p id="claim">Anyone with this link may comment on it.</p>'
   + '</div>';
 
-/** Every admitted role renders the same inline document; capabilities differ below. */
-const hasDocument = (page) => page.locator('[data-mx-inline-story]').count().then((n) => n === 1);
+/** Every admitted role reads the same document in its frame; capabilities differ below. */
+const hasDocument = async (page) => {
+  const doc = await documentFrame(page).catch(() => null);
+  if (!doc) return false;
+  await doc.locator('#claim').waitFor({ timeout: 20000 }).catch(() => {});
+  return (await doc.locator(INLINE_STORY).count()) === 1 && (await doc.locator('#claim').count()) === 1;
+};
 
 /*
  * Everything about a document lives behind ONE control (PageControls, in
@@ -72,8 +78,18 @@ const hasDocument = (page) => page.locator('[data-mx-inline-story]').count().the
  * It is closed again before anything touches the frame: the open popover lays a
  * click-outside overlay across the whole viewport, which would swallow a click
  * meant for the document.
+ *
+ * The bar's own "Comment" button is drawn for every reader (it sends one who may
+ * not comment to sign in), so "a comment control" here is the panel's
+ * "Toggle comments", which only a commenter gets.
  */
-const CONTROLS = '[role="dialog"][aria-label="Artifact controls"]';
+const commentControls = async (page) => {
+  await openControls(page);
+  const n = await page.locator('[aria-label="Toggle comments"]').count();
+  await closeControls(page);
+  return n;
+};
+const CONTROLS = '[aria-label="Artifact controls"]';
 const controlsOpen = (page) => page.locator(CONTROLS).isVisible().catch(() => false);
 const openControls = async (page) => {
   if (await controlsOpen(page)) return;
@@ -111,8 +127,8 @@ try {
 
   // ── 1. link = can view: the stranger is served the DOCUMENT ──────────────
   await stranger.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(await hasDocument(stranger), 'link=can view: a signed-in stranger gets the inline document');
-  check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 0, '…and no comment control');
+  check(await hasDocument(stranger), 'link=can view: a signed-in stranger gets the framed document');
+  check((await commentControls(stranger)) === 0, '…and no comment control');
 
   // ── 2. the owner flips ONE control ───────────────────────────────────────
   const sharingPut = (page) => page.waitForResponse(
@@ -148,7 +164,7 @@ try {
   );
   // ── 3. the SAME link, reloaded: now the shell ────────────────────────────
   await stranger.reload({ waitUntil: 'load' });
-  check(await hasDocument(stranger), 'link=can comment: the same inline document remains available');
+  check(await hasDocument(stranger), 'link=can comment: the same framed document remains available');
   // Inside the open popover, so the two absences below are real absences.
   await openControls(stranger);
   check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 1, '…with the comments control');
@@ -157,23 +173,24 @@ try {
     && await stranger.getByLabel('Owner actions').count() === 0, '…and no permissions-sharing control: the ACL stays the owner\'s');
   await closeControls(stranger);
 
-  // ── 3b. …on the mounted document ──────────────────────────────────────────
-  check(await stranger.locator('[data-mx-inline-story]').count() === 1,
-    'commenting uses the mounted SPA document, not a second standalone runtime');
+  // ── 3b. …on the framed document ───────────────────────────────────────────
+  check(await stranger.locator(INLINE_STORY).count() === 0 && await documentLocator(stranger).locator(INLINE_STORY).count() === 1,
+    'commenting uses the one framed document, not a second runtime on the app page');
 
   // ── 4. they comment, from selection to saved thread ──────────────────────
-  const frame = stranger.locator('[data-mx-inline-story]');
+  // The selection and its action bubble live in the document's frame; the composer is the app page's.
+  const frame = documentLocator(stranger);
   await frame.locator('#claim').waitFor({ timeout: 15000 });
-  const bubble = stranger.locator('[data-mx-selection-actions]');
+  const bubble = frame.locator('[data-mx-selection-actions]');
   await until(async () => {
     await frame.locator('#claim').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
     return bubble.isVisible().catch(() => false);
   }, (v) => v === true, 20000);
   check(await bubble.isVisible(), 'selecting words offers the stranger the action bubble');
-  check((await stranger.locator('[aria-label="Edit selected text"]').count()) === 0,
+  check((await frame.locator('[aria-label="Edit selected text"]').count()) === 0,
     'the bubble offers annotate and NOT edit — the capability follows the role');
 
-  await stranger.locator('[aria-label="Comment on selected text"]').click();
+  await frame.locator('[aria-label="Comment on selected text"]').click();
   const composer = await until(() => stranger.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   check(composer === 1, 'the composer opens on those words');
   await stranger.locator('[aria-label="Annotation comment"]').fill('a stranger with the link, saying something');
@@ -186,17 +203,17 @@ try {
   check(saved === 1, 'the comment is stored — a person nobody invited left feedback');
 
   // ── 5. the owner never reloaded ──────────────────────────────────────────
-  // The count rides the framed document's comment glyph now (the page keeps it live).
-  const ownerFrame = owner.mainFrame();
-  const live = await until(() => owner.locator('[data-mx-reader-count="comment"]').textContent().catch(() => null), (t) => t === '1', 20000);
+  // The count rides the app bar's Comment button (solid/document/DocumentChrome), kept live by the page's stream.
+  const ownerComment = owner.locator('header[aria-label="Page bar"] [aria-label="Comment"]');
+  const live = await until(async () => ((await ownerComment.textContent()) ?? '').trim(), (t) => t === '1', 20000);
   check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
 
   // ── 6. logged OUT on the same link: the anonymous ceiling ────────────────
   const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const visitor = await anonCtx.newPage();
   await visitor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(await hasDocument(visitor), 'logged out on a link-commentable document: inline document — anonymous caps at viewer');
-  check((await visitor.locator('[aria-label="Toggle comments"]').count()) === 0, '…and no comment control, so the crawler path is untouched');
+  check(await hasDocument(visitor), 'logged out on a link-commentable document: the framed document — anonymous caps at viewer');
+  check((await commentControls(visitor)) === 0, '…and no comment control, so the crawler path is untouched');
 
   // ── 7. flipped back, the stranger loses it ───────────────────────────────
   await openShare(owner);
@@ -208,8 +225,8 @@ try {
     })(),
   ]);
   await stranger.reload({ waitUntil: 'load' });
-  check(await hasDocument(stranger), 'demoted to can view: the inline document remains readable');
-  check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 0, '…and the comment control is gone');
+  check(await hasDocument(stranger), 'demoted to can view: the framed document remains readable');
+  check((await commentControls(stranger)) === 0, '…and the comment control is gone');
 } finally {
   await browser.close();
   await sink.close();

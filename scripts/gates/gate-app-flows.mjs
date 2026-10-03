@@ -13,12 +13,12 @@
  *   EDITOR   — toolbar, title/theme/colorMode, grid drag, slide rename
  *   MOBILE   — no horizontal overflow on the pages people open on a phone
  *
- * Complements the unit suite: these contracts live in the browser (same-origin
- * iframe focus, real drag, session cookies) where jsdom cannot follow.
+ * Complements the unit suite: these contracts live in the browser (the document
+ * framed on its own origin, real drag, session cookies) where jsdom cannot follow.
  *
  * Exits non-zero on the first failing section's summary.
  */
-import { horizontalOverflow } from './lib/page-facts.mjs';
+import { documentFrame, horizontalOverflow } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -111,7 +111,14 @@ const browser = await launchChromium();
 const ctx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
 const p = await ctx.newPage();
 p.on('dialog', (d) => d.accept());
-const surface = () => p.mainFrame();
+/*
+ * The document runs in its frame on its own origin (lib/serving/document-frame): what a reader sees and what the
+ * editor attaches to are asked THERE; the bar, the controls and the editor's toolbar are the app page's (`p`).
+ * Every navigation below re-adopts the frame (`settle`).
+ */
+let docFrame = null;
+const surface = () => docFrame;
+const settle = async () => { docFrame = await documentFrame(p); return docFrame; };
 // Edit is a MODE on the artifact's one url — `#edit` is a fragment, so it
 // never reaches the server and never changes the link you share.
 const unlock = async (id) => {
@@ -121,6 +128,7 @@ const unlock = async (id) => {
   await becomeOwner(p, B, T);
   await p.goto(`${B}/a/${id}#edit`, { waitUntil: 'load' });
   await p.waitForTimeout(4000);
+  await settle();
 };
 
 // ───────────────────────────── AUTH ─────────────────────────────
@@ -188,8 +196,9 @@ if (await openMenu(p, { timeout: 8000 }).then(() => true, () => false)) {
 await becomeOwner(p, B, T);
 await p.goto(`${B}/a/${dataDoc.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(3500);
+await settle();
 
-// The document is the SERVED page in a sandboxed frame now, so everything a
+// The document is served on its own origin in the page's frame, so everything a
 // reader sees is asserted inside that frame — the theme included.
 const themeOf = async () => surface()?.locator('[data-mx-inline-story]:not([data-mx-initial-story])').getAttribute('data-theme').catch(() => null);
 check((await themeOf()) === 'modernist', 'the served document carries the authored theme');
@@ -207,7 +216,7 @@ check((await p.locator('[aria-label="Edit artifact"]').count()) === 1, 'artifact
 // it on bare `:root`), so DARK is the one that gets stamped — the reverse of
 // what this read when dark was the default, which is exactly the shape of
 // drift a gate reading the attribute is here to catch.
-await p.click('[aria-label="Light mode"]');
+await p.click('[aria-label="Light mode"]');  // the app page's control; the frame hears it over the bridge
 await p.waitForFunction(() => !document.documentElement.dataset.theme);
 await surface().locator('[data-mx-inline-story]:not([data-mx-initial-story]).light').waitFor({ timeout: 8000 });
 check(true, 'one appearance choice turns both the app and document light');
@@ -222,7 +231,7 @@ await p.keyboard.press('Escape');
 // document.
 await p.goto(`${B}/a/${deckDoc.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(3800);
-const deck = surface();
+const deck = await settle();
 check((await deck.locator('.mx-rail-row').count()) === 3, 'deck rail lists every slide');
 await deck.click('[aria-label="Go to slide 3: Three"]'); await p.waitForTimeout(1500);
 // Scoped to the document column: the rail's previews are real <Slide>

@@ -4,10 +4,11 @@
  * The vitest suite proves the ACL decisions in-process; what only a browser
  * can prove is the delivery seam this feature leans on:
  *
- *   1. a PRIVATE html doc renders for its owner — the sandboxed iframe's
- *      document request must carry the session cookie (SameSite=Lax,
- *      same-site iframe navigation; the one behavior nothing in jsdom can
- *      answer), while a logged-out browser gets the uniform 404
+ *   1. a PRIVATE html doc renders for its owner — the document frame's
+ *      requests on the document's own origin must carry the reader across
+ *      (the pages cookie, SameSite=Lax, same-site iframe navigation; the one
+ *      behavior nothing in jsdom can answer), while a logged-out browser gets
+ *      the uniform 404
  *   2. /a/<id> self-heals to /@username/... in the location bar, and a
  *      mangled pretty URL (wrong user, stale title) heals too
  *   3. the ShareLink dialog really flips visibility from the page
@@ -28,6 +29,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { documentLocator } from './lib/page-facts.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
@@ -73,7 +75,7 @@ const doc = await api('/api/artifacts', {
 check(doc.visibility === 'private', 'owned doc is born private');
 
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-const iframeText = await page.locator('[data-mx-inline-story]').locator('#pf').textContent({ timeout: 20000 }).catch(() => null);
+const iframeText = await documentLocator(page).locator('#pf').textContent({ timeout: 20000 }).catch(() => null);
 check(iframeText === 'IFRAME-COOKIE-OK', 'PRIVATE html renders for the owner — the sandboxed iframe request carried the session cookie');
 
 const strangerCtx = await browser.newContext();

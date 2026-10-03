@@ -2,17 +2,17 @@
  * Gate: the security architecture — the browser and HTTP seams that no
  * in-process test can answer.
  *
- *   1. READER: /a/<id> answers a viewer with no session with the app document
- *      and its story runtime inline — same URL, no artifact iframe — under the
- *      document CSP, and the trusted runtime reaches its scoped query door. A
- *      signed-in NON-owner gets the same document, no redirect.
- *   2. OWNER: the app page (page controls + inline story runtime).
+ *   1. READER: /a/<id> answers a viewer with no session with the app page,
+ *      under the strict app CSP, framing the document on its own origin
+ *      (`<hex id>.<pages host>`), and the document's runtime reaches its scoped
+ *      query door. A signed-in NON-owner gets the same page, no redirect.
+ *   2. OWNER: the app page (page controls + the framed document).
  *   3. EXPORT still yields a PNG for a reader after the reader path changed.
  *   4. `/raw` is an internal address: absent from the docs.
  *   5. App pages carry a CSP with frame-ancestors.
  *   6. ANONYMOUS OWNER: a minted token is exchanged for an httpOnly agent
  *      session (POST /api/session/token); the browser then holds NO token in
- *      localStorage and /a/<id> shows owner chrome around the inline runtime.
+ *      localStorage and /a/<id> shows owner chrome around the framed document.
  *   7. Cookie-authenticated mutations reject a cross-site Origin.
  *
  * The author script runs in the document itself (lib/islands/page-runtime);
@@ -25,7 +25,8 @@
  *   node scripts/gates/gate-secure-arch.mjs [base]
  */
 import { becomeOwner, mergeGuestIntoAccount } from '../lib/start-doc.mjs';
-import { servedTopLevel } from './lib/page-facts.mjs';
+import { documentFrame, documentLocator } from './lib/page-facts.mjs';
+import { PAGES_HOST } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -49,6 +50,21 @@ const other = await otherCtx.newPage();
 await loginViaEmail(other, BASE, sink, `mxmx_test_sec_b_${ts}@example.com`);
 const readerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const reader = await readerCtx.newPage();
+/*
+ * Every reader gets the app page framing the document on the document's own origin (lib/serving/document-frame);
+ * this replaces the old "served top-level, no artifact iframe" delivery promise.
+ */
+const framedOnItsOrigin = async (page, id) => {
+  const doc = await documentFrame(page).catch(() => null);
+  return !!doc && doc !== page.mainFrame()
+    && new URL(doc.url()).hostname === `${Buffer.from(id, 'utf8').toString('hex')}.${PAGES_HOST}`;
+};
+/** The owner's bar carries Share; a reader's does not. */
+const ownerBar = async (page) => {
+  await page.locator('[aria-label="Open artifact controls"]').waitFor({ timeout: 20000 }).catch(() => {});
+  return (await page.locator('header[aria-label="Page bar"] [aria-label="Share"]').count()) === 1;
+};
+const docHeading = (page) => documentLocator(page).locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 const sessionOf = async (ctx) => (await ctx.cookies(BASE)).some((c) => /better-auth/.test(c.name));
 check(
   (await sessionOf(ownerCtx)) && (await sessionOf(otherCtx)) && !(await sessionOf(readerCtx)),
@@ -75,21 +91,23 @@ const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string"
 const doc = await api('/api/artifacts', { title: 'Sec Probe', markup: PROBE, visibility: 'public' });
 check(doc.visibility === 'public', 'probe doc is public');
 
-// ── 1. reader: the document itself, top-level, sandboxed ──────────────────
+// ── 1. reader: the app page, framing the document on its own origin ───────
 const readerResp = await reader.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 const readerPath = new URL(reader.url()).pathname;
 const readerCsp = readerResp.headers()['content-security-policy'] ?? '';
 check(!readerCsp.includes('sandbox') && /script-src[^;]*'self'/.test(readerCsp) && !/script-src[^;]*'unsafe-eval'/.test(readerCsp), `reader carries the strict app CSP (${readerCsp.slice(0, 80)}…)`);
 check(readerPath.includes(doc.id) && new URL(reader.url()).origin === BASE, `reader reaches its canonical artifact address (${readerPath})`);
-check(await servedTopLevel(reader), 'reader page has NO artifact iframe');
-const parentQuery = await reader.evaluate(async id => (await fetch('/a/' + id + '/query?q=%7B%7D')).status, doc.id);
+check(await framedOnItsOrigin(reader, doc.id), 'reader page frames the document on its own origin (no artifact iframe)');
+// The document's runtime runs in the frame, on its own origin: that is where its door is asked.
+const readerDoc = await documentFrame(reader);
+const parentQuery = await readerDoc.evaluate(async id => (await fetch('/a/' + id + '/query?q=%7B%7D')).status, doc.id).catch((e) => String(e));
 check(parentQuery === 200, `trusted document runtime can fetch its scoped query (${parentQuery})`);
 
 // signed-in NON-owner: same document, same URL, no hop
 const otherResp = await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 check(!(otherResp.headers()['content-security-policy'] ?? '').includes('sandbox'), 'signed-in non-owner gets the same top-level app policy');
 check(new URL(other.url()).pathname === readerPath && new URL(other.url()).origin === BASE, 'signed-in non-owner reaches the same canonical address');
-check(await servedTopLevel(other), 'signed-in non-owner: no iframe');
+check(await framedOnItsOrigin(other, doc.id) && !(await ownerBar(other)), 'signed-in non-owner: the same framed document, no owner bar');
 
 // private: the ACL still runs first on every path — B and the reader get the uniform 404
 const priv = await api('/api/artifacts', { title: 'Sec Private', markup: '<h1>SEC-PRIVATE</h1>' });
@@ -97,13 +115,12 @@ check(priv.visibility === 'private', 'owned doc is born private');
 check((await other.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' })).status() === 404, 'private: signed-in non-owner is a uniform 404');
 check((await reader.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' })).status() === 404, 'private: session-less reader is a uniform 404');
 await owner.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' });
-check((await owner.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null)) === 'SEC-PRIVATE', 'private: owner sees it in the shell');
+check((await docHeading(owner)) === 'SEC-PRIVATE', 'private: owner sees it in the shell');
 
-// ── 2. owner: app shell + inline runtime ──────
+// ── 2. owner: app shell + the framed document ──────
 await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-const ownerFrame = owner.locator('[data-mx-inline-story]');
-const ownerText = await ownerFrame.locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
-check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document inline');
+const ownerText = await docHeading(owner);
+check(ownerText === 'SEC-PROBE-DOC' && await ownerBar(owner), 'owner sees the shell with the document in its frame');
 
 // ── 3. export still works for a reader ────────────────────────────────────
 const shot = await readerCtx.request.get(`${BASE}/a/${doc.id}/export`);
@@ -130,7 +147,7 @@ const anonDoc = await (await fetch(`${BASE}/api/artifacts`, {
 const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const anonPage = await anonCtx.newPage();
 await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
-check(await servedTopLevel(anonPage), 'before exchange: the token holder is just a reader (document, no iframe)');
+check(await framedOnItsOrigin(anonPage, anonDoc.id) && !(await ownerBar(anonPage)), 'before exchange: the token holder is just a reader (the framed document, no owner bar)');
 // Keep the distinct browser credential from the guest approval. The CLI's
 // API-scoped token is not a credential for browser page navigation.
 await becomeOwner(anonPage, BASE, anon2.token);
@@ -140,8 +157,8 @@ check(!!sess && sess.httpOnly, `session cookie is httpOnly (${sess?.name ?? 'mis
 const stored = await anonPage.evaluate(() => [localStorage.getItem('mx_token'), localStorage.getItem('mx_tokens')]);
 check(stored.every((v) => v === null), 'no token in localStorage after the exchange');
 await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
-const anonFrameText = await anonPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
-check(anonFrameText === 'ANON-OWNED', 'after exchange: the anonymous owner gets the shell (iframe) at the same URL');
+const anonFrameText = await docHeading(anonPage);
+check(anonFrameText === 'ANON-OWNED' && await ownerBar(anonPage), 'after exchange: the anonymous owner gets the shell (owner bar, the framed document) at the same URL');
 
 // ── 6b. the anonymous owner can DISCONNECT — the cookie's own sign-out ──────
 await openMenu(anonPage);
@@ -155,7 +172,7 @@ await anonPage.waitForTimeout(1500);
 check(!(await anonCtx.cookies(BASE)).some((c) => /mx-agent-session/.test(c.name)), 'disconnecting cleared the agent-session cookie');
 // …and the browser is a plain reader again: the same document, now without owner chrome.
 await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
-check(await servedTopLevel(anonPage), 'after disconnect: the browser is a reader — the document, no iframe');
+check(await framedOnItsOrigin(anonPage, anonDoc.id) && !(await ownerBar(anonPage)), 'after disconnect: the browser is a reader — the framed document, no owner bar');
 
 // ── 6c. the SPLIT-VIEWER case, in a real browser ──────────────────────────
 // A browser can hold a CLAIMED token in its agent cookie while carrying no
@@ -176,7 +193,7 @@ await becomeOwner(splitPage, BASE, anon.token);
 check(!!(await splitCtx.cookies(BASE)).find((c) => /mx-agent-session/.test(c.name)) && !(await sessionOf(splitCtx)),
   'the split-viewer browser holds only the approval cookie (no account session)');
 const splitResponse = await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
-const splitText = await splitPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
+const splitText = await docHeading(splitPage);
 check(splitText === 'CLAIMED-PRIVATE-BODY', `the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer (status ${splitResponse?.status()}, text ${splitText}, body ${(await splitPage.locator('body').innerText()).slice(0, 140)})`);
 // And a browser with neither credential still gets the uniform 404.
 const nobodyCtx = await browser.newContext();
