@@ -22,6 +22,12 @@ describe('CI change selection', () => {
     const workspace = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
     for (const directory of workspace.workspaces) {
       const pkg = JSON.parse(readFileSync(path.join(root, directory, 'package.json'), 'utf8'));
+      // A workspace outside services/ (docs/proposals/runner-validation, installed with the rest so CI
+      // pays one install) is no CI module: it may not depend on one, or an edge would go unseen.
+      if (!directory.startsWith('services/')) {
+        expect(Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).filter((name) => name.startsWith('@artifactbin/')), directory).toEqual([]);
+        continue;
+      }
       const module = directory.split('/')[1];
       expect(CI_MODULES).toHaveProperty(module);
       for (const dependency of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) {

@@ -116,8 +116,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - name: Install isolated design validation dependencies
-        run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
       # A CLI CHANGE THAT SHIPS NO VERSION SHIPS NOWHERE: the publisher only uploads when the version
       # moved, so the source would sit on main, released to nobody, until someone noticed. The rule
       # and its wording live in scripts/lib/ci-plan.mjs, where they are tested.
@@ -384,8 +382,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - name: Install isolated design validation dependencies
-        run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
       # The export tests drive real headless Chromium (lib/export.ts). The
       # browser download is the slow half of the install; cache it on what pins
       # the browser (playwright-core's browsers.json), as the gates do — keyed on
