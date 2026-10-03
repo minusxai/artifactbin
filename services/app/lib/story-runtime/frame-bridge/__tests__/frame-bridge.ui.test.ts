@@ -36,7 +36,7 @@ vi.mock('@/lib/story-runtime/island-controller', () => ({
 import { openFrameDoor, FRAME_BRIDGE_MESSAGE, frameAppOrigin, APP_ORIGIN_ATTR } from '../door';
 import { startFrameBridge } from '../frame';
 import { createFrameBridgeParent, relayedRequest } from '../parent';
-import { STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE } from '@/lib/story-runtime/contract';
 
 const APP = 'https://app.test';
 const PAGES = 'https://6869.pages.test';
@@ -140,8 +140,10 @@ describe('the frame bridge', () => {
     expect(controller.input.initialSource()).toBe('<p>newer</p>');
 
     controller.emit({ type: 'mx:edit-ready', nonce: controller.nonce });
-    await settle(() => events.length > 0);
-    expect(events).toEqual([{ type: 'mx:edit-ready', nonce: controller.nonce }]);
+    // A script mount's "Edit script" badge (lib/story-runtime/edit/session) crosses like every controller event.
+    controller.emit({ type: 'mx:open-script', nonce: controller.nonce, component: 'Sparkline' });
+    await settle(() => events.length > 1);
+    expect(events).toEqual([{ type: 'mx:edit-ready', nonce: controller.nonce }, { type: 'mx:open-script', nonce: controller.nonce, component: 'Sparkline' }]);
 
     let done = false;
     void bridge.restored().then(() => { done = true; });
@@ -248,6 +250,23 @@ describe('the frame bridge', () => {
     expect(events.every((event) => event.nonce === 'n'.repeat(32))).toBe(true);
   });
 
+  it('holds the document\'s own live stream from edit mode on until the saved version is drawn', async () => {
+    const { frame, frameWin } = framedPair();
+    const { bridge, onReady } = parentFor(frame);
+    openDoor(frameWin);
+    await settle(() => onReady.mock.calls.length > 0);
+    const hooks = frameWin as unknown as Record<string, unknown>;
+    expect(hooks[STORY_ADOPT_HOOK]).toBeUndefined();
+    bridge.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => typeof hooks[STORY_ADOPT_HOOK] === 'function');
+    expect(typeof hooks[STORY_ADOPT_HOOK]).toBe('function');
+    bridge.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+    await tick(); await tick();
+    expect(typeof hooks[STORY_ADOPT_HOOK]).toBe('function');
+    await bridge.restored();
+    expect(hooks[STORY_ADOPT_HOOK]).toBeUndefined();
+  });
+
   it('the page\'s reader mode and data wakeups reach the framed document', async () => {
     const { frame, frameWin } = framedPair();
     const { bridge, onReady } = parentFor(frame);
@@ -261,10 +280,10 @@ describe('the frame bridge', () => {
     expect(controller.sent).toEqual([{ type: 'mx:reader-mode', mode: 'dark' }, { type: 'mx:data', datasets: ['orders'] }]);
   });
 
-  it('places the frame\'s viewport inside the iframe\'s box, and closes when the frame navigates', async () => {
+  it('places the frame\'s viewport inside the iframe\'s box, and a sandboxed copy closes when the frame navigates', async () => {
     const { frame, frameWin } = framedPair();
     const onClosed = vi.fn();
-    const { bridge, onReady } = parentFor(frame, { onClosed });
+    const { bridge, onReady } = parentFor(frame, { onClosed, frameOrigin: 'null' });
     frame.getBoundingClientRect = () => new DOMRect(30, 64, 800, 600);
     Object.defineProperties(frame, { clientLeft: { value: 1 }, clientTop: { value: 2 }, clientWidth: { value: 798 }, clientHeight: { value: 596 } });
     const rect = bridge.getViewportRect();
@@ -275,6 +294,46 @@ describe('the frame bridge', () => {
     frame.dispatchEvent(new Event('load'));
     expect(onClosed).toHaveBeenCalledWith('the framed document navigated');
     await expect(bridge.restored()).rejects.toThrow('closed');
+  });
+
+  it('attaches to a frame whose door opened before the page ran, and re-attaches when the document loads again', async () => {
+    const { frame, frameWin, toFrame } = framedPair();
+    // The server drew the frame: its door is open and its hello went to a page that was not listening yet.
+    openDoor(frameWin);
+    await tick();
+    const { bridge, onReady } = parentFor(frame);
+    const events: unknown[] = [];
+    bridge.subscribe((event) => events.push(event));
+    bridge.send({ type: STORY_SELECT_MESSAGE, path: null });
+    await settle(() => onReady.mock.calls.length > 0);
+    expect(onReady).toHaveBeenLastCalledWith('n'.repeat(32));
+    const first = made.controllers[0]!;
+    await settle(() => first.sent.length > 0);
+    expect(first.sent).toEqual([{ type: STORY_SELECT_MESSAGE, path: null }]);
+    const keyOf = (index: number) => (toFrame.filter((post) => (post.data as { payload?: { kind?: string } }).payload?.kind === 'attach')[index]?.data as { key?: string } | undefined)?.key;
+    const firstKey = keyOf(0);
+
+    // The document loads again (a consent grant, a live reload): its new door says hello, and gets a new session.
+    const waiting = bridge.restored();
+    frameWin.parent.postMessage({ type: FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } }, APP);
+    await expect(waiting).rejects.toThrow('loaded again');
+    expect(onReady).toHaveBeenLastCalledWith('');
+    await settle(() => made.controllers.length > 1);
+    await settle(() => onReady.mock.lastCall?.[0] === 'n'.repeat(32));
+    expect(made.controllers.length).toBe(2);
+    expect(first.disposed).toBe(true);
+    const keys = new Set(toFrame.flatMap((post) => ((post.data as { payload?: { kind?: string }; key?: string }).payload?.kind === 'attach' ? [(post.data as { key: string }).key] : [])));
+    expect(keys.size).toBe(2);
+    expect(keys.has(firstKey!)).toBe(true);
+    bridge.send({ type: STORY_SELECT_MESSAGE, path: '0' });
+    const second = made.controllers[1]!;
+    await settle(() => second.sent.length > 0);
+    expect(second.sent).toEqual([{ type: STORY_SELECT_MESSAGE, path: '0' }]);
+    // A load event alone (the same document) changes nothing.
+    frame.dispatchEvent(new Event('load'));
+    await tick();
+    expect(made.controllers.length).toBe(2);
+    expect(events).toEqual([]);
   });
 
   it('reads the app origin the server wrote on the document, else its own URL origin', () => {

@@ -125,10 +125,11 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   // A document on its OWN origin (APP__PAGES_HOST) is the app page's viewport: it holds its own stream and
   // reading place framed, as a top-level page does. Any other framed copy reports its scroll to the shell.
   const direct = !!doc.body?.hasAttribute(LIVE_DIRECT_ATTR);
+  // The editor's document half, on its own lazy file (scripts/build/build-islands FRAME_EDITOR): never in a reader's
+  // closure. Opened before the author's script runs; the app page attaches whenever it is ready (frame-bridge/parent).
+  if (framed) persistent.push(openFrameDoor(win, frameAppOrigin(doc, win), () => import('./frame-editor')));
   if (framed && !direct) {
     stops.push(relayFrameScroll(win, doc));
-    // The editor's document half, on its own lazy file (scripts/build/build-islands FRAME_EDITOR): never in a reader's closure.
-    stops.push(openFrameDoor(win, frameAppOrigin(doc, win), () => import('./frame-editor')));
     return () => { for (const stop of stops.splice(0)) stop(); for (const stop of persistent.splice(0)) stop(); };
   }
   if (framed) persistent.push(followFramer(win, doc));

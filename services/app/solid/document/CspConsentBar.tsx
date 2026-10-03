@@ -10,14 +10,18 @@
  */
 import { createSignal, Show, type JSX } from 'solid-js';
 import type { CspRequest } from '@/lib/story/document/csp-extensions';
+import { DOCUMENT_FRAME_SELECTOR, freshFrameSrc } from './create-framed-story';
 
-/** The frame brief A's app page renders the document in; absent, the document is the page itself. */
-export const DOCUMENT_FRAME_SELECTOR = 'iframe[data-mx-document-frame]';
-
-export function reloadDocumentFrame(): void {
+/**
+ * Draw the document again under the reader's new answer. A framed document (its own origin) loads a FRESH first URL:
+ * the served one's ticket is spent, and only a new ticket carries a once-grant across; the page itself otherwise.
+ */
+export async function reloadDocumentFrame(id: string): Promise<void> {
   const frame = document.querySelector<HTMLIFrameElement>(DOCUMENT_FRAME_SELECTOR);
-  if (frame) { const src = frame.src; frame.src = src; return; }
-  window.location.reload();
+  if (!frame) { window.location.reload(); return; }
+  const src = await freshFrameSrc(id);
+  if (src) frame.src = src;
+  else window.location.reload();
 }
 
 const host = (origin: string): string => origin.replace(/^https:\/\//, '');
@@ -46,7 +50,10 @@ export function CspConsentBar(props: {
   accountSession: boolean;
   /** Seam for tests; defaults to reloading the document frame (or the page). */
   reload?: () => void;
+  /** Fixed under the app bar at `top` (an unframed document); in the layout when the page frames the document. */
   top?: number;
+  /** Rendered in the slot above the frame (Document's `[data-mx-frame-slot]`): it takes its own row, the frame shrinks. */
+  inline?: boolean;
 }): JSX.Element {
   const [request, setRequest] = createSignal(props.request);
   const [busy, setBusy] = createSignal(false);
@@ -62,14 +69,16 @@ export function CspConsentBar(props: {
       const reply = await response.json().catch(() => ({})) as { cspRequest?: CspRequest; error?: string };
       if (!response.ok || !reply.cspRequest) { setError(response.status === 401 ? 'Sign in to keep this choice.' : `Could not save your choice (${reply.error ?? response.status}).`); return; }
       setRequest(reply.cspRequest);
-      if (reply.cspRequest.status === 'allowed') (props.reload ?? reloadDocumentFrame)();
+      if (reply.cspRequest.status === 'allowed') { if (props.reload) props.reload(); else void reloadDocumentFrame(props.id); }
     } catch { setError('Could not save your choice — try again.'); }
     finally { setBusy(false); }
   };
   const button = 'cursor-pointer rounded border border-edge px-2 py-1 font-mono text-xs hover:bg-raised disabled:opacity-60';
   return <Show when={request().status === 'blocked'}>
-    <section role="region" aria-label="Document network access" style={{ top: `${props.top ?? 0}px` }}
-      class="fixed left-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded border border-edge bg-surface px-3 py-2 text-sm text-fg shadow-sm">
+    <section role="region" aria-label="Document network access" style={props.inline ? undefined : { top: `${props.top ?? 0}px` }}
+      class={props.inline
+        ? 'border-b border-edge bg-surface px-3 py-2 text-sm text-fg'
+        : 'fixed left-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded border border-edge bg-surface px-3 py-2 text-sm text-fg shadow-sm'}>
       <Show when={!request().denied} fallback={
         <p class="flex flex-wrap items-center gap-2 text-xs text-muted">
           <span>Blocked: this document cannot reach {listed(allHosts(request().asking))}.</span>

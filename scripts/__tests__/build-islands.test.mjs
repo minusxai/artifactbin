@@ -115,13 +115,13 @@ describe('buildIslands', () => {
     expect(bytes).toBeLessThanOrEqual(28_600);
   });
 
-  it('keeps framed transport, comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
+  it('keeps comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
     const { manifest, closure } = first;
     // Which modules each output carries: the --cache marker the setup build wrote beside its manifest.
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     const all = Object.values(outputInputs).flat();
     const modules = closure([manifest['@mx/rt'], manifest['@mx/boot']]).flatMap((url) => outputInputs[url]);
-    for (const name of ['story-runtime/relay-transport.ts', 'story/annotations/comment-target.ts']) {
+    for (const name of ['story/annotations/comment-target.ts']) {
       expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
     }

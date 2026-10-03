@@ -14,6 +14,10 @@
  *  · keys the page's editor listens for on ITS window, which a key pressed here never reaches: Mod-Z/Y as
  *    `mx:history`, Enter and focus leaving a text host as `mx:edit-flush`, ⌘⌥M as `mx:comment-key`;
  *  · this document's scroll, so geometry the page draws over it can follow.
+ *
+ * While the page edits, this document's own live stream (lib/islands/live, a document on its own origin holds one)
+ * must not draw a newer version under the editor: the frame half claims STORY_ADOPT_HOOK from edit mode on until the
+ * page's `restored` has drawn the saved version, as the app page's in-page mount does for its lifetime.
  */
 import { createIslandController, type IslandStoryController } from '@/lib/story-runtime/island-controller';
 import { islandDocumentOf } from '@/lib/islands/handover';
@@ -22,7 +26,7 @@ import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract'
 import { createTrustedOverlayHost } from '@/lib/story-runtime/trusted-overlay-host';
 import { applyReaderChoice } from '@/lib/story-runtime/reader-actions';
 import {
-  STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_HISTORY_MESSAGE, STORY_READER_MODE_MESSAGE,
+  STORY_ADOPT_HOOK, STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_HISTORY_MESSAGE, STORY_READER_MODE_MESSAGE,
   type FrameBridgeParentPayload,
 } from '@/lib/story-runtime/contract';
 import type { FrameBridgeSession, FrameBridgeStartOptions } from './door';
@@ -74,6 +78,13 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     catch (error) { waiting.reject(error); }
   };
 
+  // ── the live stream waits while the page edits (lib/islands/live skips a version while the hook is claimed) ──
+  const hooks = win as unknown as Record<string, unknown>;
+  const holding = () => {};
+  const hold = () => { if (hooks[STORY_ADOPT_HOOK] === undefined) hooks[STORY_ADOPT_HOOK] = holding; };
+  const release = () => { if (hooks[STORY_ADOPT_HOOK] === holding) delete hooks[STORY_ADOPT_HOOK]; };
+  cleanups.push(release);
+
   const emit = (event: Record<string, unknown>) => { if (controller) post({ kind: 'event', event: { ...event, nonce: controller.nonce } }); };
 
   const receive = (payload: FrameBridgeParentPayload) => {
@@ -84,7 +95,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     switch (payload.kind) {
       case 'send': {
         const command = payload.command as { type?: unknown; on?: unknown; mode?: unknown } | null;
-        if (command?.type === STORY_EDIT_MODE_MESSAGE && typeof command.on === 'boolean') editing = command.on;
+        if (command?.type === STORY_EDIT_MODE_MESSAGE && typeof command.on === 'boolean') { editing = command.on; if (editing) hold(); }
         // The page's reader choice: the whole document follows it (the app page applies it to its own shell).
         if (command?.type === STORY_READER_MODE_MESSAGE && (command.mode === 'light' || command.mode === 'dark')) applyReaderChoice(win, doc, command.mode);
         controller.send(payload.command);
@@ -94,8 +105,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       case 'restored': {
         const { call } = payload;
         controller.restored().then(
-          () => post({ kind: 'restored', call, ok: true }),
-          (error: unknown) => post({ kind: 'restored', call, ok: false, error: String(error instanceof Error ? error.message : error) }),
+          () => { if (!editing) release(); post({ kind: 'restored', call, ok: true }); },
+          (error: unknown) => { if (!editing) release(); post({ kind: 'restored', call, ok: false, error: String(error instanceof Error ? error.message : error) }); },
         );
         return;
       }
