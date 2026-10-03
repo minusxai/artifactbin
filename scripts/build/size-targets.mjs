@@ -13,9 +13,13 @@
  * Units: bytes on the wire as the lab measures them (`bytes.*.gzip` — brotli
  * where the server compressed, gzip where the gateway did), medians over the
  * lab's runs, KB = 1024 bytes as the lab report prints them. Target 1 and 2
- * read `jsBeforeReadyGzip` on the reader view (`view` route): the script bytes
- * finished before the page was ready (scripts/lib/document-views.mjs). Target 3
- * reads the prose view's `totalGzip`: every response body. The production
+ * read `jsBeforeReadyGzip` on the document's own page (`raw` route): the script
+ * bytes finished before the page was ready (scripts/lib/document-views.mjs).
+ * That page is exactly what the app page frames on the document's own origin
+ * (lib/serving/document-frame); the `view` route's "ready" is the app shell's
+ * DOMContentLoaded, which measures the shell's bundle and none of the
+ * document's. Target 3 reads the prose view's `totalGzip`: every response body
+ * a reader's page loads, the shell and its frame together. The production
  * prose page is measured separately after a deploy; the lab's prose view is
  * its proxy here.
  */
@@ -27,8 +31,9 @@ const KB = 1024;
 
 /** The three targets. `fixtures` are the lab keys whose maximum is judged; `optional` ones count only when present. */
 export const SIZE_TARGETS = Object.freeze([
-  { id: 1, label: 'JS before ready, nothing interactive (prose, deck)', metric: 'jsBeforeReadyGzip', route: 'view', fixtures: ['prose', 'deck'], optional: [], limit: 10 * KB },
-  { id: 2, label: 'JS before ready, interactive (kit, dashboard, every component)', metric: 'jsBeforeReadyGzip', route: 'view', fixtures: ['kit', 'dashboard'], optional: ['kitchen'], limit: 85 * KB },
+  // 1 and 2 judge the framed document (`raw`): the app page is a shell around that frame and readies on its own.
+  { id: 1, label: 'JS before ready, nothing interactive (prose, deck)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['prose', 'deck'], optional: [], limit: 10 * KB },
+  { id: 2, label: 'JS before ready, interactive (kit, dashboard, every component)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['kit', 'dashboard'], optional: ['kitchen'], limit: 85 * KB },
   { id: 3, label: 'Prose page, total transferred', metric: 'totalGzip', route: 'view', fixtures: ['prose'], optional: [], limit: 200 * KB },
 ]);
 
