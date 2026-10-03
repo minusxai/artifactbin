@@ -20,7 +20,7 @@ import { isStoryDocumentUpdate } from '@/lib/story-runtime/document-update';
 import { applyColorMode } from '@/lib/story-runtime/reader-mode';
 import { updateCompiledStory } from '@/lib/islands/live-update';
 import { nextTask, PARSE_SLICE_MS, parseHtmlInSlices } from '@/lib/story-runtime/sliced-parse';
-import { storyFragmentUrl } from '@/lib/compiled-page/story-fragment';
+import { storyFragmentUrl, type StorySurface } from '@/lib/compiled-page/story-fragment';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
   STORY_ANNOTATIONS_MESSAGE, type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE,
@@ -114,7 +114,21 @@ export interface IslandControllerInput {
   editId: () => string;
   initialSource: () => string | null;
   portal: { current: HTMLElement | null };
+  /**
+   * How the controller makes its three APP-ORIGIN requests: the draft-preview GET (the edit sheet) and POST (a
+   * draft's compile), and the story fragment fetched after Done. In the app page they are same-origin fetches with
+   * the session (the default). A framed document has no app session and its CSP admits neither path, so the frame
+   * half of the bridge (lib/story-runtime/frame-bridge/frame) relays them through the page that frames it.
+   * `path` is always app-relative (`/a/<id>/…`); `init` carries method, headers and body.
+   */
+  appFetch?: (path: string, init: RequestInit) => Promise<Response>;
+  /** Which page's story fragment the saved version is drawn from after Done: the app page's (default) or the standalone copy's. */
+  fragmentSurface?: StorySurface;
 }
+
+/** The app page's own requests: same-origin, with its session, never cached. */
+const sameOriginFetch = (win: Window) => (path: string, init: RequestInit): Promise<Response> =>
+  win.fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' });
 
 /**
  * The page's private handle on the adopted document: what the inline runtime's controller does
@@ -137,7 +151,7 @@ export interface IslandStoryController extends StoryController {
   restored(): Promise<void>;
 }
 
-export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource }: IslandControllerInput): IslandStoryController {
+export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource, appFetch = sameOriginFetch(win), fragmentSurface = 'app' }: IslandControllerInput): IslandStoryController {
   let nodes = served;
   /** The reader's own mode, as the app last set it: a new version never stomps it. */
   let mode: 'light' | 'dark' | null = null;
@@ -284,7 +298,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
     // A page without a story sheet has nothing a reply could swap.
     if (editSheetWritten || editSheetLoading || !id || !docSheet(win.document)) return;
     editSheetLoading = true;
-    void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, { credentials: 'same-origin', cache: 'no-store' })
+    void appFetch(`/a/${encodeURIComponent(id)}/draft-preview`, {})
       .then((response) => response.ok ? response.json() as Promise<{ css?: unknown }> : null)
       .then((payload) => {
         if (!payload || typeof payload.css !== 'string') return;
@@ -434,7 +448,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
       let next: Document | null = null;
       for (let attempt = 0; !next; attempt++) {
         if (!current()) return;
-        const response = await win.fetch(storyFragmentUrl(id, win.location.search, 'app'), { credentials: 'same-origin', cache: 'no-store' });
+        const response = await appFetch(storyFragmentUrl(id, win.location.search, fragmentSurface), {});
         if (!current()) return;
         // Compiled off the write's path: a version this fresh may still be compiling.
         if (response.status === 409 && attempt < RESTORE_RETRIES) {
@@ -601,8 +615,8 @@ export function createIslandController({ win, root, islands, nodes: served, port
             nextCompile = null;
             next?.();
           };
-          void win.fetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
-            method: 'POST', credentials: 'same-origin', cache: 'no-store',
+          void appFetch(`/a/${encodeURIComponent(id)}/draft-preview`, {
+            method: 'POST',
             // The server compiles one draft per editor session and answers an older one `superseded` (409).
             headers: { 'Content-Type': 'application/json', 'X-Draft-Sequence': `${draftSession}.${++draftsSent}` },
             body: JSON.stringify({ editId: command.editId ?? editId(), source, theme: command.theme, colorMode: command.colorMode, search: win.location.search }),

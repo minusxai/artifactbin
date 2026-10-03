@@ -537,3 +537,55 @@ describe('island controller editor drafts', () => {
     controller.dispose();
   });
 });
+
+describe('island controller app requests (a framed document relays them through the page)', () => {
+  it('makes all three app-origin requests through the injected appFetch, never the window fetch, and asks the named fragment surface', async () => {
+    engine.state.applied.length = 0;
+    engine.adopted = 0;
+    const sheet = document.createElement('style');
+    sheet.setAttribute('data-mx-story-css', '');
+    sheet.textContent = '.reader-cut{}';
+    document.head.append(sheet);
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const windowFetch = vi.spyOn(window, 'fetch').mockImplementation(async () => { throw new Error('the window fetch must not be used'); });
+    const appFetch = vi.fn(async (path: string, init: RequestInit) => {
+      if (path.includes('draft-preview') && init.method === 'POST') {
+        const { source } = JSON.parse(String(init.body)) as { source: string };
+        return new Response(JSON.stringify({ html: `<html><body><div data-mx-inline-story>${source}</div></body></html>` }), { status: 200 });
+      }
+      if (path.includes('draft-preview')) return new Response(JSON.stringify({ css: '.reader-cut{}.all{}' }), { status: 200 });
+      return new Response('<html><body><div data-mx-inline-story class="light"><p>saved</p></div></body></html>', { status: 200 });
+    });
+    const islands = { setMode: vi.fn(), mode: () => 'edit', store: null } as unknown as import('@/lib/islands/contract').IslandDocument;
+    const controller = createIslandController({
+      win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null }, appFetch, fragmentSurface: 'raw',
+    });
+    try {
+      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+      await settle(() => editSession.mounts > 0 && appFetch.mock.calls.length > 0);
+      expect(appFetch.mock.calls[0]![0]).toBe('/a/doc/draft-preview');
+      expect(appFetch.mock.calls[0]![1].method ?? 'GET').toBe('GET');
+      controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
+      await settle(() => appFetch.mock.calls.some(([, init]) => init.method === 'POST'));
+      const post = appFetch.mock.calls.find(([, init]) => init.method === 'POST')!;
+      expect(post[0]).toBe('/a/doc/draft-preview');
+      expect(new Headers(post[1].headers).get('X-Draft-Sequence')).toMatch(/^[\w-]{1,64}\.1$/);
+      await settle(() => engine.state.releases.length === 1);
+      engine.state.releases.shift()!();
+      await settle(() => engine.state.active === 0 && root.textContent === 'v1');
+      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+      await controller.restored();
+      const fragment = appFetch.mock.calls.find(([path]) => path.startsWith('/a/doc/story?'));
+      expect(fragment, 'the post-Done story fetch goes through appFetch').toBeTruthy();
+      expect(new URLSearchParams(fragment![0].split('?')[1]).get('surface')).toBe('raw');
+      expect(windowFetch).not.toHaveBeenCalled();
+    } finally {
+      controller.dispose();
+      sheet.remove();
+    }
+  });
+});
