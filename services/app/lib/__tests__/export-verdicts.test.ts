@@ -169,6 +169,25 @@ describe('what the app asks the browser for', () => {
     expect(request.waitForMountsMs).toBe(5000);
   });
 
+  it('also admits the exact hosts a script document declares for scripts and connections, never a wildcard', async () => {
+    const browser = scripted(PNG);
+    setServices({ browser });
+    const source = [
+      '<Helmet>',
+      '<meta name="csp-connect" content="https://api.open-meteo.com https://*.example.org" />',
+      '<meta name="csp-script" content="https://cdn.plot.ly" />',
+      '<meta name="csp-img" content="https://images.example.com" />',
+      '<script>{`',
+      "  import { proxy } from 'page';",
+      '  export function Weather(props) { return <svg />; }',
+      '`}</script></Helmet>',
+      '<Weather><p>Loading…</p></Weather>',
+    ].join('\n');
+    await exportImageResponse({ id: 'exprt3', version: ++n + 2000, format: 'markup', source }, {}, 'http://localhost:3000');
+    const [request] = browser.seen;
+    expect(request.allowedOrigins).toEqual(['https://esm.sh', 'https://cdn.plot.ly', 'https://api.open-meteo.com']);
+  });
+
   it('names the slide as a capture mode, not a separate verb', async () => {
     const browser = scripted(PNG);
     await shoot(browser, { slide: '2' });

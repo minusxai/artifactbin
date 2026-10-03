@@ -14,8 +14,9 @@ script component mount `[data-mx-mount]` under the selector has been rendered by
 only its server fallback; the cap is not a failure) · `injectCss` · `settleMs` · `timeoutMs`.
 
 App exports set `sameOriginOnly` and `assetOrigin`, **not** a broad `allowedOrigins` exception: a document with a
-Helmet script adds only the module hosts its script imports from (the ESM CDN, and the host of each full-URL import),
-with `waitForMountsMs`, so its components render before the shot.
+Helmet script adds only the module hosts its script imports from (the ESM CDN, and the host of each full-URL import)
+and the exact hosts its Helmet declares in `csp-script` and `csp-connect`, with `waitForMountsMs`, so its components
+render before the shot.
 The page is loaded through its existing internal render URL. Requests to `assetOrigin` retain that URL
 in Chromium, but only public byte GET/HEAD routes admitted by `isPublicAssetRequest` are fetched by the
 renderer from the render URL's internal origin. A fixed `Host`, derived only from `assetOrigin`, selects
