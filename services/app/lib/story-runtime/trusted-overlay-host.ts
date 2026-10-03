@@ -7,6 +7,7 @@
  * ordered by `layer` (selection < discussion < navigation < modal).
  */
 import { currentTrustedCss, installedStyles, openOverlay, overlays } from '@/lib/serving/trusted-ui-styles';
+import { TRUSTED_LAYER_ATTR } from '@/lib/islands/trusted-portal';
 
 export type TrustedLayer = 'selection' | 'discussion' | 'navigation' | 'modal';
 const PRIORITY: Record<TrustedLayer, number> = { selection: 0, discussion: 1, navigation: 2, modal: 4 };
@@ -24,6 +25,8 @@ export function createTrustedOverlayHost(options: { doc?: Document; parent?: HTM
   const doc = options.doc ?? document;
   const host = doc.createElement('div');
   host.setAttribute('data-trusted-ui', '');
+  // Which layer this root is (lib/islands/trusted-portal finds the "navigation" one by it, wherever it sits in the page).
+  if (options.layer) host.setAttribute(TRUSTED_LAYER_ATTR, options.layer);
   host.style.display = 'contents';
   const shadow = host.attachShadow({ mode: 'open' });
   const style = doc.createElement('style');
