@@ -24,7 +24,7 @@ import { createChecker } from './lib/assert.mjs';
 import {tsImport} from 'tsx/esm/api';
 const {prepareClientDocumentUpdate}=await tsImport('../../services/app/lib/story/graph/document-update-client.ts',import.meta.url);
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -51,7 +51,7 @@ const EDITOR_EMAIL = `mxmx_test_collab_editor_${stamp}@example.com`;
 const COMMENTER_EMAIL = `mxmx_test_collab_commenter_${stamp}@example.com`;
 
 const sink = await startMailSink();
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const ownerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const editorCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const owner = await ownerCtx.newPage();

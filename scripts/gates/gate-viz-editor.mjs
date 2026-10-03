@@ -21,7 +21,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { mergeGuestIntoAccount, becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -61,7 +61,7 @@ const story = HELMET + `<div data-design="tw" className="@container p-8">` +
   `<Question title="Revenue" data="$sales" height="430px" /></div>`;
 await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Review', markup: story, theme: 'manuscript' }) }, token);
 
-const b = await chromium.launch();
+const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
 const frame = () => p.mainFrame();
 const frameText = async () => { const f = frame(); return f ? await f.locator('body').innerText().catch(() => '') : ''; };

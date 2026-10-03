@@ -19,7 +19,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -57,7 +57,7 @@ const run = async () => {
   });
   if (!put.ok) throw new Error(`publish failed (${put.status}): ${await put.text()}`);
 
-  const browser = await chromium.launch();
+  const browser = await launchChromium();
   try {
     // ── the owner's tab ────────────────────────────────────────────────────
     const owner = await browser.newContext();

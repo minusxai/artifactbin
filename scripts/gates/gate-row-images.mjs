@@ -1,5 +1,6 @@
 /** Dataset image bindings, measured in a real browser. CI-only; no production data. */
 import {chromium} from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import sharp from 'sharp';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import {startDocument,becomeOwner} from '../lib/start-doc.mjs';
@@ -33,7 +34,7 @@ const markup=`<Helmet>
 </main>`;
 const doc=await create({markup});
 check((doc.markup??markup).split('src="$_row.cover_ref"').length===3,'two authored image templates, independent of row count');
-const browser=await chromium.launch();
+const browser=await launchChromium();
 try {
  const page=await browser.newPage({viewport:{width:1100,height:800}});
  const requests=[];const errors=[];

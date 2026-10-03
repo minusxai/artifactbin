@@ -5,7 +5,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  *
  *   usage: node scripts/gates/gate-editor-path.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { expect } from 'playwright/test';
 import { createChecker } from './lib/assert.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -16,7 +16,7 @@ const check = createChecker('editor-path');
 /** A step whose failure invalidates every step after it: report it, then stop. */
 const must = (condition, label) => { if (!check(condition, label)) throw new Error(label); };
 const base = process.argv[2] ?? 'http://localhost:3030';
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const sink = await startMailSink();
 try {
   /* ── 4. THE HUMAN PATH AROUND THE ENGINE ──────────────────────────────────

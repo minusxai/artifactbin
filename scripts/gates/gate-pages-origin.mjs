@@ -17,7 +17,7 @@
  *
  *   node scripts/gates/gate-pages-origin.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent, connectionBrowserCookie } from './lib/cli-connection.mjs';
@@ -34,7 +34,7 @@ check.note(`driving ${APP} (pages at *.${PAGES_HOST}:${port}${pages.booted ? ', 
 const stamp = Date.now().toString(36);
 const EMAIL = `mxmx_test_pages_${stamp}@example.com`;
 const sink = await startMailSink();
-const browser = await chromium.launch({ args: pages.browserArgs });
+const browser = await launchChromium({ args: pages.browserArgs });
 try {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();

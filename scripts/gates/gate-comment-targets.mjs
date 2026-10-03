@@ -1,7 +1,7 @@
 /** Real app acceptance for durable comment targets across declarative content: keyed repeats, tables, unkeyed lists. */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { expect } from 'playwright/test';
 import { startDocument, becomeOwner } from '../lib/start-doc.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -20,7 +20,7 @@ const annotations = async () => {
   return (await response.json()).annotations;
 };
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 try {
   const context=await browser.newContext({viewport:{width:1280,height:960}});
   const page=await context.newPage();

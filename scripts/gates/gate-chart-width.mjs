@@ -1,5 +1,5 @@
 /** A served chart and Vega's first draw use the same slot geometry and axis ticks. */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
@@ -23,7 +23,7 @@ const documents = [
   { name: 'single', id: started.id, token: started.token, markup: `${query}<div data-design="tw" className="@container px-4 py-8 @2xl:px-8">${question('single-chart')}</div>`, widths: [1376] },
   { name: 'dashboard', ...await startDocument(base), markup: `${query}<div data-design="tw" className="@container px-4 py-8 @2xl:px-8"><Grid mode="flow"><GridItem w={6}>${question('left')}</GridItem><GridItem w={6}>${question('right')}</GridItem></Grid></div>`, widths: [682, 682] },
 ];
-const browser = await chromium.launch();
+const browser = await launchChromium();
 try {
   for (const doc of documents) {
     const saved = await fetch(`${base}/api/artifacts/${doc.id}`, {

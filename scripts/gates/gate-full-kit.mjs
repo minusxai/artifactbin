@@ -20,7 +20,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  * usage: node scripts/gates/gate-full-kit.mjs [base]   (default :3040)
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
 import { kitchenSinkMarkup } from '../lib/kitchen-sink-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -46,7 +46,7 @@ const markup = await kitchenSinkMarkup(publish);
 const doc = await publish({ markup, theme: 'modernist', colorMode: 'dark', title: 'Kitchen sink (unified)' });
 console.log(`   doc: ${BASE}/a/${doc.id}`);
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const context = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 // Login visits Home, whose showcase thumbnails can finish loading after its
 // DOM is ready. Close that page so its requests cannot enter the document gate.

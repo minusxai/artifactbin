@@ -25,7 +25,7 @@
 import { inlineStory } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -58,7 +58,7 @@ const publish = async (markup) => {
   return start;
 };
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // ── 1. One document, all the way through ────────────────────────────────────
 {

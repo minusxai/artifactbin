@@ -27,7 +27,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { connectAgent, connectionBrowserCookie } from './lib/cli-connection.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -106,7 +106,7 @@ async function contextFor(token) {
 }
 const docFrameOf = (page, self) => page.frames().find((f) => f.url().startsWith(self));
 
-const browser = await chromium.launch({ args: pages.browserArgs });
+const browser = await launchChromium({ args: pages.browserArgs });
 const errors = [];
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'gate-native-scripts-'));
 try {

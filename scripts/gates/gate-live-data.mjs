@@ -17,7 +17,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  *   usage: node scripts/gates/gate-live-data.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -92,7 +92,7 @@ await publish(seed.token, seed.id, poll(ds));
 const second = await startDocument(BASE);
 await publish(second.token, second.id, dashboard(ds));
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // Three independent contexts — three people, no shared session.
 const voterCtx = await browser.newContext();

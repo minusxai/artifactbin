@@ -22,7 +22,7 @@
  *
  *   usage: node scripts/gates/gate-mermaid-prerender.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
@@ -82,7 +82,7 @@ const normalize = (svg) => svg.replace(/mx-mermaid-\d+/g, 'mx-mermaid-N');
 /** A stored drawing's fonts block: first child, bundled faces as woff2 data, unhinted text (lib/mermaid-images/sanitize). */
 const FONTS_BLOCK = /^(<svg\b[^>]*>)(<style>(?:@font-face\{font-family:"[\w .-]+";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/]+={0,2}\) format\("woff2"\);font-weight:[1-9]00;font-style:normal(?:;unicode-range:[U+0-9A-Fa-f?,-]+)?\})+svg\{text-rendering:geometricPrecision\}<\/style>)/;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 /**
  * One page, every diagram drawn: title → { src, svg (decoded when the engine

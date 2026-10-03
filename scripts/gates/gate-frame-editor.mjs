@@ -17,7 +17,7 @@
  *
  *   usage: node scripts/gates/gate-frame-editor.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -70,7 +70,7 @@ if (!put.ok) throw new Error(`PUT → ${put.status} ${await put.text()}`);
 const before = await head(start);
 
 const SELF = pages.origin(start.id);
-const browser = await chromium.launch({ args: pages.browserArgs });
+const browser = await launchChromium({ args: pages.browserArgs });
 const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });

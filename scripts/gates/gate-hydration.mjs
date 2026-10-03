@@ -1,7 +1,7 @@
 /** Compiled reader handover: served story survives adoption and yields to editing. */
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeAccountOwner, publishAs } from '../lib/start-doc.mjs';
 import { startMailSink } from '../lib/mail-login.mjs';
 import { publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
@@ -9,7 +9,7 @@ import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('hydration');
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const waitFor = async (page, expr, ms = 20000) => {
   for (const deadline = Date.now() + ms; Date.now() < deadline;) {
     if (await page.evaluate(expr)) return true;

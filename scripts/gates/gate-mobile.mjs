@@ -27,7 +27,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  *   usage: node scripts/gates/gate-mobile.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -69,7 +69,7 @@ const chartDoc = await (await fetch(`${B}/api/artifacts`, {
   body: JSON.stringify({ title: 'mobile gate chart', markup: chartMarkup, theme: 'manuscript' }),
 })).json();
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 const open = async (viewport, hash = '', id = st.id) => {
   const page = await browser.newPage({ viewport });

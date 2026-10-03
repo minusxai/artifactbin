@@ -5,7 +5,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  *
  *   usage: node scripts/gates/gate-editor-exits.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
@@ -14,7 +14,7 @@ const check = createChecker('editor-exits');
 /** A step whose failure invalidates every step after it: report it, then stop. */
 const must = (condition, label) => { if (!check(condition, label)) throw new Error(label); };
 const base = process.argv[2] ?? 'http://localhost:3030';
-const browser = await chromium.launch();
+const browser = await launchChromium();
 try {
   /* ── 5. EVERY WAY OUT ─────────────────────────────────────────────────────
    *

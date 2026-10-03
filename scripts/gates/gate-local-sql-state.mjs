@@ -12,7 +12,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  * usage: node scripts/gates/gate-local-sql-state.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
@@ -54,7 +54,7 @@ const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Import n
 check(!!dataset.id && !!doc.id && !!aclDoc.id, `fixtures published (${dataset.id}, ${doc.id})`);
 if (!dataset.id || !doc.id || !aclDoc.id) throw new Error(`fixture publish failed: ${JSON.stringify({dataset, doc, aclDoc})}`);
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const sink = await startMailSink();
 try {
 const exercise = async (page, framed, documentId) => {

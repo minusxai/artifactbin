@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startDocument, becomeOwner } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
@@ -23,7 +23,7 @@ const dataset = await publish({
 const doc = await publish({
   markup: `<Helmet><Value name="branch" default="new branch"/><Import name="tree_data" src="ref:${dataset.id}" /><Query name="tree">{\`select * from tree_data.rows\`}</Query><Import name="append_data" src="ref:${dataset.id}" /><Mutation name="append">{\`insert into append_data.rows values ($branch)\`}</Mutation><Import name="delete_data" src="ref:${dataset.id}" /><Mutation name="delete">{\`delete from delete_data.rows\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/>`,
 });
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const sink = await startMailSink();
 try {
   const owner = await browser.newPage();

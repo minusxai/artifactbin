@@ -13,14 +13,14 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('simpler-start');
 
 // ── 1. the human's leg: setup guide → document ──
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 await page.goto(`${B}/docs-human`, { waitUntil: 'load' });

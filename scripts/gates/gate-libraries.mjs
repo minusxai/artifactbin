@@ -10,7 +10,7 @@
  */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
@@ -49,7 +49,7 @@ const helmet = '<Helmet><title>Three.js library gate</title><script>{' + JSON.st
 const canvas = '<canvas id="scene" width="400" height="300" />';
 const doc = await create({ title: 'Three.js library gate', markup: helmet + canvas });
 const prose = await create({ markup: '<h1>Ordinary prose</h1>' });
-const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
+const browser = await launchChromium({ args: ['--enable-unsafe-swiftshader'] });
 try {
   // Export before an interactive visit could warm anything.
   const exported = await fetch(`${base}/a/${doc.id}/export?format=png`);

@@ -25,7 +25,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { samplePdf } from '../lib/sample-pdf.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
 
@@ -72,7 +72,7 @@ if (put.status !== 200) {
   process.exit(2);
 }
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 // A STRANGER: a fresh context with no session, which is served the document
 // itself at /a/<id> rather than the owner's shell.
 const context = await browser.newContext({ viewport: { width: 1200, height: 900 }, acceptDownloads: true });

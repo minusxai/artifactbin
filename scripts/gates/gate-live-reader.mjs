@@ -19,7 +19,7 @@
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
 
@@ -54,7 +54,7 @@ async function publish(markup) {
   }) };
 }
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // ── 1. A document that hydrates: adopted in place ───────────────────────────
 {

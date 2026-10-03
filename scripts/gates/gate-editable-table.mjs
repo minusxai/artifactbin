@@ -8,14 +8,14 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  * read-only document.
  */
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
 import { becomeOwner, becomeAccountOwner, startDocument } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const fixture = await createEditableTableFixture(base);
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const sink = await startMailSink();
 const errors = [];
 const check = (name) => console.log(`  ok ${name}`);

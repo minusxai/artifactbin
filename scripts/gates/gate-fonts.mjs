@@ -26,7 +26,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  *   usage: node scripts/gates/gate-fonts.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { tsImport } from 'tsx/esm/api';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -42,7 +42,7 @@ const MARKUP = '<div data-design="tw" className="p-10">'
   + '<table className="mt-4"><tbody><tr><td>1,234.50</td></tr><tr><td>9,876.10</td></tr></tbody></table>'
   + '</div>';
 
-const b = await chromium.launch();
+const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1200, height: 900 } });
 
 // ── a themed document, published over the API ──────────────────────────────

@@ -16,7 +16,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
@@ -84,7 +84,7 @@ const dropScripts = (h) => {
 const strip = (h) => dropScripts(h).replace(/\s+/g, ' ').trim();
 check(strip(asBot) === strip(pageHtml), 'a crawler UA gets the same page — nothing is cloaked');
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 /*
  * 5. THE DOCUMENT REALLY IS THE PAGE, in a browser as well as in the bytes.

@@ -24,7 +24,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -130,7 +130,7 @@ async function dispatchFileEvent(page, kind, b64) {
   }, { kind, b64 });
 }
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // ── 1. the file picker: the guaranteed path ────────────────────────────────
 {
@@ -231,8 +231,8 @@ const browser = await chromium.launch();
    * about, and it is the browser people actually paste in. A machine without
    * it (a bare container, a fresh checkout) gets Playwright's own Chromium.
    */
-  const chrome = await chromium.launch({ channel: 'chrome', headless: true })
-    .catch(() => chromium.launch({ headless: true }));
+  const chrome = await launchChromium({ channel: 'chrome', headless: true })
+    .catch(() => launchChromium({ headless: true }));
   const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
   const page = await context.newPage();
@@ -363,8 +363,8 @@ const browser = await chromium.launch();
  */
 {
   const PASTE = process.platform === 'darwin' ? 'Meta+V' : 'Control+V';
-  const chrome = await chromium.launch({ channel: 'chrome', headless: true })
-    .catch(() => chromium.launch({ headless: true }));
+  const chrome = await launchChromium({ channel: 'chrome', headless: true })
+    .catch(() => launchChromium({ headless: true }));
   const context = await chrome.newContext({ viewport: { width: 1280, height: 900 } });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: B });
   const page = await context.newPage();

@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from '../lib/mail-login.mjs';
 import { notificationDocumentPayload, notificationMutationPayload } from '../fixtures/postgres-notifications.mjs';
@@ -78,7 +78,7 @@ try {
   log('disposable Postgres has two schemas and a SELECT-only reader');
 
   const start = await startDocument(base);
-  browser = await chromium.launch();
+  browser = await launchChromium();
   sink = await startMailSink();
   const owner = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   const guest = await browser.newPage({ viewport: { width: 1280, height: 900 } });

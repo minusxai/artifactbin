@@ -28,7 +28,7 @@ import { becomeOwner, mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -38,7 +38,7 @@ const check = createChecker('secure-arch');
 const ts = Date.now().toString(36);
 
 const sink = await startMailSink();
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // ── owner session A, stranger session B ───────────────────────────────────
 const ownerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });

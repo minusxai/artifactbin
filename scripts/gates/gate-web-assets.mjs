@@ -28,7 +28,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  */
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import sharp from 'sharp';
 import { becomeOwner, publishAs, startDocument } from '../lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from '../lib/mail-login.mjs';
@@ -120,7 +120,7 @@ check(raw.includes(`href="${PDF}"`), 'the served <File> card links the original 
 check(raw.includes(FACE), 'the served stylesheet keeps the original @font-face url');
 check(!/\/assets\/[0-9a-f]{64}/.test(raw), 'the served document names no /assets copy');
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 await becomeOwner(page, B, owner.token);
 await page.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });

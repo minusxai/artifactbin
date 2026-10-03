@@ -26,7 +26,7 @@
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -38,7 +38,7 @@ const EMAIL = `mxmx_test_vis_${Date.now().toString(36)}@example.com`;
 
 const sink = await startMailSink();
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const owner = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const page = await owner.newPage();
 await loginViaEmail(page, BASE, sink, EMAIL);

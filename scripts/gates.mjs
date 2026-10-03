@@ -21,6 +21,7 @@
  * SERVER; each booted host uses isolated application storage.
  */
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { PAGES_HOST } from './gates/lib/browser.mjs';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import os from 'node:os';
@@ -132,7 +133,7 @@ async function bootServer(index, mailOutbox, authSecret) {
     process.exit(2);
   }
   const port = await freePort();
-  const base = `http://localhost:${port}`;
+  const base = `http://app.${PAGES_HOST}:${port}`;
   const objects = path.join(scratch, `objects-${index}`);
   mkdirSync(objects, { recursive: true });
   const child = spawn(process.execPath, [BUNDLE], {
@@ -143,9 +144,10 @@ async function bootServer(index, mailOutbox, authSecret) {
       NODE_ENV: 'production',
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,
-      // Required (every document on its own origin). `*.localhost` is loopback in Chromium; a gate that needs the
-      // pages cookie on a same-site frame boots its own server instead (./gates/lib/pages-server).
-      APP__PAGES_HOST: 'pages.localhost',
+      // Required (every document on its own origin): `<hex id>.lvh.me`, same site as the app at `app.lvh.me`, so
+      // the pages cookie flows into the frame. Gates launch Chromium through ./gates/lib/browser.mjs, which maps
+      // the host to loopback.
+      APP__PAGES_HOST: PAGES_HOST,
       // Managed iframe assets are served by the same disposable app through a
       // dedicated first-party hostname, matching the production trust split.
       APP__ASSETS_ORIGIN: `http://assets.localhost:${port}`,

@@ -17,13 +17,13 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('data-ux');
-const b = await chromium.launch();
+const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 await p.goto(B, { waitUntil: 'load' });
 await p.evaluate(() => localStorage.clear());

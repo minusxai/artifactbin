@@ -13,7 +13,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  *   usage: node scripts/gates/gate-editor-v2.mjs [base]
  */
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -30,7 +30,7 @@ const api = (suffix = '', init = {}) =>
 const source =
   '<div data-design="tw" className="p-10"><h1 id="title">Editor V2 acceptance</h1><p id="first" className="w-[600px] max-w-full">alpha first paragraph</p><p id="second">bravo second paragraph</p><Grid id="columns" mode="flow"><GridItem id="left" w={6}><p id="lp">Left column text</p></GridItem><GridItem id="right" w={6}><p id="rp">Right column text</p></GridItem></Grid><Grid id="tiles"><GridItem id="tilea" x={0} w={6} h={2}><p>First tile</p></GridItem><GridItem id="tileb" x={6} w={6} h={2}><p>Second tile</p></GridItem></Grid><pre id="code">code literal</pre><p id="remote">Remote marker</p></div>';
 must((await api('', { method: 'PUT', body: JSON.stringify({ markup: source }) })).status === 200, 'the acceptance document publishes');
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const context = await browser.newContext({
   viewport: { width: 1400, height: 1000 },
   permissions: ['clipboard-read', 'clipboard-write'],

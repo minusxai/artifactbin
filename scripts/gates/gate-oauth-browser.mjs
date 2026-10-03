@@ -31,7 +31,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { createServer } from 'http';
 import { createHash, randomBytes } from 'crypto';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startMailSink } from '../lib/mail-login.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -59,7 +59,7 @@ const authorizeUrl = `${BASE}/oauth/authorize?${new URLSearchParams({
   code_challenge: challenge, code_challenge_method: 'S256', state: 'gate-state',
 })}`;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage();
 const cspViolations = [];
 page.on('console', (m) => { if (/Content Security Policy|form-action/i.test(m.text())) cspViolations.push(m.text().slice(0, 160)); });

@@ -1,7 +1,7 @@
 /** Full-document reader navigation, browser history, and in-tab shelf/profile links. */
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 
@@ -20,7 +20,7 @@ const published = await fetch(`${base}/api/artifacts/${first.id}`, { method: 'PU
 }) });
 assert(published.ok, `publish A: ${published.status}`);
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 try {
   const page = await browser.newPage();
   const heading = (name) => page.getByRole('heading', { name, exact: true });

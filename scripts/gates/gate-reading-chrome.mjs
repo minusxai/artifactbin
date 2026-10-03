@@ -16,7 +16,7 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
 
@@ -91,7 +91,7 @@ async function publishDark(markup) {
 const doc = await publish(DOC);
 const page2 = await publish(PAGE);
 const deck = await publish(DECK, 'deck');
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 // ── 1. desktop: the outline ────────────────────────────────────────────────
 {

@@ -21,7 +21,7 @@
 import { horizontalOverflow } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from '../lib/mail-login.mjs';
@@ -107,7 +107,7 @@ const gridDoc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringif
 </Grid></div>` }) }, T)).body;
 
 const sink = await startMailSink();
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const ctx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
 const p = await ctx.newPage();
 p.on('dialog', (d) => d.accept());

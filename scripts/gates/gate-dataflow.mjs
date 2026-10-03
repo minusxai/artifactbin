@@ -14,7 +14,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
  * the document as a module over the declared names' Preact signals.
  * Usage: node scripts/gates/gate-dataflow.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -73,7 +73,7 @@ const retiredBody = await j(retired);
 check(retired.status === 400 && /<Import name="data" src="ref:[^"]+" \/><Query name="rows">/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Import> + <Query> replacement');
 
 // ── 2 + 3. inline document and scoped authenticated transport ──────────────
-const b = await chromium.launch();
+const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 // Internal HTTP export pages lack this secure-context-only API. Exercise the
 // real runtime and the page script's start under that browser constraint.

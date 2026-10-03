@@ -30,7 +30,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *
  *   usage: node scripts/gates/gate-layout-shift.mjs [base]
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -94,7 +94,7 @@ async function mint(markup) {
   return st;
 }
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 
 /** Sample the canvas's left edge from first paint until the rail has settled. */
 async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
