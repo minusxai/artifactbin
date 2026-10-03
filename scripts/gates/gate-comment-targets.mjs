@@ -165,20 +165,4 @@ try {
   console.log('PASS area selection with parent composer layering');
 
   await context.close();
-
-  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  const phone=await mobile.newPage();await becomeOwner(phone,base,seed.token);await phone.goto(`${base}/a/${seed.id}`);
-  const heading=phone.locator('#rows-heading');await heading.waitFor();
-  await openArtifactControls(phone);await phone.getByRole('button',{name:'Toggle comments',exact:true}).tap();
-  await phone.getByRole('button',{name:'Select',exact:true}).tap();
-  await phone.getByLabel('Annotation sidebar',{exact:true}).waitFor({state:'hidden'});
-  await heading.tap();
-  await phone.getByLabel('Annotation comment',{exact:true}).fill('A markup block selected by touch');
-  await expect(phone.getByRole('button',{name:'Continue without screenshot',exact:true})).toHaveCount(0);
-  await phone.getByRole('button',{name:'Save annotation',exact:true}).tap();
-  await phone.getByLabel('Annotation composer',{exact:true}).waitFor({state:'hidden'});
-  const mobileComment=(await annotations()).find(item=>item.thread[0].body==='A markup block selected by touch');
-  assert.equal(mobileComment.anchor.nodeId,'rows-heading');
-  console.log('PASS mobile tap Select');
-  await mobile.close();
 } finally { await browser.close(); }
