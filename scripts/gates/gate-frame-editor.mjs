@@ -122,8 +122,8 @@ try {
   // ── UNDO with Mod-Z pressed inside the frame ──
   await second.click({ position: { x: 120, y: 8 } });
   await page.keyboard.press(`${MOD}+z`);
-  const undone = await until(() => second.evaluate((el) => el.innerHTML), (html) => !/<strong>/.test(html), 8000);
-  check(!/<strong>/.test(undone), `Mod-Z inside the frame undoes the bold through the page's history (${undone})`);
+  const undone = await until(() => second.evaluate((el) => el.innerHTML), (html) => !/<strong\b/.test(html), 8000);
+  check(!/<strong\b/.test(undone), `Mod-Z inside the frame undoes the bold through the page's history (${undone})`);
   const undoSaved = await until(async () => (await head(start)).markup, (source) => source.includes('<p id="second">A second paragraph that stays put.</p>'), 15000);
   check(undoSaved.includes('<p id="second">A second paragraph that stays put.</p>'), 'and the undo is saved');
 

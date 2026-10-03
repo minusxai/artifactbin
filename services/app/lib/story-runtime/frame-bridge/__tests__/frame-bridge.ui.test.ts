@@ -248,6 +248,19 @@ describe('the frame bridge', () => {
     expect(events.every((event) => event.nonce === 'n'.repeat(32))).toBe(true);
   });
 
+  it('the page\'s reader mode and data wakeups reach the framed document', async () => {
+    const { frame, frameWin } = framedPair();
+    const { bridge, onReady } = parentFor(frame);
+    openDoor(frameWin);
+    await settle(() => onReady.mock.calls.length > 0);
+    bridge.send({ type: 'mx:reader-mode', mode: 'dark' });
+    bridge.invalidate(['orders']);
+    const controller = made.controllers[0]!;
+    await settle(() => controller.sent.length >= 2);
+    expect(frameWin.document.documentElement.classList.contains('dark')).toBe(true);
+    expect(controller.sent).toEqual([{ type: 'mx:reader-mode', mode: 'dark' }, { type: 'mx:data', datasets: ['orders'] }]);
+  });
+
   it('places the frame\'s viewport inside the iframe\'s box, and closes when the frame navigates', async () => {
     const { frame, frameWin } = framedPair();
     const onClosed = vi.fn();
