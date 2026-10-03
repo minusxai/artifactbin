@@ -117,7 +117,9 @@ try {
     await output.image(await page.screenshot());
     return { receipt, people: balances, refused };
   `);
-  assert.equal(joined.status, 'completed', JSON.stringify(joined)); sessions.push(joined.session_id);
+  // Recorded before the verdict: a failed run still closes its session, so a retry is not refused for capacity.
+  if (joined.session_id) sessions.push(joined.session_id);
+  assert.equal(joined.status, 'completed', JSON.stringify(joined));
   assert(joined.result.receipt, JSON.stringify(joined.result));
   assert.equal(joined.result.receipt.committed, true, JSON.stringify(joined.result.receipt));
   assert.deepEqual(joined.result.people, [testuser.id]);
@@ -135,7 +137,8 @@ try {
     const body = await page.locator('body').innerText();
     return { people: people_, body };
   `);
-  assert.equal(mine.status, 'completed', JSON.stringify(mine)); sessions.push(mine.session_id);
+  if (mine.session_id) sessions.push(mine.session_id);
+  assert.equal(mine.status, 'completed', JSON.stringify(mine));
   assert.equal(mine.result.people.length, 2);
   assert(mine.result.body.includes(testuser.label), `the copy names ${testuser.label}; body was: ${mine.result.body.slice(0, 400)}`);
   assert(!mine.result.body.includes('Unknown person'), 'no row renders as an unknown person');

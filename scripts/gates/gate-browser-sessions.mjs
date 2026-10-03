@@ -73,7 +73,9 @@ try {
     await output.image(await opened[0].screenshot());
     return states;
   `);
-  assert.equal(first.status, 'completed', JSON.stringify(first)); ids.push(first.session_id);
+  // Recorded before the verdict: a failed run still closes its session, so a retry is not refused for capacity.
+  if (first.session_id) ids.push(first.session_id);
+  assert.equal(first.status, 'completed', JSON.stringify(first));
   assert.equal(first.pages.length, 2); assert.equal(first.attachments[0].mime, 'image/png');
   await saveImage('counter', first.attachments[0]);
   assert.deepEqual(first.result.map(s => s.count), [3,7], JSON.stringify(first.result));
@@ -144,7 +146,7 @@ try {
     await page.getByLabel('Region').waitFor();
     await page.waitForFunction(() => Boolean(window.page));
     return await page.evaluate(() => ({ region: window.page.get('region'), sales: window.page.get('sales'), tasks: window.page.get('tasks') }));
-  `); ids.push(opened.session_id);
+  `); if (opened.session_id) ids.push(opened.session_id);
   assert.equal(opened.status,'completed',JSON.stringify(opened));
   assert.equal(opened.result.region,'East');
   assert.deepEqual(opened.result.tasks.map(row=>row.title),['Existing']);
