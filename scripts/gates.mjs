@@ -27,7 +27,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, CI_ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, CI_ISOLATED_GATES, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -91,7 +91,7 @@ if (args.includes('--browsers')) {
   process.exit(0);
 }
 if (args.includes('--needs-postgres')) {
-  console.log(selected.map((gate) => gate.name).includes('postgres-datasets'));
+  console.log(needsPostgres(selected.map((gate) => gate.name)));
   process.exit(0);
 }
 
