@@ -32,7 +32,7 @@ import { MAX_CONTENT_BYTES, type ContentInputCtx, type StoredContent } from './i
 import { collectExternalAssetUrls } from '../assets/external-images';
 import type { AssetWarning, WebAssetKind } from '@/lib/serving';
 import { documentFonts, invalidFontFamilies } from '../styles/document-fonts';
-import { CSP_EXTENSIONS_META, cspExtensionsOf, hasCspExtensions } from './csp-extensions';
+import { cspExtensionsOf } from './csp-extensions';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/platform/config';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '../data/parsed-artifact-metadata';
@@ -164,8 +164,8 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
     return json({ error: 'unknown_font', details: badFamilies.map((f) => `"${f}" is not a font family name`) }, 400);
   }
   // The hosts a document asks for beyond the default policy (Helmet `<meta name="csp-…">`), validated
-  // here so a bad origin is named as what it is; stored on the meta, applied per reader at serve
-  // (lib/trust/document-trust). The same parser runs in validateMarkupStructure for `afbin validate`.
+  // here so a bad origin is named as what it is. Nothing is stored: serving reads each version's own
+  // source (lib/trust/document-trust). The same parser runs in validateMarkupStructure for `afbin validate`.
   const csp = cspExtensionsOf(split.content, split.helmet);
   if (!csp.ok) return json({ error: 'invalid_csp', details: csp.errors }, 400);
   const errors = [...structural.errors, ...validateIconNames(split.body)];
@@ -228,8 +228,6 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
       refs,
       // The compiled dataflow, for the commit to bind to the final source (lib/story/data/parsed-artifact-metadata).
       ...(compiled ? { [COMPILED_DATAFLOW]: compiled } : {}),
-      // Only when the document asks: an ordinary document's meta (and its state hash) is unchanged.
-      ...(hasCspExtensions(csp.extensions) ? { [CSP_EXTENSIONS_META]: csp.extensions } : {}),
     },
     derivedTitle: helmetTitle?.trim() || null,
     ...(warnings.length ? { warnings } : {}),

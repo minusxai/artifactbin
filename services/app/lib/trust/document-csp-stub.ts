@@ -6,7 +6,10 @@
  */
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/story/document/csp-extensions';
 
-const DIRECTIVE_NAME: Record<CspDirective, string> = { connect: 'connect-src', script: 'script-src', style: 'style-src', img: 'img-src' };
+/** The policy directives each declared set extends. Fonts ride on `csp-style`: a stylesheet host serves its faces. */
+const DIRECTIVE_NAMES: Record<CspDirective, readonly string[]> = {
+  connect: ['connect-src'], script: ['script-src'], style: ['style-src', 'font-src'], img: ['img-src'], frame: ['frame-src'], media: ['media-src'],
+};
 
 /**
  * Append each directive's origins to that directive in `policy`. Identity on an empty set. A directive
@@ -16,10 +19,12 @@ export function appendCspExtensions(policy: string, extensions: CspExtensions = 
   if (CSP_DIRECTIVES.every((d) => extensions[d].length === 0)) return policy;
   return policy.split(/;\s*/).map((directive) => {
     const [name, ...sources] = directive.trim().split(/\s+/);
-    const kind = CSP_DIRECTIVES.find((d) => DIRECTIVE_NAME[d] === name);
-    if (!kind) return directive;
-    const added = extensions[kind].filter((origin) => !sources.includes(origin));
-    return added.length ? `${directive} ${added.join(' ')}` : directive;
+    const kinds = CSP_DIRECTIVES.filter((d) => DIRECTIVE_NAMES[d].includes(name ?? ''));
+    if (!kinds.length) return directive;
+    const added = [...new Set(kinds.flatMap((kind) => extensions[kind]))].filter((origin) => !sources.includes(origin));
+    if (!added.length) return directive;
+    // 'none' cannot stand beside a source: the declared origins replace it.
+    return sources.length === 1 && sources[0] === "'none'" ? `${name} ${added.join(' ')}` : `${directive} ${added.join(' ')}`;
   }).join('; ');
 }
 
@@ -35,6 +40,7 @@ export function buildDocumentCsp({ self, extensions = EMPTY_CSP_EXTENSIONS }: { 
     "font-src 'self' data: https://fonts.gstatic.com",
     'img-src https: data: blob:',
     "media-src 'self' https: blob:",
+    'frame-src https://www.youtube-nocookie.com https://player.vimeo.com',
     "form-action 'none'",
     "base-uri 'none'",
     "frame-ancestors 'self'",

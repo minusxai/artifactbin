@@ -6,11 +6,17 @@
  *   <meta name="csp-script"  content="https://cdn.plot.ly" />
  *   <meta name="csp-style"   content="https://cdn.example.com" />
  *   <meta name="csp-img"     content="https://images.example.com" />
+ *   <meta name="csp-frame"   content="https://www.youtube-nocookie.com" />
+ *   <meta name="csp-media"   content="https://media.example.com" />
+ *
+ * Fonts ride on `csp-style` (a stylesheet host serves its faces too): it extends both style-src and
+ * font-src. The others map one to one: connect-src, script-src, img-src, frame-src, media-src.
  *
  * PURE and dependency-light on purpose: the CLI bundles it through local-validation, so `afbin validate`
- * refuses what publish refuses, with the same messages and spans. Publish stores the parsed set on the
- * content's meta (`CSP_EXTENSIONS_META`); serving appends it to the document's own policy only for a
- * reader who owns the document or allowed it (lib/trust/document-trust).
+ * refuses what publish refuses, with the same messages and spans. Nothing is stored beside the source:
+ * each version's source IS its declaration (edits commit client-prepared patches, so a stored copy would
+ * drift), and serving re-reads it (lib/trust/document-trust) to append the hosts a reader published or
+ * allowed.
  *
  * The grammar is deliberately narrow because every value lands in a response header: https origins
  * only, no path, query, fragment or credentials, and a wildcard only as a whole leading `*.` label
@@ -19,28 +25,37 @@
 import type { JsxElement, ValidationError } from '@/lib/jsx';
 import type { HelmetContent } from './helmet';
 
-/** The four directives a document may extend, as https origins appended per directive. */
+/** The directives a document may extend, as https origins appended per directive. */
 export interface CspExtensions {
   connect: string[];
   script: string[];
+  /** style-src and font-src. */
   style: string[];
   img: string[];
+  frame: string[];
+  media: string[];
 }
 export type CspDirective = keyof CspExtensions;
 
 /** What the app page tells the consent bar (lib/trust/document-trust cspRequestFor answers it). */
 export interface CspRequest {
+  /** Everything the document declares. */
   extensions: CspExtensions;
-  /** owner: trusted as theirs · allowed: a grant covers the set · blocked: default policy only · none: asks nothing. */
-  status: 'owner' | 'allowed' | 'blocked' | 'none';
+  /** What this reader is asked about: the declared hosts they did not publish themselves. Empty unless blocked. */
+  asking: CspExtensions;
+  /**
+   * publisher: every host was added by this reader's own publish · allowed: a grant covers the rest ·
+   * blocked: only the reader's own hosts apply, the rest wait on the bar · none: the document asks nothing.
+   */
+  status: 'publisher' | 'allowed' | 'blocked' | 'none';
   /** The reader said Never: the bar collapses to a note. Only ever true while `status` is 'blocked'. */
   denied: boolean;
 }
 
-export const CSP_DIRECTIVES: readonly CspDirective[] = ['connect', 'script', 'style', 'img'];
-export const EMPTY_CSP_EXTENSIONS: CspExtensions = Object.freeze({ connect: [], script: [], style: [], img: [] }) as CspExtensions;
-/** The stored content meta key (lib/story/document/input StoredContent.meta). */
-export const CSP_EXTENSIONS_META = 'cspExtensions';
+export const CSP_DIRECTIVES: readonly CspDirective[] = ['connect', 'script', 'style', 'img', 'frame', 'media'];
+export const EMPTY_CSP_EXTENSIONS: CspExtensions = Object.freeze({ connect: [], script: [], style: [], img: [], frame: [], media: [] }) as CspExtensions;
+/** A fresh, mutable empty set. */
+export const emptyCspExtensions = (): CspExtensions => ({ connect: [], script: [], style: [], img: [], frame: [], media: [] });
 export const MAX_CSP_ORIGINS_PER_DIRECTIVE = 10;
 
 const META_PREFIX = 'csp-';
@@ -51,9 +66,10 @@ export interface CspExtensionError extends ValidationError {
   value: string;
 }
 
+/** On refusal, `extensions` still holds the origins that did validate (what a reader of an unvalidated edit may be asked about). */
 export type CspExtensionsResult =
   | { ok: true; extensions: CspExtensions }
-  | { ok: false; errors: CspExtensionError[] };
+  | { ok: false; errors: CspExtensionError[]; extensions: CspExtensions };
 
 const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
 const ORIGIN_RE = new RegExp(`^https://(\\*\\.)?(${LABEL}(?:\\.${LABEL})*)(:\\d{1,5})?$`);
@@ -99,7 +115,7 @@ function spanOf(helmet: JsxElement | null | undefined, name: string): { start?: 
  */
 export function cspExtensionsOf(content: Pick<HelmetContent, 'meta'>, helmet?: JsxElement | null): CspExtensionsResult {
   const errors: CspExtensionError[] = [];
-  const extensions: CspExtensions = { connect: [], script: [], style: [], img: [] };
+  const extensions = emptyCspExtensions();
   for (const meta of content.meta) {
     if (!meta.name.startsWith(META_PREFIX)) continue;
     const directive = meta.name.slice(META_PREFIX.length) as CspDirective;
@@ -122,9 +138,9 @@ export function cspExtensionsOf(content: Pick<HelmetContent, 'meta'>, helmet?: J
     if (origins.length > MAX_CSP_ORIGINS_PER_DIRECTIVE) {
       errors.push({ message: `<meta name="${meta.name}"> names ${origins.length} origins; the cap is ${MAX_CSP_ORIGINS_PER_DIRECTIVE}`, tag: 'meta', attr: 'content', value: meta.content, ...span });
     }
-    extensions[directive] = origins;
+    extensions[directive] = origins.slice(0, MAX_CSP_ORIGINS_PER_DIRECTIVE);
   }
-  return errors.length ? { ok: false, errors } : { ok: true, extensions };
+  return errors.length ? { ok: false, errors, extensions } : { ok: true, extensions };
 }
 
 /** Does this set ask for anything at all? */
@@ -137,18 +153,24 @@ export function coversCspExtensions(granted: CspExtensions, wanted: CspExtension
 
 /** The union of two sets, per directive, order kept. */
 export function mergeCspExtensions(a: CspExtensions, b: CspExtensions): CspExtensions {
-  const out = { ...EMPTY_CSP_EXTENSIONS };
+  const out = emptyCspExtensions();
   for (const d of CSP_DIRECTIVES) out[d] = [...new Set([...a[d], ...b[d]])];
   return out;
 }
 
+/** What `a` asks for that `b` does not hold, per directive. */
+export function subtractCspExtensions(a: CspExtensions, b: CspExtensions): CspExtensions {
+  const out = emptyCspExtensions();
+  for (const d of CSP_DIRECTIVES) out[d] = a[d].filter((origin) => !b[d].includes(origin));
+  return out;
+}
+
 /**
- * A stored set read back defensively: anything that is not a list of origins this parser would accept
+ * A stored set (a `document_trust` row) read back defensively: anything that is not a list of origins this parser would accept
  * is dropped, so a hand-edited or legacy meta can never put a foreign token into a header.
  */
-export function storedCspExtensions(meta: unknown): CspExtensions {
-  const raw = meta && typeof meta === 'object' ? (meta as Record<string, unknown>)[CSP_EXTENSIONS_META] : null;
-  const out: CspExtensions = { connect: [], script: [], style: [], img: [] };
+export function storedCspExtensions(raw: unknown): CspExtensions {
+  const out = emptyCspExtensions();
   if (!raw || typeof raw !== 'object') return out;
   for (const d of CSP_DIRECTIVES) {
     const list = (raw as Record<string, unknown>)[d];

@@ -48,16 +48,22 @@ describe('parseCspOrigin', () => {
 });
 
 describe('cspExtensionsOf', () => {
-  it('reads the four directives, canonical and de-duplicated, ignoring other metas', () => {
-    const { result } = helmetOf('<meta name="csp-connect" content="https://api.open-meteo.com  https://API.open-meteo.com https://api.example.com" /><meta name="csp-script" content="https://cdn.plot.ly" /><meta name="csp-style" content="https://cdn.example.com" /><meta name="csp-img" content="https://*.images.example.com" /><meta name="font-display" content="Lobster" />');
+  it('reads the six directives, canonical and de-duplicated, ignoring other metas', () => {
+    const { result } = helmetOf('<meta name="csp-connect" content="https://api.open-meteo.com  https://API.open-meteo.com https://api.example.com" /><meta name="csp-script" content="https://cdn.plot.ly" /><meta name="csp-style" content="https://cdn.example.com" /><meta name="csp-img" content="https://*.images.example.com" /><meta name="csp-frame" content="https://www.youtube-nocookie.com" /><meta name="csp-media" content="https://media.example.com" /><meta name="font-display" content="Lobster" />');
     expect(result).toEqual({ ok: true, extensions: {
       connect: ['https://api.open-meteo.com', 'https://api.example.com'],
       script: ['https://cdn.plot.ly'], style: ['https://cdn.example.com'], img: ['https://*.images.example.com'],
+      frame: ['https://www.youtube-nocookie.com'], media: ['https://media.example.com'],
     } });
   });
 
   it('is empty for a document that asks nothing', () => {
     expect(helmetOf('<title>t</title>').result).toEqual({ ok: true, extensions: EMPTY_CSP_EXTENSIONS });
+  });
+
+  it('keeps the origins that did validate beside the refusal (what an unvalidated edit can still ask for)', () => {
+    const { result } = helmetOf('<meta name="csp-connect" content="https://ok.example.com http://bad.example.com" />');
+    expect(result.extensions.connect).toEqual(['https://ok.example.com']);
   });
 
   it('names the offending value and points at the content attribute', () => {
@@ -69,9 +75,14 @@ describe('cspExtensionsOf', () => {
     expect(source.slice(error!.start, error!.end)).toBe('content="https://ok.example.com http://bad.example.com"');
   });
 
-  it('refuses an unknown csp directive by name, listing the four', () => {
-    const { result } = helmetOf('<meta name="csp-frame" content="https://x.example.com" />');
-    expect(result.ok ? [] : result.errors.map((e) => [e.value, e.message])).toEqual([['csp-frame', expect.stringContaining('csp-connect, csp-script, csp-style, csp-img')]]);
+  it('refuses an unknown csp directive by name, listing the six (fonts ride on csp-style)', () => {
+    const { result } = helmetOf('<meta name="csp-font" content="https://x.example.com" />');
+    expect(result.ok ? [] : result.errors.map((e) => [e.value, e.message])).toEqual([['csp-font', expect.stringContaining('csp-connect, csp-script, csp-style, csp-img, csp-frame, csp-media')]]);
+  });
+
+  it('validates csp-frame and csp-media like the rest', () => {
+    const bad = helmetOf('<meta name="csp-frame" content="https://player.example.com/embed" /><meta name="csp-media" content="http://media.example.com" />').result;
+    expect(bad.ok ? [] : bad.errors.map((e) => e.value)).toEqual(['https://player.example.com/embed', 'http://media.example.com']);
   });
 
   it('refuses an empty list and more than ten origins', () => {
@@ -95,13 +106,11 @@ describe('the publish door and afbin validate', () => {
     expect(body.details[0]!.value).toBe('https://api.example.com/v1');
   });
 
-  it('publish stores the set on the content meta, and stores nothing for a document that asks nothing', async () => {
+  it('publish stores nothing beside the source: each version\'s source is its declaration', async () => {
     const asked = await prepareJsx({}, '<Helmet><meta name="csp-connect" content="https://api.open-meteo.com" /></Helmet><p>x</p>');
     if (asked instanceof Response) throw new Error(await asked.text());
-    expect(asked.content.meta.cspExtensions).toEqual({ connect: ['https://api.open-meteo.com'], script: [], style: [], img: [] });
-    const plain = await prepareJsx({}, '<p>x</p>');
-    if (plain instanceof Response) throw new Error(await plain.text());
-    expect(plain.content.meta).not.toHaveProperty('cspExtensions');
+    expect(asked.content.meta).not.toHaveProperty('cspExtensions');
+    expect(asked.content.source).toContain('csp-connect');
   });
 
   it('local validation (the CLI) reports the same refusal with its span', () => {
@@ -114,7 +123,7 @@ describe('the publish door and afbin validate', () => {
 });
 
 describe('sets', () => {
-  const ask = { connect: ['https://a.example.com'], script: ['https://cdn.plot.ly'], style: [], img: [] };
+  const ask = { ...EMPTY_CSP_EXTENSIONS, connect: ['https://a.example.com'], script: ['https://cdn.plot.ly'] };
   it('a grant covers a set only when it holds every origin', () => {
     expect(coversCspExtensions(ask, ask)).toBe(true);
     expect(coversCspExtensions(ask, { ...ask, connect: ['https://a.example.com', 'https://b.example.com'] })).toBe(false);
@@ -122,22 +131,27 @@ describe('sets', () => {
   });
 
   it('a stored set is read back defensively', () => {
-    expect(storedCspExtensions({ cspExtensions: { connect: ['https://a.example.com', "https://x.com; script-src 'unsafe-eval'", 7], script: 'https://cdn.plot.ly' } }))
-      .toEqual({ connect: ['https://a.example.com'], script: [], style: [], img: [] });
+    expect(storedCspExtensions({ connect: ['https://a.example.com', "https://x.com; script-src 'unsafe-eval'", 7], script: 'https://cdn.plot.ly' }))
+      .toEqual({ ...EMPTY_CSP_EXTENSIONS, connect: ['https://a.example.com'] });
     expect(storedCspExtensions(null)).toEqual(EMPTY_CSP_EXTENSIONS);
   });
 });
 
 describe('appending to the served policy (stub until brief A)', () => {
-  const policy = "default-src 'none'; script-src 'self' https://esm.sh; connect-src 'self'; style-src 'self'; form-action 'none'";
+  const policy = "default-src 'none'; script-src 'self' https://esm.sh; connect-src 'self'; style-src 'self'; font-src 'self'; frame-src 'none'; form-action 'none'";
   it('is the identity on an empty set', () => {
     expect(appendCspExtensions(policy, EMPTY_CSP_EXTENSIONS)).toBe(policy);
     expect(appendCspExtensions(policy)).toBe(policy);
   });
 
   it('appends each origin to its own directive once, and never adds a missing directive', () => {
-    expect(appendCspExtensions(policy, { connect: ['https://api.open-meteo.com'], script: ['https://esm.sh', 'https://cdn.plot.ly'], style: [], img: ['https://images.example.com'] }))
-      .toBe("default-src 'none'; script-src 'self' https://esm.sh https://cdn.plot.ly; connect-src 'self' https://api.open-meteo.com; style-src 'self'; form-action 'none'");
+    expect(appendCspExtensions(policy, { ...EMPTY_CSP_EXTENSIONS, connect: ['https://api.open-meteo.com'], script: ['https://esm.sh', 'https://cdn.plot.ly'], img: ['https://images.example.com'], media: ['https://media.example.com'] }))
+      .toBe("default-src 'none'; script-src 'self' https://esm.sh https://cdn.plot.ly; connect-src 'self' https://api.open-meteo.com; style-src 'self'; font-src 'self'; frame-src 'none'; form-action 'none'");
+  });
+
+  it('csp-style extends fonts too, and a declared frame host replaces a lone none', () => {
+    expect(appendCspExtensions(policy, { ...EMPTY_CSP_EXTENSIONS, style: ['https://fonts.example.com'], frame: ['https://www.youtube-nocookie.com'] }))
+      .toBe("default-src 'none'; script-src 'self' https://esm.sh; connect-src 'self'; style-src 'self' https://fonts.example.com; font-src 'self' https://fonts.example.com; frame-src https://www.youtube-nocookie.com; form-action 'none'");
   });
 
   it('buildDocumentCsp keeps the signature brief A ships', () => {
