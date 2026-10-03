@@ -583,7 +583,10 @@ async function foldersLeg(owner) {
     // ── 1. the listing is in the FIRST HTML BYTE ──
     // `page.goto` waits, so a listing that arrives a second late still finds every locator. This reads the BYTES
     // the server sent, with the owner's own cookies, before a single script has run.
-    const firstBytes = await owner.ctx.request.get(`${BASE}/a/${folder.id}`);
+    // Playwright's shared keep-alive socket can close after the login/setup gap.
+    // Its maxRetries retries ECONNRESET only, never HTTP errors: this read-only
+    // SSR assertion still requires 200 and both authorized children in the bytes.
+    const firstBytes = await owner.ctx.request.get(`${BASE}/a/${folder.id}`, { maxRetries: 1 });
     check(firstBytes.status() === 200, 'the owner’s folder address answers 200');
     const html = await firstBytes.text();
     check(html.includes('Opening Note') && html.includes('Quiet Note'), 'both children are in the FIRST HTML byte, before any script runs');
