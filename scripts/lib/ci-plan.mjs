@@ -74,8 +74,9 @@ export const CI_MODULES = {
   sql: ['contracts', 'utils'],
   browser: ['contracts', 'utils', 'test-support'],
   events: ['contracts', 'utils'],
+  runner: ['contracts', 'utils'],
   auth: ['contracts', 'utils', 'test-support'],
-  app: ['contracts', 'utils', 'sql', 'browser', 'events', 'auth', 'test-support'],
+  app: ['contracts', 'utils', 'sql', 'browser', 'events', 'auth', 'runner', 'test-support'],
   cli: ['contracts', 'app', 'sql', 'test-support'],
 };
 

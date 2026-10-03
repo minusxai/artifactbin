@@ -240,6 +240,8 @@ export interface DataflowStore {
 }
 
 export interface CreateStoreOptions {
+  /** Operation keys for a headless host; browsers default to a cryptographically random UUID. */
+  operationId?: () => string;
   /** Debounce before a CONTINUOUS change re-runs (default 150 ms) — a slider must not fire per pixel. */
   debounceMs?: number;
   transport?: QueryTransport | null;
@@ -391,7 +393,7 @@ export function createDataflowStore(
           const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
           const call = writes.get(id), previous = call?.request;
           if (m.notifies || previous?.operationKey) {
-            request.operationKey = previous?.operationKey || runtimeId();
+            request.operationKey = previous?.operationKey || (options.operationId ?? runtimeId)();
             request.tz = previous?.tz ?? localZone();
           }
           if (call) call.request = request;

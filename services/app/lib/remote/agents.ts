@@ -1,3 +1,4 @@
+import {hostedRemoteAgent} from './hosted-interface';
 import {isTerminalFeedback} from './terminal-input';
 import { getArtifactById } from '../artifacts/store';
 import { canReadArtifact } from '../artifacts/access';
@@ -40,11 +41,12 @@ export class RemoteAgents {
   }
  }
  async list(owner:string){
+  const hosted=hostedRemoteAgent();const defaultAgent=hosted?await hosted.ensure(owner):undefined;
   const db=await getDb();const saved=(await db.query<AgentRow>("SELECT * FROM remote_agents WHERE owner=$1 AND COALESCE(info->>'removed','false')<>'true' ORDER BY seen_at DESC LIMIT 100",[owner])).rows;
-  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:live.some(s=>s.id===r.id&&s.online)}))];
+  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)}))];
  }
- async read(owner:string,id:string){const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);let online=false;try{online=this.relay.read(owner,id).online;}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
- async view(owner:string,id:string,since:number){const session=await this.read(owner,id);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
+ async read(owner:string,id:string){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.ensure(owner);const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);let online=false;try{online=this.relay.read(owner,id).online;}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
+ async view(owner:string,id:string,since:number){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.view(owner,id,since);const session=await this.read(owner,id);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
  async owns(owner:string,id:string){return this.relay.owns(owner,id)||!!await this.row(await getDb(),owner,id);}
  async ready(owner:string,id:string,proof:string){
   const db=await getDb();await db.transaction(async tx=>{
@@ -55,6 +57,7 @@ export class RemoteAgents {
   });
  }
  async input(owner:string,id:string,data:string){
+  const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.input(owner,id,data);
   const db=await getDb();await db.transaction(async tx=>{
    const r=await this.row(tx,owner,id,true);
    if(r&&(!r.active||r.info.activity==='stopping'))throw new RemoteError('Session stopped',410);
@@ -65,6 +68,7 @@ export class RemoteAgents {
   });
  }
  async stop(owner:string,id:string){
+  const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.stop(owner,id);
   const db=await getDb();await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(!r){this.relay.stop(owner,id);return;}if(r.active){r.info.activity='stopping';await this.save(tx,r);}});
  }
  async stopped(owner:string,id:string,exitCode:number){
@@ -72,6 +76,7 @@ export class RemoteAgents {
   const db=await getDb();await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(!r)throw new RemoteError('Session not found',404);r.active=false;r.info.activity='stopped';r.info.exitCode=exitCode;r.info.online=false;await this.save(tx,r);await this.unavailable(tx,id);});
  }
  async remove(owner:string,id:string){
+  const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.stop(owner,id);
   if(!await this.owns(owner,id))throw new RemoteError('Session not found',404);
   const db=await getDb();const managed=await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(r){r.active=false;r.info.removed=true;r.info.activity='stopped';r.info.online=false;await this.save(tx,r);await this.unavailable(tx,id);}return !!r;});
   // Durable agents can outlive their relay; legacy sessions retain its 410 on repeated removal.

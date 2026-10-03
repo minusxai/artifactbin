@@ -47,7 +47,8 @@
     "hono": "4.13.5",
     "kysely": "0.28.17",
     "pg": "8.17.1",
-    "vega": "6.3.1"
+    "vega": "6.3.1",
+    "@artifactbin/runner": "0.1.0"
   },
   "devDependencies": {
     "@rollup/plugin-yaml": "5.0.0",
@@ -75,6 +76,7 @@
     "services/events",
     "services/auth",
     "services/cli",
-    "services/test-support"
+    "services/test-support",
+    "services/runner"
   ]
 }

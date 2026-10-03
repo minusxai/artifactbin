@@ -21,7 +21,7 @@ import esbuild from 'esbuild';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import { generateTeaching } from '../lib/generate-teaching.mjs';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, copyFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { EXTERNALS } from './runtime-externals.mjs';
 
@@ -90,3 +90,15 @@ await esbuild.build({
 });
 if (!existsSync(out)) { console.error(`build-server: ${out} missing`); process.exit(1); }
 console.log(`build-server: ${entry} → ${out}`);
+
+// The runner launches this file out-of-process; it must remain beside the host bundle.
+copyFileSync(new URL('../../services/runner/src/runner-worker.mjs',import.meta.url),join(dirname(out),'runner-worker.mjs'));
+copyFileSync(new URL('../../services/runner/src/agent.ts.txt',import.meta.url),join(dirname(out),'agent.ts.txt'));
+
+// A Lambda module bundles this DOM-free page runtime; production carries no TypeScript source tree.
+await esbuild.build({
+  entryPoints: [fileURLToPath(new URL('../../services/app/lib/runner/runtime.ts', import.meta.url))],
+  bundle: true, platform: 'browser', conditions: ['browser'], format: 'iife', globalName: 'LambdaPageRuntime',
+  target: 'es2022', minify: true, logLevel: 'warning',
+  outfile: join(dirname(out), 'lambda-page-runtime.js'),
+});

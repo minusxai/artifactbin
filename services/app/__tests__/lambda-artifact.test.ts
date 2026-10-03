@@ -1,0 +1,41 @@
+import {afterEach,expect,it} from 'vitest';
+import {Hono} from 'hono';
+import {actorReceiver,signActor} from '@artifactbin/utils';
+import {ACTOR_HEADER} from '@artifactbin/contracts';
+import {useAppHarness,request} from './harness';
+import {createUser,mintToken,claimToken} from '@/lib/accounts';
+import {POST as publish} from '@/app/api/artifacts/route';
+import {POST as operation} from '@/app/api/runner/operations/route';
+import {invokeArtifact,artifactSchedule,startLambdaSchedules,setLambdaProgramResolver} from '@/lib/runner';
+import {getArtifactById} from '@/lib/artifacts';
+import {setServices} from '@/lib/platform/services';
+import {createRunner} from '../../runner/src/local';
+import {hostCapabilities,runnerIdentity} from '../../runner/src/capabilities';
+const harness=useAppHarness();const close:Array<()=>Promise<unknown>>=[];
+afterEach(async()=>{setLambdaProgramResolver(undefined);setServices({runner:undefined});for(const fn of close.splice(0).reverse())await fn();});
+it('runs published JSX with real Solid bindings, authenticated data calls, mutations and notifications',async()=>{
+ const db=await harness.db();const owner=await createUser({email:'mxmx_test_lambda_end_to_end@example.com'}),token=await mintToken('lambda');await claimToken(owner.id,token.token);
+ const make=async(json:unknown)=>{const r=await publish(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
+ const ds=await make({dataset:[{region:'west',n:1},{region:'east',n:2}],access:'readwrite'});
+ const script=`import {signal,query,mutation} from 'page';
+const [region,setRegion]=signal('$region');const rows=query('$rows');const add=mutation('$add');
+export default async function(input){const initial=await rows.ready;setRegion('east');const pending=rows.loading();const east=await rows.ready;await add({n:input.n});const updated=await rows.ready;return {initial,east,updated,pending,region:region(),document:typeof document,process:typeof process};}`;
+ const id=await make({markup:`<Helmet><Import name="data" src="ref:${ds}" /><Value name="region" type="string" default="west" /><Query name="rows">{\`select n from data.rows where region=$region order by n\`}</Query><Mutation name="add">{\`insert into data.rows values ('east',$n)\`}</Mutation><Notify name="added" on="add">{\`select null as "to", 'Row added' as message\`}</Notify><script>{${JSON.stringify(script)}}</script></Helmet><p>Executable report</p>`});
+ const secret='mxmx_test_signed_runner_context_secret';const app=new Hono();actorReceiver(secret).mount(app);app.post('/api/runner/operations',c=>operation(c.req.raw));
+ const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:hostCapabilities({artifactbin:async(ctx,op,args)=>{
+  const response=await app.request(new Request('http://internal/api/runner/operations',{method:'POST',headers:{'content-type':'application/json',[ACTOR_HEADER]:signActor(runnerIdentity(ctx),secret)},body:JSON.stringify({operation:op.replace(/^artifactbin\./,''),input:args,documentSource:ctx.request.document?.source})}));
+  const value=await response.json();if(!response.ok)throw Error(value.error);return value;
+ }})});close.push(()=>runner.close());setServices({runner});
+ const invoke=()=>invokeArtifact(request('/run',{method:'POST',actor:{userId:owner.id,credential:'session'},json:{requestId:'real-jsx',input:{n:3}}}),id);
+ const result=await invoke();expect(result.status,await result.clone().text()).toBe(202);const {runId}=await result.json();
+ for(let i=0;i<1500;i++){if((await runner.getRun({runId,userId:owner.id})).receipt)break;await new Promise(r=>setTimeout(r,10));}
+ const done=await runner.getRun({runId,userId:owner.id});expect(done.status,JSON.stringify(done)).toBe('completed');
+ expect(done.output).toEqual({initial:[{n:1}],east:[{n:2}],updated:[{n:2},{n:3}],pending:true,region:'east',document:'undefined',process:'undefined'});
+ expect((await getArtifactById(ds))?.version).toBe(2);expect((await db.query('SELECT id FROM notification_jobs')).rows).toHaveLength(1);
+ expect(await (await invoke()).json()).toEqual({runId});
+ close.push(await startLambdaSchedules(db));
+ const scheduled=await artifactSchedule(request('/schedule',{method:'POST',actor:{userId:owner.id,credential:'session'},json:{cron:'*/5 * * * *',timezone:'UTC',input:{n:4}}}),id);
+ expect(scheduled.status,await scheduled.clone().text()).toBe(201);
+ const saved=(await db.query<{spec:{document:{source:string};version:string}}>('SELECT spec FROM runner_schedules WHERE id=$1',[(await scheduled.json()).id])).rows[0]!;
+ expect(saved.spec.document.source).toContain(script.split('\n')[0]!);expect(saved.spec.version).toBe('1');
+},25000);

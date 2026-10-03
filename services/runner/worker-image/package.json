@@ -1,0 +1,1 @@
+{"name":"artifactbin-isolate-worker","private":true,"type":"module","dependencies":{"isolated-vm":"5.0.4"}}

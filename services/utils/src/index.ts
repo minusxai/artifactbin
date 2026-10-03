@@ -24,3 +24,5 @@ export {artifactIdFromSegment,artifactIdFromPath,artifactIdFromPathPrefix} from 
 export { isBuildAssetPath, buildAssetRequest, buildAssetResponse } from './build-assets';
 export { renderConnectionPage } from './connection-page';
 export { tableQueryInput } from './table-query';
+
+export {runnerClient} from "./runner-client";

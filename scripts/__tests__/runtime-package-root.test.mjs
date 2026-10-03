@@ -27,3 +27,21 @@ test('trimmed PGLite supports fresh persistence, rollback and restart without ex
   expect(result.stderr).toBe('');expect(result.status).toBe(0);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('runtime packaging finds npm packages whose names also identify Node builtins',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-builtin-package-'));
+ try{for(const name of ['buffer','string_decoder']){
+  const directory=join(root,'node_modules',name);await mkdir(directory,{recursive:true});
+  const pkg={name,version:'1.0.0'};await writeFile(join(directory,'package.json'),JSON.stringify(pkg));
+  expect(await packageRoot(name,root)).toEqual({directory:await realpath(directory),pkg});
+ }}finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test('CLI runtime omits execution-only packages while retaining server externals',async()=>{
+ const {EXTERNALS,CLI_RUNTIME_EXTERNALS}=await import('../build/runtime-externals.mjs');
+ for(const name of ['isolated-vm','@earendil-works/pi-agent-core','@earendil-works/pi-ai','abort-controller','fast-text-encoding','core-js','vite']){
+  expect(EXTERNALS).toContain(name);expect(CLI_RUNTIME_EXTERNALS).not.toContain(name);
+ }
+ for(const name of ['esbuild','pg','@electric-sql/pglite','playwright','playwright-core','@sqlite.org/sqlite-wasm','vega','vega-lite','vega-interpreter','harfbuzzjs','wawoff2','nunjucks'])expect(CLI_RUNTIME_EXTERNALS).toContain(name);
+});
