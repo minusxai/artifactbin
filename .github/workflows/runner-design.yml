@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'docs/proposals/runner-validation/**'
+      - 'services/runner/**'
+      - 'services/app/**/runner*'
+      - 'services/app/**/hosted*'
+      - 'services/utils/src/runner-client.ts'
       - 'services/app/__tests__/runner-design.test.ts'
       - 'services/app/__tests__/runner-page-boundary.test.ts'
       - '.github/workflows/runner-design.yml'
@@ -41,6 +45,11 @@ jobs:
         env:
           RUNNER_VALIDATION_DOCKER: runner-design-worker
         run: npm test -- --files services/app/__tests__/runner-design.test.ts services/app/__tests__/runner-page-boundary.test.ts
+      - run: docker build -f services/runner/Dockerfile -t artifactbin-worker .
+      - name: Product runner, hosted comments and APIs in restricted workers
+        env:
+          RUNNER_TEST_IMAGE: artifactbin-worker
+        run: npm test -- --files services/app/__tests__/runner-service.test.ts services/app/__tests__/runner-orchestration.test.ts services/app/__tests__/hosted-runner.test.ts services/app/__tests__/runner-api.test.ts
       - name: Prove OS restrictions independently of V8
         run: node docs/proposals/runner-validation/os-boundary.mjs runner-design-worker
       - name: Prove real PostgreSQL concurrency
@@ -48,5 +57,15 @@ jobs:
           RUNNER_VALIDATION_DATABASE: postgres://postgres:validation@127.0.0.1:5432/runner_validation
           RUNNER_VALIDATION_DOCKER: runner-design-worker
         run: node docs/proposals/runner-validation/postgres-proof.mjs
+      - name: Product transactions on PostgreSQL
+        env:
+          RUNNER_TEST_DATABASE: postgres://postgres:validation@127.0.0.1:5432/runner_validation
+          RUNNER_TEST_IMAGE: artifactbin-worker
+        run: |
+          node scripts/build/build-server.mjs dist/runner-proof.mjs services/runner/prove-postgres.ts
+          node dist/runner-proof.mjs
+      - run: node docs/proposals/runner-validation/os-boundary.mjs artifactbin-worker
+      - name: Verify product worker cleanup
+        run: test -z "$(docker ps -aq --filter label=artifactbin.runner=true)"
       - name: Verify worker cleanup
         run: test -z "$(docker ps -aq --filter label=artifactbin.runner-validation=true)"

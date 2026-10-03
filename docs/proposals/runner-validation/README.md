@@ -2,7 +2,9 @@
 
 This is a **validation harness, not a registered product service**. It tests the selected TypeScript/JavaScript isolate design against existing app handlers. No production request, credential or paid model is used. The proposal is https://app.artifactbin.dev/a/zgFGB8.
 
-## Architecture to implement
+The product implementation is now in [services/runner](../../../services/runner/README.md), with registered app APIs, durable scheduling, and an opt-in hosted agent. That README records the shipped interface and boundaries; this directory preserves the earlier design probes. Product workers start on demand (no spare pool yet), external fetch remains disabled, and the section 2a authoring adapter remains a separate integration.
+
+## Architecture validated
 
 ```
 Artifactbin app ───────────────► RunnerService ──► isolated JS module

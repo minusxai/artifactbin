@@ -14,7 +14,7 @@ export const EXTERNALS = [
   'pg', '@electric-sql/pglite',
   // The offline downloader packs the compiled browser module at request time;
   // esbuild launches its native service from real package paths.
-  'esbuild',
+  'esbuild', 'isolated-vm', '@earendil-works/pi-agent-core', '@earendil-works/pi-ai', 'abort-controller', 'fast-text-encoding', 'core-js',
   'playwright', 'playwright-core',
   // The SQLite engine reads its own sqlite3.wasm beside its module.
   '@sqlite.org/sqlite-wasm',
