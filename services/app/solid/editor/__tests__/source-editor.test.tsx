@@ -89,3 +89,19 @@ it('opens with the caret and the view at a requested place (a mount badge asks f
   expect(cm.hasFocus || document.activeElement === cm.contentDOM).toBe(true);
   expect(scroll).toHaveBeenCalledWith(offset, expect.objectContaining({ y: 'center' }));
 });
+
+it('reveals a place asked for while it is open: the caret moves there and the view follows, each time it is asked', () => {
+  const doc = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n');
+  const [reveal, setReveal] = createSignal<{ start: number; end: number } | null>(null);
+  const scroll = vi.spyOn(EditorView, 'scrollIntoView');
+  const view = render(() => <SourceEditor value={doc} revision={0} onChange={() => {}} reveal={reveal} />);
+  const cm = EditorView.findFromDOM(view.container.querySelector('.cm-editor') as HTMLElement)!;
+  expect(cm.state.selection.main.head).toBe(0);
+  const offset = doc.indexOf('line 120');
+  setReveal({ start: offset, end: offset });
+  expect(cm.state.doc.lineAt(cm.state.selection.main.head).number).toBe(120);
+  expect(scroll).toHaveBeenLastCalledWith(offset, expect.objectContaining({ y: 'center' }));
+  cm.dispatch({ selection: EditorSelection.cursor(0) });
+  setReveal({ start: offset, end: offset });
+  expect(cm.state.selection.main.head).toBe(offset);
+});
