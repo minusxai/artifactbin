@@ -159,14 +159,15 @@ describe('an anonymous reader loads the app only on intent', () => {
 
   it('a document waiting on the reader\'s consent to its extra hosts loads it at once; an answered one does not', async () => {
     const pageData = (cspRequest: unknown) => `<script type="application/json" id="mx-page-data">${JSON.stringify({ path: '/a/doc1', artifact: { cspRequest } })}</script>`;
-    const ask = { extensions: { connect: ['https://api.open-meteo.com'], script: [], style: [], img: [] }, status: 'blocked', denied: false };
+    const hosts = { connect: ['https://api.open-meteo.com'], script: [], style: [], img: [], frame: [], media: [] };
+    const ask = { extensions: hosts, asking: hosts, status: 'blocked', denied: false };
     document.body.innerHTML = servedChrome(false) + pageData(ask);
     const load = vi.fn(async () => {});
     const boot = startSpaIdle({ load, stylesheet: null, idleMs: 1000 });
     await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     boot.cancel();
 
-    for (const answered of [{ ...ask, denied: true }, { ...ask, status: 'allowed' }]) {
+    for (const answered of [{ ...ask, denied: true }, { ...ask, status: 'allowed' }, { ...ask, status: 'publisher' }]) {
       document.body.innerHTML = servedChrome(false) + pageData(answered);
       const idle = vi.fn(async () => {});
       const waiting = startSpaIdle({ load: idle, stylesheet: null, idleMs: 1000 });

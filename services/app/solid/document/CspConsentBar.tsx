@@ -2,8 +2,9 @@
 /**
  * THE CONSENT BAR: a document that declares hosts beyond the default policy (Helmet `csp-*` metas)
  * runs without them until the reader allows it. This bar says what it asks for and takes the reader's
- * answer: Allow once (this browser session), Always for @author (an account's standing grant), or
- * Never (a stored deny, after which the bar is a one-line note). Granting reloads the document frame,
+ * answer about the hosts they did not publish themselves: Allow once (this browser session), Always
+ * for this document (an account's standing answer), or Never (a stored deny, after which the bar is a
+ * one-line note). Granting reloads the document frame,
  * or the page when the document is not framed. The answers are lib/trust/document-trust's, through
  * /api/trust.
  */
@@ -27,21 +28,21 @@ export function cspAskSentence(extensions: CspRequest['extensions']): string {
   const phrases = [
     extensions.script.length ? `load scripts from ${listed(extensions.script.map(host))}` : null,
     extensions.connect.length ? `connect to ${listed(extensions.connect.map(host))}` : null,
-    extensions.style.length ? `load styles from ${listed(extensions.style.map(host))}` : null,
+    extensions.style.length ? `load styles and fonts from ${listed(extensions.style.map(host))}` : null,
     extensions.img.length ? `load images from ${listed(extensions.img.map(host))}` : null,
+    extensions.media.length ? `play media from ${listed(extensions.media.map(host))}` : null,
+    extensions.frame.length ? `embed pages from ${listed(extensions.frame.map(host))}` : null,
   ].filter((phrase): phrase is string => !!phrase);
   return `This document wants to ${listed(phrases)}`;
 }
 
 const allHosts = (extensions: CspRequest['extensions']): string[] =>
-  [...new Set([...extensions.script, ...extensions.connect, ...extensions.style, ...extensions.img].map(host))];
+  [...new Set([...extensions.script, ...extensions.connect, ...extensions.style, ...extensions.img, ...extensions.media, ...extensions.frame].map(host))];
 
 export function CspConsentBar(props: {
   id: string;
   request: CspRequest;
-  /** The author's handle, for "Always for @author"; null hides that choice. */
-  author: string | null;
-  /** Always and a stored Never belong to an account; a signed-out reader may still allow once. */
+  /** "Always for this document" belongs to an account; a signed-out reader may allow once or say never for the session. */
   accountSession: boolean;
   /** Seam for tests; defaults to reloading the document frame (or the page). */
   reload?: () => void;
@@ -71,15 +72,15 @@ export function CspConsentBar(props: {
       class="fixed left-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded border border-edge bg-surface px-3 py-2 text-sm text-fg shadow-sm">
       <Show when={!request().denied} fallback={
         <p class="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span>Blocked: this document cannot reach {listed(allHosts(request().extensions))}.</span>
-          <button type="button" class={button} aria-label="Ask again" disabled={busy()} onClick={() => void send('DELETE', { scope: 'document' })}>Ask again</button>
+          <span>Blocked: this document cannot reach {listed(allHosts(request().asking))}.</span>
+          <button type="button" class={button} aria-label="Ask again" disabled={busy()} onClick={() => void send('DELETE', {})}>Ask again</button>
         </p>
       }>
         <div class="flex flex-wrap items-center gap-2">
-          <p class="min-w-0 flex-1">{cspAskSentence(request().extensions)}</p>
+          <p class="min-w-0 flex-1">{cspAskSentence(request().asking)}</p>
           <button type="button" class={button} aria-label="Allow once" disabled={busy()} onClick={() => void send('POST', { grant: 'once' })}>Allow once</button>
-          <Show when={props.accountSession && props.author}>
-            <button type="button" class={button} aria-label={`Always for @${props.author}`} disabled={busy()} onClick={() => void send('POST', { grant: 'author' })}>Always for @{props.author}</button>
+          <Show when={props.accountSession}>
+            <button type="button" class={button} aria-label="Always for this document" disabled={busy()} onClick={() => void send('POST', { grant: 'document' })}>Always for this document</button>
           </Show>
           <button type="button" class={button} aria-label="Never" disabled={busy()} onClick={() => void send('POST', { grant: 'never' })}>Never</button>
         </div>
