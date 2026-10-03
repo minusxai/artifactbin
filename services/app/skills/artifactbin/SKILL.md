@@ -29,7 +29,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 ## Example
 
-Before writing, read `afbin help <template>` for design, markup, template and theme; skipping the frame leaves content flush to the viewport edge.
+Read `afbin help <template>` for design, markup, template and theme.
 
 ```jsx
 [[ example ]]
@@ -47,5 +47,6 @@ Before writing, read `afbin help <template>` for design, markup, template and th
 - [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
 - [authentication](references/publishing-auth.md) — sign-in and credentials.
+- [lambdas](references/lambdas.md).
 - [live sessions](references/live-sessions.md) — Playwright, `mx`, screenshots.
 - [commands](references/commands.md) — every command and flag; [Markdown import](references/markdown.md) for a one-time `.md` push.
