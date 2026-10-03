@@ -41,3 +41,22 @@ it('keeps a pending intent on its route until navigation leaves it', async () =>
   navigate?.('/@owner/other');
   await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`/welcome?callbackUrl=${encodeURIComponent('/@owner/other')}`));
 });
+
+it('lets a page still loading arrive before welcome takes over: a fork lands on its copy first', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  Object.defineProperty(document, 'readyState', { value: 'loading', configurable: true });
+  try {
+    setSession({ user: { id: 'new' }, onboarded: false });
+    at('/@forker/copy-story');
+    expect(screen.getByTestId('where')).toHaveTextContent('/@forker/copy-story');
+    Object.defineProperty(document, 'readyState', { value: 'complete', configurable: true });
+    window.dispatchEvent(new Event('load'));
+    // Not inside the load event itself: the browser reports the page loaded after its handlers run.
+    expect(screen.getByTestId('where')).toHaveTextContent('/@forker/copy-story');
+    vi.runAllTimers();
+  } finally {
+    vi.useRealTimers();
+    delete (document as { readyState?: unknown }).readyState;
+  }
+  await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`/welcome?callbackUrl=${encodeURIComponent('/@forker/copy-story')}`));
+});
