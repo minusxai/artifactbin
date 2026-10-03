@@ -330,9 +330,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (pagesSite) app.use('*', pagesHost(pagesSite));
   const frames = pagesFrameSources(pagesSite);
   const pagesApex = pagesSite ? pagesApexOrigin(pagesSite) : null;
-  /** The policy an app page carries: strict, framing the pages origins; a document page without them admits its in-page author code. */
-  const pageCsp = (url: string, document: boolean): string => {
-    const csp = appCsp({ inPageDocuments: document && !pagesSite, frames, connect: pagesApex ? [pagesApex] : [] });
+  /**
+   * The policy an app page carries: strict, framing the pages origins — unless the page carries a document
+   * INLINE (no pages host; or, with one, an archived version, which is read in place), whose author code
+   * it then admits.
+   */
+  const pageCsp = (url: string, inlineDocument: boolean): string => {
+    const csp = appCsp({ inPageDocuments: inlineDocument, frames, connect: pagesApex ? [pagesApex] : [] });
     return opts.devHmrPort !== undefined ? developmentAppCsp(csp, url, opts.devHmrPort) : csp;
   };
   /** Where sign-out ends the pages session (lib/accounts/browser-session): named in every app page's head. */
@@ -447,7 +451,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const html = withPagesSession(`${compiled.html.slice(0, end)}${bootstrap}${compiled.html.slice(end)}`);
     return compressDynamic(c.req.raw, new Response(html, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      'content-security-policy': pageCsp(c.req.url, true),
+      'content-security-policy': pageCsp(c.req.url, !compiled.framed),
       ...compiled.headers,
       ...readerHeaders({ mode: 'compiled' }),
     } }));

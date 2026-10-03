@@ -216,6 +216,35 @@ describe('a document\'s own origin', () => {
     expect(preflight.headers.get('access-control-allow-origin')).toBe(self);
   });
 
+  it('streams its own live events and frames to its reader', async () => {
+    const w = await world();
+    const app = framing();
+    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const self = pagesOriginFor(w.secret, site);
+    const events = await app.request(`${self}/a/${w.secret}/events`, { headers: { cookie } });
+    expect(events.status).toBe(200);
+    expect(events.headers.get('content-type')).toMatch(/^text\/event-stream/);
+    await events.body?.cancel();
+    const frame = await app.request(`${self}/a/${w.secret}/events/frame`, { headers: { cookie } });
+    expect(frame.status).toBe(200);
+    expect(((await frame.json()) as Record<string, unknown>)).toBeTypeOf('object');
+    expect((await app.request(`${self}/a/${w.secret}/events`)).status).toBe(404);
+  });
+
+  it('loads another artifact\'s embedded bytes anonymously — what anyone with the link may — and never with its reader', async () => {
+    const w = await world();
+    const app = framing();
+    const cookie = `afbin_pages=${await pagesCookie(app, w.actor, w.secret)}`;
+    const self = pagesOriginFor(w.secret, site);
+    const t = await mintToken('embedded-owner');
+    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Open</h1>', visibility: 'unlisted' } }));
+    const { id: open } = (await res.json()) as { id: string };
+    expect((await app.request(`${self}/a/${open}/raw`, { headers: { cookie } })).status).toBe(200);
+    // The reader may read `other`, but its document's origin asks as nobody.
+    expect((await app.request(`${self}/a/${w.other}/raw`, { headers: { cookie } })).status).toBe(404);
+    expect((await app.request(`${self}/a/${open}/raw`, { method: 'POST', headers: { cookie } })).status).toBe(404);
+  });
+
   it('serves nothing else: not the app, not another document, not its own raw or export', async () => {
     const w = await world();
     const app = framing();

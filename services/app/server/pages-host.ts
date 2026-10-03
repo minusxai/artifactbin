@@ -13,7 +13,8 @@
  *       DELETE              logout's half, from the app origin (credentialed CORS): the row and the cookie go.
  *  2. HOST `<hex(id)>.<pages host>`: that document and nothing else — its standalone page at `/` (the
  *     `/raw` page under the document CSP, reader chrome off), its own doors (`/a/<id>/query`, `/mutate`,
- *     `/events`, …) and the public static runtime directories. Everything else is 404.
+ *     `/events`, …) and the public static runtime directories; and, anonymously, another artifact's
+ *     `/a/<other>/raw` bytes the document embeds (a `ref:` image). Everything else is 404.
  *  3. ORIGIN `<hex(id)>.<pages host>` on any other host: the same doors of the SAME id with credentialed
  *     CORS for exactly that origin, the static directories, and 403 `forbidden_origin` for everything
  *     else. That last rule is load-bearing: a pages origin is SAME-SITE with the app, so the app's
@@ -148,6 +149,14 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
       if (origin !== null && originId !== hostId) return forbidden(origin, `may not call the document at ${pagesOriginFor(hostId, site)}`);
       if (pathname === '/') return page(request, hostId);
       if (doorOf(pathname, hostId)) return door(c, next, hostId, origin);
+      // The one exception: ANOTHER artifact's bytes a document embeds (`ref:` images and PDF cards,
+      // lib/story/data/ref-data `/a/<id>/raw?v=`), answered to nobody — what anyone with the link may fetch,
+      // never with this document's reader.
+      const embedded = /^\/a\/([^/]+)\/raw$/.exec(pathname)?.[1];
+      if (embedded && embedded !== hostId && (request.method === 'GET' || request.method === 'HEAD')) {
+        attachActor(request, ANONYMOUS);
+        return next();
+      }
       return notFound();
     }
     if (originId) {

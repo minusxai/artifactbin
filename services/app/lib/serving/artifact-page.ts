@@ -80,6 +80,8 @@ export interface InitialStory {
 export interface CompiledStory {
   html: string;
   headers: Readonly<Record<string, string>>;
+  /** The page frames the document on its own origin instead of carrying it (APP__PAGES_HOST). */
+  framed?: boolean;
 }
 
 export interface ArtifactPageAnswer {
@@ -325,7 +327,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     });
     // No renderer is left to answer: a page the compiled reader cannot make is a 500.
     if (answer.mode === 'failed') throw new CompiledPageFailed(artifact.id, answer.reason);
-    compiled = { html: answer.html, headers: answer.headers };
+    compiled = { html: answer.html, headers: answer.headers, ...(frame ? { framed: true } : {}) };
     reader = { mode: 'compiled' };
   }
   const surface = {
