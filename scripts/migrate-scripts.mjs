@@ -25,7 +25,9 @@ import { tsImport } from 'tsx/esm/api';
 const args = process.argv.slice(2);
 const write = args.includes('--write');
 const print = args.includes('--print');
-const targets = args.filter((a) => !a.startsWith('--'));
+// Targets are taken relative to where the command was run; the module's `@/lib` paths resolve from the repository root.
+const targets = args.filter((a) => !a.startsWith('--')).map((a) => path.resolve(a));
+process.chdir(path.resolve(import.meta.dirname, '..'));
 if (!targets.length) {
   console.error('usage: node scripts/migrate-scripts.mjs [--write] [--print] <file.jsx | directory> ...');
   process.exit(2);

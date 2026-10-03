@@ -4,6 +4,7 @@
   <style>{`.lede { font-weight: 600; }
 /* migrated from Iframe "Counter canvas" */
 #Ab3d {margin:16px;font:16px system-ui} #Ab3d canvas, #Ab3d button {display:block;margin-top:12px} @media (max-width: 600px) { #Ab3d { margin: 4px } }
+#Ab3d { min-height: 220px; }
 `}</style>
   <script>{`
     import { signal } from 'page';
@@ -43,7 +44,7 @@
 </Helmet>
 <p className="lede">The canvas below reads the shared count.</p>
 {/* migrated from Iframe */}
-<div id="Ab3d" role="group" aria-label="Counter canvas" style={{ minHeight: '220px' }}>
+<div id="Ab3d" role="group" aria-label="Counter canvas">
   <button id="increment" aria-label="Increment count">Add one</button>
   <canvas id="counter" width={280} height={100} />
 </div>

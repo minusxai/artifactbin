@@ -69,10 +69,24 @@ describe('the rules', () => {
     const { source, unresolved } = migrateDocumentScripts(fixture('iframe.before.jsx'));
     expect(unresolved).toEqual([]);
     expect(source).not.toContain('<Iframe');
-    expect(source).toContain('{/* migrated from Iframe */}\n<div id="Ab3d" role="group" aria-label="Counter canvas" style={{ minHeight: \'220px\' }}>');
+    expect(source).toContain('{/* migrated from Iframe */}\n<div id="Ab3d" role="group" aria-label="Counter canvas">');
+    expect(source).not.toContain('style={{');
     expect(source).toContain('.lede { font-weight: 600; }\n/* migrated from Iframe "Counter canvas" */\n#Ab3d {margin:16px;font:16px system-ui} #Ab3d canvas, #Ab3d button');
+    expect(source).toContain('#Ab3d { min-height: 220px; }\n');
     expect(source).toContain('/* migrated from Iframe "Counter canvas" (#Ab3d) */');
     expect(source).toContain("const [count, setCount] = signal('$count');");
+  });
+
+  it('inlines a frame of plain HTML with no script: its <title> dropped, its height a min-height in the Helmet style, no script added', () => {
+    const before = '<Helmet>\n  <title>Tier html</title>\n</Helmet>\n<Iframe id="legacy-html" title="Preserved HTML document" height={2000}><title>t</title><h1>Tier html</h1></Iframe>\n';
+    const { source, applied, unresolved } = migrateDocumentScripts(before);
+    expect(unresolved).toEqual([]);
+    expect(source).not.toContain('<script');
+    expect(source).not.toContain('<title>t</title>');
+    expect(source).toContain('<style>{`\n/* migrated from Iframe "Preserved HTML document" */\n#legacy-html { min-height: 2000px; }\n`}</style>');
+    expect(source).toContain('{/* migrated from Iframe */}\n<div id="legacy-html" role="group" aria-label="Preserved HTML document"><h1>Tier html</h1></div>');
+    expect(applied).toEqual(expect.arrayContaining([expect.stringContaining('its <title> (the frame\'s tab title) dropped')]));
+    expect(migrateDocumentScripts(source)).toMatchObject({ changed: false, unresolved: [] });
   });
 
   it('keeps an inlined Iframe\'s id intact when it holds a double quote', () => {
