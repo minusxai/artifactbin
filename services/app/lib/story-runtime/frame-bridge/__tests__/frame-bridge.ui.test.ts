@@ -267,6 +267,47 @@ describe('the frame bridge', () => {
     expect(hooks[STORY_ADOPT_HOOK]).toBeUndefined();
   });
 
+  it('reserves the page\'s bar over the frame\'s top edge inside the document and scrolls by it in the same task, so nothing moves; a reloaded document is told again', async () => {
+    const { frame, frameWin } = framedPair();
+    const { bridge, onReady } = parentFor(frame);
+    const html = frameWin.document.documentElement;
+    html.style.paddingTop = '3px';
+    /** Every scroll the document made, with its padding at that moment: the two must change together. Read at 300. */
+    const scrolls: Array<{ top: number; padding: string; behavior: unknown }> = [];
+    let scrollY = 300;
+    Object.defineProperty(frameWin, 'scrollY', { configurable: true, get: () => scrollY });
+    frameWin.scrollTo = ((options: ScrollToOptions) => { scrollY = Number(options.top); scrolls.push({ top: scrollY, padding: html.style.paddingTop, behavior: options.behavior }); }) as typeof frameWin.scrollTo;
+    // Set before the frame's controller runs: delivered once it does.
+    bridge.setTopInset(44);
+    openDoor(frameWin);
+    await settle(() => scrolls.length > 0);
+    expect(onReady).toHaveBeenCalled();
+    expect(html.style.paddingTop).toBe('47px');
+    expect(html.style.scrollPaddingTop).toBe('44px');
+    expect(scrolls).toEqual([{ top: 344, padding: '47px', behavior: 'instant' }]);
+    // The same inset again is nothing.
+    bridge.setTopInset(44);
+    await tick(); await tick();
+    expect(scrolls.length).toBe(1);
+
+    // Leaving edit mode gives the space back the same way: the document's own padding, scrolled back up.
+    bridge.setTopInset(0);
+    await settle(() => scrolls.length > 1);
+    expect(html.style.paddingTop).toBe('3px');
+    expect(html.style.scrollPaddingTop).toBe('');
+    expect(scrolls[1]).toEqual({ top: 300, padding: '3px', behavior: 'instant' });
+
+    // A new session (the document loaded again) while the bar is up: the old one gives its space back as it ends
+    // (here the same window), and the new controller is told the page's inset without being asked again.
+    bridge.setTopInset(44);
+    await settle(() => scrolls.length > 2);
+    frameWin.parent.postMessage({ type: FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } }, APP);
+    await settle(() => made.controllers.length > 1 && scrolls.length > 4);
+    expect(made.controllers[0]!.disposed).toBe(true);
+    expect(scrolls.slice(3)).toEqual([{ top: 300, padding: '3px', behavior: 'instant' }, { top: 344, padding: '47px', behavior: 'instant' }]);
+    expect(html.style.paddingTop).toBe('47px');
+  });
+
   it('the page\'s reader mode and data wakeups reach the framed document', async () => {
     const { frame, frameWin } = framedPair();
     const { bridge, onReady } = parentFor(frame);

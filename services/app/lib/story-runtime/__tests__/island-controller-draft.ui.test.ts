@@ -34,11 +34,13 @@ vi.mock('@/lib/islands/live-update', () => liveUpdate);
 const editSession = vi.hoisted(() => ({
   unmounts: 0,
   mounts: 0,
+  /** The nodes the editor was last mounted over (createFrameEditSession `setNodes`). */
+  nodes: null as unknown[] | null,
   /** What the live editors answer when a draft of typed prose is offered to them. */
   reconcile: false,
   reconciled: [] as Array<HTMLElement | null>,
   session: {
-    setNodes: () => {}, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
+    setNodes: (nodes: unknown[]) => { editSession.nodes = nodes; }, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
     reconcileDraft: (_before: unknown, _after: unknown, _next: unknown, draft: HTMLElement | null) => { editSession.reconciled.push(draft); return editSession.reconcile; },
     holdUnchanged: () => new Map<string, HTMLElement>(),
     releaseHeld: () => {},
@@ -51,6 +53,8 @@ vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () 
 vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
 import { createIslandController, holdChartDrawings } from '../island-controller';
+import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
 import { createEditDraftSender, DRAFT_IDLE_MS } from '@/solid/editor/edit-draft';
 import { TYPING_QUIET_MS } from '../island-controller';
@@ -587,5 +591,48 @@ describe('island controller app requests (a framed document relays them through 
       controller.dispose();
       sheet.remove();
     }
+  });
+});
+
+describe('island controller: the editor opens on the document on screen', () => {
+  /** A reader whose page was served at `e1`, with the source the page opened the editor on. */
+  const reading = (opened: string) => {
+    document.body.setAttribute(LIVE_EDIT_ATTR, 'e1');
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>Second paragraph.</p>';
+    document.body.append(root);
+    const served = storyUpdateParts('<p>Second paragraph.</p>')!.nodes;
+    vi.spyOn(window, 'fetch').mockImplementation(async () => new Response('{}', { status: 200 }));
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: served, id: 'doc', editId: () => 'e2',
+      initialSource: () => opened, portal: { current: null },
+    });
+    return { controller, root, served };
+  };
+  afterEach(() => { document.body.removeAttribute(LIVE_EDIT_ATTR); editSession.nodes = null; });
+
+  it("mounts the editor over the LIVE version the document's own stream drew, not the nodes the page was first served with", async () => {
+    const live = '<p>Second paragraph. Written while watching.</p>';
+    const { controller, root } = reading(live);
+    // The document's own live stream draws the agent's version in place (lib/islands/live → the morph engine),
+    // which names the new version on the body and tells this controller nothing.
+    root.innerHTML = '<p>Second paragraph. Written while watching.</p>';
+    document.body.setAttribute(LIVE_EDIT_ATTR, 'e2');
+    const mounts = editSession.mounts;
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > mounts);
+    expect(JSON.stringify(editSession.nodes)).toContain('Written while watching.');
+    expect(editSession.nodes).toEqual(storyUpdateParts(live, (url) => /^https?:/.test(url))!.nodes);
+    controller.dispose();
+  });
+
+  it('keeps the served nodes when the version on screen is the one they describe', async () => {
+    const { controller, served } = reading('<p>Second paragraph.</p>');
+    const mounts = editSession.mounts;
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > mounts);
+    expect(editSession.nodes).toBe(served);
+    controller.dispose();
   });
 });

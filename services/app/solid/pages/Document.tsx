@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
-import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { useLocation } from '@solidjs/router';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
@@ -203,17 +203,26 @@ export function DocumentPage(): JSX.Element {
   });
   const readingRail = () => (railOpen() && !phone() ? RIGHT_RAIL_W : 0);
   const railInset = () => (!editing() ? readingRail() : !wide() ? 0 : editorRightInset());
-  // The framed document IS the viewport under the bar: the page does not scroll, the frame does.
+  // The framed document IS the viewport under the bar: the page does not scroll, the frame does. Its top never moves:
+  // edit mode's toolbar is drawn OVER the frame, and the document reserves that height itself (`setTopInset`, below),
+  // scrolling by it in the same task, so entering or leaving edit mode moves nothing the reader sees.
   createEffect(() => {
     if (!host) return;
-    const top = APP_BAR_H + (editing() ? EDIT_BAR_H : 0);
     Object.assign(host.style, {
-      position: 'fixed', top: `${top}px`, left: '0px', right: railInset() ? `${railInset()}px` : '0px', bottom: '0px',
+      position: 'fixed', top: `${APP_BAR_H}px`, left: '0px', right: railInset() ? `${railInset()}px` : '0px', bottom: '0px',
       display: 'flex', flexDirection: 'column', background: DOCUMENT_GROUND[mode()], padding: '0px', minHeight: '0px',
     });
   });
 
-  const editorSeed = (): EditorArtifact | undefined => {
+  /**
+   * The document the editor opens on, decided as edit mode opens (and again if the editor's part arrives after): the
+   * newest of the part and the version the live stream delivered — what the frame shows, which its own stream drew.
+   * The frame's controller is given the same source (createFramedStory `source`), so the editor and the document it
+   * edits agree. Kept after leaving: the way back to reading still compares against it. Live versions arriving
+   * during the session are the editor's own stream's to adopt, never a new seed.
+   */
+  const editorSeed = createMemo<EditorArtifact | undefined>((last) => {
+    if (!editing()) return last;
     const surface = page?.surface;
     const part = editorPart();
     if (!surface || !part) return undefined;
@@ -233,7 +242,7 @@ export function DocumentPage(): JSX.Element {
       compiledCss: part.compiledCss,
       dataflow: surface.runtime?.data.dataflow ? { flow: surface.runtime.data.dataflow.flow, state: surface.runtime.data.dataflow.state } as EditorArtifact['dataflow'] : null,
     };
-  };
+  });
 
   const accountSession = () => page?.kind === 'account' || session()?.kind === 'account';
   /** A rail action by name: a press, a carried `?intent=` (after a sign-in), or a pill. */
@@ -267,9 +276,11 @@ export function DocumentPage(): JSX.Element {
     setDocumentFrame(framed.frame);
     story = createFramedStory({
       id, framed, nodes: page.surface?.runtime?.data.nodes ?? [],
-      editId: () => editorPart()?.editId ?? page.surface?.editId ?? '',
-      source: () => editorPart()?.source ?? null,
+      editId: () => editorSeed()?.edit_id ?? editorPart()?.editId ?? page.surface?.editId ?? '',
+      source: () => editorSeed()?.markup ?? editorPart()?.source ?? null,
     });
+    const framedStory = story;
+    createEffect(() => framedStory.setTopInset(editing() ? EDIT_BAR_H : 0));
     window.addEventListener('hashchange', forwardHash);
     framed.frame.addEventListener('load', forwardHash);
     // The served frame may have loaded before the app did: forward now as well.

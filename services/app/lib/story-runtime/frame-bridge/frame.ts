@@ -13,7 +13,9 @@
  *    holds no app session and its CSP admits neither path, so the page makes them;
  *  · keys the page's editor listens for on ITS window, which a key pressed here never reaches: Mod-Z/Y as
  *    `mx:history`, Enter and focus leaving a text host as `mx:edit-flush`, ⌘⌥M as `mx:comment-key`;
- *  · this document's scroll, so geometry the page draws over it can follow.
+ *  · this document's scroll, so geometry the page draws over it can follow;
+ *  · the page's bars over this frame's top edge (`inset`: edit mode's toolbar is drawn OVER the frame, which never
+ *    moves): reserved above the document and scrolled by in one task here (createTopInset), so nothing moves on screen.
  *
  * While the page edits, this document's own live stream (lib/islands/live, a document on its own origin holds one)
  * must not draw a newer version under the editor: the frame half claims STORY_ADOPT_HOOK from edit mode on until the
@@ -48,6 +50,44 @@ const headerRecord = (headers: HeadersInit | undefined): Record<string, string> 
   return out;
 };
 
+/** The most the page may reserve over the document's top edge: a bar or two, never the document. */
+const MAX_INSET = 200;
+
+/**
+ * THE PAGE'S BARS OVER THIS DOCUMENT'S TOP EDGE. The app page draws edit mode's toolbar over the frame instead of
+ * pushing the frame down — moving the frame and scrolling it to make up would be two processes' frames, a visible
+ * jump between them. Here the same space is added above the document (the root's top padding, and the scroll
+ * padding that keeps a caret scrolled into view clear of the bar) and the document scrolled to exactly that much
+ * further IN THE SAME TASK, so what the reader sees does not move. 0 gives the space back the same way.
+ */
+export function createTopInset(win: Window): { set(px: number): void } {
+  let inset = 0;
+  let base: { paddingTop: string; scrollPaddingTop: string; padding: number } | null = null;
+  return {
+    set(px: number) {
+      const top = Number.isFinite(px) ? Math.min(MAX_INSET, Math.max(0, Math.round(px))) : 0;
+      if (top === inset) return;
+      const html = win.document.documentElement;
+      // Added to the document's own top padding, which comes back as it was.
+      base ??= { paddingTop: html.style.paddingTop, scrollPaddingTop: html.style.scrollPaddingTop, padding: parseFloat(win.getComputedStyle(html).paddingTop) || 0 };
+      // Where the reader is now, read before the padding changes: the browser's own scroll anchoring may already
+      // make up for the change when it lays the page out, so the document is put at an ABSOLUTE place, never moved by.
+      const target = Math.max(0, win.scrollY + top - inset);
+      inset = top;
+      if (top) {
+        html.style.paddingTop = `${base.padding + top}px`;
+        html.style.scrollPaddingTop = `${top}px`;
+      } else {
+        html.style.paddingTop = base.paddingTop;
+        html.style.scrollPaddingTop = base.scrollPaddingTop;
+        base = null;
+      }
+      // Instant whatever the document's own scroll-behavior: a smooth scroll would be the move this prevents.
+      try { win.scrollTo({ top: target, left: win.scrollX, behavior: 'instant' as ScrollBehavior }); } catch { /* no scrolling here */ }
+    },
+  };
+}
+
 const isUndoKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase());
 const isCommentKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && event.altKey && (event.key.toLowerCase() === 'm' || event.code === 'KeyM');
 
@@ -59,6 +99,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const context = { editId: attach.editId, source: attach.source };
   const queue: FrameBridgeParentPayload[] = [];
   const cleanups: Array<() => void> = [];
+  const topInset = createTopInset(win);
+  cleanups.push(() => topInset.set(0));
 
   // ── the controller's app requests, made by the page ──
   let calls = 0;
@@ -91,6 +133,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     if (disposed) return;
     if (payload.kind === 'fetch-result') { settleFetch(payload); return; }
     if (payload.kind === 'context') { context.editId = payload.editId; context.source = payload.source; return; }
+    // Layout, not a controller command: applied at once, whether or not the controller runs yet.
+    if (payload.kind === 'inset') { topInset.set(payload.top); return; }
     if (!controller) { queue.push(payload); return; }
     switch (payload.kind) {
       case 'send': {
