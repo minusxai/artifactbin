@@ -94,3 +94,11 @@ console.log(`build-server: ${entry} → ${out}`);
 // The runner launches this file out-of-process; it must remain beside the host bundle.
 copyFileSync(new URL('../../services/runner/src/runner-worker.mjs',import.meta.url),join(dirname(out),'runner-worker.mjs'));
 copyFileSync(new URL('../../services/runner/src/agent.ts.txt',import.meta.url),join(dirname(out),'agent.ts.txt'));
+
+// A Lambda module bundles this DOM-free page runtime; production carries no TypeScript source tree.
+await esbuild.build({
+  entryPoints: [fileURLToPath(new URL('../../services/app/lib/runner/runtime.ts', import.meta.url))],
+  bundle: true, platform: 'browser', conditions: ['browser'], format: 'iife', globalName: 'LambdaPageRuntime',
+  target: 'es2022', minify: true, logLevel: 'warning',
+  outfile: join(dirname(out), 'lambda-page-runtime.js'),
+});
