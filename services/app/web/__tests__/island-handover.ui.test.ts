@@ -156,6 +156,25 @@ describe('an anonymous reader loads the app only on intent', () => {
     window.history.replaceState(null, '', '/');
     boot.cancel();
   });
+
+  it('a document waiting on the reader\'s consent to its extra hosts loads it at once; an answered one does not', async () => {
+    const pageData = (cspRequest: unknown) => `<script type="application/json" id="mx-page-data">${JSON.stringify({ path: '/a/doc1', artifact: { cspRequest } })}</script>`;
+    const ask = { extensions: { connect: ['https://api.open-meteo.com'], script: [], style: [], img: [] }, status: 'blocked', denied: false };
+    document.body.innerHTML = servedChrome(false) + pageData(ask);
+    const load = vi.fn(async () => {});
+    const boot = startSpaIdle({ load, stylesheet: null, idleMs: 1000 });
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    boot.cancel();
+
+    for (const answered of [{ ...ask, denied: true }, { ...ask, status: 'allowed' }]) {
+      document.body.innerHTML = servedChrome(false) + pageData(answered);
+      const idle = vi.fn(async () => {});
+      const waiting = startSpaIdle({ load: idle, stylesheet: null, idleMs: 1000 });
+      vi.advanceTimersByTime(60_000);
+      expect(idle).not.toHaveBeenCalled();
+      waiting.cancel();
+    }
+  });
 });
 
 describe('a writer boots the app on idle', () => {
