@@ -41,6 +41,39 @@ function chartsSettled(selector:string):boolean {
 }
 
 /**
+ * Serialized into Chromium BEFORE the page's own scripts (an init script): which script component mounts the page has
+ * rendered. The page runtime (app lib/islands/page-runtime) takes a mount's server fallback out (`replaceChildren()`)
+ * and renders the component in the same task, and the parser never removes a node, so a removal from a mount means it
+ * was rendered; a mount whose children differ from the ones it had when parsing finished was rendered too (an empty
+ * fallback). Self-contained, no nested named functions.
+ */
+function watchMounts(): void {
+  const state = { taken: new WeakSet<Element>(), parsed: new WeakMap<Element, Node[]>() };
+  (window as unknown as { __mxMounts: typeof state }).__mxMounts = state;
+  new MutationObserver((records) => {
+    for (const record of records) {
+      const target = record.target as Element;
+      if (record.removedNodes.length && target.nodeType === 1 && target.hasAttribute('data-mx-mount')) state.taken.add(target);
+    }
+  }).observe(document, { childList: true, subtree: true });
+  document.addEventListener('DOMContentLoaded', () => {
+    for (const mount of document.querySelectorAll('[data-mx-mount]')) state.parsed.set(mount, [...mount.childNodes]);
+  });
+}
+
+/** Serialized into Chromium: every mount under the surface rendered (see watchMounts). Synchronous. */
+function mountsRendered(selector: string): boolean {
+  const root = document.querySelector(selector);
+  const state = (window as unknown as { __mxMounts?: { taken: WeakSet<Element>; parsed: WeakMap<Element, Node[]> } }).__mxMounts;
+  if (!root || !state) return true;
+  return [...root.querySelectorAll('[data-mx-mount]')].every((mount) => {
+    if (state.taken.has(mount)) return true;
+    const parsed = state.parsed.get(mount);
+    return !!parsed && (parsed.length !== mount.childNodes.length || parsed.some((node, i) => node !== mount.childNodes[i]));
+  });
+}
+
+/**
  * Serialized into Chromium: every `collect` element under the surface whose
  * `<img>` holds an SVG `data:` URL — its own `data-*` attributes, the image's
  * width/height attributes and the URL. Self-contained, synchronous, and with
@@ -134,6 +167,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
           return run;
         });
       }
+      if (req.waitForMountsMs) await page.addInitScript(watchMounts);
       await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw new NavigationError((e as Error).message); });
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
@@ -148,6 +182,9 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         const root=document.querySelector(selector);if(!root)return false;
         return [...root.querySelectorAll('[data-mx-managed-frame]')].every(host=>host.querySelector('iframe[data-mx-author-ready]'));
       },req.selector,{timeout});
+      // The page's script renders its components a moment after load; a mount still on its fallback at the cap is
+      // photographed as it stands (never a failure: the fallback is a page, a component that never mounts is the author's).
+      if (req.waitForMountsMs) await page.waitForFunction(mountsRendered, req.selector, { timeout: Math.min(req.waitForMountsMs, remaining()) }).catch(() => { remaining(); });
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
       // Readiness covers lazy placeholders and Vega's asynchronous work. Two
       // frames ensure an app handoff cannot expose a transient empty state.

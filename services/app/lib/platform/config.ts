@@ -265,6 +265,25 @@ export function parseAliasOrigins(value: string | undefined): readonly string[] 
 export const ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
+ * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/serving/pages-origin). The hostname documents are served
+ * under, one label per document: `<hex(id)>.<pages host>`, and the app page frames that origin.
+ * It MUST be a subdomain of the app's registrable domain (same site) — the frame's
+ * `afbin_pages` cookie is SameSite=Lax — and the scheme and port are the public URL's
+ * (`APP__PUBLIC_BASE_URL`), so development appends its port. A bare hostname: no scheme, port,
+ * path or wildcard; a malformed value refuses the boot. Unset or empty is OFF: documents are served
+ * exactly as before, inside the app page.
+ */
+export function parsePagesHost(value: string | undefined): string | null {
+  const host = value?.trim().toLowerCase().replace(/\.$/, '') ?? '';
+  if (!host) return null;
+  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(host)) {
+    throw new Error('APP__PAGES_HOST must be a bare hostname documents are served under (for example pages.example.com, or lvh.me in development), without a scheme, port, path or wildcard.');
+  }
+  return host;
+}
+export const PAGES_HOST = parsePagesHost(env('APP', 'PAGES_HOST'));
+
+/**
  * Where the EXPORT browser reaches this process. Internal by default, for the
  * local browser: a screenshot of our own page has no business leaving the
  * host, and a certificate the browser

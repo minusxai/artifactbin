@@ -880,7 +880,7 @@ function settleCommittedHead(id: string, version: number): void {
       if (!head) return;
       const row = await storeCompiledRecord(db, head);
       await queueMermaidHarvest(row);
-      if (row.format === 'markup') warmPreparedPage(row.id, undefined, row);
+      if (row.format === 'markup') warmPreparedPage(row.id, row);
     } catch (error) {
       console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
     }

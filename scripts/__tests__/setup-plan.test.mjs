@@ -154,6 +154,29 @@ describe('parseArgs()', () => {
   });
 });
 
+describe('--pages-host', () => {
+  it('alone names development\'s lvh.me, with a value names that host, and refuses anything but a bare hostname', () => {
+    expect(parseArgs(['--pages-host']).answers.pagesHost).toBe('lvh.me');
+    expect(parseArgs(['--pages-host', '--yes'])).toMatchObject({ yes: true, answers: { pagesHost: 'lvh.me' } });
+    expect(parseArgs(['--pages-host', 'Pages.Example.com']).answers.pagesHost).toBe('pages.example.com');
+    for (const bad of ['https://pages.example.com', 'pages.example.com:443', '*.example.com']) expect(parseArgs(['--pages-host', bad]).error, bad).toMatch(/pages host/i);
+  });
+  it('writes APP__PAGES_HOST and moves a loopback app onto the same site, keeping its port', () => {
+    const text = buildEnvFile({ port: 11001, pagesHost: 'lvh.me' }, { generated: gen });
+    expect(text).toMatch(/^APP__PAGES_HOST=lvh\.me$/m);
+    expect(text).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:11001$/m);
+    expect(buildEnvFile({ publicUrl: 'https://app.example.com', pagesHost: 'pages.example.com' }, { generated: gen })).toMatch(/^APP__PUBLIC_BASE_URL=https:\/\/app\.example\.com$/m);
+    expect(buildEnvFile({ port: 11001 }, { generated: gen })).toMatch(/^# APP__PAGES_HOST=$/m);
+  });
+  it('turns it on in an existing file without touching the rest', () => {
+    const before = buildEnvFile({ port: 11001 }, { generated: gen });
+    const after = mergeEnvFile(before, { pagesHost: 'lvh.me' }, { generated: gen, supplied: new Set(['pagesHost']) });
+    expect(after).toMatch(/^APP__PAGES_HOST=lvh\.me$/m);
+    expect(after).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:11001$/m);
+    expect(existingAnswers(after).pagesHost).toBe('lvh.me');
+  });
+});
+
 describe('scripts/setup.mjs (child process)', () => {
   it('--yes writes a 0600 .env, safely reuses it, --force replaces it, and --print masks', () => {
     const out = path.join(TMP, '.env');

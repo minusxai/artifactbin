@@ -313,7 +313,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   if (at === 'not_found') return refuse('not_found', `Version ${input.version} of this document is not available to you.`);
   const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
-  const { page } = await timed(timings, 'page', () => preparedPageFor(artifact, at, origin));
+  const { page } = await timed(timings, 'page', () => preparedPageFor(artifact, at));
   // A page compiled under the current contract pins no runtime: the file pins the build serving it now
   // (its SSR half is read live and its chunk graph is the server's, so both are left out of the file).
   const { ssr: _liveSsr, graph: _liveGraph, ...liveBuild } = loadCompilerBuild();

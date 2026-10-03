@@ -10,7 +10,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
+import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer, pagesFrameSources } from '@/server/app';
+import { pagesSiteFor } from '@/lib/serving/pages-origin';
 import { DOMAIN_HOME_CSP } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/serving';
 
@@ -26,7 +27,7 @@ describe('the app CSP', () => {
   it('locks framing and plugins on the app pages', async () => {
     expect(APP_CSP).toContain("default-src 'none'");
     expect(APP_CSP).toContain("script-src 'self'");
-    expect(APP_CSP.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob: https:");
+    expect(APP_CSP.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob:");
     expect(APP_CSP).toContain("frame-ancestors 'self'");
     expect(APP_CSP).toContain("object-src 'none'");
     expect(APP_CSP).toContain("base-uri 'self'");
@@ -55,11 +56,9 @@ describe('the app CSP', () => {
   it('admits local media previews and GLTF texture fetches without admitting blob scripts or frames', async () => {
     const response = await app.request('/login');
     const directives = response.headers.get('content-security-policy')!.split('; ');
-    expect(directives.find(d => d.startsWith('media-src'))).toBe("media-src 'self' blob: https:");
+    expect(directives.find(d => d.startsWith('media-src'))).toBe("media-src 'self' blob:");
     expect(directives.find(d => d.startsWith('connect-src'))?.split(' ')).toContain('blob:');
-    // The author module loads from a blob: URL (lib/islands/page-runtime); frames and workers still do not.
-    expect(directives.find(d => d.startsWith('script-src'))).toContain('blob:');
-    for (const directive of ['frame-src', 'worker-src']) {
+    for (const directive of ['frame-src', 'worker-src', 'script-src']) {
       expect(directives.find(d => d.startsWith(directive))).not.toContain('blob:');
     }
   });
@@ -108,7 +107,7 @@ describe('the app CSP', () => {
   });
 
   it('serves app images under the same-origin image policy', () => {
-    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toBe("img-src 'self' data: blob: https:");
+    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toBe("img-src 'self' data: blob:");
   });
 
   it('never lands on an artifact address or a machine surface', async () => {
@@ -117,4 +116,26 @@ describe('the app CSP', () => {
       expect(res.headers.get('content-security-policy'), path).not.toBe(APP_CSP);
     }
   });
+
+  it('is the strict policy again: no https: or blob: script, style, font, image, media or connection source', () => {
+    const directives = APP_CSP.split('; ');
+    expect(directives.find(d => d.startsWith('script-src'))).toBe(`script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`);
+    expect(directives.find(d => d.startsWith('style-src'))).toBe("style-src 'self' 'unsafe-inline'");
+    expect(directives.find(d => d.startsWith('font-src'))).toBe("font-src 'self' data:");
+    for (const directive of directives) expect(directive.split(' '), directive).not.toContain('https:');
+  });
+
+  it('frames exactly the pages origins when documents have their own, and stays strict on every page', async () => {
+    const site = pagesSiteFor('pages.example.com', 'https://app.example.com');
+    expect(pagesFrameSources(site)).toEqual(['https://pages.example.com', 'https://*.pages.example.com']);
+    expect(pagesFrameSources(pagesSiteFor('lvh.me', 'http://app.lvh.me:11001'))).toEqual(['http://lvh.me:11001', 'http://*.lvh.me:11001']);
+    expect(pagesFrameSources(null)).toEqual([]);
+    const framing = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>', pagesSite: site });
+    const csp = (await framing.request('https://app.example.com/login')).headers.get('content-security-policy')!;
+    expect(csp.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://pages.example.com https://*.pages.example.com");
+    // …and connects to the apex alone, where sign-out ends the pages session.
+    expect(csp.split('; ').find(d => d.startsWith('connect-src'))).toBe("connect-src 'self' blob: https://pages.example.com");
+    expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'").replace(/connect-src [^;]*/, "connect-src 'self' blob:")).toBe(APP_CSP);
+  });
 });
+

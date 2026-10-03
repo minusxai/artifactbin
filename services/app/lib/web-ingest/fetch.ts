@@ -53,6 +53,8 @@ export function setWebIngestPolicyForTests(policy: WebIngestPolicy | null): void
 }
 const activePolicy = (): WebIngestPolicy =>
   policyOverride ?? { allowPrivate: WEB_INGEST_ALLOW_PRIVATE, allowHttp: WEB_INGEST_ALLOW_PRIVATE };
+/** Whether plain http is fetchable here (the dev switch, or a test's policy): a dev checkout's own servers are http. */
+export const webIngestAllowsHttp = (): boolean => activePolicy().allowHttp;
 
 /**
  * A lookup that vets EVERY resolved address before any socket dials it.

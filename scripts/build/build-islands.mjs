@@ -122,6 +122,76 @@ const STANDALONE_LAZY = [
   { request: './url-sync', name: 'url-sync', file: () => path.join(ISLANDS_SRC, 'url-sync.ts') },
 ];
 
+/**
+ * THE FRAME EDITOR (`@mx/frame-editor`, lib/islands/frame-editor): the editor's document half for a document framed
+ * on its own origin (lib/story-runtime/frame-bridge). The page behaviour's door (`@mx/page`, lib/islands/page) asks
+ * for it with `import('./frame-editor')` only when the app page attaches to edit or comment, so it is no reader's
+ * closure. It is its OWN graph, not an entry of the shared one: an entry there would re-partition the shared
+ * chunks under the rt+boot budget for a module no reader loads. Split, so the controller and the relay load on
+ * attach and the editor (ProseMirror, the edit session, the DOM mounter) only on edit mode, through the
+ * controller's own dynamic imports. The editor's Solid modules (services/app/solid) compile as the app compiles
+ * them (dom, not hydratable); the graph carries its own copy of Solid's runtime, which shares nothing with the
+ * islands' (the editor mounts its own roots).
+ */
+export const FRAME_EDITOR = Object.freeze({ specifier: '@mx/frame-editor', request: './frame-editor', name: 'frame-editor', file: () => islandModule('frame-editor') });
+
+/** esbuild plugin: every repository `.tsx`/`.jsx` through babel-preset-solid, dom and not hydratable (the editor graph). */
+const editorSolidPlugin = {
+  name: 'mx-editor-solid',
+  setup(build) {
+    build.onLoad({ filter: /\.[jt]sx$/ }, async (args) => {
+      if (args.path.includes(`${path.sep}node_modules${path.sep}`)) return undefined;
+      const source = await fs.promises.readFile(args.path, 'utf8');
+      const stripped = (await esbuild.transform(source, { loader: args.path.endsWith('.tsx') ? 'tsx' : 'jsx', jsx: 'preserve', sourcefile: args.path })).code;
+      const out = await transformAsync(stripped, {
+        filename: args.path, babelrc: false, configFile: false, sourceType: 'module', compact: false,
+        presets: [['babel-preset-solid', { generate: 'dom', hydratable: false }]],
+      });
+      return { contents: out.code, loader: 'js', resolveDir: path.dirname(args.path) };
+    });
+  },
+};
+
+/** Build the frame editor's graph: content-addressed files (`frame-editor-<sha>.js`, `frame-editor-chunk-<sha>.js`). */
+async function buildFrameEditor() {
+  const result = await esbuild.build({
+    absWorkingDir: ROOT, entryPoints: [{ in: FRAME_EDITOR.file(), out: FRAME_EDITOR.name }], outdir: 'frame-editor-out', write: false,
+    bundle: true, splitting: true, format: 'esm', platform: 'browser', target: 'es2022', minify: true, metafile: true,
+    entryNames: '[name]-[hash]', chunkNames: 'frame-editor-chunk-[hash]', alias: { '@': APP },
+    define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'error', plugins: [editorSolidPlugin],
+  });
+  const renamed = new Map(result.outputFiles.map((file) => {
+    const oldName = path.basename(file.path);
+    return [oldName, `${oldName.replace(/-[A-Z0-9]+\.js$/, '')}-${sha256(file.contents).slice(0, 16)}.js`];
+  }));
+  const outputs = Object.entries(result.metafile.outputs);
+  const entryFile = toPosix(path.relative(ROOT, FRAME_EDITOR.file()));
+  let fileName = null;
+  const files = result.outputFiles.map((file) => {
+    const oldName = path.basename(file.path);
+    const text = file.text.replace(/(["'])\.\/([\w-]+\.js)\1/g, (match, quote, name) => (renamed.has(name) ? `${quote}./${renamed.get(name)}${quote}` : match));
+    const meta = outputs.find(([key]) => path.basename(key) === oldName)?.[1];
+    if (!meta) throw new Error(`build-islands: no frame editor metafile entry for ${oldName}`);
+    if (meta.entryPoint === entryFile) fileName = renamed.get(oldName);
+    return {
+      fileName: renamed.get(oldName), bytes: Buffer.from(text),
+      imports: meta.imports.filter((i) => i.kind === 'import-statement').map((i) => renamed.get(path.basename(i.path))),
+      inputs: Object.entries(meta.inputs).filter(([, input]) => input.bytesInOutput > 0).map(([name]) => name),
+    };
+  });
+  if (!fileName) throw new Error('build-islands: the frame editor built no entry');
+  return { ...FRAME_EDITOR, fileName, files, inputs: Object.keys(result.metafile.inputs) };
+}
+
+/** The offline half never frames a document for editing: the door's request for the editor is a stub there. */
+const offlineWithoutEditor = {
+  name: 'mx-offline-without-editor',
+  setup(build) {
+    build.onResolve({ filter: /^\.\/frame-editor$/ }, (args) => (args.kind === 'dynamic-import' ? { path: args.path, namespace: 'mx-offline-stub' } : undefined));
+    build.onLoad({ filter: /.*/, namespace: 'mx-offline-stub' }, () => ({ contents: 'export function startFrameBridge() { throw new Error("a downloaded file is never edited in a frame"); }', loader: 'js' }));
+  },
+};
+
 async function buildStandaloneLazy() {
   return Promise.all(STANDALONE_LAZY.map(async (lazy) => {
     const result = await esbuild.build({
@@ -210,7 +280,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   // The browser graph, the server half and the offline half are independent builds of the same sources: run them together.
   const serverHalf = buildServerHalf();
   const offlineHalfBuild = buildOfflineHalf();
-  const standalone = await buildStandaloneLazy();
+  const [standalone, editor] = await Promise.all([buildStandaloneLazy(), buildFrameEditor()]);
   const result = await esbuild.build({
     absWorkingDir: ROOT,
     entryPoints,
@@ -228,13 +298,13 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     alias: { '@': APP },
     define: { 'process.env.NODE_ENV': '"production"' },
     logLevel: 'error',
-    plugins: [standaloneLazyPlugin(standalone), solidPlugin({ generate: 'dom', hydratable: true })],
+    plugins: [standaloneLazyPlugin([...standalone, editor]), solidPlugin({ generate: 'dom', hydratable: true })],
   });
 
   const ssrHalf = await serverHalf;
   const offlineHalf = await offlineHalfBuild;
   // Exactly one framework: an island that reached a React or Preact file would carry a second runtime ...
-  const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs, ...offlineHalf.inputs, ...standalone.flatMap((b) => b.inputs)])].sort();
+  const inputs = [...new Set([...Object.keys(result.metafile.inputs), ...ssrHalf.inputs, ...offlineHalf.inputs, ...standalone.flatMap((b) => b.inputs), ...editor.inputs])].sort();
   const react = inputs.filter((i) => /node_modules\/(react|react-dom|preact|@preact\/[\w-]+)\//.test(i));
   if (react.length) throw new Error(`build-islands: a second framework reached the island graph (${react.slice(0, 3).join(', ')})`);
   // ... and exactly one Solid: one copy of each of its files (no nested install, no dev build beside the production one).
@@ -299,6 +369,12 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     writeImmutable(lazy.fileName, lazy.bytes);
     files[url(lazy.fileName)] = { ...sizes(lazy.bytes), imports: [] };
   }
+  for (const file of editor.files) {
+    writeImmutable(file.fileName, file.bytes);
+    files[url(file.fileName)] = { ...sizes(file.bytes), imports: file.imports.map(url) };
+    outputInputs[url(file.fileName)] = file.inputs;
+  }
+  manifest[FRAME_EDITOR.specifier] = url(editor.fileName);
   const catalog = glyphCatalog();
   const catalogName = `glyphs-${sha256(catalog).slice(0, 16)}.js`;
   writeImmutable(catalogName, catalog);
@@ -321,7 +397,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
   writeImmutable(offlineName, zlib.gzipSync(offlineHalf.bytes, { level: 9 }));
   const offline = url(offlineName);
 
-  const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs'].map((s) => [s, manifest[s]]));
+  const sortedManifest = Object.fromEntries([...ISLAND_SPECIFIERS, '@mx/glyphs', FRAME_EDITOR.specifier].map((s) => [s, manifest[s]]));
   const sortedFiles = Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]]));
   const build = buildId(sortedManifest, { ssr, offline }, inputs);
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({ build, manifest: sortedManifest, files: sortedFiles, ssr, offline, sqliteWasm }, null, 1) + '\n');
@@ -407,7 +483,7 @@ async function buildOfflineHalf() {
     alias: { '@': APP },
     define: { 'process.env.NODE_ENV': '"production"' },
     logLevel: 'error',
-    plugins: [solidPlugin({ generate: 'dom', hydratable: true })],
+    plugins: [offlineWithoutEditor, solidPlugin({ generate: 'dom', hydratable: true })],
   });
   const outputs = Object.entries(result.metafile.outputs);
   const modules = {};

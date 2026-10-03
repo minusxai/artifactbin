@@ -28,7 +28,7 @@
  * the ones the first screen paints with.
  */
 import { agentDiscoveryHead, agentDiscoveryTail } from '@/lib/serving/agent-discovery';
-import { AUTHOR_VENDOR_EXPORTS, type IslandPageData } from '@/lib/islands/contract';
+import { AUTHOR_VENDOR_EXPORTS, LIVE_DIRECT_ATTR, STORY_FRAMED_ATTR, type IslandPageData } from '@/lib/islands/contract';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
@@ -61,9 +61,11 @@ function renderOutlineRail(entries: readonly OutlineEntry[]): string {
 
 export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): AssembledPage => {
   const { compiled, overlay, chrome, spa, build } = input;
+  const frame = input.frame ?? null;
   const help = input.head?.help ?? null;
   // The stored module names the runtime by specifier; its URL and preload closure are this build's.
-  const module = compiled.module ? bindModuleRef(compiled.module, build) : null;
+  // A framed page runs none of the document's code: the document runs in its frame, on its own origin.
+  const module = compiled.module && !frame ? bindModuleRef(compiled.module, build) : null;
 
   // Request-specific SSR replaces visible HTML, while immutable browser carriers still belong
   // to the compiled module and may exist only in its stored first render.
@@ -72,10 +74,10 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
   const withOutline = input.documentChrome !== false && compiled.outline?.length
     ? `<div class="${compiled.outlinePlan ? 'mx-reading mx-reading--plan' : 'mx-reading'}">${renderOutlineRail(compiled.outline)}${storyHtml}</div>`
     : storyHtml;
-  const story = storyElement(withOutline, input.colorMode, input.theme);
+  const story = frame ? framedStoryElement(frame, input.colorMode, input.theme) : storyElement(withOutline, input.colorMode, input.theme);
 
   const islandPreloads = module ? unique([module.url, ...module.imports]) : [];
-  const behaviorSrcs = unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
+  const behaviorSrcs = frame ? [] : unique(compiled.behaviors.map((behavior) => behaviorUrl(build, behavior)).filter((url): url is string => !!url));
   const rules = speculationRulesOf(compiled.links);
   // The app shell normally defines this body face in shell.css. A compiled first paint
   // runs before that stylesheet, while Mermaid measures sequence labels against body.
@@ -106,12 +108,13 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     // page, so a reload (leaving edit mode) does not flash the dots in the margins before the app adopts it.
     + (spa ? styleTag('data-mx-app-reserve', `@media(min-width:640px){body:has(> [data-mx-inline-story]){padding-top:${APP_BAR_H}px}}`
       + 'body:has(> [data-mx-inline-story]){background:#ffffff;background-image:none}body:has(> [data-mx-inline-story].dark){background:#0b0b0c}') : '')
-    + (input.css && !input.sheets ? styleTag('data-mx-story-css', input.css) : '')
+    + (frame ? styleTag('data-mx-frame-css', FRAME_CSS) : '')
+    + (input.css && !input.sheets && !frame ? styleTag('data-mx-story-css', input.css) : '')
     + (input.footer?.css ? styleTag('data-mx-footer-css', input.footer.css) : '');
 
   const body =
     story
-    + literals
+    + (frame ? '' : literals)
     + (chrome ? renderReaderChrome(chrome) : '')
     // Page furniture after the story root, never inside it: the hydrated tree never sees it.
     + (input.footer?.html ?? '')
@@ -126,7 +129,8 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     `<!doctype html><html class="${escapeHtml(input.colorMode)}"`
     // The standalone document's sheets name the theme on the DOCUMENT element (`:root:where([data-theme])`).
     + (input.sheets && input.theme ? ` data-theme="${escapeHtml(input.theme)}"` : '')
-    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}>`
+    + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}`
+    + `${input.appOrigin ? ` data-mx-app-origin="${escapeHtml(input.appOrigin)}"` : ''}>`
     + `<head>${head}</head><body${liveAttrs(input.live ?? null)}>${body}</body></html>`;
 
   const headers: Record<string, string> = {};
@@ -144,7 +148,24 @@ const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
 const liveAttrs = (live: AssembleInput['live']): string =>
-  (live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : '');
+  (live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"${live.direct ? ` ${LIVE_DIRECT_ATTR}=""` : ''}` : '');
+
+/**
+ * THE FRAMED STORY (AssembleInput.frame): the document's own origin in one frame that IS the viewport
+ * under the app bar — it scrolls inside, the chrome stays above and beside. The sandbox keeps what a
+ * document needs (its scripts on its own origin, popups that leave the sandbox, a link that takes the
+ * tab) and nothing it does not; the app's own CSP `frame-src` admits only the pages hosts.
+ */
+const FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-downloads';
+const FRAME_ALLOW = 'fullscreen; clipboard-write';
+const FRAME_CSS = `[${STORY_FRAMED_ATTR}]{position:fixed;inset:0;top:var(--mx-frame-top,0px);display:block}`
+  + `@media(min-width:640px){[${STORY_FRAMED_ATTR}]{--mx-frame-top:${APP_BAR_H}px}}`
+  + `[${STORY_FRAMED_ATTR}]>iframe{display:block;width:100%;height:100%;border:0;background:transparent}`;
+function framedStoryElement(frame: NonNullable<AssembleInput['frame']>, colorMode: string, theme: string | null): string {
+  // `data-mx-document-frame`: the one frame a consent grant reloads (brief C's CspConsentBar).
+  const iframe = `<iframe data-mx-document-frame="" src="${escapeHtml(frame.src)}" title="${escapeHtml(frame.title)}" name="mx-document" sandbox="${FRAME_SANDBOX}" allow="${FRAME_ALLOW}" referrerpolicy="no-referrer"></iframe>`;
+  return `<div id="${STORY_ROOT_ID}" data-mx-inline-story="" ${STORY_FRAMED_ATTR}="" class="${escapeHtml(colorMode)}"${theme ? ` data-theme="${escapeHtml(theme)}"` : ''}>${iframe}</div>`;
+}
 
 /**
  * `crossorigin` on every module fetch, script and preload alike: a `/raw` copy

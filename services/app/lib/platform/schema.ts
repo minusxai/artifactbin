@@ -907,6 +907,39 @@ const MUTATION_NOTIFICATIONS: Table = {name:'mutation_notifications',columns:[
  {name:'idx_mutation_notifications_recipient',columns:['recipient_id','created_at']},
 ]};
 /**
+ * THE PAGES SESSIONS (lib/accounts/pages-sessions, server/pages-host): what the `afbin_pages` cookie on
+ * the documents' own origins (APP__PAGES_HOST) refers to. The app page mints a one-time ticket for its
+ * reader (a `codes` row, 60 s), the pages apex exchanges it for a row here and sets the cookie, and the
+ * documents' doors read the reader back from it. Only the cookie's sha256 is stored. The row is an
+ * actor snapshot of who the app page served — never the authentication session, which the app does not
+ * see — so a token behind it is re-resolved on every read, and logout deletes the row
+ * (`DELETE <pages apex>/pages-session`); `expires_at` bounds the rest. Erased with a test user
+ * (`user_id`, lib/accounts/testusers).
+ */
+const PAGES_SESSIONS: Table = {
+  name: 'pages_sessions',
+  columns: [
+    { name: 'id_hash', type: 'TEXT', notNull: true }, // sha256 hex of the cookie value; plaintext never stored
+    // 'session' | 'agent-cookie' — how the app page's reader was authenticated.
+    { name: 'credential', type: 'TEXT', notNull: true },
+    { name: 'user_id', type: 'TEXT' },
+    { name: 'token_id', type: 'TEXT' },
+    { name: 'email', type: 'TEXT' },
+    { name: 'email_verified', type: 'BOOLEAN' },
+    // App-origin decisions the app page carried across with the ticket (a reader's one-time consent
+    // grant, which lives in an app-origin cookie the document's origin never sees). Data, never a credential.
+    { name: 'carried', type: 'JSONB', notNull: true, default: "'{}'" },
+    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    { name: 'expires_at', type: 'TIMESTAMPTZ', notNull: true },
+  ],
+  primaryKey: ['id_hash'],
+  indexes: [
+    { name: 'idx_pages_sessions_expires', columns: ['expires_at'] },
+    { name: 'idx_pages_sessions_user', columns: ['user_id'] },
+  ],
+};
+
+/**
  * A READER'S STANDING ANSWER to what one document asks of the network beyond the default document
  * policy (lib/trust/document-trust): "Always for this document" ('allow') or "Never" ('deny'). One row
  * per person per document. `extensions` is the set the answer covers ({connect, script, style, img,
@@ -925,7 +958,7 @@ const DOCUMENT_TRUST: Table = {
   {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
  ],primaryKey:['user_id','artifact_id'],
 };
-export const TABLES: Table[] = [DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
 import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { useLocation } from '@solidjs/router';
 import { startIslandLive } from '@/lib/islands/live';
 import { islandDocumentOf } from '@/lib/islands/handover';
@@ -11,7 +12,7 @@ import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-
 import { READER_CHROME_HIDDEN_CLASS } from '@/lib/story/reader/reader-chrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
 import { keepReadingPlace } from '@/lib/story-runtime/anchor';
-import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { ServedStoryRuntime } from '@/lib/story/prepared/prepared-runtime';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
@@ -32,6 +33,7 @@ import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DocumentPeople } from '../document/DocumentPeople';
 import { createIslandStory, type IslandStory } from '../document/create-island-story';
+import { createFramedStory, framedDocumentFor } from '../document/create-framed-story';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
 import { moveInto } from '@/lib/story-runtime/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
@@ -72,6 +74,8 @@ interface DocumentAnswer {
     refs?: Array<{ id: string; kind: string; title?: string | null }>;
     template?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null;
     heading?: string | null; pwaEnabled?: boolean; membershipAvailable?: boolean;
+    /** The document's own origin when the page frames it there (APP__PAGES_HOST, lib/serving/artifact-page). */
+    framedOrigin?: string;
   };
   archived?: { version: number; head: number } | null;
   /** What the document asks of the network beyond the default policy, and this reader's standing (lib/trust). */
@@ -168,6 +172,29 @@ export function DocumentPage(): JSX.Element {
   const editorFlush: { current: (() => Promise<void>) | null } = { current: null };
   let island: IslandStory | null = null;
   let adoptedStory: HTMLElement | null = null;
+  /**
+   * THE DOCUMENT'S FRAME, when the page frames it on its own origin (lib/compiled-page/assembler `frame`):
+   * the document runs there — its islands, its script, its own live stream and its doors — and this page
+   * draws the chrome around it. Comments, selections, the reader's colour choice and editing reach it through
+   * the bridge (solid/document/create-framed-story); the address's `#hash` goes to its page behaviour.
+   */
+  const [documentFrame, setDocumentFrame] = createSignal<HTMLIFrameElement | null>(null);
+  /**
+   * The slot ABOVE the frame, in the layout rather than over it: page notices about the document (brief C's
+   * CspConsentBar renders here, `<Portal mount={frameSlot()}>`), so the frame shrinks to make room.
+   */
+  const [frameSlot, setFrameSlot] = createSignal<HTMLElement | null>(null);
+  /** The reader chose a colour on this page: a frame that loads again gets it again. */
+  let modeChosen = false;
+  const framedOrigin = page?.surface?.framedOrigin ?? null;
+  const postToFrame = (message: Record<string, unknown>) => {
+    const target = documentFrame()?.contentWindow;
+    if (target && framedOrigin) target.postMessage(message, framedOrigin);
+  };
+  const forwardHash = () => {
+    const hash = window.location.hash;
+    if (hash && hash !== '#edit') postToFrame({ type: STORY_FRAME_HASH_MESSAGE, hash });
+  };
   let chromeElement: HTMLElement | null = null;
   let host!: HTMLDivElement;
   const pendingData: string[] = [];
@@ -178,6 +205,7 @@ export function DocumentPage(): JSX.Element {
     applyReaderChoice(window, document, next);
     applyColorMode(adoptedStory, next);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: next });
+    modeChosen = true;
     setMode(next);
   };
 
@@ -202,6 +230,8 @@ export function DocumentPage(): JSX.Element {
     get enabled() { return ready() && !editing() && !archivedNow() && typeof EventSource === 'function'; },
     onData: (event) => {
       if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1);
+      // A framed document hears its own stream (lib/islands/live on its origin): nothing to forward.
+      if (documentFrame()) return;
       if (!runtimeRef.current) { pendingData.push(...event.datasets); return; }
       runtimeRef.current.send({ type: STORY_DATA_MESSAGE, datasets: event.datasets });
     },
@@ -210,7 +240,8 @@ export function DocumentPage(): JSX.Element {
   }) : () => null;
   createEffect(() => {
     const frame = live();
-    if (!frame || untrack(editing) || !frame.nodes) return;
+    // A framed document draws its own new versions from its own stream; the page sends it none.
+    if (!frame || untrack(editing) || !frame.nodes || untrack(documentFrame)) return;
     runtimeRef.current?.update({
       type: STORY_DOCUMENT_MESSAGE, nodes: frame.nodes,
       ...(frame.dataflow ? { dataflow: frame.dataflow } : {}),
@@ -247,7 +278,8 @@ export function DocumentPage(): JSX.Element {
     if (!wide() || untrack(panelFits) !== null) return;
     let frame = 0; let frames = 0;
     const decide = () => {
-      const root = host?.querySelector('[data-mx-inline-story]');
+      // A framed document (create-framed-story) is the frame itself: it has its content, and no margin to fit in.
+      const root = host?.querySelector('[data-mx-inline-story]') ?? host?.querySelector('iframe');
       const hasContent = !!root && root.childElementCount > 0;
       if (!hasContent && !untrack(railOpen) && frames++ < 300) { frame = requestAnimationFrame(decide); return; }
       setEditorRightInset(editPanelWidth(readEditPanelCollapsed()));
@@ -258,8 +290,19 @@ export function DocumentPage(): JSX.Element {
   });
   const readingRail = () => (railOpen() && !phone() ? RIGHT_RAIL_W : 0);
   const railInset = () => (!editing() ? readingRail() : !wide() ? 0 : panelFits() === null ? readingRail() : panelFits() ? 0 : editorRightInset());
+  // A hook for the page's own styles (and brief C's notices) while the host holds a frame and its slot.
+  createEffect(() => host?.toggleAttribute('data-mx-framed-host', !!frameSlot()));
+  // The framed document IS the viewport under the chrome: the page does not scroll, the frame does.
   createEffect(() => {
-    if (!host) return;
+    if (!host || !documentFrame()) return;
+    const top = (phone() ? 0 : APP_BAR_H) + (editing() ? EDIT_BAR_H : 0);
+    Object.assign(host.style, {
+      position: 'fixed', top: `${top}px`, left: '0px', right: railInset() ? `${railInset()}px` : '0px', bottom: '0px',
+      display: 'flex', flexDirection: 'column', background: DOCUMENT_GROUND[mode()], padding: '0px', minHeight: '0px',
+    });
+  });
+  createEffect(() => {
+    if (!host || documentFrame()) return;
     host.style.position = 'relative';
     // Full-width whatever the rail does: the rail's width is the host's padding, never its box.
     host.style.right = '0px';
@@ -317,14 +360,40 @@ export function DocumentPage(): JSX.Element {
     adoptedStory = story;
     chromeElement = chrome;
     setMode(story.classList.contains('dark') ? 'dark' : 'light');
-    const islands = islandDocumentOf(story);
-    island = createIslandStory({
-      id, host, story, islands, nodes: page.surface?.runtime?.data.nodes ?? [],
+    // The frame condition (create-framed-story `framedDocumentFor`): the server drew the story as one frame on the
+    // document's own origin. Everything below talks to it through the bridge's stand-in.
+    const framed = framedDocumentFor(story, framedOrigin);
+    const islands = framed ? null : islandDocumentOf(story);
+    const storyInputs = {
+      id, nodes: page.surface?.runtime?.data.nodes ?? [],
       editId: () => editorPart()?.editId ?? page.surface?.editId ?? '',
       source: () => editorPart()?.source ?? null,
-    });
+    };
+    if (framed) {
+      // The served frame keeps loading where it is: moved, never re-created (moveBefore where the browser has it).
+      const slot = document.createElement('div');
+      slot.setAttribute('data-mx-frame-slot', '');
+      slot.style.flex = '0 0 auto';
+      host.insertBefore(slot, story);
+      Object.assign(story.style, { position: 'relative', inset: 'auto', flex: '1 1 auto', minHeight: '0px' });
+      setFrameSlot(slot);
+      setDocumentFrame(framed.frame);
+      island = createFramedStory({ ...storyInputs, framed });
+      window.addEventListener('hashchange', forwardHash);
+      framed.frame.addEventListener('load', forwardHash);
+      onCleanup(() => { framed.frame.removeEventListener('load', forwardHash); window.removeEventListener('hashchange', forwardHash); story.remove(); });
+      // The served frame may have loaded before the app did (it loads on idle): forward now as well.
+      forwardHash();
+    } else {
+      island = createIslandStory({ ...storyInputs, host, story, islands });
+    }
     runtimeRef.current = island.controller();
-    setNonce(island.nonce());
+    // A framed document's controller signs its events once it runs in the frame: the nonce arrives then (and again
+    // after the frame loads anew, which also takes the reader's colour choice again).
+    createEffect(on(() => island?.nonce() ?? null, (next) => {
+      setNonce(next);
+      if (next && framed && modeChosen) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode: untrack(mode) });
+    }));
     if (pendingData.length) runtimeRef.current?.send({ type: STORY_DATA_MESSAGE, datasets: [...new Set(pendingData.splice(0))] });
     setReady(true);
     const sharing = wireReaderSharing(window, document, chrome);
@@ -402,7 +471,7 @@ export function DocumentPage(): JSX.Element {
     <TrustedUi overlay layer="navigation">
       <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
       <style>{PANEL_CSS}</style>
-      <Show when={page?.cspRequest?.status === 'blocked' && !editing()}>
+      <Show when={page?.cspRequest?.status === 'blocked' && !editing() && !frameSlot()}>
         <CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} top={phone() ? 8 : APP_BAR_H + 8} />
       </Show>
       <Show when={panel()}>
@@ -423,6 +492,10 @@ export function DocumentPage(): JSX.Element {
       </Show>
       <Show when={fork() && id}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Show>
     </TrustedUi>
+    {/* A framed document's notice takes its own row above the frame (the frame shrinks), never over it. */}
+    <Show when={page?.cspRequest?.status === 'blocked' && !editing() && frameSlot()}>{(slot) => (
+      <Portal mount={slot()}><TrustedUi><CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} inline /></TrustedUi></Portal>
+    )}</Show>
     <TrustedUi overlay layer="discussion">
     <Show when={ready() && nonce()}>
       <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canEdit={editable()} canAnnotate={annotatable()} editing={editing()}

@@ -14,6 +14,7 @@
  */
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, For, Show, untrack, type JSX } from 'solid-js';
 import { firstHeadingTitle } from '@/lib/story/document/title';
+import { scriptExportLocation } from '@/lib/story/document/script-export-location';
 import { Portal } from 'solid-js/web';
 import { useBeforeLeave } from '@solidjs/router';
 import ChartColumn from 'lucide-solid/icons/chart-column';
@@ -261,12 +262,28 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   });
 
   let imageDoors: { dropped: (file: File, where?: ImageDropPlacement) => void; pick: (bodyPath: string) => void } | null = null;
+  /**
+   * Where a mount badge's "Edit script" asked the source editor to open (lib/story/document/script-export-location):
+   * read once when the code pane mounts, and revealed when it is already open. A fresh object per ask.
+   */
+  const [scriptAt, setScriptAt] = createSignal<{ start: number; end: number } | null>(null);
+  const openScript = (component: string) => {
+    const at = scriptExportLocation(editorSource.current(), component);
+    setScriptAt(at ? { start: at.offset, end: at.offset } : null);
+    setContentView(null);
+    if (mode() !== 'code') chooseMode('code');
+  };
+  createEffect(on(mode, (now) => { if (now !== 'code') setScriptAt(null); }, { defer: true }));
   const inPlace = createInPlaceEdit({
     get runtimeRef() { return runtimeRef; },
     get sessionNonce() { return props.sessionNonce; },
     onError: setHistoryError,
     onRejectedEdit: setRejectedFragment,
     onHistory: (direction) => { void applyHistory(direction); },
+    onOpenScript: openScript,
+    // A framed document's Enter / focus-out and ⌘⌥M, forwarded: the same as the window listeners below.
+    onFlush: () => showInDocument.flush(),
+    onCommentKey: () => { const current = edit?.selection(); if (current) props.onComment?.(current); },
     onImageDrop: (file, where) => imageDoors?.dropped(file, where),
     onImageReplaceRequest: (path) => imageDoors?.pick(path),
     get editing() { return mode() === 'design' && !preview(); },
@@ -794,7 +811,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       </Show>
       <Show when={mode() === 'code'}>
         <div class="fixed bottom-0 z-20" style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }} aria-label="Source pane">
-          <SourceEditorPane value={source()} revision={editorSource.revision()} onChange={(text) => editorSource.apply(text, { origin: 'local' })} />
+          <SourceEditorPane value={source()} revision={editorSource.revision()} onChange={(text) => editorSource.apply(text, { origin: 'local' })}
+            initialSelection={scriptAt} reveal={scriptAt} />
         </div>
       </Show>
       <Show when={wide() && appView()}>

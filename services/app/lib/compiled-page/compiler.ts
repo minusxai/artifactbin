@@ -26,7 +26,7 @@
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
-import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
+import { isScriptComponent, MOUNT_ATTR } from './script-mount';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
@@ -194,13 +194,10 @@ const isElement = (node: JsxNode): node is JsxElement => node.type === 'element'
 /**
  * A capitalized tag outside the registry is a component the document's SCRIPT exports (validated at publish against
  * the built module's exports): the compiler emits its mount node, with its props as data and its children as the
- * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime).
+ * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime). The
+ * predicate and the attribute live in ./script-mount, which the editor reads too.
  */
-const REGISTERED_COMPONENTS: ReadonlySet<string> = new Set(JSX_STORY_COMPONENT_NAMES);
-/** Declarations and retired tags that validation refuses in a body: never a script component, so a stale document still reports them. */
-const NEVER_SCRIPT_COMPONENTS: ReadonlySet<string> = new Set(['Helmet', 'Import', 'Value', 'Query', 'Mutation', 'Notify', 'Param']);
-export const isScriptComponent = (node: JsxNode): boolean => isElement(node) && node.isComponent && !REGISTERED_COMPONENTS.has(node.tag) && !NEVER_SCRIPT_COMPONENTS.has(node.tag);
-export const MOUNT_ATTR = 'data-mx-mount';
+export { isScriptComponent, MOUNT_ATTR };
 /** The mount's props (literal JSON), its bindings (prop → declared name) and the DOM attributes the node keeps. */
 export function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {
   const props: Record<string, unknown> = {};

@@ -15,7 +15,7 @@ import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/serving';
-import { APP_CSP, createAppServer } from '../app';
+import { IN_PAGE_DOCUMENT_CSP, createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -35,19 +35,21 @@ async function world() {
 }
 
 describe('a document address', () => {
-  it('serves readable initial markup under app CSP at the canonical address', async () => {
+  // With no pages host the document runs inside the app page, whose policy admits its author module
+  // (server/app appCsp); with one, the page frames it under the strict APP_CSP (__tests__/pages-origin-host).
+  it('serves readable initial markup under the in-page document policy at the canonical address', async () => {
     const w = await world();
     for (const path of [`/a/${w.pub.id}`, `/@${w.owner.username}/${w.pub.id}-pub`]) {
       const res = await app.request(path, { headers: as({ credential: 'none' }) });
       expect(res.status, path).toBe(200);
-      expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
+      expect(res.headers.get('content-security-policy'), path).toBe(IN_PAGE_DOCUMENT_CSP);
       expect(await res.text()).toContain('public words');
     }
   });
   it('serves the owner the same app page under the same CSP (at the canonical address)', async () => {
     const w = await world();
     const res = await app.request(`/@${w.owner.username}/${w.pub.id}-pub`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
-    expect(res.headers.get('content-security-policy')).toBe(APP_CSP);
+    expect(res.headers.get('content-security-policy')).toBe(IN_PAGE_DOCUMENT_CSP);
     const html = await res.text();
     expect(html).toContain('public words');
     expect(html).toContain('data-mx-inline-story');

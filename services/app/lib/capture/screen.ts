@@ -1,3 +1,4 @@
+import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import {CaptureError, type CaptureRect, type CaptureSession, type CaptureStage} from './contract';
 
 interface CaptureTrack extends MediaStreamTrack {
@@ -48,7 +49,7 @@ function observeFrame(video: HTMLVideoElement, stage: CaptureStage, accept: () =
 export async function beginCapture(): Promise<CaptureSession> {
   if (!captureAvailable()) throw new CaptureError('unsupported');
   const devices=navigator.mediaDevices as CaptureDevices;
-  handle ??= crypto.randomUUID();
+  handle ??= runtimeId();
   devices.setCaptureHandleConfig!({handle,permittedOrigins:[location.origin],exposeOrigin:false});
   const requested=devices.getDisplayMedia({audio:false,video:{frameRate:30},preferCurrentTab:true} as DisplayMediaStreamOptions);
   let timedOut=false;

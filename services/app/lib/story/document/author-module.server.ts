@@ -27,10 +27,14 @@ import { AUTHOR_VENDOR_EXPORTS } from '@/lib/islands/contract';
 import type { HelmetContent } from './helmet';
 
 export const PAGE_GLOBAL = '__mxPageBindings';
+/** Where a bare npm specifier resolves (`three` → `https://esm.sh/three`): the module host every script may load from. */
+export const ESM_CDN_ORIGIN = 'https://esm.sh';
 export const PAGE_SPECIFIER = 'page';
-/** What `page` exports: each binds one declared name of its kind. */
-export const PAGE_EXPORTS = ['signal', 'query', 'mutation'] as const;
-type PageExport = (typeof PAGE_EXPORTS)[number];
+/** The `page` exports that bind one declared name of their kind (`signal('$region')`). */
+export const PAGE_BINDERS = ['signal', 'query', 'mutation'] as const;
+type PageExport = (typeof PAGE_BINDERS)[number];
+/** Everything `page` exports: the binders, and `proxy(url)` (lib/islands/page-runtime pageProxyUrl), which takes any https URL. */
+export const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy'] as const;
 
 /** The declared names by kind: `values` are scalar Values; `tables` are table Values (rows, like a Query). */
 export interface AuthorModuleNames { values: string[]; tables?: string[]; queries: string[]; mutations: string[] }
@@ -52,7 +56,7 @@ const VENDOR: Readonly<Record<string, ReadonlySet<string>>> = Object.fromEntries
   Object.entries(AUTHOR_VENDOR_EXPORTS).map(([spec, names]) => [spec, new Set<string>(names)]),
 );
 
-/** The generated `page` module: the three binders, read from the runtime's bindings at import. */
+/** The generated `page` module: the binders and `proxy`, read from the runtime's bindings at import. */
 export function pageModuleSource(): string {
   return [
     `const b = globalThis[${JSON.stringify(PAGE_GLOBAL)}];`,
@@ -108,7 +112,8 @@ function pageCallsPlugin(names: AuthorModuleNames, errors: string[]): PluginObj 
                 errors.push(at(spec.loc?.start, `'page' exports ${PAGE_EXPORTS.join(', ')}, not ${imported}` + (kind ? `; bind the declared name with ${kinds[kind].hint(imported)}` : '')));
                 continue;
               }
-              binders.set(spec.local.name, imported as PageExport);
+              // `proxy` takes a URL, not a declared name: nothing to check at its calls.
+              if ((PAGE_BINDERS as readonly string[]).includes(imported)) binders.set(spec.local.name, imported as PageExport);
             } else if (source === 'solid-js' && spec.type === 'ImportSpecifier') {
               const imported = spec.imported.type === 'Identifier' ? spec.imported.name : spec.imported.value;
               if (imported === 'createSignal') createSignals.add(spec.local.name);
@@ -255,7 +260,7 @@ async function build(script: string, names: AuthorModuleNames): Promise<AuthorMo
           errors.push(`import "${spec}": a page script is Solid; there is no Preact or React here. Use createSignal, createEffect, createMemo, For and Show from 'solid-js', and signal('$name')/query('$name')/mutation('$name') from 'page'`);
           return { path: spec, external: true };
         }
-        if (/^[@\w][\w./@-]*$/.test(spec)) return { path: `https://esm.sh/${spec}`, external: true };
+        if (/^[@\w][\w./@-]*$/.test(spec)) return { path: `${ESM_CDN_ORIGIN}/${spec}`, external: true };
         errors.push(`import "${spec}": not a package name or a URL`);
         return { path: spec, external: true };
       });

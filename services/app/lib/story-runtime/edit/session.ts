@@ -38,6 +38,7 @@ import {
   STORY_COMMITTED_MESSAGE,
   STORY_LAYOUT_EDIT_MESSAGE,
   STORY_SLIDE_TITLE_MESSAGE,
+  STORY_OPEN_SCRIPT_MESSAGE,
   type StoryEditParentMessage,
 } from '../contract';
 import { ancestorCrumbs } from './describe-selection';
@@ -415,6 +416,7 @@ export function createFrameEditSession({
         },
         onLayout(rects) { post({ type: STORY_LAYOUT_EDIT_MESSAGE, rects }); },
         onSlideTitle(path, title) { post({ type: STORY_SLIDE_TITLE_MESSAGE, path, title }); },
+        onOpenScript(component) { post({ type: STORY_OPEN_SCRIPT_MESSAGE, component }); },
         onError(message) { post({ type: 'mx:edit-error', message }); },
         onBusy: reportTyping,
         onView(view) {

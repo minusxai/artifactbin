@@ -204,6 +204,10 @@ export const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 export const LIVE_ID_ATTR = 'data-mx-live-id';
 /** The version the page shows, on `<body>` beside `LIVE_ID_ATTR`. */
 export const LIVE_EDIT_ATTR = 'data-mx-live-edit';
+/** On `<body>` beside the live identity: the page is a document on its own origin, so it holds its own stream even when framed. */
+export const LIVE_DIRECT_ATTR = 'data-mx-live-direct';
+/** On the app page's story element when it holds the document's frame rather than the document (AssembleInput.frame). */
+export const STORY_FRAMED_ATTR = 'data-mx-framed';
 /** A compiler-generated hydration key prefix (`s<i>-`, `d-`); anything else never reaches a selector. Stateless: no `g`/`y` flag. */
 export const RENDER_ID_PATTERN = /^[\w-]+$/;
 
@@ -258,6 +262,12 @@ export interface IslandPageData {
   queryUrl?: string;
   mutateUrl?: string;
   viewerUrl?: string;
+  /**
+   * The page is a document on its OWN origin (APP__PAGES_HOST), framed by the app page or not: its doors
+   * are absolute, it calls them directly with its pages cookie (`credentials: 'include'`), and it holds
+   * its own live stream even when framed.
+   */
+  direct?: boolean;
   assetsUrl?: string;
   /**
    * The request holds a credential for this document (session or held connection): the page's doors

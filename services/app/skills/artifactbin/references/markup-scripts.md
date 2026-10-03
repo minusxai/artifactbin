@@ -21,10 +21,6 @@ the script carries behaviour.
   the line: a syntax error, an undeclared or wrong-kind `$name`,
   `createSignal('$region')` (a local signal bound to nothing), a relative import.
 
-## Contents
-
-Example · Imports · The page module · Components · Libraries · Other hosts.
-
 ## Example
 
 ```jsx
@@ -85,7 +81,7 @@ In Helmet script text, split `</script` as `'</scr' + 'ipt'`.
 
 | Specifier | Gives |
 | --- | --- |
-| `page` | `signal`, `query`, `mutation` (below) |
+| `page` | `signal`, `query`, `mutation` (below) ; `proxy` (Other hosts) |
 | `solid-js` | `createSignal`, `createEffect`, `createMemo`, `createRoot`, `batch`, `untrack`, `on`, `onMount`, `onCleanup`, `For`, `Show`, `Switch`, `Match`, `mergeProps`, `splitProps` |
 | `solid-js/web` | `render`, and what JSX compiles to |
 | `solid-js/store` | `createStore`, `reconcile` |
@@ -108,7 +104,7 @@ Each binder takes one string literal, the declared name with its `$`.
   null; `await monthly.ready` gives the next settled rows or rejects with it.
 - **A Mutation**: `const rename = mutation('$rename')` is an async function.
   `await rename({ from: 'west', to: 'West' })` resolves after commit, rejects
-  with the server's message (`try`/`catch`). Row-scoped: `_row: { id: 7 }`.
+  with the server's message (`try`/`catch`).
 
 ## Components
 
@@ -118,8 +114,7 @@ writes its name as a tag (any capitalized tag that is not a kit component);
 the children are the server-rendered fallback until it mounts.
 
 ```jsx
-export function Detail(props) { const item = () => props.item[0]; return <p>{item()?.month}: {item()?.total}</p>; }
-// markup: <Detail item={$monthly} />
+export function Detail(props) { const item = () => props.item[0]; return <p>{item()?.total}</p>; }
 ```
 
 props.item is the current rows array (tracked; read it inside JSX, a memo or
@@ -127,9 +122,7 @@ an effect), not a function; a literal prop such as color is a plain value.
 
 ## Libraries
 
-Import a library by its npm name or by URL. To pin a version, pin it in every
-specifier of that package (`three@0.170.0`, `three@0.170.0/examples/…`). `fetch` reaches HTTPS URLs
-that allow cross-origin reads.
+Import a library by its npm name or by URL. Pin a version in every specifier (`three@0.170.0`, `three@0.170.0/examples/…`).
 
 ```jsx
 <canvas id="scene" className="block h-[420px] w-full" />
@@ -163,3 +156,7 @@ Also `csp-style` (fonts too), `csp-img`, `csp-media`, `csp-frame`; other
 names are `invalid_csp`. Publishing a host is your consent; every other
 reader is asked (once, for this document, or never) and until then its
 requests fail: handle a failed `fetch`.
+
+Fetching other hosts: read a `csp-connect` host through the document, GET
+only: `fetch(proxy('https://api.example.com/x'))`, `proxy` from `page`;
+403 until the reader allows it.

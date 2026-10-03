@@ -54,12 +54,14 @@ import { agentDiscovery } from './agent-discovery';
 import { canonicalDocumentUrl } from './custom-domains';
 import { CARD_RENDER_GENERATION } from './og-card';
 import { readerChromeFonts } from '@/lib/story/styles';
+import { issuePagesTicket } from '@/lib/accounts/pages-sessions';
+import { pagesOriginFor, pagesSessionUrl, type PagesSite } from './pages-origin';
 import { declaresMutations } from '@/lib/story/document';
 import { assetsPath, mutatePath, queryPath } from '@/lib/story/styles';
 import { archivedReadOnly } from './archived-version';
 import type { ReaderChromeInput } from '@/lib/story/reader';
 import { displayTitle } from '@/lib/story/document';
-import { cspRequestFor } from '@/lib/trust/document-trust';
+import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
 
 /** The story the app page inlines for this answer (server/app withInitialStory). */
 export interface InitialStory {
@@ -79,6 +81,8 @@ export interface InitialStory {
 export interface CompiledStory {
   html: string;
   headers: Readonly<Record<string, string>>;
+  /** The page frames the document on its own origin instead of carrying it (APP__PAGES_HOST). */
+  framed?: boolean;
 }
 
 export interface ArtifactPageAnswer {
@@ -101,9 +105,34 @@ export interface ArtifactPageOptions {
   admitted?: ArtifactRow;
   /** The app page: the reader mode is decided here, and a compiled page is assembled with the app's idle entry. */
   page?: { spa: AssembleInput['spa'] };
+  /**
+   * Every document on its own origin (APP__PAGES_HOST): the app page frames the document there instead
+   * of carrying it, after handing the reader across with a one-time ticket (lib/accounts/pages-sessions).
+   * Null or absent: the document is the page's, as before.
+   */
+  pages?: PagesSite | null;
 }
 
 const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_found' } });
+
+/**
+ * A document frame's first URL for this request's reader (APP__PAGES_HOST): the pages apex exchange with
+ * a one-time ticket (none for a guest), redirecting to the document's own origin — or null when the reader
+ * may not read the document or it is not a document. `search` carries the reader's `$` values across.
+ * The app page draws its frame with it; brief B's framed story asks for a fresh one (app/api/page/frame).
+ */
+export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<{ src: string; origin: string } | null> {
+  if (!ID_RE.test(id)) return null;
+  const artifact = await getArtifactById(id);
+  if (!artifact || artifact.format !== 'markup') return null;
+  const actor = await sessionActor(request);
+  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return null;
+  const origin = pagesOriginFor(artifact.id, site);
+  // The reader's "Allow once" grants live in an app-origin cookie the document's origin never sees: they ride the
+  // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
+  const carried = carriedTrust(request, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null });
+  return { src: pagesSessionUrl(site, `${origin}/${search}`, await issuePagesTicket(actor, carried)), origin };
+}
 
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
   if (!ID_RE.test(id)) return notFound();
@@ -177,7 +206,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
    */
   if (search.get('part') === 'editor') {
     if (!isDoc || at || exporting || !canEdit(role)) return notFound();
-    const { row, page } = await preparedPageFor(artifact, null, baseUrl(request));
+    const { row, page } = await preparedPageFor(artifact, null);
     return { status: 200, body: {
       editId: artifact.edit_id, version: artifact.version, source: row.source ?? '',
       ...(artifact.document?.kind === 'graph' ? { document: artifact.document } : {}),
@@ -209,7 +238,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
-  const prepared = isDoc ? await preparedPageFor(artifact, at, baseUrl(request)) : null;
+  const prepared = isDoc ? await preparedPageFor(artifact, at) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
   // Every document the app page serves is the prepared compiled page (§10) — a capture's and the
   // editor's address included — except the starter placeholder's READ view, whose agent instructions
@@ -236,7 +265,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   // What only this request decides, over the stored version. On the compiled page without this
   // reader's first results: its rows are the guest snapshot's, and this reader's arrive after paint.
   const servedFor = (results: boolean) => (prepared ? servedPage(prepared.row, prepared.page, {
-    at, search: new URL(request.url).search, origin: baseUrl(request),
+    at, search: new URL(request.url).search,
     // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
     drawings: engineRequested(request.url) ? 'engine' : 'stored',
     colorMode: capturedColor,
@@ -258,6 +287,12 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
 
   let compiled: CompiledStory | null = null;
   let reader: ArtifactPageAnswer['reader'];
+  // A capture photographs the document itself, and an archived version is read in place: neither is framed.
+  const pages = options.pages && compiledMode && !exporting && !at && artifact.format === 'markup' ? options.pages : null;
+  const framedOrigin = pages ? pagesOriginFor(artifact.id, pages) : null;
+  // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
+  const framedSrc = pages ? await framedDocumentSrc(request, artifact.id, pages, new URL(request.url).search) : null;
+  const frame = framedSrc ? { src: framedSrc.src, title: row.title || prepared?.page.title || 'Document' } : null;
   if (compiledMode && prepared) {
     const answer = await compiledPageFor(prepared.row, prepared.page, {
       at,
@@ -284,6 +319,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
       chrome: await readerChromeFor({ hasDataMutations: membershipAvailable, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
       chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
       spa: options.page!.spa,
+      ...(frame ? { frame } : {}),
       head: {
         description: row.description,
         canonical: await canonicalDocumentUrl(artifact),
@@ -293,7 +329,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     });
     // No renderer is left to answer: a page the compiled reader cannot make is a 500.
     if (answer.mode === 'failed') throw new CompiledPageFailed(artifact.id, answer.reason);
-    compiled = { html: answer.html, headers: answer.headers };
+    compiled = { html: answer.html, headers: answer.headers, ...(frame ? { framed: true } : {}) };
     reader = { mode: 'compiled' };
   }
   const surface = {
@@ -333,6 +369,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     refs: meta.refs ?? [],
     accountSession: kind === 'account',
     anonSession: kind === 'anon',
+    // The document's own origin when the app page frames it there (solid/pages/Document posts to it).
+    ...(framedOrigin ? { framedOrigin } : {}),
     version: artifact.version,
     // Anyone who may COMMENT has a comment badge to fill: computing this
     // for the owner alone left an editor's and a commenter's count at 0

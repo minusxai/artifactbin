@@ -33,6 +33,7 @@ import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
+import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
 import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
@@ -83,6 +84,21 @@ export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam
 const EMPTY_PAGE: IslandPageData = { values: {}, results: null, appPage: false, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
 
 /** The page data island, or the empty page when it is absent or unreadable (the islands still hydrate). */
+/**
+ * This document's id, for the script's `proxy`: the live identity on `<body>`, else the id its doors name (a capture
+ * carries no live identity but still has its assets door). Null when neither says.
+ */
+export function documentIdOf(doc: Document): string | null {
+  const live = doc.body?.getAttribute(LIVE_ID_ATTR);
+  if (live) return live;
+  const data = readPageData(doc);
+  for (const door of [data.queryUrl, data.assetsUrl, data.viewerUrl]) {
+    const id = door ? /\/a\/([^/?#]+)\//.exec(door)?.[1] : null;
+    if (id) return decodeURIComponent(id);
+  }
+  return null;
+}
+
 export function readPageData(doc: Document): IslandPageData {
   const text = doc.getElementById(ISLAND_DATA_ID)?.textContent;
   if (!text) return EMPTY_PAGE;
@@ -93,11 +109,6 @@ export function readPageData(doc: Document): IslandPageData {
     return EMPTY_PAGE;
   }
 }
-
-/** The app's origin: where this chunk was served from (a `/raw` copy's own origin is opaque). */
-const appOrigin = (): string => {
-  try { return new URL(import.meta.url).origin; } catch { return ''; }
-};
 
 /**
  * `ISLANDS` alone is accepted for a module whose islands read no data (the compiler's first shape);
@@ -114,10 +125,14 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const flow = module.FLOW ?? null;
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
   // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
-  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, {
-    session: data.signedIn,
-    relay: { lazy: () => import('@/lib/story-runtime/relay-transport').then((m) => m.createRelayTransport) },
-  }) : null;
+  // A document on its OWN origin (APP__PAGES_HOST) calls its absolute doors directly, framed or not,
+  // with its pages cookie (`credentials: 'include'`).
+  const direct = !!data.direct && !!data.queryUrl;
+  const transport = !flow ? null : direct
+    ? createFetchTransport(data.queryUrl!, undefined, data.mutateUrl, { session: data.signedIn, credentials: 'include' })
+    : createDocumentTransport(win, data.queryUrl, undefined, data.mutateUrl, { session: data.signedIn });
+  /** What a top-level page holds itself — its stream and `window.page` — a document on its own origin holds framed too. */
+  const holdsOwn = win.parent === win || direct;
   /*
    * The page's own engine, when this page may hold data and its door can fetch it (the relay cannot):
    * `$_me` is bound to the reader the door answers for — nobody on a guest page; on a signed-in page
@@ -163,12 +178,12 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const stopWrites = context.writes.subscribe((statuses) => emit({ type: 'writes', statuses }));
   let stopStatus = () => {};
 
-  // The document's own live stream, top-level only (framed, the page above holds it and posts in).
+  // The document's own live stream, top-level only (framed, the page above holds it and posts in) — or on its own origin.
   const hooks = win as unknown as Record<string, unknown>;
   let stopLive = () => {};
   const liveId = doc.body?.getAttribute(LIVE_ID_ATTR);
   const liveEdit = doc.body?.getAttribute(LIVE_EDIT_ATTR);
-  const holdsLive = win.parent === win && typeof (win as { EventSource?: unknown }).EventSource === 'function' && !!liveId && !!liveEdit;
+  const holdsLive = holdsOwn && typeof (win as { EventSource?: unknown }).EventSource === 'function' && !!liveId && !!liveEdit;
   /** Open the stream from the version the page shows now (its `<body>` names it), picking up at `since`. */
   const openLive = (since: string | null) => {
     const edit = doc.body?.getAttribute(LIVE_EDIT_ATTR);
@@ -207,7 +222,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     const generation = ++authorGeneration;
     stopAuthor();
     // `window.page` (top-level, a page that declares data) comes from the same runtime, script or not.
-    const exposes = !!store && win.parent === win;
+    const exposes = !!store && holdsOwn;
     if (!source && !exposes) return;
     const vendor = readPageData(doc).vendor ?? {};
     const runtimeUrl = vendor['@mx/page-runtime'];
@@ -215,7 +230,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     const runtime = (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime');
     if (generation !== authorGeneration || disposed || mode !== 'read') return;
     const hide = exposes ? runtime.exposePage(win, store!) : () => {};
-    const stop = source ? await runtime.startAuthorModule({ source, store, root, vendor }) : () => {};
+    const stop = source ? await runtime.startAuthorModule({ source, store, root, vendor, id: documentIdOf(doc) }) : () => {};
     if (generation !== authorGeneration || disposed || mode !== 'read') { stop(); hide(); return; }
     stopAuthor = () => { stopAuthor = () => {}; stop(); hide(); };
   };
