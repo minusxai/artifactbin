@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEffect, createRoot, For } from 'solid-js';
 import { bindPage, mountComponents, type PageBindings } from '../page-runtime';
 import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/story-runtime/store';
+import type { RunAnswer } from '@/lib/story-runtime/dataflow-core';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import type { Row } from '@/lib/story/data/dataflow';
 
@@ -26,7 +27,7 @@ afterEach(() => { bindings?.dispose(); store?.dispose(); store = null; bindings 
 function setup() {
   let release: (() => void) | null = null;
   const transport: QueryTransport = {
-    run: vi.fn((values) => new Promise((resolve) => {
+    run: vi.fn((values: Record<string, unknown>) => new Promise<RunAnswer>((resolve) => {
       const answer = () => resolve({ tables: { monthly: { rows: ROWS[String(values.region)] ?? [], columns: [{ name: 'month', type: 'string' }] } }, errors: {} });
       release = answer;
     })),
