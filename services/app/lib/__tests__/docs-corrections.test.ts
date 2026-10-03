@@ -32,7 +32,7 @@ describe('the publishing skill', () => {
     expect(doc).not.toMatch(/no network\./);
     expect(doc).not.toContain('cannot make arbitrary network requests');
     expect(doc).toContain('The Helmet script runs in the document as an ES module');
-    expect(doc).toContain('imports the declared names from `page` as Preact signals');
+    expect(doc).toContain('binds the declared names from `page` as Solid signals (`signal(\'$name\')`, `query`, `mutation`)');
     expect(doc).toContain('may fetch https URLs that allow cross-origin reads');
   });
   it('the comment command teaches reopening through --state open', () => {

@@ -43,12 +43,13 @@ const ds = await j(await api('/api/artifacts', { dataset: [{ region: 'EU', reven
 check(!!ds.id, 'the dataset published');
 /** The page's own script: an effect over the `sales` and `region` signals, rendering into a node the markup does not bind. */
 const DATAFLOW_SCRIPT = [
-  "import { sales, region } from 'page';",
-  "import { effect } from '@preact/signals';",
+  "import { query, signal } from 'page';",
+  "import { createEffect } from 'solid-js';",
+  "const sales = query('$sales'); const [region] = signal('$region');",
   "const out = document.getElementById('out');",
   "let initial;",
-  "effect(() => {",
-  "  const now = region.value; const rows = sales.value;",
+  "createEffect(() => {",
+  "  const now = region(); const rows = sales();",
   "  if (initial === undefined) initial = now;",
   "  out.textContent = now !== initial ? 'changed:' + now : 'page:' + typeof sales + ' rows=' + rows.length;",
   "});",

@@ -102,7 +102,7 @@ try {
       }
       return { message: 'the permission answer never arrived' };
     }, name);
-    const people = (page) => page.evaluate(async () => (await window.page.query('balances').ready).map(r => r.person));
+    const people = (page) => page.evaluate(async () => (await window.page.ready('balances')).map(r => r.person));
   `;
   const joined = await cli(['sessions', 'script', 'new', '--as', testuser.id], `${driver}
     const page = await context.newPage(); const nav = await page.goto(${JSON.stringify(`/a/${copy}`)});

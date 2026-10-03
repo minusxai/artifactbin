@@ -44,10 +44,11 @@ try {
   // The counter's own Helmet script renders the count through an effect over the `count` signal; the session
   // drives the very same signal through `window.page`.
   const counterScript = [
-    "import { count } from 'page';",
-    "import { effect } from '@preact/signals';",
-    "effect(() => { document.getElementById('value').textContent = String(count.value); });",
-    "document.getElementById('add').addEventListener('click', () => { count.value = count.value + 1; });",
+    "import { signal } from 'page';",
+    "import { createEffect } from 'solid-js';",
+    "const [count, setCount] = signal('$count');",
+    "createEffect(() => { document.getElementById('value').textContent = String(count()); });",
+    "document.getElementById('add').addEventListener('click', () => { setCount(count() + 1); });",
   ].join('\n');
   const markup = count => '<Helmet><Value name="count" type="number" default={' + count + '}/><Query name="result">{`select $count as n`}</Query><script>{' + JSON.stringify(counterScript) + '}</script></Helmet><h1>Session counter</h1><Number data="$result" col="n"/><button id="add">Add one</button><p id="value">Waiting</p>';
   const artifacts = [];
@@ -62,11 +63,11 @@ try {
       await page.waitForFunction(() => Boolean(window.page));
       return page;
     }));
-    await opened[0].evaluate(() => { window.page.value('count').value = 3; });
+    await opened[0].evaluate(() => { window.page.set('count', 3); });
     await opened[0].locator('#value').filter({hasText:/^3$/}).waitFor();
     const states = await Promise.all(opened.map(page => page.evaluate(async () => ({
-      count: window.page.value('count').value,
-      result: await window.page.query('result').ready,
+      count: window.page.get('count'),
+      result: await window.page.ready('result'),
       shown: document.getElementById('value').textContent,
     }))));
     await output.image(await opened[0].screenshot());
@@ -83,7 +84,7 @@ try {
     const page = pages[${JSON.stringify(pageId)}];
     await page.getByRole('button',{name:'Add one'}).click();
     await page.locator('#value').filter({hasText:/^4$/}).waitFor();
-    return await page.evaluate(() => ({ count: window.page.value('count').value }));
+    return await page.evaluate(() => ({ count: window.page.get('count') }));
   `);
   assert.equal(resumed.status, 'completed', JSON.stringify(resumed)); assert.equal(resumed.result.count,4);
   assert(resumed.pages.some(page => page.page_id === pageId));
@@ -112,8 +113,9 @@ try {
   // An agent-shaped widget: the page's own script builds the controls and renders through `effect`, and a
   // session drives the same names through `window.page` — the two must agree in both directions.
   const widgetScript = [
-    "import { region, sales, addTask } from 'page';",
-    "import { effect } from '@preact/signals';",
+    "import { signal, query, mutation } from 'page';",
+    "import { createEffect } from 'solid-js';",
+    "const [region, setRegion] = signal('$region'); const sales = query('$sales'); const addTask = mutation('$addTask');",
     "const host = document.getElementById('agent-widget');",
     "const regionEl = document.createElement('select'); regionEl.setAttribute('aria-label', 'Region');",
     "for (const name of ['East', 'West']) { const option = document.createElement('option'); option.value = name; option.textContent = name; regionEl.append(option); }",
@@ -122,12 +124,12 @@ try {
     "const addBtn = document.createElement('button'); addBtn.textContent = 'Add task';",
     "const errorEl = document.createElement('p');",
     "host.replaceChildren(regionEl, table, labelEl, addBtn, errorEl);",
-    "effect(() => { if (regionEl.value !== String(region.value)) regionEl.value = String(region.value); });",
-    "effect(() => {",
-    "  rowsEl.replaceChildren(...sales.value.map(row => { const tr = document.createElement('tr'); for (const v of [row.name, row.revenue]) { const td = document.createElement('td'); td.textContent = String(v); tr.append(td); } return tr; }));",
-    "  errorEl.textContent = sales.error.value ?? '';",
+    "createEffect(() => { if (regionEl.value !== String(region())) regionEl.value = String(region()); });",
+    "createEffect(() => {",
+    "  rowsEl.replaceChildren(...sales().map(row => { const tr = document.createElement('tr'); for (const v of [row.name, row.revenue]) { const td = document.createElement('td'); td.textContent = String(v); tr.append(td); } return tr; }));",
+    "  errorEl.textContent = sales.error() ?? '';",
     "});",
-    "regionEl.addEventListener('change', () => { region.value = regionEl.value; });",
+    "regionEl.addEventListener('change', () => { setRegion(regionEl.value); });",
     "addBtn.addEventListener('click', async () => {",
     "  const title = labelEl.value.trim(); if (!title) return;",
     "  addBtn.disabled = true;",
@@ -141,7 +143,7 @@ try {
     const page = await context.newPage(); await page.goto(${JSON.stringify('/a/')}+${JSON.stringify(agentArtifact.id)});
     await page.getByLabel('Region').waitFor();
     await page.waitForFunction(() => Boolean(window.page));
-    return await page.evaluate(() => ({ region: window.page.value('region').value, sales: window.page.query('sales').value, tasks: window.page.query('tasks').value }));
+    return await page.evaluate(() => ({ region: window.page.get('region'), sales: window.page.get('sales'), tasks: window.page.get('tasks') }));
   `); ids.push(opened.session_id);
   assert.equal(opened.status,'completed',JSON.stringify(opened));
   assert.equal(opened.result.region,'East');
@@ -151,7 +153,7 @@ try {
     const page = pages[${JSON.stringify(agentPageId)}];
     return await page.evaluate(async () => {
       await window.page.mutation('addTask')({ taskTitle: 'Session task' });
-      return { tasks: await window.page.query('tasks').ready, taskTitle: window.page.value('taskTitle').value };
+      return { tasks: await window.page.ready('tasks'), taskTitle: window.page.get('taskTitle') };
     });
   `);
   assert.equal(mutated.status,'completed',JSON.stringify(mutated));
@@ -161,15 +163,15 @@ try {
     const page = pages[${JSON.stringify(agentPageId)}];
     await page.getByLabel('Region').selectOption('West');
     await page.getByText('West total',{exact:true}).waitFor();
-    await page.evaluate(() => { window.page.value('region').value = 'East'; });
+    await page.evaluate(() => { window.page.set('region', 'East'); });
     await page.getByText('East total',{exact:true}).waitFor();
     if (await page.getByLabel('Region').inputValue()!=='East') throw new Error('Page selection did not synchronize');
     await page.getByLabel('Task title').fill('Widget task');
     await page.getByRole('button',{name:'Add task'}).click();
-    await page.waitForFunction(() => window.page.query('tasks').value.some(row => row.title === 'Widget task'), null, { timeout: 5000 });
+    await page.waitForFunction(() => window.page.get('tasks').some(row => row.title === 'Widget task'), null, { timeout: 5000 });
     await page.waitForFunction(() => !document.querySelector('#agent-widget button').disabled, null, { timeout: 5000 });
     await output.image(await page.screenshot());
-    return await page.evaluate(() => ({ region: window.page.value('region').value, taskTitle: window.page.value('taskTitle').value, tasks: window.page.query('tasks').value.map(row => row.title) }));
+    return await page.evaluate(() => ({ region: window.page.get('region'), taskTitle: window.page.get('taskTitle'), tasks: window.page.get('tasks').map(row => row.title) }));
   `);
   assert.equal(widget.status,'completed',JSON.stringify(widget));
   assert.equal(widget.result.taskTitle,'untouched');
