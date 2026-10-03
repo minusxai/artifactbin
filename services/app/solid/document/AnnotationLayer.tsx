@@ -19,6 +19,7 @@
  *
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
+import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { useLocation } from '@solidjs/router';
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
 import Camera from 'lucide-solid/icons/camera';
@@ -524,7 +525,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       const attachmentId = await capture.stage(shot ? await screenshotExport.current!() : undefined);
       const body = draft();
       const signature = JSON.stringify([subject, body, attachmentId]);
-      if (mutation.signature !== signature) mutation = { signature, key: crypto.randomUUID() };
+      if (mutation.signature !== signature) mutation = { signature, key: runtimeId() };
       let wire: AnnotationWire;
       try {
         // The exact words ride along when there are any; a caret comment carries neither key.

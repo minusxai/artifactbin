@@ -1,4 +1,5 @@
 /** Selected-block controls own their preview; only a completed gesture changes source. */
+import { runtimeId } from '../story-runtime/runtime-id';
 import type { BlockEdit } from './block-edit';
 import { createDragPreview } from './drag-preview';
 import { SELECTION_PRESENTATION } from '../story-runtime/selection-presentation';
@@ -78,7 +79,7 @@ export function createNodeChrome(
   let gesture: Gesture | null = null;
   const dragPreview = createDragPreview(doc);
   const previewStyle = doc.createElement('style');
-  const previewId = crypto.randomUUID();
+  const previewId = runtimeId();
   doc.head.append(previewStyle);
   const handleStyle = doc.createElement('style');
   handleStyle.textContent = HANDLE_CSS;

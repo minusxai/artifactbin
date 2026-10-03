@@ -1,3 +1,4 @@
+import { runtimeId } from './runtime-id';
 import type {ImageAssetAnswer} from '@/lib/story/data/ref-data';
 /**
  * The document's DATA at runtime — one store per document, framework-free.
@@ -390,7 +391,7 @@ export function createDataflowStore(
           const request = mutationRequestFor(m, { values, ...(row ? { row } : {}), ...(Object.hasOwn(values, '_value') ? { value: values._value } : {}), ...(localTables ? { localTables } : {}) });
           const call = writes.get(id), previous = call?.request;
           if (m.notifies || previous?.operationKey) {
-            request.operationKey = previous?.operationKey || crypto.randomUUID();
+            request.operationKey = previous?.operationKey || runtimeId();
             request.tz = previous?.tz ?? localZone();
           }
           if (call) call.request = request;

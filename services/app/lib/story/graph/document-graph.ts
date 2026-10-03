@@ -4,11 +4,12 @@
  */
 import type {DocumentGraph,DocumentGraphNode} from '@artifactbin/contracts';
 export type {DocumentGraph,DocumentGraphNode} from '@artifactbin/contracts';
-const randomUUID=()=>globalThis.crypto.randomUUID();
+const randomUUID=()=>runtimeId();
 const byteLength=(value:string)=>new TextEncoder().encode(value).length;
 import type {DocumentPath} from '@artifactbin/contracts';
 import type {JsxNode} from '../../jsx/types';
 import {parseJsx} from '../../jsx/parse';
+import {runtimeId} from '../../story-runtime/runtime-id';
 import {serializeJsx} from '../../jsx/serialize';
 import {graphSelectors} from './document-graph-selectors';
 import {collectRefUses} from '../data/refs';
