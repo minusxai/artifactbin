@@ -77,12 +77,13 @@ export const GATE_SPECS = Object.freeze([
   { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 3, timeoutMs: 60_000 },
   { name: 'viz-editor', needsMail: true, seconds: 61, timeoutMs: 130_000 },
   // Journey gates (scripts/gates/gate-<name>.mjs headers list what each absorbed). `seconds` measured in one
-  // `node scripts/gate-container.mjs` run (4 CPUs, two servers, CI's shape); timeoutMs = max(60s, 3 × seconds).
-  { name: 'reader-shell', needsMail: true, seconds: 30, timeoutMs: 90_000 },
+  // `node scripts/gate-container.mjs reader-shell own-origin-script reading-geometry media` run (4 CPUs, two
+  // servers, CI's shape: 66s wall-clock); timeoutMs = max(60s, 3 × seconds), rounded up to ten seconds.
+  { name: 'reader-shell', needsMail: true, seconds: 9, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
-  { name: 'own-origin-script', needsMail: true, seconds: 60, timeoutMs: 180_000 },
-  { name: 'reading-geometry', needsMail: false, seconds: 65, timeoutMs: 200_000 },
-  { name: 'media', needsMail: true, serialGroup: 'clipboard', seconds: 60, timeoutMs: 180_000 },
+  { name: 'own-origin-script', needsMail: true, seconds: 14, timeoutMs: 60_000 },
+  { name: 'reading-geometry', needsMail: false, seconds: 63, timeoutMs: 190_000 },
+  { name: 'media', needsMail: true, serialGroup: 'clipboard', seconds: 35, timeoutMs: 110_000 },
 ]);
 
 /**
