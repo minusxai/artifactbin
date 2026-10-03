@@ -6,11 +6,11 @@ description: >-
 ## Read first
 
 The one `<script>` in `<Helmet>` runs **in the document itself** as an ES
-module, after the markup is in the DOM: native DOM access, `import`, top-level
-`await`, strict mode. It is Solid, on the page's own Solid: bind a declared
+module, after the markup is in the DOM, with `import`, top-level `await` and
+strict mode. It is Solid, on the page's own Solid: bind a declared
 name with `import { signal, query, mutation } from 'page'`, by the name the
 markup spells: `signal('$region')`. Markup carries content, data and layout;
-the script carries behaviour: DOM handlers, canvas, a library, a component.
+the script carries behaviour.
 
 - **Ownership**: a node bound in markup (`value="$region"`, `{$clicks}`,
   `data="$monthly"`) changes through its signal; every other node the script
@@ -18,7 +18,7 @@ the script carries behaviour: DOM handlers, canvas, a library, a component.
 - **The trap**: reading `region()` outside an effect, a memo or JSX is a
   one-time copy and subscribes to nothing. So is destructuring `props`.
 - A script that does not build is refused at publish as `invalid_script` with
-  the message and line: a syntax error, an undeclared or wrong-kind `$name`, a
+  the line: a syntax error, an undeclared or wrong-kind `$name`,
   `createSignal('$region')` (a local signal bound to nothing), a relative import.
 
 ## Contents
@@ -36,29 +36,29 @@ Example · Imports · The page module · Components · Libraries · Other hosts.
   <Query name="monthly">{`select month, total from sales where region = $region order by month`}</Query>
   <Mutation name="bump">{`update sales set total = total + 10 where region = $region`}</Mutation>
   <script>{`
-    import { signal, query, mutation } from 'page';
+    import { signal, query, mutation } from 'page';            // the three binders
     import { createEffect, createMemo, createSignal, For } from 'solid-js';
 
-    const [region] = signal('$region');
-    const [clicks, setClicks] = signal('$clicks');
-    const monthly = query('$monthly');
-    const bump = mutation('$bump');
+    const [region] = signal('$region');                         // a Value: Solid's [read, write]; only the accessor is needed here
+    const [clicks, setClicks] = signal('$clicks');              // clicks() reads, setClicks(n) writes; markup and queries follow
+    const monthly = query('$monthly');                          // a Query: monthly() rows; .loading(), .error(), await .ready
+    const bump = mutation('$bump');                             // a Mutation: an async function that resolves after commit
 
-    const total = createMemo(() => monthly().reduce((s, r) => s + Number(r.total), 0));
-    createEffect(() => {
-      document.querySelector('#summary').textContent =
+    const total = createMemo(() => monthly().reduce((s, r) => s + Number(r.total), 0));   // derived, cached until monthly changes
+    createEffect(() => {                                        // runs now and whenever a signal it CALLS changes
+      document.querySelector('#summary').textContent =          // unbound markup: the script owns it
         region() + ': ' + total() + (monthly.loading() ? ' (updating…)' : '');
     });
-    document.querySelector('#more').addEventListener('click', () => setClicks(clicks() + 1));
+    document.querySelector('#more').addEventListener('click', () => setClicks(clicks() + 1));   // write a Value
     document.querySelector('#bump').addEventListener('click', async () => {
       const status = document.querySelector('#status');
-      try { await bump(); status.textContent = 'saved'; }
-      catch (error) { status.textContent = error.message; }
+      try { await bump(); status.textContent = 'saved'; }      // readers of the table re-run
+      catch (error) { status.textContent = error.message; }     // the server's refusal, verbatim
     });
 
-    export function Bars(props) {
-      const [hover, setHover] = createSignal(null);
-      const max = () => Math.max(1, ...props.rows.map((r) => Number(r.total)));
+    export function Bars(props) {                               // mounted from markup below; keep props whole
+      const [hover, setHover] = createSignal(null);             // local state: the same primitive
+      const max = () => Math.max(1, ...props.rows.map((r) => Number(r.total)));   // props.rows: the tracked rows, not a function
       const h = (r) => (Number(r.total) / max()) * 56;
       return (
         <svg viewBox="0 0 200 60" style={{ width: '100%', height: '80px' }}>
@@ -72,10 +72,10 @@ Example · Imports · The page module · Components · Libraries · Other hosts.
   `}</script>
 </Helmet>
 <div data-design="tw" className="@container space-y-4 p-6">
-  <Select label="Region" value="$region" options={["west", "east"]} />
+  <Select label="Region" value="$region" options={["west", "east"]} />   {/* bound: changes via its signal */}
   <p id="summary">Loading…</p>
   <p>Clicks: {$clicks} <button id="more">More</button> <button id="bump">Add 10</button> <span id="status" /></p>
-  <Bars rows={$monthly} color="var(--chart-1)"><p>Loading chart…</p></Bars>
+  <Bars rows={$monthly} color="var(--chart-1)"><p>Loading chart…</p></Bars>   {/* the script's component; children = fallback */}
 </div>
 ```
 
@@ -100,39 +100,30 @@ script.
 
 Each binder takes one string literal, the declared name with its `$`.
 
-- **A Value**: `const [region, setRegion] = signal('$region')` is Solid's
-  pair. `region()` reads it; `setRegion('east')` writes it, and bound markup
-  re-renders and dependent queries re-run.
+- **A Value**: `const [region, setRegion] = signal('$region')`, Solid's pair:
+  `region()` reads, `setRegion('east')` writes; bound markup and dependent queries follow.
 - **A Query** (or a `type="table"` Value): `const monthly = query('$monthly')`
-  is an accessor of its rows, already loaded at page load. `monthly.loading()`
-  is true while a re-run is in flight (the old rows stay in `monthly()`
-  meanwhile); `monthly.error()` is the engine's message or null; `await
-  monthly.ready` gives the next settled rows and rejects with the engine's message.
+  is an accessor of its rows, loaded at page load. `monthly.loading()` is true
+  during a re-run (old rows stay); `monthly.error()` is the engine's message or
+  null; `await monthly.ready` gives the next settled rows or rejects with it.
 - **A Mutation**: `const rename = mutation('$rename')` is an async function.
-  `await rename({ from: 'west', to: 'West' })` resolves after commit and
-  rejects with the server's message, so wrap it in `try`/`catch`. A
-  row-scoped one takes `_row: { id: 7 }`. Permissions still apply.
+  `await rename({ from: 'west', to: 'West' })` resolves after commit, rejects
+  with the server's message (`try`/`catch`). Row-scoped: `_row: { id: 7 }`.
 
 ## Components
 
-JSX in the script is Solid JSX: the component function runs once, and what
-it reads inside JSX, a memo or an effect updates in place. A component the
-script exports mounts wherever markup writes its name as a tag (any
-capitalized tag that is not a kit component), rendered with Solid's `render`;
+Solid JSX: the component function runs once; what it reads inside JSX, a memo
+or an effect updates in place. An exported component mounts wherever markup
+writes its name as a tag (any capitalized tag that is not a kit component);
 the children are the server-rendered fallback until it mounts.
 
 ```jsx
-export function Detail(props) {
-  const item = () => props.item[0];
-  return <p style={{ color: props.color }}>{item()?.month}: {item()?.total}</p>;
-}
-// markup: <Detail item={$monthly} color="teal"><p>Loading…</p></Detail>
+export function Detail(props) { const item = () => props.item[0]; return <p>{item()?.month}: {item()?.total}</p>; }
+// markup: <Detail item={$monthly} />
 ```
 
 props.item is the current rows array (tracked; read it inside JSX, a memo or
 an effect), not a function; a literal prop such as color is a plain value.
-Inside a component, `onClick` and friends are ordinary Solid; markup itself
-still has no handlers.
 
 ## Libraries
 
@@ -146,12 +137,11 @@ that allow cross-origin reads.
   import * as THREE from 'three';
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
   const canvas = document.querySelector('#scene');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+  const renderer = new THREE.WebGLRenderer({ canvas });
   const camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
   camera.position.z = 4;
   const scene = new THREE.Scene();
-  scene.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 128, 16), new THREE.MeshNormalMaterial()));
+  scene.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3), new THREE.MeshNormalMaterial()));
   const controls = new OrbitControls(camera, canvas);
   renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
 `}</script></Helmet>
@@ -159,9 +149,8 @@ that allow cross-origin reads.
 
 ## Other hosts
 
-When a script needs a host outside the default policy, declare it in the
-Helmet, https origins only (no paths; a wildcard only as a leading `*.`;
-at most 10 per meta):
+A host outside the default policy is declared in the Helmet (https origins,
+no paths, `*.` wildcard only, at most 10 per meta):
 
 ```jsx
 <Helmet>
@@ -170,8 +159,7 @@ at most 10 per meta):
 </Helmet>
 ```
 
-Also `csp-style` (fonts too), `csp-img`, `csp-media`, `csp-frame`; any
-other `csp-` name is `invalid_csp`. Publishing a host is your consent;
-every other reader, the owner included, is asked (once, always for this
-document, or never), and until then requests to it fail, so handle a
-failed `fetch`.
+Also `csp-style` (fonts too), `csp-img`, `csp-media`, `csp-frame`; other
+names are `invalid_csp`. Publishing a host is your consent; every other
+reader is asked (once, for this document, or never) and until then its
+requests fail: handle a failed `fetch`.
