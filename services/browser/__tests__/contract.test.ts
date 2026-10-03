@@ -43,7 +43,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -109,6 +109,10 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
   });
   it('fails a managed readiness timeout instead of returning cacheable blank bytes',async()=>{
     const r=await svc.render({...base(),url:`${pages.base}/never-ready`,waitForManagedFrames:true,settleMs:0,timeoutMs:250});
+    expect(!r.ok&&r.reason).toBe('failed');
+  });
+  it('fails a render whose deadline elapses while the page is still loading, instead of calling it unreachable',async()=>{
+    const r=await svc.render({...base(),url:`${pages.base}/slow`,settleMs:0,timeoutMs:250});
     expect(!r.ok&&r.reason).toBe('failed');
   });
   it('shoots one slide as jpg', async () => {

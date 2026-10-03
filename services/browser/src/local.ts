@@ -8,7 +8,7 @@ import type { BrowserSessionOptions } from './session-config';
  * on first use, closed after a minute idle; renders are SERIALISED — one page
  * at a time bounds memory, and a failed launch never poisons the next try.
  */
-import { chromium, type Browser, type Locator, type Page } from 'playwright';
+import { chromium, errors, type Browser, type Locator, type Page } from 'playwright';
 import sharp from 'sharp';
 import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
 import {browserUploadOptions} from './upload-config';
@@ -143,6 +143,9 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
     let deadlineClose:Promise<void>|undefined;
     const renderTimer=setTimeout(()=>{deadlineClose=b.close().catch(()=>{});},remaining());
+    // The deadline closing the browser, or Playwright's own timeout, rejects navigation too: that is the render's
+    // budget running out (a 'failed' render, like a late success), never a page that could not be reached.
+    const deadlineElapsed=(e:unknown)=>deadlineClose!==undefined||e instanceof errors.TimeoutError;
     const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor, serviceWorkers: 'block' }).catch(async error=>{clearTimeout(renderTimer);await deadlineClose;throw error;});
     const forwarding = new AbortController();
     const pending = new Set<Promise<void>>();
@@ -168,7 +171,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         });
       }
       if (req.waitForMountsMs) await page.addInitScript(watchMounts);
-      await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw new NavigationError((e as Error).message); });
+      await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw deadlineElapsed(e) ? new Error('Render deadline') : new NavigationError((e as Error).message); });
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
       await surface.waitFor({ timeout });
