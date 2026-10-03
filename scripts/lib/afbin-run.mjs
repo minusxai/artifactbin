@@ -8,7 +8,8 @@
  * dangerous are decided HERE, once, and none of them is left to the caller:
  *
  *   - the PORT comes from the same resolver `npm run dev` uses (`dev-env.mjs`), so a
- *     worktree's `.env` block points its own CLI at its own server;
+ *     worktree's `.env` block points its own CLI at its own server, by the origin that
+ *     server calls itself (`afbinServer`);
  *   - the STATE lives in `~/.artifactbin-dev/<port>`, never `~/.artifactbin`, and no
  *     credential exported in the shell for production follows the child in;
  *   - SKILLS are switched off (`ARTIFACTBIN_SKILLS=off`), so eager init writes into
@@ -111,9 +112,27 @@ export async function runAfbin({
   if (!await serverHealthy(port, fetchImpl)) { log(healthRefusal(port)); return 1; }
   if (await cliBuildStale(root)) await build(root);
   const childEnv = afbinChildEnv(env, port, home);
-  const flags = serverFlag(argv, port);
+  const flags = serverFlag(argv, afbinServer(env, port));
   const args = [distEntry(root), ...(argv[0] === 'remote' ? [argv[0], ...flags, ...argv.slice(1)] : [...argv, ...flags])];
   return spawnImpl(execPathOf(env), args, { stdio: 'inherit', env: childEnv });
+}
+
+/**
+ * The origin the CLI selects: the one this checkout's server calls itself. With
+ * APP__PAGES_HOST set the app serves at APP__PUBLIC_BASE_URL (`http://app.lvh.me:<port>`)
+ * and advertises its approval page there, so a CLI pointed at `localhost` would refuse
+ * the pairing as another origin (approval_origin_mismatch). Without it, `localhost`.
+ * @param {Record<string, string | undefined>} env
+ * @param {number} port
+ */
+export function afbinServer(env, port) {
+  if (env.APP__PAGES_HOST?.trim()) {
+    try {
+      const origin = new URL(env.APP__PUBLIC_BASE_URL ?? '').origin;
+      if (origin !== 'null') return origin;
+    } catch { /* no usable public base URL: this checkout's localhost */ }
+  }
+  return `http://localhost:${port}`;
 }
 
 /**
@@ -121,9 +140,9 @@ export async function runAfbin({
  * checkout's server (or a throwaway) is a legitimate thing to ask for, and an appended flag
  * that silently overrode it would make the request look honoured while it was not.
  * @param {readonly string[]} argv
- * @param {number} port
+ * @param {string} server
  */
-export function serverFlag(argv, port) {
+export function serverFlag(argv, server) {
   let options = argv;
   if (argv[0] === 'remote') {
     let end = 1;
@@ -135,7 +154,7 @@ export function serverFlag(argv, port) {
     options = argv.slice(0, end);
   }
   const chosen = options.some((arg) => arg === '--server' || arg.startsWith('--server='));
-  return chosen ? [] : ['--server', `http://localhost:${port}`];
+  return chosen ? [] : ['--server', server];
 }
 
 /** The Node that runs this script runs the CLI too; nothing else is on the path for sure. */

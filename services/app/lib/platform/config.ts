@@ -237,7 +237,7 @@ export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE
  * canonical origin, never to a name on this list.
  *
  * Comma-separated origins, validated with the one origin rule the CLI's
- * `normalizeServer` uses (HTTPS, or HTTP on loopback for development; no path,
+ * `normalizeServer` uses (HTTPS, or HTTP on a local development host; no path,
  * query, fragment or credentials). A malformed entry throws at module load,
  * like DATASET__DNS_SERVERS: half a list is worse than a refused boot, because
  * the missing half is a name that silently stops being the same server.
@@ -247,7 +247,7 @@ export function parseAliasOrigins(value: string | undefined): readonly string[] 
   const origins: string[] = [];
   for (const entry of value.split(',')) {
     const origin = normalizeOrigin(entry.trim());
-    if (!origin) throw new Error('APP__ALIAS_ORIGINS must be a comma-separated list of origins this deployment also answers at (HTTPS, or HTTP on loopback), without a path, query, fragment or credentials.');
+    if (!origin) throw new Error('APP__ALIAS_ORIGINS must be a comma-separated list of origins this deployment also answers at (HTTPS, or HTTP on a local development host such as localhost or *.lvh.me), without a path, query, fragment or credentials.');
     if (!origins.includes(origin)) origins.push(origin);
   }
   return Object.freeze(origins);
