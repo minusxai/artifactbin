@@ -94,6 +94,24 @@ describe('startUrlSync', () => {
     expect(url.search).not.toContain('secret');
   });
 
+  it('framed, hands the page that frames it the `$` params alone on every write, debounced and compared', async () => {
+    window.history.replaceState(null, '', '/?ticketless=1&$region=west');
+    const store = createDataflowStore({ flow: SYNC_FLOW, values: { region: 'west' } }, { debounceMs: 0 });
+    const posted: string[] = [];
+    stop = startUrlSync(window, store, 5, (values) => posted.push(values));
+    expect(posted, 'nothing moved: nothing to tell').toEqual([]);
+    store.setValue('zoom', 3);
+    store.setValue('region', 'east');
+    store.setValue('draft', 'secret');
+    await tick(40);
+    expect(posted).toEqual(['?$region=east&$zoom=3']);
+    expect(window.location.search, 'its own address follows too').toBe('?ticketless=1&$region=east&$zoom=3');
+    store.setValue('zoom', 2);
+    store.setValue('region', 'north');
+    await tick(40);
+    expect(posted, 'back at rest: the page\'s selection is cleared').toEqual(['?$region=east&$zoom=3', '']);
+  });
+
   it('writes at once when a value moved before it started, and stops when torn down', async () => {
     window.history.replaceState(null, '', '/a/abc');
     const store = createDataflowStore({ flow: SYNC_FLOW, values: { region: 'south' } }, { debounceMs: 0 });

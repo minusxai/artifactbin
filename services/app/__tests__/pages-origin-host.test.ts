@@ -107,6 +107,30 @@ describe('the app page frames the document on its own origin', () => {
   });
 });
 
+describe('the reader\'s selection in the app page\'s address reaches the frame', () => {
+  it('forwards every `$` param of the page\'s address into the frame\'s first URL, and the document starts from it', async () => {
+    const w = await world();
+    const id = await w.publish('<Helmet><Value name="region" type="string" default="north" /><Value name="zoom" type="number" default={2} /></Helmet><p>{$region}</p>', 'private');
+    await drainPreparedPageWarmups();
+    const app = framing();
+    const self = pagesOriginFor(id, site);
+    const page = await app.request(as(`${APP}/a/${id}?$region=west&$zoom=5`, w.actor, { headers: { accept: 'text/html' } }));
+    const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+    expect(src.searchParams.get('next')).toBe(`${self}/?$region=west&$zoom=5`);
+    // The apex spends the ticket and lands the frame on the document's origin with the selection intact.
+    const exchanged = await app.request(src.href);
+    expect(exchanged.status).toBe(302);
+    const landed = exchanged.headers.get('location')!;
+    expect(new URL(landed).search).toBe('?$region=west&$zoom=5');
+    const cookie = /afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!;
+    const html = await (await app.request(landed, { headers: { cookie: `afbin_pages=${cookie}` } })).text();
+    expect(island(html)).toMatchObject({ values: { region: 'west', zoom: 5 } });
+    // A fresh frame URL (a consent grant's reload) carries the page's address the same way.
+    const fresh = await framedDocumentSrc(as(`${APP}/api/page/frame/${id}?$region=east`, w.actor), id, site, '?$region=east');
+    expect(new URL(fresh!.src).searchParams.get('next')).toBe(`${self}/?$region=east`);
+  });
+});
+
 describe('a fresh frame URL (app/api/page/frame, for an app page that builds its own frame)', () => {
   it('carries a one-time ticket for this reader to the document\'s origin, and nothing for a reader who may not read it', async () => {
     const w = await world();

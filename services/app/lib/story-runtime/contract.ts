@@ -331,6 +331,17 @@ export const STORY_SCROLL_MESSAGE = 'mx:reader-scroll';
  * link to a heading scrolls the frame. `{ type, hash }`, hash `#…`; the frame takes it from its parent only.
  */
 export const STORY_FRAME_HASH_MESSAGE = 'mx:frame-hash';
+/**
+ * A document framed on its own origin → the app page: the reader moved a `<Value>` the link carries, and this is
+ * what the link should now say — the `$` params ONLY (lib/story/data/url-values `writeUrlValues('', …)`, `''` at
+ * rest), never the frame's other params or hash. Posted by the document's link follower (lib/islands/url-sync,
+ * debounced and compared there) to the app origin; the page's half of the bridge (frame-bridge/parent) takes it
+ * only from its own frame's window and origin, and the page (solid/document/create-framed-story) puts exactly
+ * those `$` pairs in its own address, so the address bar, a copied link and a reload carry the selection.
+ * Unkeyed on purpose: the author's script can move every value anyway, so it gains nothing by forging one.
+ */
+export const STORY_URL_VALUES_MESSAGE = 'mx:url-values';
+export interface StoryUrlValuesMessage { type: typeof STORY_URL_VALUES_MESSAGE; search: string }
 export interface StoryScrollMessage {
   type: typeof STORY_SCROLL_MESSAGE;
   scrollY: number;

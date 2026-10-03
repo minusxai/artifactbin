@@ -23,8 +23,9 @@
  * 8. when the page may hold data (`hold`, `sqliteWasm`): gives the store the page's own SQLite engine
  *    (./sqlite-engine, bundled alone and loaded behind the first paint — the store asks for it once the
  *    first run is on its way), so what the reader holds is answered in the page, as the former reader does.
- * 9. top-level only: the link follows the reader — a moved `<Value>` rewrites the page's own `$` params
- *    (./url-sync), loaded after hydration.
+ * 9. top-level or on its own origin: the link follows the reader — a moved `<Value>` rewrites the page's own `$`
+ *    params (./url-sync), loaded after hydration; framed, it also tells the app page that frames it, whose address
+ *    is the reader's (STORY_URL_VALUES_MESSAGE).
  *
  * The viewer overlay, the write status feed and its indicator are wave-3 seams (viewer.ts,
  * writes.ts, kit/status.tsx): this file calls them and their owners replace those files.
@@ -34,7 +35,8 @@ import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
 import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
-import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
+import { STORY_DATA_HOOK, STORY_URL_VALUES_MESSAGE, type StoryUrlValuesMessage } from '@/lib/story-runtime/contract';
+import { frameAppOrigin } from '@/lib/story-runtime/frame-bridge/door';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
 import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
@@ -198,12 +200,19 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     openLive(data.results?.since ?? null);
   }
-  // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
+  // The link follows the reader (./url-sync) where this document is the reader's page: top-level, or framed on its
+  // own origin — where the address the reader sees, copies and reloads is the app page's, so each change is posted
+  // there too (only to the app origin the server named; the page takes it only from this frame).
   let stopUrl = () => {};
+  const framer = win.parent === win ? null : win.parent;
+  const appOrigin = framer ? frameAppOrigin(doc, win) : null;
+  const postValues = framer && appOrigin ? (search: string) => {
+    try { framer.postMessage({ type: STORY_URL_VALUES_MESSAGE, search } satisfies StoryUrlValuesMessage, appOrigin); } catch { /* an opaque origin cannot be addressed */ }
+  } : undefined;
   /** The link follows the reader while reading; editing pauses it (no value moves) and reading again resumes it. */
   const followUrl = () => {
-    if (store && win.parent === win) void import('./url-sync').then(({ startUrlSync }) => {
-      if (!disposed && mode === 'read') { stopUrl(); stopUrl = startUrlSync(win, store); }
+    if (store && holdsOwn) void import('./url-sync').then(({ startUrlSync }) => {
+      if (!disposed && mode === 'read') { stopUrl(); stopUrl = startUrlSync(win, store, undefined, postValues); }
     }, () => {});
   };
   followUrl();

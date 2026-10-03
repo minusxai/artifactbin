@@ -14,6 +14,9 @@
  * Bundled alone (scripts/build/build-islands.mjs STANDALONE_LAZY) and loaded by boot after hydration, off the
  * shared runtime's closure; a value moved before it loaded is written at once. A sandboxed copy whose
  * opaque origin refuses the rewrite keeps its address.
+ *
+ * FRAMED on its own origin, the reader's address is the app page's, not this document's: every write also hands
+ * `post` the `$` params alone (lib/story-runtime/contract STORY_URL_VALUES_MESSAGE), which boot sends to the page.
  */
 import { readUrlValues, urlValueParams, writeUrlValues } from '@/lib/story/data/url-values';
 import type { DataflowStore } from '@/lib/story-runtime/store';
@@ -25,11 +28,15 @@ export function startUrlSync(
   win: Window,
   store: Pick<DataflowStore, 'subscribe' | 'getState' | 'flow'>,
   debounceMs: number = URL_SYNC_DEBOUNCE_MS,
+  /** The page that frames this document, told what its own link's `$` params should now be (`''` at rest). */
+  post?: (values: string) => void,
 ): () => void {
   const said = () => JSON.stringify(urlValueParams(store.flow, store.getState().values));
   const write = () => {
     const { pathname, search, hash } = win.location;
-    try { win.history.replaceState(win.history.state, '', `${pathname}${writeUrlValues(search, store.flow, store.getState().values)}${hash}`); } catch { /* an opaque origin keeps its address */ }
+    const values = store.getState().values;
+    try { win.history.replaceState(win.history.state, '', `${pathname}${writeUrlValues(search, store.flow, values)}${hash}`); } catch { /* an opaque origin keeps its address */ }
+    post?.(writeUrlValues('', store.flow, values));
   };
   // What the address says now: the declared defaults under the link's own `$` values.
   const linked = { ...Object.fromEntries(store.flow.values.flatMap((v) => (v.kind === 'scalar' ? [[v.name, v.default ?? null]] : []))), ...readUrlValues(win.location.search, store.flow) };

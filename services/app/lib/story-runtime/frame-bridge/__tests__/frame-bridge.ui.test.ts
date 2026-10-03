@@ -35,8 +35,8 @@ vi.mock('@/lib/story-runtime/island-controller', () => ({
 
 import { openFrameDoor, FRAME_BRIDGE_MESSAGE, frameAppOrigin, APP_ORIGIN_ATTR } from '../door';
 import { startFrameBridge } from '../frame';
-import { createFrameBridgeParent, relayedRequest } from '../parent';
-import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE } from '@/lib/story-runtime/contract';
+import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '../parent';
+import { STORY_ADOPT_HOOK, STORY_EDIT_MODE_MESSAGE, STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_HISTORY_MESSAGE, STORY_SELECT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
 
 const APP = 'https://app.test';
 const PAGES = 'https://6869.pages.test';
@@ -265,6 +265,27 @@ describe('the frame bridge', () => {
     expect(typeof hooks[STORY_ADOPT_HOOK]).toBe('function');
     await bridge.restored();
     expect(hooks[STORY_ADOPT_HOOK]).toBeUndefined();
+  });
+
+  it('hands the page the document\'s `$` params from its own frame only, bounded and without a hash', async () => {
+    const { frame, pageProxy } = framedPair();
+    const onUrlValues = vi.fn();
+    parentFor(frame, { onUrlValues });
+    // From the frame's window and origin (what lib/islands/boot posts to the app origin).
+    pageProxy.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: '?$region=east' }, APP);
+    pageProxy.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: '' }, APP);
+    // Malformed: a hash, whitespace, an oversized query, not a string.
+    pageProxy.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: '?$region=east#evil' }, APP);
+    pageProxy.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: '?$region=a b' }, APP);
+    pageProxy.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: `?$region=${'x'.repeat(9000)}` }, APP);
+    pageProxy.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: 1 }, APP);
+    await tick(); await tick();
+    // Another window, or the right window from another origin.
+    window.dispatchEvent(new MessageEvent('message', { data: { type: STORY_URL_VALUES_MESSAGE, search: '?$region=other' }, origin: PAGES, source: window }));
+    window.dispatchEvent(new MessageEvent('message', { data: { type: STORY_URL_VALUES_MESSAGE, search: '?$region=other' }, origin: 'https://evil.test', source: frame.contentWindow }));
+    expect(onUrlValues.mock.calls).toEqual([['?$region=east'], ['']]);
+    expect(urlValuesOf({ type: STORY_URL_VALUES_MESSAGE, search: '$region=east' })).toBe('$region=east');
+    expect(urlValuesOf({ type: 'mx:frame-bridge', search: '?$region=east' })).toBeNull();
   });
 
   it('the page\'s reader mode and data wakeups reach the framed document', async () => {
