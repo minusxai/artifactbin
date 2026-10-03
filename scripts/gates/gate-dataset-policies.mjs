@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { launchChromium } from './lib/browser.mjs';
 import { startDocument, becomeOwner } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
+import { documentLocator } from './lib/page-facts.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
 const seed = await startDocument(base);
 const publish = async (body) => {
@@ -23,6 +24,18 @@ const dataset = await publish({
 const doc = await publish({
   markup: `<Helmet><Value name="branch" default="new branch"/><Import name="tree_data" src="ref:${dataset.id}" /><Query name="tree">{\`select * from tree_data.rows\`}</Query><Import name="append_data" src="ref:${dataset.id}" /><Mutation name="append">{\`insert into append_data.rows values ($branch)\`}</Mutation><Import name="delete_data" src="ref:${dataset.id}" /><Mutation name="delete">{\`delete from delete_data.rows\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/>`,
 });
+/*
+ * The document's buttons and table live in its frame (every document is served on its own origin, framed by the
+ * app page); the dataset's editor is the app's own page. `until` polls a frame locator's state, which survives the
+ * frame reloading.
+ */
+const until = async (probe, timeout = 30_000) => {
+  const end = Date.now() + timeout;
+  while (!(await probe().catch(() => false))) {
+    if (Date.now() > end) throw new Error(`timed out after ${timeout}ms waiting for ${probe}`);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+};
 const browser = await launchChromium();
 const sink = await startMailSink();
 try {
@@ -32,14 +45,11 @@ try {
     second = await browser.newPage();
   await guest.goto(doc.url);
   await second.goto(doc.url);
-  await guest
-    .getByRole('button', { name: 'Append branch', exact: true })
-    .waitFor();
-  assert(
-    await guest
-      .getByRole('button', { name: 'Append branch', exact: true })
-      .isDisabled(),
-  );
+  const guestDoc = documentLocator(guest),
+    secondDoc = documentLocator(second);
+  const append = guestDoc.getByRole('button', { name: 'Append branch', exact: true });
+  await append.waitFor();
+  assert(await append.isDisabled());
   const editor = await browser.newPage();
   const email = `mxmx_test_policy_editor_${Date.now()}@example.com`;
   await loginViaEmail(editor, base, sink, email);
@@ -71,22 +81,16 @@ try {
     .getByRole('button', { name: 'Save access policies', exact: true })
     .click();
   await editor.getByText('Access policies saved.', { exact: true }).waitFor();
-  await guest.waitForFunction(() =>
-    [...document.querySelectorAll('button')].some(
-      (b) => b.textContent === 'Append branch' && !b.disabled,
-    ),
-  );
+  await until(() => append.isEnabled());
   assert(
-    await guest
+    await guestDoc
       .getByRole('button', { name: 'Delete tree', exact: true })
       .isDisabled(),
   );
-  await guest
-    .getByRole('button', { name: 'Append branch', exact: true })
-    .click();
-  await second.getByText('new branch', { exact: true }).waitFor();
+  await append.click();
+  await secondDoc.getByText('new branch', { exact: true }).waitFor();
   await second.reload();
-  await second.getByText('new branch', { exact: true }).waitFor();
+  await secondDoc.getByText('new branch', { exact: true }).waitFor();
   const forged = await guest.request.post(`${base}/a/${doc.id}/mutate`, {
     data: { mutation: 'delete' },
   });
@@ -107,11 +111,7 @@ try {
   await editor
     .getByRole('button', { name: 'Save access policies', exact: true })
     .click();
-  await guest.waitForFunction(() =>
-    [...document.querySelectorAll('button')].some(
-      (b) => b.textContent === 'Append branch' && b.disabled,
-    ),
-  );
+  await until(() => append.isDisabled());
   await editor.reload();
   await editor.getByRole('button', {name:'Source & models', exact:true}).click();
   await editor.getByLabel('Dataset title', {exact:true}).fill('Updated policy dataset');

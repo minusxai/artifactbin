@@ -1,6 +1,6 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { documentFrame, INLINE_STORY } from './lib/page-facts.mjs';
 /**
  * Gate: a document's own typeface must not arrive after the reader does.
  *
@@ -18,11 +18,11 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *   3. the head preloads it (discovery at parse time, not after hydration).
  *
  * Check 4 is the one that looks like success while failing: a preload lands in
- * the PARENT document, but the font is used inside a sandboxed srcdoc iframe
- * whose CSP has its own `font-src`. If that ever stops allowing 'self', the
- * parent timeline still shows a perfect fast preload and every document still
- * renders in a fallback face. So the gate asserts the font resolved INSIDE the
- * iframe, not merely that it was fetched.
+ * the APP page, but the font is used inside the document's frame, on its own
+ * origin, whose CSP has its own `font-src`. If that ever stops allowing 'self',
+ * the app page's timeline still shows a perfect fast preload and every document
+ * still renders in a fallback face. So the gate asserts the font resolved INSIDE
+ * the frame, not merely that it was fetched.
  *
  *   usage: node scripts/gates/gate-fonts.mjs [base]
  */
@@ -31,7 +31,15 @@ import { tsImport } from 'tsx/esm/api';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
+const APP_ORIGIN = new URL(B).origin;
 const check = createChecker('fonts');
+
+/** The document's frame on the app page (its own origin), once its story is on screen. */
+async function storyFrame(page, timeout = 20_000) {
+  const frame = await documentFrame(page, { timeout });
+  await frame.waitForSelector(INLINE_STORY, { timeout });
+  return frame;
+}
 
 // A serif theme on purpose: Noto Serif was both the biggest asset (1.8 MB) and
 // the most jarring swap, since the fallback is Georgia — a different face
@@ -120,14 +128,14 @@ check(docHead.indexOf('rel="preload"') < docHead.indexOf('@font-face'), 'and it 
 const reqs = [];
 p.on('request', (r) => { if (r.url().includes('/fonts/')) reqs.push(r.url()); });
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-const frameEl = await p.waitForSelector('[data-mx-inline-story]', { timeout: 20_000 });
-const docFrame = p.mainFrame();
+const docFrame = await storyFrame(p);
 await docFrame.waitForSelector('h1', { timeout: 20_000 });
 await p.waitForTimeout(2500);
 
 check(reqs.length > 0, `the font is actually fetched (${reqs.length} request)`);
 check(reqs.every((u) => u.endsWith('.woff2')), 'and nothing requests a .ttf');
-const docReqs = new Set(reqs.filter(isDocFont));
+// The document's fetches are the ones on ITS origin: the app page's bar fetches the shell's faces from the app's.
+const docReqs = new Set(reqs.filter((u) => new URL(u).origin !== APP_ORIGIN && isDocFont(u)).map((u) => new URL(u).pathname));
 check(docReqs.size === 2, `and exactly the document's display and body files are needed (${docReqs.size})`);
 
 const inside = await docFrame.evaluate(async (docFonts) => {
@@ -156,7 +164,7 @@ check(inside.start !== null && inside.start <= inside.domInteractive,
 
 // ── 5. a WARM load spends no round trip (the immutable win) ────────────────
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-const warmFrame = await artifactDocument(p, { timeout: 20_000 });
+const warmFrame = await storyFrame(p);
 await warmFrame.waitForSelector('h1', { timeout: 20_000 });
 await p.waitForTimeout(2000);
 const warm = await warmFrame.evaluate(() => performance.getEntriesByType('resource')
@@ -202,16 +210,13 @@ await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
 const measure = async () => {
   await p.goto(`${B}/a/${st.id}`, { waitUntil: 'commit' });
   /*
-   * Wait for the frame to be AT the document, not merely to exist. The app mounts
-   * the iframe on `about:blank` and points it at /raw a moment later; binding to
-   * the context that early means the real navigation destroys it underneath the
-   * probe ("Execution context was destroyed"). Locally those moments are close
-   * enough to get away with — against a remote server it failed every time.
-   * Verified with a frame-navigation log: the document is still fetched exactly
-   * ONCE, so this is the gate's timing, not the page's behaviour.
+   * Wait for the frame to be AT the document, not merely to exist. The frame's
+   * first URL is the pages session exchange, which redirects to the document's
+   * own origin; binding to a context before that lands means the real navigation
+   * destroys it underneath the probe ("Execution context was destroyed").
    */
-  await p.waitForSelector('[data-mx-inline-story]', { timeout: 30_000 });
-  return p.evaluate(FONT_ORDER_PROBE, [...docFontUrls]);
+  const frame = await storyFrame(p, 30_000);
+  return frame.evaluate(FONT_ORDER_PROBE, [...docFontUrls]);
 };
 let order = null;
 for (let attempt = 0; attempt < 3 && order === null; attempt++) {
@@ -324,8 +329,10 @@ for (const theme of [null, ...STORY_THEMES.map((t) => t.name)]) {
     await cdp.send('Log.enable');
     cdp.on('Log.entryAdded', ({ entry }) => { if (/preload/i.test(entry.text)) warnings.push(entry.text); });
     await page.goto(`${B}${path}`, { waitUntil: 'load' });
+    // /raw IS the document; /a frames it on its own origin, and the probe reads the document's own head and timeline.
+    const target = path.endsWith('/raw') ? page.mainFrame() : await storyFrame(page);
     await page.waitForTimeout(1500);
-    const r = await page.evaluate(FIRST_SCREEN_PROBE);
+    const r = await target.evaluate(FIRST_SCREEN_PROBE);
     const preloaded = r.preloads.map((x) => x.url);
     check(r.preloads.every((x) => x.cors === 'anonymous'), `${label}: every font preload is crossorigin`);
     const unused = preloaded.filter((u) => !r.loaded.includes(u));

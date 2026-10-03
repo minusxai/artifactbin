@@ -1,7 +1,7 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkWebImport } from './lib/web-import-cases.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { documentFrame, INLINE_STORY } from './lib/page-facts.mjs';
 /**
  * Gate: a web URL written into a document is served AS WRITTEN, and the copies
  * this app still makes are made only where a reader's browser asks for them.
@@ -35,6 +35,13 @@ import { loginViaEmail, startMailSink } from '../lib/mail-login.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('web-assets');
+
+/** The document's frame on the app page (its own origin), once its story is on screen. */
+async function storyFrame(page) {
+  const frame = await documentFrame(page);
+  await frame.waitForSelector(INLINE_STORY, { state: 'visible', timeout: 30_000 });
+  return frame;
+}
 
 /* ── the "public web" this gate imports from ─────────────────────────────────
  * Its own port so the count of requests to it is unambiguous: publish must ask
@@ -124,7 +131,7 @@ const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 await becomeOwner(page, B, owner.token);
 await page.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
-const frame = await artifactDocument(page, { timeout: 30_000 });
+const frame = await storyFrame(page);
 const probe = await frame.evaluate(async () => {
   const deadline = Date.now() + 8000;
   const shot = () => ({
@@ -254,8 +261,8 @@ await checkWebImport(B, browser, WEB, check);
   const boundStored = await (await fetch(`${B}/api/artifacts/${bound.id}`, { headers: boundAuth })).json();
   check(boundStored.markup.includes('src="$pick"'), 'bound: the stored markup keeps the binding the author wrote');
 
-  // A STRANGER: no session, no adopted token. A public document is served
-  // top-level, so this is the reading path a shared link gives someone.
+  // A STRANGER: no session, no adopted token. The app page frames the public
+  // document on its own origin, read as nobody: the path a shared link gives someone.
   const reading = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   const boundOutbound = [];
   const endpointCalls = [];
@@ -269,6 +276,7 @@ await checkWebImport(B, browser, WEB, check);
   }).then((r) => r.json());
   const firstImport = waitForImport(ONE);
   await reading.goto(`${B}/a/${bound.id}`, { waitUntil: 'networkidle' });
+  const readingDoc = await storyFrame(reading);
 
   /**
    * The `<img>` once it has SETTLED on the URL we are asking about — polled by
@@ -276,7 +284,7 @@ await checkWebImport(B, browser, WEB, check);
    * its previous source until the new one decodes, so "has it painted" asked
    * too early is the old picture answering for the new one.
    */
-  const shotOf = (expect) => reading.evaluate(async (want) => {
+  const shotOf = (expect) => readingDoc.evaluate(async (want) => {
     const deadline = Date.now() + 8000;
     const read = () => {
       const img = document.querySelector('img[alt="the pick"]');
@@ -305,7 +313,7 @@ await checkWebImport(B, browser, WEB, check);
     `bound: the source host was asked ONCE for the first picture (${hits.filter((h) => h === '/pic1.png').length})`);
 
   const secondImport = waitForImport(TWO);
-  await reading.selectOption('select[aria-label="pick"]', TWO);
+  await readingDoc.selectOption('select[aria-label="pick"]', TWO);
   const secondAnswer = await secondImport;
   const secondShot = await shotOf(secondAnswer.url);
   check(/^\/assets\/[0-9a-f]{64}$/.test(secondShot.src ?? '') && secondShot.src === secondAnswer.url
@@ -314,14 +322,14 @@ await checkWebImport(B, browser, WEB, check);
   check(hits.filter((h) => h === '/pic2.png').length === 1, 'bound: the source host was asked once for the second');
 
   const beforeReturn = { web: hits.length, endpoint: endpointCalls.length };
-  await reading.selectOption('select[aria-label="pick"]', ONE);
+  await readingDoc.selectOption('select[aria-label="pick"]', ONE);
   const back = await shotOf('/assets/');
   check(/^\/assets\/[0-9a-f]{64}$/.test(back.src ?? '') && back.natural[0] === 48,
     `bound: coming back renders our copy directly, and it still paints (${back.src})`);
   check(hits.length === beforeReturn.web && endpointCalls.length === beforeReturn.endpoint,
     `bound: neither the source host nor the endpoint was asked again (${hits.length - beforeReturn.web} / ${endpointCalls.length - beforeReturn.endpoint})`);
 
-  const untilRefused = () => reading.evaluate(async () => {
+  const untilRefused = () => readingDoc.evaluate(async () => {
     const deadline = Date.now() + 8000;
     const read = () => {
       const img = document.querySelector('img[alt="the pick"]');
@@ -339,12 +347,12 @@ await checkWebImport(B, browser, WEB, check);
     }
     return read();
   });
-  await reading.selectOption('select[aria-label="pick"]', BAD);
+  await readingDoc.selectOption('select[aria-label="pick"]', BAD);
   const refused = await untilRefused();
   check(refused.mark === 'refused' && refused.src === null,
     `bound: a refused URL is marked and carries no src (data-mx-asset=${refused.mark})`);
   check(refused.alt === 'the pick', "bound: the alt text is still the author's, so the browser draws it");
-  await reading.selectOption('select[aria-label="pick"]', DATA_URL);
+  await readingDoc.selectOption('select[aria-label="pick"]', DATA_URL);
   const dataShot = await untilRefused();
   check(dataShot.mark === 'refused' && dataShot.src === null && dataShot.natural !== 40,
     `bound: a data: value is refused by the MAPPING, not left to the policy (${JSON.stringify(dataShot)})`);
@@ -352,12 +360,11 @@ await checkWebImport(B, browser, WEB, check);
   check(boundOutbound.length === 0, `bound: zero requests from the page to the source host (${boundOutbound.length})`);
 
   /*
-   * THE CASE THE WHOLE RELAY EXISTS FOR, and it is the DEFAULT one: a signed-in
-   * user's document is born private, so its first reader is its owner, looking
-   * at it in the shell. The frame is opaque-origin — its <img> carries no
-   * cookie — so the endpoint sees an anonymous caller and the read ACL answers
-   * 404. The page asks instead, with its session, and hands back the public
-   * address of our copy (mx:asset).
+   * THE DEFAULT CASE: a signed-in user's document is born private, so its first
+   * reader is its owner, looking at it on the app page. The frame is on the
+   * document's own origin and calls its own asset door with the pages session
+   * the app page minted for that reader, so the door's read ACL sees the owner
+   * and hands back the public address of our copy.
    */
   const sink = await startMailSink();
   const PRIV = `${WEB}/pic3.png?run=${RUN_ID}`;
@@ -392,11 +399,11 @@ await checkWebImport(B, browser, WEB, check);
   });
 
   await holder.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
-  const owned = await paints(await artifactDocument(holder, { timeout: 30_000 }));
+  const owned = await paints(await storyFrame(holder));
   check(owned.natural[0] === 48 && owned.natural[1] === 32,
-    `bound: a private document's OWNER sees the picture, imported through the page (${JSON.stringify(owned)})`);
+    `bound: a private document's OWNER sees the picture, imported through its own door (${JSON.stringify(owned)})`);
   check(/^\/assets\/[0-9a-f]{64}$/.test(owned.src ?? ''),
-    `bound: and its src is the public content address the relay handed back (${owned.src})`);
+    `bound: and its src is the public content address the door handed back (${owned.src})`);
   check(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1,
     `bound: the source host was asked exactly once for it (before=${beforePriv}, after=${hits.filter(h=>h==='/pic3.png').length})`);
   const listed = await holder.evaluate(async () => (await fetch('/api/my/artifacts')).json());
@@ -419,9 +426,9 @@ await checkWebImport(B, browser, WEB, check);
   await loginViaEmail(guest, B, sink, guestEmail);
   const beforeGuest = hits.filter((h) => h === '/pic3.png').length;
   await guest.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
-  const seenByGuest = await paints(guest.mainFrame());
+  const seenByGuest = await paints(await storyFrame(guest));
   check(seenByGuest.natural[0] === 48,
-    `bound: an INVITED VIEWER of the private document sees the picture too, through the shell (${JSON.stringify(seenByGuest)})`);
+    `bound: an INVITED VIEWER of the private document sees the picture too, in the app page's frame (${JSON.stringify(seenByGuest)})`);
   check(hits.filter((h) => h === '/pic3.png').length === beforeGuest,
     'bound: and cost the source host nothing — it was already ours');
   sink.close();

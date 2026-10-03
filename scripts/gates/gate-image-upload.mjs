@@ -13,9 +13,10 @@
  * and a real ⌘V while it is selected — and asserts only its src changed.
  *
  * The paste/drop half is realm-sensitive: the listeners live inside the SERVED
- * document (its own window, sandboxed without allow-same-origin), so the events
- * are dispatched THERE through Playwright's frame API — a page-level dispatch
- * would prove nothing, and `contentDocument` is null from the parent. Every
+ * document (its own window, framed by the app page on the document's own
+ * origin), so the events are dispatched THERE through Playwright's frame API — a
+ * page-level dispatch would prove nothing, and `contentDocument` is null from
+ * the parent. Every
  * check asserts the image actually PAINTS (naturalWidth > 0) and counts only
  * `/a/<id>/raw` sources: the credits-footer logo made an earlier version of
  * this gate pass while nothing was being inserted at all.
@@ -25,7 +26,7 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
-import { artifactDocument } from './lib/artifact-document.mjs';
+import { documentFrame as framedDocument, INLINE_STORY } from './lib/page-facts.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -60,10 +61,8 @@ async function mint() {
 /**
  * Count <img> that have actually decoded to non-zero pixels.
  *
- * Two realms to look in, and both matter: the EDIT canvas is a same-origin
- * frame the page can reach into, while the SERVED document is opaque-origin
- * and only reachable through the frame API. Ask Playwright for whichever
- * frame is there.
+ * The document — read or edited — is the app page's frame on its own origin,
+ * reachable only through the frame API.
  */
 async function paintedImages(page) {
   const countIn = (ctx) => ctx.evaluate(async () => {
@@ -83,8 +82,7 @@ async function paintedImages(page) {
     return n;
   });
 
-  await page.locator('[data-mx-inline-story]').waitFor();
-  return countIn(page);
+  return countIn(await documentFrame(page));
 }
 
 async function openEditor(page, st) {
@@ -100,16 +98,17 @@ await becomeOwner(page, B, st.token);
  * Dispatch a paste OR drop carrying a File, inside the DOCUMENT's own realm.
  *
  * This has to run in the frame, not the page: editing happens in the served
- * document, which is sandboxed without allow-same-origin, so the parent cannot
- * reach `contentDocument` and a page-level dispatch would prove nothing. That
- * unreachability is also why this leg silently asserted nothing for a while —
- * and the feature it covers had in fact been lost. Playwright can evaluate
- * inside an opaque frame even though script cannot, which is what makes a real
- * end-to-end assertion possible here.
+ * document, on its own origin, so the parent cannot reach `contentDocument` and
+ * a page-level dispatch would prove nothing. That unreachability is also why
+ * this leg silently asserted nothing for a while — and the feature it covers had
+ * in fact been lost. Playwright can evaluate inside a cross-origin frame even
+ * though script cannot, which is what makes a real end-to-end assertion possible
+ * here.
  */
 async function documentFrame(page) {
-  await page.locator('[data-mx-inline-story]').waitFor();
-  return page.mainFrame();
+  const frame = await framedDocument(page);
+  await frame.waitForSelector(INLINE_STORY, { state: 'visible', timeout: 30_000 });
+  return frame;
 }
 
 async function dispatchFileEvent(page, kind, b64) {
@@ -321,7 +320,7 @@ const browser = await launchChromium();
   await page.route(`**/a/${st.id}/raw*`, async (route) => { await held; await route.continue(); });
   await becomeOwner(page, B, st.token);
   await page.goto(`${B}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
-  const frame = await artifactDocument(page, { timeout: 30_000 });
+  const frame = await documentFrame(page);
   await frame.waitForSelector('img[alt="blurred"]', { timeout: 20_000 });
 
   const during = await frame.evaluate(() => {
