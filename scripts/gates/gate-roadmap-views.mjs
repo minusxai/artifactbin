@@ -29,9 +29,7 @@ try {
   await page.locator('#view-dag [aria-label="Dependency 1 → 3"]').first().waitFor({timeout:3000});
   assert.equal(await page.getByLabel('Item 1',{exact:true}).isVisible(),false);
   await switchView('Sprint');
-  // The document's own address follows the reader (lib/islands/url-sync, inside the frame)…
-  await page.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
-  // …and the link the reader copies, the app page's address, must say the same.
+  // The link the reader copies, the app page's address, says what they narrowed the document to (lib/islands/url-sync).
   const linked = await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint',null,{timeout:5000}).then(()=>true,()=>false);
   if (!linked) failures.push(`the app page's address carries the view the reader chose ($view_mode=sprint): saw ${JSON.stringify(await ownerPage.evaluate(()=>location.search))}, the frame's ${JSON.stringify(await page.evaluate(()=>location.search))}`);
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
@@ -55,7 +53,7 @@ try {
   await page.getByLabel('Cancel sprint',{exact:true}).click();
   await dialog.waitFor({state:'hidden'});
   await switchView('Table');
-  await page.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')!=='sprint');
+  await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')!=='sprint');
   await page.getByLabel('Sprint 1',{exact:true}).click();
   await page.getByRole('option',{name:'Planning week',exact:true}).waitFor();
   await page.locator('[data-return-label="Sprint 1"]').click();

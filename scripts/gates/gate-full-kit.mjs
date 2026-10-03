@@ -207,7 +207,10 @@ await prosePage.waitForTimeout(3000);
 const manifest = await (await fetch(`${BASE}/islands/manifest.json`)).json();
 const closure = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u) || !manifest.files[u]) continue; seen.add(u); closure(manifest.files[u].imports, seen); } return seen; };
 const allowed = closure([manifest.manifest['@mx/page']]);
-const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p));
+// The owner's app page attaches to the frame for comments (lib/story-runtime/frame-bridge), which loads the editor's
+// document half, `@mx/frame-editor`, and its own lazy chunks (`frame-editor-chunk-*`): no chart code is in that build.
+const frameEditor = (p) => closure([manifest.manifest['@mx/frame-editor']]).has(p) || p.startsWith('/islands/frame-editor-chunk-');
+const extra = proseRequests.map((u) => new URL(u).pathname).filter((p) => p.startsWith('/islands/') && !allowed.has(p) && !frameEditor(p));
 check(extra.length === 0, `a prose document never fetches the chart chunk (island files beyond its page behaviour: ${extra.join(', ') || 'none'})`);
 
 // 6. A Popover opens NEXT TO its trigger, not at the viewport's corner (the placement is measured, so only a
@@ -218,7 +221,9 @@ for (const viewport of [{ width: 1200, height: 800 }, { width: 390, height: 800 
   await popPage.goto(`${BASE}/a/${popover.id}`);
   const popDoc = await documentFrame(popPage);
   await popDoc.waitForSelector('[data-mx-inline-story] h1', { timeout: 20000 });
-  await popPage.waitForTimeout(1500);
+  // The press must land on a live trigger: wait for the islands to take over (lib/islands/boot `<html data-mx-ready>`).
+  await popDoc.waitForSelector('html[data-mx-ready]', { state: 'attached', timeout: 20000 }).catch(() => {});
+  await popPage.waitForTimeout(500);
   await popDoc.getByRole('button', { name: 'Open popover' }).click();
   await popDoc.waitForFunction(() => { const transform = document.querySelector('[data-radix-popper-content-wrapper]')?.style.transform ?? ''; return transform !== '' && !transform.includes('%'); }, null, { timeout: 10000 }).catch(() => {}); // an unplaced popover fails the position checks below
   const box = await popDoc.evaluate(() => {
@@ -227,6 +232,7 @@ for (const viewport of [{ width: 1200, height: 800 }, { width: 390, height: 800 
     return t && c ? { t: { l: t.left, r: t.right, b: t.bottom, w: t.width }, c: { l: c.left, r: c.right, t: c.top, w: c.width }, inStory: !!document.querySelector('[data-mx-inline-story] [data-slot="popover-content"]') } : null;
   });
   const tag = `${viewport.width}px`;
+  if (!box) check.note(`${tag}: ${JSON.stringify(await popDoc.evaluate(() => ({ ready: document.documentElement.hasAttribute('data-mx-ready'), expanded: document.querySelector('[data-slot="popover-trigger"]')?.getAttribute('aria-expanded') ?? null, wrappers: document.querySelectorAll('[data-radix-popper-content-wrapper]').length }))) }`);
   check(!!box, `${tag}: the popover opened`);
   if (box) {
     check(Math.abs(box.c.t - (box.t.b + 4)) <= 2, `${tag}: popover sits just under its trigger (content top ${box.c.t}, trigger bottom ${box.t.b})`);

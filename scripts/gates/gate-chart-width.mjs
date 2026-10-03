@@ -38,8 +38,8 @@ try {
     for (let i = 0; i < 30; i++) {
       await before.goto(url, { waitUntil: 'domcontentloaded' });
       // The app page frames the document on its own origin (drawn by the server, so it loads without script too).
-      const doc = await documentFrame(before);
-      served = await doc.locator('[aria-label="Question embed"] svg.marks').evaluateAll((svgs) => svgs.map((svg) => ({
+      const frame = await documentFrame(before);
+      served = await frame.locator('[aria-label="Question embed"] svg.marks').evaluateAll((svgs) => svgs.map((svg) => ({
         width: Number(svg.getAttribute('width')),
         ticks: [...svg.querySelectorAll('.role-axis-label text')].map((label) => label.textContent),
       })));
