@@ -36,7 +36,6 @@ import { actorSubject, emit } from '../platform/events';
 import { generateFileId } from '../platform/ids';
 import { type ArtifactFormat } from '../story/document/input';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from '../serving/web-assets';
-import { resolveWebFont, UnknownFontError } from '../webfonts/index';
 import { webIngestRateLimited } from '../accounts/auth';
 import { json } from '../http/http';
 import { loadDatasetRows } from '../story/datasets/dataset-store';
@@ -1066,26 +1065,6 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
  */
 export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
   return () => assetByteQuotaExceeded(tokenId);
-}
-
-/**
- * The publish door's font resolver: a family the document names becomes faces
- * copied into our object store (lib/webfonts), once per deployment. Failure is
- * a 400 that NAMES the family — the same stance the image door takes, and for
- * the same reason: a silent fallback renders as "it worked".
- */
-export function fontResolver(): (family: string) => Promise<Response | null> {
-  return async (family) => {
-    try {
-      await resolveWebFont(family);
-      return null;
-    } catch (error) {
-      if (error instanceof UnknownFontError) {
-        return json({ error: 'unknown_font', details: [error.message] }, 400);
-      }
-      throw error;
-    }
-  };
 }
 
 /** The actor's REACH: what they own, and what they are named editor on. */

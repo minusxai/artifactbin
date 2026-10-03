@@ -36,7 +36,7 @@ export async function compiledDocument(input: DocumentCase): Promise<string> {
     chrome: null, spa: null, build, head: input.head ?? null, footer: input.footer ?? null,
     sheets: documentStyleSheets({
       compiledCss: input.compiledCss, chrome: input.chrome ?? true, bare: !!input.footer,
-      theme: input.theme, importedFaces: parts.importedFaces, docFonts: parts.docFonts,
+      theme: input.theme, docFonts: parts.docFonts,
       authorCss: parts.runtime.authorCss,
     }),
   }).html;

@@ -135,12 +135,6 @@ export interface ContentInputCtx {
    */
   importAsset?: (url: string, kind: WebAssetKind) => Promise<AssetWarning | null>;
   /**
-   * Resolve one font family the document names, answering a Response only when
-   * it cannot be had. Absent ⇒ no resolution (preview): the door still
-   * validates the NAME, so a draft that previews still publishes.
-   */
-  resolveFont?: (family: string) => Promise<Response | null>;
-  /**
    * "Is the caller already over their stored-byte quota?" — asked BEFORE a
    * tier stores something large, and answered by lib/asset-quota under the
    * caller's identity (account-keyed for a claimed token, token-keyed for an

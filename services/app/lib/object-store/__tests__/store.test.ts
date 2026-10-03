@@ -105,7 +105,7 @@ contractSuite('local', async () => {
 //
 // `raises ObjectUnavailable for a missing key` needs the IAM user to hold
 // s3:ListBucket: without it S3 answers an absent key with 403 AccessDenied
-// instead of 404 NoSuchKey, which is what makes /webfonts/<unknown-hash> a 500.
+// instead of 404 NoSuchKey, which is what turns a read of an unknown key into a 500.
 // A failure there is a defect in the deployment rather than in the assertion —
 // the contract stays as written and the fix is the ListBucket grant.
 const MINIO = process.env.TEST_S3_URL;
@@ -181,7 +181,7 @@ describe('the prefix is actually applied to stored keys', () => {
  *
  * A 25 MB PDF read through `get` is +25 MB of RSS for the life of the response
  * and, worse, would be admitted to the read cache and evict essentially all of
- * it — the cache that exists so datasets, ref images and webfonts are not
+ * it — the cache that exists so datasets and ref images are not
  * refetched on every render. So the PDF tier reads
  * through `getStream`, which buffers nothing and caches nothing, and the
  * cache's own budget never has to move.

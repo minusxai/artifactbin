@@ -38,7 +38,7 @@ import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const HK = 'data-hk';
 /** Sheets that belong to one version and may be absent from the next (lib/story/styles/document-styles, the assembler). */
-const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-webfonts', 'data-mx-font-vars', 'data-mx-author'];
+const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-font-vars', 'data-mx-author'];
 /** How often a version the server is still compiling is asked for again, and how long apart. */
 const NOT_READY_RETRIES = 6;
 const NOT_READY_DELAY_MS = 250;

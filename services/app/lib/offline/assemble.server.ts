@@ -48,7 +48,6 @@ import { prepareStoryParts } from '@/lib/story/prepared/prepare-runtime.server';
 import { displayTitle } from '@/lib/story/document';
 import { getUserById } from '@/lib/accounts/users';
 import { webAssetByHash, webAssetsForSource } from '@/lib/serving/web-assets';
-import { webFontObjectKey } from '@/lib/webfonts';
 import { offlineExtrasRef } from './bundle.server';
 import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-format';
 import { precomputeVariants, valueDomains, type VariantCaps } from './variants';
@@ -136,7 +135,6 @@ const QUERY = String.raw`(?:\?[^\s"'()<>,\\]*)?`;
 const ASSET_RE = new RegExp(String.raw`/assets/([0-9a-f]{64})${QUERY}`, 'g');
 const RAW_RE = new RegExp(String.raw`/a/([A-Za-z0-9_-]+)/raw${QUERY}`, 'g');
 const AVATAR_RE = new RegExp(String.raw`/api/users/([A-Za-z0-9_%-]+)/avatar${QUERY}`, 'g');
-const WEBFONT_RE = /\/webfonts\/([0-9a-f]{32}\.woff2)/g;
 const FONT_RE = /\/fonts\/([A-Za-z0-9._-]+\.woff2)/g;
 /** Any url() still naming this server, after the known addresses were folded in. */
 const ROOT_URL_RE = /url\(\s*(['"]?)\/(?!\/)/g;
@@ -150,7 +148,7 @@ const inlinable = (contentType: string): boolean => /^(image|font)\//.test(conte
  * address is loaded once, and only from what the ACL-checked producers above
  * already handed out: `/a/<id>/raw` only for image refs this document's
  * refData resolved for this reader, everything else a public address by
- * construction (/assets, /webfonts, /fonts, avatars).
+ * construction (/assets, /fonts, avatars).
  */
 class Inliner {
   private readonly resolved = new Map<string, string>();
@@ -172,7 +170,7 @@ class Inliner {
     return uri;
   }
 
-  private async load(address: string, kind: 'asset' | 'raw' | 'avatar' | 'webfont' | 'font', key: string): Promise<string> {
+  private async load(address: string, kind: 'asset' | 'raw' | 'avatar' | 'font', key: string): Promise<string> {
     try {
       if (kind === 'asset') {
         const row = await webAssetByHash(key);
@@ -193,10 +191,6 @@ class Inliner {
         const r = await (await getDb()).query<{ image_key: string | null }>('SELECT image_key FROM users WHERE id = $1', [decodeURIComponent(key)]);
         const imageKey = r.rows[0]?.image_key;
         return imageKey ? this.charge(dataUri('image/webp', await objectStore().get(imageKey))) : this.absolute(address);
-      }
-      if (kind === 'webfont') {
-        const objectKey = webFontObjectKey(key);
-        return objectKey ? this.charge(dataUri('font/woff2', await objectStore().get(objectKey))) : this.absolute(address);
       }
       // A bundled face: public/fonts, beside the app (server/app serves the same directory).
       return this.charge(dataUri('font/woff2', await readFile(path.join(path.resolve('public'), 'fonts', path.basename(key)))));
@@ -227,7 +221,6 @@ class Inliner {
   /** Font and image addresses inside CSS; anything else root-relative becomes a live link. */
   async css(text: string): Promise<string> {
     let out = await this.replaceAll(text, FONT_RE, 'font');
-    out = await this.replaceAll(out, WEBFONT_RE, 'webfont');
     out = await this.json(out);
     return out.replace(ROOT_URL_RE, (_all, quote: string) => `url(${quote}${this.origin}/`);
   }

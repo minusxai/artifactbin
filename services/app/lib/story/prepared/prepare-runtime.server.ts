@@ -8,7 +8,6 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { glyphsForNodes } from '../assets/icon-glyphs';
 import { documentFonts } from '../styles/document-fonts';
 import { storyBaseCss, type StoryBaseCssRecipe } from '../styles/story-base-css';
-import { webFontAssets } from '@/lib/webfonts';
 import { firstScreenFonts } from '../styles/first-screen-fonts';
 import type { StoryIslandData, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import { mermaidImagesFor, type MermaidImageLookup } from '@/lib/mermaid-images/store';
@@ -94,20 +93,19 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
   // The version's prerendered diagrams, when the route asked for them (never an offline file or a draft).
   const mermaidImages = input.mermaidImages ?? (split && input.mermaidImageLookup ? await mermaidImagesFor(input.mermaidImageLookup, split.body) : undefined);
   const docFonts = documentFonts(helmet);
-  const importedFaces = docFonts.families.length ? await webFontAssets(docFonts.families) : [];
   const data: StoryIslandData = {
     nodes: split?.body ?? [], colorMode: mode, template: input.template ?? null, chrome,
     ...(Object.keys(glyphs).length ? { glyphs } : {}),
     ...readerIslandData({ ...input, mermaidImages }),
   };
-  const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, faces: importedFaces, fonts: docFonts };
+  const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, fonts: docFonts };
   const baseCss = storyBaseCss(baseRecipe);
   const runtime: PreparedStoryRuntime = {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
     authorScript: await authorModuleCode(helmet),
     theme: input.theme, title,
     // The faces this document's first screen paints (lib/story/styles/first-screen-fonts), one per file.
-    fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts, importedFaces }).map(face => face.url),
+    fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts }).map(face => face.url),
   };
-  return { runtime, split, helmet, mode, title, glyphs, docFonts, importedFaces, baseRecipe };
+  return { runtime, split, helmet, mode, title, glyphs, docFonts, baseRecipe };
 }

@@ -1104,19 +1104,6 @@ CREATE INDEX IF NOT EXISTS idx_relations_follow_subject ON app.relations (subjec
 
 CREATE INDEX IF NOT EXISTS idx_relations_follow_object ON app.relations (object_id) WHERE verb = 'follow' AND deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS app.webfonts (
-  family TEXT NOT NULL,
-  assets JSONB NOT NULL DEFAULT '[]',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (family)
-);
-
-ALTER TABLE app.webfonts ADD COLUMN IF NOT EXISTS family TEXT NOT NULL;
-
-ALTER TABLE app.webfonts ADD COLUMN IF NOT EXISTS assets JSONB NOT NULL DEFAULT '[]';
-
-ALTER TABLE app.webfonts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
 CREATE TABLE IF NOT EXISTS app.web_assets (
   url_hash TEXT NOT NULL,
   url TEXT NOT NULL,
