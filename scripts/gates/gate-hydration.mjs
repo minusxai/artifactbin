@@ -36,7 +36,8 @@ const COMPILED_PROBE = () => {
     state.served = [...story.querySelectorAll('*')];
     // One-tree keys also cover stateful kit roots; full-kit and Mermaid gates check their reader-visible transitions.
     state.staticNodes = [...story.querySelectorAll('[data-mx-ast]')]
-      .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"]'))
+      // Floating content (a pinned-open tooltip or popover) is positioned at runtime: its style and side are the popper's.
+      .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"], [data-story-floating]'))
       .map((node) => ({ node, attrs: [...node.attributes].map((attr) => [attr.name, attr.value]),
         text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') }));
   });
