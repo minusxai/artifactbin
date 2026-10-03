@@ -8,9 +8,12 @@ where the author script runs in [serving and security](../../../../docs/serving-
 - Static JSX is data. `lib/jsx/parse.ts` uses acorn/acorn-jsx and records non-static expressions.
   Validation accepts only allowlisted reactive/row expressions in permitted scopes and rejects the
   rest with useful spans. Do not replace this with an executable JSX/MDX compiler.
-- Keep publish validation (`lib/jsx/validate.ts`) and renderer filtering (`interpreter-primitives.ts`, the compiler's `rawBuildProps`) independent.
-  Stored content may predate current validation. Update both sides when changing denied attributes,
-  URL schemes or component vocabulary; account for authored HTML spellings versus compiled JSX prop names.
+- Validation at publish (`lib/jsx/validate.ts`) is the one markup policy: denied tags and attributes, event
+  handlers, URL schemes, SVG paint references and component vocabulary are decided there and nowhere else.
+  The renderer (`interpreter-primitives.ts` `rawBuildProps`, the compiler) only renders — spellings, the
+  `style` string as an object, controlled-to-uncontrolled props — and re-checks no policy: every document
+  runs on its own origin under the document CSP, and a document that predates a rule is migrated by
+  republishing, never filtered at render. Account for authored HTML spellings versus compiled JSX prop names.
 - The publish path (`lib/story/document/jsx-tier.ts`) owns markup policy, sanitization and CSS compilation.
   Inline style policy and authored style blocks have different rules. Do not relax one because another
   layer also sanitizes.
@@ -36,5 +39,5 @@ where the author script runs in [serving and security](../../../../docs/serving-
   inputs run `npm run generate-story-ui-classes`; `recipe-classes.test.ts` fails when it is stale.
   `lib/data/story/typography.ts` supplies the editor's class vocabulary; the CSS union/version must
   change together so saved documents recompile.
-- Verify parser/serialization, publish rejection, renderer defense, SSR/hydration and affected editing
+- Verify parser/serialization, publish rejection, SSR/hydration and affected editing
   behavior. Use existing browser gates for geometry and real browser isolation, not DOM mocks alone.
