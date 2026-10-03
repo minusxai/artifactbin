@@ -21,14 +21,14 @@ The installer supports macOS and Linux, ARM64 and x64, without Node or sudo. The
 ```sh
 afbin serve --dir ./artifactbin-data --port 7445
 # In another terminal:
-afbin config set host http://127.0.0.1:7445
+afbin config set host http://app.lvh.me:7445
 afbin auth
 afbin add report.jsx --json
 afbin preview report.jsx
 afbin push report.jsx
 ```
 
-Use the origin the server prints. It advertises `http://127.0.0.1:7445`, and approval and login must happen at that exact origin — `http://localhost:7445` is a different origin and `afbin auth` refuses it with `approval_origin_mismatch`.
+Use the origin the server prints (`http://app.lvh.me:7445` by default). Approval and login must happen at that exact origin; `localhost` and `127.0.0.1` are different origins and fail with `approval_origin_mismatch`. `lvh.me` and its subdomains resolve to loopback; app and document origins need the same site for private document cookies.
 
 `serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, the installer to run, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; SQLite still handles document queries.
 
@@ -48,7 +48,7 @@ npm run setup -- --yes
 npm run dev
 ```
 
-Open http://localhost:3030. For another instance, use a separate checkout/data directory and `npm run setup -- --yes --port 7445`. See [CONTRIBUTING.md](CONTRIBUTING.md) for development and testing rules.
+Open the public URL printed by setup: http://app.lvh.me:3030 by default. For another instance, use a separate checkout/data directory and `npm run setup -- --yes --port 7445`. Local login codes come from `npm run dev:otp -- your@email.example`; no mail provider is needed. See [CONTRIBUTING.md](CONTRIBUTING.md) for development and testing rules.
 
 ```sh
 npm run validate
@@ -59,9 +59,11 @@ The local test wrapper runs affected tests within its file budget; broader suite
 
 ## Modules and documentation
 
-`services/cli` owns commands and local state; `services/app` owns the reader/editor and artifact APIs; `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/contracts` and `services/utils` provide shared capabilities. `afbin serve` composes them in one process; other deployments can compose the same module entrypoints with their own infrastructure.
+`services/cli` owns commands and local state; `services/app` owns the reader/editor and artifact APIs; `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/runner`, `services/contracts` and `services/utils` provide shared capabilities. `afbin serve` composes the app services; lambdas use a separate runner. Source development includes a local runner.
 
 [CLI reference](services/cli/README.md) · [Document format](docs/document-format.md) · [Editing](docs/editing.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md)
+
+[OSS feature setup and first document](docs/oss-onboarding.md) · [Lambdas and schedules](services/runner/README.md) · [Remote review](docs/remote-review.md)
 
 [Apache-2.0](LICENSE). Third-party license files remain with their runtime packages; the pinned Node runtime release includes its license.
 

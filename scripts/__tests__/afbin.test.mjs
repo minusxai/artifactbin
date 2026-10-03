@@ -121,6 +121,10 @@ describe('npm run afbin', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
+  it('does not add a client destination to the server-owning serve command', () => {
+    expect(serverFlag(['serve', '--dir', './team', '--port', '7475'], 'http://app.lvh.me:7465')).toEqual([]);
+  });
+
   it('selects the origin the server calls itself: APP__PUBLIC_BASE_URL when APP__PAGES_HOST is set, else localhost', async () => {
     const root = await fakeCheckout();
     const run = recorder();

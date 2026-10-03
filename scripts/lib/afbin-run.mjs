@@ -143,6 +143,8 @@ export function afbinServer(env, port) {
  * @param {string} server
  */
 export function serverFlag(argv, server) {
+  // serve owns a server; the CLI refuses a client-only --server on this command.
+  if (argv[0] === 'serve') return [];
   let options = argv;
   if (argv[0] === 'remote') {
     let end = 1;

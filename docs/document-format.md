@@ -11,9 +11,12 @@ An agent sends `markup` — there is no second document tier:
 | Files | `<img src>` takes an upload (`ref:<id>`) or any `https` URL; `<File src>` links a PDF as a card; `<iframe src="https://…">` frames a player or page (YouTube, Vimeo and Loom by default, other hosts via `<meta name="csp-frame">`) |
 
 A document is SERVED as compiled static HTML with small Solid islands: `/a/<id>` with the app's reader
-chrome, `/a/<id>/raw` without it (see [Phase 2 architecture](phase2-architecture.md)). An author
-`<script>` runs in a separate opaque-origin frame, so it can paint and respond but cannot reach the
-app's session, its storage, or the network.
+chrome, `/a/<id>/raw` without it (see [Phase 2 architecture](phase2-architecture.md)).
+Every document is framed from its own origin under `APP__PAGES_HOST`. Its author
+`<script>` runs natively there as a Solid ES module, can access the document DOM,
+and uses declared `page` bindings for data. The document's CSP and reader consent
+control external hosts; the app session and storage remain on the app origin.
+See [serving and security](serving-and-security.md) and `afbin help markup-scripts`.
 
 Documents get: six dual-palette **themes** (`modernist · organic · industry ·
 terminal · manuscript · pop`, each with a light and a dark mode), a stable public link that survives edits, and full

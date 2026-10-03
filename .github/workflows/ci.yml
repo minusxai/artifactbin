@@ -887,6 +887,18 @@ jobs:
       - name: Chromium system libraries
         if: startsWith(matrix.os, 'ubuntu')
         run: npx playwright install-deps chromium
+      # These assets are checked against their source fingerprints by build-prep --cache.
+      # Preserve the markers as well as the bytes; a stale restore rebuilds normally.
+      # Keep platform/architecture separate, and still build and test the shipped binary.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cli-reader-assets
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: cli-reader-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          restore-keys: cli-reader-v1-${{ runner.os }}-${{ runner.arch }}-
       - name: Build compact standalone CLI
         run: npm run build:binary -w services/cli
       - if: runner.os != 'Windows'
