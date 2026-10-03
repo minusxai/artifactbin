@@ -19,6 +19,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
+import { DOCUMENT_FRAME, documentFrame } from './lib/page-facts.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -107,8 +108,9 @@ check((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'r
   check(put.status === 200, `the story accepts a Query over the uploaded dataset (${put.status})`);
 
   await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
+  // The app page frames the document on its own origin: the chart is drawn inside that frame.
+  const surface = await documentFrame(p);
   await p.waitForTimeout(6000);
-  const surface = p.mainFrame();
   check((await surface.locator('svg.marks, canvas').count()) > 0, 'a real Vega chart rendered (not a fallback table)');
   const text = await surface.locator('body').innerText();
   check(/2026-01/.test(text), 'the x axis carries values from the uploaded CSV');
@@ -135,17 +137,20 @@ check((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'r
 // localStorage token — and the shell it unlocks belongs to the owner.
 await becomeOwner(p, B, st.token);
   await p.goto(`${B}/a/${st.id}#edit`, { waitUntil: 'commit' });
+  // The editor runs inside the document's frame (@mx/frame-editor). Take the frame as soon as it exists, before it
+  // loads, so a "data unavailable" flash during loading is seen; re-resolved each poll in case the page replaces it.
+  const editFrame = () => p.locator(DOCUMENT_FRAME).elementHandle({ timeout: 150 }).then((h) => h?.contentFrame() ?? null, () => null);
   let sawUnavailable = false;
   for (let i = 0; i < 70; i++) {
     await p.waitForTimeout(150);
-    const fr = p.mainFrame();
-    const txt = fr ? await fr.locator('body').innerText().catch(() => '') : '';
+    const fr = await editFrame();
+    const txt = fr ? await fr.locator('body').innerText({ timeout: 1000 }).catch(() => '') : '';
     if (/data unavailable/.test(txt)) sawUnavailable = true;
     if (fr && (await fr.locator('svg.marks, canvas').count().catch(() => 0))) break;
   }
-  const ef = p.mainFrame();
+  const ef = await editFrame();
   const marks = ef ? await ef.locator('svg.marks, canvas').count().catch(() => 0) : 0;
-  const text = ef ? await ef.locator('body').innerText().catch(() => '') : '';
+  const text = ef ? await ef.locator('body').innerText({ timeout: 5000 }).catch(() => '') : '';
   check(marks > 0, `a chart renders in EDIT mode (${marks} marks)`);
   check(!/data unavailable/.test(text), 'and does not say "data unavailable"');
   // The failure message must never appear even for a frame while refs load —

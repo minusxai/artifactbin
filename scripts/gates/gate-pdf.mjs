@@ -10,8 +10,8 @@
  *
  * What only a browser CAN answer, and this gate does:
  *  1. the card is in the document a STRANGER is served — not the owner's shell,
- *     the reader's own top-level document, which is where a File card lives or
- *     dies,
+ *     the document on its own origin that the app page frames, which is where a
+ *     File card lives or dies,
  *  2. a REAL click on it opens a popup at the file's own address. A programmatic
  *     click opens nothing (measured), so the click has to be a click: this is
  *     the whole reason the card is a link and not a button.
@@ -25,7 +25,8 @@
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { launchChromium } from './lib/browser.mjs';
+import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
+import { documentFrame } from './lib/page-facts.mjs';
 import { samplePdf } from '../lib/sample-pdf.mjs';
 import { startDocument } from '../lib/start-doc.mjs';
 
@@ -42,7 +43,9 @@ const plainRes = await fetch(`${B}/api/artifacts`, {
 });
 if (plainRes.status !== 201) throw new Error(`plain control publish failed: ${plainRes.status}`);
 const plain = await plainRes.json();
-const plainCsp = (await fetch(`${B}/a/${plain.id}`)).headers.get('content-security-policy');
+/** A document's own origin, where its page and its policy are served (lib/serving/pages-origin): `<hex id>.lvh.me`. */
+const documentOrigin = (id) => `http://${Buffer.from(id, 'utf8').toString('hex')}.${PAGES_HOST}:${new URL(B).port}`;
+const plainCsp = (await fetch(`${documentOrigin(plain.id)}/`)).headers.get('content-security-policy');
 
 // 1. the file itself
 const fileRes = await fetch(`${B}/api/artifacts`, {
@@ -73,13 +76,15 @@ if (put.status !== 200) {
 }
 
 const browser = await launchChromium();
-// A STRANGER: a fresh context with no session, which is served the document
-// itself at /a/<id> rather than the owner's shell.
+// A STRANGER: a fresh context with no session. The app page frames the
+// document on its own origin; the card is in that frame.
 const context = await browser.newContext({ viewport: { width: 1200, height: 900 }, acceptDownloads: true });
 const page = await context.newPage();
 await page.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
+const doc = await documentFrame(page);
+await doc.waitForSelector('[data-slot="file"]', { timeout: 20_000 }).catch(() => {}); // a missing card fails below
 
-const card = await page.evaluate(() => {
+const card = await doc.evaluate(() => {
   const el = document.querySelector('[data-slot="file"]');
   const link = document.querySelector('[data-slot="file-link"]');
   return {
@@ -111,7 +116,7 @@ context.on('request', (r) => asked.push(r.url()));
 const [popup, download] = await Promise.all([
   page.waitForEvent('popup', { timeout: 8_000 }).catch(() => null),
   page.waitForEvent('download', { timeout: 8_000 }).catch(() => null),
-  page.click('[data-slot="file-link"]'),
+  doc.click('[data-slot="file-link"]'),
 ]);
 check(popup !== null || download !== null, 'a real click opened the file');
 check(asked.some((u) => u.endsWith(`/a/${file.id}/raw?v=1`)),
@@ -128,10 +133,10 @@ if (download) {
 
 /*
  * The headers as the wire carries them — through the CONTEXT's own request
- * client, not `fetch` inside the page. The reader's page IS the sandboxed
- * document, whose CSP is `default-src 'none'` with a connect-src naming only
- * its own three endpoints, so a fetch from in there is refused. (Which is
- * itself the design working, and cost this gate one rewrite.)
+ * client, not `fetch` inside the page. The document's CSP is `default-src
+ * 'none'` with a connect-src naming only its own doors, so a fetch from in
+ * there is refused. (Which is itself the design working, and cost this gate
+ * one rewrite.)
  */
 const res = await context.request.get(`${B}/a/${file.id}/raw?v=1`);
 const headers = {
@@ -165,11 +170,11 @@ check(seek.bytes === PDF.subarray(PDF.byteLength - 32).toString('latin1'), 'the 
 
 // The document's CSP is UNCHANGED by any of this: a link is navigation, and
 // nothing here asked for a new connect-src, frame-src or object-src.
-const docCsp = (await context.request.get(`${B}/a/${owner.id}`)).headers()['content-security-policy'];
-// The runtime now permits its same-origin author wrapper in every document.
+// Compared on the documents' own origins, where their policy is served (the app page's is the app's).
+const docCsp = (await context.request.get(`${documentOrigin(owner.id)}/`)).headers()['content-security-policy'];
 // A File card must not widen that policy or enable a PDF/object embed.
-check(Boolean(plainCsp) && docCsp === plainCsp.replaceAll(`/a/${plain.id}/`, `/a/${owner.id}/`),
-  'the document needed no new CSP allowance for the card');
+check(Boolean(plainCsp) && docCsp === plainCsp.replaceAll(`/a/${plain.id}/`, `/a/${owner.id}/`).replaceAll(documentOrigin(plain.id), documentOrigin(owner.id)),
+  `the document needed no new CSP allowance for the card${docCsp === plainCsp ? '' : ` (${docCsp})`}`);
 
 await context.close();
 await browser.close();

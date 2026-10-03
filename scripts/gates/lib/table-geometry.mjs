@@ -1,6 +1,7 @@
 import {fixtureFetch as fetch} from './fixture-http.mjs';
 /** Short-table fit, height cap and virtualized tail, measured in Chromium. */
 import { startDocument } from '../../lib/start-doc.mjs';
+import { documentFrame } from './page-facts.mjs';
 
 export async function checkTableGeometry(BASE, browser, check) {
   const CAP = 420;
@@ -35,13 +36,13 @@ export async function checkTableGeometry(BASE, browser, check) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
-  // A public data document is served TOP-LEVEL to anyone but its owner, so the
-  // boxes are measured on the main frame — no iframe to reach through.
+  // The document is framed by the app page on its own origin, so the boxes are measured inside that frame.
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await page.waitForSelector('#long [data-slot="data-table"]', { timeout: 20000 });
+  const doc = await documentFrame(page);
+  await doc.waitForSelector('#long [data-slot="data-table"]', { timeout: 20000 });
   // The rows arrive with the page (lib/story/prepared/served-results.server) in the static regime; what is
   // measured below is the VIRTUAL one, which the runtime switches the long table to once it owns it.
-  await page.waitForFunction(
+  await doc.waitForFunction(
     (last) => (document.querySelector('#short tbody')?.textContent ?? '').includes('row-2')
       && (document.querySelector('#long tbody')?.querySelectorAll('tr').length ?? 0) > 5
       && document.querySelector('#long [data-mx-kit-table]')?.style.display === 'block'
@@ -51,7 +52,7 @@ export async function checkTableGeometry(BASE, browser, check) {
   ).catch(() => {});
 
   const box = (id) => `#${id} [data-slot="data-table"] > div`;
-  const measured = await page.evaluate((sel) => {
+  const measured = await doc.evaluate((sel) => {
     const read = (q) => {
       const el = document.querySelector(q);
       return el ? { clientHeight: el.clientHeight, scrollHeight: el.scrollHeight } : null;
@@ -80,13 +81,13 @@ export async function checkTableGeometry(BASE, browser, check) {
 
   // The cap-only box must still be the virtualizer's scroll element: scroll to
   // the end and the window must follow, all the way to the dataset's last row.
-  await page.evaluate((q) => { const el = document.querySelector(q); el.scrollTop = el.scrollHeight; }, box('long'));
-  await page.waitForFunction(
+  await doc.evaluate((q) => { const el = document.querySelector(q); el.scrollTop = el.scrollHeight; }, box('long'));
+  await doc.waitForFunction(
     (args) => (document.querySelector(`${args.q} tbody`)?.textContent ?? '').includes(args.last),
     { q: box('long'), last: LAST_LABEL },
     { timeout: 10000 },
   ).catch(() => {});
-  const tail = await page.evaluate((q) => {
+  const tail = await doc.evaluate((q) => {
     const body = document.querySelector(`${q} tbody`);
     const trs = [...(body?.querySelectorAll('tr') ?? [])];
     const el = document.querySelector(q);
