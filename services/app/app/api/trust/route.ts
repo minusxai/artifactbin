@@ -2,11 +2,17 @@
  * GET|POST|DELETE /api/trust → `{ cspRequest }` — a reader's answer to what a document asks of the
  * network beyond the default policy (lib/trust/document-trust).
  *
- *   GET    ?artifactId=<id>                                   where this reader stands
- *   POST   { artifactId, grant: 'once' | 'author' | 'never' }  allow for this browser session, always
- *                                                            for this document's author, or never
- *   DELETE { artifactId, scope?: 'document' | 'author' }     forget this reader's choice (default: on
- *                                                            this document, session included)
+ *   GET    ?artifactId=<id>                                     where this reader stands
+ *   POST   { artifactId, grant: 'once' | 'document' | 'never' } allow for this browser session, always
+ *                                                              for this document, or never
+ *   DELETE { artifactId }                                       forget this reader's answer on this
+ *                                                              document, the session's included
+ *
+ * The document must be READABLE by whoever asks: an unreadable one and a missing one are the same 404.
+ * "Once" lives in the browser session (a signed session cookie), so any reader may use it; "Always for
+ * this document" and a stored Never belong to an account (401 otherwise) — a signed-out Never is kept
+ * for the session. Every answer covers the hosts the reader is ASKED about: the ones they did not
+ * publish themselves.
  *
  * A browser door, and its writes are SAME-ORIGIN only, whatever the credential: a write that mints a
  * grant must come from the app's own page, never from another site (a signed-out reader would otherwise
@@ -21,15 +27,13 @@ import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifa
 import { refusesCrossSite, sessionActor, type RequestActor } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { hasCspExtensions, storedCspExtensions } from '@/lib/story/document/csp-extensions';
+import { subtractCspExtensions } from '@/lib/story/document/csp-extensions';
 import {
-  allowAuthor, authorScope, cspRequestFor, denyDocument, documentScope, extensionsHash, revokeTrust, sessionTrustCookie,
-  type TrustViewer,
+  allowDocument, cspRequestFor, denyDocument, extensionsHash, hostsPublishedBy, revokeTrust, sessionTrustCookie, type TrustViewer,
 } from '@/lib/trust/document-trust';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
-const GRANTS = ['once', 'author', 'never'] as const;
-const SCOPES = ['document', 'author'] as const;
+const GRANTS = ['once', 'document', 'never'] as const;
 
 /** Who is asking about which readable document — or the Response that refuses them. */
 /** A write from anywhere but the app's own page: another site, or a same-site sibling origin. */
@@ -80,20 +84,19 @@ export async function POST(request: Request): Promise<Response> {
   const { artifact, actor, viewer } = opening;
   const grant = body?.grant;
   if (!GRANTS.includes(grant as never)) return json({ error: 'invalid_grant', allowed: GRANTS }, 400);
-  const extensions = storedCspExtensions(artifact.meta);
-  if (!hasCspExtensions(extensions)) return json({ error: 'nothing_to_trust', details: ['this document asks for nothing beyond the default policy'] }, 400);
+  const standing = await cspRequestFor({ artifact, viewer, request });
+  if (standing.status === 'none') return json({ error: 'nothing_to_trust', details: ['this document asks for nothing beyond the default policy'] }, 400);
+  if (standing.status === 'publisher') return answer(request, artifact, viewer);
+  // What the reader was asked about: the declared hosts minus their own (re-derived, never sent by the client).
+  const asked = subtractCspExtensions(standing.extensions, await hostsPublishedBy(artifact, viewer, standing.extensions));
   const userId = actor.viewer?.userId ?? null;
-  const hash = extensionsHash(extensions);
+  const hash = extensionsHash(standing.extensions);
   if (grant === 'once') return answer(request, artifact, viewer, sessionTrustCookie(request, viewer, artifact.id, { hash, decision: 'allow' }));
   if (grant === 'never' && !userId) return answer(request, artifact, viewer, sessionTrustCookie(request, viewer, artifact.id, { hash, decision: 'deny' }));
   if (!userId) return unauthorized(request);
-  if (grant === 'author') {
-    if (!artifact.user_id) return json({ error: 'no_author', details: ['this document has no author account to trust'] }, 400);
-    await allowAuthor(userId, artifact.user_id, artifact.id, extensions);
-  } else {
-    await denyDocument(userId, artifact.id, extensions);
-  }
-  // The stored choice supersedes whatever this session said about the document.
+  if (grant === 'document') await allowDocument(userId, artifact.id, asked);
+  else await denyDocument(userId, artifact.id, asked);
+  // The stored answer supersedes whatever this session said about the document.
   return answer(request, artifact, viewer, sessionTrustCookie(request, viewer, artifact.id, { decision: null }));
 }
 
@@ -102,14 +105,7 @@ export async function DELETE(request: Request): Promise<Response> {
   const opening = await opened(request, body?.artifactId);
   if (opening instanceof Response) return opening;
   const { artifact, actor, viewer } = opening;
-  const scope = body?.scope ?? 'document';
-  if (!SCOPES.includes(scope as never)) return json({ error: 'invalid_scope', allowed: SCOPES }, 400);
   const userId = actor.viewer?.userId ?? null;
-  if (scope === 'author') {
-    if (!userId) return unauthorized(request);
-    if (artifact.user_id) await revokeTrust(userId, [authorScope(artifact.user_id)]);
-    return answer(request, artifact, viewer);
-  }
-  if (userId) await revokeTrust(userId, [documentScope(artifact.id)]);
+  if (userId) await revokeTrust(userId, artifact.id);
   return answer(request, artifact, viewer, sessionTrustCookie(request, viewer, artifact.id, { decision: null }));
 }

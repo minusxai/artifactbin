@@ -340,8 +340,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     openAnnotations,
   };
   // What the document asks of the network beyond the default policy, and where this reader stands on it:
-  // the consent bar (solid/document/CspConsentBar) draws from this. The served row's meta is the version shown.
-  const cspRequest = isDoc ? await cspRequestFor({ artifact: { ...row, user_id: artifact.user_id, token_id: artifact.token_id }, viewer: { userId: viewerId, tokenId: actor.tokenId }, request }) : null;
+  // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
+  const cspRequest = isDoc ? await cspRequestFor({ artifact: row, viewer: { userId: viewerId, tokenId: actor.tokenId }, request }) : null;
   const body = {
     canonical: canonicalArtifactPath(artifact, authorUsername),
     ...(cspRequest ? { cspRequest } : {}),

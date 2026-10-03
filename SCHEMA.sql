@@ -34,16 +34,16 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 CREATE TABLE IF NOT EXISTS app.document_trust (
   user_id TEXT NOT NULL,
-  scope TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
   decision TEXT NOT NULL DEFAULT 'allow',
   extensions JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, scope)
+  PRIMARY KEY (user_id, artifact_id)
 );
 
 ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
 
-ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL;
+ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
 
 ALTER TABLE app.document_trust ADD COLUMN IF NOT EXISTS decision TEXT NOT NULL DEFAULT 'allow';
 

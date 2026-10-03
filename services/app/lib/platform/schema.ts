@@ -907,22 +907,23 @@ const MUTATION_NOTIFICATIONS: Table = {name:'mutation_notifications',columns:[
  {name:'idx_mutation_notifications_recipient',columns:['recipient_id','created_at']},
 ]};
 /**
- * A READER'S TRUST in what documents ask of the network beyond the default document policy
- * (lib/trust/document-trust). One row per person per scope: `document:<artifact id>` or
- * `author:<user id>`. `decision` is 'allow' or 'deny'; `extensions` is the set the decision covers
- * ({connect, script, style, img} origin lists) — an allow covers a document only when every origin it
- * asks for is in the set, so a republish asking for more asks again. "Allow once" is never a row: it
- * lives in the reader's browser session. `user_id` names the reader, so a test user's rows are erased
- * with it (lib/accounts/testusers ERASE_BY_USER).
+ * A READER'S STANDING ANSWER to what one document asks of the network beyond the default document
+ * policy (lib/trust/document-trust): "Always for this document" ('allow') or "Never" ('deny'). One row
+ * per person per document. `extensions` is the set the answer covers ({connect, script, style, img,
+ * frame, media} origin lists): an allow covers the document only while every host it asks this reader
+ * about is in the set, so a republish asking for more asks again. "Allow once" is never a row: it lives
+ * in the reader's browser session. Hosts a reader published themselves need no row: their publish was
+ * their consent. `user_id` names the reader, so a test user's rows are erased with it
+ * (lib/accounts/testusers ERASE_BY_USER).
  */
 const DOCUMENT_TRUST: Table = {
  name:'document_trust',columns:[
   {name:'user_id',type:'TEXT',notNull:true},
-  {name:'scope',type:'TEXT',notNull:true},
+  {name:'artifact_id',type:'TEXT',notNull:true},
   {name:'decision',type:'TEXT',notNull:true,default:"'allow'"},
   {name:'extensions',type:'JSONB',notNull:true},
   {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- ],primaryKey:['user_id','scope'],
+ ],primaryKey:['user_id','artifact_id'],
 };
 export const TABLES: Table[] = [DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
