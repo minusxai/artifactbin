@@ -37,7 +37,7 @@ describe('resolveRefImageSrc', () => {
 
 describe('resolveRefProps — the one ref-patch for both render paths', () => {
   // Every position where markup carries an IMAGE `ref:<id>` that must become a
-  // URL at render time, as ONE table: <img src> and <Video poster>. (A PDF
+  // URL at render time, as ONE table: <img src>. (A PDF
   // `<File src>` and the generic media positions ride the same resolver —
   // reference-media.test.ts covers those.) Both the WYSIWYG canvas and the
   // runtime call this from their decorateElement seam, so a position resolving
@@ -47,19 +47,14 @@ describe('resolveRefProps — the one ref-patch for both render paths', () => {
       .toEqual({ src: '/a/img123/raw?v=3' });
   });
 
-  it('patches a <Video poster="ref:…">', () => {
-    expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { poster: 'ref:img123' }, REF_DATA))
-      .toEqual({ poster: '/a/img123/raw?v=3' });
-  });
 
   it('returns null when there is nothing to patch', () => {
     expect(resolveRefProps({ isComponent: false, tag: 'img' }, { src: '/plain.png' }, REF_DATA)).toBeNull();
-    expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { src: 'https://youtu.be/x' }, REF_DATA)).toBeNull();
     expect(resolveRefProps({ isComponent: false, tag: 'div' }, { src: 'ref:img123' }, REF_DATA)).toBeNull();
     expect(resolveRefProps({ isComponent: false, tag: 'video' }, { poster: '/plain.png' }, REF_DATA)).toBeNull();
   });
 
   it('an unresolved ref stays unpatched — the component falls back, the string never reaches the DOM as a URL', () => {
-    expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { poster: 'ref:gone11' }, REF_DATA)).toBeNull();
+    expect(resolveRefProps({ isComponent: false, tag: 'img' }, { src: 'ref:gone11' }, REF_DATA)).toBeNull();
   });
 });

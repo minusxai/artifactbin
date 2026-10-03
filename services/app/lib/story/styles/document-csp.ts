@@ -11,6 +11,7 @@
  *    CDNs an author script may import from — never inline script or eval;
  *  - connections to this origin (its own doors, server/pages-host), this document's doors on the app
  *    origin path-exact, and the same CDNs — never the app's other routes;
+ *  - frames: the default players (`FRAME_HOSTS`) and any host the document declares with `csp-frame`;
  *  - `frame-ancestors`: the app alone.
  *
  * `extensions` are the https origins a document declares in its Helmet (`csp-*` metas, lib/story/document/csp-extensions)
@@ -19,7 +20,7 @@
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
 import { assetsPath, mutatePath, queryPath } from './markup-csp';
-import { EMBED_HOSTS, FONT_FILES, FONT_STYLES, MODULE_CDNS } from './document-sources';
+import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from './document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/story/document/csp-extensions';
 
 export interface DocumentCspInput {
@@ -72,7 +73,8 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     join('font-src', "'self'", 'data:', FONT_FILES, asset, ext.style),
     join('img-src', "'self'", 'https:', 'data:', 'blob:', asset, ext.img),
     join('media-src', "'self'", 'https:', 'blob:', asset, ext.media),
-    join('frame-src', EMBED_HOSTS, ext.frame),
+    // An author `<iframe>` (lib/jsx/validate): the default players, then the hosts the document declares.
+    join('frame-src', FRAME_HOSTS, ext.frame),
     "form-action 'none'",
     "base-uri 'none'",
     `frame-ancestors ${appOrigin}`,

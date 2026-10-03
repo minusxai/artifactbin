@@ -1,9 +1,8 @@
 /**
  * WHICH EXTERNAL URLs A DOCUMENT NAMES — the pure half of importing them.
  *
- * Two positions hold an image the document must own: `<img src>` and
- * `<Video poster>`, the two places refs.ts treats as image refs; ONE holds a
- * PDF, `<File src>`, which is imported the same way under its own cap. A web URL
+ * One position holds an image the document must own: `<img src>`, the place
+ * refs.ts treats as an image ref; ONE holds a PDF, `<File src>`, which is imported the same way under its own cap. A web URL
  * anywhere else keeps whatever meaning the validator gives it (`href` is
  * navigation; other subresource attributes stay rejected as non-self-contained)
  * — and ONE css position holds a face the document self-hosts:
@@ -27,7 +26,6 @@ const WEB_URL = /^https?:\/\//i;
 /** [element tag, attribute] pairs that hold an image the document must own. */
 const IMAGE_POSITIONS: ReadonlyArray<readonly [tag: string, attr: string, component: boolean]> = [
   ['img', 'src', false],
-  ['Video', 'poster', true],
 ];
 
 /** The one position that holds a PDF: the card that links it. */

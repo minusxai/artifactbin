@@ -511,7 +511,6 @@
    "services/app/lib/story-ui/__tests__/interactive-tags.test.ts": 24,
    "services/app/lib/story-ui/__tests__/mermaid-source.test.ts": 19,
    "services/app/lib/story-ui/__tests__/recipe-classes.test.ts": 572,
-   "services/app/lib/story-ui/__tests__/video-embed.test.ts": 20,
    "services/app/lib/story/__tests__/annotation-area.test.ts": 16,
    "services/app/lib/story/__tests__/annotation-span.test.ts": 21,
    "services/app/lib/story/__tests__/asset-map.test.ts": 1080,

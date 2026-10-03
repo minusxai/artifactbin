@@ -1,7 +1,7 @@
 /**
  * The pure half of importing: WHICH external URLs a document names. Positions
- * are scoped on purpose — `<img src>` and `<Video poster>` are the two places
- * refs.ts already treats as image refs, `<File src>` is the one that holds a
+ * are scoped on purpose — `<img src>` is the place refs.ts already treats as
+ * an image ref, `<File src>` is the one that holds a
  * PDF (its own list, under its own cap), and an `@font-face` `src` is the one
  * css position that may name a face; a web URL anywhere else stays whatever the
  * validator says it is.
@@ -14,11 +14,12 @@ import { describe, expect, it } from 'vitest';
 import { collectExternalAssetUrls, collectExternalFontUrls, collectExternalImageUrls } from '../assets/external-images';
 
 describe('collectExternalImageUrls', () => {
-  it('finds https URLs on img src and Video poster, deduplicated, in order', () => {
+  it('finds https URLs on img src, deduplicated, in order — never an iframe or video src', () => {
     const src = `<div>
       <img src="https://a.example/one.png" />
       <img src="https://a.example/one.png" alt="again" />
-      <Video src="https://www.youtube.com/watch?v=x" poster="https://a.example/two.jpg" />
+      <iframe src="https://www.youtube-nocookie.com/embed/x" title="clip" />
+      <img src="https://a.example/two.jpg" />
       <img src="ref:abc123" />
       <img src="data:image/png;base64,xxxx" />
     </div>`;

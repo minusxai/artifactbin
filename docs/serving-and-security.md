@@ -128,7 +128,7 @@ server fetches it once, stores a copy, and serves it from this origin:
 - `<img src="https://example.com/chart.png" />` in markup — and the URL STAYS
   in the document. An agent writes what it would write anywhere and reads back
   exactly that; only what a reader is SERVED is swapped for our copy. The same
-  goes for `<Video poster>`, `<File src="https://…/paper.pdf" />` and an
+  goes for `<File src="https://…/paper.pdf" />` and an
   `@font-face { src: url(https://…) }` in the document's own stylesheet.
 - `{ "imageUrl": … }`, `{ "pdfUrl": … }` or `{ "csvUrl": … }` on create, when
   you want the file to be an artifact with an id of its own.

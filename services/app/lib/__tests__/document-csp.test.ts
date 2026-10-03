@@ -35,7 +35,8 @@ describe('buildDocumentCsp', () => {
     expect(directive(csp, 'font-src')).toBe("font-src 'self' data: https://fonts.gstatic.com");
     expect(directive(csp, 'img-src')).toBe("img-src 'self' https: data: blob:");
     expect(directive(csp, 'media-src')).toBe("media-src 'self' https: blob:");
-    expect(directive(csp, 'frame-src')).toBe('frame-src https://www.youtube-nocookie.com https://player.vimeo.com');
+    // An author <iframe> frames the retired <Video> card's players by default; any other host is a `csp-frame` meta.
+    expect(directive(csp, 'frame-src')).toBe('frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com');
     expect(directive(csp, 'form-action')).toBe("form-action 'none'");
     expect(directive(csp, 'base-uri')).toBe("base-uri 'none'");
   });
@@ -48,7 +49,7 @@ describe('buildDocumentCsp', () => {
   it('appends https origins a document declares, per directive — never a connection, which goes through its /fetch door — and refuses anything else', () => {
     const extended = buildDocumentCsp({ self: SELF, app: APP, id: 'Ab3xK9', extensions: { connect: ['https://api.example.org'], script: ['https://cdn.example.org'], style: ['https://css.example.org'], img: ['https://img.example.org'], frame: ['https://embed.example.org'], media: ['https://media.example.org'] } });
     expect(directive(extended, 'font-src')!.split(' ').at(-1)).toBe('https://css.example.org');
-    expect(directive(extended, 'frame-src')!.split(' ').at(-1)).toBe('https://embed.example.org');
+    expect(directive(extended, 'frame-src')).toBe('frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com https://embed.example.org');
     expect(directive(extended, 'media-src')!.split(' ').at(-1)).toBe('https://media.example.org');
     expect(directive(extended, 'connect-src')).toBe(directive(csp, 'connect-src'));
     expect(extended).not.toContain('https://api.example.org');

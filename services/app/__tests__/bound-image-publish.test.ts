@@ -99,10 +99,9 @@ describe('a bound src is a binding, not an external URL', () => {
   it('a web URL in a NON-image position publishes as written: external subresources are allowed, and only `img src` is imported', async () => {
     hits.length = 0;
     const url = `${web}/clip.mp4`;
-    const { res, body } = await publish(`${HELMET}<div><img src="$pick" /><input value="$pick" /><Video src="${url}" poster="$pick" /></div>`);
+    const { res, body } = await publish(`${HELMET}<div><img src="$pick" /><input value="$pick" /><video src="${url}" controls /></div>`);
     expect(res.status, JSON.stringify(body)).toBe(201);
-    // `poster` is not a bindable position and `src` on <Video> is not an imported one: the URL stays verbatim
-    // in the source and publish fetches nothing for it.
+    // `src` on <video> is not an imported position: the URL stays verbatim in the source and publish fetches nothing for it.
     expect((await getArtifactById(body.id as string))!.source).toContain(`src="${url}"`);
     expect(hits).toEqual([]);
   });

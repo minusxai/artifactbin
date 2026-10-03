@@ -17,6 +17,8 @@ import { inputOf } from './p3-static/harness';
 import { KIT_FOUR_MARKUP, KIT_REPORT_MARKUP } from './kit-four-fixture';
 
 const edge = (key: string, body: string): CorpusDoc => ({ key, group: 'tag', template: null, markup: `<div data-design="tw" className="px-6" id="root">${body}</div>` });
+/** An author's player, every attribute it may carry (lib/jsx/validate `iframeErrors`). */
+const IFRAME = '<iframe src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?start=5&amp;rel=0" title="Big Buck Bunny" width={560} height="315" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy" className="aspect-video w-full" style={{ border: 0 }} id="player" />';
 const LONG = `${'word  with\ttabs and nbsp &amp; &lt;b&gt; '.repeat(40)}end`;
 
 /** The shapes where Solid's server template does something implicit: whitespace, escaping, booleans, voids, casing. */
@@ -36,8 +38,9 @@ const EDGES: CorpusDoc[] = [
   edge('kit-fallback', '<section><Progress value={30} /><Button variant="outline">go</Button><Separator decorative={false} /><Icon name="check" /></section><Separator orientation="vertical" decorative={false} /><Alert variant="destructive"><AlertTitle>t</AlertTitle><AlertDescription>d <Icon name="x" /></AlertDescription></Alert>'),
   edge('kit-four', '<Grid>\n  <GridItem x={0} y={0} w={4} h={1}>  a  b  </GridItem>\n  <GridItem x={4} y={0} w={4} h={1}></GridItem>\n</Grid><Grid mode="flow"></Grid><GridItem w={3}><b>orphan</b></GridItem>'
     + '<Button>  spaced   text  </Button><Button type="button" aria-label="Go &amp; see">{"lit"}<Icon name="check" /> after</Button><Button size="icon" variant="link" data-x="1" style={{ marginTop: 2 }}>s</Button>'
-    + '<Video src="https://vimeo.com/76979871" interactive={false} /><Video src="https://youtu.be/aqz-KE-bpKQ" poster="ref:NOPE" title="a &quot;quoted&quot; title" />'
-    + '<SlideDeck><Slide>untitled</Slide><Slide title="Two"><Grid><GridItem x={0} y={0} w={12} h={2}><Button>in</Button><Video src="https://youtu.be/aqz-KE-bpKQ" /></GridItem></Grid></Slide></SlideDeck>'),
+    + '<File src="https://example.com/a.pdf" interactive={false} /><File src="ref:NOPE" title="a &quot;quoted&quot; title" />'
+    + '<SlideDeck><Slide>untitled</Slide><Slide title="Two"><Grid><GridItem x={0} y={0} w={12} h={2}><Button>in</Button><File src="https://example.com/b.pdf" /></GridItem></Grid></Slide></SlideDeck>'),
+  edge('iframe', IFRAME),
   edge('mixed', '<Helmet><Value name="who" type="string" default="Ada" /></Helmet><section><h2>Static</h2><p>Hello {$who}</p><ul><li>one</li><li>two <Badge>b</Badge></li></ul><Card><p>in card</p><span>and</span></Card></section>'),
 ];
 
@@ -68,10 +71,10 @@ describe('static chunks', () => {
     }
     // The chunks are exercised, not bypassed — the kit's among them.
     expect(chunks).toBeGreaterThan(100);
-    expect([...kitChunks]).toEqual(expect.arrayContaining(['table', 'table-row', 'table-cell', 'card', 'card-content', 'badge', 'icon', 'separator', 'alert', 'button', 'video']));
+    expect([...kitChunks]).toEqual(expect.arrayContaining(['table', 'table-row', 'table-cell', 'card', 'card-content', 'badge', 'icon', 'separator', 'alert', 'button', 'file']));
   }, 240_000);
 
-  it('pre-renders static Grid/GridItem, Button, Video and Slide: the served bytes and the browser module are the JSX\'s', async () => {
+  it('pre-renders static Grid/GridItem, Button, File and Slide: the served bytes and the browser module are the JSX\'s', async () => {
     const input = await inputOf({ key: 'kit-four', group: 'tag', template: null, markup: KIT_FOUR_MARKUP });
     const { chunked, jsx, fast, reference } = await compileBoth(input);
     expect(fast.html).toBe(reference.html);
@@ -79,12 +82,23 @@ describe('static chunks', () => {
     expect(chunked.browserIslands).toBe(jsx.browserIslands);
     expect(chunked.islandRefs).toEqual(jsx.islandRefs);
     const html = chunked.staticHtml.join('');
-    for (const mark of ['data-slot="button"', 'data-slot="video"', 'data-slot="video-link"', 'data-mx-slide=""', 'data-mx-slide-title="Slide 5"', '--g-cols:12', '--gi-w:6', 'id="g9e"', 'id="deck"']) expect(html, mark).toContain(mark);
+    for (const mark of ['data-slot="button"', 'data-slot="file"', 'data-slot="file-link"', 'data-mx-slide=""', 'data-mx-slide-title="Slide 5"', '--g-cols:12', '--gi-w:6', 'id="g9e"', 'id="deck"']) expect(html, mark).toContain(mark);
     // The skeleton keeps no JSX for them, the deck rail's miniatures included: what is left is the live value.
-    for (const tag of ['<Grid', '<Button', '<Video', '<Slide', '<SlideDeck', '<Card', '--g-cols', 'mx-preview-']) expect(chunked.skeleton, tag).not.toContain(tag);
+    for (const tag of ['<Grid', '<Button', '<File', '<Slide', '<SlideDeck', '<Card', '--g-cols', 'mx-preview-']) expect(chunked.skeleton, tag).not.toContain(tag);
     expect(html).toContain('id="mx-preview-');
     expect(chunked.skeleton.length).toBeLessThan(10_000);
-    expect(jsx.skeleton.slice(jsx.skeleton.indexOf('<div class="mx-doc">'))).toContain('<Video');
+    expect(jsx.skeleton.slice(jsx.skeleton.indexOf('<div class="mx-doc">'))).toContain('<File');
+  }, 120_000);
+
+  it('serves an author <iframe> as written: its src, its attributes, nothing added or dropped', async () => {
+    const { fast, reference } = await compileBoth(await inputOf(edge('iframe', IFRAME)));
+    expect(fast.html).toBe(reference.html);
+    const tag = /<iframe[^>]*id="player"[^>]*>/.exec(fast.html)?.[0] ?? /<iframe[^>]*title="Big Buck Bunny"[^>]*>/.exec(fast.html)?.[0];
+    expect(tag, fast.html.slice(0, 2000)).toBeDefined();
+    for (const attr of ['src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?start=5&amp;rel=0"', 'title="Big Buck Bunny"', 'width="560"', 'height="315"',
+      'allow="autoplay; encrypted-media; picture-in-picture"', 'loading="lazy"', 'class="aspect-video w-full"', 'style="border:0"']) expect(tag, attr).toContain(attr);
+    expect(tag).toMatch(/ allowfullscreen(="")?[ >]/);
+    expect(tag).not.toMatch(/sandbox|srcdoc/);
   }, 120_000);
 
   it('keeps a heavy static document out of the module Babel transforms', async () => {

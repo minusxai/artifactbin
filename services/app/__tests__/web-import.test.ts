@@ -10,7 +10,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * self-contained (no CSP change, no reader-IP leak, no rot). Three doors:
  *
  *   1. `imageUrl` on create — an image artifact straight from a URL,
- *   2. `<img src="https://…">` (and `<Video poster>`, and an `@font-face`
+ *   2. `<img src="https://…">` (and an `@font-face`
  *      `src` url) in markup — the agent door: imported into the global URL
  *      cache while the URL STAYS in the stored document, and mapped to our
  *      copy on the way out (lib/web-assets, lib/story/assets/asset-url),
@@ -191,18 +191,6 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
     const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<div>${many}</div>` } }));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('too_many_external_images');
-  });
-
-  it('a <Video poster> follows the same rule', async () => {
-    const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
-      markup: `<div><Video src="https://youtu.be/dQw4w9WgXcQ" poster="${web}/photo.jpg" /></div>`,
-    } }));
-    expect(res.status).toBe(201);
-    const body = await res.json();
-    expect((await getArtifactById(body.id))!.source).toContain(`${web}/photo.jpg`);
-    const html = await (await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id }))).text();
-    expect(html).toContain(assetUrlFor(`${web}/photo.jpg`));
   });
 
   it('PUT imports too — the shared pipeline, not just create', async () => {
