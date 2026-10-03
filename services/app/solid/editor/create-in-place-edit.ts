@@ -77,6 +77,13 @@ export interface InPlaceEditOptions {
   /** Delete/Backspace pressed with a selection, or Escape. */
   onEditKey?: (key: 'Delete' | 'Backspace' | 'Escape', selection: StoryEditSelection | null) => void;
   onHistory?: (direction: 'undo' | 'redo') => void;
+  /**
+   * A framed document forwards what the page's own window would have heard (lib/story-runtime/frame-bridge/frame):
+   * Enter, or focus leaving a text host — hand held typing to the document now.
+   */
+  onFlush?: () => void;
+  /** …and the comment shortcut (⌘⌥M) pressed inside it. */
+  onCommentKey?: () => void;
   /** A slide was renamed from the deck's own rail. */
   onSlideTitle?: (path: string, title: string) => void;
   /**
@@ -143,6 +150,12 @@ export function createInPlaceEdit(options: InPlaceEditOptions): InPlaceEditContr
           switch (event.data.type) {
             case 'mx:history':
               options.onHistory?.(event.data.direction);
+              break;
+            case 'mx:edit-flush':
+              options.onFlush?.();
+              break;
+            case 'mx:comment-key':
+              options.onCommentKey?.();
               break;
             case 'mx:block-edit': {
               const next = editBlock(sourceRef.current, event.data.command);

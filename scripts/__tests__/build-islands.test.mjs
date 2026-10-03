@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { AUTHOR_VENDOR_SPECIFIERS, CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
+import { AUTHOR_VENDOR_SPECIFIERS, CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, FRAME_EDITOR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
@@ -45,9 +45,13 @@ describe('buildIslands', () => {
     }
     expect(Object.keys(written).sort()).toEqual(['build', 'files', 'manifest', 'offline', 'sqliteWasm', 'ssr']);
     expect(written.sqliteWasm).toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
-    // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
-    const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
+    // Exactly one Solid in the shared graph: its DOM runtime (the event-delegation key is a string literal in solid-js/web)
+    // is in one chunk. The frame editor is its own graph (build-islands FRAME_EDITOR) and carries its own copy, in its own file.
+    const solidWebIn = (urls) => urls.filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
+    const isEditorFile = (url) => /\/frame-editor(-chunk)?-[0-9a-f]{16}\.js$/.test(url);
+    const withSolidWeb = solidWebIn(Object.keys(first.files).filter((url) => !isEditorFile(url)));
     expect(withSolidWeb).toHaveLength(1);
+    expect(solidWebIn(Object.keys(first.files).filter(isEditorFile))).toHaveLength(1);
     // ... and the author script's `solid-js/web`, the page runtime and rt all reach that one chunk.
     for (const specifier of ['@mx/rt', '@mx/page-runtime', 'solid-js/web']) expect(first.closure([first.manifest[specifier]]), specifier).toContain(withSolidWeb[0]);
     expect(first.offline).toMatch(/^\/islands\/offline-[0-9a-f]{16}\.json\.gzip$/);
@@ -138,6 +142,24 @@ describe('buildIslands', () => {
     const dynamic = [...dataCode.matchAll(/import\("\.\/([\w-]+\.js)"\)/g)].map(match => `/islands/${match[1]}`);
     expect(dynamic.some(url => files[url]?.gz > 100 * 1024)).toBe(true);
     expect(dynamic.every(url => !staticUrls.includes(url))).toBe(true);
+  });
+
+  it('keeps the frame editor out of every reader closure: page names it only lazily, and ProseMirror loads only after it', () => {
+    const { manifest, files, closure } = first;
+    const editor = manifest[FRAME_EDITOR.specifier];
+    expect(editor).toMatch(/^\/islands\/frame-editor-[0-9a-f]{16}\.js$/);
+    expect(existsSync(path.join(outDir, editor.slice('/islands/'.length)))).toBe(true);
+    const readers = [manifest['@mx/rt'], manifest['@mx/boot'], manifest['@mx/page'], ...KIT_FAMILIES.map((family) => manifest[`@mx/kit/${family}`])];
+    const editorFiles = Object.keys(files).filter((url) => /\/frame-editor(-chunk)?-[0-9a-f]{16}\.js$/.test(url));
+    expect(closure(readers).filter((url) => editorFiles.includes(url))).toEqual([]);
+    const page = readFileSync(path.join(outDir, manifest['@mx/page'].slice('/islands/'.length)), 'utf8');
+    expect(page).toContain(`import("./${editor.slice('/islands/'.length)}")`);
+    // Attaching (comments, selection actions) loads the controller and the relay; the editor itself is behind them.
+    const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
+    const carried = (urls) => urls.flatMap((url) => outputInputs[url] ?? []);
+    expect(carried(closure([editor])).some((input) => input.endsWith('story-runtime/island-controller.ts'))).toBe(true);
+    expect(carried(closure([editor])).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(false);
+    expect(carried(editorFiles).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(true);
   });
 
   it('loads tooltip placement only when a tooltip opens', () => {

@@ -122,6 +122,18 @@ describe('startPage', () => {
     expect(FakeEventSource.made).toEqual([]);
   });
 
+  it('framed: opens the bridge door before any author script, telling the app origin (and only it) that it may attach', () => {
+    page();
+    const posted: Array<[unknown, string]> = [];
+    const parent = { postMessage: (data: unknown, target: string) => { posted.push([data, target]); } };
+    const framed = new Proxy(window, { get: (target, key) => (key === 'parent' ? parent : Reflect.get(target, key, target)) });
+    stops.push(startPage(document, framed));
+    expect(posted).toContainEqual([{ type: 'mx:frame-bridge', payload: { kind: 'hello' } }, window.location.origin]);
+    posted.length = 0;
+    stops.push(startPage(document, window));
+    expect(posted).toEqual([]);
+  });
+
   it('puts the reader back where a live reload left them, and consumes the anchor', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     page({ live: false });

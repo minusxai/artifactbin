@@ -33,6 +33,7 @@ import { ForkConfirm } from '../document/ForkArtifact';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DocumentPeople } from '../document/DocumentPeople';
 import { createIslandStory, type IslandStory } from '../document/create-island-story';
+import { createFramedStory, framedDocumentFor } from '../document/create-framed-story';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
 import { moveInto } from '@/lib/story-runtime/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
@@ -282,7 +283,8 @@ export function DocumentPage(): JSX.Element {
     if (!wide() || untrack(panelFits) !== null) return;
     let frame = 0; let frames = 0;
     const decide = () => {
-      const root = host?.querySelector('[data-mx-inline-story]');
+      // A framed document (create-framed-story) is the frame itself: it has its content, and no margin to fit in.
+      const root = host?.querySelector('[data-mx-inline-story]') ?? host?.querySelector('iframe');
       const hasContent = !!root && root.childElementCount > 0;
       if (!hasContent && !untrack(railOpen) && frames++ < 300) { frame = requestAnimationFrame(decide); return; }
       setEditorRightInset(editPanelWidth(readEditPanelCollapsed()));
@@ -384,13 +386,21 @@ export function DocumentPage(): JSX.Element {
       // The served frame may have loaded before the app did (it loads on idle): forward now as well.
       forwardHash();
     } else {
-      island = createIslandStory({
-        id, host, story, islands, nodes: page.surface?.runtime?.data.nodes ?? [],
+      // The frame condition (create-framed-story `framedDocumentFor`): the document runs in a frame on its own origin,
+      // and the served story here is put away; everything below talks to it through the bridge's stand-in.
+      const framedAt = framedDocumentFor(id, window.location.href);
+      const storyInputs = {
+        id, nodes: page.surface?.runtime?.data.nodes ?? [],
         editId: () => editorPart()?.editId ?? page.surface?.editId ?? '',
         source: () => editorPart()?.source ?? null,
-      });
+      };
+      if (framedAt) { islands?.dispose(); story.remove(); adoptedStory = null; }
+      island = framedAt
+        ? createFramedStory({ ...storyInputs, host, frame: framedAt, height: () => `calc(100vh - ${(phone() ? 0 : APP_BAR_H) + (editing() ? EDIT_BAR_H : 0)}px)` })
+        : createIslandStory({ ...storyInputs, host, story, islands });
       runtimeRef.current = island.controller();
-      setNonce(island.nonce());
+      // A framed document's controller signs its events once it runs in the frame: the nonce arrives then.
+      createEffect(() => setNonce(island?.nonce() ?? null));
     }
     if (pendingData.length) runtimeRef.current?.send({ type: STORY_DATA_MESSAGE, datasets: [...new Set(pendingData.splice(0))] });
     setReady(true);
@@ -442,7 +452,7 @@ export function DocumentPage(): JSX.Element {
     sample();
     const liveId = document.body.getAttribute('data-mx-live-id');
     const editId = document.body.getAttribute('data-mx-live-edit');
-    const stopLive = !islands && liveId && editId && typeof EventSource === 'function' ? startIslandLive(window, liveId, editId) : null;
+    const stopLive = !framedAt && !islands && liveId && editId && typeof EventSource === 'function' ? startIslandLive(window, liveId, editId) : null;
     const stopIdle = editable() ? whenIdle(prefetchEditor) : null;
     onCleanup(() => { wiring.dispose(); window.removeEventListener('hashchange', lifecycle.sync); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); window.cancelAnimationFrame(frame); stopLive?.(); stopIdle?.(); sharing.dispose(); runtimeRef.current = null;
       // The route is leaving this (already-adopted) document: `clearInitialStory` never runs for it

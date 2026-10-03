@@ -267,6 +267,9 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     onError: setHistoryError,
     onRejectedEdit: setRejectedFragment,
     onHistory: (direction) => { void applyHistory(direction); },
+    // A framed document's Enter / focus-out and ⌘⌥M, forwarded: the same as the window listeners below.
+    onFlush: () => showInDocument.flush(),
+    onCommentKey: () => { const current = edit?.selection(); if (current) props.onComment?.(current); },
     onImageDrop: (file, where) => imageDoors?.dropped(file, where),
     onImageReplaceRequest: (path) => imageDoors?.pick(path),
     get editing() { return mode() === 'design' && !preview(); },

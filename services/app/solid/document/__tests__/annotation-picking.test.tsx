@@ -59,6 +59,8 @@ describe('picking a block from the rail', () => {
     expect(screen.getByRole('status', { name: 'Screenshot tool active' })).toHaveTextContent('drag an area');
     view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: { ...PICKED, range: { v: 1, kind: 'area', box: { x: 0, y: 0, w: 1, h: 1 } } } });
     expect(capture).toHaveBeenCalledOnce();
+    // The area is the document's (its viewport at 0,100 here, as a framed document's sits below the bar): the page captures it where it is.
+    expect(capture.mock.calls[0]![0]).toMatchObject({ x: 5, y: 106, width: 200, height: 40 });
     await flush();
     expect(screen.getByLabelText('Upload screenshot')).toBeTruthy();
     fireEvent.input(screen.getByLabelText('Annotation comment'), { target: { value: 'Area comment' } });

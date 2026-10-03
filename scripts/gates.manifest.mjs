@@ -69,6 +69,8 @@ export const GATE_SPECS = Object.freeze([
   // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
   { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
   { name: 'inplace-edit', needsMail: false, seconds: 66, timeoutMs: 180_000 },
+  // Measured 10s alone against a dev server (not yet in CI); the floor timeout.
+  { name: 'frame-editor', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
   { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },

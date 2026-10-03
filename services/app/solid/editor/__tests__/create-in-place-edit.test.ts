@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { createSignal } from 'solid-js';
-import { STORY_FLOW_EDIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_COMMENT_KEY_MESSAGE, STORY_EDIT_FLUSH_MESSAGE, STORY_FLOW_EDIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_TYPING_MESSAGE } from '@/lib/story-runtime/contract';
 import { createInPlaceEdit } from '../create-in-place-edit';
 import { createEditorSource } from '../create-editor-source';
 import { renderHook } from '@/solid/__tests__/helpers';
@@ -161,4 +161,26 @@ it('carries typed prose into the source as typing, so its draft waits for a paus
     { source: '<p id="a">alpha!</p>', typing: true },
     { source: '<p id="a"><strong>alpha!</strong></p>', typing: false },
   ]);
+});
+
+it('takes the keys a framed document forwards: a signed flush and comment shortcut reach their handlers, unsigned ones do not', () => {
+  const { runtimeRef, emit, emitUnsigned } = fakeRuntime();
+  const onFlush = vi.fn();
+  const onCommentKey = vi.fn();
+  const onHistory = vi.fn();
+  renderHook(() => createInPlaceEdit({
+    runtimeRef, sourceRef: { current: '<p>draft</p>' }, editing: true, sessionNonce: NONCE, onSourceEdited: () => {},
+    onFlush, onCommentKey, onHistory,
+  }));
+  emitUnsigned({ type: STORY_EDIT_FLUSH_MESSAGE, reason: 'enter' });
+  emitUnsigned({ type: STORY_COMMENT_KEY_MESSAGE });
+  expect(onFlush).not.toHaveBeenCalled();
+  expect(onCommentKey).not.toHaveBeenCalled();
+  emit({ type: STORY_EDIT_FLUSH_MESSAGE, reason: 'enter' });
+  emit({ type: STORY_EDIT_FLUSH_MESSAGE, reason: 'focusout' });
+  emit({ type: STORY_COMMENT_KEY_MESSAGE });
+  emit({ type: 'mx:history', direction: 'undo' });
+  expect(onFlush).toHaveBeenCalledTimes(2);
+  expect(onCommentKey).toHaveBeenCalledTimes(1);
+  expect(onHistory).toHaveBeenCalledWith('undo');
 });
