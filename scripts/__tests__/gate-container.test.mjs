@@ -6,9 +6,10 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import yaml from 'yaml';
 import {
-  CONTAINER_REFUSALS, DEFAULT_CPUS, DEFAULT_MEMORY, INSIDE,
-  checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, parseArgs,
+  BUILD_OUTPUTS, BUILD_VOLUME, CONTAINER_REFUSALS, DEFAULT_CPUS, DEFAULT_MEMORY, INSIDE,
+  buildCacheKey, checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, parseArgs,
 } from '../lib/gate-container.mjs';
 import { gateNamesOnDisk } from '../gates.manifest.mjs';
 
@@ -26,6 +27,8 @@ describe('parseArgs', () => {
     expect(parseArgs(['--cpus=1', 'a']).servers).toBe(1);
     expect(parseArgs(['--servers', '4', 'a']).servers).toBe(4);
     expect(parseArgs(['--inside', '--servers', '2', 'a', 'b'])).toMatchObject({ inside: true, gates: ['a', 'b'] });
+    expect(parseArgs(['--inside', '--build-key', 'a'.repeat(32), 'a']).buildKey).toBe('a'.repeat(32));
+    expect(() => parseArgs(['--build-key', 'nope', 'a'])).toThrow(/--build-key/);
   });
 
   it('refuses no gates, unknown options and malformed quotas', () => {
@@ -76,11 +79,32 @@ describe('image and dependency volume', () => {
     expect(depsVolume({ ...base })).toBe(key);
     for (const field of Object.keys(base)) expect(depsVolume({ ...base, [field]: 'changed' }), field).not.toBe(key);
   });
+
+  it('keys the cached build on CI’s build key, the working tree’s changed build inputs and the dependencies', () => {
+    const base = { buildKey: 'B', changes: 'C', deps: 'D' };
+    const key = buildCacheKey(base);
+    expect(key).toMatch(/^[0-9a-f]{32}$/);
+    expect(buildCacheKey({ ...base })).toBe(key);
+    for (const field of Object.keys(base)) expect(buildCacheKey({ ...base, [field]: 'changed' }), field).not.toBe(key);
+  });
+
+  it('caches exactly what a CI gate shard restores and runs on without building', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(SCRIPTS, '..', '.github/workflows/ci.yml'), 'utf8'));
+    const restore = jobs.gates.steps.find((step) => step.id === 'build-cache');
+    expect([...BUILD_OUTPUTS].sort()).toEqual(restore.with.path.trim().split('\n').map((line) => line.trim()).sort());
+  });
+
+  it('builds only what the gates read, as CI’s gate shards do, and restores before building', () => {
+    const runner = readFileSync(path.join(SCRIPTS, 'gate-container.mjs'), 'utf8');
+    expect(runner).toContain("run('node', ['scripts/build/build-gate-inputs.mjs'])");
+    expect(runner).not.toMatch(/run\('npm', \['run', 'build'/);
+    expect(runner.indexOf('[ -f ${entry}/ready ] || exit 3')).toBeLessThan(runner.indexOf('build-gate-inputs.mjs\'])'));
+  });
 });
 
 describe('dockerRunArgs', () => {
   const args = dockerRunArgs({
-    name: containerName('/Users/me/projects/Proof Tree_A', 4242), image: 'afbin-gate:pw1-abc', volume: 'afbin-gate-deps-1',
+    name: containerName('/Users/me/projects/Proof Tree_A', 4242), image: 'afbin-gate:pw1-abc', volume: 'afbin-gate-deps-1', buildKey: 'b'.repeat(32),
     worktree: '/Users/me/projects/tree', cpus: 4, memory: '8g', servers: 2, gates: ['hydration', 'fonts'],
   });
   const value = (flag) => args[args.indexOf(flag) + 1];
@@ -89,9 +113,9 @@ describe('dockerRunArgs', () => {
     expect(value('--name')).toBe('afbin-gate-proof-tree_a-4242');
   });
 
-  it('mounts the worktree read-only and the dependency cache as the one named volume', () => {
+  it('mounts the worktree read-only, and the dependency and build caches as the two named volumes', () => {
     const mounts = args.filter((_, i) => args[i - 1] === '-v');
-    expect(mounts).toEqual([`/Users/me/projects/tree:${INSIDE.src}:ro`, `afbin-gate-deps-1:${INSIDE.deps}`]);
+    expect(mounts).toEqual([`/Users/me/projects/tree:${INSIDE.src}:ro`, `afbin-gate-deps-1:${INSIDE.deps}`, `${BUILD_VOLUME}:${INSIDE.builds}`]);
   });
 
   it('applies the quota, removes itself, keeps stdin open and publishes no port', () => {
@@ -104,7 +128,7 @@ describe('dockerRunArgs', () => {
   });
 
   it('runs the inside half with CI’s gate environment and the chosen gates', () => {
-    expect(args.slice(args.indexOf('afbin-gate:pw1-abc') + 1)).toEqual(['node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', '2', 'hydration', 'fonts']);
+    expect(args.slice(args.indexOf('afbin-gate:pw1-abc') + 1)).toEqual(['node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', '2', '--build-key', 'b'.repeat(32), 'hydration', 'fonts']);
     expect(args.filter((_, i) => args[i - 1] === '-e')).toEqual(['DATASET__ALLOW_PRIVATE_NETWORKS=true']);
   });
 

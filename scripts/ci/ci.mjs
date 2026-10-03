@@ -4,8 +4,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { normalisedLock } from '../lib/lock-fingerprint.mjs';
-import { createHash } from 'node:crypto';
-import { CI_JOBS, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
+import { CI_JOBS, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, buildKey, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
 
 const env = process.env;
 const mode = process.argv[2];
@@ -309,13 +308,10 @@ if (mode === 'plan') {
   writeFileSync('.ci-cache-key/install.json', lock);
   console.log('Wrote .ci-cache-key/install.json (the lockfile with workspace versions normalised).');
 } else if (mode === 'build-key') {
-  // The build cache's key: git's own object ids for every build input (scripts/lib/ci-plan.mjs
-  // `isBuildInput`), so it costs one `ls-files` rather than reading the tree.
-  const index = execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-    .split('\n').filter((line) => line && isBuildInput(line.slice(line.indexOf('\t') + 1)));
-  const key = createHash('sha256').update(index.join('\n')).digest('hex').slice(0, 32);
+  // The build cache's key (scripts/lib/ci-plan.mjs `buildKey`).
+  const { key, inputs } = buildKey(execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
-  console.log(`build key ${key} over ${index.length} build inputs`);
+  console.log(`build key ${key} over ${inputs} build inputs`);
 } else {
   throw new Error('Expected plan, node, check, cli-bump, record-tree, lock-fingerprint or build-key');
 }

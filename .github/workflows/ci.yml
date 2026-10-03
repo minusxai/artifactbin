@@ -134,7 +134,10 @@ jobs:
   # running whole, which made `validate + node` a 2m16s job of which 103s was
   # this step alone.
   #
-  # EIGHT shards, down from ten after run 36838282615, where the plain shards ran 63-111s against a
+  # FOUR shards, down from seven (.agent/ci-proposal.md §1d): seven ran 28-56s of Vitest each beside
+  # ~16s of setup, far under the gates (~155s warm), so four keep every shard below them — the
+  # heaviest, by scripts/ci/test-timings.json with the integration and CLI-suite reserves, ~124s warm.
+  # Earlier: EIGHT, down from ten after run 36838282615, where the plain shards ran 63-111s against a
   # 240s budget and the gates set the run's path. Before that, TEN, up from four: shard 3 also builds and tests the CLI (~141s fixed, unaffected by
   # shard count — see below), so on run 36611975484 it was the tallest job in the run at 236s even
   # though its own share of the plain vitest work was only 72s. Downloading `build`'s artifact instead
@@ -145,13 +148,13 @@ jobs:
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
-    name: node tests (${{ matrix.shard }}/7)
+    name: node tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
+        shard: [ 1, 2, 3, 4 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -200,7 +203,7 @@ jobs:
           restore-keys: test-builds-v1-${{ runner.os }}-
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
-        run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/7
+        run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/4
       # The heavy tests that `npm test` leaves out — a disposable Dockerised
       # Postgres and real Chromium — live in the `integration` project and
       # would otherwise run nowhere in CI. This job already provisions both
@@ -228,16 +231,18 @@ jobs:
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
   # on run 36608202961 — over the ~150s per-job target — so it split three, then four ways. Three
   # again after run 36838282615 (four shards, 84-129s): the gates, not this job, set the run's path.
+  # TWO since .agent/ci-proposal.md §1d: three ran 38-44s of work each, so two (~80s warm) stay
+  # under the gates.
   ui:
     needs: [ plan ]
     if: needs.plan.outputs.ui == 'true'
-    name: ui tests (${{ matrix.shard }}/3)
+    name: ui tests (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3 ]
+        shard: [ 1, 2 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -270,7 +275,7 @@ jobs:
             node_modules/.cache/build-islands.json
           key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: test-builds-v1-${{ runner.os }}-
-      - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/3
+      - run: npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2
 
   # The BUILD catches what tsc and vitest cannot: a route the generated table
   # has not seen, an import that only resolves under the bundler, a SPA module
@@ -436,13 +441,13 @@ jobs:
   gates:
     needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/8)
+    name: browser gates (${{ matrix.shard }}/7)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -509,8 +514,8 @@ jobs:
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
       # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
       # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
       # (one gate shard), against a 240s job budget. Only the cross-browser shards pay it, and with the
@@ -572,9 +577,10 @@ jobs:
       #
       # Twelve shards (two taken from api), packed by each gate's MEASURED CI seconds rather than its
       # timeout (scripts/gates.manifest.mjs `shardWeight`): <=~75s of gate work per shard. The gates that
-      # lose races under a neighbour's load (`CI_ISOLATED_GATES`) each hold a shard alone.
+      # lose races under a neighbour's load (`CI_ISOLATED_GATES`) share one shard and nothing else, and
+      # the runner gives that set one server, one gate at a time (scripts/gates.servers.mjs `serversFor`).
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/8
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/7
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

@@ -16,14 +16,18 @@
  * worktree's source — tracked and untracked, not ignored: what a checkout of the working tree would
  * hold — is copied from a read-only mount into the container's own `/work`; the dependencies come
  * from a named volume keyed like CI's install cache (`npm ci` on the first run, a copy afterwards);
- * then `npm run build`, `npm run build -w services/cli` and `node scripts/gates.mjs --servers=N
- * --only=<gates>` against production servers in the container's own network namespace, with a
- * delegated cgroup and the real bubblewrap session sandbox rather than `BROWSER__SANDBOX=none`.
- * `--servers` defaults to one per two CPUs: CI's two servers on a four-vCPU runner.
+ * then CI's gate build (scripts/build/build-gate-inputs.mjs: the app, `dist/server.mjs` and the CLI
+ * bundle — not the CLI's declarations and host runtime, which no gate reads), restored instead from
+ * the `afbin-gate-builds` volume when the build inputs have not changed since it last ran
+ * (lib/gate-container.mjs `buildCacheKey`); then `node scripts/gates.mjs --servers=N --only=<gates>`
+ * against production servers in the container's own network namespace, with a delegated cgroup and
+ * the real bubblewrap session sandbox rather than `BROWSER__SANDBOX=none`. `--servers` defaults to one
+ * per two CPUs: CI's two servers on a four-vCPU runner.
  *
  * The gate output streams here, the exit status is the gates', and the container is removed when
  * it ends — also when this runner is interrupted or killed (the container watches its stdin). Only
- * the `afbin-gate-deps-*` volume and the `afbin-gate:*` image persist, as caches.
+ * the `afbin-gate-deps-*` and `afbin-gate-builds` volumes and the `afbin-gate:*` image persist, as
+ * caches; the builds volume keeps the last few builds (`BUILD_CACHE_ENTRIES`).
  *
  * The worktree must be visible to the container engine: Colima shares `$HOME` by default.
  * The gate processes run as root inside the container: the Colima VM restricts unprivileged user
@@ -35,7 +39,10 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readF
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, INSIDE, parseArgs } from './lib/gate-container.mjs';
+import { createHash } from 'node:crypto';
+import { BUILD_CACHE_ENTRIES, BUILD_OUTPUTS, BUILD_VOLUME, buildCacheKey, checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, INSIDE, parseArgs } from './lib/gate-container.mjs';
+import { changedFiles, hashFiles } from './lib/check-evidence.mjs';
+import { buildKey, isBuildInput } from './lib/ci-plan.mjs';
 import { gateNamesOnDisk } from './gates.manifest.mjs';
 import { acquireSlot, parseMemory, slotCount } from './lib/gate-slots.mjs';
 import { normalisedLock } from './lib/lock-fingerprint.mjs';
@@ -94,11 +101,20 @@ function sourceFiles() {
   });
 }
 
+/** The key of the build this working tree would produce (lib/gate-container.mjs `buildCacheKey`). */
+function treeBuildKey(deps) {
+  const index = spawnSync('git', ['ls-files', '-s'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (index.status !== 0) throw new Error(`git ls-files failed: ${index.stderr}`);
+  const changes = hashFiles(createHash('sha256'), ROOT, changedFiles(ROOT).filter(isBuildInput)).digest('hex');
+  return buildCacheKey({ buildKey: buildKey(index.stdout).key, changes, deps });
+}
+
 async function host({ cpus, memory, servers, gates }) {
   const known = gateNamesOnDisk(readdirSync(path.join(HERE, 'gates')));
   let engine;
   let tag;
   let volume;
+  let build;
   let files;
   let slots;
   try {
@@ -116,7 +132,10 @@ async function host({ cpus, memory, servers, gates }) {
       preparePty: readFileSync(path.join(ROOT, 'services/cli/scripts/prepare-pty.mjs'), 'utf8'),
       image: tag,
     });
-    if (docker(['volume', 'create', '--label', 'afbin.gate-container=1', volume]).status !== 0) throw new Error(`could not create volume ${volume}`);
+    for (const name of [volume, BUILD_VOLUME]) {
+      if (docker(['volume', 'create', '--label', 'afbin.gate-container=1', name]).status !== 0) throw new Error(`could not create volume ${name}`);
+    }
+    build = treeBuildKey(volume);
     files = sourceFiles();
   } catch (error) {
     console.error(String(error.message ?? error));
@@ -134,7 +153,7 @@ async function host({ cpus, memory, servers, gates }) {
   console.log(`gate slot ${slot.index}/${slots} (waited ${waited}); container ${name}: ${cpus} CPUs, ${memory}, ${servers} server(s), gates: ${gates.join(' ')}`);
 
   const started = Date.now();
-  const child = spawn('docker', dockerRunArgs({ name, image: tag, volume, worktree: ROOT, cpus, memory, servers, gates, env: process.env }), {
+  const child = spawn('docker', dockerRunArgs({ name, image: tag, volume, buildKey: build, worktree: ROOT, cpus, memory, servers, gates, env: process.env }), {
     stdio: ['pipe', 'inherit', 'inherit'],
   });
   child.stdin.on('error', () => { /* the container ended first */ });
@@ -165,7 +184,7 @@ async function host({ cpus, memory, servers, gates }) {
 
 /* ────────────────────────────── inside the container ────────────────────────────── */
 
-async function inside({ servers, gates }) {
+async function inside({ servers, gates, buildKey: key }) {
   const children = new Set();
   const killAll = () => {
     for (const child of children) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } }
@@ -248,8 +267,37 @@ async function inside({ servers, gates }) {
     return 0;
   });
 
-  await phase('build', () => run('npm', ['run', 'build']));
-  await phase('build CLI', () => run('npm', ['run', 'build', '-w', 'services/cli']));
+  // THE BUILD, ONCE PER SET OF BUILD INPUTS. An entry is a directory named by the key, published by
+  // rename under an exclusive lock and read under a shared one, so a concurrent container either sees
+  // a whole entry or none, and pruning never removes one being copied out.
+  if (!key) abort('no --build-key from the host runner', 2);
+  const entry = path.join(INSIDE.builds, key);
+  const lock = path.join(INSIDE.builds, '.lock');
+  const restored = await run('flock', ['-s', lock, 'bash', '-c', `
+    set -euo pipefail
+    [ -f ${entry}/ready ] || exit 3
+    touch ${entry}
+    cp -a ${entry}/tree/. ${INSIDE.work}/
+  `]);
+  if (restored === 0) {
+    console.log(`▸ build: restored ${key} from the ${BUILD_VOLUME} volume (no build input changed)`);
+  } else {
+    await phase('build (scripts/build/build-gate-inputs.mjs)', () => run('node', ['scripts/build/build-gate-inputs.mjs']));
+    // Saving is a cache write: a failure costs the next run a build, never this run its gates.
+    const saved = await run('bash', ['-c', `
+      set -euo pipefail
+      shopt -s nullglob
+      staging=${INSIDE.builds}/.staging-$$
+      rm -rf "$staging" && mkdir -p "$staging/tree"
+      cp -a --parents ${BUILD_OUTPUTS.join(' ')} "$staging/tree/"
+      touch "$staging/ready"
+      flock -x ${lock} bash -c '
+        if [ -f ${entry}/ready ]; then rm -rf "$0"; else rm -rf ${entry} && mv "$0" ${entry}; fi
+        ls -1dt ${INSIDE.builds}/*/ | tail -n +${BUILD_CACHE_ENTRIES + 1} | xargs -r rm -rf
+      ' "$staging"
+    `]);
+    console.log(saved === 0 ? `▸ build saved to the ${BUILD_VOLUME} volume as ${key}` : `▸ build not saved (exit ${saved}); the next run builds again`);
+  }
 
   const since = Date.now();
   const code = await run('node', ['scripts/gates.mjs', `--servers=${servers}`, `--only=${gates.join(',')}`]);

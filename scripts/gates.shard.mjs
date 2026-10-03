@@ -10,9 +10,9 @@
  * Dividing it BY INDEX would be arbitrary, because gates are not the same size
  * — app-flows runs 75s and annotations 9s — so an unlucky split leaves one
  * runner holding every slow gate and saves nothing. The weight used instead is
- * `timeoutMs` from the manifest: it is derived from each gate's measured
- * seconds and lives beside the row it describes, so re-measuring a gate
- * re-balances the shards with no second list to keep in step.
+ * the manifest's measured CI `seconds` (`shardWeight`): it lives beside the row
+ * it describes, so re-measuring a gate re-balances the shards with no second
+ * list to keep in step.
  *
  * Longest-first greedy: deterministic, within 4/3 of optimal, and it cannot
  * put the two heaviest gates in one shard.
@@ -40,26 +40,33 @@ export function parseShard(arg) {
  * @param {readonly string[]} names  every gate in the set
  * @param {{index: number, total: number}} shard  1-based
  * @param {(name: string) => number} weight  how long the gate is expected to take
- * @param {{ isolated?: readonly string[] }} [options]  names that each occupy a whole bin when enough bins exist
+ * @param {{ isolated?: readonly string[], serialGroup?: (name: string) => string | undefined }} [options]
+ *   `isolated`: names that share one bin, alone, whenever another bin remains.
+ *   `serialGroup`: gates of one group run one at a time even across a runner's servers
+ *   (scripts/gates.mjs), so two in one bin add up rather than overlap: each goes to the lightest bin
+ *   that holds no other member of its group, while one exists.
  * @returns {string[]}
  */
-export function shardOf(names, { index, total }, weight, { isolated = [] } = {}) {
+export function shardOf(names, { index, total }, weight, { isolated = [], serialGroup = () => undefined } = {}) {
   if (total === 1) return [...names];
   const bins = Array.from({ length: total }, () => ({ load: 0, names: new Set() }));
-  // A heavy gate whose first attempt is sensitive to parallel browser load gets its own runner.
-  // Keep the other bins available only when at least one remains for ordinary gates.
-  const reserved = [...new Set(isolated)].filter(name => names.includes(name));
-  const exclusive = reserved.length < total ? reserved : [];
-  for (const [offset, name] of exclusive.entries()) {
-    bins[offset].names.add(name);
-    bins[offset].load = weight(name);
+  // Gates whose first attempt loses races under a neighbour's browser load share ONE runner, alone:
+  // scripts/gates.mjs runs a set made only of them on one server, one at a time (gates.servers.mjs
+  // `serversFor`), so they never meet each other's load either. The other bins hold every ordinary gate.
+  const exclusive = [...new Set(isolated)].filter(name => names.includes(name));
+  for (const name of exclusive) {
+    bins[0].names.add(name);
+    bins[0].load += weight(name);
   }
-  const shared = bins.slice(exclusive.length);
+  const shared = exclusive.length > 0 ? bins.slice(1) : bins;
   // Heaviest first, name as the tie-break so the split never depends on the
   // order the filesystem happened to hand back.
   const ordered = names.filter(name => !exclusive.includes(name)).sort((a, b) => weight(b) - weight(a) || a.localeCompare(b));
+  const lightestOf = (bins) => bins.reduce((min, bin) => (bin.load < min.load ? bin : min), bins[0]);
   for (const name of ordered) {
-    const lightest = shared.reduce((min, bin) => (bin.load < min.load ? bin : min), shared[0]);
+    const group = serialGroup(name);
+    const apart = group === undefined ? shared : shared.filter((bin) => ![...bin.names].some((other) => serialGroup(other) === group));
+    const lightest = lightestOf(apart.length > 0 ? apart : shared);
     lightest.names.add(name);
     lightest.load += weight(name);
   }

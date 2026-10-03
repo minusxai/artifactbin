@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
-import { CI_GATE_SHARDS, CI_ISOLATED_GATES, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
 /** Built and proved only for a release: the five-target binaries (the Intel proofs consume its artifact) and the distributions gate. */
@@ -696,11 +696,18 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
     expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
   });
-  it('splits the node project into seven shards, and every shard runs its seventh', () => {
+  it('splits the node project into four shards, and every shard runs its fourth', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/7)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci/ci.mjs node')).run).toBe('node scripts/ci/ci.mjs node ${{ matrix.shard }}/7');
+    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/4)');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci/ci.mjs node')).run).toBe('node scripts/ci/ci.mjs node ${{ matrix.shard }}/4');
+  });
+  it('splits the ui and islands projects into two shards, and every shard runs its half', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    expect(jobs.ui.strategy.matrix.shard).toEqual([1, 2]);
+    expect(jobs.ui.name).toBe('ui tests (${{ matrix.shard }}/2)');
+    expect(jobs.ui.steps.find(step => (step.run ?? '').includes('vitest run --project=ui')).run)
+      .toBe('npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2');
   });
   it('runs the CLI source suite on the reader and island builds, never the full CLI build', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -764,7 +771,7 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over ten runners and pulls Postgres only for its assigned shard', () => {
+  it('fans the gate set over seven runners and pulls Postgres only for its assigned shard', () => {
     const { jobs } = ci();
     expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: CI_GATE_SHARDS }, (_, index) => index + 1));
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
@@ -802,15 +809,17 @@ describe('CI job shape', () => {
 
     const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts/gates')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
-      shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: CI_ISOLATED_GATES }).reduce((sum, name) => sum + shardWeight(name), 0)));
+      shardOf(names, { index: offset + 1, total: count }, shardWeight, CI_SHARD_OPTIONS).reduce((sum, name) => sum + shardWeight(name), 0)));
     expect(heaviest(CI_GATE_SHARDS)).toBeLessThanOrEqual(heaviest(CI_GATE_SHARDS - 1));
     // Every shard fits its wall: two servers halve its summed seconds, but the clipboard group runs
-    // one gate at a time across both, so it is charged whole.
+    // one gate at a time across both, so it is charged whole — and so is the isolated gates' shard,
+    // which runs on one server (scripts/gates.servers.mjs `serversFor`).
     for (let index = 1; index <= CI_GATE_SHARDS; index++) {
-      const shard = shardOf(names, { index, total: CI_GATE_SHARDS }, shardWeight, { isolated: CI_ISOLATED_GATES });
+      const shard = shardOf(names, { index, total: CI_GATE_SHARDS }, shardWeight, CI_SHARD_OPTIONS);
       const seconds = shard.reduce((sum, name) => sum + specFor(name).seconds, 0);
       const serial = shard.filter((name) => specFor(name).serialGroup === 'clipboard').reduce((sum, name) => sum + specFor(name).seconds, 0);
-      expect(Math.max(seconds / 2, serial), `shard ${index}: ${shard.join(',')}`).toBeLessThanOrEqual(75);
+      const servers = shard.every((name) => CI_ISOLATED_GATES.includes(name)) ? 1 : 2;
+      expect(Math.max(seconds / servers, serial), `shard ${index}: ${shard.join(',')}`).toBeLessThanOrEqual(75);
     }
 
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
