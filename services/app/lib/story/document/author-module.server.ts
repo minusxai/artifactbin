@@ -15,7 +15,10 @@
  * Pure text in, text out: no author code runs here.
  */
 import { createHash } from 'node:crypto';
-import * as esbuild from 'esbuild';
+// The bundler is a TYPE import here and loads inside build(): a document without a script never starts it, and
+// esbuild's import-time realm check (TextEncoder output instanceof the global Uint8Array) never runs in a jsdom
+// test that publishes through jsx-tier — there the two come from different realms and the import itself throws.
+import type * as esbuild from 'esbuild';
 
 export const PAGE_GLOBAL = '__mxPageBindings';
 export const PAGE_SPECIFIER = 'page';
@@ -62,6 +65,7 @@ export async function buildAuthorModule(script: string, names: AuthorModuleNames
 }
 
 async function build(script: string, names: AuthorModuleNames): Promise<AuthorModuleResult> {
+  const { build: bundle } = await import('esbuild');
   const errors: string[] = [];
   const plugin: esbuild.Plugin = {
     name: 'mx-page',
@@ -84,7 +88,7 @@ async function build(script: string, names: AuthorModuleNames): Promise<AuthorMo
     },
   };
   try {
-    const result = await esbuild.build({
+    const result = await bundle({
       stdin: { contents: script, loader: 'jsx', sourcefile: 'helmet-script.jsx', resolveDir: '/' },
       bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022', metafile: true,
       jsx: 'automatic', jsxImportSource: 'preact', logLevel: 'silent', plugins: [plugin], outfile: 'author-module.js',
