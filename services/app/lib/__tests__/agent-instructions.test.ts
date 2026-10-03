@@ -18,8 +18,11 @@ describe('agent instructions', () => {
      * afbin` → `npm run eval`), which is the instruction that stops agents testing
      * CLI and skill changes against production. Adding to these files means earning
      * the room — say what changed here before moving this number again.
+     * Main #326 adds the FAST/SLOW tier policy and command guidance to the root
+     * file (12,227 bytes). Give that file a 12 KiB ceiling; scoped files retain
+     * their previous limit. No instruction content is changed by this adjustment.
      */
-    expect(Buffer.byteLength(instructions)).toBeLessThan(9728);
+    expect(Buffer.byteLength(instructions)).toBeLessThan(scope === '' ? 12 * 1024 : 9728);
     for (const match of instructions.matchAll(/\]\(([^)]+)\)/g)) {
       const target = match[1];
       if (!target.includes('://') && !target.startsWith('#')) {
