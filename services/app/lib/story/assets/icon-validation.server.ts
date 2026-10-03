@@ -11,7 +11,7 @@ import { isLucideIcon } from './icon-glyphs';
 export function validateIconNames(nodes: JsxNode[]): ValidationError[] {
   const errors: ValidationError[] = [];
   const visit = (node: JsxNode): void => {
-    if (node.type !== 'element' || node.tag === 'Iframe') return;
+    if (node.type !== 'element') return;
     if (node.tag === 'Icon') {
       const attribute = node.attributes.find((attr) => attr.name === 'name');
       const name = attribute?.value.static ? attribute.value.json : undefined;

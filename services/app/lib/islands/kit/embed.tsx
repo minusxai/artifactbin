@@ -1,21 +1,14 @@
 /* @jsxImportSource solid-js */
 /**
- * THE EMBED FAMILY (`@mx/kit/embed`): `<Iframe>` and `<DeckGL>` as islands. Each
- * island is the box the former reader draws, server-rendered at its final size; its behaviour is a lazy chunk
- * loaded once the island is mounted, never part of the shared runtime or of a page's first paint:
- *
- * - `<Iframe>`: the former managed frame (lib/story-runtime/managed-iframe) — ./embed/frame-engine mounts the
- *   sandboxed author realm in the box and binds it to the document's store, its assets resolved through the
- *   page's own door (IslandPageData.managedAssets) or, framed, the parent page's relay.
- * - `<DeckGL>`: the former map — ./embed/deck-engine replaces
- *   the loading stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
+ * THE EMBED FAMILY (`@mx/kit/embed`): `<DeckGL>` as an island. The island is the box the former reader
+ * draws, server-rendered at its final size; its behaviour is a lazy chunk loaded once the island is mounted,
+ * never part of the shared runtime or of a page's first paint: ./embed/deck-engine replaces the loading
+ * stand-in with deck.gl (and MapLibre for a basemap), over the table `data` names.
  */
-import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { refName } from '@/lib/story/data/dataflow';
-import { managedFrameLayout } from '@/lib/story/reader/managed-frame-layout';
 import { deckGlHeight } from '@/lib/viz/deck-height';
 import { MAP_CLASSES } from '@/lib/viz/deck-chrome';
-import type { ManagedIframeContent } from '@/lib/story/reader/managed-iframe';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import type { DeckEngineProps } from './embed/deck-engine';
@@ -27,29 +20,6 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : und
  * leaves a served attribute alone), never through the CSSOM, which would rewrite it (`height: 1px;`).
  */
 const servedStyle = (css: string) => ({ 'attr:style': css }) as JSX.HTMLAttributes<HTMLDivElement>;
-
-/** `<Iframe>`: the managed frame's box (the `data-mx-managed-frame` element), the author realm mounted in it. */
-export function Iframe(props: Props) {
-  const island = useIsland();
-  const { label, pixels } = managedFrameLayout(props.title, props.height);
-  const [error, setError] = createSignal('');
-  let host!: HTMLDivElement;
-  onMount(() => {
-    let disposed = false;
-    let stop = () => {};
-    const cancel = deferEngine(host, () => { void import('./embed/frame-engine').then(({ mountManagedFrame }) => {
-      if (disposed) return;
-      stop = mountManagedFrame({ host, compiled: props.compiled as ManagedIframeContent, store: island.store(), label, onError: setError });
-    }).catch((e: Error) => { if (!disposed) setError(String(e.message).slice(0, 500)); }); });
-    onCleanup(() => { disposed = true; cancel(); stop(); });
-  });
-  return (
-    <div id={str(props.id)} class={str(props.class)} data-mx-ast={str(props['data-mx-ast'])} data-mx-managed-frame="" aria-label={label} {...servedStyle(`height:${pixels}px;width:100%`)}>
-      <div ref={host} {...servedStyle('height:100%')} />
-      <Show when={error()}><p role="alert">{error()}</p></Show>
-    </div>
-  );
-}
 
 /**
  * `<DeckGL>`: the runtime adapter's box (identity) around the map's own (class), and in it the map's box —

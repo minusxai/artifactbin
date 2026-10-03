@@ -17,11 +17,15 @@
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
 
  *
+ * The document is framed by the app page on its own origin: the charts, the prose and the edit surface are
+ * the frame's; the chart inspector, the toolbar and its save status are the page's.
+ *
  *   usage: node scripts/gates/gate-viz-editor.mjs [base]
  */
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
+import { documentLocator } from './lib/page-facts.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { mergeGuestIntoAccount, becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
@@ -61,9 +65,9 @@ const story = HELMET + `<div data-design="tw" className="@container p-8">` +
   `<Question title="Revenue" data="$sales" height="430px" /></div>`;
 await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Review', markup: story, theme: 'manuscript' }) }, token);
 
-const b = await chromium.launch();
+const b = await launchChromium();
 const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
-const frame = () => p.mainFrame();
+const frame = () => documentLocator(p);
 const frameText = async () => { const f = frame(); return f ? await f.locator('body').innerText().catch(() => '') : ''; };
 const marks = async () => { const f = frame(); return f ? await f.locator('svg.marks, canvas').count().catch(() => 0) : 0; };
 
@@ -75,7 +79,7 @@ const openEditor = async () => {
   // The document IS the frame the reader was already looking at — editing is a
   // mode it enters, not a canvas built beside it.
   await p.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 40000 });
-  await p.waitForFunction(() => !!document.querySelector('[data-mx-inline-story]'), { timeout: 40000 });
+  await frame().locator('[data-mx-inline-story]').waitFor({ state: 'attached', timeout: 40000 });
   /*
    * Wait for edit mode to be LIVE, not merely for the document to have
    * rendered. The runtime loads its edit chunk on demand, so there is a window
@@ -83,7 +87,7 @@ const openEditor = async () => {
    * there selects nothing and the panel never opens.
    */
   for (let i = 0; i < 120; i++) {
-    const ready = await frame()?.evaluate(() => !!document.querySelector('[contenteditable="true"]')).catch(() => false);
+    const ready = (await frame().locator('[contenteditable="true"]').count().catch(() => 0)) > 0;
     if (ready) break;
     await p.waitForTimeout(150);
   }
@@ -137,10 +141,11 @@ check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'the inspe
  * close and select-something-else all leave the text column exactly where it
  * was — it used to jump sideways under the pointer on every one of them.
  */
-const column = () => p.evaluate(() => {
-  const r = document.querySelector('[data-mx-inline-story] p')?.getBoundingClientRect();
-  return r ? `${Math.round(r.left)}/${Math.round(r.width)}` : 'missing';
-});
+// Measured ON SCREEN (the frame's offset plus the paragraph's place in it), so a frame that moves counts too.
+const column = async () => {
+  const r = await frame().locator('[data-mx-inline-story] p').first().boundingBox({ timeout: 5000 }).catch(() => null);
+  return r ? `${Math.round(r.x)}/${Math.round(r.width)}` : 'missing';
+};
 const entered = await column();
 check(entered !== 'missing', `the document column is measurable in edit mode (${entered})`);
 
@@ -311,8 +316,8 @@ check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shu
   const p2 = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   await becomeOwner(p2, B, token); // a fresh page owns nothing until it holds the cookie
   await p2.goto(`${B}/a/${st.id}#edit`, { waitUntil: 'load' });
-  await p2.waitForFunction(() => !!document.querySelector('[data-mx-inline-story]'), { timeout: 40000 });
-  const frame2 = () => p2.mainFrame();
+  const frame2 = () => documentLocator(p2);
+  await frame2().locator('[data-mx-inline-story]').waitFor({ state: 'attached', timeout: 40000 });
   for (let i = 0; i < 80 && !(await frame2()?.locator('[data-mx-ast]').count().catch(() => 0)); i++) await p2.waitForTimeout(150);
   /*
    * The document renders its BODY, so what it stamps is body-relative: the div
@@ -381,9 +386,9 @@ try {
   // No stored bearer: the editor must authenticate by session alone.
   await page.goto(`${B}/a/${start.id}`, { waitUntil: 'load' });
   await page.goto(`${B}/a/${start.id}#edit`, { waitUntil: 'load' });
-  await page.waitForFunction(() => !!document.querySelector('[data-mx-inline-story]'), { timeout: 40000 });
+  const sf = documentLocator(page);
+  await sf.locator('[data-mx-inline-story]').waitFor({ state: 'attached', timeout: 40000 });
   await page.waitForTimeout(3000);
-  const sf = page.mainFrame();
   await sf.locator('[aria-label="Question embed"]').first().click();
   await page.waitForSelector('[aria-label="Chart editor"]', { timeout: 20000 });
   const sessionOptions = await optionsOf(page, 'Table');
@@ -433,8 +438,8 @@ try {
   const pg = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   await becomeOwner(pg, B, token);
   await pg.goto(`${B}/a/${gd.id}#edit`, { waitUntil: 'load' });
-  await pg.waitForFunction(() => !!document.querySelector('[data-mx-inline-story]'), { timeout: 40000 });
-  const gf = () => pg.mainFrame();
+  const gf = () => documentLocator(pg);
+  await gf().locator('[data-mx-inline-story]').waitFor({ state: 'attached', timeout: 40000 });
   // Edit is live when the Solid grid grips are mounted.
   for (let i = 0; i < 120 && !(await gf()?.locator('.mx-grid-grip').count().catch(() => 0)); i++) await pg.waitForTimeout(150);
   check((await gf().locator('.mx-grid-grip').count()) > 0, 'edit mode mounted grid controls');

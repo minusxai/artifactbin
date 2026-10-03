@@ -57,15 +57,14 @@ export interface WebAssetBox {
 export type AssetLookup = (url: string) => WebAssetBox | boolean | null | undefined;
 
 /**
- * The same positions lib/story/assets/external-images.ts owns: `<img src>`,
- * `<Video poster>`, and `<File src>` — the card that links a PDF, mapped here
+ * The same positions lib/story/assets/external-images.ts owns: `<img src>` and
+ * `<File src>` — the card that links a PDF, mapped here
  * for the same reason as an image, though the card is a LINK rather than a
  * subresource: the point of importing is that opening a document sends nothing
  * to a third party, and a link the reader clicks would.
  */
 const IMAGE_POSITIONS: ReadonlyArray<readonly [tag: string, attr: string, component: boolean]> = [
   ['img', 'src', false],
-  ['Video', 'poster', true],
   ['File', 'src', true],
 ];
 
@@ -225,8 +224,7 @@ const walk = (nodes: JsxNode[], visit: (el: JsxElement) => void): void => {
   for (const n of nodes) {
     if (n.type !== 'element') continue;
     visit(n);
-    // Managed contents have their own asset resolver and isolated URL policy.
-    if(n.tag!=='Iframe')walk(n.children, visit);
+    walk(n.children, visit);
   }
 };
 
@@ -294,9 +292,8 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
       /*
        * The box and the blur, on the SAME rule lib/story/data/ref-data
        * `resolveRefProps` applies to a `ref:` image, and for the same reasons:
-       * only a real <img> (a <Video> poster is a background, and sizing it by
-       * the poster's pixels would fight the player's layout), and only where
-       * the author said nothing — they mean what they wrote.
+       * only a real <img> (never the <File> card), and only where the author
+       * said nothing — they mean what they wrote.
        */
       if (attr !== 'src' || el.isComponent || typeof held !== 'object') continue;
       const sized = held.width && held.height && !attrOf(el, 'width') && !attrOf(el, 'height');

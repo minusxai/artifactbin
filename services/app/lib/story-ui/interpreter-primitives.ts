@@ -1,10 +1,7 @@
 /** Framework-free author AST props and names shared by the compiler and the editor. */
 import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';
-import { DENIED_JSX_ATTRS } from '@/lib/jsx/denied-attrs';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
-import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATTRS, paintHasExternalUrl } from '@/lib/jsx/url-attrs';
 import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/story/data/dataflow';
 import { substituteRow } from '@/lib/story/data/row-scope';
 import { AST_PATH_ATTR } from './ast-path';
@@ -43,9 +40,6 @@ const CONTROLLED_TO_DEFAULT: Record<string, string> = {
 const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
 export const FORM_CONTROL_TAGS = immutableSet(['input', 'textarea', 'select']);
 
-/** Name-denied props, lowercase — the same set the save-time gate uses (lib/jsx/denied-attrs.ts). */
-const DENIED_PROPS = DENIED_JSX_ATTRS;
-
 /**
  * The story components that render a plain `<button>` around whatever the
  * author put in them. The other triggers (Tabs/Accordion/Collapsible/Popover)
@@ -69,6 +63,12 @@ export function wrapsControl(node: JsxElement): boolean {
     && (INTERACTIVE_TAGS.has(child.tag) || INTERACTIVE_TAGS.has(child.tag.toLowerCase()) || wrapsControl(child)));
 }
 
+/**
+ * An element's props as the renderer writes them: React/Solid spellings, the `style` string as an object, the
+ * controlled-to-uncontrolled mapping and a row's fields substituted. RENDERING ONLY — the markup policy (event
+ * handlers, denied attributes, URL schemes, SVG paint references) is publish validation's alone
+ * (lib/jsx/validate.ts): every stored document passed it, and the document runs on its own origin.
+ */
 export function rawBuildProps(
   attributes: JsxAttribute[],
   isComponent: boolean,
@@ -80,7 +80,6 @@ export function rawBuildProps(
   const props: Record<string, unknown> = { [AST_PATH_ATTR]: path };
   for (const a of attributes) {
     const lower = a.name.toLowerCase();
-    if (lower.startsWith('on') || DENIED_PROPS.has(lower)) continue;
     if (!a.value.static) {
       if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) {
         props[a.name] = Boolean(evaluateReactive(a.value.reactive, values, row));
@@ -96,16 +95,6 @@ export function rawBuildProps(
     }
     let name = HTML_ATTR_TO_REACT[a.name] ?? SVG_ATTR_CASE[lower] ?? a.name;
     let value = row && lower !== 'id' ? substituteRow(a.value.json, row) : a.value.json;
-
-    // Dangerous URL schemes dropped (browser-normalized check — see lib/jsx/validate.ts).
-    if (typeof value === 'string') {
-      const dangerous = URL_LIST_PROPS.has(lower)
-        ? listHasDangerousScheme(value, lower)
-        : URL_PROPS.has(lower) && hasDangerousScheme(value);
-      if (dangerous) continue;
-      // SVG paint references must stay local — url(#id) only (see url-attrs.ts).
-      if (SVG_PAINT_ATTRS.has(lower) && paintHasExternalUrl(value)) continue;
-    }
 
     // `style`: authored as a CSS string (HTML idiom) or an object — React needs an object.
     if (name === 'style') {

@@ -1,7 +1,16 @@
 import { getArtifactById } from '@/lib/artifacts/store';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { ownerUsername } from '@/lib/accounts/users';
-import type { ReaderForkedFrom } from './reader-chrome';
+
+/**
+ * PROVENANCE, resolved per render and never written into the markup. A public source carries an href;
+ * anything that is not public — unlisted, private, deleted — arrives with `href: null` and a label that says
+ * only that there WAS a source, so the line can be neither an existence oracle nor a listing surface.
+ */
+export interface ReaderForkedFrom {
+  label: string;
+  href: string | null;
+}
 
 /**
  * WHERE THIS COPY CAME FROM, as the credit line may say it.

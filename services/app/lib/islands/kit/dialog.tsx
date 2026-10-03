@@ -4,6 +4,7 @@ import { refName, resolveBindings, type BindingSource } from '@/lib/story/data/d
 import { refusalText } from '@/lib/story/reader/sign-in-required';
 import { useIsland } from '../context';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
+import { overlayDestination } from './trusted-overlay';
 
 type DialogState = { open: () => boolean; setOpen: (value: boolean) => void; trigger: () => HTMLElement | null; setTrigger: (value: HTMLElement | null) => void; busy: () => boolean; setBusy: (value: boolean) => void };
 const Context = createContext<DialogState>();
@@ -81,7 +82,7 @@ export function DialogContent(props: JSX.DialogHtmlAttributes<HTMLDialogElement>
         openedDialog = null;
         queueMicrotask(() => ctx.trigger()?.focus());
       }
-      const destination = open ? island.trustedPortal() : null;
+      const destination = open ? overlayDestination(island) : null;
       if (destination) destination.append(dialog);
       else home.parentNode?.insertBefore(dialog, home.nextSibling);
       if (open) {

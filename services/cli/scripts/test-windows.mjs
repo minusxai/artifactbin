@@ -30,7 +30,7 @@ const release=createServer(async(req,res)=>{
 await new Promise(r=>release.listen(0,'127.0.0.1',r));
 const releaseBase=`http://127.0.0.1:${release.address().port}`;
 const reserve=createServer();await new Promise(r=>reserve.listen(0,'127.0.0.1',r));const port=reserve.address().port;await new Promise(r=>reserve.close(r));
-const base=`http://127.0.0.1:${port}`,exe=join(install,'afbin.exe');
+const base=`http://app.lvh.me:${port}`,exe=join(install,'afbin.exe');
 clientEnv.CLI__SERVICE_BASE_URL=releaseBase;
 const installerFile=join(root,'install.ps1');
 const installerSource=await readFile(join(repo,'services/app/public/chat/install.ps1'),'utf8');

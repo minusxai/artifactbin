@@ -2,5 +2,3 @@
 export { APP_BAR_H } from './edit-bar';
 export { readPwaSettings } from './pwa-settings';
 export type { PwaSettings } from './pwa-settings';
-export { renderReaderChrome } from './reader-chrome';
-export type { ReaderChromeInput } from './reader-chrome';

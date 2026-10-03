@@ -8,6 +8,7 @@
  * and the server render are wrapped (never replaced) so a hit can be shown to
  * call none of them.
  */
+import { framedDocument } from './harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -127,7 +128,8 @@ describe('the prepared page store', () => {
     resetSpies();
     const first = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
     expect(first.status).toBe(200);
-    expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
+    // The app page frames the document: it reads the stored page and compiles nothing.
+    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
     // A stale key (a new CSS compiler or server build) is a miss that writes back.
     await (await harness.db()).query(`UPDATE prepared_pages SET page_key = 'stale' WHERE artifact_id = $1`, [id]);
     resetSpies();
@@ -146,7 +148,7 @@ describe('the prepared page store', () => {
     const response = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
     expect(response.status).toBe(200);
     expect(await response.text()).toContain('rel="manifest"');
-    expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
+    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
     resetSpies();
     const manifest = await app.request(`/a/${id}/app/manifest.webmanifest`);
     expect(await manifest.json()).toMatchObject({ name: 'Cached app' });
@@ -163,14 +165,15 @@ describe('the prepared page store', () => {
     const dataflow = inlined(await res.text()).artifact.surface.runtime.data.dataflow;
     expect(dataflow.flow.queries).toHaveLength(1);
     expect(dataflow).not.toHaveProperty('results');
-    expect({ ...spies }).toEqual({ parse: 1, css: 0, nodes: 0, render: 0 });
+    expect({ ...spies }).toEqual({ parse: 0, css: 0, nodes: 0, render: 0 });
   });
 
   it('renders a request\'s first results fresh, and never into the stored render', async () => {
     const { id } = await world(`<Helmet><Value name="n" type="number" default={2} /><Query name="q">{\`select $n * 3 as n\`}</Query></Helmet>
 <div><h1>Data notes</h1><p>Six is <Number data="$q" col="n" /></p></div>`);
     resetSpies();
-    const html = await (await app.request(`/a/${id}`, { headers: { accept: 'text/html' } })).text();
+    // The document in the app page's frame, on its own origin.
+    const html = await (await framedDocument(app, `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
     expect(compiledData(html).results?.tables.q.rows).toEqual([{ n: 6 }]);
     expect(new JSDOM(html).window.document.querySelector('[data-mx-story-root]')!.textContent).toContain('Six is 6');
     // The overlay carries the rows, so its digest is not the stored anonymous render's: one fresh render, nothing else.
@@ -217,14 +220,16 @@ describe('the per-viewer overlay', () => {
     const own = inlined(await (await app.request(`/a/${id}`, { headers: { accept: 'text/html' } })).text());
     // The owner's render follows the owner (served at the canonical address the page names).
     const ownHtml = await (await app.request(own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } })).text();
-    expect(ownHtml).toContain('Signed in reader');
-    expect(new JSDOM(ownHtml).window.document.documentElement.hasAttribute('data-mx-signed-in')).toBe(true);
+    const ownDoc = await (await framedDocument(app, own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
+    expect(ownDoc).toContain('Signed in reader');
+    expect(new JSDOM(ownDoc).window.document.documentElement.hasAttribute('data-mx-signed-in')).toBe(true);
     expect(inlined(ownHtml).artifact.surface.runtime.data.viewer).toEqual({ id: owner.id });
     expect(inlined(ownHtml).artifact.surface.hasInvitedUsers).toBe(false);
     asSession(null);
     resetSpies();
     const html = await (await app.request(own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } })).text();
-    const story = new JSDOM(html).window.document.querySelector('[data-mx-story-root]')!.textContent;
+    const doc = await (await framedDocument(app, own.address ?? `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
+    const story = new JSDOM(doc).window.document.querySelector('[data-mx-story-root]')!.textContent;
     expect(story).toContain('Guest reader');
     expect(story).not.toContain('Signed in reader');
     const anon = inlined(html).artifact;
@@ -248,14 +253,16 @@ describe('the per-viewer overlay', () => {
 });
 
 describe('the served HTML', () => {
-  it('carries the compiled sheet once in the head, outside the bootstrap', async () => {
+  it('leaves the compiled sheet to the frame: none in the app page\'s head or its bootstrap, once in the document\'s', async () => {
     const { id } = await world();
     const res = await app.request(`/a/${id}`, { headers: { accept: 'text/html' } });
-    const html = await res.text();
-    const data = inlined(html).artifact;
+    const page = await res.text();
+    const data = inlined(page).artifact;
     expect(data.surface.runtime).not.toHaveProperty('css');
+    expect(page).not.toContain('& more');
+    const html = await (await framedDocument(app, `/a/${id}`, { headers: { accept: 'text/html' } }))!.text();
     const dom = new JSDOM(html);
-    const style = dom.window.document.querySelector('style[data-mx-story-css]');
+    const style = [...dom.window.document.querySelectorAll('style')].find((sheet) => sheet.textContent?.includes('& more'));
     expect(style?.textContent).toContain('& more');
     expect(html.split(style!.textContent!.slice(0, 200)).length - 1).toBe(1);
     dom.window.close();

@@ -200,8 +200,8 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
   const imports: CompiledImport[] = [];
   for (const i of flow.imports) {
     const source = ctx.sources[i.ref];
-    if (!source) errors.push(at(i, 'Import', `<Import name="${i.name}" src="ref:${i.ref}"> — ref:${i.ref} is not a dataset or folder you can read`, 'src'));
-    else if (source.kind === 'postgres') errors.push(at(i, 'Import', `<Import name="${i.name}"> — ref:${i.ref} is a connected Postgres database, which is never imported: run the query inside it with <Query name="…" source="ref:${i.ref}">`, 'src'));
+    if (!source) errors.push(at(i, 'Import', `<Import> "${i.name}" — its src ref:${i.ref} is not a dataset or folder you can read`, 'src'));
+    else if (source.kind === 'postgres') errors.push(at(i, 'Import', `<Import> "${i.name}" — ref:${i.ref} is a connected Postgres database, which is never imported: run the query inside it with a <Query> whose source is ref:${i.ref}`, 'src'));
     else imports.push({ name: i.name, ref: i.ref, tables: source.tables.map((t) => ({ name: t.name, columns: t.columns })) });
   }
   const importKinds = new Map(flow.imports.map((i) => [i.name.toLowerCase(), ctx.sources[i.ref]?.kind]));
@@ -210,7 +210,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
   const picked = (v: Extract<Dataflow['values'][number], { kind: 'scalar' }>) => {
     if (!v.source) return v.constraints;
     const column = ctx.sources[v.source]?.tables.find((t) => t.name === 'rows')?.columns.find((c) => c.name === v.column);
-    if (column?.type !== 'user') errors.push(at(v, 'Value', `<Value name="${v.name}"> must bind an available user column — ref:${v.source} has no user column ${v.column}`, 'column'));
+    if (column?.type !== 'user') errors.push(at(v, 'Value', `<Value> "${v.name}" must bind an available user column — ref:${v.source} has no user column ${v.column}`, 'column'));
     return column?.constraints;
   };
   const values: CompiledValue[] = flow.values.map((v) => v.kind === 'scalar'
@@ -262,21 +262,21 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
       params.push(logical);
       if (logical.startsWith('_')) {
         const builtin = builtinInput(logical);
-        if (logical === VIEWER) errors.push(at(span, tag, `<${tag} name="${name}"> binds $_me, the reader as a row — bind its id: $${VIEWER_ID} (or join the one-row table _me)`));
-        else if (!builtin) errors.push(at(span, tag, `<${tag} name="${name}"> binds $${logical}, which is not a built-in — the built-ins are $_me.id, $_now, $_tz, and in a <Mutation> $_row.<column> and $_value`));
-        else if (statement === 'query' && !builtin.query) errors.push(at(span, tag, `<${tag} name="${name}"> binds $${logical} — only a <Mutation> reads ${builtin.name === '_row' ? 'the row its control sits in' : 'the value an editing cell holds'}; a query reads page values ($name)`));
-        else if (builtin.name === '_row' && !rowField(logical)) errors.push(at(span, tag, `<${tag} name="${name}"> binds $_row — name the field: $_row.<column>`));
+        if (logical === VIEWER) errors.push(at(span, tag, `<${tag}> "${name}" binds $_me, the reader as a row — bind its id: $${VIEWER_ID} (or join the one-row table _me)`));
+        else if (!builtin) errors.push(at(span, tag, `<${tag}> "${name}" binds $${logical}, which is not a built-in — the built-ins are $_me.id, $_now, $_tz, and in a <Mutation> $_row.<column> and $_value`));
+        else if (statement === 'query' && !builtin.query) errors.push(at(span, tag, `<${tag}> "${name}" binds $${logical} — only a <Mutation> reads ${builtin.name === '_row' ? 'the row its control sits in' : 'the value an editing cell holds'}; a query reads page values ($name)`));
+        else if (builtin.name === '_row' && !rowField(logical)) errors.push(at(span, tag, `<${tag}> "${name}" binds $_row — name the field: $_row.<column>`));
         else add('builtins', logical as BuiltinInput);
         continue;
       }
       const kind = kinds.get(logical.toLowerCase());
       if (kind === 'scalar') add('values', flow.values.find((v) => v.name.toLowerCase() === logical.toLowerCase())!.name);
-      else if (kind) errors.push(at(span, tag, `<${tag} name="${name}"> binds $${logical}, but "${logical}" is ${kind === 'import' ? 'an <Import>' : kind === 'mutation' ? 'a <Mutation>' : 'a table'} — $params bind scalar values; read a table by its name (… from ${kind === 'import' ? `${logical}.rows` : logical} …)`));
-      else if (statement === 'query') errors.push(at(span, tag, `<${tag} name="${name}"> binds $${logical}, which is not a declared <Value> — declare <Value name="${logical}" type="…" />`));
+      else if (kind) errors.push(at(span, tag, `<${tag}> "${name}" binds $${logical}, but "${logical}" is ${kind === 'import' ? 'an <Import>' : kind === 'mutation' ? 'a <Mutation>' : 'a table'} — $params bind scalar values; read a table by its name (… from ${kind === 'import' ? `${logical}.rows` : logical} …)`));
+      else if (statement === 'query') errors.push(at(span, tag, `<${tag}> "${name}" binds $${logical}, which is not a declared <Value> — declare a <Value> named "${logical}" with its type`));
       if (statement === 'mutation' && (!kind || kind === 'scalar')) args.push(logical);
     }
     for (const f of analysis.functions) {
-      if (CLOCK_FUNCTIONS.has(f)) errors.push(at(span, tag, `<${tag} name="${name}"> calls ${f} — the current time is the built-in $_now (UTC; the reader's zone is $_tz), identical wherever the statement runs`));
+      if (CLOCK_FUNCTIONS.has(f)) errors.push(at(span, tag, `<${tag}> "${name}" calls ${f} — the current time is the built-in $_now (UTC; the reader's zone is $_tz), identical wherever the statement runs`));
     }
     return { reads, params, args };
   };
@@ -298,7 +298,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
   const compileQuery = (q: QueryDecl, path: QueryDecl[]): void => {
     const key = q.name.toLowerCase();
     if (compiledQueries.has(key) || failed.has(key)) return;
-    const fail = (message: string) => { failed.add(key); errors.push(at(q, QUERY_TAG, `<Query name="${q.name}"> ${message}`)); };
+    const fail = (message: string) => { failed.add(key); errors.push(at(q, QUERY_TAG, `<Query> "${q.name}" ${message}`)); };
     const { sql, fields, now, branches, casts } = rewriteBuiltinFields(q.sql);
     if (q.source) return compilePostgres(q, sql, fields);
     const cast = dateCastRefusal(casts);
@@ -371,7 +371,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
 
   const compilePostgres = (q: QueryDecl, sql: string, fields: Map<string, string>): void => {
     const key = q.name.toLowerCase();
-    const fail = (message: string) => { failed.add(key); errors.push(at(q, QUERY_TAG, `<Query name="${q.name}" source="ref:${q.source}">: ${message}`, 'source')); };
+    const fail = (message: string) => { failed.add(key); errors.push(at(q, QUERY_TAG, `<Query> "${q.name}" (source ref:${q.source}): ${message}`, 'source')); };
     const source = ctx.sources[q.source!];
     if (!source) return fail(`ref:${q.source} is not a dataset you can read`);
     if (source.kind === 'folder') return fail('source= requires a dataset');
@@ -406,7 +406,7 @@ export function compileDataflow(flow: Dataflow, ctx: CompileContext, body?: JsxN
     if (compiled) mutations.push(compiled);
   }
   function compileMutation(m: MutationDecl): CompiledMutation | null {
-    const fail = (message: string) => { errors.push(at(m, MUTATION_TAG, `<Mutation name="${m.name}"> ${message}`)); return null; };
+    const fail = (message: string) => { errors.push(at(m, MUTATION_TAG, `<Mutation> "${m.name}" ${message}`)); return null; };
     const { sql, fields, now, casts } = rewriteBuiltinFields(m.sql);
     const cast = dateCastRefusal(casts);
     if (cast) return fail(cast);

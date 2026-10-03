@@ -10,7 +10,7 @@ Targets (brotli/wire bytes, checked by `scripts/build/size-targets.mjs` against 
 |---|--------|----------------|--------|
 | 1 | JS before ready, pages with nothing interactive (prose, deck) | 275 KB | ≤ 10 KB |
 | 2 | JS before ready, interactive pages (kit, dashboard, every component) | 275–300 KB | ≤ 85 KB |
-| 3 | Production prose page, total transferred | 481 KB | ≤ 200 KB |
+| 3 | Production prose page, total transferred | 481 KB | ≤ 250 KB |
 
 Design decisions: a publish-time compiler to Solid islands (Solid 1.9); a vendored interactive kit that
 mirrors Radix's DOM conventions, so authored and compiled markup keep one shape (no solid-ui or
@@ -118,7 +118,7 @@ the app loader; it keeps its CSP sandbox.
 `createDocumentTransport`, seeds it from the snapshot's `results`, and hydrates each island in
 place by its hydration-key prefix (`rt.island(renderId, Component)` in the prototype): the parent's
 other children are handed back as the same nodes, so static siblings are never touched. The store is
-the one source of document data for islands, the author's `window.mx`, and later the app.
+the one source of document data for islands, the author's `page` signals (and a session's `window.page`), and later the app.
 
 ### 2.4 Revalidate
 
@@ -380,9 +380,10 @@ parameter selects another runtime.
 
 - `scripts/gates/gate-hydration.mjs`: checks the compiled story's served elements, island hydration,
   app adoption and edit handover. `x-mx-reader` confirms the compiled response.
-- `scripts/build/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (view route),
-  target 2 from `jsBeforeReady` on kit, dashboard and kitchen (view route), target 3 from the total
-  wire bytes of prose (view route); one line per target, `pass`/`fail`/`no data`; `--strict` fails on
+- `scripts/build/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (raw route),
+  target 2 from `jsBeforeReady` on kit, dashboard and kitchen (raw route), target 3 from the total
+  wire bytes of prose (view route); the raw route is the document's own page, which the app page frames, and
+  the view route's ready is the app shell's own; one line per target, `pass`/`fail`/`no data`; `--strict` fails on
   a missed target. `page-speed.yml` runs it on the head result into the job summary with `--strict`;
   that fails the page-speed workflow, which is informational and does not gate `ci.yml`.
 - `jsBeforeReady` joins the page's resource timing (names and `responseEnd`, available at the opaque

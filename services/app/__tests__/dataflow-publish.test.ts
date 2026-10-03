@@ -204,7 +204,7 @@ describe('dataflow at the publish door', () => {
     });
     expect(res.status).toBe(400);
     const message = await details(res);
-    expect(message).toMatch(/name="add"/);
+    expect(message).toMatch(/<Mutation> "add"/);
     expect(message).toMatch(/nope/);
   });
 

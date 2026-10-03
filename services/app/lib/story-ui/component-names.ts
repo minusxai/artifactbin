@@ -7,7 +7,7 @@
 /** The shadcn component tags a new-format (`format:'jsx'`) story may use. */
 export const STORY_UI_COMPONENT_NAME_LIST = [
   'Dialog', 'DialogTrigger', 'DialogContent', 'DialogClose',
-  'Iframe', 'Mermaid', 'DeckGL',
+  'Mermaid', 'DeckGL',
   'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardContent', 'CardFooter', 'CardAction',
   'Badge', 'Button',
   'Alert', 'AlertTitle', 'AlertDescription',
@@ -29,7 +29,6 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   // from the native tags alone has no visual family at all.
   'Input', 'Textarea', 'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch',
   'SlideDeck', 'Slide',
-  'Video',
   // A PDF the document links, as a card that opens it.
   'File',
   'Icon',
@@ -71,7 +70,7 @@ export const STORY_SVG_TAGS = [
 /**
  * The explicit HTML tag allowlist for new-format stories: content/document tags only,
  * plus the SVG drawing subset above.
- * `script`/`iframe`/`object`/`embed`/`base`/`form`/`meta`/`link` are excluded (the validator
+ * `script`/`object`/`embed`/`base`/`form`/`meta`/`link` are excluded (the validator
  * additionally hard-denies them for every story format).
  */
 export const STORY_HTML_TAGS = [
@@ -83,16 +82,19 @@ export const STORY_HTML_TAGS = [
   'img', 'figure', 'figcaption', 'picture', 'source',
   // Media the served document's CSP already grants (`media-src 'self' data:
   // blob:`): without these, `<source>` was in the vocabulary with nothing to
-  // put it in. Remote media stays blocked by that same CSP, and the <Video>
-  // component remains the door for the three sanctioned embed hosts.
+  // put it in.
   'video', 'audio', 'track',
+  // A player or page, framed as written: an https `src` and a short attribute
+  // list (lib/jsx/validate `iframeErrors`); which hosts load is the document
+  // CSP's `frame-src` (lib/story/styles/document-csp, `<meta name="csp-frame">`).
+  'iframe',
   'section', 'article', 'aside', 'header', 'footer', 'main', 'nav', 'address',
   'hr', 'br', 'wbr', 'time', 'data', 'details', 'summary',
   // The INTERACTIVE vocabulary. A document may carry its own <script>
   // (lib/story/document/helmet.ts), and a script with nothing to drive is not a
-  // feature — these are the elements it acts on. `form`, `iframe`, `object`
-  // and `embed` stay denied (lib/jsx/dangerous-tags.ts): navigation hijacks
-  // and nested browsing contexts, which no author document needs.
+  // feature — these are the elements it acts on. `form`, `object` and `embed`
+  // stay denied (lib/jsx/dangerous-tags.ts): navigation hijacks and plugin
+  // contexts, which no author document needs.
   'button', 'input', 'label', 'select', 'option', 'optgroup', 'textarea',
   'fieldset', 'legend', 'output', 'meter', 'progress', 'datalist',
   'canvas', 'dialog', 'template',

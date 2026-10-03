@@ -5,6 +5,7 @@
  * document's stranger gets the uniform 404 page; the app's paths get the SPA
  * under the app CSP; and anything else is a plain 404.
  */
+import { pagesSite } from '@/lib/serving/pages-origin';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
@@ -15,7 +16,7 @@ import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/serving';
-import { APP_CSP, createAppServer } from '../app';
+import { appPagePolicy, createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -35,22 +36,23 @@ async function world() {
 }
 
 describe('a document address', () => {
-  it('serves readable initial markup under app CSP at the canonical address', async () => {
+  // The app page frames the document on its own origin under the strict app policy (__tests__/pages-origin-host).
+  it('serves the document\'s frame under the strict app policy at the canonical address', async () => {
     const w = await world();
     for (const path of [`/a/${w.pub.id}`, `/@${w.owner.username}/${w.pub.id}-pub`]) {
       const res = await app.request(path, { headers: as({ credential: 'none' }) });
       expect(res.status, path).toBe(200);
-      expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
+      expect(res.headers.get('content-security-policy'), path).toBe(appPagePolicy(pagesSite()));
       expect(await res.text()).toContain('public words');
     }
   });
   it('serves the owner the same app page under the same CSP (at the canonical address)', async () => {
     const w = await world();
     const res = await app.request(`/@${w.owner.username}/${w.pub.id}-pub`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
-    expect(res.headers.get('content-security-policy')).toBe(APP_CSP);
+    expect(res.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
     const html = await res.text();
     expect(html).toContain('public words');
-    expect(html).toContain('data-mx-inline-story');
+    expect(html).toContain('data-mx-document-frame');
   });
   /**
    * The exporter's key is the ONE credential that opens a private document to

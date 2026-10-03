@@ -3,16 +3,16 @@
  *
  * The vitest suite proves each half in process — the door's ACL, the row, the
  * anchor's two hrefs, the strip. What only a browser can prove is that they are
- * ONE journey: a logged-out reader is served the sandboxed document TOP-LEVEL,
- * so the fork control they see is an anchor inside an opaque origin, and the
- * ask has to survive a top navigation, a login, a canonical redirect and a
+ * ONE journey: a logged-out reader is served the app page with the document
+ * framed on its own origin, so the fork control they see is the app bar's, and
+ * the ask has to survive a top navigation, a login, a canonical redirect and a
  * mount before anything happens. Every one of those is a place the instruction
  * could be dropped, and none of them exists in a unit test.
  *
  *   1. A (logged in) publishes a public document
  *   2. an ANONYMOUS `?intent=fork` fetch is still the DOCUMENT — the parameter
  *      is not a lever a stranger can pull on a shared link
- *   3. B (logged out) opens it top-level, opens the reader controls, taps Fork
+ *   3. B (logged out) opens it, taps Fork on the app bar
  *   4. B lands on /login carrying the ask, and logs in THERE (the round trip is
  *      the point, so the login is driven on the page the anchor produced)
  *   5. B is returned to the document with the CONFIRM open, and confirms
@@ -27,10 +27,10 @@
  *   node scripts/gates/gate-fork.mjs [base]
  */
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
-import { servedTopLevel } from './lib/page-facts.mjs';
+import { documentFrame, DOCUMENT_FRAME } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail, passTheWelcomePage } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -58,7 +58,7 @@ async function loginOnThisPage(page, sink, email) {
 }
 
 const sink = await startMailSink();
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const ownerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const forkerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const owner = await ownerCtx.newPage();
@@ -89,18 +89,21 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case a stranger ca
 // ── 2. the parameter is not a lever on a shared link ──────────────────────
 const strangerHtml = await (await fetch(`${BASE}/a/${doc.id}?intent=fork`)).text();
 
-check(strangerHtml.includes('data-mx-story-root') && strangerHtml.includes('The original, published by its owner.'),
-  'an anonymous ?intent=fork still receives the server-rendered document');
-check(strangerHtml.includes('data-mx-spa-idle') && !strangerHtml.includes('<iframe title="artifact"'), 'the shared SPA supplies the authenticated fork action, not an outer document iframe');
+// The app page carries none of the document now: it names it in its head and draws its frame (lib/serving/document-frame).
+check(strangerHtml.includes('<title>Fork gate') && strangerHtml.includes('data-mx-document-frame'),
+  'an anonymous ?intent=fork still receives the document page (its title, its frame)');
+check((strangerHtml.match(/<iframe\b/g) ?? []).length === 1 && !strangerHtml.includes('<iframe title="artifact"'), 'the shared SPA supplies the authenticated fork action, around the one document frame and no other iframe');
 
 
-// ── 3. the logged-out reader taps Fork in the document's own controls ─────
+// ── 3. the logged-out reader taps Fork on the app's bar ───────────────────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await forker.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 20000 });
-check(await servedTopLevel(forker), 'a logged-out reader is served the document TOP-LEVEL, not the shell');
+const strangerFrame = await documentFrame(forker);
+const original = await strangerFrame.getByText('The original, published by its owner.').waitFor({ timeout: 20000 }).then(() => true, () => false);
+check(original, 'a logged-out reader reads the document in its frame');
+// (The "served TOP-LEVEL, not the shell" check is gone: every reader gets the app page framing the document.)
 const forkAnchor = forker.locator('[aria-label="Fork artifact"]');
 await forkAnchor.waitFor({ state: 'visible', timeout: 10000 });
-check(true, 'the reader action bar offers Fork directly');
+check(true, 'the app bar offers Fork directly');
 
 // ── 4. the ask survives the top navigation into /login ────────────────────
 await forkAnchor.click();
@@ -145,7 +148,7 @@ await forker.waitForLoadState('networkidle');
 // A brand-new forker meets the welcome page once on this next navigation; confirm through it like a person.
 await passTheWelcomePage(forker, FORKER_EMAIL);
 await forker.waitForURL((u) => u.pathname === copyPath, { timeout: 30_000 });
-await forker.locator('[data-mx-reader-chrome]').waitFor({ state: 'attached', timeout: 30_000 });
+await forker.locator(DOCUMENT_FRAME).waitFor({ state: 'attached', timeout: 30_000 });
 
 await openArtifactControls(forker);
 const credit = forker.locator('[data-mx-forked-from]');

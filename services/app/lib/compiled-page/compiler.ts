@@ -17,8 +17,8 @@
  * `JSON.parse(<lit>)`, so it is a string literal too, never an object literal the author shapes. Tag
  * and attribute NAMES come only from the validated AST and are re-checked against a strict grammar
  * (`safeTag`/`safeAttr`); a name outside it refuses the compile. Props are computed by the
- * interpreter's `rawBuildProps` (dangerous schemes, handlers and denied attributes dropped exactly
- * as the former React render did) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
+ * interpreter's `rawBuildProps` (rendering only: the markup policy — handlers, denied attributes, URL
+ * schemes — is publish validation's, lib/jsx/validate) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
  * runtime with lib/jsx/reactive. `codegen-safety.ts structureIndependent` is the proof.
  *
  * Pure and deterministic for one input.
@@ -26,6 +26,7 @@
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { rawBuildProps, wrapsControl, templateIds } from '@/lib/story-ui/interpreter-primitives';
 import { STORY_SVG_TAGS } from '@/lib/story-ui/component-names';
+import { isScriptComponent, MOUNT_ATTR } from './script-mount';
 import { gridCols, gridRowHeight, gridItemRect, gridRows } from '@/lib/story-ui/grid-layout';
 import { ICON_BASE_CLASS } from '@/lib/story-ui/icon-contract';
 import { buildGlyphMap } from '@/lib/story/assets/icon-glyphs';
@@ -39,7 +40,6 @@ import { discoverSlides, MIN_SLIDES_FOR_RAIL } from '@/lib/story-runtime/slides'
 import { discoverOutline, hasOutline } from '@/lib/story-runtime/outline';
 import { createPreviewPropsAllocator } from '@/lib/story-runtime/preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { compileManagedIframe } from '@/lib/story/reader/managed-iframe';
 import { RECIPES, cn } from '@/lib/islands/kit/recipes';
 import { peopleClasses } from '@/lib/islands/kit/recipes/people';
 import type { GeneratedSources } from './codegen-safety';
@@ -124,14 +124,13 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   // A person's class depends on whom it resolves to in the browser (a guest's fallback, a card): every state's class
   // is evaluated here (recipes/people peopleClasses) and handed to the port as `classes`.
   User: { mod: 'people', island: true, api: ['userId', 'fallback', 'avatar', 'link', 'classes'] }, UserImage: { mod: 'people', island: true, api: ['userId', 'fallback', 'size', 'decorative', 'classes'] }, UserHandle: { mod: 'people', island: true, api: ['userId', 'fallback', 'link', 'classes'] }, SignIn: { mod: 'people', island: true },
-  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): the managed frame and map.
-  Iframe: { mod: 'embed', island: true, api: ['title', 'height', 'compiled'], dom: 'box', noChildren: true },
+  // Embeds with behaviour in a lazy chunk (lib/islands/kit/embed, their own family): the map.
   DeckGL: { mod: 'embed', island: true, api: ['data', 'layers', 'basemap', 'initialViewState', 'tooltip', 'legend', 'title', 'height', 'colorMode'], dom: 'box', grid: true },
   Dialog: { mod: 'dialog', island: true, api: ['defaultOpen', 'open'] }, DialogTrigger: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogClose: { mod: 'dialog', api: ['wrapsControl', 'disabled'] }, DialogContent: { mod: 'dialog', api: ['run', 'args', 'stacked'] },
   Table: { mod: 'static' }, TableHeader: { mod: 'static' }, TableBody: { mod: 'static' }, TableFooter: { mod: 'static' }, TableRow: { mod: 'static' }, TableHead: { mod: 'static' }, TableCell: { mod: 'static' }, TableCaption: { mod: 'static' },
   Separator: { mod: 'static', api: ['orientation', 'decorative'] }, Skeleton: { mod: 'static' },
   Breadcrumb: { mod: 'static' }, BreadcrumbList: { mod: 'static' }, BreadcrumbItem: { mod: 'static' }, BreadcrumbLink: { mod: 'static' }, BreadcrumbPage: { mod: 'static' }, BreadcrumbSeparator: { mod: 'static' }, BreadcrumbEllipsis: { mod: 'static' },
-  SlideDeck: { mod: 'static' }, Slide: { mod: 'static', api: ['title'] }, Video: { mod: 'static', api: ['src', 'poster', 'title', 'interactive'] }, File: { mod: 'static', api: ['src', 'title', 'name', 'bytes', 'pages', 'interactive'] },
+  SlideDeck: { mod: 'static' }, Slide: { mod: 'static', api: ['title'] }, File: { mod: 'static', api: ['src', 'title', 'name', 'bytes', 'pages', 'interactive'] },
 };
 /**
  * Kit components whose server render is a pure function of static props (no behaviour, no context, no asset or
@@ -142,13 +141,13 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
   'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction', 'CardContent', 'CardFooter',
   'Badge', 'Alert', 'AlertTitle', 'AlertDescription', 'Progress', 'Icon', 'Separator', 'Skeleton',
   'Breadcrumb', 'BreadcrumbList', 'BreadcrumbItem', 'BreadcrumbLink', 'BreadcrumbPage', 'BreadcrumbSeparator', 'BreadcrumbEllipsis',
-  // A Button without run/set (one with them is an island), a Video (its `ref:` poster resolved here, `kitParts`), a deck's
+  // A Button without run/set (one with them is an island), a File (its `ref:` src resolved here, `kitParts`), a deck's
   // SlideDeck and Slide (named by a pattern: a new string literal here would join the recipe class union, recipe-classes.ts,
   // and flip every story's CSS compile version).
-  'Button', 'Video', 'File', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
+  'Button', 'File', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
 ]);
 /** The rail's miniature stubs its embeds. */
-const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table', Video: 'video' };
+const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
 /** Components whose HTML is rendered at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
@@ -192,11 +191,36 @@ const jsxLiteral = (value: string): string => escapeHtml(value).replace(/\{/g, '
 const isElement = (node: JsxNode): node is JsxElement => node.type === 'element';
 
 /** Does this node itself need the browser? */
+/**
+ * A capitalized tag outside the registry is a component the document's SCRIPT exports (validated at publish against
+ * the built module's exports): the compiler emits its mount node, with its props as data and its children as the
+ * server-rendered fallback, and the page runtime renders the component into it (lib/islands/page-runtime). The
+ * predicate and the attribute live in ./script-mount, which the editor reads too.
+ */
+export { isScriptComponent, MOUNT_ATTR };
+/** The mount's props (literal JSON), its bindings (prop → declared name) and the DOM attributes the node keeps. */
+export function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: Record<string, string>; id?: string; cls?: string } {
+  const props: Record<string, unknown> = {};
+  const bind: Record<string, string> = {};
+  let id: string | undefined, cls: string | undefined;
+  for (const a of node.attributes) {
+    if (!a.value.static) { if (a.value.reactive?.kind === 'signal') bind[a.name] = a.value.reactive.name; continue; }
+    const v = a.value.json;
+    if (a.name === 'id' && typeof v === 'string') { id = v; continue; }
+    if ((a.name === 'className' || a.name === 'class') && typeof v === 'string') { cls = v; continue; }
+    const ref = typeof v === 'string' ? refName(v) : null;
+    if (ref) bind[a.name] = ref; else props[a.name] = v;
+  }
+  return { props, bind, ...(id !== undefined ? { id } : {}), ...(cls !== undefined ? { cls } : {}) };
+}
+
 function selfDynamic(node: JsxNode): boolean {
   if (node.type === 'text') return false;
   if (node.type === 'expression') return !node.value.static;
   if (node.control) return node.control.kind !== 'fragment';
   if (node.tag === 'For') return true;
+  // A mount is static markup: its bindings are data the runtime reads, never an island's.
+  if (isScriptComponent(node)) return false;
   if (ISLAND_TAGS.has(node.tag)) return true;
   if (node.attributes.some((a) => !a.value.static)) return true;
   if (node.attributes.some((a) => ['run', 'set', 'args'].includes(a.name))) return true;
@@ -216,9 +240,6 @@ function readsDataNode(node: JsxNode): boolean {
 }
 
 const isTableParts = (node: JsxElement): boolean => node.children.every((c) => (c.type === 'text' ? !c.value.trim() : c.type === 'element' && ['tr', 'td', 'th'].includes(c.tag)));
-
-/** The managed frame's author content compiled as inert data (lib/story/reader/managed-iframe), or null when it is refused. */
-const managedFrameOf = (node: JsxElement) => { try { return compileManagedIframe(node); } catch { return null; } };
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The generator
@@ -316,7 +337,6 @@ export function generate(input: GenerateInput): Generated {
   const needsBrowser = (node: JsxNode): boolean => {
     const known = needs.get(node);
     if (known !== undefined) return known;
-    if (isElement(node) && node.tag === 'Iframe' && managedFrameOf(node) === null) return false;
     const value = selfDynamic(node) || (isElement(node) && node.children.some(needsBrowser));
     needs.set(node, value);
     return value;
@@ -367,8 +387,6 @@ export function generate(input: GenerateInput): Generated {
       return `<rt.When test={${json(node.control.test)}} row={${ctx.row ?? 'undefined'}}${node.control.kind === 'conditional' ? ` fallback={<>${no}</>}` : ''}>{<>${yes}</>}</rt.When>`;
     }
     if (INERT.has(node.tag)) return '';
-    // A managed frame whose content is refused renders nothing (the interpreter's renderNode), island or not.
-    if (node.tag === 'Iframe' && !ctx.row && managedFrameOf(node) === null) return '';
     // Both builds keep the same tree of hydration boundaries. Static descendants are
     // server markup only; the browser emits an empty boundary at the same position.
     // A live control is emitted as a sibling of these boundaries, never inside one.
@@ -402,7 +420,6 @@ export function generate(input: GenerateInput): Generated {
     }
     if (node.control) return null;
     if (INERT.has(node.tag)) return { html: '', counts: false };
-    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return { html: '', counts: false };
     if (needsBrowser(node)) return null;
     const html = htmlOf(node, path, ctx);
     return html === null ? null : { html, counts: true };
@@ -427,6 +444,30 @@ export function generate(input: GenerateInput): Generated {
     return known.html;
   }
   /** A static kit component's server HTML (`KIT_CHUNK`), from the build's server kit; null when it keeps its JSX. */
+  /** A script component's mount as static HTML: the node, its data, and its children as the fallback. */
+  function mountHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
+    const { props, bind, id, cls } = mountParts(node);
+    const attrs: Array<[string, string]> = [[MOUNT_ATTR, node.tag], ['data-mx-props', JSON.stringify(props)], ['data-mx-bind', JSON.stringify(bind)]];
+    if (id !== undefined) attrs.push(['id', id]);
+    if (cls !== undefined) attrs.push(['class', cls]);
+    const attrHtml = solidAttrs(attrs, safeAttr);
+    if (attrHtml === null) return null;
+    const parts: string[] = [];
+    for (let i = 0; i < node.children.length; i++) {
+      const child = childHtmlOf(node.children[i]!, `${path}.${i}`, ctx);
+      if (child === null) return null;
+      if (child.counts) parts.push(child.html);
+    }
+    return `<div${attrHtml}>${solidChildren(parts)}</div>`;
+  }
+  /** The same mount inside an island's JSX. */
+  function mountJsx(node: JsxElement, path: string, mode: Mode, ctx: Ctx): string {
+    const { props, bind, id, cls } = mountParts(node);
+    const children = node.children.map((c, i) => emit(c, `${path}.${i}`, mode, ctx)).join('');
+    const idJsx = id !== undefined ? ` id={${lit(id)}}` : '';
+    const clsJsx = cls !== undefined ? ` class={${lit(cls)}}` : '';
+    return `<div ${MOUNT_ATTR}={${lit(node.tag)}} data-mx-props={${lit(JSON.stringify(props))}} data-mx-bind={${lit(JSON.stringify(bind))}}${idJsx}${clsJsx}>${children}</div>`;
+  }
   function kitHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (!input.kitServer || ctx.liveKit || !KIT_CHUNK.has(node.tag)) return null;
     if (node.attributes.some((a) => !a.value.static)) return null;
@@ -464,7 +505,7 @@ export function generate(input: GenerateInput): Generated {
   function renderHtml(node: JsxElement, path: string, ctx: Ctx): string | null {
     if (node.control || ctx.preview || ctx.row || ctx.cell || ctx.branch) return null;
     if (node.tag === 'Grid' || node.tag === 'GridItem') return gridHtml(node, path, ctx);
-    if (node.isComponent) return kitHtml(node, path, ctx);
+    if (node.isComponent) return isScriptComponent(node) ? mountHtml(node, path, ctx) : kitHtml(node, path, ctx);
     const lower = node.tag.toLowerCase();
     if (SOLID_SPECIAL_TAGS.has(lower)) return null;
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
@@ -507,7 +548,7 @@ export function generate(input: GenerateInput): Generated {
     const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
     if (!ctx.preview && ['TabsContent', 'AccordionContent', 'CollapsibleContent', 'PopoverContent', 'TooltipContent'].includes(node.tag)) props.forceMount = true;
     if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
-    if (node.tag === 'Video' || node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
+    if (node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
     // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
     if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
     // The dialog stacks its fields (and its mutation form is `display:contents`) only without an author class.
@@ -530,11 +571,6 @@ export function generate(input: GenerateInput): Generated {
     }
     if (node.tag === 'Files' || node.tag === 'Icon') props.glyphs = glyphs;
     if (node.tag === 'Icon' && input.glyphCatalogUrl) props.catalogUrl = input.glyphCatalogUrl;
-    if (node.tag === 'Iframe') {
-      // The interpreter's rules (renderNode): refused inside a row, and invalid content renders nothing.
-      if (ctx.row) return `<div role="alert">{${lit('DataTable and Iframe must be outside For templates')}}</div>`;
-      props.compiled = managedFrameOf(node);
-    }
     // The runtime hands the map the document's colour mode.
     if (node.tag === 'DeckGL') props.colorMode = input.colorMode ?? 'light';
     const classes = peopleClasses(node.tag, props);
@@ -575,6 +611,7 @@ export function generate(input: GenerateInput): Generated {
       const props = ctx.preview.rewrite(rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview.values));
       return `<${previewTag} p={${json(props)}} />`;
     }
+    if (isScriptComponent(node)) return mountJsx(node, path, mode, ctx);
     if (node.isComponent) {
       const meta = node.tag === 'Progress' ? { ...KIT.Progress!, mod: 'static' } : KIT[node.tag];
       if (!meta) { unported.add(node.tag); return `<div data-mx-unported={${lit(node.tag)}} data-mx-ast={${lit(path)}}></div>`; }
@@ -793,7 +830,6 @@ export function generate(input: GenerateInput): Generated {
       return node.control.kind === 'and' && !yes ? NONE : previewOf(node.children[yes ? 0 : 1]!, `${path}.${yes ? 0 : 1}`, ctx);
     }
     if (INERT.has(node.tag)) return NONE;
-    if (node.tag === 'Iframe' && managedFrameOf(node) === null) return NONE;
     return previewElement(node, path, ctx);
   }
   /** A native element's children as its server template writes them, or null. */
@@ -844,7 +880,7 @@ export function generate(input: GenerateInput): Generated {
       const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, preview.values);
       const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
       const props = preview.rewrite({ ...wrapper, id: ownerId || undefined,
-        ...(!ctx.svg ? { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
+        ...(!ctx.svg ? { style: { display: 'contents', ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
       const tag = ctx.svg ? 'g' : 'div';
       return element(tag, elementAttrs(tag, props), '');
     }
@@ -928,17 +964,19 @@ export function generate(input: GenerateInput): Generated {
       const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, ctx.preview.values);
       const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
       const props = ctx.preview.rewrite({ ...wrapper, id: ownerId || undefined,
-        ...(!ctx.svg ? { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
+        ...(!ctx.svg ? { style: { display: 'contents', ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } } : {}) });
       const tag = ctx.svg ? 'g' : 'div';
       return `<${tag}${jsxAttrs(elementAttrs(tag, props))}></${tag}>`;
     }
     const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, {});
     const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
     const svg = !!ctx.svg;
-    const style = svg ? {} : { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
+    // `display: contents`: the rows are laid out by the For's PARENT (an author's grid or flex sees each row as a
+    // child), not boxed by a wrapper that would stack them in one cell. The wrapper still owns the id and the attrs.
+    const style = svg ? {} : { style: { display: 'contents', ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
     const { className, ...rest } = wrapper;
     // The wrapper's style goes to rt.Repeat as `attr:style`: its spread then SETS the attribute (skipped while
-    // hydrating), keeping the served `min-height:1px` byte for byte. A spread `style` would be rewritten
+    // hydrating), keeping the served `display:contents` byte for byte. A spread `style` would be rewritten
     // through the CSSOM (`min-height: 1px;`) during hydration, which the served page must not do.
     const attrs = elementAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
       .map(([n, v]): Attr => [n === 'style' ? 'attr:style' : n, v]);

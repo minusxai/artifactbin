@@ -55,7 +55,7 @@ it('whole replacement and restoration use the same JSONB protocol through PUT an
 });
 it.each([
  '<script>run()</script>', '<p onClick="run()">x</p>', '<a href="javascript:alert(1)">x</a>',
- '<p style={{color:"red"}}>x</p>', '<Helmet /><Helmet />', '<p>{process.exit()}</p>',
+ '<form><button>x</button></form>', '<Helmet /><Helmet />', '<p>{process.exit()}</p>',
  '<Column col="x">x</Column>', '<Grid mode="wrong" />', '<p>{$_row.missing}</p>',
  '<Helmet><Value name="x" type="number" default="wrong" /></Helmet>', '<img src="ref:zzzzzz" />',
  '<p>\0</p>', '<Icon name="nonexistent-xyz" />',

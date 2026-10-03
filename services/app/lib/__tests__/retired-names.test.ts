@@ -29,7 +29,7 @@ const RETIRED_ENV_NAMES = [
   'LOGIN_EMAIL_FROM', 'MAX_EXTERNAL_IMAGES_PER_PUBLISH', 'MAX_IMAGE_BYTES', 'MAX_QUERY_ROWS', 'MAX_ROWS_LIMIT',
   'MIXPANEL_HOST', 'MIXPANEL_TOKEN', 'MUTATION_MAX_PER_MINUTE', 'PORT', 'PUBLIC_BASE_URL', 'QUERY_TIMEOUT_MS',
   'RESEND_API_KEY', 'RESEND_BASE_URL', 'TRUSTED_PROXY_HOPS', 'WEB_INGEST_ALLOW_PRIVATE', 'WEB_INGEST_MAX_PER_HOUR',
-  'WEB_INGEST_TIMEOUT_MS', 'WAITLIST__WEBHOOK_URL',
+  'WEB_INGEST_TIMEOUT_MS', 'WAITLIST__WEBHOOK_URL', 'WEB_INGEST__MAX_IMAGES_PER_PUBLISH', 'WEB_INGEST__MAX_ASSETS_PER_PUBLISH',
 ];
 
 interface Scan {
@@ -181,7 +181,7 @@ describe('the surviving vocabulary', () => {
   });
 
   it('points every human link at /docs-human', () => {
-    for (const file of ['solid/components/PageChrome.tsx', 'solid/App.tsx', 'lib/story/reader/reader-chrome.ts']) {
+    for (const file of ['solid/components/PageChrome.tsx', 'solid/App.tsx']) {
       expect(codeOf(readFileSync(path.join(APP_ROOT, file), 'utf8')), file).toContain('/docs-human');
     }
   });

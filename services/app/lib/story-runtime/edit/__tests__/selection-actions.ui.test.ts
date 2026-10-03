@@ -250,16 +250,10 @@ describe('view-mode text selection actions', () => {
   });
 
   /*
-   * …AND NOT UNDER THE DOCK. A document served top-level parks the
-   * reader's own chrome at the bottom of a phone's viewport, and the bubble
-   * hangs BELOW the words — so a selection near the foot of the page would
-   * put the only way to act on it behind the dock. The clamp counts the dock
-   * only when it is really parked down there: it is `display: none` while the
-   * document is framed and only `position: fixed` under 640px, and a dock in
-   * ordinary flow scrolled into the upper half must not pull the bubble up off
-   * its words.
+   * …AND NOT OFF THE VIEWPORT. The bubble hangs BELOW the words, so a selection
+   * at the foot of the page would put the only way to act on it out of reach.
    */
-  it('keeps a touch bubble clear of a reader dock parked at the foot of the viewport', async () => {
+  it('keeps a touch bubble inside the foot of the viewport', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: query === '(pointer: coarse)',
       media: query,
@@ -270,15 +264,11 @@ describe('view-mode text selection actions', () => {
       removeListener: () => {},
       dispatchEvent: () => false,
     }));
-    document.body.innerHTML = '<p data-mx-ast="0">select these words</p>'
-      + '<div data-mx-reader-chrome></div>';
-    // jsdom's viewport is 768 tall: the dock occupies its last 68px.
+    document.body.innerHTML = '<p data-mx-ast="0">select these words</p>';
+    // jsdom's viewport is 768 tall.
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       if (this.hasAttribute(SELECTION_ACTIONS_ATTR)) {
         return { x: 0, y: 0, left: 0, top: 0, right: 132, bottom: 30, width: 132, height: 30, toJSON: () => ({}) };
-      }
-      if (this.hasAttribute('data-mx-reader-chrome')) {
-        return { x: 0, y: 700, left: 0, top: 700, right: 390, bottom: 760, width: 390, height: 60, toJSON: () => ({}) };
       }
       return { x: 100, y: 660, left: 100, top: 660, right: 240, bottom: 690, width: 140, height: 30, toJSON: () => ({}) };
     });
@@ -287,7 +277,7 @@ describe('view-mode text selection actions', () => {
     const text = document.querySelector('p')!.firstChild!;
     const range = document.createRange();
     range.selectNodeContents(text);
-    const low = { x: 100, y: 660, left: 100, top: 660, right: 240, bottom: 690, width: 140, height: 30, toJSON: () => ({}) };
+    const low = { x: 100, y: 730, left: 100, top: 730, right: 240, bottom: 760, width: 140, height: 30, toJSON: () => ({}) };
     Object.defineProperty(range, 'getBoundingClientRect', { value: () => low });
     Object.defineProperty(range, 'getClientRects', { value: () => [low] });
     const selection = window.getSelection()!;
@@ -296,10 +286,10 @@ describe('view-mode text selection actions', () => {
     document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
     await Promise.resolve();
 
-    // Below the words would be 697; the dock's top (700) less an 8px margin
+    // Below the words would be 767; the viewport's foot (768) less an 8px margin
     // and the bubble's own 30px height is as low as it may go.
     const toolbar = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`)!;
-    expect(toolbar.style.top).toBe('662px');
+    expect(toolbar.style.top).toBe('730px');
     expect(toolbar).not.toHaveAttribute('hidden');
   });
 

@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { tsImport } from 'tsx/esm/api';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -73,7 +73,7 @@ async function invoke(args, { cwd = workspace, expected = 0, approve = false } =
 const sink = await startMailSink();
 // Reuse the eval's real email login for deployments; its outbox variant is exercised in CI.
 const credentialSource = process.env.CONFORMANCE__CREDENTIAL_SOURCE;
-const browser = credentialSource ? null : await chromium.launch();
+const browser = credentialSource ? null : await launchChromium();
 const publishedIds = [];
 try {
   await invoke(['auth'], { approve: true });

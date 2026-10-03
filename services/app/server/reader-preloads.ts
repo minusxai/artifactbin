@@ -86,28 +86,3 @@ export function createEntryPreloader(webDir: string, entries: readonly string[])
     return inject(html, cached);
   };
 }
-
-/**
- * THE HTML-FIRST PAGE'S APP ENTRY (docs/phase2-architecture.md §2.2, §7): the small module the
- * compiled reader page tags `data-mx-spa-idle` (web/solid-spa-idle.ts, its own Vite entry), which loads
- * the app only when it is wanted, and its static closure to `modulepreload`. Null when this build has
- * no such entry: the page is then the document and its islands without the app.
- */
-export const SPA_IDLE_ENTRY = 'solid-spa-idle.ts';
-export function createSpaEntry(webDir: string, key = SPA_IDLE_ENTRY): () => { entry: string; preload: string[] } | null {
-  let cached: { entry: string; preload: string[] } | null | undefined;
-  return () => {
-    if (cached !== undefined) return cached;
-    try {
-      const manifest = readManifest(webDir);
-      const chunk = manifest[key];
-      if (!chunk) throw Error('no app idle entry');
-      const hints = closureHints(manifest, [key]).filter((hint) => !hint.style);
-      cached = { entry: `/${chunk.file}`, preload: hints.map((hint) => hint.href).filter((href) => href !== `/${chunk.file}`) };
-    } catch {
-      console.warn('[reader] the app idle entry is not in the build manifest; compiled pages load no app');
-      cached = null;
-    }
-    return cached;
-  };
-}

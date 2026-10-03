@@ -10,8 +10,37 @@
 /** The artifact iframe a wrapped document would sit in; a top-level delivery has none. */
 const ARTIFACT_FRAME = 'iframe[title="artifact"]';
 
-/** The story runtime, rendered INLINE into the served document. */
+/** The story runtime, rendered INLINE into the served document (inside the document frame on the app page). */
 export const INLINE_STORY = '[data-mx-inline-story]';
+
+/** The frame the app page serves the document in, on the document's own origin. */
+export const DOCUMENT_FRAME = 'iframe[data-mx-document-frame]';
+
+/**
+ * The document's frame as a Playwright Frame: wait for the app page to attach it and for its document to load.
+ * A page that IS the document (custom-domain post, /raw) has no frame and is returned as its own main frame.
+ * @param {import('playwright').Page} page
+ * @param {{ timeout?: number }} [options]
+ * @returns {Promise<import('playwright').Frame>}
+ */
+export async function documentFrame(page, options = {}) {
+  const timeout = options.timeout ?? 30_000;
+  const iframe = page.locator(DOCUMENT_FRAME);
+  if ((await iframe.count()) === 0) {
+    try { await iframe.waitFor({ state: 'attached', timeout: Math.min(timeout, 5_000) }); } catch { return page.mainFrame(); }
+  }
+  const handle = await iframe.elementHandle({ timeout });
+  const frame = await handle.contentFrame();
+  if (!frame) throw new Error('the document frame has no content frame');
+  await frame.waitForLoadState('domcontentloaded', { timeout });
+  return frame;
+}
+
+/**
+ * Locators scoped to the document: `documentLocator(page).locator('#figure')`.
+ * @param {import('playwright').Page} page
+ */
+export const documentLocator = (page) => page.frameLocator(DOCUMENT_FRAME);
 
 /**
  * Was the document served as the page itself, rather than inside the app's
@@ -35,7 +64,7 @@ export const horizontalOverflow = (page) => page.evaluate(
  * @param {import('playwright').Page} page
  * @param {{ timeout?: number, state?: 'attached' | 'visible' }} [options]
  */
-export const inlineStory = (page, options = {}) => page.waitForSelector(
+export const inlineStory = async (page, options = {}) => (await documentFrame(page, options)).waitForSelector(
   INLINE_STORY,
   { timeout: options.timeout ?? 30_000, ...(options.state ? { state: options.state } : {}) },
 );

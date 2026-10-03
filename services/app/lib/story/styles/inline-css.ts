@@ -2,7 +2,7 @@ import * as cssTree from './css-parser';
 import { sha256Hex } from '@/lib/platform/sha256';
 import type { JsxNode } from '@/lib/jsx';
 
-/** Apply the same CSS policy to static inline style values, without entering Iframes. */
+/** Apply the same CSS policy to static inline style values. */
 export function isolateStoryNodes(nodes: JsxNode[], css: string): JsxNode[] {
   // Parse the font declarations once; only these small aliases are carried
   // through inline-value sanitization, not the entire compiled stylesheet for
@@ -17,7 +17,7 @@ export function isolateStoryNodes(nodes: JsxNode[], css: string): JsxNode[] {
     } });
   } catch { /* No valid definitions; inline URL policy still applies. */ }
   const visit = (items: JsxNode[]): JsxNode[] => items.map(node => {
-    if (node.type !== 'element' || node.tag === 'Iframe') return node;
+    if (node.type !== 'element') return node;
     return { ...node, children: visit(node.children), attributes: node.attributes.map(attr => {
       if (['fontfamily', 'font-family'].includes(attr.name.toLowerCase()) && attr.value.static && typeof attr.value.json === 'string') {
         const input = cssTree.generate({ type: 'String', value: attr.value.json });

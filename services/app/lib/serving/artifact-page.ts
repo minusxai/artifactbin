@@ -9,9 +9,9 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * design, the declared dataflow, the open-annotation count).
  *
  * ONE answer for both doors: the JSON route (client navigation,
- * app/api/page/artifact/[id]) and the app page (server/app), which also
- * inlines the story this answer's runtime renders — without round-tripping
- * that render through the JSON.
+ * app/api/page/artifact/[id]) and the app page (server/app), which also draws
+ * the document's frame — the document itself is only ever rendered on its own
+ * origin (lib/serving/pages-origin, app/a/[id]/raw), never inside the app page.
  *
  * A DOCUMENT is served from its prepared page (lib/story/prepared/prepared-page.server):
  * the reader payload carries no source, no document graph and no raw
@@ -35,59 +35,27 @@ import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/document/inpu
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { getUserById, ownerUsername } from '@/lib/accounts/users';
 import { avatarUrl } from '@/lib/accounts/avatars';
-import { actorForArtifacts, browserSessionKind, roleFor, sessionActor } from '@/lib/accounts/viewer';
+import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, roleFor, sessionActor } from '@/lib/accounts/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import { canAnnotate, canEdit } from '@/lib/artifacts/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { lazyCodeOf } from '@/lib/story/document';
 import { firstHeadingTitle } from '@/lib/story/document';
 import { isStartPlaceholder } from './start-placeholder';
-import type { LazyCode } from '@/lib/story/document';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { ASSETS_ORIGIN } from '@/lib/platform/config';
-import { VIEWER_OVERLAY_PATH, type AssembleInput } from '@/lib/compiled-page/contract';
-
-
-import { CompiledPageFailed, compiledPageFor } from '@/lib/compiled-page/serve.server';
-import { agentDiscovery } from './agent-discovery';
-import { canonicalDocumentUrl } from './custom-domains';
 import { CARD_RENDER_GENERATION } from './og-card';
-import { readerChromeFonts } from '@/lib/story/styles';
-import { declaresMutations } from '@/lib/story/document';
-import { assetsPath, mutatePath, queryPath } from '@/lib/story/styles';
-import { archivedReadOnly } from './archived-version';
-import type { ReaderChromeInput } from '@/lib/story/reader';
-import { displayTitle } from '@/lib/story/document';
-
-/** The story the app page inlines for this answer (server/app withInitialStory). */
-export interface InitialStory {
-  /** The story element, rendered (or the stored anonymous render, when this request's overlay is the same). */
-  html: () => string;
-  title: string;
-  fontPreloads: string[];
-  lazyCode: LazyCode;
-  starter: boolean;
-}
-
-/**
- * The HTML-FIRST page (docs/phase2-architecture.md §2.2, §7): the whole document the compiled
- * reader's assembler made for this request — the story, the server-rendered reader chrome and the
- * app's idle entry — which the app page serves as it is, with the page data beside it.
- */
-export interface CompiledStory {
-  html: string;
-  headers: Readonly<Record<string, string>>;
-}
+import { issuePagesTicket } from '@/lib/accounts/pages-sessions';
+import { pagesOriginFor, pagesSessionUrl, type PagesSite } from './pages-origin';
+import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
+import type { DocumentFrame } from './document-frame';
 
 export interface ArtifactPageAnswer {
   status: number;
   body: unknown;
-  story?: InitialStory;
-  /** The compiled page, when this request is served by the compiled reader. */
-  compiled?: CompiledStory;
-  /** Which renderer answered a document's page (the page's `x-mx-reader` header). */
+  /** The document's frame, which the app page draws (lib/serving/document-frame): only the HTML door asks for it. */
+  frame?: DocumentFrame;
+  /** Which renderer answered a document's page (the page's `x-mx-reader` header): the compiled page, in its frame. */
   reader?: { mode: 'compiled' };
 }
 
@@ -99,11 +67,41 @@ export interface ArtifactPageOptions {
    * fetch and one access check per view.
    */
   admitted?: ArtifactRow;
-  /** The app page: the reader mode is decided here, and a compiled page is assembled with the app's idle entry. */
-  page?: { spa: AssembleInput['spa'] };
+  /**
+   * The app page (the HTML door): it frames the document on its own origin, after handing the reader
+   * across with a one-time ticket (lib/accounts/pages-sessions) in the frame's first URL. The JSON door
+   * passes nothing and mints no ticket.
+   */
+  pages?: PagesSite;
 }
 
 const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_found' } });
+
+/**
+ * A document frame's first URL for this request's reader (APP__PAGES_HOST): the pages apex exchange with
+ * a one-time ticket (none for a guest), redirecting to the document's own origin — or null when the reader
+ * may not read the document or it is not a document. `search` carries the reader's `$` values across.
+ * The app page draws its frame with it; brief B's framed story asks for a fresh one (app/api/page/frame).
+ */
+export async function framedDocumentSrc(request: Request, id: string, site: PagesSite, search = ''): Promise<{ src: string; origin: string } | null> {
+  if (!ID_RE.test(id)) return null;
+  const artifact = await getArtifactById(id);
+  if (!artifact || artifact.format !== 'markup') return null;
+  const actor = await sessionActor(request);
+  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return null;
+  return admittedFrameSrc(request, artifact, actor, site, search);
+}
+
+/** The frame's first URL for a reader this request already admitted to `artifact` (one admission per view). */
+async function admittedFrameSrc(request: Request, artifact: ArtifactRow, actor: Awaited<ReturnType<typeof sessionActor>>, site: PagesSite, search: string): Promise<{ src: string; origin: string }> {
+  const origin = pagesOriginFor(artifact.id, site);
+  // The reader's "Allow once" grants live in an app-origin cookie the document's origin never sees: they ride the
+  // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
+  const carried = carriedTrust(request, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null });
+  // A browser session's scripted browser reads its frame as the session's actor (lib/accounts/pages-sessions).
+  const ticket = await issuePagesTicket(actor, carried, Date.now(), { browserSession: isBrowserSessionRequest(request) });
+  return { src: pagesSessionUrl(site, `${origin}/${search}`, ticket), origin };
+}
 
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
   if (!ID_RE.test(id)) return notFound();
@@ -177,7 +175,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
    */
   if (search.get('part') === 'editor') {
     if (!isDoc || at || exporting || !canEdit(role)) return notFound();
-    const { row, page } = await preparedPageFor(artifact, null, baseUrl(request));
+    const { row, page } = await preparedPageFor(artifact, null);
     return { status: 200, body: {
       editId: artifact.edit_id, version: artifact.version, source: row.source ?? '',
       ...(artifact.document?.kind === 'graph' ? { document: artifact.document } : {}),
@@ -209,7 +207,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
-  const prepared = isDoc ? await preparedPageFor(artifact, at, baseUrl(request)) : null;
+  const prepared = isDoc ? await preparedPageFor(artifact, at) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
   // Every document the app page serves is the prepared compiled page (§10) — a capture's and the
   // editor's address included — except the starter placeholder's READ view, whose agent instructions
@@ -220,7 +218,10 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
 
   const membershipAvailable = !at && prepared?.page.declared?.flow.mutations.some(m => 'import' in m.target) === true;
   const pwaEnabled = !at && artifactPwaEnabled(row);
-  const compiledMode = !!options.page && !!prepared && !(starterDoc && !editAddress && !exporting);
+  // The app page frames every document it serves — an archived version (`?version=N`, carried in the frame's
+  // first URL) and the writer's `/edit` included — except the starter placeholder's READ view, whose agent
+  // instructions are app UI (solid/pages/Starter). A capture photographs `/raw` itself (lib/export).
+  const framing = !!options.pages && !!prepared && !(starterDoc && !editAddress);
 
 
   const meta = (row.meta ?? {}) as {
@@ -236,7 +237,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   // What only this request decides, over the stored version. On the compiled page without this
   // reader's first results: its rows are the guest snapshot's, and this reader's arrive after paint.
   const servedFor = (results: boolean) => (prepared ? servedPage(prepared.row, prepared.page, {
-    at, search: new URL(request.url).search, origin: baseUrl(request),
+    at, search: new URL(request.url).search,
     // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
     drawings: engineRequested(request.url) ? 'engine' : 'stored',
     colorMode: capturedColor,
@@ -245,7 +246,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     ...(results ? { results: { admit: actor.viewer } } : {}),
   }) : Promise.resolve(null));
   const [firstServed, [author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview]] = await Promise.all([
-    servedFor(!compiledMode),
+    // A framed document runs its own first results on its own origin: the app page's answer carries none.
+    servedFor(!framing),
     social,
   ]);
   const served = firstServed;
@@ -256,48 +258,23 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
   const authorMark = { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom };
   const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
-  let compiled: CompiledStory | null = null;
-  let reader: ArtifactPageAnswer['reader'];
-  if (compiledMode && prepared) {
-    const answer = await compiledPageFor(prepared.row, prepared.page, {
-      at,
-      search: new URL(request.url).search,
-      drawings: engineRequested(request.url) ? null : 'inline',
-      colorMode: capturedColor,
-      // Any held credential: an account session, or the connection a guest owner holds. Either one is
-      // who the write check and a private query answer for, so the page uses the credentialed doors.
-      signedIn: kind !== 'none',
-      // The page queries its POST door as this request's reader: what they may hold, the page runs itself.
-      holder: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
-      doors: {
-        queryUrl: queryPath(artifact.id),
-        ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
-        viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
-        assetsUrl: assetsPath(artifact.id),
-      },
-      // The managed <Iframe>'s asset door, as the page's island carries it (prepared-page readerInputFor).
-      managedAssets: ASSETS_ORIGIN ? { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } : null,
-      ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
-      live: at ? null : { id: artifact.id, editId: artifact.edit_id },
-      // The page's own behaviour (lib/islands/page), as a /raw copy runs it: the live stream of a page with
-      // no islands (the app loads on intent, so until then the page holds it), the reader's place across
-      // the reload a new version delivers, and their mode.
-      behaviors: ['page'],
-      chrome: await readerChromeFor({ hasDataMutations: membershipAvailable, artifact, row, role, kind, actor, at, author: authorMark, likeCount, liked, follow, openAnnotations, hasInvitedUsers: ownerScope ? hasInvitedUsers : undefined, ground: design.colorMode ?? prepared.page.data.colorMode }),
-      chromeFonts: readerChromeFonts({ theme: prepared.page.base.theme, docFonts: prepared.page.base.fonts, importedFaces: prepared.page.base.faces }).map((face) => face.url),
-      spa: options.page!.spa,
-      head: {
-        description: row.description,
-        canonical: await canonicalDocumentUrl(artifact),
-        social: { title: prepared.page.title, description: row.description, image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&r=${CARD_RENDER_GENERATION}` },
-        help: agentDiscovery(baseUrl(request)),
-      },
-    });
-    // No renderer is left to answer: a page the compiled reader cannot make is a 500.
-    if (answer.mode === 'failed') throw new CompiledPageFailed(artifact.id, answer.reason);
-    compiled = { html: answer.html, headers: answer.headers };
-    reader = { mode: 'compiled' };
-  }
+  // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
+  // The reader was admitted above (or by the caller) unless an export key stood in for the check: only then is it asked.
+  const readerAdmitted = !!admitted || !exporting || actor.tokenId === artifact.token_id;
+  const framedSrc = framing && artifact.format === 'markup' && (readerAdmitted || await canReadArtifact(artifact, actor.viewer))
+    ? await admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search) : null;
+  const framedOrigin = framedSrc?.origin ?? null;
+  const membership = membershipAvailable ? await membershipOf(actor, artifact.id) : undefined;
+  const frame: DocumentFrame | null = framedSrc && prepared ? {
+    src: framedSrc.src,
+    title: row.title || prepared.page.title || 'Document',
+    colorMode: design.colorMode ?? prepared.page.data.colorMode,
+    head: {
+      title: prepared.page.title,
+      description: row.description,
+      image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&r=${CARD_RENDER_GENERATION}`,
+    },
+  } : null;
   const surface = {
     pwaEnabled, membershipAvailable,
     captureKey: exporting ? key : null,
@@ -309,7 +286,8 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     title: row.title,
     author: authorMark,
     ...(served ? {
-      runtime: served.runtime,
+      // The framed page's own sheet is the frame's: the app page's data carries the runtime without it.
+      runtime: framing ? { ...served.runtime, css: undefined } : served.runtime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/story/document/title) and whether it is still the starter placeholder.
       heading: firstHeadingTitle(row.source), starter,
@@ -335,14 +313,22 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     refs: meta.refs ?? [],
     accountSession: kind === 'account',
     anonSession: kind === 'anon',
+    // The document's own origin when the app page frames it there (solid/pages/Document posts to it).
+    ...(framedOrigin ? { framedOrigin } : {}),
+    // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).
+    ...(membership ? { membership } : {}),
     version: artifact.version,
     // Anyone who may COMMENT has a comment badge to fill: computing this
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.
     openAnnotations,
   };
+  // What the document asks of the network beyond the default policy, and where this reader stands on it:
+  // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
+  const cspRequest = isDoc ? await cspRequestFor({ artifact: row, viewer: { userId: viewerId, tokenId: actor.tokenId }, request }) : null;
   const body = {
     canonical: canonicalArtifactPath(artifact, authorUsername),
+    ...(cspRequest ? { cspRequest } : {}),
     description: row.description,
     role,
     kind,
@@ -361,26 +347,22 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
     // A document's runtime carries its sheet once, isolated; the data tiers carry their stored one.
     surface,
   };
-  if (compiled) return { status: 200, body, compiled, reader };
-  return {
-    status: 200, body,
-    ...(reader ? { reader } : {}),
-    ...(served && prepared ? { story: {
-      html: served.storyHtml, title: served.runtime.title, fontPreloads: served.runtime.fontPreloads ?? [],
-      // A diagram drawn from its stored SVG runs no engine: its kind's code is not preloaded.
-      lazyCode: served.runtime.data.mermaidImages
-        ? lazyCodeOf(prepared.page.data.nodes, { images: served.runtime.data.mermaidImages, mode: served.runtime.data.colorMode })
-        : prepared.page.lazyCode,
-      starter,
-    } } : {}),
-  };
+  if (frame) return { status: 200, body, frame, reader: { mode: 'compiled' } };
+  return { status: 200, body };
+}
+
+/** The reader's standing on a document that writes to datasets: the rail's Join/Joined/Pending pill. */
+async function membershipOf(viewer: Awaited<ReturnType<typeof sessionActor>>, id: string): Promise<'join' | 'pending' | 'joined'> {
+  const actor = actorForArtifacts(viewer);
+  const self = actor?.userId ? (await membershipState(actor, id)).self : null;
+  return self?.status === 'accepted' && self.explicit_join ? 'joined' : self?.status === 'pending' ? 'pending' : 'join';
 }
 
 /**
  * The JSON door (app/api/page/artifact/[id]).
  *
- * Every role reads a markup document from the compiled page the HTML door serves (solid/pages/Document
- * adopts it); nothing renders a document from this answer any more. A client-side link to a document
+ * Every role reads a markup document in the frame the HTML door draws (solid/pages/Document adopts it);
+ * nothing renders a document from this answer. A client-side link to a document
  * reads it only to learn that the address is a document (solid/pages/ArtifactAddress `replaceDocument`), the
  * writer's editor reads `?part=editor`, and a dataset reader re-reads its catalog. So this door keeps
  * the non-compiled payload (`servedFor(true)`: the runtime and its first results), which those callers
@@ -389,52 +371,4 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
   return answer.status === 200 ? json(answer.body, 200, { 'Cache-Control': 'no-store' }) : json(answer.body, answer.status);
-}
-
-/**
- * THE READER CHROME the HTML-first page draws on the server (lib/story/reader/reader-chrome): the same
- * input the app's own chrome builds from this
- * answer once it adopts the page, so the takeover changes no pixel of it. Its Edit control is what the
- * page's loader reads a writer by (web/idle-boot `capabilityOf`).
- */
-async function readerChromeFor(facts: {
-  hasDataMutations: boolean;
-  artifact: ArtifactRow; row: ArtifactRow; role: Awaited<ReturnType<typeof roleFor>>; kind: 'account' | 'anon' | 'none';
-  actor: Awaited<ReturnType<typeof sessionActor>>; at: { version: number; head: number } | null;
-  author: ReaderChromeInput['author']; likeCount: number; liked: boolean;
-  follow: { following: boolean; count: number } | null; openAnnotations: number; hasInvitedUsers?: boolean; ground: 'light' | 'dark';
-}): Promise<ReaderChromeInput> {
-  const { artifact, row, role, at } = facts;
-  const owner = role === 'owner' && !at;
-  let membership: ReaderChromeInput['membership'];
-  if (!at && facts.hasDataMutations) {
-    const actor = actorForArtifacts(facts.actor);
-    const self = actor?.userId ? (await membershipState(actor, artifact.id)).self : null;
-    membership = self?.status === 'accepted' && self.explicit_join ? 'joined' : self?.status === 'pending' ? 'pending' : 'join';
-  }
-  const person = facts.kind === 'account' && facts.actor.viewer?.userId ? await getUserById(facts.actor.viewer.userId) : null;
-  return {
-    artifactId: artifact.id,
-    membership,
-    // Keep the inbox reachable before the app loads; the live provider supplies the unread badge.
-    notifications: person ? {unread:0} : undefined,
-    ground: facts.ground,
-    share: owner,
-    install: artifactPwaEnabled(row),
-    archived: at ? { version: at.version, head: at.head } : null,
-    visibility: artifact.visibility,
-    ...(facts.hasInvitedUsers === undefined ? {} : { hasInvitedUsers: facts.hasInvitedUsers }),
-    title: displayTitle({ title: row.title, source: row.source }),
-    forkBusy: false,
-    author: facts.author,
-    viewer: person ? { id: person.id, name: person.username || person.email || '', image: avatarUrl(person) } : null,
-    edit: canEdit(role) && !at,
-    ownerBreadcrumb: owner,
-    panels: false,
-    reactions: {
-      like: { count: facts.likeCount, liked: facts.liked, href: '#' },
-      follow: facts.follow ? { following: facts.follow.following, count: facts.follow.count, href: '#' } : null,
-      comment: { count: facts.openAnnotations, href: '#' },
-    },
-  };
 }

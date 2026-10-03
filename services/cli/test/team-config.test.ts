@@ -108,20 +108,53 @@ test('team settings refuse the network shapes teammates cannot sign in through, 
   await writeFile(file,network('https://artifacts.example.test')+secret+login);
   const proxied=await teamSettings(file,{},{port:9000});
   assert.equal(proxied.port,9000);assert.equal(proxied.origin,'https://artifacts.example.test');
-  // The generated single-machine default keeps working without any mail provider.
+  // The generated single-machine default keeps working without any mail provider, and so does an
+  // operator's explicit loopback address, kept as written.
+  await writeFile(file,network('http://app.lvh.me:7445','127.0.0.1')+secret);
+  assert.equal((await teamSettings(file)).origin,'http://app.lvh.me:7445');
+  await writeFile(file,network('http://app.lvh.me:7445')+secret);
+  await assert.rejects(teamSettings(file),/URL teammates use/);
   await writeFile(file,network('http://127.0.0.1:7445','127.0.0.1')+secret);
   assert.equal((await teamSettings(file)).origin,'http://127.0.0.1:7445');
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
+/**
+ * The app server refuses to boot without APP__PAGES_HOST, and the host it names must be same site as
+ * the public URL: a team host derives one from the hostname it already knows unless the operator names it.
+ */
+test('team settings give the host a pages host on the public URL\'s site, keep an operator\'s, and refuse to guess for an IP address',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-team-pages-'));
+ try{
+  const file=join(directory,'server.env'),secret='AUTH__SECRET='+'s'.repeat(48)+'\n',login='EMAIL__RESEND_API_KEY=re_test_key\nEMAIL__FROM=Team <team@example.test>\n';
+  const shape=(origin:string,host='0.0.0.0')=>`APP__HOST=${host}\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=${origin}\n`+secret;
+  const pages=async(text:string)=>{await writeFile(file,text);return (await teamSettings(file,{APP__PAGES_HOST:'inherited.example.test'})).env.APP__PAGES_HOST;};
+  assert.equal(await pages(shape('http://127.0.0.1:7445','127.0.0.1')),'lvh.me');
+  assert.equal(await pages(shape('http://localhost:7445','127.0.0.1')),'lvh.me');
+  assert.equal(await pages(shape('http://[::1]:7445','::1')),'lvh.me');
+  assert.equal(await pages(shape('http://app.lvh.me:7445','127.0.0.1')),'lvh.me');
+  assert.equal(await pages(shape('https://Team.Example.test')+login),'pages.team.example.test');
+  assert.equal(await pages(shape('https://team.example.test')+login+'APP__PAGES_HOST=docs.example.test\n'),'docs.example.test');
+  await writeFile(file,shape('https://203.0.113.7')+login);
+  await assert.rejects(teamSettings(file),/IP address.*APP__PAGES_HOST/);
+  await writeFile(file,shape('https://203.0.113.7')+login+'APP__PAGES_HOST=pages.example.test\n');
+  assert.equal((await teamSettings(file)).env.APP__PAGES_HOST,'pages.example.test');
+  // A published origin tells the operator which names DNS and TLS must cover; a loopback one needs nothing.
+  await writeFile(file,shape('https://team.example.test')+login);
+  const published=serverInstructions(await teamSettings(file));
+  assert.ok(published.some(line=>line.includes('https://<id>.pages.team.example.test')&&line.includes('*.pages.team.example.test')),published.join('\n'));
+  await writeFile(file,shape('http://127.0.0.1:7445','127.0.0.1'));
+  assert.ok(!serverInstructions(await teamSettings(file)).some(line=>line.includes('<id>.')));
  }finally{await rm(directory,{recursive:true,force:true});}
 });
 test('startup instructions name the host teammates set, the installer, and where login codes appear',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'afbin-team-instructions-'));
  try{
   const file=join(directory,'server.env'),secret='AUTH__SECRET='+'s'.repeat(48)+'\n';
-  await writeFile(file,'APP__HOST=127.0.0.1\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=http://127.0.0.1:7445\n'+secret);
+  await writeFile(file,'APP__HOST=127.0.0.1\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=http://app.lvh.me:7445\n'+secret);
   const single=await teamSettings(file),local=serverInstructions(single);
   assert.ok(local.every(line=>!line.includes('\n')),'one line each');
-  assert.ok(local.some(line=>line.includes('afbin config set host http://127.0.0.1:7445')),local.join('\n'));
-  assert.ok(local.some(line=>line.includes('curl -fsSL http://127.0.0.1:7445/chat/install.sh | sh')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('afbin config set host http://app.lvh.me:7445')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('curl -fsSL http://app.lvh.me:7445/chat/install.sh | sh')),local.join('\n'));
   assert.ok(local.some(line=>line.includes('[dev-mail] otp')&&line.includes(single.env.EMAIL__DEV_OUTBOX_PATH!)),local.join('\n'));
   const network='APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://artifacts.example.test\n';
   await writeFile(file,network+'EMAIL__RESEND_API_KEY=re_test_key\nEMAIL__FROM=Team <team@example.test>\n'+secret);
@@ -193,7 +226,9 @@ test('first serve creates private persistent operator settings without client de
   const again=await prepareServe({...options,port:8124,dbUrl:'postgres://localhost/app'});
   assert.equal(await readFile(again.config,'utf8'),bytes);
   const settings=await teamSettings(again.config,{},again.overrides);
-  assert.equal(settings.port,8124);assert.equal(settings.origin,'http://127.0.0.1:8124');
+  // The generated public URL is an lvh.me name, same site with the documents' lvh.me origins, and follows --port.
+  assert.match(bytes,/^APP__PUBLIC_BASE_URL=http:\/\/app\.lvh\.me:8123$/m);
+  assert.equal(settings.port,8124);assert.equal(settings.origin,'http://app.lvh.me:8124');assert.equal(settings.env.APP__PAGES_HOST,'lvh.me');
   assert.equal(settings.env.DATABASE_URL,'postgres://localhost/app');
   await assert.rejects(stat(join(home,'.artifactbin/config.json')),{code:'ENOENT'});
  }finally{await rm(home,{recursive:true,force:true});}

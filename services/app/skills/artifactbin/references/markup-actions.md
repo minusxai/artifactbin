@@ -2,16 +2,13 @@
 name: markup-actions
 description: DataTable row action menus and row-scoped buttons.
 ---
+## Read first
+
+A Popover inside a Column holds `<Button run="$mutation">`; `$_row` scope
+survives the nesting. A button-only Column still needs a query column:
+`'' as action`.
+
 ## Row action menus
-
-Put a Popover inside a Column and use a Button with `run="$mutation"`.
-The trigger label and action retain `$_row` scope through the nested components;
-portaled controls such as Select retain their row context too. A button-only
-Column still needs a column in the query result: `'' as action` supplies it.
-
-This runnable example uses temporary local rows. Reload resets them. For saved
-tasks, `<Import name="tasks_data" src="ref:<datasetId>" />`, read and write
-`tasks_data.rows`, and keep the same row guard and `expectedAffected={1}`.
 
 ```jsx
 <Helmet>
@@ -36,8 +33,6 @@ tasks, `<Import name="tasks_data" src="ref:<datasetId>" />`, read and write
 </DataTable>
 ```
 
-PopoverContent currently renders inline; it is not the Select menu's body portal.
-Check an action menu near the edges of its actual scroll container before
-shipping. A Button captures the clicked row and reports pending/error state;
-it does not supply `$_value`. See [row actions](markup-repeat.md).
-
+PopoverContent renders inline, not portaled: check it near the edges of its
+scroll container. For saved rows, write `tasks_data.rows` from an `<Import>`.
+See [row actions](markup-repeat.md).

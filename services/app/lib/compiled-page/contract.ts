@@ -22,7 +22,6 @@ import type { CompiledDataflow, CompiledReads } from '@/lib/story/data/compiled-
 import type { Scalar } from '@/lib/story/data/dataflow';
 import type { RefDataMap } from '@/lib/story/data/ref-data';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { ReaderChromeInput } from '@/lib/story/reader/reader-chrome';
 import type { OutlineEntry } from '@/lib/story-runtime/outline';
 import type { ServedResults, StoredMermaidImage, StoryViewer } from '@/lib/story-runtime/contract';
 import type { AgentDiscovery } from '@/lib/serving';
@@ -196,7 +195,7 @@ export interface CompiledPage {
    * path); kept as the refusal's door.
    */
   unported: string[];
-  /** Components rendered statically whose BEHAVIOUR is not ported yet (`Iframe`, `DeckGL`): served, reported. */
+  /** Components rendered statically whose BEHAVIOUR is not ported yet (`DeckGL`): served, reported. */
   partial: string[];
   /**
    * The version's author script, or null. DATA, never code of this page: the assembler writes it into
@@ -449,15 +448,9 @@ export interface AssembleOverlay {
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay (lib/story/styles/markup-csp paths); absent on a capture. */
-  doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
+  doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string; direct?: true } | null;
   /** A capture's verified image import door, even though it has no query or mutation door. */
   assetsUrl?: string;
-  /**
-   * The managed `<Iframe>`'s asset door for this request (islands contract `IslandPageData.managedAssets`):
-   * beside `doors` because a capture has no doors and still resolves its frames' assets with its key.
-   * Absent or null without an asset origin.
-   */
-  managedAssets?: { origin: string; resolveUrl: string } | null;
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
   readOnly?: string | null;
   /** The imports the page may hold for the door it queries through (IslandPageData.hold); absent: none. */
@@ -489,14 +482,6 @@ export interface AssembleInput {
   /** The guest snapshot for these inputs, or null (the cold path ran inside its budget, or nothing is servable). */
   snapshot: DataSnapshot | null;
   overlay: AssembleOverlay;
-  /** Reader chrome to render on the server (`/a/:id`, a domain post); null for `/raw`, captures, the offline file. */
-  chrome: ReaderChromeInput | null;
-  /**
-   * Load the Solid app on idle (or first chrome interaction) and hand it the
-   * island document (§7): the SPA's entry and the chunks to `modulepreload`
-   * (server/reader-preloads). Null for `/raw` and every path without the SPA.
-   */
-  spa: { entry: string; preload: readonly string[] } | null;
   /** Where the shared chunks are (the manifest), so the assembler emits `modulepreload`s and the boot import. */
   build: CompilerBuild;
   /**
@@ -510,9 +495,15 @@ export interface AssembleInput {
    * island runtime holds the document's live stream only when both are present. Null or absent on a
    * capture, an archived version and the offline file.
    */
-  live?: { id: string; editId: string } | null;
+  live?: { id: string; editId: string; direct?: boolean } | null;
   /**
-   * A line of page furniture after the story root (and after the chrome), never inside it: a domain
+   * A document served on its OWN origin (APP__PAGES_HOST) names the app origin that frames it, as
+   * `data-mx-app-origin` on `<html>`: the frame side of the app bridge reads it before any author code
+   * runs, and refuses every message from anywhere else.
+   */
+  appOrigin?: string | null;
+  /**
+   * A line of page furniture after the story root, never inside it: a domain
    * post's attribution back to the app. Its CSS joins the head's styles.
    */
   footer?: { html: string; css: string } | null;
@@ -559,7 +550,5 @@ export const ISLAND_DATA_ID = 'mx-story-data';
 export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
 /** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */
 export const CHART_STATE_ATTR = 'data-mx-chart-state';
-/** The idle loader's marker on the SPA's script tag, so gates can tell the HTML-first page from the former client-rendered one. */
-export const SPA_IDLE_ATTR = 'data-mx-spa-idle';
 /** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
 export const READER_READY_ATTR = 'data-mx-ready';

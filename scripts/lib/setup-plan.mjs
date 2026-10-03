@@ -9,10 +9,11 @@
  * `scripts/__tests__/setup-plan.test.mjs` fails when the two have drifted.
  */
 
-const DEFAULT_PUBLIC_URL = 'http://localhost:3030';
+// The app on the development pages host's site (`*.lvh.me` is loopback in public DNS): documents frame on <hex>.lvh.me.
+const DEFAULT_PUBLIC_URL = 'http://app.lvh.me:3030';
 
 // Generated from .env.example — do not hand-edit; run `npm run generate:env-snapshot`.
-const ENV_EXAMPLE_BASE64 = 'IyBSdW4gYG5wbSBydW4gc2V0dXBgIHRvIGdlbmVyYXRlIGEgc2VjdXJlIGAuZW52YCBmb3IgdGhpcyBjaGVja291dC4KCiMgRW5hYmxlcyBvcGVyYXRpb25hbCB0b2tlbiBtaW50L3Jldm9rZSBlbmRwb2ludHMuIEdlbmVyYXRlIHdpdGg6IG9wZW5zc2wgcmFuZCAtYmFzZTY0IDMyCkFETUlOX19TRUNSRVQ9CgojIFNpZ25zIGxvZ2luIHNlc3Npb25zLiBHZW5lcmF0ZSB3aXRoOiBvcGVuc3NsIHJhbmQgLWJhc2U2NCAzMgpBVVRIX19TRUNSRVQ9CgojIFVuc2V0IHVzZXMgZW1iZWRkZWQgUEdMaXRlIGF0IC4vZGF0YS9wZ2xpdGUuIEFsc28gYWNjZXB0cyBwZ2xpdGU6Ly9tZW1vcnkgb3IgUG9zdGdyZXMuCiMgREFUQUJBU0VfVVJMPXBnbGl0ZTovLy4vZGF0YS9wZ2xpdGUKCiMgUHVibGljIG9yaWdpbiBhbmQgbGlzdGVuaW5nIHBvcnQuIEFQUF9fSE1SX1BPUlQgZGVmYXVsdHMgdG8gQVBQX19QT1JUICsgMS4KQVBQX19QVUJMSUNfQkFTRV9VUkw9aHR0cDovL2xvY2FsaG9zdDozMDMwCiMgT3B0aW9uYWwgZGVkaWNhdGVkIG9yaWdpbiB0aGF0IHNlcnZlcyBvbmx5IGFub255bW91cyBjYWNoZWQgYnl0ZXMgYXQgL2Fzc2V0cy8qLgojIFByb2R1Y3Rpb24gcmVxdWlyZXMgYSBkaXN0aW5jdCBIVFRQUyBob3N0bmFtZTsgSFRUUCBpcyBhY2NlcHRlZCBvbmx5IG9uIGxvb3BiYWNrLgojIEFQUF9fQVNTRVRTX09SSUdJTj1odHRwczovL2Fzc2V0cy5leGFtcGxlLmNvbQojIE90aGVyIG9yaWdpbnMgdGhpcyBzYW1lIGRlcGxveW1lbnQgYW5zd2VycyBhdCAoYSBtYXJrZXRpbmcgaG9zdG5hbWUgdGhhdCBwcm94aWVzCiMgaGVyZSwgYSBwcmV2aW91cyBuYW1lKS4gQ29tbWEtc2VwYXJhdGVkOyBIVFRQUywgb3IgSFRUUCBvbiBsb29wYmFjazsgbm8gcGF0aCBvcgojIGNyZWRlbnRpYWxzLiBTZXJ2ZWQgYXQgR0VUIC9hcGkvc2VydmVyLCBzbyBhZmJpbiB0cmVhdHMgYSBsaW5rIG9yIGEgZm9sZGVyIGZyb20KIyBlaXRoZXIgbmFtZSBhcyB0aGlzIHNlcnZlcjsgcmVxdWVzdHMgYW5kIGNyZWRlbnRpYWxzIHN0aWxsIGdvIHRvCiMgQVBQX19QVUJMSUNfQkFTRV9VUkwgYWxvbmUuIEEgbWFsZm9ybWVkIGVudHJ5IHJlZnVzZXMgdGhlIGJvb3QuCiMgQVBQX19BTElBU19PUklHSU5TPWh0dHBzOi8vZXhhbXBsZS5jb20KQVBQX19QT1JUPTMwMzAKIyBBUFBfX0hPU1Q9CkFQUF9fSE1SX1BPUlQ9CgojIFBlci10b2tlbiBhcnRpZmFjdCBjYXA7IDAgZGlzYWJsZXMgdGhlIGNhcC4KUVVPVEFfX0FSVElGQUNUU19QRVJfVE9LRU49MTAwMAoKIyBTdG9yZWQgYXNzZXRzIHBlciBhY2NvdW50ICh1cGxvYWRzICsgVVJMcyBpbXBvcnRlZCBmaXJzdCksIDEwIEdCOyBhbm9ueW1vdXMgdG9rZW5zIGhhdmUgdGhlaXIgb3duIGNhcC4gMCBkaXNhYmxlcy4KIyBBU1NFVFNfX01BWF9CWVRFU19QRVJfVE9LRU49MTAwMDAwMDAwMDAKCiMgTG9jYWwgZGV2ZWxvcG1lbnQgd3JpdGVzIGxvZ2luIG1haWwgdG8gLmFydGlmYWN0YmluL2Rldi1tYWlsLmpzb25sOyByZWFkIGEgY29kZSB3aXRoOgojICAgbnBtIHJ1biBkZXY6b3RwIC0tIHlvdUBleGFtcGxlLmNvbQojIE9wdGlvbmFsIG92ZXJyaWRlIGZvciBzdGFuZGFsb25lIHByb2Nlc3NlcyBhbmQgdGVzdCBvcmNoZXN0cmF0aW9uLgojIEVNQUlMX19ERVZfT1VUQk9YX1BBVEg9CiMgUHVibGljIGRlcGxveW1lbnRzIHJlcXVpcmUgYSBSZXNlbmQga2V5IGFuZCB2ZXJpZmllZCBzZW5kZXIuCkVNQUlMX19SRVNFTkRfQVBJX0tFWT0KRU1BSUxfX0ZST009YXJ0aWZhY3RiaW4gPGxvZ2luQGV4YW1wbGUuY29tPgoKIyBVbnNldCBTM19VUkwgc3RvcmVzIG9iamVjdHMgbG9jYWxseS4gUGVyY2VudC1lbmNvZGUgY3JlZGVudGlhbHMgaW4gUzMgVVJMcy4KIyBTM19VUkw9czM6Ly9LRVk6U0VDUkVUQHMzLnJlZ2lvbi5hbWF6b25hd3MuY29tL2J1Y2tldC9wcmVmaXg/cmVnaW9uPXJlZ2lvbgpPQkpFQ1RfU1RPUkVfX0xPQ0FMX0RJUj0uYXJ0aWZhY3Qtb2JqZWN0cwoKSU1BR0VTX19NQVhfQllURVM9NTAwMDAwMDAKUERGX19NQVhfQllURVM9NTAwMDAwMDAKRklMRVNfX01BWF9CWVRFUz01MDAwMDAwMAoKIyBXZWIgaW1wb3J0cyBibG9jayBwcml2YXRlIG5ldHdvcmtzIGJ5IGRlZmF1bHQuCldFQl9JTkdFU1RfX0FMTE9XX1BSSVZBVEU9MApXRUJfSU5HRVNUX19USU1FT1VUX01TPTEwMDAwCldFQl9JTkdFU1RfX01BWF9QRVJfSE9VUj0zMDAKV0VCX0lOR0VTVF9fTUFYX0lNQUdFU19QRVJfUFVCTElTSD04CldFQl9JTkdFU1RfX01BWF9BU1NFVFNfUEVSX1BVQkxJU0g9MTYKClNRTF9fTUFYX1JPV1M9MTAwMDAKU1FMX19NQVhfUVVFUllfUk9XUz0xMDAwMApTUUxfX1FVRVJZX1RJTUVPVVRfTVM9NTAwMAoKIyBOdW1iZXIgb2YgdHJ1c3RlZCBmb3J3YXJkaW5nIGhvcHMgdXNlZCB0byBpbnRlcnByZXQgY2xpZW50IGFkZHJlc3Nlcy4KSFRUUF9fVFJVU1RFRF9QUk9YWV9IT1BTPTEKCiMgT3B0aW9uYWwgZGVwbG95bWVudCBjb250cm9scy4KIyBBUlRJRkFDVFNfX0FMTE9XX1BVQkxJQz0xCiMgQ3VzdG9tIGRvbWFpbnMgZm9yIHByb2ZpbGVzOiB0aGUgRE5TIHRhcmdldCBob3N0bmFtZSB1c2VycyBwb2ludCB0aGVpciBkb21haW4gYXQKIyAoYSBDTkFNRS9BTElBUyB0byBpdCwgb3IgYW4gQSByZWNvcmQgdG8gaXRzIGFkZHJlc3MpLiBVbnNldCBvciBlbXB0eSB0dXJucyBvZmYKIyBhdHRhY2hpbmcgYW5kIHZlcmlmeWluZyBvbmx5OyB2ZXJpZmllZCBkb21haW5zIGtlZXAgYmVpbmcgc2VydmVkIGVpdGhlciB3YXkuCiMgRkxBR19fQ1VTVE9NX0RPTUFJTlM9ZG9tYWlucy5leGFtcGxlLmNvbQojIEFOQUxZVElDU19fU0VDUkVUPQoKIyBTcGxpdC1zZXJ2aWNlIGRlcGxveW1lbnQuIElOVEVSTkFMX19TRVJWSUNFX1NFQ1JFVCBtdXN0IG1hdGNoIGFjcm9zcyBhcHAsIFNRTCwgYnJvd3NlciBhbmQgZXZlbnRzLgojIENPTlRSQUNUX19BQ1RPUl9TRUNSRVQ9CiMgQlJPV1NFUl9fU0VSVklDRV9VUkw9aHR0cDovL2Jyb3dzZXI6ODA4MAojIE9wdGlvbmFsIGRpcmVjdCBleHBvcnQgdXBsb2FkOyBleGFjdCBTMyBvcmlnaW4gYW5kIGV4cG9ydCBvYmplY3QgcHJlZml4IG9ubHkuCiMgQlJPV1NFUl9fVVBMT0FEX09SSUdJTj1odHRwczovL2J1Y2tldC5zMy51cy13ZXN0LTEuYW1hem9uYXdzLmNvbQojIEJST1dTRVJfX1VQTE9BRF9QUkVGSVg9L2FydGlmYWN0cy9leHBvcnRzL29iamVjdHMvCiMgSW50ZXJuYWwtb25seSBicm93c2VycyByZWFjaCBTMyB0aHJvdWdoIHRoZSBzY29wZWQgdXBsb2FkIGdhdGV3YXkuCiMgQlJPV1NFUl9fVVBMT0FEX1BST1hZX1VSTD1odHRwOi8vdXBsb2FkLWdhdGV3YXk6ODA4MAojIEJyb3dzZXIgc2Vzc2lvbnMgcmVxdWlyZSBMaW51eCBidWJibGV3cmFwIHdpdGggdW5wcml2aWxlZ2VkIHVzZXIgbmFtZXNwYWNlcy4KIyBERVZFTE9QTUVOVCBPTkxZLiBCUk9XU0VSX19TQU5EQk9YPW5vbmUgcnVucyB0aGUgc2Vzc2lvbiB3b3JrZXIgYXMgYSBwbGFpbiBjaGlsZAojIHByb2Nlc3M6IG5vIGJ1YmJsZXdyYXAsIG5vIGNncm91cCwgTk8gT1MgY29udGFpbm1lbnQg4oCUIGEgc2Vzc2lvbiBzY3JpcHQgdGhlbiBoYXMgdGhlCiMgd2hvbGUgbWFjaGluZSwgdGhpcyBjaGVja291dCBhbmQgdGhlIG5ldHdvcmsuIEl0IGV4aXN0cyBzbyBsaXZlIHNlc3Npb25zIHJ1biBvbiBhCiMgbWFjT1MgZGV2IGhvc3QgYXQgYWxsOyBgbnBtIHJ1biBkZXZgIGFscmVhZHkgZGVmYXVsdHMgaXQgdGhlcmUuIEl0IGlzIHJlZnVzZWQgd2hlbgojIE5PREVfRU5WPXByb2R1Y3Rpb24sIGFuZCBhbnkgb3RoZXIgdmFsdWUgaXMgcmVmdXNlZCBvdXRyaWdodC4gTmV2ZXIgc2V0IGl0IG9uIGEgc2VydmVyLgojIEJST1dTRVJfX1NBTkRCT1g9bm9uZQojIFNwbGl0IGJyb3dzZXIgc2VydmljZTogdHJ1c3RlZCBhcHAgVVJMOyBhbHNvIHNldCBBUFBfX1BVQkxJQ19CQVNFX1VSTCBhbmQgQ09OVFJBQ1RfX0FDVE9SX1NFQ1JFVCB0aGVyZS4KIyBCUk9XU0VSX19TRVNTSU9OX0FQUF9VUkw9aHR0cDovL2FwcDo4MDgwCiMgV3JpdGFibGUgZGVsZWdhdGVkIGNncm91cCB2MiBzdWJ0cmVlIHdpdGggY3B1LCBtZW1vcnkgYW5kIHBpZHMgY29udHJvbGxlcnMgZW5hYmxlZC4KIyBCUk9XU0VSX19TRVNTSU9OX0NHUk9VUF9ST09UPS9zeXMvZnMvY2dyb3VwL2FmYmluLXNlc3Npb25zCiMgTGl2ZSBicm93c2VyIHNlc3Npb25zIHRoaXMgc2VydmljZSBob2xkcywgc2hhcmVkIGJ5IGV2ZXJ5IG93bmVyLCBhbmQgaG93IG1hbnkgb25lCiMgY3JlZGVudGlhbCBtYXkgaG9sZC4gV2hvbGUgbnVtYmVycyBvZiBhdCBsZWFzdCAxOyBlYWNoIHNlc3Npb24gc3RpbGwgZ2V0cyAxIEdpQi4KIyBCUk9XU0VSX19TRVNTSU9OX01BWD0yCiMgQlJPV1NFUl9fU0VTU0lPTl9NQVhfUEVSX0FDVE9SPTIKIyBJTlRFUk5BTF9fU0VSVklDRV9TRUNSRVQ9CiMgU1FMX19TRVJWSUNFX1VSTD1odHRwOi8vc3FsOjgwODAKIyBFdmVudHMgdXNlIHRoZSBsb2NhbCBkYXRhYmFzZSB1bmxlc3MgYW4gSFRUUCBzZXJ2aWNlIFVSTCBpcyBjb25maWd1cmVkLgojIEVWRU5UU19fU0VSVklDRV9VUkw9aHR0cDovL2V2ZW50czo4MDgwCiMgRVZFTlRTX19TQ0hFTUE9ZXZlbnRzCkVYUE9SVF9fSU5URVJOQUxfT1JJR0lOPQoKIyBPcHRpb25hbCBkYXRhYmFzZSBzY2hlbWEgbmFtZXMuCiMgQVVUSF9fU0NIRU1BPWF1dGgKIyBBUFBfX1NDSEVNQT1hcHAKCiMgT3B0aW9uYWwgR29vZ2xlIGxvZ2luLgojIEFVVEhfX0dPT0dMRV9DTElFTlRfSUQ9CiMgQVVUSF9fR09PR0xFX0NMSUVOVF9TRUNSRVQ9CgojIE9wdGlvbmFsIE9JREMgbG9naW4uIFVzZSBleHBsaWNpdCBlbmRwb2ludHMgb3IgZGlzY292ZXJ5LCBub3QgYm90aC4KIyBBVVRIX19PSURDX1BST1ZJREVSX0lEPW9pZGMKIyBBVVRIX19PSURDX0NMSUVOVF9JRD0KIyBBVVRIX19PSURDX0NMSUVOVF9TRUNSRVQ9CiMgQVVUSF9fT0lEQ19BVVRIT1JJWkFUSU9OX1VSTD0KIyBBVVRIX19PSURDX1RPS0VOX1VSTD0KIyBBVVRIX19PSURDX1VTRVJJTkZPX1VSTD0KIyBBVVRIX19PSURDX0RJU0NPVkVSWV9VUkw9CgoKIyBQZXJtaXQgUG9zdGdyZXMgY29ubmVjdGlvbnMgdG8gbG9vcGJhY2svcHJpdmF0ZSBuZXR3b3JrcyAoc2VsZi1ob3N0ZWQgZGVwbG95bWVudHMgb25seSkuCiMgTGluay1sb2NhbCwgbWV0YWRhdGEsIG11bHRpY2FzdCBhbmQgdW5zcGVjaWZpZWQgZGVzdGluYXRpb25zIHJlbWFpbiBibG9ja2VkLgpEQVRBU0VUX19BTExPV19QUklWQVRFX05FVFdPUktTPWZhbHNlCiMgT3B0aW9uYWwgY29tbWEtc2VwYXJhdGVkIGxpdGVyYWwgRE5TIHNlcnZlciBJUHMgZm9yIGRhdGFzZXQgUG9zdGdyZVNRTCBob3N0IHJlc29sdXRpb24gb25seS4KIyBFbXB0eSB1c2VzIHRoZSBvcGVyYXRpbmcgc3lzdGVtIHJlc29sdmVyLgpEQVRBU0VUX19ETlNfU0VSVkVSUz0KCiMgQ0xJLW9ubHkgc2VydmljZSBtaXJyb3I6IGV4cG9ydCB0aGlzIGluIHRoZSBzaGVsbCBydW5uaW5nIGFmYmluOyBjaGVja3N1bXMgcmVtYWluIHBpbm5lZC4KIyBBbiBIVFRQUyBiYXNlIFVSTCAob3B0aW9uYWwgcGF0aCBwcmVmaXgpLCBvciBIVFRQIGxvb3BiYWNrOyBzZXJ2ZXMgYWZiaW4tdlZFUlNJT04vYWZiaW4tc3FsLU9TLUFSQ0guZ3ouCiMgQ0xJX19TRVJWSUNFX0JBU0VfVVJMPQoKIyBDTEktb25seTogZXhwb3J0ZWQgc2V0dGluZ3MgZm9yIG1hbmFnZWQgc3RhbmRhbG9uZSBiYWNrZ3JvdW5kIHVwZGF0ZXMuCiMgU2V0IHRvIDAgdG8gZGlzYWJsZSBhdXRvbWF0aWMgZGlzY292ZXJ5IGFuZCBpbnN0YWxsYXRpb24gKGV4cGxpY2l0IGFmYmluIHVwZGF0ZSBzdGlsbCB3b3JrcykuCiMgQ0xJX19BVVRPX1VQREFURT0xCiMgQSB2ZXJzaW9uIHBpbiBkaXNhYmxlcyBhdXRvbWF0aWMgdXBkYXRlcyBhbmQgcmVzdHJpY3RzIGV4cGxpY2l0IHVwZGF0ZXMgdG8gdGhhdCByZWxlYXNlLgojIENMSV9fVkVSU0lPTl9QSU49Cg==';
+const ENV_EXAMPLE_BASE64 = 'IyBSdW4gYG5wbSBydW4gc2V0dXBgIHRvIGdlbmVyYXRlIGEgc2VjdXJlIGAuZW52YCBmb3IgdGhpcyBjaGVja291dC4KCiMgRW5hYmxlcyBvcGVyYXRpb25hbCB0b2tlbiBtaW50L3Jldm9rZSBlbmRwb2ludHMuIEdlbmVyYXRlIHdpdGg6IG9wZW5zc2wgcmFuZCAtYmFzZTY0IDMyCkFETUlOX19TRUNSRVQ9CgojIFNpZ25zIGxvZ2luIHNlc3Npb25zLiBHZW5lcmF0ZSB3aXRoOiBvcGVuc3NsIHJhbmQgLWJhc2U2NCAzMgpBVVRIX19TRUNSRVQ9CgojIFVuc2V0IHVzZXMgZW1iZWRkZWQgUEdMaXRlIGF0IC4vZGF0YS9wZ2xpdGUuIEFsc28gYWNjZXB0cyBwZ2xpdGU6Ly9tZW1vcnkgb3IgUG9zdGdyZXMuCiMgREFUQUJBU0VfVVJMPXBnbGl0ZTovLy4vZGF0YS9wZ2xpdGUKCiMgUHVibGljIG9yaWdpbiBhbmQgbGlzdGVuaW5nIHBvcnQuIEFQUF9fSE1SX1BPUlQgZGVmYXVsdHMgdG8gQVBQX19QT1JUICsgMS4KQVBQX19QVUJMSUNfQkFTRV9VUkw9aHR0cDovL2FwcC5sdmgubWU6MzAzMAojIE9wdGlvbmFsIGRlZGljYXRlZCBvcmlnaW4gdGhhdCBzZXJ2ZXMgb25seSBhbm9ueW1vdXMgY2FjaGVkIGJ5dGVzIGF0IC9hc3NldHMvKi4KIyBQcm9kdWN0aW9uIHJlcXVpcmVzIGEgZGlzdGluY3QgSFRUUFMgaG9zdG5hbWU7IEhUVFAgaXMgYWNjZXB0ZWQgb25seSBvbiBsb29wYmFjay4KIyBBUFBfX0FTU0VUU19PUklHSU49aHR0cHM6Ly9hc3NldHMuZXhhbXBsZS5jb20KIyBPdGhlciBvcmlnaW5zIHRoaXMgc2FtZSBkZXBsb3ltZW50IGFuc3dlcnMgYXQgKGEgbWFya2V0aW5nIGhvc3RuYW1lIHRoYXQgcHJveGllcwojIGhlcmUsIGEgcHJldmlvdXMgbmFtZSkuIENvbW1hLXNlcGFyYXRlZDsgSFRUUFMsIG9yIEhUVFAgb24gbG9vcGJhY2s7IG5vIHBhdGggb3IKIyBjcmVkZW50aWFscy4gU2VydmVkIGF0IEdFVCAvYXBpL3NlcnZlciwgc28gYWZiaW4gdHJlYXRzIGEgbGluayBvciBhIGZvbGRlciBmcm9tCiMgZWl0aGVyIG5hbWUgYXMgdGhpcyBzZXJ2ZXI7IHJlcXVlc3RzIGFuZCBjcmVkZW50aWFscyBzdGlsbCBnbyB0bwojIEFQUF9fUFVCTElDX0JBU0VfVVJMIGFsb25lLiBBIG1hbGZvcm1lZCBlbnRyeSByZWZ1c2VzIHRoZSBib290LgojIEFQUF9fQUxJQVNfT1JJR0lOUz1odHRwczovL2V4YW1wbGUuY29tCiMgUkVRVUlSRUQuIEV2ZXJ5IGRvY3VtZW50IGlzIHNlcnZlZCBvbiBpdHMgb3duIG9yaWdpbiwgPGhleCBpZD4uPHRoaXMgaG9zdD4sIGZyYW1lZCBieSB0aGUgYXBwIHBhZ2UuCiMgQSBiYXJlIGhvc3RuYW1lIHVuZGVyIHRoZSBhcHAncyByZWdpc3RyYWJsZSBkb21haW4gKHNhbWUgc2l0ZSksIGUuZy4gcGFnZXMuZXhhbXBsZS5jb207CiMgc2NoZW1lIGFuZCBwb3J0IGZvbGxvdyBBUFBfX1BVQkxJQ19CQVNFX1VSTC4gVW5zZXQgcmVmdXNlcyB0aGUgYm9vdC4KIyBEZXZlbG9wbWVudDogbHZoLm1lLCBicm93c2luZyB0aGUgYXBwIGF0IGh0dHA6Ly9hcHAubHZoLm1lOjxwb3J0PiAobnBtIHJ1biBzZXR1cCB3cml0ZXMgYm90aCkuCkFQUF9fUEFHRVNfSE9TVD1sdmgubWUKQVBQX19QT1JUPTMwMzAKIyBBUFBfX0hPU1Q9CkFQUF9fSE1SX1BPUlQ9CgojIFBlci10b2tlbiBhcnRpZmFjdCBjYXA7IDAgZGlzYWJsZXMgdGhlIGNhcC4KUVVPVEFfX0FSVElGQUNUU19QRVJfVE9LRU49MTAwMAoKIyBTdG9yZWQgYXNzZXRzIHBlciBhY2NvdW50ICh1cGxvYWRzICsgVVJMcyBpbXBvcnRlZCBmaXJzdCksIDEwIEdCOyBhbm9ueW1vdXMgdG9rZW5zIGhhdmUgdGhlaXIgb3duIGNhcC4gMCBkaXNhYmxlcy4KIyBBU1NFVFNfX01BWF9CWVRFU19QRVJfVE9LRU49MTAwMDAwMDAwMDAKCiMgTG9jYWwgZGV2ZWxvcG1lbnQgd3JpdGVzIGxvZ2luIG1haWwgdG8gLmFydGlmYWN0YmluL2Rldi1tYWlsLmpzb25sOyByZWFkIGEgY29kZSB3aXRoOgojICAgbnBtIHJ1biBkZXY6b3RwIC0tIHlvdUBleGFtcGxlLmNvbQojIE9wdGlvbmFsIG92ZXJyaWRlIGZvciBzdGFuZGFsb25lIHByb2Nlc3NlcyBhbmQgdGVzdCBvcmNoZXN0cmF0aW9uLgojIEVNQUlMX19ERVZfT1VUQk9YX1BBVEg9CiMgUHVibGljIGRlcGxveW1lbnRzIHJlcXVpcmUgYSBSZXNlbmQga2V5IGFuZCB2ZXJpZmllZCBzZW5kZXIuCkVNQUlMX19SRVNFTkRfQVBJX0tFWT0KRU1BSUxfX0ZST009YXJ0aWZhY3RiaW4gPGxvZ2luQGV4YW1wbGUuY29tPgoKIyBVbnNldCBTM19VUkwgc3RvcmVzIG9iamVjdHMgbG9jYWxseS4gUGVyY2VudC1lbmNvZGUgY3JlZGVudGlhbHMgaW4gUzMgVVJMcy4KIyBTM19VUkw9czM6Ly9LRVk6U0VDUkVUQHMzLnJlZ2lvbi5hbWF6b25hd3MuY29tL2J1Y2tldC9wcmVmaXg/cmVnaW9uPXJlZ2lvbgpPQkpFQ1RfU1RPUkVfX0xPQ0FMX0RJUj0uYXJ0aWZhY3Qtb2JqZWN0cwoKSU1BR0VTX19NQVhfQllURVM9NTAwMDAwMDAKUERGX19NQVhfQllURVM9NTAwMDAwMDAKRklMRVNfX01BWF9CWVRFUz01MDAwMDAwMAoKIyBXZWIgaW1wb3J0cyBibG9jayBwcml2YXRlIG5ldHdvcmtzIGJ5IGRlZmF1bHQuCldFQl9JTkdFU1RfX0FMTE9XX1BSSVZBVEU9MApXRUJfSU5HRVNUX19USU1FT1VUX01TPTEwMDAwCldFQl9JTkdFU1RfX01BWF9QRVJfSE9VUj0zMDAKClNRTF9fTUFYX1JPV1M9MTAwMDAKU1FMX19NQVhfUVVFUllfUk9XUz0xMDAwMApTUUxfX1FVRVJZX1RJTUVPVVRfTVM9NTAwMAoKIyBOdW1iZXIgb2YgdHJ1c3RlZCBmb3J3YXJkaW5nIGhvcHMgdXNlZCB0byBpbnRlcnByZXQgY2xpZW50IGFkZHJlc3Nlcy4KSFRUUF9fVFJVU1RFRF9QUk9YWV9IT1BTPTEKCiMgT3B0aW9uYWwgZGVwbG95bWVudCBjb250cm9scy4KIyBBUlRJRkFDVFNfX0FMTE9XX1BVQkxJQz0xCiMgQ3VzdG9tIGRvbWFpbnMgZm9yIHByb2ZpbGVzOiB0aGUgRE5TIHRhcmdldCBob3N0bmFtZSB1c2VycyBwb2ludCB0aGVpciBkb21haW4gYXQKIyAoYSBDTkFNRS9BTElBUyB0byBpdCwgb3IgYW4gQSByZWNvcmQgdG8gaXRzIGFkZHJlc3MpLiBVbnNldCBvciBlbXB0eSB0dXJucyBvZmYKIyBhdHRhY2hpbmcgYW5kIHZlcmlmeWluZyBvbmx5OyB2ZXJpZmllZCBkb21haW5zIGtlZXAgYmVpbmcgc2VydmVkIGVpdGhlciB3YXkuCiMgRkxBR19fQ1VTVE9NX0RPTUFJTlM9ZG9tYWlucy5leGFtcGxlLmNvbQojIEFOQUxZVElDU19fU0VDUkVUPQoKIyBTcGxpdC1zZXJ2aWNlIGRlcGxveW1lbnQuIElOVEVSTkFMX19TRVJWSUNFX1NFQ1JFVCBtdXN0IG1hdGNoIGFjcm9zcyBhcHAsIFNRTCwgYnJvd3NlciBhbmQgZXZlbnRzLgojIENPTlRSQUNUX19BQ1RPUl9TRUNSRVQ9CiMgQlJPV1NFUl9fU0VSVklDRV9VUkw9aHR0cDovL2Jyb3dzZXI6ODA4MAojIE9wdGlvbmFsIGRpcmVjdCBleHBvcnQgdXBsb2FkOyBleGFjdCBTMyBvcmlnaW4gYW5kIGV4cG9ydCBvYmplY3QgcHJlZml4IG9ubHkuCiMgQlJPV1NFUl9fVVBMT0FEX09SSUdJTj1odHRwczovL2J1Y2tldC5zMy51cy13ZXN0LTEuYW1hem9uYXdzLmNvbQojIEJST1dTRVJfX1VQTE9BRF9QUkVGSVg9L2FydGlmYWN0cy9leHBvcnRzL29iamVjdHMvCiMgSW50ZXJuYWwtb25seSBicm93c2VycyByZWFjaCBTMyB0aHJvdWdoIHRoZSBzY29wZWQgdXBsb2FkIGdhdGV3YXkuCiMgQlJPV1NFUl9fVVBMT0FEX1BST1hZX1VSTD1odHRwOi8vdXBsb2FkLWdhdGV3YXk6ODA4MAojIEJyb3dzZXIgc2Vzc2lvbnMgcmVxdWlyZSBMaW51eCBidWJibGV3cmFwIHdpdGggdW5wcml2aWxlZ2VkIHVzZXIgbmFtZXNwYWNlcy4KIyBERVZFTE9QTUVOVCBPTkxZLiBCUk9XU0VSX19TQU5EQk9YPW5vbmUgcnVucyB0aGUgc2Vzc2lvbiB3b3JrZXIgYXMgYSBwbGFpbiBjaGlsZAojIHByb2Nlc3M6IG5vIGJ1YmJsZXdyYXAsIG5vIGNncm91cCwgTk8gT1MgY29udGFpbm1lbnQg4oCUIGEgc2Vzc2lvbiBzY3JpcHQgdGhlbiBoYXMgdGhlCiMgd2hvbGUgbWFjaGluZSwgdGhpcyBjaGVja291dCBhbmQgdGhlIG5ldHdvcmsuIEl0IGV4aXN0cyBzbyBsaXZlIHNlc3Npb25zIHJ1biBvbiBhCiMgbWFjT1MgZGV2IGhvc3QgYXQgYWxsOyBgbnBtIHJ1biBkZXZgIGFscmVhZHkgZGVmYXVsdHMgaXQgdGhlcmUuIEl0IGlzIHJlZnVzZWQgd2hlbgojIE5PREVfRU5WPXByb2R1Y3Rpb24sIGFuZCBhbnkgb3RoZXIgdmFsdWUgaXMgcmVmdXNlZCBvdXRyaWdodC4gTmV2ZXIgc2V0IGl0IG9uIGEgc2VydmVyLgojIEJST1dTRVJfX1NBTkRCT1g9bm9uZQojIFNwbGl0IGJyb3dzZXIgc2VydmljZTogdHJ1c3RlZCBhcHAgVVJMOyBhbHNvIHNldCBBUFBfX1BVQkxJQ19CQVNFX1VSTCwgQVBQX19QQUdFU19IT1NUIGFuZCBDT05UUkFDVF9fQUNUT1JfU0VDUkVUIHRoZXJlLgojIEJST1dTRVJfX1NFU1NJT05fQVBQX1VSTD1odHRwOi8vYXBwOjgwODAKIyBXcml0YWJsZSBkZWxlZ2F0ZWQgY2dyb3VwIHYyIHN1YnRyZWUgd2l0aCBjcHUsIG1lbW9yeSBhbmQgcGlkcyBjb250cm9sbGVycyBlbmFibGVkLgojIEJST1dTRVJfX1NFU1NJT05fQ0dST1VQX1JPT1Q9L3N5cy9mcy9jZ3JvdXAvYWZiaW4tc2Vzc2lvbnMKIyBMaXZlIGJyb3dzZXIgc2Vzc2lvbnMgdGhpcyBzZXJ2aWNlIGhvbGRzLCBzaGFyZWQgYnkgZXZlcnkgb3duZXIsIGFuZCBob3cgbWFueSBvbmUKIyBjcmVkZW50aWFsIG1heSBob2xkLiBXaG9sZSBudW1iZXJzIG9mIGF0IGxlYXN0IDE7IGVhY2ggc2Vzc2lvbiBzdGlsbCBnZXRzIDEgR2lCLgojIEJST1dTRVJfX1NFU1NJT05fTUFYPTIKIyBCUk9XU0VSX19TRVNTSU9OX01BWF9QRVJfQUNUT1I9MgojIElOVEVSTkFMX19TRVJWSUNFX1NFQ1JFVD0KIyBTUUxfX1NFUlZJQ0VfVVJMPWh0dHA6Ly9zcWw6ODA4MAojIEV2ZW50cyB1c2UgdGhlIGxvY2FsIGRhdGFiYXNlIHVubGVzcyBhbiBIVFRQIHNlcnZpY2UgVVJMIGlzIGNvbmZpZ3VyZWQuCiMgRVZFTlRTX19TRVJWSUNFX1VSTD1odHRwOi8vZXZlbnRzOjgwODAKIyBFVkVOVFNfX1NDSEVNQT1ldmVudHMKRVhQT1JUX19JTlRFUk5BTF9PUklHSU49CgojIE9wdGlvbmFsIGRhdGFiYXNlIHNjaGVtYSBuYW1lcy4KIyBBVVRIX19TQ0hFTUE9YXV0aAojIEFQUF9fU0NIRU1BPWFwcAoKIyBPcHRpb25hbCBHb29nbGUgbG9naW4uCiMgQVVUSF9fR09PR0xFX0NMSUVOVF9JRD0KIyBBVVRIX19HT09HTEVfQ0xJRU5UX1NFQ1JFVD0KCiMgT3B0aW9uYWwgT0lEQyBsb2dpbi4gVXNlIGV4cGxpY2l0IGVuZHBvaW50cyBvciBkaXNjb3ZlcnksIG5vdCBib3RoLgojIEFVVEhfX09JRENfUFJPVklERVJfSUQ9b2lkYwojIEFVVEhfX09JRENfQ0xJRU5UX0lEPQojIEFVVEhfX09JRENfQ0xJRU5UX1NFQ1JFVD0KIyBBVVRIX19PSURDX0FVVEhPUklaQVRJT05fVVJMPQojIEFVVEhfX09JRENfVE9LRU5fVVJMPQojIEFVVEhfX09JRENfVVNFUklORk9fVVJMPQojIEFVVEhfX09JRENfRElTQ09WRVJZX1VSTD0KCgojIFBlcm1pdCBQb3N0Z3JlcyBjb25uZWN0aW9ucyB0byBsb29wYmFjay9wcml2YXRlIG5ldHdvcmtzIChzZWxmLWhvc3RlZCBkZXBsb3ltZW50cyBvbmx5KS4KIyBMaW5rLWxvY2FsLCBtZXRhZGF0YSwgbXVsdGljYXN0IGFuZCB1bnNwZWNpZmllZCBkZXN0aW5hdGlvbnMgcmVtYWluIGJsb2NrZWQuCkRBVEFTRVRfX0FMTE9XX1BSSVZBVEVfTkVUV09SS1M9ZmFsc2UKIyBPcHRpb25hbCBjb21tYS1zZXBhcmF0ZWQgbGl0ZXJhbCBETlMgc2VydmVyIElQcyBmb3IgZGF0YXNldCBQb3N0Z3JlU1FMIGhvc3QgcmVzb2x1dGlvbiBvbmx5LgojIEVtcHR5IHVzZXMgdGhlIG9wZXJhdGluZyBzeXN0ZW0gcmVzb2x2ZXIuCkRBVEFTRVRfX0ROU19TRVJWRVJTPQoKIyBDTEktb25seSBzZXJ2aWNlIG1pcnJvcjogZXhwb3J0IHRoaXMgaW4gdGhlIHNoZWxsIHJ1bm5pbmcgYWZiaW47IGNoZWNrc3VtcyByZW1haW4gcGlubmVkLgojIEFuIEhUVFBTIGJhc2UgVVJMIChvcHRpb25hbCBwYXRoIHByZWZpeCksIG9yIEhUVFAgbG9vcGJhY2s7IHNlcnZlcyBhZmJpbi12VkVSU0lPTi9hZmJpbi1zcWwtT1MtQVJDSC5nei4KIyBDTElfX1NFUlZJQ0VfQkFTRV9VUkw9CgojIENMSS1vbmx5OiBleHBvcnRlZCBzZXR0aW5ncyBmb3IgbWFuYWdlZCBzdGFuZGFsb25lIGJhY2tncm91bmQgdXBkYXRlcy4KIyBTZXQgdG8gMCB0byBkaXNhYmxlIGF1dG9tYXRpYyBkaXNjb3ZlcnkgYW5kIGluc3RhbGxhdGlvbiAoZXhwbGljaXQgYWZiaW4gdXBkYXRlIHN0aWxsIHdvcmtzKS4KIyBDTElfX0FVVE9fVVBEQVRFPTEKIyBBIHZlcnNpb24gcGluIGRpc2FibGVzIGF1dG9tYXRpYyB1cGRhdGVzIGFuZCByZXN0cmljdHMgZXhwbGljaXQgdXBkYXRlcyB0byB0aGF0IHJlbGVhc2UuCiMgQ0xJX19WRVJTSU9OX1BJTj0K';
 const ENV_EXAMPLE = Buffer.from(ENV_EXAMPLE_BASE64, 'base64').toString('utf8');
 
 function httpUrlError(value) {
@@ -35,6 +36,32 @@ function postgresUrlError(value) {
     if ((url.protocol === 'postgres:' || url.protocol === 'postgresql:') && url.hostname) return undefined;
   } catch {}
   return 'Database URL must be a Postgres URL';
+}
+
+/** APP__PAGES_HOST: a bare hostname (no scheme, port, path or wildcard), as services/app/lib/platform/config parsePagesHost reads it. */
+function pagesHostError(value) {
+  return /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(String(value).trim().toLowerCase())
+    ? undefined
+    : 'Pages host must be a bare hostname such as lvh.me or pages.example.com';
+}
+
+/** The development pages host: `*.lvh.me` resolves to 127.0.0.1 in public DNS, with no hosts-file edit. */
+export const DEV_PAGES_HOST = 'lvh.me';
+
+/**
+ * Documents on their own origins need the app on the SAME SITE as the pages host (the frame's cookie is
+ * SameSite=Lax), so a loopback public URL moves to `app.<pages host>` on the same port.
+ */
+function sameSitePublicUrl(publicUrl, pagesHost) {
+  try {
+    const url = new URL(publicUrl);
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+    if (!pagesHost || !loopback) return publicUrl;
+    url.hostname = `app.${pagesHost}`;
+    return url.origin;
+  } catch {
+    return publicUrl;
+  }
 }
 
 function s3UrlError(value) {
@@ -67,7 +94,8 @@ function publicUrlFromPort(port) {
 export function loopbackPublicUrlFollowsPort(publicUrl, port) {
   try {
     const url = new URL(publicUrl);
-    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
+      || url.hostname === DEV_PAGES_HOST || url.hostname.endsWith(`.${DEV_PAGES_HOST}`);
     return loopback && Number(url.port) === Number(port);
   } catch {
     return false;
@@ -88,6 +116,7 @@ export function defaultAnswers(answerOverrides = {}) {
     databaseUrl: '',
     objects: 'local',
     s3Url: '',
+    pagesHost: DEV_PAGES_HOST,
     ...answerOverrides,
   };
   if (answerOverrides.port !== undefined && answerOverrides.publicUrl === undefined) {
@@ -95,6 +124,7 @@ export function defaultAnswers(answerOverrides = {}) {
   } else if (answerOverrides.publicUrl !== undefined && answerOverrides.port === undefined) {
     answers.port = portFromPublicUrl(answerOverrides.publicUrl);
   }
+  answers.publicUrl = sameSitePublicUrl(answers.publicUrl, answers.pagesHost);
   return answers;
 }
 
@@ -122,6 +152,7 @@ export function existingAnswers(text) {
     databaseUrl,
     objects: s3Url ? 's3' : 'local',
     s3Url,
+    pagesHost: values.get('APP__PAGES_HOST') || DEV_PAGES_HOST,
   });
 }
 
@@ -129,6 +160,7 @@ export function questions() {
   return [
     { key: 'publicUrl', prompt: 'APP__PUBLIC_BASE_URL — public URL people will use', default: DEFAULT_PUBLIC_URL, validate: httpUrlError },
     { key: 'port', prompt: 'APP__PORT — local port to listen on', default: (answers) => portFromPublicUrl(answers.publicUrl), validate: portError },
+    { key: 'pagesHost', prompt: 'APP__PAGES_HOST — hostname documents are served under, same site as the public URL', default: DEV_PAGES_HOST, validate: pagesHostError },
     { key: 'email', prompt: 'EMAIL__RESEND_API_KEY — login email (optional)', default: '', validate: () => undefined, secret: true, clearable: true },
     { key: 'emailFrom', prompt: 'EMAIL__FROM — sender address', default: (answers) => fromAddress(answers.publicUrl), validate: (value) => String(value).trim() ? undefined : 'From address must not be blank', when: (answers) => Boolean(answers.email) },
     { key: 'database', prompt: 'DATABASE_URL — storage: [1] embedded PGLite  [2] Postgres URL', default: '1', validate: (value) => ['1', '2', 'pglite', 'postgres'].includes(String(value)) ? undefined : 'Database must be 1 or 2' },
@@ -158,6 +190,12 @@ export function parseArgs(argv) {
       result.noInterview = true;
     } else if (flag === '--force') result.force = true;
     else if (flag === '--print') result.print = true;
+    else if (flag === '--pages-host') {
+      // `--pages-host` alone is development's lvh.me; `--pages-host <host>` names one.
+      const value = argv[index + 1];
+      if (value !== undefined && !value.startsWith('--')) { result.answers.pagesHost = value.trim().toLowerCase(); index += 1; }
+      else result.answers.pagesHost = DEV_PAGES_HOST;
+    }
     else if (values.has(flag)) {
       const value = argv[index + 1];
       if (value === undefined) return { ...result, error: `${flag} requires a value` };
@@ -175,6 +213,10 @@ export function parseArgs(argv) {
   }
   if (result.answers.port !== undefined) {
     const error = portError(result.answers.port);
+    if (error) return { ...result, error };
+  }
+  if (result.answers.pagesHost !== undefined) {
+    const error = pagesHostError(result.answers.pagesHost);
     if (error) return { ...result, error };
   }
   if (result.answers.databaseUrl !== undefined) {
@@ -219,6 +261,7 @@ export function buildEnvFile(answerOverrides, { generated, validate = true }) {
     .replace(/^# INTERNAL__SERVICE_SECRET=.*$/m, `INTERNAL__SERVICE_SECRET=${generated.INTERNAL__SERVICE_SECRET}`)
     .replace(/^APP__PUBLIC_BASE_URL=.*$/m, `APP__PUBLIC_BASE_URL=${answers.publicUrl}`)
     .replace(/^APP__PORT=.*$/m, `APP__PORT=${answers.port}`);
+  text = text.replace(/^APP__PAGES_HOST=.*$/m, `APP__PAGES_HOST=${answers.pagesHost || DEV_PAGES_HOST}`);
 
   if (answers.database === 'postgres') {
     text = text.replace(/^# DATABASE_URL=.*$/m, `DATABASE_URL=${answers.databaseUrl}`);
@@ -243,7 +286,7 @@ export function buildEnvFile(answerOverrides, { generated, validate = true }) {
 }
 
 const MANAGED_ENV = {
-  publicUrl: ['APP__PUBLIC_BASE_URL'], port: ['APP__PORT'],
+  publicUrl: ['APP__PUBLIC_BASE_URL'], port: ['APP__PORT'], pagesHost: ['APP__PAGES_HOST', 'APP__PUBLIC_BASE_URL'],
   email: ['EMAIL__RESEND_API_KEY', 'EMAIL__FROM'], emailFrom: ['EMAIL__FROM'],
   database: ['DATABASE_URL'], databaseUrl: ['DATABASE_URL'],
   objects: ['S3_URL', 'OBJECT_STORE__LOCAL_DIR'], s3Url: ['S3_URL', 'OBJECT_STORE__LOCAL_DIR'],
@@ -264,6 +307,9 @@ export function mergeEnvFile(existingText, answerOverrides, { generated, supplie
   const current = activeEnv(existingText);
   const prior = existingAnswers(existingText);
   const effectiveSupplied = new Set(supplied);
+  // A file written before APP__PAGES_HOST was required gets the development pages host, and its loopback
+  // public URL moves onto the same site with it (defaultAnswers sameSitePublicUrl).
+  if (!current.get('APP__PAGES_HOST')) effectiveSupplied.add('pagesHost');
   const explicit = Object.fromEntries([...effectiveSupplied].filter((key) => key in answerOverrides).map((key) => [key, answerOverrides[key]]));
   if (effectiveSupplied.has('port') && !effectiveSupplied.has('publicUrl') && loopbackPublicUrlFollowsPort(prior.publicUrl, prior.port)) {
     explicit.publicUrl = publicUrlWithPort(prior.publicUrl, answerOverrides.port);

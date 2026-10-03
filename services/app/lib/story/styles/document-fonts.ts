@@ -1,7 +1,6 @@
 /**
  * The font families a document ASKS FOR, and the CSS that makes the ask real.
- * PURE — the resolution (fetch, store) is lib/webfonts; this is the vocabulary
- * and the stylesheet, so publish and render agree on both by construction.
+ * PURE: the vocabulary and the stylesheet, so publish and render agree on both by construction.
  *
  * The ask rides Helmet `<meta>`, which already exists and already round-trips:
  *
@@ -14,6 +13,7 @@
  * theme's palette, radii and rules and changes only the face.
  */
 import type { HelmetContent } from '../document/helmet';
+import { STORY_FONT_FAMILIES } from '@/lib/data/story/story-fonts';
 
 /** The three slots a document may override, in the order the head declares them. */
 /** A family name is a css identifier, not free text — it lands in a stylesheet. Browser safe: the lazy
@@ -45,8 +45,28 @@ export function invalidFontFamilies(fonts: DocumentFonts): string[] {
   return fonts.families.filter((f) => !FAMILY_RE.test(f));
 }
 
+/** Google Fonts' stylesheet host: the document's policy admits it and its files (./document-sources). */
+const GOOGLE_FONTS_CSS = 'https://fonts.googleapis.com/css2';
 /**
- * The override: the vars AND the rules that consume them.
+ * Regular, bold and italic where the family ships them: css2 answers the faces it has from this list
+ * and refuses a bare `family=` for a family with no upright 400 (an italic-only one such as Molle).
+ */
+const GOOGLE_FONTS_AXES = ':ital,wght@0,400;0,700;1,400';
+
+/**
+ * The CSS way to load a family: one `@import` of Google Fonts' stylesheet for every named family the
+ * build does not bundle (a bundled one is served from this origin by the theme sheet). It must open
+ * its stylesheet, which is why it is the first line of {@link documentFontCss}'s own sheet.
+ */
+export function documentFontImport(fonts: DocumentFonts): string {
+  const imported = fonts.families.filter((family) => FAMILY_RE.test(family) && !STORY_FONT_FAMILIES.includes(family));
+  if (imported.length === 0) return '';
+  const query = imported.map((family) => `family=${family.replace(/ /g, '+')}${GOOGLE_FONTS_AXES}`).join('&');
+  return `@import url(${GOOGLE_FONTS_CSS}?${query}&display=swap);`;
+}
+
+/**
+ * The override: the import, the vars AND the rules that consume them.
  *
  * Both halves are needed, and only a browser showed why: a THEMED document
  * already binds `--font-display` to headings and `--font-body` to the root
@@ -63,9 +83,9 @@ export function documentFontCss(fonts: DocumentFonts): string {
   const named = FONT_SLOTS.filter((slot) => fonts.slots[slot]);
   if (named.length === 0) return '';
   const stack = (slot: FontSlot) => `"${fonts.slots[slot]}", var(--${slot}-fallback, sans-serif)`;
-  const blocks = [`:root {\n${named.map((slot) => `  --${slot}: ${stack(slot)};`).join('\n')}\n}`];
+  const blocks = [documentFontImport(fonts), `:root {\n${named.map((slot) => `  --${slot}: ${stack(slot)};`).join('\n')}\n}`];
   if (fonts.slots['font-body']) blocks.push(':where(:root) { font-family: var(--font-body); }');
   if (fonts.slots['font-display']) blocks.push(':where(:root) :is(h1, h2, h3, h4, h5, h6) { font-family: var(--font-display); }');
   if (fonts.slots['font-mono']) blocks.push(':where(:root) :is(code, pre, kbd, samp) { font-family: var(--font-mono); }');
-  return blocks.join('\n');
+  return blocks.filter(Boolean).join('\n');
 }

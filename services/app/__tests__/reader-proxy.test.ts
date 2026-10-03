@@ -1,8 +1,9 @@
 /** Reader URLs use the shared app document; explicit raw/export keeps its sandbox. */
+import { pagesSite } from '@/lib/serving/pages-origin';
 import { describe, expect, it } from 'vitest';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
-import { APP_CSP, BOOTSTRAP_ID, candidateDocument, createAppServer } from '@/server/app';
+import { BOOTSTRAP_ID, appPagePolicy, candidateDocument, createAppServer } from '@/server/app';
 import { createArtifact } from '@/lib/artifacts';
 import { mintToken } from '@/lib/accounts';
 import { createUser, ensureUsername } from '@/lib/accounts';
@@ -22,15 +23,15 @@ describe('reader delivery over HTTP',()=>{
   for(const path of ['/a/Ab3xK9','/@name/folder/Ab3xK9-title'])expect(candidateDocument(path)).toEqual({id:'Ab3xK9'});
   for(const path of ['/a/Ab3xK9/raw','/api/artifacts','/@name','/'])expect(candidateDocument(path)).toBeNull();
  });
- it.each(['public','unlisted'] as const)('serves %s readers initial content and prepared data under app CSP',async visibility=>{
+ it.each(['public','unlisted'] as const)('serves %s readers the document\'s frame and prepared data under app CSP',async visibility=>{
   const {row}=await publish(visibility),response=await app.request(`/a/${row.id}`),html=await response.text();
-  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(APP_CSP);
-  expect(response.headers.get('cache-control')).toBe('no-store');expect(html).toContain('data-mx-story-root');
-  expect(html).toContain('>Readable body</h1>');expect(html).toContain(BOOTSTRAP_ID);expect(html).not.toContain('<iframe title="artifact"');
+  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
+  expect(response.headers.get('cache-control')).toBe('no-store');expect(html).toContain('data-mx-document-frame');
+  expect(html).not.toContain('>Readable body</h1>');expect(html).toContain(BOOTSTRAP_ID);expect(html).not.toContain('<iframe title="artifact"');
  });
  it('serves anonymous owners the same document policy',async()=>{
   const {row,token}=await publish();const response=await app.request(`/a/${row.id}`,{headers:{cookie:await agentCookie([token.id])}});
-  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(APP_CSP);expect(await response.text()).toContain('"role":"owner"');
+  expect(response.status).toBe(200);expect(response.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));expect(await response.text()).toContain('"role":"owner"');
  });
  it('never leaks private contents or a canonical redirect to strangers',async()=>{
   const owner=await ensureUsername(await createUser({email:'mxmx_test_reader@example.com'}));const {row}=await publish('private','<p>Private-only words</p>',owner.id);
@@ -41,7 +42,7 @@ describe('reader delivery over HTTP',()=>{
   // Served in place (no redirect hop), naming the canonical address the page heals to.
   const headers=actor({credential:'session',userId:owner.id,email:owner.email});const response=await app.request(`/a/${row.id}`,{headers});
   expect(response.status).toBe(200);expect(response.headers.get('location')).toBeNull();expect(response.headers.get('cache-control')).toBe('no-store');
-  const html=await response.text();expect(html).toContain('>Private owner body</p>');expect(html).toContain(`"address":"/@${owner.username}/${row.id}`);
+  const html=await response.text();expect(html).toContain('data-mx-document-frame');expect(html).not.toContain('>Private owner body</p>');expect(html).toContain(`"address":"/@${owner.username}/${row.id}`);
  });
  it('retains raw sandbox without inheriting it into the app reader',async()=>{
   const {row}=await publish(),raw=await app.request(`/a/${row.id}/raw?chrome=0`),page=await app.request(`/a/${row.id}`);
@@ -49,7 +50,7 @@ describe('reader delivery over HTTP',()=>{
  });
  it('keeps scripts inert and live selections in prepared data',async()=>{
   const {row}=await publish('public','<Helmet><Value name="count" type="number" default={0}/><script>{`globalThis.shouldNotRun=true`}</script></Helmet><p>{$count}</p>');
-  const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).toContain('"authorScript":"globalThis.shouldNotRun=true"');expect(html).not.toContain('<script>globalThis.shouldNotRun');expect(html).toContain('"values":{"count":4}');
+  const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).toMatch(/"authorScript":"[^"]*globalThis\.shouldNotRun = true;/);expect(html).not.toContain('<script>globalThis.shouldNotRun');expect(html).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]*shouldNotRun/);expect(html).toContain('"values":{"count":4}');
  });
  it('keeps datasets on their existing app representation',async()=>{
   const token=await mintToken('dataset'),row=await createArtifact(token.id,null,{format:'dataset',source:null,meta:{},title:'Data',description:null,visibility:'public'});

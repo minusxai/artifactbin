@@ -40,6 +40,8 @@ export interface SourceViewOptions {
 export interface SourceView {
   /** Replace the whole buffer from outside, keeping the caret where it was (clamped). */
   replace(text: string): void;
+  /** Put the caret (and focus) at `selection` and bring it into view: a place asked for while the editor is open. */
+  reveal(selection: { start: number; end: number }): void;
   destroy(): void;
 }
 
@@ -118,7 +120,11 @@ export function createSourceView({ parent, doc, readOnly, ariaLabel, selection, 
       ],
     }),
   });
-  if (selection) view.focus();
+  if (selection) {
+    view.focus();
+    // A caret asked for from outside (a mount badge's "Edit script") is shown, not left below the fold.
+    view.dispatch({ effects: EditorView.scrollIntoView(clamp(selection.start, doc.length), { y: 'center' }) });
+  }
 
   return {
     replace(text) {
@@ -129,6 +135,14 @@ export function createSourceView({ parent, doc, readOnly, ariaLabel, selection, 
         changes: { from: 0, to: current.length, insert: text },
         selection: EditorSelection.single(clamp(anchor, text.length), clamp(head, text.length)),
         annotations: [Transaction.remote.of(true), Transaction.addToHistory.of(false)],
+      });
+    },
+    reveal(at) {
+      const length = view.state.doc.length;
+      view.focus();
+      view.dispatch({
+        selection: EditorSelection.single(clamp(at.start, length), clamp(at.end, length)),
+        effects: EditorView.scrollIntoView(clamp(at.start, length), { y: 'center' }),
       });
     },
     destroy() { view.destroy(); },

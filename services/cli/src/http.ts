@@ -1,4 +1,4 @@
-import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,normalizeOrigin} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,isLocalDevelopmentHost,normalizeOrigin} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {CliError} from './commands';
 import {CLI_VERSION} from './version';
@@ -69,7 +69,7 @@ export class HttpClient {
    }
    if(imageExport&&response.status===302){
     const asset=new URL(response.headers.get('location')??'',url);
-    const secure=asset.protocol==='https:'||(asset.origin===url.origin&&['localhost','127.0.0.1','[::1]'].includes(asset.hostname));
+    const secure=asset.protocol==='https:'||(asset.origin===url.origin&&isLocalDevelopmentHost(asset.hostname));
     if(!secure||asset.username||asset.password||asset.hash||!/^\/assets\/export\/[0-9a-f-]{36}$/.test(asset.pathname)
      ||[...asset.searchParams.keys()].length!==1||!/^[1-9][0-9]*\.[0-9a-f]{64}$/.test(asset.searchParams.get('key')??''))
      throw new CliError('invalid_redirect','The export returned an invalid image redirect.');

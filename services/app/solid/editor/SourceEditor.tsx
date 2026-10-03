@@ -21,6 +21,11 @@ export interface SourceEditorProps {
   onChange: (next: string) => void;
   /** Preserve focus/caret when upgrading from the plain editor. */
   initialSelection?: () => { start: number; end: number } | null;
+  /**
+   * A place to show while the editor is already open (a mount badge's "Edit script"): each new object moves the
+   * caret there and scrolls to it. `initialSelection` is read once, on mount; this is read on every change.
+   */
+  reveal?: () => { start: number; end: number } | null;
   readOnly?: boolean;
   ariaLabel?: string;
 }
@@ -44,5 +49,7 @@ export default function SourceEditor(props: SourceEditorProps) {
   }));
   // Someone else moved the document.
   createEffect(on(() => props.revision, () => view?.replace(untrack(() => props.value)), { defer: true }));
+  // A place asked for after mount.
+  createEffect(on(() => props.reveal?.() ?? null, (at) => { if (at) view?.reveal(at); }, { defer: true }));
   return <div ref={host} class="h-full" />;
 }

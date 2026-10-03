@@ -9,7 +9,7 @@ import { refusedForSignIn } from '@/lib/story/reader/sign-in-required';
 import { loginHref } from '@/lib/http/login-href';
 import { pageDataChanged } from '@/web/page-data-events';
 import { takeBootstrap } from '@/web/bootstrap';
-import { initialDocumentStory } from '@/web/initial-story';
+import { servedDocumentFrame } from '@/web/served-frame';
 import { Avatar } from '../components/Avatar';
 import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';
@@ -63,9 +63,9 @@ export function ProfilePage(): JSX.Element {
  * (folders included), same as `/a/:id` does with `ArtifactRoute` in solid/App.tsx.
  *
  * Resolution is id-anchored, same grammar as the rest of the app (lib/urls
- * parsePrettyPath) — the difference is what Solid does once it has the id: `initialDocumentStory()`
- * (the same discriminator `ArtifactRoute` uses for `/a/:id`) says whether THIS load served a compiled
- * document, so a compiled document is adopted by the reader (`DocumentPage`) and anything else — a
+ * parsePrettyPath) — the difference is what Solid does once it has the id: `servedDocumentFrame()`
+ * (the same discriminator `ArtifactRoute` uses for `/a/:id`) says whether THIS load served a document's
+ * frame, so a framed document is adopted by the document page (`DocumentPage`) and anything else — a
  * folder, a data tier, the starter, a dataset editor — is routed by its answer (`ArtifactAddressRoute`)
  * instead of guessing from the URL shape alone. "Nesting is not in the address" (see
  * the profile API's own doc comment): a rest path that fails to parse as an id is a uniform 404, never
@@ -80,7 +80,7 @@ export function ProfileAliasRoute(): JSX.Element {
   const id = createMemo(() => parsePrettyPath(artifactViewPath(params.rest ?? '').split('/').filter(Boolean))?.id ?? null);
   return <Show when={!bare()} fallback={<ProfilePage />}>
     <Show when={id()} fallback={<NotFoundPage />}>
-      {resolvedId => <Show when={initialDocumentStory()} fallback={<ArtifactAddressRoute id={resolvedId()} editing={editing()} />}><DocumentPage /></Show>}
+      {resolvedId => <Show when={servedDocumentFrame()} fallback={<ArtifactAddressRoute id={resolvedId()} editing={editing()} />}><DocumentPage /></Show>}
     </Show>
   </Show>;
 }

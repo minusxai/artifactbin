@@ -13,15 +13,15 @@
  *   EDITOR   — toolbar, title/theme/colorMode, grid drag, slide rename
  *   MOBILE   — no horizontal overflow on the pages people open on a phone
  *
- * Complements the unit suite: these contracts live in the browser (same-origin
- * iframe focus, real drag, session cookies) where jsdom cannot follow.
+ * Complements the unit suite: these contracts live in the browser (the document
+ * framed on its own origin, real drag, session cookies) where jsdom cannot follow.
  *
  * Exits non-zero on the first failing section's summary.
  */
-import { horizontalOverflow, servedTopLevel } from './lib/page-facts.mjs';
+import { documentFrame, horizontalOverflow } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from '../lib/mail-login.mjs';
@@ -107,11 +107,18 @@ const gridDoc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringif
 </Grid></div>` }) }, T)).body;
 
 const sink = await startMailSink();
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const ctx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
 const p = await ctx.newPage();
 p.on('dialog', (d) => d.accept());
-const surface = () => p.mainFrame();
+/*
+ * The document runs in its frame on its own origin (lib/serving/document-frame): what a reader sees and what the
+ * editor attaches to are asked THERE; the bar, the controls and the editor's toolbar are the app page's (`p`).
+ * Every navigation below re-adopts the frame (`settle`).
+ */
+let docFrame = null;
+const surface = () => docFrame;
+const settle = async () => { docFrame = await documentFrame(p); return docFrame; };
 // Edit is a MODE on the artifact's one url — `#edit` is a fragment, so it
 // never reaches the server and never changes the link you share.
 const unlock = async (id) => {
@@ -121,6 +128,7 @@ const unlock = async (id) => {
   await becomeOwner(p, B, T);
   await p.goto(`${B}/a/${id}#edit`, { waitUntil: 'load' });
   await p.waitForTimeout(4000);
+  await settle();
 };
 
 // ───────────────────────────── AUTH ─────────────────────────────
@@ -165,46 +173,8 @@ await loginViaEmail(p, B, sink, EMAIL);
 check(await signedIn(), 'log back in with a fresh code works');
 
 // ───────────────────────────── VIEWER ─────────────────────────────
-console.log('█ SANDBOX');
-// Two shapes, one guarantee. For the OWNER the document is a child frame of the
-// app, which is only safe while that frame keeps an OPAQUE origin — the parent
-// holds the session cookie, and author JS must not reach it. For everyone else
-// the document is served top-level, where the same opacity is what stops it
-// touching the app at all (proved end-to-end in gate-secure-arch).
-//
-// A fresh context, holding only the token that owns this document: the AUTH
-// section above signed a DIFFERENT user in, and a signed-in non-owner is a
-// reader — served the document, with no frame to probe.
-const ownerCtx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
-const op = await ownerCtx.newPage();
-await becomeOwner(op, B, T);
-await op.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
-await op.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'attached' });
-{
-  const probe = await op.evaluate(() => {
-    const f = document.querySelector('iframe[title="Isolated artifact script"]');
-    if (!f) return { missing: true };
-    let readable = true;
-    try { readable = !!f.contentDocument; } catch { readable = false; }
-    return { sandbox: f.getAttribute('sandbox') || '', readable };
-  });
-  check(!probe.missing && probe.sandbox.includes('allow-scripts') && !probe.sandbox.includes('allow-same-origin'),
-     'author code renders in a child frame sandboxed without allow-same-origin');
-  check(probe.readable === false, 'the author script frame is opaque to the app page');
-}
-
-// And the reader's copy — same document, no frame, still opaque.
-{
-  const readerCtx = await browser.newContext();
-  const rp = await readerCtx.newPage();
-  await rp.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
-  check(await servedTopLevel(rp), 'a reader is served the document itself, with no app frame');
-  const script = await (await rp.waitForSelector('iframe[title="Isolated artifact script"]', { state: 'attached' })).contentFrame();
-  const opaque = await script.evaluate(() => { try { void localStorage.length; return false; } catch { return true; } });
-  check(opaque, 'author code retains an opaque origin — storage is unreachable inside it');
-  await readerCtx.close();
-}
-await ownerCtx.close();
+// The author's script runs natively in the document, which is served on its own origin and framed
+// by the app page (APP__PAGES_HOST); that isolation is gate-pages-origin's subject, not this gate's.
 
 console.log('█ VIEWER');
 // dataDoc belongs to token T, and ownership resolves SESSION FIRST — so while
@@ -226,8 +196,9 @@ if (await openMenu(p, { timeout: 8000 }).then(() => true, () => false)) {
 await becomeOwner(p, B, T);
 await p.goto(`${B}/a/${dataDoc.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(3500);
+await settle();
 
-// The document is the SERVED page in a sandboxed frame now, so everything a
+// The document is served on its own origin in the page's frame, so everything a
 // reader sees is asserted inside that frame — the theme included.
 const themeOf = async () => surface()?.locator('[data-mx-inline-story]:not([data-mx-initial-story])').getAttribute('data-theme').catch(() => null);
 check((await themeOf()) === 'modernist', 'the served document carries the authored theme');
@@ -245,7 +216,7 @@ check((await p.locator('[aria-label="Edit artifact"]').count()) === 1, 'artifact
 // it on bare `:root`), so DARK is the one that gets stamped — the reverse of
 // what this read when dark was the default, which is exactly the shape of
 // drift a gate reading the attribute is here to catch.
-await p.click('[aria-label="Light mode"]');
+await p.click('[aria-label="Light mode"]');  // the app page's control; the frame hears it over the bridge
 await p.waitForFunction(() => !document.documentElement.dataset.theme);
 await surface().locator('[data-mx-inline-story]:not([data-mx-initial-story]).light').waitFor({ timeout: 8000 });
 check(true, 'one appearance choice turns both the app and document light');
@@ -260,7 +231,7 @@ await p.keyboard.press('Escape');
 // document.
 await p.goto(`${B}/a/${deckDoc.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(3800);
-const deck = surface();
+const deck = await settle();
 check((await deck.locator('.mx-rail-row').count()) === 3, 'deck rail lists every slide');
 await deck.click('[aria-label="Go to slide 3: Three"]'); await p.waitForTimeout(1500);
 // Scoped to the document column: the rail's previews are real <Slide>

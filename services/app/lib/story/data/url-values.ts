@@ -189,6 +189,17 @@ export function writeUrlValues(search: string, flow: Declared, values: Record<st
   return query ? `?${query}` : '';
 }
 
+/**
+ * `search` with its `$` params replaced by the `$` params of `values` — a `$`-only search a document's link
+ * follower wrote (`writeUrlValues('', …)`), carried to a page that holds no declarations of its own (the app
+ * page framing the document). Every other param of `search` is kept EXACTLY as it arrived; anything in `values`
+ * that is not a `$` param is dropped. `''` when nothing is left, as `writeUrlValues`.
+ */
+export function withUrlValuesOf(search: string, values: string): string {
+  const query = [...pairsOf(search).filter((p) => !p.ours), ...pairsOf(values).filter((p) => p.ours)].map((p) => p.raw).join('&');
+  return query ? `?${query}` : '';
+}
+
 /** A link's selection, as the two different things a caller needs it to be. */
 interface UrlSelection {
   /**

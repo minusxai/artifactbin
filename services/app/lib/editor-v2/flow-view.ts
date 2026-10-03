@@ -3,6 +3,7 @@
  * key bindings, node views, AST-path decorations, the guarded transaction pipeline, paste and
  * composition handling. solid/editor/FlowEditor.tsx adapts it with onMount + one effect.
  */
+import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { DOMSerializer, type ResolvedPos } from 'prosemirror-model';
 import { EditorState, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
@@ -203,7 +204,7 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
     props().onChange(sourceNodes(view.state.doc), group, {
       before,
       after: captureBookmark(view.state),
-      ...(maps.length ? { annotationOperation: { id: crypto.randomUUID(), kind: 'map', maps } as const } : {}),
+      ...(maps.length ? { annotationOperation: { id: runtimeId(), kind: 'map', maps } as const } : {}),
     });
   };
   const flush = () => {

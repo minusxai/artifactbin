@@ -216,7 +216,7 @@ describe('each topic is taught by exactly its owner', () => {
     ['the reader-control roster', '## Bindings: controls', [`${R}/markup-data.md`]],
     ['the <Helmet> :root override example', /:root \{ --background/, [`${R}/markup.md`]],
     ['the scroll-reveal observer', 'data-mx-seen', [`${R}/markup-motion.md`]],
-    ['the video card', '<Video src=', [`${R}/markup-video.md`]],
+    ['the author iframe', '<iframe src="https://', [`${R}/markup.md`]],
     ['the SVG subset', 'foreignObject', [`${R}/markup-svg.md`]],
   ];
   for (const [topic, fp, owner] of cases) {

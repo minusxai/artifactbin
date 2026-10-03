@@ -34,11 +34,13 @@ vi.mock('@/lib/islands/live-update', () => liveUpdate);
 const editSession = vi.hoisted(() => ({
   unmounts: 0,
   mounts: 0,
+  /** The nodes the editor was last mounted over (createFrameEditSession `setNodes`). */
+  nodes: null as unknown[] | null,
   /** What the live editors answer when a draft of typed prose is offered to them. */
   reconcile: false,
   reconciled: [] as Array<HTMLElement | null>,
   session: {
-    setNodes: () => {}, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
+    setNodes: (nodes: unknown[]) => { editSession.nodes = nodes; }, canApplyDraft: () => true, dispose: () => {}, onParentMessage: () => {},
     reconcileDraft: (_before: unknown, _after: unknown, _next: unknown, draft: HTMLElement | null) => { editSession.reconciled.push(draft); return editSession.reconcile; },
     holdUnchanged: () => new Map<string, HTMLElement>(),
     releaseHeld: () => {},
@@ -51,6 +53,8 @@ vi.mock('@/lib/story-runtime/edit/session', () => ({ createFrameEditSession: () 
 vi.mock('@/solid/editor/dom-mounter', () => ({ mountCompiledEditRegions: () => ({ dispose() {} }) }));
 
 import { createIslandController, holdChartDrawings } from '../island-controller';
+import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
+import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_READER_MODE_MESSAGE } from '../contract';
 import { createEditDraftSender, DRAFT_IDLE_MS } from '@/solid/editor/edit-draft';
 import { TYPING_QUIET_MS } from '../island-controller';
@@ -534,6 +538,101 @@ describe('island controller editor drafts', () => {
     expect(sequences.map((value) => Number(value.split('.')[1]))).toEqual([1, 2, 3]);
     expect(JSON.parse(String(fetch.mock.calls[2]![1].body)).source).toBe('<p>v2</p>');
     expect(root.textContent).toBe('v0');
+    controller.dispose();
+  });
+});
+
+describe('island controller app requests (a framed document relays them through the page)', () => {
+  it('makes all three app-origin requests through the injected appFetch, never the window fetch, and asks the named fragment surface', async () => {
+    engine.state.applied.length = 0;
+    engine.adopted = 0;
+    const sheet = document.createElement('style');
+    sheet.setAttribute('data-mx-story-css', '');
+    sheet.textContent = '.reader-cut{}';
+    document.head.append(sheet);
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>v0</p>';
+    document.body.append(root);
+    const windowFetch = vi.spyOn(window, 'fetch').mockImplementation(async () => { throw new Error('the window fetch must not be used'); });
+    const appFetch = vi.fn(async (path: string, init: RequestInit) => {
+      if (path.includes('draft-preview') && init.method === 'POST') {
+        const { source } = JSON.parse(String(init.body)) as { source: string };
+        return new Response(JSON.stringify({ html: `<html><body><div data-mx-inline-story>${source}</div></body></html>` }), { status: 200 });
+      }
+      if (path.includes('draft-preview')) return new Response(JSON.stringify({ css: '.reader-cut{}.all{}' }), { status: 200 });
+      return new Response('<html><body><div data-mx-inline-story class="light"><p>saved</p></div></body></html>', { status: 200 });
+    });
+    const islands = { setMode: vi.fn(), mode: () => 'edit', store: null } as unknown as import('@/lib/islands/contract').IslandDocument;
+    const controller = createIslandController({
+      win: window, root, islands, nodes: [], id: 'doc', editId: () => 'e1',
+      initialSource: () => '<p>v0</p>', portal: { current: null }, appFetch, fragmentSurface: 'raw',
+    });
+    try {
+      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+      await settle(() => editSession.mounts > 0 && appFetch.mock.calls.length > 0);
+      expect(appFetch.mock.calls[0]![0]).toBe('/a/doc/draft-preview');
+      expect(appFetch.mock.calls[0]![1].method ?? 'GET').toBe('GET');
+      controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source: '<p>v1</p>', editId: 'e1', theme: null, colorMode: 'light' });
+      await settle(() => appFetch.mock.calls.some(([, init]) => init.method === 'POST'));
+      const post = appFetch.mock.calls.find(([, init]) => init.method === 'POST')!;
+      expect(post[0]).toBe('/a/doc/draft-preview');
+      expect(new Headers(post[1].headers).get('X-Draft-Sequence')).toMatch(/^[\w-]{1,64}\.1$/);
+      await settle(() => engine.state.releases.length === 1);
+      engine.state.releases.shift()!();
+      await settle(() => engine.state.active === 0 && root.textContent === 'v1');
+      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: false });
+      await controller.restored();
+      const fragment = appFetch.mock.calls.find(([path]) => path.startsWith('/a/doc/story?'));
+      expect(fragment, 'the post-Done story fetch goes through appFetch').toBeTruthy();
+      expect(new URLSearchParams(fragment![0].split('?')[1]).get('surface')).toBe('raw');
+      expect(windowFetch).not.toHaveBeenCalled();
+    } finally {
+      controller.dispose();
+      sheet.remove();
+    }
+  });
+});
+
+describe('island controller: the editor opens on the document on screen', () => {
+  /** A reader whose page was served at `e1`, with the source the page opened the editor on. */
+  const reading = (opened: string) => {
+    document.body.setAttribute(LIVE_EDIT_ATTR, 'e1');
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p>Second paragraph.</p>';
+    document.body.append(root);
+    const served = storyUpdateParts('<p>Second paragraph.</p>')!.nodes;
+    vi.spyOn(window, 'fetch').mockImplementation(async () => new Response('{}', { status: 200 }));
+    const controller = createIslandController({
+      win: window, root, islands: null, nodes: served, id: 'doc', editId: () => 'e2',
+      initialSource: () => opened, portal: { current: null },
+    });
+    return { controller, root, served };
+  };
+  afterEach(() => { document.body.removeAttribute(LIVE_EDIT_ATTR); editSession.nodes = null; });
+
+  it("mounts the editor over the LIVE version the document's own stream drew, not the nodes the page was first served with", async () => {
+    const live = '<p>Second paragraph. Written while watching.</p>';
+    const { controller, root } = reading(live);
+    // The document's own live stream draws the agent's version in place (lib/islands/live → the morph engine),
+    // which names the new version on the body and tells this controller nothing.
+    root.innerHTML = '<p>Second paragraph. Written while watching.</p>';
+    document.body.setAttribute(LIVE_EDIT_ATTR, 'e2');
+    const mounts = editSession.mounts;
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > mounts);
+    expect(JSON.stringify(editSession.nodes)).toContain('Written while watching.');
+    expect(editSession.nodes).toEqual(storyUpdateParts(live, (url) => /^https?:/.test(url))!.nodes);
+    controller.dispose();
+  });
+
+  it('keeps the served nodes when the version on screen is the one they describe', async () => {
+    const { controller, served } = reading('<p>Second paragraph.</p>');
+    const mounts = editSession.mounts;
+    controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+    await settle(() => editSession.mounts > mounts);
+    expect(editSession.nodes).toBe(served);
     controller.dispose();
   });
 });

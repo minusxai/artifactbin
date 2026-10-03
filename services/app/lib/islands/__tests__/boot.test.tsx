@@ -12,11 +12,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Show } from 'solid-js';
 import { boot } from '../boot';
-import { startPage } from '../page';
 import { islandDocumentOf } from '../handover';
 import { useIsland } from '../context';
 import { DataTable, Question } from '../kit/data';
-import { PUBLIC_MX_KEY, type IslandDocument, type IslandEvent, type PublicMxHost } from '../contract';
+import type { IslandDocument, IslandEvent } from '../contract';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const reads = (imports: string[]) => ({ imports, queries: [], values: [], builtins: [] });
@@ -126,6 +125,46 @@ describe('boot', () => {
     expect(document.getElementById('island')?.textContent).toBe('41East');
   });
 
+  it('exposes the declared names as window.page on a page with no script, removes it for editing and restores it on reading', async () => {
+    // A root-relative module id: the test runner loads it through its own module graph.
+    const runtimeUrl = new URL('../page-runtime.ts', import.meta.url).pathname;
+    page({ ...snapshot, vendor: { '@mx/page-runtime': runtimeUrl } });
+    expect(window.page).toBeUndefined();
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    await vi.waitFor(() => expect(window.page).toBeDefined());
+    const api = window.page!;
+    expect(Object.keys(api).sort()).toEqual(['get', 'mutation', 'ready', 'set']);
+    expect(api.get('region'), 'a Value reads the store').toBe('West');
+    expect(api.get('total'), 'a Query is its rows').toEqual([{ n: 41 }]);
+    await expect(api.ready('total'), 'ready is the settled rows').resolves.toEqual([{ n: 41 }]);
+    expect(api.get('missing')).toBeUndefined();
+    expect(api.mutation('missing')).toBeUndefined();
+    expect(() => api.set('total', 1), 'a Query cannot be set').toThrow(/names no declared Value/);
+    api.set('region', 'East');
+    expect(booted.store?.getState().values.region, 'set writes the store').toBe('East');
+    expect(api.get('region')).toBe('East');
+    expect(document.getElementById('island')?.textContent).toBe('41East');
+
+    booted.setMode('edit');
+    expect(window.page, 'editing removes the session API').toBeUndefined();
+    booted.setMode('read');
+    await vi.waitFor(() => expect(window.page).toBeDefined());
+    expect(window.page!.get('region')).toBe('East');
+    booted.dispose();
+    booted = null;
+    expect(window.page, 'dispose removes it').toBeUndefined();
+  });
+
+  it('exposes no window.page when the page names no runtime or declares no data', async () => {
+    page(snapshot);
+    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
+    page(null);
+    const bare = boot({ ISLANDS: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(window.page).toBeUndefined();
+    bare.dispose();
+  });
+
   it('signals ready on a page whose module has no islands and no data', () => {
     page(null);
     const ready = vi.fn();
@@ -135,48 +174,6 @@ describe('boot', () => {
     expect(ready).toHaveBeenCalledTimes(1);
     expect(booted.store).toBeNull();
     expect(booted.context.writesUnavailable()).toBeNull();
-  });
-
-  it('keeps the public mx API on a compiled data page until that page is disposed', async () => {
-    page(snapshot);
-    const stopPage = startPage();
-    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
-    await vi.waitFor(() => expect(window.mx).toBeDefined());
-    expect((await window.mx!.read(['region'])).signals.region.value).toBe('West');
-    const installed = window.mx;
-    booted.dispose();
-    booted = null;
-    expect(window.mx).not.toBe(installed);
-    stopPage();
-  });
-
-  it('releases the public mx API when the compiled document enters edit mode', async () => {
-    page(snapshot);
-    const stopPage = startPage();
-    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
-    await vi.waitFor(() => expect(window.mx).toBeDefined());
-    const installed = window.mx;
-    booted.setMode('edit');
-    expect(window.mx).not.toBe(installed);
-    booted.setMode('read');
-    await vi.waitFor(() => expect(window.mx).toBeDefined());
-    expect((await window.mx!.read(['region'])).signals.region.value, 'reading again in place: the public API is back').toBe('West');
-    stopPage();
-  });
-
-  it('installs no public mx API when the document is disposed before the API chunk loads', async () => {
-    delete window.mx;
-    page(snapshot);
-    const stopPage = startPage();
-    booted = boot({ ISLANDS: [['s0-', Total]], FLOW: flow });
-    const root = booted.root as PublicMxHost;
-    booted.dispose();
-    booted = null;
-    await import('../mx-host');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(window.mx).toBeUndefined();
-    expect(root[PUBLIC_MX_KEY]).toBeUndefined();
-    stopPage();
   });
 
   it('accepts ISLANDS alone for a module whose islands read no data', () => {

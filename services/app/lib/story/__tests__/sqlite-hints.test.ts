@@ -49,7 +49,7 @@ describe('another dialect\'s habits, answered with the SQLite to write', () => {
 
   it('refuses the silent cast in a mutation too', async () => {
     const message = await errorOf('<Value name="d" type="string" /><Mutation name="m">{`insert into sales.rows (day, region, revenue) values (cast($d as date), \'EU\', 1)`}</Mutation>');
-    expect(message).toMatch(/<Mutation name="m"> casts to date/);
+    expect(message).toMatch(/<Mutation> "m" casts to date/);
   });
 
   it('leaves a quoted cast, a column alias and SQLite\'s own casts alone', async () => {

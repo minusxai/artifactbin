@@ -8,7 +8,7 @@ import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
 import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './lib/notifications';
-import { clearInitialStoryOnRoute, initialDocumentStory } from '@/web/initial-story';
+import { dropServedFrameOnRoute, servedDocumentFrame } from '@/web/served-frame';
 
 const TrashPage = lazy(() => import('./pages/Trash').then((m) => ({ default: m.TrashPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFoundPage })));
@@ -40,14 +40,13 @@ function IntentPreload(): JSX.Element {
 
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
-  const servedDocument = !!initialDocumentStory();
+  const servedDocument = !!servedDocumentFrame();
   const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
-  // Leaving the served document (a link, the onboarding redirect) takes its story and chrome off the page
-  // and shows the app's root, which the served page kept hidden.
+  // Leaving the served document (a link, the onboarding redirect) takes its frame off the page.
   const initialPath = window.location.pathname;
   createEffect(() => {
-    clearInitialStoryOnRoute(location.pathname);
+    dropServedFrameOnRoute(location.pathname);
     if (location.pathname !== initialPath) document.querySelectorAll('[data-mx-pwa]').forEach(node => node.remove());
   });
   return (
@@ -68,16 +67,16 @@ function Root(props: RouteSectionProps): JSX.Element {
 }
 
 /**
- * `/a/<id>`: every artifact is Solid's (lib/solid-routes). A compiled document is adopted by the document
- * page; anything served without one — a folder, a data tier, the starter — is routed by its answer.
+ * `/a/<id>`: every artifact is Solid's (lib/solid-routes). A document's frame (served into this page) is adopted by
+ * the document page; anything served without one — a folder, a data tier, the starter — is routed by its answer.
  */
 function ArtifactRoute(): JSX.Element {
-  return initialDocumentStory() ? <DocumentPage /> : <ArtifactAddressRoute />;
+  return servedDocumentFrame() ? <DocumentPage /> : <ArtifactAddressRoute />;
 }
 
 /** `/a/<id>/edit`: a served document opens in edit mode; a dataset's address is its editor. */
 function ArtifactEditRoute(): JSX.Element {
-  return initialDocumentStory() ? <DocumentPage /> : <ArtifactAddressRoute editing />;
+  return servedDocumentFrame() ? <DocumentPage /> : <ArtifactAddressRoute editing />;
 }
 
 export function App(): JSX.Element {

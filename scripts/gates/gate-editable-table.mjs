@@ -1,6 +1,7 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkTableGeometry } from './lib/table-geometry.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
+import { documentLocator, INLINE_STORY } from './lib/page-facts.mjs';
 /**
  * Full served-document test: real cell writes, two readers, conflict, portals
  * and virtual rows — and then the same editors under every permission the
@@ -8,14 +9,14 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  * read-only document.
  */
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchChromium } from './lib/browser.mjs';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
 import { becomeOwner, becomeAccountOwner, startDocument } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const fixture = await createEditableTableFixture(base);
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const sink = await startMailSink();
 const errors = [];
 const check = (name) => console.log(`  ok ${name}`);
@@ -87,9 +88,7 @@ try {
     await userPage.close();
   }
   await Promise.all([aPage.goto(fixture.url), bPage.goto(fixture.url)]);
-  await Promise.all([aPage.locator('[data-mx-inline-story]').waitFor(),bPage.locator('[data-mx-inline-story]').waitFor()]);
-  const a = await artifactDocument(aPage);
-  const b = await artifactDocument(bPage);
+  const [a, b] = await Promise.all([artifactDocument(aPage), artifactDocument(bPage)]);
   await Promise.all([a.getByLabel('Item 1', { exact: true }).waitFor(), b.getByLabel('Item 1', { exact: true }).waitFor()]);
   const select = async (page, label, option) => {
     const trigger = page.getByRole('button', { name: label, exact: true });
@@ -238,10 +237,10 @@ try {
   owner.on('pageerror', error => errors.push(error.message));
   await becomeOwner(owner, base, fixture.token);
   await owner.goto(fixture.url);
-  const frame = owner.locator('[data-mx-inline-story]');
+  const frame = documentLocator(owner).locator(INLINE_STORY);
   await frame.getByLabel('Item 1', { exact: true }).waitFor();
   await frame.getByLabel('Owner 1', { exact: true }).click();
-  await commit(owner, () => owner.getByRole('option', { name: '@ppsreejith', exact: true }).click());
+  await commit(owner, () => documentLocator(owner).getByRole('option', { name: '@ppsreejith', exact: true }).click());
   await waitText(b, 'Owner 1', '@ppsreejith');
   assert.equal((await fixture.api(`/api/artifacts/${fixture.datasetId}`, undefined, 'GET')).rows.find(row => row.id === 1).owner, '@ppsreejith');
   check('owner cell snapshots publish updates to other readers');
@@ -273,11 +272,12 @@ try {
    * its state.
    */
   const shared = await createEditableTableFixture(base, 2, { seed: await startDocument(base) });
-  const guest = await browser.newPage();
-  await guest.goto(shared.url);
+  const guestPage = await browser.newPage();
+  await guestPage.goto(shared.url);
+  const guest = await artifactDocument(guestPage);
   await guest.getByLabel('Item 1', { exact: true }).waitFor();
   assert.equal(await guest.getByLabel('Item 1', { exact: true }).isDisabled(), true);
-  const forged = await guest.request.post(`${shared.url}/mutate`, { data: {
+  const forged = await guestPage.request.post(`${shared.url}/mutate`, { data: {
     mutation: 'set_item',
     args: {},
     value: 'forged',
@@ -292,8 +292,8 @@ try {
   const email = `mxmx_test_dataset_friend_${Date.now().toString(36)}@example.com`;
   await loginViaEmail(friend, base, sink, email);
   await friend.goto(shared.url);
-  await friend.locator('[data-mx-inline-story]').waitFor();
-  const friendDoc = friend.locator('[data-mx-inline-story]');
+  const friendDoc = documentLocator(friend).locator(INLINE_STORY);
+  await friendDoc.waitFor();
   await friendDoc.getByLabel('Item 1', { exact: true }).waitFor();
   assert.equal(await friendDoc.getByLabel('Item 1', { exact: true }).isDisabled(), true);
 
@@ -322,7 +322,7 @@ try {
 
   // Read-only is not inert: the table still filters.
   await friendDoc.getByLabel('Filter status', { exact: true }).click();
-  await friend.getByRole('option', { name: 'backlog', exact: true }).click();
+  await documentLocator(friend).getByRole('option', { name: 'backlog', exact: true }).click();
   await friendDoc.getByLabel('Item 1', { exact: true }).waitFor();
   check('and a read-only reader can still filter');
 

@@ -204,11 +204,12 @@ export const STORY_ROOT_SELECTOR = '[data-mx-inline-story]';
 export const LIVE_ID_ATTR = 'data-mx-live-id';
 /** The version the page shows, on `<body>` beside `LIVE_ID_ATTR`. */
 export const LIVE_EDIT_ATTR = 'data-mx-live-edit';
+/** On `<body>` beside the live identity: the page is a document on its own origin, so it holds its own stream even when framed. */
+export const LIVE_DIRECT_ATTR = 'data-mx-live-direct';
+/** On the app page's story element when it holds the document's frame rather than the document (AssembleInput.frame). */
+export const STORY_FRAMED_ATTR = 'data-mx-framed';
 /** A compiler-generated hydration key prefix (`s<i>-`, `d-`); anything else never reaches a selector. Stateless: no `g`/`y` flag. */
 export const RENDER_ID_PATTERN = /^[\w-]+$/;
-/** The story root's private slot for the public `mx` API's uninstaller (lib/islands/mx-host `installPublicMx`). */
-export const PUBLIC_MX_KEY = '__mxPublicApi';
-export type PublicMxHost = HTMLElement & { [PUBLIC_MX_KEY]?: () => void };
 
 /** Fired on `document` once every island has hydrated (the same event the former runtime fires after hydration). */
 export const ISLANDS_READY_EVENT = 'mx:ready';
@@ -228,6 +229,23 @@ export const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure
 export type KitFamily = (typeof KIT_FAMILIES)[number];
 
 /**
+ * WHAT AN AUTHOR SCRIPT MAY IMPORT FROM SOLID: each specifier is an entry of the island build
+ * (lib/islands/vendor/*, scripts/build/build-islands.mjs), the SAME Solid the kit runs on, and exports exactly
+ * these names (the build refuses a vendor chunk whose exports differ). Curated, not `export *`: esbuild splits by
+ * file, so every Solid export a vendor entry keeps alive lands in the shared chunk every interactive page loads
+ * (measured: `Portal` and `Dynamic` ~600 B brotli, `produce`/`unwrap` ~120 B, context, `Index`, `createUniqueId`
+ * and `createRenderEffect` ~150 B, so they are left out and rt+boot and the kit closure keep their budgets). The
+ * web list covers every helper Solid's JSX transform emits for `generate: 'dom'` without hydration; the publish
+ * build (lib/story/document/author-module.server) refuses an import of any other name.
+ */
+export const AUTHOR_VENDOR_EXPORTS = {
+  'solid-js': ['For', 'Match', 'Show', 'Switch', 'batch', 'createEffect', 'createMemo', 'createRoot', 'createSignal', 'mergeProps', 'on', 'onCleanup', 'onMount', 'splitProps', 'untrack'],
+  'solid-js/web': ['addEventListener', 'classList', 'className', 'createComponent', 'delegateEvents', 'effect', 'insert', 'memo', 'mergeProps', 'render', 'setAttribute', 'setAttributeNS', 'setBoolAttribute', 'setProperty', 'setStyleProperty', 'spread', 'style', 'template', 'use'],
+  'solid-js/store': ['createStore', 'reconcile'],
+} as const satisfies Record<string, readonly string[]>;
+export type AuthorVendorSpecifier = keyof typeof AUTHOR_VENDOR_EXPORTS;
+
+/**
  * The page's data island (`<script type="application/json">`, written by the
  * assembler, read by the island runtime's boot): everything a reader's islands
  * start from before any request.
@@ -239,18 +257,16 @@ export interface IslandPageData {
   /** A prepared version that cannot run carries its query errors into the reader. */
   state?: import('@/lib/story/data/dataflow').DataflowState;
   results: ServedResults | null;
-  /** The compiled app page uses its same-origin scoped POST query door, including for guests. */
-  appPage: boolean;
   queryUrl?: string;
   mutateUrl?: string;
   viewerUrl?: string;
-  assetsUrl?: string;
   /**
-   * The managed `<Iframe>`'s asset door (lib/story-runtime/managed-assets ManagedAssetsConfig): the
-   * deployment's asset origin and this page's absolute import door (with a capture's verified export key),
-   * exactly as the former island carries it. Absent without an asset origin; a frame then refuses external assets.
+   * The page is a document on its OWN origin (APP__PAGES_HOST), framed by the app page or not: its doors
+   * are absolute, it calls them directly with its pages cookie (`credentials: 'include'`), and it holds
+   * its own live stream even when framed.
    */
-  managedAssets?: { origin: string; resolveUrl: string };
+  direct?: boolean;
+  assetsUrl?: string;
   /**
    * The request holds a credential for this document (session or held connection): the page's doors
    * carry it, and viewer-dependent islands show a neutral placeholder rather than guest content until
@@ -269,8 +285,15 @@ export interface IslandPageData {
   readOnly: string | null;
   /**
    * The version's author script (CompiledPage.authorScript), present only when it has one: `boot`
-   * then loads the lazy author host, which runs it in the sandboxed author frame against this page's
-   * store — never in this document.
+   * then loads the page runtime (`vendor['@mx/page-runtime']`), which runs it as a module of this
+   * document against this page's store.
    */
   authorScript?: string | null;
+  /**
+   * The script's bare imports → this build's chunks (`solid-js`, `solid-js/web`, `solid-js/store`, AUTHOR_VENDOR_EXPORTS,
+   * and `@mx/page-runtime` itself), present with `authorScript` or a declared dataflow: the runtime resolves the
+   * module's imports against the serving build, so the script, the runtime and the kit share one Solid, and boot
+   * loads the same runtime for `window.page`.
+   */
+  vendor?: Readonly<Record<string, string>>;
 }

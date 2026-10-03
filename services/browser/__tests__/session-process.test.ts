@@ -4,6 +4,8 @@ import {createEnv} from '@artifactbin/utils';
 import {createSessionProcess,forwardSessionFetch,sessionPlainPlan,sessionSandboxPlan} from '../src/session-process';
 import {sessionCapacity,sessionEnvNamesRead,sessionProcessPaths,sessionSandboxChoice} from '../src/session-config';
 import {createBrowserSessions} from '../src/sessions';
+import {createPagesCookieJar,sessionBrowserArgs,sessionOrigins} from '../src/session-origins';
+import {FORWARDED_HOST} from '@artifactbin/contracts';
 it('launches SEA through its trusted selector with only the executable and browser tree mounted',()=>{
  const plan=sessionSandboxPlan('/tmp/private-session','/cache/chromium/chrome-linux64','/home/operator/bin/afbin',['--internal-browser-worker']);
  expect(plan.args).toContain('--unshare-all');expect(plan.args).toContain('--die-with-parent');expect(plan.args).toContain('--new-session');
@@ -125,4 +127,71 @@ it('reads session capacity at the same env boundary, defaulting to two and refus
  expect(sessionProcessPaths({BROWSER__SESSION_MAX:'5'})).toMatchObject({capacity:{sessions:5,sessionsPerActor:2}});
  // And the boot audit hears that this boundary read both names.
  expect([...sessionEnvNamesRead()]).toEqual(expect.arrayContaining(['BROWSER__SESSION_MAX','BROWSER__SESSION_MAX_PER_ACTOR']));
+});
+
+/**
+ * EVERY DOCUMENT ON ITS OWN ORIGIN: the app page frames `<hex id>.<pages host>` through the apex's ticket
+ * exchange, so a session admits exactly those origins beside the app's own, and the pages cookie the
+ * exchange sets stays on this side of the worker.
+ */
+it('admits the app origin, the pages apex and document origins under the pages host, and nothing else',()=>{
+ const origins=sessionOrigins('http://app.lvh.me:7001','lvh.me');
+ for(const url of ['http://app.lvh.me:7001/a/x','http://lvh.me:7001/pages-session','http://646f6331.lvh.me:7001/'])expect(origins.allows(new URL(url)),url).toBe(true);
+ for(const url of ['http://646f6331.lvh.me:7002/','https://646f6331.lvh.me:7001/','http://a.b.lvh.me:7001/','http://notahexlabel.lvh.me:7001/','http://646f6331.lvh.me.evil.test:7001/','http://u:p@646f6331.lvh.me:7001/','http://elsewhere.test/'])
+  expect(origins.allows(new URL(url)),url).toBe(false);
+ // The app's own origin is not the pages site even when it sits under the pages host.
+ expect(origins.pages(new URL('http://app.lvh.me:7001/'))).toBe(false);
+ // Without a pages host a session is the app's origin alone, as before.
+ expect(sessionOrigins('http://app.lvh.me:7001').allows(new URL('http://646f6331.lvh.me:7001/'))).toBe(false);
+});
+
+it('maps a development pages host to loopback for the session browser and leaves a real one alone',()=>{
+ expect(sessionBrowserArgs('lvh.me')).toEqual(['--host-resolver-rules=MAP *.lvh.me 127.0.0.1, MAP lvh.me 127.0.0.1']);
+ expect(sessionBrowserArgs('pages.localhost')).toHaveLength(1);
+ expect(sessionBrowserArgs('pages.example.com')).toEqual([]);
+ expect(sessionBrowserArgs(undefined)).toEqual([]);
+ expect(sessionProcessPaths({APP__PAGES_HOST:'LVH.me'})).toMatchObject({pagesHost:'lvh.me'});
+ expect(sessionProcessPaths({})).not.toHaveProperty('pagesHost');
+ expect(()=>sessionProcessPaths({APP__PAGES_HOST:'https://lvh.me'})).toThrow(/APP__PAGES_HOST/);
+ expect([...sessionEnvNamesRead()]).toContain('APP__PAGES_HOST');
+});
+
+it('forwards a document request with the addressed host and the pages cookie the parent holds, never handing it back',async()=>{
+ const seen:Request[]=[];
+ const pagesHost='lvh.me';
+ const jar=createPagesCookieJar(sessionOrigins('http://app.lvh.me:7001',pagesHost),pagesHost);
+ const options={baseURL:'http://app.lvh.me:7001',pagesHost,jar,async request(request:Request){
+  seen.push(request);
+  const url=new URL(request.url);
+  if(url.pathname==='/pages-session')return new Response(null,{status:302,headers:[['location','http://646f6331.lvh.me:7001/'],['set-cookie','afbin_pages=c0ffee; Domain=.lvh.me; Path=/; HttpOnly'],['set-cookie','other=x; Path=/']]});
+  return new Response('doc',{headers:{'content-type':'text/html'}});
+ }};
+ const actor={credential:'bearer' as const,tokenId:'tok_owner',userId:'usr_owner'};
+ const exchanged=await forwardSessionFetch({type:'fetch',id:'1',url:'http://lvh.me:7001/pages-session?ticket=t',method:'GET',headers:{}},actor,options);
+ expect(exchanged.status).toBe(302);
+ expect(exchanged.headers.location).toBe('http://646f6331.lvh.me:7001/');
+ expect(Object.keys(exchanged.headers)).not.toContain('set-cookie');
+ // A script-supplied cookie is dropped; the parent's own pages cookie is what the document request carries.
+ await forwardSessionFetch({type:'fetch',id:'2',url:'http://646f6331.lvh.me:7001/',method:'GET',headers:{cookie:'afbin_pages=forged'}},actor,options);
+ await forwardSessionFetch({type:'fetch',id:'3',url:'http://app.lvh.me:7001/a/doc1',method:'GET',headers:{}},actor,options);
+ expect(seen.map(request=>request.headers.get(FORWARDED_HOST))).toEqual(['lvh.me:7001','646f6331.lvh.me:7001','app.lvh.me:7001']);
+ expect(seen.map(request=>request.headers.get('cookie'))).toEqual([null,'afbin_pages=c0ffee',null]);
+});
+
+it('expires and clears what the pages site set, and keeps nothing set for another domain',()=>{
+ let now=1_000_000;
+ const origins=sessionOrigins('http://app.lvh.me:7001','lvh.me');
+ const jar=createPagesCookieJar(origins,'lvh.me',()=>now);
+ const site=new URL('http://lvh.me:7001/pages-session');
+ const set=(...lines:string[])=>jar.store(site,new Response(null,{headers:lines.map(line=>['set-cookie',line] as [string,string])}));
+ set('afbin_pages=a; Domain=lvh.me; Max-Age=60','host-only=x','wide=y; Domain=example.com');
+ expect(jar.headerFor(new URL('http://646f6331.lvh.me:7001/'))).toBe('afbin_pages=a');
+ now+=61_000;
+ expect(jar.headerFor(new URL('http://646f6331.lvh.me:7001/'))).toBeNull();
+ set('afbin_pages=b; Domain=.lvh.me');
+ set('afbin_pages=; Domain=.lvh.me; Max-Age=0');
+ expect(jar.headerFor(new URL('http://646f6331.lvh.me:7001/'))).toBeNull();
+ // An app-origin answer is never the jar's.
+ jar.store(new URL('http://app.lvh.me:7001/a/x'),new Response(null,{headers:{'set-cookie':'afbin_pages=c; Domain=.lvh.me'}}));
+ expect(jar.headerFor(new URL('http://lvh.me:7001/'))).toBeNull();
 });

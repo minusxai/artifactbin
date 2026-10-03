@@ -6,6 +6,7 @@
  * slow, and a compile that fails is a reported 500. Real routes, the harness's database, the reader
  * inline budget at zero for this file (every inline compile is "over budget").
  */
+import { framedDocument } from './harness';
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -92,7 +93,7 @@ describe('a compile that fails', () => {
     await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
   };
 
-  it('/raw and the app page answer 500, and every occurrence is reported', async () => {
+  it('/raw and the document the app page frames answer 500, and every occurrence is reported', async () => {
     const who = await owner();
     const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
     await recordFailure(id);
@@ -103,7 +104,8 @@ describe('a compile that fails', () => {
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     expect(await res.text()).not.toContain('A plain prose document');
     expect((await raw(id)).status).toBe(500);
-    const page = await app.request(`/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } });
+    // The app page is only the frame's shell; the document in its frame is the renderer's, and fails the same way.
+    const page = (await framedDocument(app, `/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } }))!;
     expect(page.status).toBe(500);
     expect(compiledPageFailures() - before).toBe(3);
     expect(error.mock.calls.filter(([line]) => String(line).includes(`FAILED ${id}`))).toHaveLength(3);

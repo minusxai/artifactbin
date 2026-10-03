@@ -1,20 +1,26 @@
-# Unified mx and live browser sessions
+# Live browser sessions and `window.page`
 
-The runtime owns one five-method data capability: `describe`, `read`, `set`,
-`mutate`, and `subscribe`. Both the public artifact page and managed iframe use
-this implementation; the iframe adapter transports requests and coalesced
-subscription packets over its existing MessagePort. It owns no cached read API.
-Signals include scalar values, local tables, and query results. Only scalars can
-be set; declared mutations own row writes. Mutation arguments apply to one call.
+A browser session drives a public artifact page through `window.page`, which
+the island boot (`lib/islands/boot.ts`) installs on a top-level page that
+declares data, while it reads. It reads and writes the page runtime's bindings
+(`lib/islands/page-runtime.ts` `bindPage`, `exposePage`), the very Solid signals
+the page's own `<Helmet>` script binds from `page`, as plain data: `get(name)` is
+a Value's current value or a Query's (or table Value's) current rows, `set(name,
+value)` writes a scalar Value (queries re-run), `ready(name)` a Query's next
+settled rows, and `mutation(name)` an async function that waits for the page's
+access check, resolves after commit and rejects with the server's message. An
+undeclared name gives `undefined` (`set` and `ready` throw). Editing removes it
+and reading again restores it. There is no cached read API and no subscription
+API beside the signals.
 
 The session service owns authentication scope, leases, execution receipts, and
 script serialization. Each isolated worker owns an actual Playwright browser,
 context, and pages across calls. The CLI submits async function bodies and polls
 receipts. It prints recovery IDs before waiting. `context` is standard Playwright;
 `pages` is a frozen map of stable page IDs; `output.image(bytes)` attaches PNG/JPEG.
-Open artifacts with `await page.goto('/a/<id>')`, call mx through
+Open artifacts with `await page.goto('/a/<id>')`, call `window.page` through
 `page.evaluate()`, and use normal locators and screenshots. Independent page work
-can use `Promise.all`. Source editing is not an mx operation.
+can use `Promise.all`. Source editing is not a session operation.
 
 ```
 afbin sessions script new --input actions.js --json
@@ -26,24 +32,31 @@ afbin sessions close SESSION_ID --json
 ```js
 const page = await context.newPage();
 await page.goto('/a/abc123');
-await page.waitForFunction(() => Boolean(window.mx));
-const description = await page.evaluate(() => window.mx.describe());
+await page.waitForFunction(() => Boolean(window.page));
+await page.evaluate(() => { window.page.set('region', 'West'); });
+const rows = await page.evaluate(() => window.page.ready('sales'));
 await output.image(await page.screenshot());
-return description;
+return rows;
 ```
 
 Session routes use `/api/browser-sessions`; existing remote terminal resources
 under `/api/sessions` retain their contract. Credentials remain in the parent
 broker. Workers have no network namespace access to the host, no host checkout,
-and only private writable storage. The broker admits the configured app origin,
+and only private writable storage. The broker admits the configured app origin and, under
+`APP__PAGES_HOST`, the pages apex and the document origins the app page frames (`<hex id>.<pages host>`),
 forwards the authenticated actor (revalidating its token on each app request), strips supplied credential headers, and bounds
 request and response bodies. Canonical redirects are resolved by the broker (at most ten same-origin hops).
 The broker fulfills the originally requested URL; the app may then update its displayed URL through client-side navigation.
+A redirect to another admitted origin (the pages apex sending a document's frame to the document's own origin) is
+navigated by the page itself, so the frame is that origin. The pages cookie the apex sets for the frame's one-time
+ticket is held by the broker and attached only to the pages origins; the worker's browser never holds it. On a page
+that frames a document, `page.evaluate`, `waitForFunction`, locators and selector actions resolve in the document
+frame (after it has loaded and booted), where `window.page` lives; `page.url()`, `goto` and `screenshot` stay the app page's.
 Every hop revalidates the actor. Linux bubblewrap/user namespaces are required;
 unsupported hosts fail closed. A delegated cgroup v2 subtree bounds every worker
 to 1 GiB memory, 512 processes/threads, and one CPU. Set
 `BROWSER__SESSION_CGROUP_ROOT` to that subtree (default `/sys/fs/cgroup/afbin-sessions`). Split services additionally configure
-`BROWSER__SESSION_APP_URL`, `APP__PUBLIC_BASE_URL`, and `CONTRACT__ACTOR_SECRET`.
+`BROWSER__SESSION_APP_URL`, `APP__PUBLIC_BASE_URL`, `APP__PAGES_HOST`, and `CONTRACT__ACTOR_SECRET`.
 
 `BROWSER__SESSION_MAX` (default 2) caps the live browsers one browser service holds, shared by
 every owner; `BROWSER__SESSION_MAX_PER_ACTOR` (default 2) caps how many of them one credential

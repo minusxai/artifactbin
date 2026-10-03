@@ -58,6 +58,18 @@ test("rejects unsafe server URLs", () => {
     "http://127.0.0.1:6400",
   );
 });
+test("accepts plain http only on a local development host", () => {
+  // The dev app serves at http://app.<pages host>:<port>, and *.lvh.me resolves to 127.0.0.1.
+  assert.equal(normalizeServer("http://app.lvh.me:3030"), "http://app.lvh.me:3030");
+  for (const origin of ["http://localhost:3030", "http://127.0.0.1:3030", "http://[::1]:3030", "http://lvh.me:3030",
+    "http://app.localhost:3030", "http://artifactbin.test:3030", "http://APP.LVH.ME:3030"])
+    assert.equal(normalizeServer(origin), new URL(origin).origin, origin);
+  // Everything else keeps requiring https, including names that only look local.
+  for (const origin of ["http://example.com", "http://lvh.me.example.com", "http://evil-lvh.me", "http://app.lvh.me.evil.com",
+    "http://localhost.example.com", "http://test", "http://notlocalhost", "http://10.0.0.1:3030", "http://example.testing"])
+    assert.throws(() => normalizeServer(origin), /HTTPS server origin/, origin);
+  assert.equal(normalizeServer("https://example.com"), "https://example.com");
+});
 
 test("does not load retired config or create state on a read", async () => {
  const home = await mkdtemp(join(tmpdir(), "afbin-config-"));

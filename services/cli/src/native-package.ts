@@ -1,6 +1,7 @@
 import {lstat,mkdir,mkdtemp,readFile,readlink,realpath,rename,rm,symlink,writeFile} from 'node:fs/promises';
 import {dirname,join,posix,relative} from 'node:path';
 import {gunzipSync} from 'node:zlib';
+import {isLocalDevelopmentHost} from '@artifactbin/contracts';
 import {digest,privateDirectory,isMissing} from './files';
 import {download} from './release-download';
 import {CliError} from './commands';
@@ -12,7 +13,7 @@ function validate(spec:NativePackage,kind='sql',platform=process.platform):numbe
  const seen=new Set<string>();let total=0;
  if(!hash.test(spec.sha256)||!spec.files.length||spec.files.length>(kind==='sql'?4096:30000))throw new CliError('invalid_release','Invalid native package manifest.');
  const url=new URL(spec.url);
- if((url.protocol!=='https:'&&!(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname)))||url.username||url.password||url.search||url.hash)throw new CliError('invalid_release','Invalid native package manifest URL.');
+ if((url.protocol!=='https:'&&!(url.protocol==='http:'&&isLocalDevelopmentHost(url.hostname)))||url.username||url.password||url.search||url.hash)throw new CliError('invalid_release','Invalid native package manifest URL.');
  for(const file of spec.files){
   if(!file.path.startsWith('node_modules/')||file.path.includes('\\')||file.path.includes('\0')||file.path.split('/').some(p=>!p||p==='.'||p==='..')||seen.has(file.path)||!hash.test(file.sha256)||!Number.isSafeInteger(file.size)||file.size<0)throw new CliError('invalid_release','Invalid native package manifest entry.');
   if(file.mode!==undefined&&![0o600,0o700].includes(file.mode))throw new CliError('invalid_release','Invalid native package manifest mode.');

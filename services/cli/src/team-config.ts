@@ -1,6 +1,7 @@
 /** Explicit team hosting owns its settings and data; it never reads client profiles. */
 import {readFile,realpath} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
+import {isLocalDevelopmentHost} from '@artifactbin/contracts';
 import {parseDatabaseUrl} from '../../app/lib/platform/database-url';
 // The auth service owns both questions: which settings amount to a login someone could COMPLETE,
 // and which origins the local outbox serves. Asking it keeps the refusals and the startup text true
@@ -9,8 +10,29 @@ import {completeLoginMethods} from '../../auth/src/config';
 import {usesDevOutbox} from '../../auth/src/mail';
 // Only namespaces owned by the OSS host enter its process configuration.
 const teamModules=new Set(['APP','AUTH','EMAIL','ADMIN','ANALYTICS','ARTIFACTS','ASSETS','BROWSER','DATASET','EVENTS','EXPORT','FILES','IMAGES','INTERNAL','PDF','QUOTA','SQL','WEB_INGEST']);
-/** The listen addresses that reach this machine only; `usesDevOutbox` answers the same question for a URL. */
-const LOOPBACK_HOSTS=['localhost','127.0.0.1','::1','[::1]'];
+/**
+ * A listen address that reaches this machine only: a local development host (`isLocalDevelopmentHost`,
+ * the origin rule's), or IPv6 loopback as APP__HOST spells it, unbracketed. `usesDevOutbox` answers
+ * the question for the public URL.
+ */
+const listensLocally=(host:string)=>host==='::1'||isLocalDevelopmentHost(host);
+/**
+ * Every document is served on its own origin, `<hex id>.<pages host>` (APP__PAGES_HOST, which the app
+ * server refuses to boot without), and that host must be SAME SITE as the public URL: the frame's pages
+ * cookie is SameSite=Lax. An operator value wins. Otherwise a loopback public URL (`usesDevOutbox`:
+ * loopback or lvh.me) gets development's `lvh.me`, every name under which resolves to 127.0.0.1 — same
+ * site only for an app at an lvh.me name, which is why `afbin serve` generates `http://app.lvh.me:<port>`
+ * (serve-config) — and a named host gets
+ * `pages.<its hostname>`, a subdomain and so same site by construction. An IP address has no subdomain
+ * to derive, so it has to name one.
+ */
+export function teamPagesHost(publicUrl:URL,configured:string|undefined):string{
+ if(configured?.trim())return configured.trim();
+ const name=publicUrl.hostname.toLowerCase().replace(/\.$/,'');
+ if(usesDevOutbox(publicUrl.origin))return 'lvh.me';
+ if(name.startsWith('[')||/^\d+\.\d+\.\d+\.\d+$/.test(name))throw new Error(`Team APP__PUBLIC_BASE_URL ${publicUrl.origin} is an IP address, so no pages host can be derived from it: set APP__PAGES_HOST to a hostname on the same site that resolves to this server (documents are served at <id>.<that host>).`);
+ return 'pages.'+name;
+}
 export interface TeamOverrides {directory?:string;port?:number;dbUrl?:string}
 export interface TeamSettings {directory:string;host:string;port:number;origin:string;env:NodeJS.ProcessEnv}
 export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv=process.env,overrides:TeamOverrides={}):Promise<TeamSettings>{
@@ -37,9 +59,10 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
   // server whose login page dies at the provider. `completeLoginMethods` is the auth service's answer.
   const methods=completeLoginMethods(operator);
   if(!methods.mail&&!methods.google&&!methods.oidc)throw new Error(`Team hosting at ${url.origin} has no login method teammates can complete, so they would be told a code was emailed and never receive one. Set EMAIL__RESEND_API_KEY AND EMAIL__FROM for emailed codes (the key alone leaves the sender at a default address no mail provider will send for), or AUTH__GOOGLE_CLIENT_ID with AUTH__GOOGLE_CLIENT_SECRET, or AUTH__OIDC_PROVIDER_ID with AUTH__OIDC_CLIENT_ID, AUTH__OIDC_CLIENT_SECRET and either AUTH__OIDC_DISCOVERY_URL or all of AUTH__OIDC_AUTHORIZATION_URL, AUTH__OIDC_TOKEN_URL and AUTH__OIDC_USERINFO_URL. Only a loopback public URL may use the local outbox.`);
- }else if(!LOOPBACK_HOSTS.includes(host))
+ }else if(!listensLocally(host))
   throw new Error(`Team APP__HOST ${host} accepts connections from the network, but APP__PUBLIC_BASE_URL ${url.origin} is a loopback address teammates cannot open: approval and login must both happen at the public URL. Set APP__PUBLIC_BASE_URL to the URL teammates use.`);
- if(overrides.port!==undefined&&['localhost','127.0.0.1','[::1]'].includes(url.hostname))url.port=String(port);
+ // A loopback public URL IS the listener, so `--port` moves it too (an lvh.me name resolves to 127.0.0.1).
+ if(overrides.port!==undefined&&usesDevOutbox(url.origin))url.port=String(port);
  const data=join(directory,'data');
  const requested=overrides.dbUrl??operator.DATABASE_URL;
  if(requested&&!/^(pglite|postgres|postgresql):\/\//.test(requested))throw new Error('Use a pglite:// or postgres:// database URL.');
@@ -52,7 +75,7 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
  for(const key of ['EMAIL__DEV_OUTBOX_PATH'])if(operator[key])operator[key]=resolve(dirname(file),operator[key]);
  return {directory,host,port,origin:url.origin,env:{...base,...operator,NODE_ENV:'production',
   EMAIL__DEV_OUTBOX_PATH:operator.EMAIL__DEV_OUTBOX_PATH??join(data,'outbox.jsonl'),
-  APP__PORT:String(port),APP__PUBLIC_BASE_URL:url.origin,DATABASE_URL:database,OBJECT_STORE__LOCAL_DIR:join(data,'objects'),ARTIFACTBIN_HOME:join(data,'runtime')}};
+  APP__PORT:String(port),APP__PUBLIC_BASE_URL:url.origin,APP__PAGES_HOST:teamPagesHost(url,operator.APP__PAGES_HOST),DATABASE_URL:database,OBJECT_STORE__LOCAL_DIR:join(data,'objects'),ARTIFACTBIN_HOME:join(data,'runtime')}};
 }
 /**
  * What an operator has to pass on once the server is up: the origin teammates point a client at, the
@@ -69,7 +92,13 @@ export function serverInstructions(settings:TeamSettings):string[]{
   usesDevOutbox(settings.origin)
    ?`Login codes are NOT emailed from a loopback URL: each one prints here as "[dev-mail] otp email=… code=…" and is appended to ${settings.env.EMAIL__DEV_OUTBOX_PATH}.`
    :loginDelivery(settings.env),
+  // A derived pages host serves nothing until DNS and TLS cover it, so a published origin names it.
+  ...(usesDevOutbox(settings.origin)?[]:[pagesDelivery(settings)]),
  ];
+}
+function pagesDelivery(settings:TeamSettings):string{
+ const pages=settings.env.APP__PAGES_HOST!,scheme=new URL(settings.origin).protocol;
+ return `Documents are served on their own origins, ${scheme}//<id>.${pages}: point DNS and a TLS certificate for ${pages} and *.${pages} at this server (APP__PAGES_HOST chooses another name on the same site).`;
 }
 function loginDelivery(env:NodeJS.ProcessEnv):string{
  const methods=completeLoginMethods(env);

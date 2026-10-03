@@ -35,7 +35,6 @@ import { applyGraphPatch } from '@/lib/story/graph/document-graph-patch';
 import { needsAuthoringContext, prepareClientDocumentReplacement } from '@/lib/story/graph/document-update-client';
 import { documentAfterOperation } from '@/lib/story/graph/document-update-history';
 import { sourcePathToBodyPath } from '@/lib/story/document/edit-compose';
-import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
 import { storyUpdateParts } from '@/lib/story/document/update-parts';
 import {
   OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest, type ArtifactFile, type ArtifactFileEdit,
@@ -226,15 +225,14 @@ function headingOver(graph: DocumentGraph, changed: Set<string>): string | null 
 
 // ── what an edit would need from artifactbin ────────────────────────────────
 
-/** The server-bound inputs a source names: asset URLs, ref: targets, data bindings, icons and fonts. */
+/** The server-bound inputs a source names: ref: targets, data bindings, icons and fonts. */
 function authoringInputs(source: string): Set<string> {
   const out = new Set<string>();
-  for (const url of collectExternalAssetUrls(source).all) out.add(`url:${url}`);
   const parsed = parseJsx(source);
   if (!parsed.ok) return out;
   const walk = (nodes: JsxNode[]) => {
     for (const node of nodes) {
-      if (node.type !== 'element' || node.tag === 'Iframe') continue;
+      if (node.type !== 'element') continue;
       for (const attr of node.attributes) {
         if (attr.value.static && typeof attr.value.json === 'string' && attr.value.json.startsWith('ref:')) out.add(`ref:${attr.value.json}`);
       }

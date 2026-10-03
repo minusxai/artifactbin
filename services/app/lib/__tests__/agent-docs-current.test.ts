@@ -15,13 +15,15 @@
  * rejects. Add a builder here when you add one.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc } from '../skills';
+import { buildQuickSheet, renderDoc, renderTree, skillTree } from '../skills';
+import { publishJsx } from '../story/document/jsx-tier';
+import type { StoredContent } from '../story/document/input';
 
 const BASE = 'https://example.test';
 const files = (...paths: string[]) => (base: string) => paths.map((p) => renderDoc(p, base)).join('\n');
 /** The publishing references as one text. */
 const buildSkillDoc = files('artifactbin/references/publishing.md', 'artifactbin/references/publishing-auth.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-versions.md');
-const buildMarkupDoc = files('artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-video.md', 'artifactbin/references/markup-svg.md');
+const buildMarkupDoc = files('artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-svg.md');
 const buildDesignDoc = files('artifactbin/references/design.md');
 const buildThemesDoc = files('artifactbin/references/themes.md');
 const buildTemplatesDoc = files('artifactbin/references/templates.md');
@@ -79,6 +81,60 @@ describe('the reference teaches what a document CAN do', () => {
 
   it('and the themes doc points at the same one place', () => {
     expect(buildThemesDoc(BASE)).toMatch(/Helmet/);
+  });
+});
+
+/**
+ * The Helmet script runs IN the document as an ES module on the kit's Solid: the hidden author
+ * frame, its `mx` API and the managed `<Iframe>` are gone, and authored CSS is no longer stripped.
+ * The scripts reference teaches the contract the page runtime implements, and its example must
+ * clear the same door an agent's push does (module build, mount validation, second-save identity).
+ */
+describe('the scripts reference teaches the in-document module', () => {
+  const scripts = renderDoc('artifactbin/references/markup-scripts.md', BASE);
+  const flat = scripts.replace(/\s+/g, ' ');
+
+  it('names the page module, the import table, the ownership rule and the trap', () => {
+    for (const text of [
+      "import { signal, query, mutation } from 'page'", "signal('$region')", "query('$monthly')", "mutation('$bump')",
+      '`solid-js`', '`solid-js/web`', '`solid-js/store`', "The three `solid-js` specifiers are the page's own Solid, the kit's instance",
+      'https://esm.sh/<name>', 'Relative imports do not exist', 'invalid_script',
+      'a node bound in markup (`value="$region"`, `{$clicks}`, `data="$monthly"`) changes through its signal; every other node the script may touch freely',
+      'reading `region()` outside an effect, a memo or JSX is a one-time copy and subscribes to nothing', 'So is destructuring `props`',
+      'monthly.loading()', 'monthly.error()', 'await monthly.ready', '`createSignal(\'$region\')` (a local signal bound to nothing)',
+      'const item = () => props.item[0];',
+      'props.item is the current rows array (tracked; read it inside JSX, a memo or an effect), not a function; a literal prop such as color is a plain value',
+      "import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'",
+      // A document connects only to its own origin: another host is read through its /fetch door.
+      "fetch(proxy('https://api.example.com/x'))", 'read a `csp-connect` host through the document, GET only', '403 until the reader allows it',
+    ]) expect(flat, text).toContain(text);
+    expect(flat).not.toContain('`fetch` reaches HTTPS URLs');
+  });
+
+  it('teaches no part of the retired Preact contract', () => {
+    expect(scripts).not.toMatch(/preact|@preact\/signals|\.value\b|\beffect\(|useState|from 'react'/i);
+  });
+
+  it('teaches no part of the retired frame API', () => {
+    expect(scripts).not.toMatch(/\bmx\.(read|set|subscribe|mutate|describe)\b|<Iframe|opaque-origin iframe/);
+  });
+
+  it('publishes its example, and the stored source is stable on a second save', async () => {
+    const sample = /```jsx\n([\s\S]*?)\n```/.exec(scripts)?.[1];
+    expect(sample).toContain('export function Bars');
+    const saved = await publishJsx({}, sample!);
+    const refused = saved instanceof Response ? (await saved.text()).slice(0, 400) : null;
+    expect(refused).toBeNull();
+    const source = (saved as StoredContent).source!;
+    expect(((await publishJsx({}, source)) as StoredContent).source).toBe(source);
+  });
+});
+
+describe('no reference teaches the retired frame or the CSS strip', () => {
+  const rendered = renderTree(skillTree(), BASE).map(({ file, text }) => [file.path, text] as const);
+  it.each(rendered)('%s', (_path, text) => {
+    expect(text).not.toMatch(/<Iframe|markup-iframe|markup-libraries/);
+    expect(text).not.toMatch(/managed (Iframe|frame)|author frame|stripped at save|style=` is rejected/i);
   });
 });
 

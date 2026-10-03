@@ -43,17 +43,42 @@ and shares do not, and the original is never touched. The copy's footer says whe
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
-Pages run behind a strict CSP: styles are allowed, executable inline scripts
-are refused on compiled standalone pages, **all external network blocked**,
-and a `sandbox` directive gives each artifact an opaque
-origin so it can't touch the app's storage. Documents are always
-self-contained — but you don't have to make them so by hand.
+**Where a document runs.** Every document is served on its own origin, one
+per document id under the pages host (`APP__PAGES_HOST`, required: the server
+refuses to boot without it), and that is the only place a document is ever
+rendered. The app page at `/a/<id>` is the app's own shell — its bar and rail
+(`solid/document/DocumentChrome`), the consent slot above the frame, the
+comments rail and the editor's chrome — around ONE frame the server draws into
+the page (`lib/serving/document-frame`), whose first URL hands the reader across
+with a one-time ticket (`lib/accounts/pages-sessions`). The app page carries none
+of the document: no story, no island data, no document code, under the strict
+app policy that frames only the pages origins. The document's origin is not the
+app's, so nothing in the document can read the app's cookies, storage or
+account APIs. The document
+calls its own data doors (`/a/<id>/query`, `/mutate`, `/events`) directly:
+the server admits a call only when its origin names the same document as its
+path and the reader behind it may read (or write) that document. Each response
+carries the document's CSP: styles are allowed, executable inline scripts are
+refused on compiled pages, and scripts and connections reach this origin plus
+the ESM CDN the script's imports resolve to. A document that needs more hosts
+declares them in its Helmet (`<meta name="csp-connect" content="https://…">`,
+likewise `csp-script`, `csp-style`, `csp-img`); they are checked at publish and
+apply for a reader once that reader allows them (an owner's own documents are
+trusted). The markup itself has ONE policy, publish validation
+(`lib/jsx/validate.ts`): event handlers, denied tags and attributes, dangerous
+URL schemes and external SVG paint are refused before anything is stored, and the
+renderer re-checks none of it (`lib/story-ui/AGENTS.md`); a document that predates
+a rule is migrated by republishing. Documents are always self-contained — but you
+don't have to make them so by hand.
 
-**Compiled reader.** Published documents are prepared as static HTML with
-small interactive islands. `/a/<id>` serves that HTML with reader chrome;
-`/a/<id>/raw`, custom-domain posts and exports use the same assembled document
-without app chrome. The response identifies the served path with
-`x-mx-reader: compiled`. A missing, stale or refused compile is recompiled
+**Compiled reader — the one renderer.** Published documents are prepared as
+static HTML with small interactive islands, assembled as ONE standalone page
+(`lib/compiled-page/assembler`): the document's own origin serves it at `/` (and
+`/a/<id>/raw`), framed by the app page; custom-domain posts, exports
+(`/a/<id>/raw?chrome=0&key=`), the offline file and the CLI preview are the same
+page. There is no variant with the app's chrome and no copy inside the app page.
+The response identifies the served path with `x-mx-reader: compiled` (the app
+page that frames a document says the same of what is in its frame). A missing, stale or refused compile is recompiled
 within the read budget; if it still cannot be made the read fails with a reported
 500 (there is no other renderer); access checks run before the response. A prose page
 needs no island module.
@@ -61,16 +86,18 @@ Interactive pages load only their needed same-origin, content-addressed chunks.
 The compiled standalone page uses `script-src 'self'`: its data is inert JSON,
 not executable inline script, and author strings never become generated code.
 
-Author scripts run in a second opaque child reached through the fixed
-`/author-frame` wrapper, never in the visible renderer. The page carries the
-script only as data (inside its JSON data island, which is not script under
-the page's `script-src`); the page's runtime hands it to the child over a
-MessagePort after the wrapper loads, and the wrapper answers under its own
-policy (`sandbox allow-scripts`, no framing, no forms). A bounded
-MessagePort exposes only declared values, query refreshes and permitted
-dataset mutations. Managed `<Iframe>` assets are imported through the
-document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;
-arbitrary network, navigation, account APIs and parent DOM access remain denied.
+The author script is Solid, running in the document itself on the document's
+origin, with the same reach as the page. It is built into an ES module at publish (`lib/story/document/author-module.server.ts`:
+Solid JSX to DOM code, bare npm names to `https://esm.sh/<name>`), carried as data in
+the page's JSON island, and loaded by the page runtime
+(`lib/islands/page-runtime.ts`) from a `blob:` URL, with its `solid-js`
+imports pointed at the page's own build (the kit's one Solid). Its `page` module
+binds only the declared names: Values and Queries as Solid signals over the
+page's store, Mutations through the same permission-checked `/mutate` door as
+the kit's controls. Components it exports mount where the markup names them,
+over their server-rendered fallback. There is no author frame, no `mx` bridge
+and no managed `<Iframe>`; `scripts/migrate-scripts.mjs` rewrites a document
+written for them.
 
 **Data.** A document's `<Import>`s, `<Query>`s and `<Mutation>`s are compiled
 at publish — against the artifacts it may read, by the SQLite engine the
@@ -103,31 +130,34 @@ people an in-page result names get their cards through the same door
 that reader: themselves, and the people in a user column of an import they may
 hold, when one of the document's queries shows a person from it.
 
-Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
-page, the standalone `/raw` document and the offline file. It admits compiling
+Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the
+standalone document (its own origin and `/raw`) and the offline file (the app
+page's policy keeps it too). It admits compiling
 WebAssembly and nothing else — `eval`, `new Function` and string timers stay
-refused — and it is never added to the author-script frames, where author code
-runs. The wasm is fetched from this origin at a content-addressed `/islands/`
+refused. The wasm is fetched from this origin at a content-addressed `/islands/`
 URL (the `/raw` document's `connect-src` names that directory), cached
 `immutable`; the offline file carries it inside itself.
 
-**Import from the web.** Point at an image, a PDF, a font or a CSV and the
-server fetches it once, stores a copy, and serves it from this origin:
+**Web URLs in markup.** `<img src="https://example.com/chart.png" />`,
+`<File src="https://…/paper.pdf" />` and an `@font-face { src: url(https://…) }`
+are served exactly as written: publish fetches nothing, stores nothing and
+reports nothing. The document is its own page; its CSP admits any https image
+(`img-src https:`), and a face from a host outside the default font hosts needs
+that host in a `csp-style` meta.
 
-- `<img src="https://example.com/chart.png" />` in markup — and the URL STAYS
-  in the document. An agent writes what it would write anywhere and reads back
-  exactly that; only what a reader is SERVED is swapped for our copy. The same
-  goes for `<Video poster>`, `<File src="https://…/paper.pdf" />` and an
-  `@font-face { src: url(https://…) }` in the document's own stylesheet.
+**Import from the web.** Point at a file on create and the server fetches it
+once, stores a copy, and serves it from this origin:
+
 - `{ "imageUrl": … }`, `{ "pdfUrl": … }` or `{ "csvUrl": … }` on create, when
   you want the file to be an artifact with an id of its own.
-- `<meta name="font-display" content="Lobster" />` in `<Helmet>` — any
-  Google family, downloaded once, served from here.
 
-Nothing is ever hotlinked: readers never touch the origin host, documents
-can't rot when it dies, and no reader's IP leaks to a third party. A URL that
-will not fetch is a warning on the publish reply, never a refused document —
-that one picture falls back to its alt text.
+An imported copy cannot rot when the origin host dies, and no reader's IP
+leaks to it.
+
+Fonts named by `<meta name="font-display" content="Lobster" />` (also `font-body`,
+`font-mono`) in `<Helmet>` are not imported: the served stylesheet `@import`s Google
+Fonts, whose two hosts the document's policy admits (`lib/story/styles/document-csp.ts`).
+Bundled theme faces are served from this origin.
 
 The copy lives at `/assets/<sha256 of the URL>`, shared across every document
 and every user, so a popular URL is fetched exactly once. It is served

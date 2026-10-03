@@ -11,7 +11,7 @@ import { publishJsx } from '../story/document/jsx-tier';
 
 const B = 'https://example.test';
 /** The markup skill as one text: its SKILL.md plus the motion, svg and data files it links. */
-const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-svg.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
+const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-svg.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplatesDoc = (base: string) => renderDoc('artifactbin/references/templates.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
@@ -45,10 +45,11 @@ describe('markup doc teaches the motion kit', () => {
     expect(doc).toMatch(/text-\[#/);
   });
 
-  it('teaches the authored <style> block: template-literal idiom, custom keyframes, inline ban', () => {
+  it('teaches the authored <style> block: template-literal idiom, custom keyframes, inline style allowed', () => {
     expect(doc).toContain('<style>{`');
     expect(doc).toContain('@keyframes');
-    expect(doc).toMatch(/style=.*(rejected|not allowed)|inline `?style`?[^.]*(rejected|stays out)/i);
+    expect(doc).toMatch(/inline `style=\{\{…\}\}` is fine/);
+    expect(doc).not.toMatch(/style=`? is rejected/);
   });
 
   it('states the cascade contract: utilities are !important and always win', () => {

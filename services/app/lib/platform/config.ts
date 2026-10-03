@@ -12,8 +12,9 @@ import { DEFAULT_UPLOAD_MAX_BYTES, normalizeOrigin } from '@artifactbin/contract
  * two spellings for one setting is a trap — a file carrying both, where the
  * namespaced one silently wins and the other reads as live — so an
  * unnamespaced name is simply not a setting.
- * Production hard-fails only when
- * AUTH__SECRET or APP__PUBLIC_BASE_URL is absent (see the composition root).
+ * Production hard-fails when
+ * AUTH__SECRET or APP__PUBLIC_BASE_URL is absent (see the composition root); every boot, development
+ * included, refuses without APP__PAGES_HOST (PAGES_HOST below).
  * Two deliberate exceptions, because they are conventions every host and
  * pooler documents: `DATABASE_URL` and `S3_URL`. `NODE_ENV` is the runtime's.
  * Guarded by lib/__tests__/env-namespacing.test.ts.
@@ -193,17 +194,6 @@ export const WEB_INGEST_ALLOW_PRIVATE = env('WEB_INGEST', 'ALLOW_PRIVATE') === '
 export const WEB_INGEST_TIMEOUT_MS = Number(env('WEB_INGEST', 'TIMEOUT_MS') ?? '10000');
 /** Fetch ATTEMPTS one identity may spend per hour (lib/auth webIngestRateLimited). */
 export const WEB_INGEST_MAX_PER_HOUR = Number(env('WEB_INGEST', 'MAX_PER_HOUR') ?? '300');
-/** External images one publish may import — bounds publish latency, not storage. */
-export const MAX_EXTERNAL_IMAGES_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_IMAGES_PER_PUBLISH') ?? '8');
-/**
- * External ASSETS one publish may import in total — images AND the `@font-face`
- * urls in its stylesheet. The image cap above counts images alone, which left
- * the number of outbound fetches a single document could cause up to whoever
- * wrote the document: twelve faces named twelve hosts and no cap saw them.
- * Over this, the excess is NAMED in the reply and not fetched; the document
- * still publishes, because a cap is not a reason to lose someone's work.
- */
-export const MAX_EXTERNAL_ASSETS_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_ASSETS_PER_PUBLISH') ?? '16');
 
 /**
  * The biggest image an artifact may hold. Decoupled from MAX_CONTENT_BYTES (the
@@ -247,7 +237,7 @@ export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE
  * canonical origin, never to a name on this list.
  *
  * Comma-separated origins, validated with the one origin rule the CLI's
- * `normalizeServer` uses (HTTPS, or HTTP on loopback for development; no path,
+ * `normalizeServer` uses (HTTPS, or HTTP on a local development host; no path,
  * query, fragment or credentials). A malformed entry throws at module load,
  * like DATASET__DNS_SERVERS: half a list is worse than a refused boot, because
  * the missing half is a name that silently stops being the same server.
@@ -257,12 +247,39 @@ export function parseAliasOrigins(value: string | undefined): readonly string[] 
   const origins: string[] = [];
   for (const entry of value.split(',')) {
     const origin = normalizeOrigin(entry.trim());
-    if (!origin) throw new Error('APP__ALIAS_ORIGINS must be a comma-separated list of origins this deployment also answers at (HTTPS, or HTTP on loopback), without a path, query, fragment or credentials.');
+    if (!origin) throw new Error('APP__ALIAS_ORIGINS must be a comma-separated list of origins this deployment also answers at (HTTPS, or HTTP on a local development host such as localhost or *.lvh.me), without a path, query, fragment or credentials.');
     if (!origins.includes(origin)) origins.push(origin);
   }
   return Object.freeze(origins);
 }
 export const ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
+
+/**
+ * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/serving/pages-origin) — the only way a document is rendered.
+ * The hostname documents are served under, one label per document: `<hex(id)>.<pages host>`, and the
+ * app page frames that origin. It MUST be a subdomain of the app's registrable domain (same site) —
+ * the frame's `afbin_pages` cookie is SameSite=Lax — and the scheme and port are the public URL's
+ * (`APP__PUBLIC_BASE_URL`), so development appends its port. A bare hostname: no scheme, port, path
+ * or wildcard. REQUIRED to serve: a malformed value refuses any import of this module, and an unset one
+ * refuses the boot (`requirePagesHost`, asked by the composition and the app server) — tooling that reads
+ * this module without serving (the teaching compiler, scripts) does not need it. `npm run setup` writes `lvh.me`.
+ */
+export function parsePagesHost(value: string | undefined): string | null {
+  const host = value?.trim().toLowerCase().replace(/\.$/, '') ?? '';
+  if (!host) return null;
+  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(host)) {
+    throw new Error('APP__PAGES_HOST must be a bare hostname documents are served under (for example pages.example.com, or lvh.me in development), without a scheme, port, path or wildcard.');
+  }
+  return host;
+}
+const PAGES_HOST = parsePagesHost(env('APP', 'PAGES_HOST'));
+/** This deployment's pages host; unset refuses the boot with the setting's name. */
+export function requirePagesHost(): string {
+  if (!PAGES_HOST) {
+    throw new Error('APP__PAGES_HOST is required: the hostname every document is served under on its own origin (for example pages.example.com, or lvh.me in development with the app at http://app.lvh.me:<port>). Run `npm run setup` to write it.');
+  }
+  return PAGES_HOST;
+}
 
 /**
  * Where the EXPORT browser reaches this process. Internal by default, for the

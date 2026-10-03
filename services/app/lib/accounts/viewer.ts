@@ -76,6 +76,15 @@ function attachedActor(request: Request | undefined): RequestActor | null {
 }
 
 /**
+ * A request a browser session's scripted browser made: the session transport (services/browser
+ * `forwardSessionFetch`) marks it and attaches the actor the session browses as. The header alone is text
+ * anyone may send; with no attached actor it is not a session's request.
+ */
+export function isBrowserSessionRequest(request: Request): boolean {
+  return request.headers.get(BROWSER_SESSION_HEADER) === '1' && actorOf(request) !== null;
+}
+
+/**
  * The proxy's verdict, when there is a proxy. No attached actor means direct
  * mode, where the app resolves its own bearer/session/agent-cookie credential.
  */

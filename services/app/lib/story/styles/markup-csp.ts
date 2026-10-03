@@ -27,20 +27,23 @@
  */
 import { BASEMAP_PATH } from '@/lib/serving/basemap';
 import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
+import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from './document-sources';
+import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/story/document/csp-extensions';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
   "default-src 'none'",
   // 'wasm-unsafe-eval': the runtime compiles its SQLite engine (WebAssembly
-  // only — no eval); the author's script runs in a child frame without it.
-  "script-src 'unsafe-inline' 'self' 'wasm-unsafe-eval'",
-  "style-src 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "media-src 'self' data: blob:",
-  // The runtime's fixed same-origin HTTP wrapper; authored raw frames remain invalid JSX.
+  // only — no eval). `blob:` and the module CDNs: the author's script is a module
+  // of this document (lib/islands/page-runtime) and may import from them — the
+  // same sources its own origin admits (./document-csp), never any https host.
+  `script-src 'unsafe-inline' 'self' 'wasm-unsafe-eval' blob: ${MODULE_CDNS.join(' ')}`,
+  `style-src 'unsafe-inline' ${FONT_STYLES}`,
+  "img-src 'self' data: blob: https:",
+  `font-src 'self' data: ${FONT_FILES}`,
+  "media-src 'self' data: blob: https:",
+  // Same-origin frames only: an author's <iframe> plays on the document's own
+  // origin (./document-csp), never in this sandboxed copy.
   "frame-src 'self'",
-  // Raw <iframe> remains invalid markup. The trusted runtime owns this HTTP
-  // wrapper; its own frame-src 'none' prevents the inner author navigating.
 ] as const;
 
 /** What the document may DO — content-independent. */
@@ -95,10 +98,8 @@ export const mutatePath = (id: string): string => `/a/${id}/mutate`;
  * …and the document-scoped endpoint where a
  * document imports an image URL only its reader can compute
  * (app/a/[id]/assets). It belongs here because this is the registry of a
- * document's own addresses. Legacy images use it as their src; configured
- * managed frames additionally resolve URLs through its JSON GET API from the
- * trusted parent runtime. Only that configured policy adds it to connect-src;
- * the author child receives cached asset URLs, never this resolver endpoint.
+ * document's own addresses. Legacy images use it as their src; a configured
+ * asset origin also adds it to connect-src.
  */
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
@@ -149,7 +150,7 @@ const viewerPath = (id: string): string => `/a/${id}/viewer`;
  * `application/json` island, which is not script. `'self'` leads, so the policy
  * says first what the page runs.
  */
-const COMPILED_SCRIPT_SRC = "script-src 'self' 'wasm-unsafe-eval'";
+const COMPILED_SCRIPT_SRC = `script-src 'self' 'wasm-unsafe-eval' blob: ${MODULE_CDNS.join(' ')}`;
 
 export interface MarkupCspOptions {
   /** The response is the compiled reader's (x-mx-reader: compiled): no inline script is admitted. */
@@ -165,17 +166,40 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const viewer = options.compiled ? ` ${self}${viewerPath(id)} ${self}${storyFragmentPath(id)}` : '';
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data:`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
-    // Firefox evaluates inherited 'self' against the opaque srcdoc realm for
-    // dynamic imports. Keep the compatibility library directory explicit;
-    // the inner managed frame still restricts scripts to cached bundle URLs.
-    // This grants neither API fetches nor navigation to the main origin.
+    // The hosted library directory stays explicit for documents that import a
+    // pinned bundle by URL. This grants neither API fetches nor navigation.
     const script=options.compiled&&d.startsWith('script-src ')?COMPILED_SCRIPT_SRC:d;
     const source=script.startsWith('script-src ')?script+` ${self}/libraries/`:script;
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
   });
   const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
   return [...sources, connect+assetConnect, ...BEHAVIOUR_DIRECTIVES].join('; ');
+}
+
+/** The policy directives each declared set extends. Fonts ride on `csp-style`: a stylesheet host serves its faces. */
+const EXTENDED_DIRECTIVES: Record<CspDirective, readonly string[]> = {
+  connect: ['connect-src'], script: ['script-src'], style: ['style-src', 'font-src'], img: ['img-src'], frame: ['frame-src'], media: ['media-src'],
+};
+
+/**
+ * The `/raw` copy's policy (`markupCsp`) with the hosts this reader trusts the document to reach (its Helmet `csp-*`
+ * metas, lib/trust/document-trust `cspExtensionsFor`) appended per directive. Where APP__PAGES_HOST frames documents
+ * on their own origin, that origin's policy (./document-csp `buildDocumentCsp`) takes them instead; this serves the
+ * same consent to the app origin's standalone copy. Identity on an empty set. A directive the policy does not carry is
+ * left alone: adding it would narrow its `default-src` fallback, never widen.
+ */
+export function appendCspExtensions(policy: string, extensions: CspExtensions = EMPTY_CSP_EXTENSIONS): string {
+  if (CSP_DIRECTIVES.every((d) => extensions[d].length === 0)) return policy;
+  return policy.split(/;\s*/).map((directive) => {
+    const [name, ...sources] = directive.trim().split(/\s+/);
+    const kinds = CSP_DIRECTIVES.filter((d) => EXTENDED_DIRECTIVES[d].includes(name ?? ''));
+    if (!kinds.length) return directive;
+    const added = [...new Set(kinds.flatMap((kind) => extensions[kind]))].filter((origin) => !sources.includes(origin));
+    if (!added.length) return directive;
+    // 'none' cannot stand beside a source: the declared origins replace it.
+    return sources.length === 1 && sources[0] === "'none'" ? `${name} ${added.join(' ')}` : `${directive} ${added.join(' ')}`;
+  }).join('; ');
 }

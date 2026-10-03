@@ -8,8 +8,7 @@
  * `<Helmet>` are fragments of a document shown elsewhere and are not published.
  *
  * The booking document is the skill's large worked example: its block in markup-data-example must BE the
- * golden fixture the compiler and server tests run, and every excerpt the walkthrough explains must be
- * a piece of it.
+ * golden fixture the compiler and server tests run, shown once rather than re-quoted part by part.
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -153,9 +152,8 @@ describe('the booking walkthrough', () => {
     expect(jsxBlocks(walkthrough)).toContain(GOLDEN);
   });
 
-  it('explains only excerpts of that document', () => {
+  it('is one example, not a tour: no excerpt of it is quoted again', () => {
     const excerpts = [...walkthrough.matchAll(/```(?:jsx|sql)\n([\s\S]*?)```/g)].map((m) => m[1]!).filter((b) => b !== GOLDEN);
-    expect(excerpts.length).toBeGreaterThan(3);
-    for (const excerpt of excerpts) for (const line of excerpt.split('\n').filter((l) => l.trim())) expect(GOLDEN, 'an excerpt line the document does not hold').toContain(line);
+    expect(excerpts).toEqual([]);
   });
 });

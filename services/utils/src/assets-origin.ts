@@ -1,7 +1,8 @@
+import { isLocalDevelopmentHost } from '@artifactbin/contracts';
 /** Deployment-owned origin and exact public byte-route boundary. */
 export function parseAssetsOrigin(main: string, controls: string | null, configured: string): string {
   const root = new URL(main), asset = new URL(configured);
-  const loopback = (host: string) => ['localhost', '127.0.0.1', '[::1]'].includes(host) || host.endsWith('.localhost');
+  const loopback = isLocalDevelopmentHost;
   if (!['http:', 'https:'].includes(asset.protocol) || asset.username || asset.password
     || asset.pathname !== '/' || asset.search || asset.hash
     || asset.hostname === root.hostname || (controls && asset.hostname === new URL(controls).hostname)

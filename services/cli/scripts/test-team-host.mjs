@@ -12,7 +12,7 @@ const executable=resolve(process.argv[2]??`dist/afbin-${process.platform}-${proc
 const root=await mkdtemp(join(tmpdir(),'afbin-team-product-')),operator=join(root,'team'),home=join(root,'client');
 await mkdir(operator);await mkdir(home);
 const reserve=createServer();await new Promise(resolve=>reserve.listen(0,'127.0.0.1',resolve));const port=reserve.address().port;await new Promise(resolve=>reserve.close(resolve));
-const origin='http://127.0.0.1:'+port,outbox=join(operator,'mail.jsonl');
+const origin='http://app.lvh.me:'+port,outbox=join(operator,'mail.jsonl');
 const mirror=createServer(async(req,res)=>{
  const file=basename(new URL(req.url,'http://127.0.0.1').pathname);
  if(!/^afbin-(sql|chromium|runtime)-[a-z0-9-]+\.gz$/.test(file)){res.writeHead(404);res.end();return;}

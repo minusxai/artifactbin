@@ -38,7 +38,7 @@ import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const HK = 'data-hk';
 /** Sheets that belong to one version and may be absent from the next (lib/story/styles/document-styles, the assembler). */
-const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-webfonts', 'data-mx-font-vars', 'data-mx-author'];
+const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-font-vars', 'data-mx-author'];
 /** How often a version the server is still compiling is asked for again, and how long apart. */
 const NOT_READY_RETRIES = 6;
 const NOT_READY_DELAY_MS = 250;
@@ -95,7 +95,6 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   if (!nextRoot) throw refuse('the fragment carries no story');
   const nextEdit = next.body.getAttribute(LIVE_EDIT_ATTR);
   if (nextEdit && nextEdit === doc.body.getAttribute(LIVE_EDIT_ATTR)) return;
-  const authorChanged = authorScriptOf(doc) !== authorScriptOf(next);
 
   const oldModule = moduleUrl(doc);
   const newModule = moduleUrl(next);
@@ -149,6 +148,10 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   const activeSlide = activeRow ? [...root.querySelectorAll('.mx-doc [data-mx-slide]')][[...root.querySelectorAll('.mx-rail-row')].indexOf(activeRow)]?.id : null;
   const focused = doc.activeElement instanceof HTMLElement && root.contains(doc.activeElement) ? doc.activeElement : null;
 
+  // The script ends FIRST: the components it mounted and the nodes it made leave before the morph compares
+  // children, and it never sees a half-morphed page. It starts again on the new version below, whatever its source.
+  if (seam && authorScriptOf(doc)) await seam.restartAuthor(null);
+
   const override = options.mode?.() ?? readerMode(win);
   syncAttributes(root, nextRoot, override);
   morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])), preserveCharts: !!newModule && newModule === oldModule });
@@ -178,7 +181,8 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
 
   // The page's record of what it runs is the new version's now: the next version compares against it.
   syncModuleRecord(doc, next);
-  if (authorChanged && seam) await seam.restartAuthor(authorScriptOf(next));
+  const nextScript = authorScriptOf(next);
+  if (seam && nextScript) await seam.restartAuthor(nextScript);
   if (deck) doc.dispatchEvent(new CustomEvent('mx:deck-morphed', { detail: { slideId: activeSlide } }));
 
   if (focused && !focused.isConnected && focused.id) doc.getElementById(focused.id)?.focus({ preventScroll: true });

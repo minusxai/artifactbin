@@ -1,11 +1,12 @@
 import {expect,it,vi} from 'vitest';
+import { pagesSite } from '@/lib/serving/pages-origin';
 import {getDb} from '@/lib/platform';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/datasets/dataset-store';
-import {APP_CSP,createAppServer} from '@/server/app';
+import {appPagePolicy,createAppServer} from '@/server/app';
 import {mintToken} from '@/lib/accounts';
 import {claimToken,createUser} from '@/lib/accounts';
 import {agentCookie,request,useAppHarness} from './harness';
@@ -46,7 +47,7 @@ it('uses dataset roles independently of the document role and rechecks revocatio
 it('gives a dataset editor the session relay even when they only view the document',async()=>{
  const f=await fixture();await f.share(f.ds,'editor');
  const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
- expect((await app.request(request(`/a/${f.doc}`,{cookie:f.cookie}))).headers.get('content-security-policy')).toBe(APP_CSP);
+ expect((await app.request(request(`/a/${f.doc}`,{cookie:f.cookie}))).headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
  expect((await f.write(f.cookie)).status).toBe(200);
  await updateSharingFor({tokenId:f.owner.id,userId:null},f.ds,{access:'read'});
  expect((await f.write(f.cookie)).status).toBe(403);

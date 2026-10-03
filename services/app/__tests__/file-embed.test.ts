@@ -8,11 +8,11 @@
  * opened at the PDF and the browser's own viewer rendered it — and it needs no
  * CSP change at all, because a link is navigation rather than a subresource.
  *
- * The position has to be taught to FOUR tables that each know where an asset
+ * The position has to be taught to the tables that each know where an asset
  * can appear, and forgetting one is invisible until a reader opens a document:
- * refs.ts (what a `ref:` there must resolve to), external-images.ts (what a
- * publish imports), asset-url.ts (what a reader is served) and ref-data.ts
- * (what the card is told). One assertion each, so a table left behind is red.
+ * refs.ts (what a `ref:` there must resolve to) and ref-data.ts (what the card
+ * is told). A web URL there is a link served as written: publish fetches
+ * nothing for it.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
@@ -21,8 +21,6 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { assetUrlFor } from '@/lib/story/assets/asset-url';
-import { collectExternalAssetUrls } from '@/lib/story/assets/external-images';
-import { lookupWebAssets } from '@/lib/serving';
 import { mintToken } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -34,20 +32,15 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9
 
 let server: RunningServer;
 let web: string;
-/** Every path the "public web" was asked for — the cap's real subject. */
+/** Every path the "public web" was asked for: publish must add nothing here. */
 const asked: string[] = [];
-
-const WOFF2 = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(64, 3)]);
 
 beforeAll(async () => {
   server = await withHttpServer((req, res) => {
     const path = (req.url ?? '').split('?')[0];
     asked.push(path);
-    if (path.startsWith('/img')) { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG); return; }
-    if (path.startsWith('/face')) { res.writeHead(200, { 'Content-Type': 'font/woff2' }); res.end(WOFF2); return; }
     switch (path) {
       case '/report.pdf': res.writeHead(200, { 'Content-Type': 'application/pdf' }); res.end(samplePdf(2)); return;
-      case '/gone.pdf': res.writeHead(404); res.end(); return;
       default: res.writeHead(500); res.end();
     }
   });
@@ -135,78 +128,29 @@ describe('a ref: to a PDF', () => {
 });
 
 describe('a web URL in the same position', () => {
-  it('is collected, imported at publish, kept verbatim in storage and served from our origin', async () => {
+  it('is kept verbatim, fetched by nobody, stored nowhere and served as written', async () => {
     const t = await mintToken('t');
     const url = `${web}/report.pdf`;
     const source = `<div data-design="tw" className="p-8"><File src="${url}" title="The report" /></div>`;
-
-    // 1. the pure collector sees it (lib/story/assets/external-images)
-    expect(collectExternalAssetUrls(source).pdfs).toEqual([url]);
-
-    const res = await create(t.token, { markup: source, visibility: 'public' });
-    expect(res.status).toBe(201);
-    const { id } = await res.json();
-
-    // 2. one row in the global cache, typed from the bytes
-    const db = await getDb();
-    const rows = await db.query<{ content_type: string; bytes: number }>('select content_type, bytes from web_assets where url = $1', [url]);
-    expect(rows.rows[0]?.content_type).toBe('application/pdf');
-    expect(rows.rows[0]?.bytes).toBe(samplePdf(2).byteLength);
-
-    // 3. the URL the author wrote is what the author reads back
-    expect((await getArtifactById(id))!.source).toContain(url);
-
-    /*
-     * 4. …and the reader is served OUR copy (lib/story/assets/asset-url), at the
-     * VERSIONED address: a refreshed PDF is as cached as a refreshed picture,
-     * so the `?v=` the row's object key produces rides on this href too. The
-     * bare form is what a caller with no row would emit.
-     */
-    const held = await lookupWebAssets([url]);
-    const html = await (await rawRoute(request(`/a/${id}/raw`), params(id))).text();
-    expect(assetUrlFor(url, held.get(url))).toMatch(/\?v=[0-9a-f]{8}$/);
-    expect(html).toContain(`href="${assetUrlFor(url, held.get(url))}"`);
-    expect(html).not.toContain(url);
-  });
-
-  it('counts against the SAME total cap as images and faces, and the excess is named not fetched', async () => {
-    /*
-     * MAX_EXTERNAL_ASSETS_PER_PUBLISH (16) bounds what one document can make
-     * this server fetch. A PDF is an outbound fetch like any other — and the
-     * biggest of them — so it counts. The merge that brought the cap in left
-     * the PDF loop OUTSIDE it, which would have made <File> the way around it.
-     *
-     * The per-image cap is 8, so the sixteen are eight images and eight faces;
-     * the PDF is the seventeenth and is the one named.
-     */
-    const t = await mintToken('t');
-    const run = `?run=${Date.now()}`;
-    const images = Array.from({ length: 8 }, (_, i) => `${web}/img${i}.png${run}`);
-    const faces = Array.from({ length: 8 }, (_, i) => `${web}/face${i}.woff2${run}`);
-    const pdfUrl = `${web}/report.pdf${run}`;
-    const source = `<Helmet><style>{\`${faces.map((u, i) => `@font-face{font-family:F${i};src:url(${u})}`).join('')}\`}</style></Helmet>`
-      + `<div data-design="tw" className="p-8">${images.map((u) => `<img src="${u}" alt="i" />`).join('')}`
-      + `<File src="${pdfUrl}" /></div>`;
-
     asked.length = 0;
     const res = await create(t.token, { markup: source, visibility: 'public' });
     expect(res.status).toBe(201);
-    const warnings = (await res.json()).asset_warnings as Array<{ code: string; url: string }>;
-    const excess = warnings.find((w) => w.url === pdfUrl);
-    expect(excess?.code).toBe('too_many_external_assets');
-    // Named, not fetched: the whole point of the cap is the outbound request
-    // that never happens.
-    expect(asked.filter((u) => u.startsWith('/report.pdf'))).toEqual([]);
-    expect(asked.length).toBe(16);
+    const body = await res.json();
+    expect(body).not.toHaveProperty('asset_warnings');
+    expect(asked).toEqual([]);
+    const db = await getDb();
+    expect((await db.query('select 1 from web_assets where url = $1', [url])).rows).toEqual([]);
+    expect((await getArtifactById(body.id))!.source).toContain(url);
+    const html = await (await rawRoute(request(`/a/${body.id}/raw`), params(body.id))).text();
+    expect(html).toContain(`href="${url}"`);
+    expect(html).not.toContain(assetUrlFor(url));
   });
 
-  it('with a % in its filename still SERVES — a warning must not become a permanent 500', async () => {
+  it('with a % in its filename still SERVES — never a permanent 500', async () => {
     /*
      * `50%off.pdf` is an ordinary filename and `decodeURIComponent` throws on
-     * it. The import fails (the host does not resolve), which is a warning by
-     * design — and then the card's own name derivation threw during SSR, so the
-     * author was handed a document no reader could ever open. That is exactly
-     * the failure the warn-don't-refuse rule exists to avoid, one layer down.
+     * it. The card's own name derivation once threw during SSR, so the author
+     * was handed a document no reader could ever open.
      */
     const t = await mintToken('t');
     const url = 'https://example.invalid/50%off.pdf';
@@ -220,17 +164,4 @@ describe('a web URL in the same position', () => {
     // The name is shown as it was written, percent and all.
     expect(html).toContain('50%off.pdf');
   }, 20_000);
-
-  it('reports a URL it cannot fetch as a warning and publishes anyway', async () => {
-    const t = await mintToken('t');
-    const url = `${web}/gone.pdf`;
-    const res = await create(t.token, { markup: `<div data-design="tw"><File src="${url}" /></div>`, visibility: 'public' });
-    expect(res.status).toBe(201);
-    const body = await res.json();
-    // Losing a whole document over one dead link is the worse answer — the
-    // warn-don't-refuse rule, and the same key an image's refusal comes back under.
-    const warnings = body.asset_warnings as Array<{ code: string; url: string; fix: string }>;
-    expect(warnings.map((w) => w.url)).toContain(url);
-    expect(warnings.find((w) => w.url === url)!.code).toBe('bad_status');
-  });
 });

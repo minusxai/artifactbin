@@ -258,7 +258,6 @@ describe('a self-contained file', () => {
     for (const door of [`/a/${w.doc}/query`, '/mutate', '/events', '/api/']) expect(island).not.toContain(door);
     expect(file.island).not.toHaveProperty('queryUrl');
     expect(file.island).not.toHaveProperty('assetsUrl');
-    expect(file.island).not.toHaveProperty('managedAssets');
   });
 
   it('says a Mermaid document needs the mermaid bundle', async () => {

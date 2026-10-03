@@ -2,8 +2,8 @@
  * A DOCUMENT'S BASE SHEET — everything the served story's stylesheet carries
  * ahead of its compiled Tailwind and its authored `<style>`: the bare element
  * typography and controls, the navigation chrome, the embed/table/column
- * rules and the fonts (the theme's faces, faces the document imported, and
- * the slot overrides its Helmet names).
+ * rules and the fonts (the theme's faces, and the Google import and slot
+ * overrides its Helmet names).
  *
  * ONE writer for both sides. The server builds it when it prepares a version
  * (lib/story/prepared/prepare-runtime.server); the reader is sent only the RECIPE — a
@@ -16,16 +16,16 @@
  */
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
-import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
-import { getStoryFontCss, storyFontFaceCss, type StoryFontAsset } from '@/lib/data/story/story-fonts';
+import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
+import { getStoryFontCss } from '@/lib/data/story/story-fonts';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
 export interface StoryBaseCssRecipe {
   /** False for a capture (`chrome=0`): no navigation chrome. */
   chrome: boolean;
   theme: string | null;
-  /** Faces the document imported (lib/webfonts), already resolved. */
-  faces: StoryFontAsset[];
+  /** Never written: retained only until lib/serving/artifact-page stops reading it (a contract request). */
+  faces?: never[];
   /** The Helmet's font slot overrides. */
   fonts: DocumentFonts;
 }
@@ -36,12 +36,12 @@ const STORY_ROOT_RULE = ':root { --mx-vh: 100vh; color: var(--foreground, Canvas
  * The fixed sheets a base sheet is made of: what a prepared page's stored stylesheet version hashes
  * (lib/story/prepared/css-version.server), so changing any of them re-prepares the stored pages that carry it.
  */
-export const STORY_BASE_SHEETS: readonly string[] = [STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_CHROME_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS];
+export const STORY_BASE_SHEETS: readonly string[] = [STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, DOCUMENT_NAV_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS];
 
 export function storyBaseCss(recipe: StoryBaseCssRecipe): string {
   return [
     STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
-    recipe.chrome ? STORY_CHROME_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
-    getStoryFontCss(recipe.theme ?? undefined), storyFontFaceCss(recipe.faces), documentFontCss(recipe.fonts),
+    recipe.chrome ? DOCUMENT_NAV_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
+    getStoryFontCss(recipe.theme ?? undefined), documentFontCss(recipe.fonts),
   ].join('\n');
 }

@@ -8,7 +8,7 @@
  * A browser gate found it; this pins it.
  */
 import { describe, expect, it } from 'vitest';
-import { documentFonts, documentFontCss, invalidFontFamilies } from '../styles/document-fonts';
+import { documentFonts, documentFontCss, documentFontImport, invalidFontFamilies } from '../styles/document-fonts';
 import { EMPTY_HELMET_CONTENT } from '../document/helmet';
 
 const helmet = (meta: Array<{ name: string; content: string }>) => ({ ...EMPTY_HELMET_CONTENT, meta });
@@ -44,7 +44,27 @@ describe('invalidFontFamilies', () => {
   });
 });
 
+describe('documentFontImport', () => {
+  it('imports every named Google family from Google Fonts in one line, regular, bold and italic', () => {
+    const fonts = documentFonts(helmet([{ name: 'font-display', content: 'Lobster' }, { name: 'font-body', content: 'Playfair Display' }]));
+    expect(documentFontImport(fonts)).toBe('@import url(https://fonts.googleapis.com/css2?family=Lobster:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap);');
+  });
+
+  it('imports nothing for a bundled family, a malformed name, or a document that names none', () => {
+    expect(documentFontImport(documentFonts(helmet([{ name: 'font-mono', content: 'JetBrains Mono' }])))).toBe('');
+    expect(documentFontImport(documentFonts(helmet([{ name: 'font-body', content: 'Bricolage Grotesque' }])))).toBe('');
+    expect(documentFontImport(documentFonts(helmet([{ name: 'font-body', content: 'Inter"; } body {' }])))).toBe('');
+    expect(documentFontImport(documentFonts(EMPTY_HELMET_CONTENT))).toBe('');
+  });
+});
+
 describe('documentFontCss', () => {
+  it('OPENS with the import: `@import` after any other rule is ignored by the browser', () => {
+    const css = documentFontCss(documentFonts(helmet([{ name: 'font-display', content: 'Lobster' }])));
+    expect(css.startsWith('@import url(https://fonts.googleapis.com/css2?family=Lobster:')).toBe(true);
+    expect(css.match(/@import/g)).toHaveLength(1);
+  });
+
   it('is empty when the document names no fonts', () => {
     expect(documentFontCss(documentFonts(EMPTY_HELMET_CONTENT))).toBe('');
   });

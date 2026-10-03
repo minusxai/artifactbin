@@ -90,8 +90,14 @@ export interface ValidateOptions {
   /** Registered component names (Capitalized tags) that are renderable. */
   components: Iterable<string>;
   /**
+   * Components the document's own script exports (lib/story/document/author-module.server): a capitalized tag
+   * outside the registry is one of these, mounted where the markup places it. `'any'` accepts every unknown
+   * capitalized tag, for a check that cannot build the script (the CLI); the server checks the exact set.
+   */
+  scriptComponents?: ReadonlySet<string> | 'any';
+  /**
    * Lowercase HTML tags to allow. Omit to allow all HTML tags except the built-in
-   * dangerous denylist (`script`, `iframe`, …). Provide a set to restrict further.
+   * dangerous denylist (`script`, `object`, …). Provide a set to restrict further.
    */
   allowedHtmlTags?: Iterable<string>;
   /**

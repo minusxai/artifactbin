@@ -14,15 +14,18 @@
  *    islands, so a page with a module always signals ready;
  * 6. top-level only: holds the document's live stream (./live, from the snapshot's `since`) and
  *    re-runs exactly the queries reading a dataset a `data` frame names (`store.invalidateDatasets`);
- * 7. when the page data names the version's author script, loads the lazy author host (./author-host,
- *    a standalone chunk) and runs the script in its sandboxed frame against this store, after the
- *    islands have hydrated — as the former runtime runs it after its first commit. Edit mode and dispose
- *    revoke it (the editor starts its own).
+ * 7. when the page data names the version's author script, loads the page runtime (`@mx/page-runtime`, the
+ *    chunk the page data's `vendor` names) and runs the script in this document against this store, after
+ *    the islands have hydrated. Edit mode and dispose stop it (the editor starts its own).
+ * 7b. top-level only, whenever the page declares data: exposes the declared names as `window.page`
+ *    (`value`, `query`, `mutation`, `signal`, the same signals the script imports from `page`) for browser
+ *    sessions to drive the page. Edit mode and dispose remove it; reading again restores it.
  * 8. when the page may hold data (`hold`, `sqliteWasm`): gives the store the page's own SQLite engine
  *    (./sqlite-engine, bundled alone and loaded behind the first paint — the store asks for it once the
  *    first run is on its way), so what the reader holds is answered in the page, as the former reader does.
- * 9. top-level only: the link follows the reader — a moved `<Value>` rewrites the page's own `$` params
- *    (./url-sync), loaded after hydration.
+ * 9. top-level or on its own origin: the link follows the reader — a moved `<Value>` rewrites the page's own `$`
+ *    params (./url-sync), loaded after hydration; framed, it also tells the app page that frames it, whose address
+ *    is the reader's (STORY_URL_VALUES_MESSAGE).
  *
  * The viewer overlay, the write status feed and its indicator are wave-3 seams (viewer.ts,
  * writes.ts, kit/status.tsx): this file calls them and their owners replace those files.
@@ -31,9 +34,11 @@ import type { Component } from 'solid-js';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 import { createDataflowStore } from '@/lib/story-runtime/store';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
-import { STORY_DATA_HOOK } from '@/lib/story-runtime/contract';
+import { createFetchTransport } from '@/lib/story-runtime/fetch-transport';
+import { STORY_DATA_HOOK, STORY_URL_VALUES_MESSAGE, type StoryUrlValuesMessage } from '@/lib/story-runtime/contract';
+import { frameAppOrigin } from '@/lib/story-runtime/frame-bridge/door';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
-import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, PUBLIC_MX_KEY, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer, type PublicMxHost } from './contract';
+import { ISLAND_DOCUMENT_KEY, ISLANDS_READY_EVENT, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR, type IslandDocument, type IslandDocumentMode, type IslandEvent, type IslandHost, type IslandPageData, type IslandViewer } from './contract';
 import { createIslandRuntime, hydrateIsland } from './rt';
 import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './module';
 import { installIslandDocument } from './handover';
@@ -78,9 +83,24 @@ export interface IslandMorphSeam {
 }
 export type MorphableIslandDocument = IslandDocument & { morph?: IslandMorphSeam };
 
-const EMPTY_PAGE: IslandPageData = { values: {}, results: null, appPage: false, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
+const EMPTY_PAGE: IslandPageData = { values: {}, results: null, signedIn: false, hold: [], mermaidImages: {}, readOnly: null };
 
 /** The page data island, or the empty page when it is absent or unreadable (the islands still hydrate). */
+/**
+ * This document's id, for the script's `proxy`: the live identity on `<body>`, else the id its doors name (a capture
+ * carries no live identity but still has its assets door). Null when neither says.
+ */
+export function documentIdOf(doc: Document): string | null {
+  const live = doc.body?.getAttribute(LIVE_ID_ATTR);
+  if (live) return live;
+  const data = readPageData(doc);
+  for (const door of [data.queryUrl, data.assetsUrl, data.viewerUrl]) {
+    const id = door ? /\/a\/([^/?#]+)\//.exec(door)?.[1] : null;
+    if (id) return decodeURIComponent(id);
+  }
+  return null;
+}
+
 export function readPageData(doc: Document): IslandPageData {
   const text = doc.getElementById(ISLAND_DATA_ID)?.textContent;
   if (!text) return EMPTY_PAGE;
@@ -91,11 +111,6 @@ export function readPageData(doc: Document): IslandPageData {
     return EMPTY_PAGE;
   }
 }
-
-/** The app's origin: where this chunk was served from (a `/raw` copy's own origin is opaque). */
-const appOrigin = (): string => {
-  try { return new URL(import.meta.url).origin; } catch { return ''; }
-};
 
 /**
  * `ISLANDS` alone is accepted for a module whose islands read no data (the compiler's first shape);
@@ -112,10 +127,14 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const flow = module.FLOW ?? null;
   // A signed-in reader's queries and writes are theirs: the transport carries the session to the
   // doors that read it. A guest page keeps the anonymous GET door (lib/story-runtime/fetch-transport).
-  const transport = flow ? createDocumentTransport(win, data.queryUrl, appOrigin(), undefined, data.mutateUrl, {
-    session: data.signedIn,
-    relay: { lazy: () => import('@/lib/story-runtime/relay-transport').then((m) => m.createRelayTransport) },
-  }) : null;
+  // A document on its OWN origin (APP__PAGES_HOST) calls its absolute doors directly, framed or not,
+  // with its pages cookie (`credentials: 'include'`).
+  const direct = !!data.direct && !!data.queryUrl;
+  const transport = !flow ? null : direct
+    ? createFetchTransport(data.queryUrl!, undefined, data.mutateUrl, { session: data.signedIn, credentials: 'include' })
+    : createDocumentTransport(win, data.queryUrl, undefined, data.mutateUrl, { session: data.signedIn });
+  /** What a top-level page holds itself — its stream and `window.page` — a document on its own origin holds framed too. */
+  const holdsOwn = win.parent === win || direct;
   /*
    * The page's own engine, when this page may hold data and its door can fetch it (the relay cannot):
    * `$_me` is bound to the reader the door answers for — nobody on a guest page; on a signed-in page
@@ -161,12 +180,12 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const stopWrites = context.writes.subscribe((statuses) => emit({ type: 'writes', statuses }));
   let stopStatus = () => {};
 
-  // The document's own live stream, top-level only (framed, the page above holds it and posts in).
+  // The document's own live stream, top-level only (framed, the page above holds it and posts in) — or on its own origin.
   const hooks = win as unknown as Record<string, unknown>;
   let stopLive = () => {};
   const liveId = doc.body?.getAttribute(LIVE_ID_ATTR);
   const liveEdit = doc.body?.getAttribute(LIVE_EDIT_ATTR);
-  const holdsLive = win.parent === win && typeof (win as { EventSource?: unknown }).EventSource === 'function' && !!liveId && !!liveEdit;
+  const holdsLive = holdsOwn && typeof (win as { EventSource?: unknown }).EventSource === 'function' && !!liveId && !!liveEdit;
   /** Open the stream from the version the page shows now (its `<body>` names it), picking up at `since`. */
   const openLive = (since: string | null) => {
     const edit = doc.body?.getAttribute(LIVE_EDIT_ATTR);
@@ -181,12 +200,19 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     // Loaded after hydration, off the shared runtime's closure: the marks cover the gap, so nothing is missed.
     openLive(data.results?.since ?? null);
   }
-  // The link follows the reader (./url-sync), top-level only: a framed document's address is its frame's.
+  // The link follows the reader (./url-sync) where this document is the reader's page: top-level, or framed on its
+  // own origin — where the address the reader sees, copies and reloads is the app page's, so each change is posted
+  // there too (only to the app origin the server named; the page takes it only from this frame).
   let stopUrl = () => {};
+  const framer = win.parent === win ? null : win.parent;
+  const appOrigin = framer ? frameAppOrigin(doc, win) : null;
+  const postValues = framer && appOrigin ? (search: string) => {
+    try { framer.postMessage({ type: STORY_URL_VALUES_MESSAGE, search } satisfies StoryUrlValuesMessage, appOrigin); } catch { /* an opaque origin cannot be addressed */ }
+  } : undefined;
   /** The link follows the reader while reading; editing pauses it (no value moves) and reading again resumes it. */
   const followUrl = () => {
-    if (store && win.parent === win) void import('./url-sync').then(({ startUrlSync }) => {
-      if (!disposed && mode === 'read') { stopUrl(); stopUrl = startUrlSync(win, store); }
+    if (store && holdsOwn) void import('./url-sync').then(({ startUrlSync }) => {
+      if (!disposed && mode === 'read') { stopUrl(); stopUrl = startUrlSync(win, store, undefined, postValues); }
     }, () => {});
   };
   followUrl();
@@ -195,14 +221,27 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   let ready = false;
   let disposed = false;
   let stopAuthor = () => {};
-  const uninstallMx = () => (root as PublicMxHost)[PUBLIC_MX_KEY]?.();
   let authorGeneration = 0;
+  /**
+   * Run the version's script IN THIS DOCUMENT: the page runtime (`@mx/page-runtime`, a chunk of the serving build
+   * named by the page data) binds the declared names as signals over this store, loads the module with its vendor
+   * imports pointed at the same build, and mounts the components it exports where the markup placed them.
+   */
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
     stopAuthor();
-    if (!source) return;
-    const { startAuthorHost } = await import('./author-host');
-    if (generation === authorGeneration && !disposed && mode === 'read') stopAuthor = startAuthorHost(source, store, doc);
+    // `window.page` (top-level, a page that declares data) comes from the same runtime, script or not.
+    const exposes = !!store && holdsOwn;
+    if (!source && !exposes) return;
+    const vendor = readPageData(doc).vendor ?? {};
+    const runtimeUrl = vendor['@mx/page-runtime'];
+    if (!runtimeUrl) { if (source) console.error('[islands] the page names a script but no runtime for it'); return; }
+    const runtime = (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime');
+    if (generation !== authorGeneration || disposed || mode !== 'read') return;
+    const hide = exposes ? runtime.exposePage(win, store!) : () => {};
+    const stop = source ? await runtime.startAuthorModule({ source, store, root, vendor, id: documentIdOf(doc) }) : () => {};
+    if (generation !== authorGeneration || disposed || mode !== 'read') { stop(); hide(); return; }
+    stopAuthor = () => { stopAuthor = () => {}; stop(); hide(); };
   };
   const islandDocument: MorphableIslandDocument = {
     morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), trees: new WeakMap(module.TREE ? [[module.TREE, module]] : []), restartAuthor },
@@ -216,23 +255,19 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
         /*
          * Back to reading IN PLACE (the page's controller has already drawn the saved version on this
          * context, lib/story-runtime/island-controller `restoreRead`, and synced the page's records): the
-         * document's stream, the public API and the version's author script resume as boot started them.
+         * document's stream, `window.page` and the version's author script resume as boot started them.
          * The stream opens from the snapshot's marks, so a dataset written while editing re-runs at once.
          */
         mode = 'read';
         runtime.setPaused(false);
         openLive(data.results?.since ?? null);
         followUrl();
-        if (store && win.parent === win) void import('./mx-host').then(({ installPublicMx }) => {
-          installPublicMx(root, store, win, () => !disposed && mode === 'read');
-        }).catch((error: unknown) => console.error('[islands] the public mx API did not load', error));
         const script = readPageData(doc).authorScript;
         void restartAuthor(typeof script === 'string' && script ? script : null).catch((error: unknown) => console.error('[islands] author host failed', error));
         emit({ type: 'mode', mode });
         return;
       }
       stopAuthor();
-      uninstallMx();
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
@@ -250,7 +285,6 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
       if (disposed) return;
       disposed = true;
       stopAuthor();
-      uninstallMx();
       disposeIslands();
       stopLive();
       stopUrl();
@@ -287,7 +321,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     }).catch((error: unknown) => console.error('[islands] write status did not load', error));
     if (page && !data.hold?.length) page.engine.prepare(flow!, []);
     const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-    if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
+    void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
   }
   return islandDocument;
 }

@@ -1,4 +1,5 @@
 /** Source/engine adapter. Only this module knows both static JSX and ProseMirror. */
+import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { Schema, Fragment, Slice, type Node as EditorNode, type Mark, type NodeSpec } from 'prosemirror-model';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Root } from 'mdast';
@@ -353,7 +354,7 @@ export function normalizeIdentities(tr: Transaction, mintMissing = false): Trans
     if (mintMissing) {
       // Explicit IDs are supported by the source contract. A UUID avoids reuse
       // across deleted nodes, tabs and concurrent editors without a server trip.
-      const fresh = `e${globalThis.crypto.randomUUID().replaceAll('-', '')}`;
+      const fresh = `e${runtimeId().replaceAll('-', '')}`;
       attributes.push(attr('id', fresh));
       seen.add(fresh);
     }

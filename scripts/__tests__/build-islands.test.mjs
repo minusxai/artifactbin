@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
+import { AUTHOR_VENDOR_SPECIFIERS, CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, FRAME_EDITOR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
@@ -31,7 +31,9 @@ describe('buildIslands', () => {
   const first = { ...written, closure: (urls) => closureOf(written.files, urls) };
   it('names every specifier a compiled page may import', () => {
     expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
-    expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js')), 'generated code reaches Solid only through @mx/rt').toEqual([]);
+    // Generated code reaches Solid only through @mx/rt; the bare Solid specifiers are the author script's vendor entries.
+    expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js'))).toEqual(['solid-js', 'solid-js/web', 'solid-js/store']);
+    expect([...AUTHOR_VENDOR_SPECIFIERS].sort()).toEqual(['solid-js', 'solid-js/store', 'solid-js/web']);
   });
 
   it('writes content-addressed chunks, a manifest and a 16-hex build id', () => {
@@ -43,9 +45,15 @@ describe('buildIslands', () => {
     }
     expect(Object.keys(written).sort()).toEqual(['build', 'files', 'manifest', 'offline', 'sqliteWasm', 'ssr']);
     expect(written.sqliteWasm).toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
-    // Exactly one Solid: its DOM runtime (the event-delegation key is a string literal in solid-js/web) is in one chunk.
-    const withSolidWeb = Object.keys(first.files).filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
+    // Exactly one Solid in the shared graph: its DOM runtime (the event-delegation key is a string literal in solid-js/web)
+    // is in one chunk. The frame editor is its own graph (build-islands FRAME_EDITOR) and carries its own copy, in its own file.
+    const solidWebIn = (urls) => urls.filter((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('_$DX_DELEGATE'));
+    const isEditorFile = (url) => /\/frame-editor(-chunk)?-[0-9a-f]{16}\.js$/.test(url);
+    const withSolidWeb = solidWebIn(Object.keys(first.files).filter((url) => !isEditorFile(url)));
     expect(withSolidWeb).toHaveLength(1);
+    expect(solidWebIn(Object.keys(first.files).filter(isEditorFile))).toHaveLength(1);
+    // ... and the author script's `solid-js/web`, the page runtime and rt all reach that one chunk.
+    for (const specifier of ['@mx/rt', '@mx/page-runtime', 'solid-js/web']) expect(first.closure([first.manifest[specifier]]), specifier).toContain(withSolidWeb[0]);
     expect(first.offline).toMatch(/^\/islands\/offline-[0-9a-f]{16}\.json\.gzip$/);
   });
 
@@ -68,43 +76,6 @@ describe('buildIslands', () => {
     for (const name of Object.values(ssr.exports)) expect(text, name).toMatch(new RegExp(`\\b${name}\\b`));
     // The lazy engines (Vega, Mermaid, React behind them) are browser-only stubs here.
     expect(text.length).toBeLessThan(512 * 1024);
-  });
-
-  it('bundles the managed frame\'s behaviour alone: its own file, no imports, no Solid, loaded by the embed family by content address', () => {
-    const { manifest, files } = first;
-    const engines = Object.keys(files).filter((url) => /\/frame-engine-[0-9a-f]{16}\.js$/.test(url));
-    expect(engines).toHaveLength(1);
-    const engine = engines[0];
-    expect(files[engine].imports).toEqual([]);
-    const code = readFileSync(path.join(outDir, engine.slice('/islands/'.length)), 'utf8');
-    expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
-    // Some chunk of the embed family's closure asks for it by its file name, lazily.
-    const name = engine.slice('/islands/'.length);
-    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
-    expect([...reach([manifest['@mx/kit/embed']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(`import("./${name}")`))).toBe(true);
-    // …and nothing the data family loads does: a page with a table never carries the frame's door.
-    expect([...reach([manifest['@mx/kit/data']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
-    // …and nothing in the shared runtime's closure does.
-    expect([...reach([manifest['@mx/rt'], manifest['@mx/boot']])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes(name))).toBe(false);
-  });
-
-  it('bundles the author script host alone: its own file, no imports, no Solid, loaded by boot by content address and only there', () => {
-    const { manifest, files } = first;
-    const hosts = Object.keys(files).filter((url) => /\/author-host-[0-9a-f]{16}\.js$/.test(url));
-    expect(hosts).toHaveLength(1);
-    const host = hosts[0];
-    expect(files[host].imports).toEqual([]);
-    const code = readFileSync(path.join(outDir, host.slice('/islands/'.length)), 'utf8');
-    expect(code).not.toMatch(/\$DX_DELEGATE|_\$HY/);
-    expect(code, 'today\'s wrapper and sandbox').toContain('/author-frame');
-    const name = host.slice('/islands/'.length);
-    const text = (url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8');
-    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
-    const runtime = [...reach([manifest['@mx/rt'], manifest['@mx/boot']])];
-    // Boot asks for it lazily, by file name; nothing in the runtime's closure carries its code.
-    expect(runtime.some((url) => text(url).includes(`import("./${name}")`))).toBe(true);
-    expect(runtime.some((url) => text(url).includes('mx:author:init'))).toBe(false);
-    expect(runtime).not.toContain(host);
   });
 
   it('bundles the page\'s SQLite engine alone: its own file, no imports, no Solid, the core inlined, loaded by boot by content address', () => {
@@ -140,16 +111,18 @@ describe('buildIslands', () => {
     // helpers any kit family uses land in the shared chunk that rt's closure includes; they load on every
     // interactive page anyway. The owner's target 2 (≤ 85 KB before ready on interactive pages) is the
     // real check, in scripts/build/size-targets.mjs.
-    expect(bytes).toBeLessThanOrEqual(27_979);
+    // boot grew by the page runtime's loader (lib/islands/page-runtime: the vendor map and the module import).
+    // The framed document's runtime now also relays its URL values and app-path links to the app page.
+    expect(bytes).toBeLessThanOrEqual(29_500);
   });
 
-  it('keeps framed transport, comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
+  it('keeps comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
     const { manifest, closure } = first;
     // Which modules each output carries: the --cache marker the setup build wrote beside its manifest.
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     const all = Object.values(outputInputs).flat();
     const modules = closure([manifest['@mx/rt'], manifest['@mx/boot']]).flatMap((url) => outputInputs[url]);
-    for (const name of ['story-runtime/relay-transport.ts', 'story/annotations/comment-target.ts']) {
+    for (const name of ['story/annotations/comment-target.ts']) {
       expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
     }
@@ -159,7 +132,7 @@ describe('buildIslands', () => {
     }
   });
 
-  it('keeps every kit family inside the ready-time static budget, with the map and frame engines behind dynamic imports', () => {
+  it('keeps every kit family inside the ready-time static budget, with the map engine behind dynamic imports', () => {
     const { manifest, files, closure } = first;
     const staticUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.map(family => manifest[`@mx/kit/${family}`])]);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
@@ -168,9 +141,26 @@ describe('buildIslands', () => {
     expect(withImage.reduce((sum, url) => sum + files[url].br, 0)).toBeLessThanOrEqual(85 * 1024);
     const dataCode = staticUrls.map(url => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).join('\n');
     const dynamic = [...dataCode.matchAll(/import\("\.\/([\w-]+\.js)"\)/g)].map(match => `/islands/${match[1]}`);
-    expect(dynamic.some(url => /frame-engine-[0-9a-f]{16}\.js$/.test(url))).toBe(true);
     expect(dynamic.some(url => files[url]?.gz > 100 * 1024)).toBe(true);
     expect(dynamic.every(url => !staticUrls.includes(url))).toBe(true);
+  });
+
+  it('keeps the frame editor out of every reader closure: page names it only lazily, and ProseMirror loads only after it', () => {
+    const { manifest, files, closure } = first;
+    const editor = manifest[FRAME_EDITOR.specifier];
+    expect(editor).toMatch(/^\/islands\/frame-editor-[0-9a-f]{16}\.js$/);
+    expect(existsSync(path.join(outDir, editor.slice('/islands/'.length)))).toBe(true);
+    const readers = [manifest['@mx/rt'], manifest['@mx/boot'], manifest['@mx/page'], ...KIT_FAMILIES.map((family) => manifest[`@mx/kit/${family}`])];
+    const editorFiles = Object.keys(files).filter((url) => /\/frame-editor(-chunk)?-[0-9a-f]{16}\.js$/.test(url));
+    expect(closure(readers).filter((url) => editorFiles.includes(url))).toEqual([]);
+    const page = readFileSync(path.join(outDir, manifest['@mx/page'].slice('/islands/'.length)), 'utf8');
+    expect(page).toContain(`import("./${editor.slice('/islands/'.length)}")`);
+    // Attaching (comments, selection actions) loads the controller and the relay; the editor itself is behind them.
+    const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
+    const carried = (urls) => urls.flatMap((url) => outputInputs[url] ?? []);
+    expect(carried(closure([editor])).some((input) => input.endsWith('story-runtime/island-controller.ts'))).toBe(true);
+    expect(carried(closure([editor])).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(false);
+    expect(carried(editorFiles).some((input) => input.includes('node_modules/prosemirror-view/'))).toBe(true);
   });
 
   it('loads tooltip placement only when a tooltip opens', () => {
