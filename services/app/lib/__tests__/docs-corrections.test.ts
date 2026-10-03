@@ -307,7 +307,7 @@ describe('the markup skill', () => {
  * none, and this one an agent would act on by hunting for an id that is never
  * echoed.
  */
-describe('URL-kept external assets', () => {
+describe('external asset URLs in markup', () => {
   const markup = buildMarkupDoc(BASE);
   const publishing = buildSkillDoc(BASE);
   const flat = (t: string) => t.replace(/\s+/g, ' ');
@@ -318,11 +318,9 @@ describe('URL-kept external assets', () => {
     expect(flat(markup)).not.toMatch(/echoed back (as|rewritten to) `ref:/);
     expect(flat(markup)).not.toMatch(/rewritten to `ref:/);
   });
-  it('the markup vocabulary says the copy is stored and the URL is kept', () => {
-    expect(flat(markup)).toContain('publish stores a copy, keeps your URL in the source');
-  });
-  it('…and that a URL that will not fetch is a warning, not a failed publish', () => {
-    expect(flat(markup)).toContain('warns if fetching fails');
+  it('the markup vocabulary says a web image is served as written, with no copy promised', () => {
+    expect(flat(markup)).toContain('Web URLs also work and are served as written');
+    expect(flat(markup)).not.toMatch(/stores a copy|warns if fetching fails/);
   });
   it('the subresource roster names both positions and the `$` binding', () => {
     expect(flat(markup)).toContain('In parent markup only `<img src>` and `<File src>` take a URL');

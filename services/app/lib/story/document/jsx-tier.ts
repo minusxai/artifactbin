@@ -29,11 +29,8 @@ import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
 import { MAX_CONTENT_BYTES, type ContentInputCtx, type StoredContent } from './input';
-import { collectExternalAssetUrls } from '../assets/external-images';
-import type { AssetWarning, WebAssetKind } from '@/lib/serving';
 import { documentFonts, invalidFontFamilies } from '../styles/document-fonts';
 import { cspExtensionsOf } from './csp-extensions';
-import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/platform/config';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '../data/parsed-artifact-metadata';
 import { validateIconNames } from '../assets/icon-validation.server';
@@ -45,7 +42,6 @@ const COLOR_MODES = ['light', 'dark'] as const;
 
 export interface PreparedMarkup {
   content: StoredContent;
-  imports: Array<{url: string; kind: WebAssetKind}>;
 }
 
 /** Validation and compilation have no import or persistence capability. */
@@ -56,9 +52,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   /*
    * REPAIR FIRST, above everything that reads the source. The one fault we fix
    * rather than refuse is the shell-escaped backtick (lib/jsx/repair — it costs
-   * an agent minutes and cannot be meant), and it has to happen before the
-   * asset scan below: that scan has SIDE EFFECTS (it fetches URLs), so
-   * repairing afterwards would import twice. Free for every document that does
+   * an agent minutes and cannot be meant). Free for every document that does
    * not carry the sequence.
    */
   const repaired = repairJsxSource(sourceIn);
@@ -86,50 +80,8 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
     return json({ error: 'unknown_color_mode', allowed: COLOR_MODES }, 400);
   }
 
-  /*
-   * IMPORT, AND KEEP THE URL. Every web URL the document names in an image
-   * position — and every `@font-face` src in its own stylesheet — is fetched
-   * once into the global asset cache (lib/web-assets) and the SOURCE IS LEFT
-   * ALONE: the author wrote a URL and reads a URL back, while the served
-   * document is pointed at our copy on the way out (lib/story/assets/asset-url), which
-   * is what satisfies the sandbox's `img-src 'self'` and keeps a reader's
-   * browser away from the upstream host.
-   *
-   * A URL that will not import is a WARNING, never a refusal: the document is
-   * fine, one picture is missing, and an author can act on a named failure. The
-   * CAP is checked hook-or-no-hook, which is what keeps /api/preview (no import
-   * hook, no fetches) agreeing with publish.
-   */
-  const externalAssets = collectExternalAssetUrls(source);
-  if (externalAssets.images.length > MAX_EXTERNAL_IMAGES_PER_PUBLISH) {
-    return json({
-      error: 'too_many_external_images',
-      details: [`this publish imports ${externalAssets.images.length} external images; the cap is ${MAX_EXTERNAL_IMAGES_PER_PUBLISH} — save the rest beside the document and reference their relative paths, and afbin push publishes them with it as ref:<id>`],
-    }, 400);
-  }
-  /*
-   * The TOTAL cap — images, faces and the PDFs a <File> card names,
-   * together. The image cap above counts images
-   * alone, so a document naming a dozen `@font-face` urls caused a dozen
-   * outbound fetches that nothing bounded — the count was the author's to set.
-   * Over the cap the excess is NAMED and not fetched, rather than refused:
-   * losing a whole document to a thirteenth font is the failure this cap exists
-   * to stop, and an author who is told which urls were skipped can act.
-   * Counted hook-or-no-hook, so /api/preview agrees with publish.
-   */
-  const wanted = [
-    ...externalAssets.images.map((url) => ({ url, kind: 'image' as const })),
-    ...externalAssets.fonts.map((url) => ({ url, kind: 'font' as const })),
-    // A PDF a <File> card names by URL is an outbound fetch like any other, and
-    // the biggest of them: it counts against the same total.
-    ...externalAssets.pdfs.map((url) => ({ url, kind: 'pdf' as const })),
-  ];
-  const warnings: AssetWarning[] = wanted.slice(MAX_EXTERNAL_ASSETS_PER_PUBLISH).map(({ url }) => ({
-    code: 'too_many_external_assets',
-    url,
-    fix: `this document names ${wanted.length} external assets; the cap is ${MAX_EXTERNAL_ASSETS_PER_PUBLISH} — this one was not imported, so save it beside the document and reference its relative path for afbin push to publish, or drop it`,
-  }));
-
+  // A web URL in an image or file position is served as written: the document is its own page under a
+  // CSP that admits `img-src https:`, so publish fetches nothing and stores no copy.
 
   // Gate 1: the ported three-gate pipeline (registry, handlers, URL schemes).
   // Gate 2 (artifactbin's own): every subresource must be self-contained —
@@ -226,23 +178,12 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
       ...(compiled ? { [COMPILED_DATAFLOW]: compiled } : {}),
     },
     derivedTitle: helmetTitle?.trim() || null,
-    ...(warnings.length ? { warnings } : {}),
     ...(repairs.length ? {repairs} : {}),
   };
-  return {content, imports: wanted.slice(0, MAX_EXTERNAL_ASSETS_PER_PUBLISH)};
-}
-
-/** Apply only a successfully prepared document, retaining publication warnings. */
-export async function applyPreparedJsx(prepared: PreparedMarkup, effects: Pick<ContentInputCtx, 'importAsset'>): Promise<StoredContent | Response> {
-  const warnings = [...(prepared.content.warnings ?? [])];
-  if (effects.importAsset) for (const asset of prepared.imports) {
-    const warning = await effects.importAsset(asset.url, asset.kind);
-    if (warning) warnings.push(warning);
-  }
-  return {...prepared.content, ...(warnings.length ? {warnings} : {})};
+  return {content};
 }
 
 export async function publishJsx(body: Record<string, unknown>, source: string, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
   const prepared = await prepareJsx(body, source, ctx);
-  return prepared instanceof Response ? prepared : applyPreparedJsx(prepared, ctx);
+  return prepared instanceof Response ? prepared : prepared.content;
 }

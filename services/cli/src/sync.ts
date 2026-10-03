@@ -1,7 +1,7 @@
 import {createDocumentGraph} from '../../app/lib/story/graph/document-graph';
 import {documentOutcomePresent} from './document-recovery';
 import {prepareClientDocumentPublication} from '../../app/lib/story/graph/document-update-client';
-import type {DocumentGraph,DocumentUpdate,DocumentAssetWarning} from '@artifactbin/contracts';
+import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
 import {localIdentities} from './identities';
 import {referenceIds} from './preview/graph';
 import {inferColumns} from '@artifactbin/utils/shape';
@@ -40,7 +40,7 @@ import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,s
  */
 const VERSION_2_FIX='A dataset pushed without --access or --policy keeps its default version 2 policy, which this flag cannot replace: put --policy viewers-write on the first push of a new dataset, or grant writes in this dataset\'s YAML policy (afbin help apps).';
 interface PushOptions {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
-interface PushPlan {warnings?:DocumentAssetWarning[];authoringBase?:Snapshot;confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
+interface PushPlan {authoringBase?:Snapshot;confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
 /**
  * The tables `--policy viewers-write` is aimed at: the ones the pushed `<Dataset>` definition
@@ -188,10 +188,9 @@ async function prepareDocumentPlan(plan:PushPlan,client:HttpClient,force:boolean
   ...(delta.parent_id!==undefined?{parentId:delta.parent_id as string|null}:{}),
   ...(delta.shares!==undefined?{shares:delta.shares as NonNullable<DocumentUpdate['settings']>['shares']}:{}),
  };
- let warnings:DocumentAssetWarning[]=[];
- const update=await prepareClientDocumentPublication({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:native||force||plan.file.document.metadata.version!==undefined},async source=>client.request(`/artifacts/${plan.id}/prepare`,'POST',{source,dryRun}),received=>{warnings=received;});
+ const update=await prepareClientDocumentPublication({document,version:head.version,title:head.title,description:head.description as string|null,meta:{theme:head.theme,template:head.template,colorMode:head.colorMode}},{source:plan.file.document.body,metadata,whole:native||force||plan.file.document.metadata.version!==undefined},async source=>client.request(`/artifacts/${plan.id}/prepare`,'POST',{source,dryRun}));
  if(Object.keys(settings).length)Object.assign(update,{settings,expectedSharingRevision:Number(head.sharing_revision??0),expectedParentIds:head.ancestor_ids??[]});
- return {...plan,warnings,authoringBase:head,mode:'edit',reconcile:false,body:{edit_id:head.edit_id,document_update:update}};
+ return {...plan,authoringBase:head,mode:'edit',reconcile:false,body:{edit_id:head.edit_id,document_update:update}};
 }
 async function observeConditions(plan:PushPlan,client:HttpClient,force:boolean):Promise<PushPlan>{
  if(!plan.id||!force&&(plan.file.tracked||plan.body.expectedVersion!==undefined&&plan.body.expectedState!==undefined))return plan;
@@ -244,7 +243,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    plan=await reconcileMixed(plan,client);
    const mode=plan.mode==='none'?'replace':plan.mode;
    const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(mode!=='create'?{mode}:{}),input:plan.body});
-   results.push({path:plan.file.path,...preflight,...(plan.warnings?.length?{asset_warnings:plan.warnings}:{})});
+   results.push({path:plan.file.path,...preflight});
   }
   return{dry_run:true,operations:results};
  }
@@ -252,7 +251,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.home,workspace.root);
   const operations:Array<Record<string,unknown>>=[];
-  if(pending){const recovered=await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered',...(pending.file.warnings?.length?{asset_warnings:pending.file.warnings}:{}),...sourceRewrite(recovered,pending.request.body.markup??pending.request.body.source)});workspace=await loadWorkspace(workspace.cwd,workspace.home);}
+  if(pending){const recovered=await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered',...sourceRewrite(recovered,pending.request.body.markup??pending.request.body.source)});workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   try{
   const plans=await planPush(workspace,paths,options);
   for(let plan of plans){
@@ -263,10 +262,10 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    plan=await reconcileMixed(plan,client,workspace);
    const method=plan.mode==='metadata'?'PATCH':plan.mode==='replace'?'PUT':'POST';
    const path=plan.mode==='create'?'/artifacts':`/artifacts/${plan.id}${plan.mode==='edit'?'/edits':''}`;
-   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{warnings:plan.warnings,authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
+   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
    const snapshot=await recoverRequest(workspace,client,staged);workspace=await loadWorkspace(workspace.cwd,workspace.home);
-   const operation:Record<string,unknown>={path:plan.file.path,status:'published',...(plan.warnings?.length?{asset_warnings:plan.warnings}:{}),id:snapshot.id,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
+   const operation:Record<string,unknown>={path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
    operations.push(operation);
    // The policy the content write could not carry, on the published dataset, inside the same command.
    if(plan.policy!==undefined){await writeDatasetPolicy(workspace,client,plan,snapshot);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
@@ -390,7 +389,7 @@ async function writeDatasetPolicy(workspace:Workspace,client:HttpClient,plan:Pus
  if(observed&&isDeepStrictEqual(observed.dataset_policy??null,plan.policy??null))return snapshot;
  const staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),
   request:{path:`/artifacts/${snapshot.id}`,method:'PATCH',body:{policy:plan.policy,expectedPolicyRevision:Number(observed?.policy_revision??snapshot.policy_revision??0),expectedState:typeof observed?.state==='string'?observed.state:snapshot.state}},
-  file:{warnings:plan.warnings,authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:workspace.tracking?.files[plan.file.path]}});
+  file:{authoringBase:plan.authoringBase,source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:workspace.tracking?.files[plan.file.path]}});
  return recoverRequest(workspace,client,staged);
 }
 /**

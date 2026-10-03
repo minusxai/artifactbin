@@ -28,7 +28,6 @@ import { remoteRoute } from '@/lib/remote/route';
 import { accountProfile, updateAccountProfile } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
-import { MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/platform';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -119,17 +118,6 @@ describe('refusals an afbin command reaches name the afbin action', () => {
     expect(refusal.hint).toContain('--quote');
     expect(refusal.hint).toContain('--node');
     expect(refusal.hint).not.toContain('node_id');
-  });
-
-  it('too many external images tells the agent to push local files, not to "upload image artifacts"', async () => {
-    const t = await mintToken('t');
-    const images = Array.from({ length: MAX_EXTERNAL_IMAGES_PER_PUBLISH + 1 }, (_, i) => `<img src="https://example.test/${i}.png" />`).join('');
-    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<main>${images}</main>` } }));
-    expect(res.status).toBe(400);
-    const refusal = await body(res);
-    expect(refusal.error).toBe('too_many_external_images');
-    expect(String(refusal.details[0])).toContain('afbin push');
-    expect(String(refusal.details[0])).not.toContain('upload the rest as image artifacts');
   });
 
   it('a folder refuses content by naming its YAML fields, not parent_id on the wire', async () => {

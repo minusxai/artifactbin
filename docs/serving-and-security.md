@@ -122,21 +122,21 @@ refused. The wasm is fetched from this origin at a content-addressed `/islands/`
 URL (the `/raw` document's `connect-src` names that directory), cached
 `immutable`; the offline file carries it inside itself.
 
-**Import from the web.** Point at an image, a PDF, a font or a CSV and the
-server fetches it once, stores a copy, and serves it from this origin:
+**Web URLs in markup.** `<img src="https://example.com/chart.png" />`,
+`<File src="https://…/paper.pdf" />` and an `@font-face { src: url(https://…) }`
+are served exactly as written: publish fetches nothing, stores nothing and
+reports nothing. The document is its own page; its CSP admits any https image
+(`img-src https:`), and a face from a host outside the default font hosts needs
+that host in a `csp-style` meta.
 
-- `<img src="https://example.com/chart.png" />` in markup — and the URL STAYS
-  in the document. An agent writes what it would write anywhere and reads back
-  exactly that; only what a reader is SERVED is swapped for our copy. The same
-  goes for `<File src="https://…/paper.pdf" />` and an
-  `@font-face { src: url(https://…) }` in the document's own stylesheet.
+**Import from the web.** Point at a file on create and the server fetches it
+once, stores a copy, and serves it from this origin:
+
 - `{ "imageUrl": … }`, `{ "pdfUrl": … }` or `{ "csvUrl": … }` on create, when
   you want the file to be an artifact with an id of its own.
 
-Nothing imported is hotlinked: readers never touch the origin host, documents
-can't rot when it dies, and no reader's IP leaks to a third party. A URL that
-will not fetch is a warning on the publish reply, never a refused document —
-that one picture falls back to its alt text.
+An imported copy cannot rot when the origin host dies, and no reader's IP
+leaks to it.
 
 Fonts named by `<meta name="font-display" content="Lobster" />` (also `font-body`,
 `font-mono`) in `<Helmet>` are not imported: the served stylesheet `@import`s Google

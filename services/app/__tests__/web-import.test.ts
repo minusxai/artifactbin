@@ -5,16 +5,15 @@ import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Importing assets FROM THE WEB, through the real doors: ingest-and-own.
  *
- * A URL is a SOURCE, never a reference — the server fetches it once at publish
- * time and the artifact owns a copy, so the served document stays fully
- * self-contained (no CSP change, no reader-IP leak, no rot). Three doors:
+ * Two doors fetch a URL once and own a copy:
  *
  *   1. `imageUrl` on create — an image artifact straight from a URL,
- *   2. `<img src="https://…">` (and an `@font-face`
- *      `src` url) in markup — the agent door: imported into the global URL
- *      cache while the URL STAYS in the stored document, and mapped to our
- *      copy on the way out (lib/web-assets, lib/story/assets/asset-url),
- *   3. `csvUrl` on create — a dataset from any public CSV, not only Sheets.
+ *   2. `csvUrl` on create — a dataset from any public CSV, not only Sheets.
+ *
+ * A URL written INTO markup (`<img src="https://…">`, an `@font-face` url) is
+ * not one of them: the document is its own page under a CSP that admits
+ * `img-src https:`, so publish fetches nothing and the reader loads the URL as
+ * written.
  *
  * All of it under lib/web-ingest's guard, whose refusals must surface as
  * actionable 400s naming the URL — an agent can fix "404" and cannot fix
@@ -41,9 +40,12 @@ useAppHarness();
 
 let server: RunningServer;
 let web: string; // the "public web" this suite serves
+/** Every path the "public web" was asked for: a document naming a URL must add nothing here. */
+const hits: string[] = [];
 
 beforeAll(async () => {
   server = await withHttpServer((req, res) => {
+    hits.push((req.url ?? '').split('?')[0]!);
     // The path alone decides: tests distinguish URLs by a query string (the
     // cache is keyed by the whole URL), and every one of them wants these bytes.
     switch ((req.url ?? '').split('?')[0]) {
@@ -104,161 +106,123 @@ describe('imageUrl — an image artifact straight from a URL', () => {
   });
 });
 
-describe('the agent door — external <img src> is imported and the URL is KEPT', () => {
-  it('stores the URL verbatim and serves our copy', async () => {
+describe('the agent door — an external <img src> is served as written and never copied', () => {
+  /** What the document's own page loads: the URL the author wrote, and nothing of ours. */
+  const servedHtml = async (id: string) => (await rawRoute(request(`/a/${id}/raw`), params({ id }))).text();
+  const storedAssets = async () =>
+    Number((await (await getDb()).query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0]!.n);
+
+  it('stores no asset row, fetches nothing and serves the original URL', async () => {
     const t = await mintToken('t');
+    hits.length = 0;
     const markup = `<div className="p-8" id="root"><h1 id="heading">Doc</h1><img id="logo" src="${web}/logo.png" alt="logo" /></div>`;
     const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    // NOTHING was rewritten, so the echo is not news: the agent reads back the
-    // document it sent, and the URL it wrote is still the URL it wrote.
     expect(body.markup_changed).toBe(false);
+    expect(body).not.toHaveProperty('asset_warnings');
     expect((await getArtifactById(body.id))!.source).toContain(`${web}/logo.png`);
-    // …and no image artifact was invented on its behalf.
+    expect(hits).toEqual([]);
+    expect(await storedAssets()).toBe(0);
+    // No image artifact was invented on its behalf either.
     const list = await listArtifacts(request('/api/artifacts', { token: t.token }));
     expect((await list.json()).artifacts).toHaveLength(1);
 
-    // The SERVED document points at our copy and never at the source host.
-    const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id }));
-    const html = await page.text();
-    expect(html).toContain(assetUrlFor(`${web}/logo.png`));
-    expect(html).not.toContain('127.0.0.1');
+    const html = await servedHtml(body.id);
+    expect(html).toContain(`src="${web}/logo.png"`);
+    expect(html).not.toContain(assetUrlFor(`${web}/logo.png`));
+    expect(html).not.toContain('/assets/');
   });
 
-  it('one URL is one stored object, however many times a document names it', async () => {
+  it('publishes a URL on a host that does not resolve, with no warning and nothing stored', async () => {
     const t = await mintToken('t');
+    const url = 'https://nowhere.invalid/x.png';
     const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
-      markup: `<div><img src="${web}/logo.png" /><img src="${web}/logo.png" /></div>`,
-    } }));
-    expect(res.status).toBe(201);
-    const db = await getDb();
-    expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('1');
-  });
-
-  it('a dead URL is a WARNING, not a refusal — the document publishes', async () => {
-    const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
-      markup: `<div><img src="${web}/logo.png" /><img src="${web}/gone.png" alt="missing" /></div>`,
+      markup: `<div><img src="${url}" alt="missing" /></div>`,
     } }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    // ASSET warnings have their own key: `warnings` keeps the dataset-dependent
-    // shape ({id,title,details}) it has always had, and a markup PUT can carry
-    // both — one key with two shapes is a wire an agent cannot parse.
-    expect(body.asset_warnings).toEqual([expect.objectContaining({ code: 'bad_status', url: `${web}/gone.png` })]);
-    expect(String(body.asset_warnings[0].fix).length).toBeGreaterThan(0);
+    expect(body).not.toHaveProperty('asset_warnings');
     expect(body.warnings).toBeUndefined();
-    // The good one still maps; the dead one keeps its URL, and the browser
-    // draws the alt text (the document's CSP never reaches the host for it).
-    const html = await (await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id }))).text();
-    expect(html).toContain(assetUrlFor(`${web}/logo.png`));
-    expect(html).toContain('missing');
+    expect(await storedAssets()).toBe(0);
+    expect(await servedHtml(body.id)).toContain(`src="${url}"`);
   });
 
-  it('an image URL serving html is warned about by the sniff, and stores nothing', async () => {
+  it('has no cap on how many web images one document names', async () => {
     const t = await mintToken('t');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
-      markup: `<div><img src="${web}/page.html" /></div>`,
-    } }));
-    expect(res.status).toBe(201);
-    expect((await res.json()).asset_warnings[0].code).toBe('unsupported_type');
-    const db = await getDb();
-    expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('0');
-  });
-
-  it('caps the TOTAL external assets one publish imports, and names the excess', async () => {
-    const t = await mintToken('t');
-    // Seven images and twelve faces: under the image cap, far over the total.
-    const imgs = Array.from({ length: 7 }, (_, i) => `<img src="${web}/logo.png?i=${i}" />`).join('');
-    const faces = Array.from({ length: 12 }, (_, i) =>
-      `@font-face{font-family:F${i};src:url(${web}/face.woff2?f=${i}) format('woff2')}`).join('');
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
-      markup: `<Helmet><style>{\`${faces}\`}</style></Helmet><div>${imgs}</div>`,
-    } }));
-    expect(res.status).toBe(201);
-    const warned = (await res.json()).asset_warnings as Array<{ code: string; url: string }>;
-    // 19 named, 16 imported, 3 warned — by name, so the author can act.
-    expect(warned.filter((w) => w.code === 'too_many_external_assets')).toHaveLength(3);
-    expect(warned.at(-1)!.url).toBe(`${web}/face.woff2?f=11`);
-    const db = await getDb();
-    expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('16');
-  });
-
-  it('caps the imports one publish may make', async () => {
-    const t = await mintToken('t');
-    const many = Array.from({ length: 9 }, (_, i) => `<img src="${web}/logo.png?n=${i}" />`).join('');
+    hits.length = 0;
+    const many = Array.from({ length: 20 }, (_, i) => `<img src="${web}/logo.png?n=${i}" alt="" />`).join('');
     const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<div>${many}</div>` } }));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('too_many_external_images');
+    expect(res.status).toBe(201);
+    expect(hits).toEqual([]);
+    expect(await storedAssets()).toBe(0);
   });
 
-  it('PUT imports too — the shared pipeline, not just create', async () => {
+  it('PUT serves the URL as written too — the shared pipeline, not just create', async () => {
     const t = await mintToken('t');
     const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>v1</p>' } }))).json();
+    hits.length = 0;
     const put = await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: t.token, json: {
-      markup: `<div><img src="${web}/photo.jpg" /></div>`,
+      markup: `<div><img src="${web}/photo.jpg" alt="" /></div>`,
     } }), params({ id: made.id }));
     expect(put.status).toBe(200);
-    // The URL is still the URL — the mapping is serve-time, so a mapped tree
-    // must never find its way back into storage through any write door.
-    expect((await getArtifactById(made.id))!.source).toContain(`${web}/photo.jpg`);
-    const html = await (await rawRoute(request(`/a/${made.id}/raw`), params({ id: made.id }))).text();
-    expect(html).toContain(assetUrlFor(`${web}/photo.jpg`));
+    expect(await put.json()).not.toHaveProperty('asset_warnings');
+    expect(hits).toEqual([]);
+    expect(await storedAssets()).toBe(0);
+    expect(await servedHtml(made.id)).toContain(`src="${web}/photo.jpg"`);
   });
 
-  it('the EDITS door REPORTS what it could not import, like create and PUT', async () => {
+  it('the EDITS door asks for no authoring context and imports nothing for a pasted web image', async () => {
     const t = await mintToken('t');
     const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
     const row=(await getArtifactById(made.id))!;
     if(row.document?.kind!=='graph')throw new Error('Missing authoring graph');
-    let warnings:unknown[]=[];
-    const update=await prepareClientDocumentPublication({...row,document:row.document},{source:row.source!.replace('</div>',`<img id="missing" src="${web}/gone.png" alt="missing" /></div>`)},async source=>{
-      const response=await prepareDocumentAuthoringContext({tokenId:t.id,userId:null},made.id,{source});
-      expect(response.ok).toBe(true);return response.json();
-    },received=>{warnings=received;});
+    hits.length = 0;
+    let asked=0;
+    const update=await prepareClientDocumentPublication({...row,document:row.document},{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" alt="" /></div>`)},async source=>{
+      asked++;
+      return (await prepareDocumentAuthoringContext({tokenId:t.id,userId:null},made.id,{source})).json();
+    });
     const res=await editsRoute(request(`/api/artifacts/${made.id}/edits`,{method:'POST',token:t.token,json:{edit_id:row.edit_id,document_update:update}}),params({id:made.id}));
     expect(res.status).toBe(200);
-    expect(warnings).toEqual([expect.objectContaining({code:'bad_status',url:`${web}/gone.png`})]);
+    expect(await res.json()).not.toHaveProperty('asset_warnings');
+    expect(asked).toBe(0);
+    expect(hits).toEqual([]);
+    expect(await storedAssets()).toBe(0);
+    expect((await getArtifactById(made.id))!.source).toContain(`${web}/logo.png`);
+    expect(await servedHtml(made.id)).toContain(`src="${web}/logo.png"`);
   });
 
-  it('the EDITS door imports too — an agent pasting a web image mid-edit', async () => {
+  it('the EDITS door through the prepared-resources helper stores nothing either', async () => {
     const t = await mintToken('t');
     const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
     const row=(await getArtifactById(made.id))!;
-    const body=await documentPublicationWithResources(row,{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" /></div>`)});
+    hits.length = 0;
+    const body=await documentPublicationWithResources(row,{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" alt="" /></div>`)});
     const res=await editsRoute(request(`/api/artifacts/${made.id}/edits`,{method:'POST',token:t.token,json:body}),params({id:made.id}));
     expect(res.status).toBe(200);
-    expect((await getArtifactById(made.id))!.source).toContain(`${web}/logo.png`);
-    const html = await (await rawRoute(request(`/a/${made.id}/raw`), params({ id: made.id }))).text();
-    expect(html).toContain(assetUrlFor(`${web}/logo.png`));
+    expect(hits).toEqual([]);
+    expect(await storedAssets()).toBe(0);
   });
 });
 
-describe('a self-hosted font', () => {
-  it('is imported at publish, kept in the source, and served from our origin', async () => {
+describe('an @font-face url in the document stylesheet', () => {
+  it('is kept in the source and served as written, with nothing fetched or stored', async () => {
     const t = await mintToken('t');
+    hits.length = 0;
     const css = `@font-face{font-family:Mine;src:url(${web}/face.woff2) format('woff2')}`;
     const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
       markup: `<Helmet><style>{\`${css}\`}</style></Helmet><p className="font-[Mine]">words</p>`,
     } }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    // A 201 with the @font-face silently deleted is the failure this catches.
+    expect(body).not.toHaveProperty('asset_warnings');
     expect((await getArtifactById(body.id))!.source).toContain(`${web}/face.woff2`);
+    expect(hits).toEqual([]);
+    expect(Number((await (await getDb()).query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0]!.n)).toBe(0);
     const html = await (await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id }))).text();
-    expect(html).toContain(assetUrlFor(`${web}/face.woff2`));
-    expect(html).not.toContain(`${web}/face.woff2`);
-  });
-
-  it('a face that will not load is a warning, and the rest of the document publishes', async () => {
-    const t = await mintToken('t');
-    const css = `@font-face{font-family:Mine;src:url(${web}/gone.woff2) format('woff2')}`;
-    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
-      markup: `<Helmet><style>{\`${css}\`}</style></Helmet><p>words</p>`,
-    } }));
-    expect(res.status).toBe(201);
-    expect((await res.json()).asset_warnings[0].url).toBe(`${web}/gone.woff2`);
+    expect(html).toContain(`${web}/face.woff2`);
+    expect(html).not.toContain(assetUrlFor(`${web}/face.woff2`));
   });
 });
 

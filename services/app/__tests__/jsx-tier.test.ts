@@ -112,9 +112,8 @@ describe('jsx tier publish', () => {
 
   /**
    * External subresources are allowed: CSS and markup are unconstrained, and the
-   * page CSP admits every https host. A web URL in a NON-image position is kept
-   * as written (not imported, not refused); `<img src="https://…">` alone is
-   * IMPORTED by the publish door — __tests__/web-import.test.ts owns that.
+   * page CSP admits every https host. A web URL is kept as written in every
+   * position, `<img src="https://…">` included — nothing is imported.
    */
   it('publishes external subresource URLs as written; inline style is valid', async () => {
     const t = await mintToken('t');
@@ -137,17 +136,15 @@ describe('jsx tier publish', () => {
       expect((await got.json()).markup, markup).toContain(kept);
     }
 
-    // The imported position PUBLISHES even when the host is unreachable: the
-    // URL stays in the document, the reply names what could not be fetched, and
-    // the reader sees the alt text where the picture would be. Losing a whole
-    // document over one dead link is the failure this replaced.
-    const imported = await createArtifactRoute(
+    // An unreachable host publishes as written with nothing to report: publish never fetches it.
+    const unreachable = await createArtifactRoute(
       request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup: '<div data-design="tw"><img src="https://evil.test/p.png" /></div>' } }),
     );
-    expect(imported.status).toBe(201);
-    const importedBody = await imported.json();
-    expect(importedBody.asset_warnings[0].url).toBe('https://evil.test/p.png');
-    expect(String(importedBody.asset_warnings[0].fix).length).toBeGreaterThan(0);
+    expect(unreachable.status).toBe(201);
+    const unreachableBody = await unreachable.json();
+    expect(unreachableBody).not.toHaveProperty('asset_warnings');
+    const stored = await getArtifactRoute(request(`/api/artifacts/${unreachableBody.id}`, { token: t.token }), params({ id: unreachableBody.id }));
+    expect((await stored.json()).markup).toContain('src="https://evil.test/p.png"');
   });
 
   it('allows the self-contained sources: ref: and inline data:image', async () => {

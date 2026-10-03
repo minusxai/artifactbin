@@ -27,7 +27,7 @@ import { STORY_TEMPLATES } from '@/lib/data/story/story-templates';
 import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
 import { MAX_CONTENT_BYTES } from '@/lib/story/document/input';
-import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
+import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
 import { COMPUTED_FIGURE_RULE } from '@/lib/serving/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
 import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/story/data';
@@ -111,8 +111,6 @@ const REGISTRY_GLOBALS = {
   maxContentBytes: MAX_CONTENT_BYTES.toLocaleString('en-US'),
   maxImageBytes: MAX_IMAGE_BYTES.toLocaleString('en-US'),
   maxPdfBytes: MAX_PDF_BYTES.toLocaleString('en-US'),
-  /** The cap on how many external urls ONE document may import (images, faces and PDFs). */
-  maxExternalAssets: MAX_EXTERNAL_ASSETS_PER_PUBLISH,
   /** One shared sentence for validation and authoring guidance — the rule that figures are computed, never typed. */
   computedFigureRule: COMPUTED_FIGURE_RULE,
   /** The functions the engine adds to SQLite, as the engine registers them (@artifactbin/contracts SQL_FUNCTIONS). */
