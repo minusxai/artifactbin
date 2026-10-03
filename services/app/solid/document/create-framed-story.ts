@@ -15,6 +15,7 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import type { JsxNode } from '@/lib/jsx/types';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
+import { withUrlValuesOf } from '@/lib/story/data/url-values';
 import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
 
 /** The served frame a consent grant reloads (brief C's CspConsentBar) and the bridge attaches to. */
@@ -41,6 +42,19 @@ export async function freshFrameSrc(id: string, search = typeof window === 'unde
     const answer = await response.json() as { src?: unknown };
     return typeof answer.src === 'string' ? answer.src : null;
   } catch { return null; }
+}
+
+/**
+ * The framed document's link moved (lib/islands/url-sync → STORY_URL_VALUES_MESSAGE): this page's address takes
+ * exactly its `$` params — the path, the hash and every other param kept, replaced rather than pushed — so the
+ * address bar, a copied link and a reload carry the reader's selection (the server forwards the page's `$` params
+ * into the frame's first URL, lib/serving/artifact-page).
+ */
+export function followFramedValues(win: Window, values: string): void {
+  const { pathname, search, hash } = win.location;
+  const next = withUrlValuesOf(search, values);
+  if (next === search) return;
+  win.history.replaceState(win.history.state, '', `${pathname}${next}${hash}`);
 }
 
 export interface FramedStoryOptions {
@@ -70,6 +84,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     editId: options.editId, source: options.source,
     onReady: (next) => setNonce(next || null),
     onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
+    onUrlValues: (values) => followFramedValues(window, values),
   });
   setCurrent(bridge);
   createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));

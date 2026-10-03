@@ -18,14 +18,17 @@
  *    it is posted to `*`, and its second `load` closes the bridge for good rather than re-attach to a document
  *    whose origin cannot be told apart;
  *  · the frame may ask the page to make exactly three requests for this document (IslandControllerInput.appFetch):
- *    `GET|POST /a/<id>/draft-preview` and `GET /a/<id>/story` — nothing else, never another document's.
+ *    `GET|POST /a/<id>/draft-preview` and `GET /a/<id>/story` — nothing else, never another document's;
+ *  · the document's link follower (lib/islands/url-sync) tells the page what its address's `$` params should say
+ *    (STORY_URL_VALUES_MESSAGE): taken from this frame's window and origin only, outside any session (the author's
+ *    script moves every value anyway), as a bounded query string with no hash — the page keeps only its `$` pairs.
  */
 import type { JsxNode } from '@/lib/jsx/types';
 import { runtimeId } from '@/lib/story-runtime/runtime-id';
 import { storyFragmentPath } from '@/lib/compiled-page/story-fragment';
 import type { IslandStoryController } from '@/lib/story-runtime/island-controller';
 import {
-  STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, isFrameBridgeEnvelope,
+  STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope,
   type FrameBridgeFramePayload, type FrameBridgeParentPayload, type StoryDocumentUpdate,
 } from '@/lib/story-runtime/contract';
 
@@ -48,11 +51,24 @@ export interface FrameBridgeParentOptions {
   onScroll?: (scroll: { x: number; y: number }) => void;
   /** The bridge closed itself (the frame navigated away, or reported it cannot run the editor). */
   onClosed?: (reason: string) => void;
+  /** The document's link moved: `search` is what the page's address's `$` params should now say (`''` at rest). */
+  onUrlValues?: (search: string) => void;
 }
 
 export interface FrameBridgeParent extends IslandStoryController {
   /** The editor's newer head pointer and source, which the frame's controller reads live. */
   setContext(editId: string, source: string | null): void;
+}
+
+/** The longest `$` query a document may hand the page's address. */
+const MAX_URL_VALUES = 8192;
+
+/** A document's `$` params as the page will take them (STORY_URL_VALUES_MESSAGE), or null: a bounded query, no hash or space. */
+export function urlValuesOf(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const { type, search } = data as { type?: unknown; search?: unknown };
+  if (type !== STORY_URL_VALUES_MESSAGE || typeof search !== 'string' || search.length > MAX_URL_VALUES) return null;
+  return /^\??[^#\s]*$/.test(search) ? search : null;
 }
 
 /** The response headers a relayed answer keeps: what the controller reads. */
@@ -149,7 +165,10 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   };
 
   const onMessage = (event: MessageEvent) => {
-    if (closed || event.source !== frame.contentWindow || event.origin !== frameOrigin || !isFrameBridgeEnvelope(event.data)) return;
+    if (closed || event.source !== frame.contentWindow || event.origin !== frameOrigin) return;
+    const values = urlValuesOf(event.data);
+    if (values !== null) { options.onUrlValues?.(values); return; }
+    if (!isFrameBridgeEnvelope(event.data)) return;
     const data = event.data as { key?: unknown; payload: FrameBridgeFramePayload };
     const payload = data.payload;
     if (payload.kind === 'hello') {
