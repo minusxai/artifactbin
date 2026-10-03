@@ -3,19 +3,19 @@
  * `docker run` line — so each can be tested without a container engine.
  */
 import { createHash } from 'node:crypto';
+import { GATE_SPECS } from '../gates.manifest.mjs';
 
 /** What a container asks for unless told otherwise: the shape of one CI gate runner (4 vCPUs). */
 export const DEFAULT_CPUS = 4;
 export const DEFAULT_MEMORY = '8g';
 
 /**
- * Gates that cannot run inside a gate container, and why. Each is still run by PR CI; the runner
- * refuses them by name instead of failing them for a reason that says nothing about the product.
+ * Gates that cannot run inside a gate container, and why: every manifest row with `needsPostgres`. Each is
+ * still run by PR CI; the runner refuses them by name instead of failing them for a reason that says
+ * nothing about the product.
  */
-export const CONTAINER_REFUSALS = Object.freeze({
-  'postgres-datasets':
-    'starts its own Postgres with `docker run -p 127.0.0.1::5432`, a host port the container cannot reach; PR CI runs it',
-});
+export const CONTAINER_REFUSALS = Object.freeze(Object.fromEntries(GATE_SPECS.filter((spec) => spec.needsPostgres).map((spec) => [spec.name,
+  'starts its own Postgres with `docker run -p 127.0.0.1::5432`, a host port the container cannot reach; PR CI runs it'])));
 
 /** Where things live inside the container. */
 export const INSIDE = Object.freeze({ src: '/src', work: '/work', deps: '/deps' });

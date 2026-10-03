@@ -6,7 +6,7 @@
  * nodes are in hand before the first paint, so discovery is a tree walk rather
  * than a poll of the rendered frame. That is what lets the rail be
  * SERVER-rendered at its final size, with no reservation guess and so no 190px
- * layout shift (scripts/gates/gate-layout-shift.mjs).
+ * layout shift (scripts/gates/gate-reading-geometry.mjs).
  *
  * The title fallback chain: the authored `title` prop, else the slide's first
  * heading, else "Slide N".

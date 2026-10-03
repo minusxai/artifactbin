@@ -21,6 +21,8 @@
  * @property {boolean} needsMail      reads a login code from the mail sink
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
  * @property {string[]} [browsers]    engines required by the default gate invocation; defaults to Chromium
+ * @property {true} [needsPostgres]   starts a disposable PostgreSQL through the host's Docker: CI pulls the image
+ *                                    for its shard, and a gate container refuses it
  * @property {number} seconds         measured CI duration under two-server load — the shard weight
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
@@ -29,74 +31,60 @@
 // `seconds` re-read from CI runs 36875088399, 36875673784 and 36876517464: the slowest of the three
 // `──── name (Ns) ────` lines for each gate (a failed first attempt excluded).
 export const GATE_SPECS = Object.freeze([
-  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 37, timeoutMs: 150_000 },
-  // Opens rendered offline files from file:// (reading, editing, comments, Save, code view offline and
-  // online, agent-edited files), one engine per gate. All three took 74s on run 36879103503 (after 48s of
-  // cross-browser install); alone, 29s/38s/28s on run 36880158113.
-  { name: 'offline-file', needsMail: false, seconds: 29, timeoutMs: 120_000 },
-  { name: 'offline-file-firefox', browsers: ['firefox'], needsMail: false, seconds: 38, timeoutMs: 120_000 },
-  { name: 'offline-file-webkit', browsers: ['webkit'], needsMail: false, seconds: 28, timeoutMs: 120_000 },
-  { name: 'cli-conformance', needsMail: true, seconds: 12, timeoutMs: 180_000 },
-  { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
-  { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
-  { name: 'testusers', needsMail: true, seconds: 10, timeoutMs: 60_000 },
-  { name: 'comment-targets', needsMail: false, seconds: 17, timeoutMs: 60_000 },
-  { name: 'dataset-policies', needsMail: true, seconds: 5, timeoutMs: 60_000 },
-  { name: 'app-home', needsMail: false, serialGroup: 'clipboard', seconds: 1, timeoutMs: 120_000 },
-  { name: 'seamless-navigation', needsMail: true, seconds: 5, timeoutMs: 60_000 },
-  { name: 'libraries', needsMail: false, seconds: 10, timeoutMs: 60_000 },
-  { name: 'postgres-datasets', needsMail: true, seconds: 14, timeoutMs: 60_000 },
-  { name: 'annotations', needsMail: false, seconds: 40, timeoutMs: 120_000 },
-  { name: 'app-flows', needsMail: true, seconds: 75, timeoutMs: 210_000 },
-  { name: 'claim-flow', needsMail: true, seconds: 6, timeoutMs: 60_000 },
-  { name: 'collab-edit', needsMail: true, seconds: 37, timeoutMs: 100_000 },
-  { name: 'data-ux', needsMail: false, seconds: 16, timeoutMs: 60_000 },
-  { name: 'dataflow', needsMail: true, seconds: 13, timeoutMs: 60_000 },
+  // Journey gates (.agent/gates-proposal.md §3): each absorbs several former gates; `seconds` measured in
+  // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
+  // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
+  // process (formerly offline-file, -firefox, -webkit and screenshot-comments: three shards' cross-browser setup).
+  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 29, timeoutMs: 90_000 },
+  // Guest start, OAuth consent and the login door, claim, fork, folders and CLI acceptance, one persona per leg
+  // (formerly simpler-start, oauth-browser, app-flows AUTH, claim-flow, fork, folders and cli-conformance).
+  { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 22, timeoutMs: 70_000 },
+  // Writes reaching open pages with no reload (formerly live-data, live-reader, app-flows VIEWER and the
+  // watched-then-edit half of inplace-edit section 3).
+  { name: 'live', needsMail: false, seconds: 14, timeoutMs: 60_000 },
+  // Browser sessions and test users through the real CLI, Linux + bubblewrap (formerly browser-sessions, testusers).
+  { name: 'sessions', needsMail: true, seconds: 35, timeoutMs: 110_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
-  // run 36838282615 that held a runner to itself and set the run's critical path.
-  { name: 'editor-v2', needsMail: false, serialGroup: 'clipboard', seconds: 45, timeoutMs: 200_000 },
-  { name: 'editor-path', needsMail: true, seconds: 47, timeoutMs: 150_000 },
-  { name: 'editor-exits', needsMail: false, seconds: 42, timeoutMs: 120_000 },
-  { name: 'editable-table', needsMail: true, seconds: 36, timeoutMs: 120_000 },
-  { name: 'roadmap-views', needsMail: false, seconds: 8, timeoutMs: 60_000 },
-  { name: 'export-slice', needsMail: false, seconds: 13, timeoutMs: 60_000 },
-  { name: 'fonts', needsMail: false, seconds: 39, timeoutMs: 150_000 },
-  { name: 'folders', needsMail: true, seconds: 12, timeoutMs: 60_000 },
-  { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
-  { name: 'full-kit', needsMail: false, seconds: 33, timeoutMs: 60_000 },
-  { name: 'hydration', needsMail: true, seconds: 31, timeoutMs: 190_000 },
-  { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 47, timeoutMs: 110_000 },
-  // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
-  { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
-  { name: 'inplace-edit', needsMail: false, seconds: 66, timeoutMs: 180_000 },
-  // Frames a document on its own origin, so it boots its own production server with APP__PAGES_HOST=lvh.me
-  // (scripts/gates/lib/pages-server; the runner's servers have none). Measured 10s against a dev server; its boot adds ~10s.
-  { name: 'frame-editor', needsMail: false, seconds: 20, timeoutMs: 90_000 },
-  { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
-  { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
-  { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },
-  { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
-  { name: 'live-reader', needsMail: false, seconds: 30, timeoutMs: 70_000 },
+  // run 36838282615 that held a runner to itself and set the run's critical path. editor-path also
+  // carries hydration's compiled-page edit leg; editor-exits carries mobile's editor sections. Measured in
+  // one gate container (`--servers 1`, 4 CPUs): 28s/43s/41s; editor-engine's and editor-path's timeouts stay 3x
+  // their 45s/47s CI times (the container ran editor-v2's script 17s faster than CI did).
+  { name: 'editor-engine', needsMail: false, serialGroup: 'clipboard', seconds: 28, timeoutMs: 140_000 },
+  { name: 'editor-path', needsMail: true, seconds: 43, timeoutMs: 150_000 },
+  { name: 'editor-exits', needsMail: false, seconds: 41, timeoutMs: 130_000 },
+  // Reading → editing → agent write → exit, and typing that survives a remote edit: 35s in one gate container.
+  { name: 'inplace-edit', needsMail: false, seconds: 35, timeoutMs: 110_000 },
   // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
   { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
-  { name: 'mobile', needsMail: false, seconds: 21, timeoutMs: 100_000 },
-  // The four native-scripts briefs end to end on a server it boots with APP__PAGES_HOST=lvh.me (./lib/pages-server):
-  // frame, direct query, consent and the fetch door, in-frame editing with the script badge, a comment, afbin export.
-  { name: 'native-scripts', needsMail: false, seconds: 45, timeoutMs: 150_000 },
-  { name: 'oauth-browser', needsMail: true, seconds: 3, timeoutMs: 60_000 },
-  { name: 'reading-chrome', needsMail: false, seconds: 19, timeoutMs: 90_000 },
-  { name: 'web-assets', needsMail: true, seconds: 17, timeoutMs: 60_000 },
-  { name: 'pdf', needsMail: false, seconds: 2, timeoutMs: 60_000 },
-  // Boots its own production server with APP__PAGES_HOST=lvh.me (the runner's servers have none), signs in,
-  // publishes and frames a private document. Measured 14s against a dev server; its own boot adds ~10s.
-  { name: 'pages-origin', needsMail: true, seconds: 30, timeoutMs: 120_000 },
-  { name: 'secure-arch', needsMail: true, seconds: 14, timeoutMs: 60_000 },
-  { name: 'shell-seo', needsMail: false, seconds: 3, timeoutMs: 60_000 },
-  { name: 'social-preview', needsMail: false, seconds: 29, timeoutMs: 80_000 },
-  { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 3, timeoutMs: 60_000 },
-  { name: 'visibility', needsMail: true, seconds: 9, timeoutMs: 60_000 },
-  { name: 'viz-editor', needsMail: true, seconds: 61, timeoutMs: 130_000 },
+  // One walk over dataflow, local-sql-state, dataset-policies, data-ux and postgres-datasets (proposal row 10).
+  // Starts a disposable PostgreSQL through the host's Docker, so a gate container refuses it. Measured 11s on
+  // a host run (one server, `node scripts/gates.mjs --servers=1 --only=data-journey`); re-read it from CI.
+  { name: 'data-journey', needsMail: true, needsPostgres: true, seconds: 11, timeoutMs: 60_000 },
+  // editable-table, roadmap-views and row-images over one account (proposal row 13). Measured 18s in a gate container.
+  { name: 'datasets-in-documents', needsMail: true, seconds: 18, timeoutMs: 60_000 },
+  // full-kit, the compiled handover from hydration, libraries and fonts (proposal row 14). Needs esm.sh.
+  // Measured 28s in a gate container.
+  { name: 'kit-and-fonts', needsMail: false, seconds: 28, timeoutMs: 90_000 },
+  // Measured in one gate-container run (4 CPUs, two servers, beside each other): viz-editor 50s, comments 13s,
+  // collab-roles 14s, exports 34s.
+  // Builds a chart by clicking, reloads, edits again, then a session-only owner and a grid (beside the journey).
+  // The slow-network rebind leg was dropped (it repeated the refused-switch leg).
+  { name: 'viz-editor', needsMail: true, seconds: 50, timeoutMs: 150_000 },
+  // One journey: the former annotations and comment-targets gates (two lanes in one browser, the fold leg alone).
+  { name: 'comments', needsMail: false, seconds: 13, timeoutMs: 60_000 },
+  // One journey: the former collab-edit and link-access gates — four signed-in people and a logged-out visitor.
+  { name: 'collab-roles', needsMail: true, seconds: 14, timeoutMs: 60_000 },
+  // One journey: the former export-slice and social-preview gates, plus the one PNG/JPEG/card/?chrome=0 set.
+  { name: 'exports', needsMail: false, seconds: 34, timeoutMs: 110_000 },
+  // Journey gates (scripts/gates/gate-<name>.mjs headers list what each absorbed). `seconds` measured in one
+  // `node scripts/gate-container.mjs reader-shell own-origin-script reading-geometry media` run (4 CPUs, two
+  // servers, CI's shape: 66s wall-clock); timeoutMs = max(60s, 3 × seconds), rounded up to ten seconds.
+  { name: 'reader-shell', needsMail: true, seconds: 9, timeoutMs: 60_000 },
+  // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
+  { name: 'own-origin-script', needsMail: true, seconds: 14, timeoutMs: 60_000 },
+  { name: 'reading-geometry', needsMail: false, seconds: 63, timeoutMs: 190_000 },
+  { name: 'media', needsMail: true, serialGroup: 'clipboard', seconds: 35, timeoutMs: 110_000 },
 ]);
 
 /**
@@ -141,6 +129,11 @@ export function specFor(name) {
   return spec;
 }
 
+/** Does any of these gates start its own PostgreSQL (CI pulls the image only for a shard that holds one)? */
+export function needsPostgres(names) {
+  return names.some((name) => specFor(name).needsPostgres === true);
+}
+
 /** Browser installation plan for exactly the gates this runner will execute. */
 export function browsersFor(names) {
   return [...new Set(names.flatMap(name => specFor(name).browsers ?? ['chromium']))].sort();
@@ -153,16 +146,16 @@ export function browsersFor(names) {
  * Twelve bins of <=~75s of wall each (two servers per runner) from ~1,250s of measured gate work, two of
  * them held alone by CI_ISOLATED_GATES; ten left ~89s of work on the shared bins (run 36879103503).
  */
-export const CI_GATE_SHARDS = 12;
+export const CI_GATE_SHARDS = 8;
 
 /**
  * Gates that each get a CI runner to themselves. Both FAIL under a neighbour's browser load and then
  * pass alone in the runner's retry: inplace-edit ("typing did not move the reader (145 → 995)", then
- * "passed alone in 62s") doubled shard 4/10 to 134s on run 36875673784, and collab-edit retried on two
+ * "passed alone in 62s") doubled shard 4/10 to 134s on run 36875673784, and collab-edit (now collab-roles) retried on two
  * of three runs (36876517464, 36875088399), +33s each. Alone they cannot lose that race, so the shard's
  * time is the gate's own: no retry to pad for.
  */
-export const CI_ISOLATED_GATES = Object.freeze(['inplace-edit', 'collab-edit']);
+export const CI_ISOLATED_GATES = Object.freeze(['inplace-edit', 'collab-roles']);
 
 /** The extra a shard pays to apt-install Firefox/WebKit system packages: 91s on CI run 35740918148. */
 export const CROSS_BROWSER_SETUP_SECONDS = 91;

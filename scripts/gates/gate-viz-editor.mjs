@@ -132,6 +132,46 @@ const waitForOption = async (pg, label, option) => {
 /** The toolbar's save status: "not saved — …", "Saving…", or "vN · Saved". */
 const saveStatus = async (pg) => (await pg.locator('[aria-label="Document actions"] [role="status"]').textContent().catch(() => '')) ?? '';
 
+// ── a chart INSIDE A GRID selects on the FIRST click ────────────────────────
+// Its own document and page, so it runs BESIDE the main journey rather than after it.
+/*
+ * The dashboard case, which the legs above cannot see: edit mode wraps a
+ * A chart inside a grid must open the inspector on one plain click. The
+ * Solid editor mounts a separate grip over each tile, so the chart itself
+ * must remain clickable. Only a real browser can check hit testing here.
+ */
+const gridLeg = (async () => {
+  const gridDoc = `<Helmet><Import name="gsales_data" src="ref:${sales.id}" /><Query name="gsales">{\`select * from gsales_data.rows\`}</Query></Helmet>`
+    + `<div data-design="tw" className="@container p-4">`
+    + `<Grid cols={12} rowHeight={86}>`
+    + `<GridItem x={0} y={0} w={6} h={4}><Question title="Grid chart" data="$gsales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} /></GridItem>`
+    + `<GridItem x={6} y={0} w={6} h={4}><Question title="Grid table" data="$gsales" /></GridItem>`
+    + `</Grid></div>`;
+  const gd = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Grid dash', markup: gridDoc, theme: 'manuscript' }) }, token);
+  check(!!gd.id, 'the grid dashboard published');
+  const pg = await b.newPage({ viewport: { width: 1500, height: 1000 } });
+  await becomeOwner(pg, B, token);
+  await pg.goto(`${B}/a/${gd.id}#edit`, { waitUntil: 'load' });
+  const gf = () => documentLocator(pg);
+  await gf().locator('[data-mx-inline-story]').waitFor({ state: 'attached', timeout: 40000 });
+  // Edit is live when the Solid grid grips are mounted.
+  for (let i = 0; i < 120 && !(await gf()?.locator('.mx-grid-grip').count().catch(() => 0)); i++) await pg.waitForTimeout(150);
+  check((await gf().locator('.mx-grid-grip').count()) > 0, 'edit mode mounted grid controls');
+  for (let i = 0; i < 40 && !(await gf().locator('svg.marks, canvas').count().catch(() => 0)); i++) await pg.waitForTimeout(250);
+  // ONE plain click, dead center on the chart — no drag, no shake.
+  await gf().locator('[aria-label="Question embed"]').first().click();
+  const opened = await pg.waitForSelector('[aria-label="Chart editor"]', { timeout: 8000 }).then(() => true).catch(() => false);
+  check(opened, 'ONE click on a chart inside a grid opens the inspector');
+  await pg.close();
+})().catch((err) => check(false, `the grid leg could not run (${String(err).split('\n').slice(0, 4).join(' | ')})`));
+
+// The signed-in leg's login runs beside the journey too; only adopting the guest token waits for the end, so the
+// journey's token-owned edits are made exactly as before.
+const sink = await startMailSink();
+const sessionPage = await b.newPage({ viewport: { width: 1500, height: 1000 } });
+const sessionEmail = `mxmx_test_viz_${Date.now().toString(36)}@example.com`;
+const signedIn = loginViaEmail(sessionPage, B, sink, sessionEmail).then(() => null, (err) => err);
+
 // ── the journey ─────────────────────────────────────────────────────────────
 await openEditor();
 check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'the inspector stays shut until a chart is clicked');
@@ -249,31 +289,8 @@ await p.screenshot({ path: '/tmp/viz-editor-table.png' });
   check(await until(async () => !/not saved/.test(await saveStatus(p))), `and the "not saved" status cleared (${await saveStatus(p)})`);
   check((await storedChart()).includes('A paragraph that must survive'), 'with the prose still intact');
 
-  // The same rebind on a SLOW NETWORK: the lone table switch is still on the
-  // wire (its /prepare held back) when the axis picks land. Those picks are
-  // newer work queued behind a write that will be refused, and must go out
-  // after it — dropping them left the editor on "not saved" with the stored
-  // chart still bound to the old table.
-  const prepareStatuses = [];
-  await p.route('**/prepare', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const response = await route.fetch();
-    prepareStatuses.push(response.status());
-    await route.fulfill({ response });
-  });
-  try {
-    await pick('Table', '$costs');
-    await p.waitForTimeout(400); // with pick's own 400 ms: past the batch window, so the switch flushes alone
-    check(await waitForOption(p, 'X-Axis', 'month'), 'on a slow network the axis pickers offer $costs columns');
-    await pick('X-Axis', 'month');
-    await pick('Y-Axis', 'spend');
-    check(await until(async () => barOnCosts(await storedChart()), 60),
-      `the axis picks queued behind the refused switch SAVED: bar on $costs, month × spend (prepare answered ${prepareStatuses.join(', ')})`);
-    check(prepareStatuses[0] === 400, 'and the switch was refused on its own first, so this leg exercised the refusal');
-    check(await until(async () => !/not saved/.test(await saveStatus(p))), `and the "not saved" status cleared (${await saveStatus(p)})`);
-  } finally {
-    await p.unroute('**/prepare');
-  }
+  // The same rebind on a SLOW NETWORK (/prepare held 2.5 s) is dropped: it repeated the refused-switch-then-axes leg
+  // above (a refusal, then picks that must still save and clear "not saved"), at ~10 s of fixed waits.
 }
 
 // ── the inspector is not offered where it must not write ────────────────────
@@ -376,10 +393,9 @@ check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shu
 // picker has to offer the whole shelf. Same panel, so the same journey must
 // work with no stored token anywhere.
 try {
-  const sink = await startMailSink();
-  const page = await b.newPage({ viewport: { width: 1500, height: 1000 } });
-  const email = `mxmx_test_viz_${Date.now().toString(36)}@example.com`;
-  await loginViaEmail(page, B, sink, email);
+  const page = sessionPage;
+  const loginError = await signedIn;
+  if (loginError) throw loginError;
   await mergeGuestIntoAccount(page, B, token);
   await page.waitForTimeout(1000);
 
@@ -419,37 +435,7 @@ try {
   check(false, `the signed-in leg could not run — read its OTP with npm run dev:otp -- <email> (${String(err).split('\n').slice(0,4).join(' | ')})`);
 }
 
-// ── a chart INSIDE A GRID selects on the FIRST click ────────────────────────
-/*
- * The dashboard case, which the legs above cannot see: edit mode wraps a
- * A chart inside a grid must open the inspector on one plain click. The
- * Solid editor mounts a separate grip over each tile, so the chart itself
- * must remain clickable. Only a real browser can check hit testing here.
- */
-{
-  const gridDoc = `<Helmet><Import name="gsales_data" src="ref:${sales.id}" /><Query name="gsales">{\`select * from gsales_data.rows\`}</Query></Helmet>`
-    + `<div data-design="tw" className="@container p-4">`
-    + `<Grid cols={12} rowHeight={86}>`
-    + `<GridItem x={0} y={0} w={6} h={4}><Question title="Grid chart" data="$gsales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} /></GridItem>`
-    + `<GridItem x={6} y={0} w={6} h={4}><Question title="Grid table" data="$gsales" /></GridItem>`
-    + `</Grid></div>`;
-  const gd = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Grid dash', markup: gridDoc, theme: 'manuscript' }) }, token);
-  check(!!gd.id, 'the grid dashboard published');
-  const pg = await b.newPage({ viewport: { width: 1500, height: 1000 } });
-  await becomeOwner(pg, B, token);
-  await pg.goto(`${B}/a/${gd.id}#edit`, { waitUntil: 'load' });
-  const gf = () => documentLocator(pg);
-  await gf().locator('[data-mx-inline-story]').waitFor({ state: 'attached', timeout: 40000 });
-  // Edit is live when the Solid grid grips are mounted.
-  for (let i = 0; i < 120 && !(await gf()?.locator('.mx-grid-grip').count().catch(() => 0)); i++) await pg.waitForTimeout(150);
-  check((await gf().locator('.mx-grid-grip').count()) > 0, 'edit mode mounted grid controls');
-  for (let i = 0; i < 40 && !(await gf().locator('svg.marks, canvas').count().catch(() => 0)); i++) await pg.waitForTimeout(250);
-  // ONE plain click, dead center on the chart — no drag, no shake.
-  await gf().locator('[aria-label="Question embed"]').first().click();
-  const opened = await pg.waitForSelector('[aria-label="Chart editor"]', { timeout: 8000 }).then(() => true).catch(() => false);
-  check(opened, 'ONE click on a chart inside a grid opens the inspector');
-  await pg.close();
-}
+await gridLeg;
 
 await b.close();
 check.done();

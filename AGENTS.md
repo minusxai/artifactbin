@@ -86,7 +86,7 @@ From the repo root; keep this list current.
   only; `-- --reuse` reuses evidence. Config/package edits may defer everything (expected).
 - `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — **SLOW, PRE-MERGE
   ONLY, NEVER AFTER AN EDIT**: named browser gates in a Linux container, built and served as CI does.
-  `node scripts/gate-container.mjs hydration` verifies the compiled reader handover (reader/islands changes).
+  `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).
 - CI-only: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
   Never use them to bypass deferral.
 - `npm run build:islands -w services/app` — the shared reader islands and manifest.

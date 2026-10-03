@@ -48,7 +48,7 @@ is typed against the framework-free store (`lib/story-runtime/store`), never aga
 | Viewer overlay door | `GET /a/:id/viewer` | After paint: the viewer's identity, the `viewer`-scope results, mutation access, holdable imports — the same admission as `POST /a/:id/query`. |
 | App handover | `web/initial-story.ts`, `solid/document/create-island-story.ts`, `solid/pages/Document.tsx`, `lib/islands/handover.ts` | The Solid app adopts the live island document without re-rendering it (`IslandDocument`, in `lib/islands/contract.ts`) (§7). |
 | Link hints | `lib/compiled-page/links.ts`, `speculation.ts` | `<a href>` to same-deployment artifacts, collected at compile → `<link rel=prefetch>` and speculation rules emitted by the assembler. |
-| Handover gate | `scripts/gates/gate-hydration.mjs` | Checks that the compiled story survives island hydration and app adoption, then yields to the editor. |
+| Handover gates | `scripts/gates/gate-kit-and-fonts.mjs`, `scripts/gates/gate-editor-path.mjs` | Check that the compiled story survives island hydration in its frame (kit-and-fonts), then yields to the editor (editor-path). |
 | Size targets | `scripts/build/size-targets.mjs`, `scripts/lib/document-views.mjs` (`jsBeforeReady`) | The four targets, pass/fail per target from a lab result JSON; `--strict` fails the page-speed workflow (not `ci.yml`). |
 
 Routes translate results to HTTP; every module above returns data or a string and never a `Response`.
@@ -379,8 +379,8 @@ parameter selects another runtime.
 
 ## 11. Gates and the size targets
 
-- `scripts/gates/gate-hydration.mjs`: checks the compiled story's served elements, island hydration,
-  app adoption and edit handover. `x-mx-reader` confirms the compiled response.
+- `scripts/gates/gate-kit-and-fonts.mjs`: checks the compiled story's served elements and island hydration in
+  its frame; `scripts/gates/gate-editor-path.mjs` the edit handover. `x-mx-reader` confirms the compiled response.
 - `scripts/build/size-targets.mjs <lab.json>`: target 1 from `jsBeforeReady` on prose and deck (raw route),
   target 2 from `jsBeforeReady` on kit, dashboard and kitchen (raw route), target 3 from the total
   wire bytes of prose (view route), target 4 from `jsBeforeReady` on prose, deck, kit, dashboard and kitchen

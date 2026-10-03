@@ -15,6 +15,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
+import { GET as queryGetRoute, POST as queryPostRoute } from '@/app/a/[id]/query/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
@@ -125,6 +126,16 @@ describe('defaults and validation', () => {
 });
 
 describe('read enforcement — uniform 404, decided before serving', () => {
+  // Was gate-dataflow's and gate-local-sql-state's (proposal §2): the document's own data door is a read too.
+  it('the query door answers the uniform 404 for a private doc without a session and for an unknown id', async () => {
+    const { ownedToken } = await fixtures();
+    const doc = await create(ownedToken, { title: 'secret', markup: '<h1>secret</h1>', visibility: 'private' });
+    expect((await queryGetRoute(request(`/a/${doc.id}/query?q=%7B%7D`), params({ id: doc.id }))).status).toBe(404);
+    expect((await queryPostRoute(request(`/a/${doc.id}/query`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' }), params({ id: doc.id }))).status).toBe(404);
+    expect((await queryPostRoute(request('/a/zzzzzz/query', { method: 'POST', json: { values: {} } }), params({ id: 'zzzzzz' }))).status).toBe(404);
+    expect((await queryGetRoute(request('/a/zzzzzz/query?q=%7B%7D'), params({ id: 'zzzzzz' }))).status).toBe(404);
+  });
+
   it('a private doc 404s for no-session, strangers, and wrong emails; serves for the owner and invited emails', async () => {
     const { ownedToken, owner } = await fixtures();
     const doc = await create(ownedToken, { title: 'secret', markup: '<h1>secret</h1>' });

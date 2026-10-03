@@ -3,7 +3,7 @@
  * (./door, opened before the author's script) and the frame half (./frame) over a real pair of jsdom windows — the
  * page and an iframe. jsdom's own postMessage carries neither `source` nor `origin`, so each window's postMessage
  * is replaced by one that delivers a TRUSTED MessageEvent with the source and origin a browser would give it; the
- * frame's controller is a recording stand-in (the real one is proved by scripts/gates/gate-frame-editor.mjs).
+ * frame's controller is a recording stand-in (the real one is proved by scripts/gates/gate-own-origin-script.mjs).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, needsPostgres, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
@@ -22,11 +22,11 @@ const onDisk = readdirSync(GATE_DIR).filter((f) => f.startsWith('gate-') && f.en
   .filter((name) => !GATE_RUNNERS.includes(name)).sort();
 const source = (name) => readFileSync(path.join(GATE_DIR, `gate-${name}.mjs`), 'utf8');
 const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode|becomeAccountOwner/;
-const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'serialGroup', 'timeoutMs', 'browsers']);
+const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'needsPostgres', 'serialGroup', 'timeoutMs', 'browsers']);
 
 describe('the manifest and the disk are one set', () => {
   it('1. every gate file has a row and every row has a file', () => {
-    expect(onDisk.length).toBeGreaterThanOrEqual(30);
+    expect(onDisk.length).toBeGreaterThanOrEqual(20);
     expect([...GATE_SPECS].map((s) => s.name).sort()).toEqual(onDisk);
   });
 
@@ -36,6 +36,7 @@ describe('the manifest and the disk are one set', () => {
       expect(typeof spec.needsMail, spec.name).toBe('boolean');
       expect(Number.isInteger(spec.timeoutMs) && spec.timeoutMs > 0, `${spec.name} timeoutMs`).toBe(true);
       if (spec.serialGroup !== undefined) expect(typeof spec.serialGroup, spec.name).toBe('string');
+      if (spec.needsPostgres !== undefined) expect(spec.needsPostgres, spec.name).toBe(true);
     }
   });
 
@@ -94,7 +95,7 @@ describe('the rows tell the truth about their sources', () => {
   it('8. every gate reports through the one verdict dialect, or asserts and throws', () => {
     for (const name of onDisk) {
       const src = source(name);
-      // A per-engine gate runs another gate's file (gate-offline-file-firefox.mjs): that file, itself a
+      // A per-engine gate runs another gate's file (a thin wrapper importing ./gate-<name>.mjs): that file, itself a
       // gate on disk and checked by this same loop, is the one that must report.
       const delegate = /await import\('\.\/gate-([a-z0-9-]+)\.mjs'\)/.exec(src);
       if (delegate) {
@@ -159,12 +160,22 @@ describe('the shards are cut from those rows', () => {
   });
 });
 
+ describe('Postgres provisioning follows the manifest, not a gate name', () => {
+  it('pulls Postgres only for a selection holding a needsPostgres row', () => {
+    const postgresGates = GATE_SPECS.filter((spec) => spec.needsPostgres).map((spec) => spec.name);
+    expect(postgresGates).toEqual(['data-journey']);
+    expect(needsPostgres(['comments', 'data-journey'])).toBe(true);
+    expect(needsPostgres(GATE_SPECS.filter((spec) => !spec.needsPostgres).map((spec) => spec.name))).toBe(false);
+    expect(() => needsPostgres(['missing-gate'])).toThrow(/no row/);
+  });
+ });
+
  describe('browser provisioning follows the selected gates', () => {
   it('keeps Chromium-only shards free of unused engines', () => {
-    expect(browsersFor(['annotations', 'dataflow'])).toEqual(['chromium']);
+    expect(browsersFor(['comments', 'data-journey'])).toEqual(['chromium']);
   });
   it('preserves all three engines for screenshot coverage', () => {
-    expect(browsersFor(['annotations', 'screenshot-comments'])).toEqual(['chromium', 'firefox', 'webkit']);
+    expect(browsersFor(['comments', 'offline-file'])).toEqual(['chromium', 'firefox', 'webkit']);
   });
   it('rejects unknown gates instead of silently underprovisioning', () => {
     expect(() => browsersFor(['missing-gate'])).toThrow(/no row/);
@@ -172,8 +183,8 @@ describe('the shards are cut from those rows', () => {
  });
 
 it('balances the extra cross-browser setup without extending any test timeout', () => {
-  expect(shardWeight('annotations')).toBe(specFor('annotations').seconds);
-  expect(shardWeight('screenshot-comments')).toBe(specFor('screenshot-comments').seconds + CROSS_BROWSER_SETUP_SECONDS);
+  expect(shardWeight('comments')).toBe(specFor('comments').seconds);
+  expect(shardWeight('offline-file')).toBe(specFor('offline-file').seconds + CROSS_BROWSER_SETUP_SECONDS);
 });
 
 it('weighs every gate by a measured duration that fits inside its own timeout', () => {
@@ -191,7 +202,7 @@ it('prints the same browser plan used by the CI shards without starting servers'
     const output = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--browsers', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8'}).trim();
     expect(output).toBe(browsersFor(selected).join(' '));
     const postgres = execFileSync(process.execPath, [path.join(SCRIPTS, 'gates.mjs'), '--needs-postgres', `--shard=${index}/${CI_GATE_SHARDS}`], {encoding: 'utf8', env: {...process.env, FORCE_COLOR: '0', NO_COLOR: '1'}}).trim();
-    expect(postgres).toBe(String(selected.includes('postgres-datasets')));
+    expect(postgres).toBe(String(needsPostgres(selected)));
   }
 
 });

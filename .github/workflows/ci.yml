@@ -436,13 +436,13 @@ jobs:
   gates:
     needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/12)
+    name: browser gates (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -509,8 +509,8 @@ jobs:
       # packages even on a browser-cache hit; install them only on shards that use them.
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
-          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/12)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(node scripts/gates.mjs --needs-postgres --shard=${{ matrix.shard }}/8)" >> "$GITHUB_OUTPUT"
       # FIREFOX/WEBKIT'S SYSTEM PACKAGES, KEPT AS .debs. Their `--with-deps` apt pass is the one
       # provisioning step that hangs on a slow mirror: 91s typically, 236s on PR #269's run 36867396926
       # (one gate shard), against a 240s job budget. Only the cross-browser shards pay it, and with the
@@ -574,7 +574,7 @@ jobs:
       # timeout (scripts/gates.manifest.mjs `shardWeight`): <=~75s of gate work per shard. The gates that
       # lose races under a neighbour's load (`CI_ISOLATED_GATES`) each hold a shard alone.
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/12
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/8
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
@@ -1050,14 +1050,14 @@ jobs:
           }
           ci_pids=()
           for cli in "$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" "$RUNNER_TEMP/afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs"; do
-            CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=cli-conformance &
+            CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
             ci_pids+=("$!")
           done
           wait_pair
           ci_pids=()
-          CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=cli-conformance &
+          CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
           ci_pids+=("$!")
-          CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=cli-conformance &
+          CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
           ci_pids+=("$!")
           wait_pair
 

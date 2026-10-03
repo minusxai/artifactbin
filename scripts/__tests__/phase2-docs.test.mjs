@@ -24,7 +24,7 @@ describe('documentation', () => {
   it('AGENTS.md names the island build and the compiled hydration gate among the commands', () => {
     const agents = read('AGENTS.md');
     expect(agents).toContain('build:islands');
-    expect(agents).toContain('gate-container.mjs hydration');
+    expect(agents).toContain('gate-container.mjs kit-and-fonts');
   });
   it('the size targets block the lab once Phase 2 is on', () => {
     expect(read('.github/workflows/page-speed.yml')).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict');

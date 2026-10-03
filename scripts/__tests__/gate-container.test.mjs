@@ -42,13 +42,13 @@ describe('checkGates', () => {
   const known = gateNamesOnDisk(readdirSync(path.join(SCRIPTS, 'gates')));
 
   it('accepts real gates and names every unknown one at once', () => {
-    expect(() => checkGates(['hydration', 'full-kit'], known)).not.toThrow();
-    expect(() => checkGates(['hydration', 'nope', 'nada'], known)).toThrow(/unknown gate\(s\): nope, nada/);
+    expect(() => checkGates(['editor-path', 'inplace-edit'], known)).not.toThrow();
+    expect(() => checkGates(['editor-path', 'nope', 'nada'], known)).toThrow(/unknown gate\(s\): nope, nada/);
     expect(() => checkGates(['container'], known)).toThrow(/unknown gate/);
   });
 
   it('refuses a gate that needs the host’s Docker, with the reason, and only gates that exist', () => {
-    expect(() => checkGates(['postgres-datasets'], known)).toThrow(/postgres-datasets cannot run in a gate container: it starts its own Postgres/);
+    expect(() => checkGates(['data-journey'], known)).toThrow(/data-journey cannot run in a gate container: it starts its own Postgres/);
     for (const name of Object.keys(CONTAINER_REFUSALS)) expect(known).toContain(name);
   });
 });

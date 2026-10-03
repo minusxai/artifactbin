@@ -44,7 +44,7 @@ getDisplayMedia wrapper does not establish source identity or supply Region Capt
 Firefox/WebKit fallback coverage is not a claim of native capture support there.
 
 Focused contracts live in capture, screenshot-editor and comment-images tests. The
-CI-only `screenshot-comments` gate exercises Chromium native tab capture and the
+CI-only `offline-file` gate (its screenshot-comment lane) exercises Chromium native tab capture and the
 Firefox/WebKit upload path, including brush markup, comment save, thumbnail loading
 and reload. It is run by the normal gate manifest. Real Chrome picker acceptance
 requires a person; an automated chooser in CI tests a separate permission setup.
