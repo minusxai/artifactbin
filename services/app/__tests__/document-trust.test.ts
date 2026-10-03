@@ -155,6 +155,18 @@ describe('/api/trust', () => {
 
     const open = await publish(owner.token, asks(METEO));
     expect((await grant(open, 'once', { actor: stranger.actor, origin: 'https://evil.example' })).status).toBe(403);
+    // Signed out and cross-site (a form post arrives cookie-less): refused, and no grant cookie is minted.
+    const forged = await grant(open, 'once', { origin: 'https://evil.example' });
+    expect(forged.status).toBe(403);
+    expect(forged.headers.get('set-cookie')).toBeNull();
+    // A same-site sibling origin (a framed document's own origin) may not consent for its reader either.
+    const sibling = await grantRoute(request('/api/trust', { method: 'POST', json: { artifactId: open, grant: 'author' }, actor: stranger.actor, headers: { 'sec-fetch-site': 'same-site' } }));
+    expect(sibling.status).toBe(403);
+    expect(await servedCsp(open, { actor: stranger.actor })).not.toContain(METEO);
+    // Writes are JSON only: a text/plain form body never reaches a grant.
+    const plainForm = await grantRoute(request('/api/trust', { method: 'POST', body: JSON.stringify({ artifactId: open, grant: 'once' }), headers: { 'content-type': 'text/plain' } }));
+    expect(plainForm.status).toBe(415);
+    expect(plainForm.headers.get('set-cookie')).toBeNull();
     expect((await grant(open, 'sometimes', { actor: stranger.actor })).status).toBe(400);
     const plain = await publish(owner.token, '<p>plain</p>');
     expect(((await (await grant(plain, 'once', { actor: stranger.actor })).json()) as { error: string }).error).toBe('nothing_to_trust');

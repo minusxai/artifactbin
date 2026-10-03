@@ -8,14 +8,18 @@
  *   DELETE { artifactId, scope?: 'document' | 'author' }     forget this reader's choice (default: on
  *                                                            this document, session included)
  *
- * A browser door, ridden by cookies, so cookie-borne writes are same-site only (`refusesCrossSite`).
+ * A browser door, and its writes are SAME-ORIGIN only, whatever the credential: a write that mints a
+ * grant must come from the app's own page, never from another site (a signed-out reader would otherwise
+ * be pre-consented by a cross-site form post that arrives cookie-less) and never from a same-site
+ * document origin (a framed document's script must not be able to consent on its reader's behalf).
+ * Writes are JSON only, so a cross-origin caller cannot send one without a preflight.
  * The document must be READABLE by whoever asks: an unreadable one and a missing one are the same 404.
  * "Once" lives in the browser session (a signed session cookie), so any reader may use it; Always and
  * a stored Never belong to an account (401 otherwise) — a signed-out Never is kept for the session.
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { refusesCrossSite, sessionActor, type RequestActor } from '@/lib/accounts';
-import { json, readJson, unauthorized } from '@/lib/http';
+import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { hasCspExtensions, storedCspExtensions } from '@/lib/story/document/csp-extensions';
 import {
@@ -28,7 +32,16 @@ const GRANTS = ['once', 'author', 'never'] as const;
 const SCOPES = ['document', 'author'] as const;
 
 /** Who is asking about which readable document — or the Response that refuses them. */
+/** A write from anywhere but the app's own page: another site, or a same-site sibling origin. */
+function foreignWrite(request: Request): boolean {
+  if (request.method === 'GET' || request.method === 'HEAD') return false;
+  const site = request.headers.get('sec-fetch-site');
+  return site ? site !== 'same-origin' : isCrossSiteRequest(request);
+}
+
 async function opened(request: Request, artifactId: unknown): Promise<{ artifact: ArtifactRow; actor: RequestActor; viewer: TrustViewer } | Response> {
+  if (foreignWrite(request)) return json({ error: 'forbidden' }, 403);
+  if (request.method !== 'GET' && !(request.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json')) return json({ error: 'unsupported_media_type' }, 415);
   const actor = await sessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   if (typeof artifactId !== 'string' || !ID_RE.test(artifactId)) return json({ error: 'invalid_artifact_id' }, 400);
