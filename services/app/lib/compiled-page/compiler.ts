@@ -974,10 +974,12 @@ export function generate(input: GenerateInput): Generated {
     const wrapper = rawBuildProps(node.attributes.filter((a) => a.name !== 'each' && a.name !== 'keyBy'), true, node.tag, path, undefined, {});
     const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
     const svg = !!ctx.svg;
-    const style = svg ? {} : { style: { minHeight: 1, ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
+    // `display: contents`: the rows are laid out by the For's PARENT (an author's grid or flex sees each row as a
+    // child), not boxed by a wrapper that would stack them in one cell. The wrapper still owns the id and the attrs.
+    const style = svg ? {} : { style: { display: 'contents', ...((wrapper.style && typeof wrapper.style === 'object' ? wrapper.style : {}) as Props) } };
     const { className, ...rest } = wrapper;
     // The wrapper's style goes to rt.Repeat as `attr:style`: its spread then SETS the attribute (skipped while
-    // hydrating), keeping the served `min-height:1px` byte for byte. A spread `style` would be rewritten
+    // hydrating), keeping the served `display:contents` byte for byte. A spread `style` would be rewritten
     // through the CSSOM (`min-height: 1px;`) during hydration, which the served page must not do.
     const attrs = elementAttrs(svg ? 'g' : 'div', { ...rest, ...(className ? { className } : {}), ...style, id: ownerId || undefined })
       .map(([n, v]): Attr => [n === 'style' ? 'attr:style' : n, v]);

@@ -220,15 +220,15 @@ describe('a compiled island through the runtime', () => {
   });
 
   it("serves a <For> wrapper's inline style as React writes it and hands it to hydration as an attribute", () => {
-    // React's server renderer writes `min-height:1px`; today's hydration leaves a served attribute alone.
+    // The wrapper is `display:contents` so a parent grid or flex lays the rows out itself; hydration leaves a served attribute alone.
     const server = serverHalf(...CALLS[5]);
     const host = document.createElement('div');
     host.innerHTML = server.html;
-    expect(host.querySelector('#w > div')?.getAttribute('style')).toBe('min-height:1px');
+    expect(host.querySelector('#w > div')?.getAttribute('style')).toBe('display:contents');
     // As `attr:style`, Solid's hydration keeps the served string (setAttribute skips a hydrating node);
-    // as `style`, it would rewrite it through the CSSOM (`min-height: 1px;`) — see the next case.
-    expect(server.islands).toContain('attr:style={"min-height:1px"}');
-    expect(server.islands).not.toMatch(/\sstyle=\{"min-height:1px"\}/);
+    // as `style`, it would rewrite it through the CSSOM — see the next case.
+    expect(server.islands).toContain('attr:style={"display:contents"}');
+    expect(server.islands).not.toMatch(/\sstyle=\{"display:contents"\}/);
   });
 
   it('a spread `attr:style` survives hydration byte for byte, where a spread `style` is rewritten', () => {
