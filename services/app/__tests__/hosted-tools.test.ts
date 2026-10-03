@@ -1,0 +1,29 @@
+import {expect,it} from 'vitest';
+import {attachActor} from '@artifactbin/utils';
+import {createUser} from '@/lib/accounts';
+import {runnerOperation} from '@/lib/runner';
+import {hostedOperationTools} from '@/lib/remote/tools';
+import {useAppHarness} from './harness';
+
+useAppHarness();
+it('teaches real operation inputs and creates, reads and edits with the observed version',async()=>{
+ const owner=await createUser({email:'mxmx_test_hosted_tools@example.com'});
+ const request=attachActor(new Request('http://localhost/api/runner/operations',{method:'POST'}),{userId:owner.id,credential:'session'});
+ const invoke=(name:string,input:Record<string,unknown>)=>runnerOperation(request,name,input);
+ const tools=hostedOperationTools();
+ expect(tools.find(tool=>tool.name==='create_artifact')?.parameters).toMatchObject({type:'object',properties:{markup:{type:'string'}}});
+ expect(tools.find(tool=>tool.name==='edit_document')?.parameters).toMatchObject({required:['id','edit_id','markup']});
+ const created=await invoke('create_artifact',{markup:'<h1>First draft</h1>',title:'Agent draft',visibility:'private'});
+ expect(created.status).toBe(201);
+ const doc=await created.json();
+ const read=await invoke('get_artifact',{id:doc.id});expect(read.status).toBe(200);
+ const edited=await invoke('edit_document',{id:doc.id,edit_id:doc.edit_id,markup:'<h1>Revised draft</h1>'});
+ expect(edited.status).toBe(200);
+ expect(await (await invoke('get_artifact',{id:doc.id})).json()).toMatchObject({markup:expect.stringContaining('Revised draft')});
+ const stale=await invoke('edit_document',{id:doc.id,edit_id:doc.edit_id,markup:'<h1>Overwrite newer work</h1>'});
+ expect(stale.status).toBe(409);
+ const stranger=await createUser({email:'mxmx_test_hosted_stranger@example.com'});
+ const other=attachActor(new Request('http://localhost/api/runner/operations',{method:'POST'}),{userId:stranger.id,credential:'session'});
+ expect((await runnerOperation(other,'edit_document',{id:doc.id,edit_id:doc.edit_id,markup:'<p>Forbidden</p>'})).status).toBe(404);
+ expect((await invoke('delete_artifact',{id:doc.id})).status).toBe(403);
+});
