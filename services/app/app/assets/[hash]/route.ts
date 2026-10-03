@@ -18,7 +18,7 @@
  * download rather than a page, and `nosniff` holds the browser to the type we
  * sniffed from the bytes at import. None of the three touches a subresource
  * load: an `<img>`, a `<link rel=preload>` and an `@font-face` all still use
- * these bytes, which is what `scripts/gates/gate-web-assets.mjs` proves in a real
+ * these bytes, which is what `scripts/gates/gate-media.mjs` proves in a real
  * browser. ACAO because a served document has an opaque origin, so its own
  * font fetch is a CORS request.
  *

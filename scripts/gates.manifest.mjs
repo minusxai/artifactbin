@@ -38,12 +38,9 @@ export const GATE_SPECS = Object.freeze([
   { name: 'offline-file-webkit', browsers: ['webkit'], needsMail: false, seconds: 28, timeoutMs: 120_000 },
   { name: 'cli-conformance', needsMail: true, seconds: 12, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, seconds: 35, timeoutMs: 150_000 },
-  { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
   { name: 'testusers', needsMail: true, seconds: 10, timeoutMs: 60_000 },
   { name: 'comment-targets', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, seconds: 5, timeoutMs: 60_000 },
-  { name: 'app-home', needsMail: false, serialGroup: 'clipboard', seconds: 1, timeoutMs: 120_000 },
-  { name: 'seamless-navigation', needsMail: true, seconds: 5, timeoutMs: 60_000 },
   { name: 'libraries', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   { name: 'postgres-datasets', needsMail: true, seconds: 14, timeoutMs: 60_000 },
   { name: 'annotations', needsMail: false, seconds: 40, timeoutMs: 120_000 },
@@ -65,14 +62,9 @@ export const GATE_SPECS = Object.freeze([
   { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'full-kit', needsMail: false, seconds: 33, timeoutMs: 60_000 },
   { name: 'hydration', needsMail: true, seconds: 31, timeoutMs: 190_000 },
-  { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 47, timeoutMs: 110_000 },
   // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
   { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
   { name: 'inplace-edit', needsMail: false, seconds: 66, timeoutMs: 180_000 },
-  // Frames a document on its own origin, so it boots its own production server with APP__PAGES_HOST=lvh.me
-  // (scripts/gates/lib/pages-server; the runner's servers have none). Measured 10s against a dev server; its boot adds ~10s.
-  { name: 'frame-editor', needsMail: false, seconds: 20, timeoutMs: 90_000 },
-  { name: 'layout-shift', needsMail: false, seconds: 39, timeoutMs: 140_000 },
   { name: 'link-access', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'local-sql-state', needsMail: true, seconds: 7, timeoutMs: 60_000 },
   { name: 'live-data', needsMail: false, seconds: 7, timeoutMs: 60_000 },
@@ -80,23 +72,17 @@ export const GATE_SPECS = Object.freeze([
   // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
   { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
-  { name: 'mobile', needsMail: false, seconds: 21, timeoutMs: 100_000 },
-  // The four native-scripts briefs end to end on a server it boots with APP__PAGES_HOST=lvh.me (./lib/pages-server):
-  // frame, direct query, consent and the fetch door, in-frame editing with the script badge, a comment, afbin export.
-  { name: 'native-scripts', needsMail: false, seconds: 45, timeoutMs: 150_000 },
   { name: 'oauth-browser', needsMail: true, seconds: 3, timeoutMs: 60_000 },
-  { name: 'reading-chrome', needsMail: false, seconds: 19, timeoutMs: 90_000 },
-  { name: 'web-assets', needsMail: true, seconds: 17, timeoutMs: 60_000 },
-  { name: 'pdf', needsMail: false, seconds: 2, timeoutMs: 60_000 },
-  // Boots its own production server with APP__PAGES_HOST=lvh.me (the runner's servers have none), signs in,
-  // publishes and frames a private document. Measured 14s against a dev server; its own boot adds ~10s.
-  { name: 'pages-origin', needsMail: true, seconds: 30, timeoutMs: 120_000 },
-  { name: 'secure-arch', needsMail: true, seconds: 14, timeoutMs: 60_000 },
-  { name: 'shell-seo', needsMail: false, seconds: 3, timeoutMs: 60_000 },
   { name: 'social-preview', needsMail: false, seconds: 29, timeoutMs: 80_000 },
   { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', seconds: 3, timeoutMs: 60_000 },
-  { name: 'visibility', needsMail: true, seconds: 9, timeoutMs: 60_000 },
   { name: 'viz-editor', needsMail: true, seconds: 61, timeoutMs: 130_000 },
+  // Journey gates (scripts/gates/gate-<name>.mjs headers list what each absorbed). `seconds` measured in one
+  // `node scripts/gate-container.mjs` run (4 CPUs, two servers, CI's shape); timeoutMs = max(60s, 3 × seconds).
+  { name: 'reader-shell', needsMail: true, seconds: 30, timeoutMs: 90_000 },
+  // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
+  { name: 'own-origin-script', needsMail: true, seconds: 60, timeoutMs: 180_000 },
+  { name: 'reading-geometry', needsMail: false, seconds: 65, timeoutMs: 200_000 },
+  { name: 'media', needsMail: true, serialGroup: 'clipboard', seconds: 60, timeoutMs: 180_000 },
 ]);
 
 /**

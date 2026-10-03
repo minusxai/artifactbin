@@ -7,7 +7,7 @@
  * Inlined by the SERVER, not injected by the runtime: the rail is a layout
  * sibling of the document, so a rail that arrived with hydration would shift
  * every deck 190px sideways one tick after it painted — the exact regression
- * scripts/gates/gate-layout-shift.mjs was written for. Server CSS + server-rendered
+ * scripts/gates/gate-reading-geometry.mjs was written for. Server CSS + server-rendered
  * rail (discovery is a pure AST walk now) means the deck's first paint is its
  * final geometry.
  *

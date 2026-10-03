@@ -77,7 +77,7 @@ export async function checkWebImport(B, browser, WEB, ok) {
       // document re-renders with refData that knows the new id — the `ref:` is
       // resolved to a URL only on that pass, so a single early read sees the raw
       // ref and reports a phantom failure. (Same polling shape as
-      // gate-image-upload, for the same reason.)
+      // gate-media's picture leg, for the same reason.)
       let inserted = null;
       for (let i = 0; i < 40 && !(inserted && inserted.w > 0); i++) {
         // The document — edited too — is the app page's frame, on its own origin.

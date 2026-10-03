@@ -53,5 +53,5 @@ the login outbox and the CLI's device mint treat them as loopback. `npm run setu
 names another host (production: a subdomain of the app's registrable domain, such as `pages.example.com`). The dev
 server tells Vite `allowedHosts: ['.<pages host>', <app host>]` (its DNS-rebinding guard refuses unknown `Host`s, and
 every document is a new one) and `cors: false` (the app's origin gate, not Vite, answers CORS). The browser proof is
-`node scripts/gates/gate-pages-origin.mjs <base>`; the gate runner's own servers use `pages.localhost`, and the gates
+`node scripts/gates/gate-own-origin-script.mjs <base>`; the gate runner's own servers use `pages.localhost`, and the gates
 that need the pages cookie boot their own server at `app.lvh.me` from `dist/server.mjs`.

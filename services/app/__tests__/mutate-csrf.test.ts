@@ -21,11 +21,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my/profile/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
 import { mintToken } from '@/lib/accounts';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -124,6 +125,19 @@ describe('cross-site writes', () => {
     expect((await at({})).credential).toBe('session');
     sessionUser.id = ''; sessionUser.email = '';
     expect((await at({})).credential).toBe('none');
+  });
+
+  // Was gate-secure-arch §7: the account's own profile write is cookie-authorized too.
+  it('refuses a cross-site PATCH /api/my/profile riding the account session, and still answers it same-origin', async () => {
+    const user = await createUser({ email: 'profile@x.com' });
+    sessionUser.id = user.id;
+    sessionUser.email = user.email;
+    const before = (await getUserById(user.id))!.username;
+    const csrf = await patchProfileRoute(request('/api/my/profile', { method: 'PATCH', origin: 'https://evil.example', json: { username: 'mxmx_test_csrf' } }));
+    expect(csrf.status).toBe(403);
+    expect((await getUserById(user.id))!.username).toBe(before);
+    const sameOrigin = await getProfileRoute(request('/api/my/profile', { origin: 'same' }));
+    expect(sameOrigin.status).toBe(200);
   });
 
   it('refuses writes from the anonymous served document, including its opaque origin', async () => {
