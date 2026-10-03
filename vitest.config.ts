@@ -96,6 +96,8 @@ export default defineConfig({
       // cap test trips on a payload a test can build rather than on a real one.
       PDF__MAX_BYTES: '20000',
       FILES__MAX_BYTES: '10000',
+      // Required (every document on its own origin, lib/platform/config PAGES_HOST): the development host.
+      APP__PAGES_HOST: 'lvh.me',
     },
     projects: [
       {

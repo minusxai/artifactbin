@@ -44,9 +44,17 @@ source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
 **Where a document runs.** Every document is served on its own origin, one
-per document id under the pages host, and the app page at `/a/<id>` frames it
-with its chrome around the frame. That origin is not the app's, so nothing in
-the document can read the app's cookies, storage or account APIs. The document
+per document id under the pages host (`APP__PAGES_HOST`, required: the server
+refuses to boot without it), and that is the only place a document is ever
+rendered. The app page at `/a/<id>` is the app's own shell — its bar and rail
+(`solid/document/DocumentChrome`), the consent slot above the frame, the
+comments rail and the editor's chrome — around ONE frame the server draws into
+the page (`lib/serving/document-frame`), whose first URL hands the reader across
+with a one-time ticket (`lib/accounts/pages-sessions`). The app page carries none
+of the document: no story, no island data, no document code, under the strict
+app policy that frames only the pages origins. The document's origin is not the
+app's, so nothing in the document can read the app's cookies, storage or
+account APIs. The document
 calls its own data doors (`/a/<id>/query`, `/mutate`, `/events`) directly:
 the server admits a call only when its origin names the same document as its
 path and the reader behind it may read (or write) that document. Each response
@@ -56,14 +64,21 @@ the ESM CDN the script's imports resolve to. A document that needs more hosts
 declares them in its Helmet (`<meta name="csp-connect" content="https://…">`,
 likewise `csp-script`, `csp-style`, `csp-img`); they are checked at publish and
 apply for a reader once that reader allows them (an owner's own documents are
-trusted). Documents are always self-contained — but you don't have to make them
-so by hand.
+trusted). The markup itself has ONE policy, publish validation
+(`lib/jsx/validate.ts`): event handlers, denied tags and attributes, dangerous
+URL schemes and external SVG paint are refused before anything is stored, and the
+renderer re-checks none of it (`lib/story-ui/AGENTS.md`); a document that predates
+a rule is migrated by republishing. Documents are always self-contained — but you
+don't have to make them so by hand.
 
-**Compiled reader.** Published documents are prepared as static HTML with
-small interactive islands. `/a/<id>` serves that HTML with reader chrome;
-`/a/<id>/raw`, custom-domain posts and exports use the same assembled document
-without app chrome. The response identifies the served path with
-`x-mx-reader: compiled`. A missing, stale or refused compile is recompiled
+**Compiled reader — the one renderer.** Published documents are prepared as
+static HTML with small interactive islands, assembled as ONE standalone page
+(`lib/compiled-page/assembler`): the document's own origin serves it at `/` (and
+`/a/<id>/raw`), framed by the app page; custom-domain posts, exports
+(`/a/<id>/raw?chrome=0&key=`), the offline file and the CLI preview are the same
+page. There is no variant with the app's chrome and no copy inside the app page.
+The response identifies the served path with `x-mx-reader: compiled` (the app
+page that frames a document says the same of what is in its frame). A missing, stale or refused compile is recompiled
 within the read budget; if it still cannot be made the read fails with a reported
 500 (there is no other renderer); access checks run before the response. A prose page
 needs no island module.
@@ -115,8 +130,9 @@ people an in-page result names get their cards through the same door
 that reader: themselves, and the people in a user column of an import they may
 hold, when one of the document's queries shows a person from it.
 
-Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the app
-page, the standalone `/raw` document and the offline file. It admits compiling
+Running the engine needs one more CSP source, `'wasm-unsafe-eval'`, on the
+standalone document (its own origin and `/raw`) and the offline file (the app
+page's policy keeps it too). It admits compiling
 WebAssembly and nothing else — `eval`, `new Function` and string timers stay
 refused. The wasm is fetched from this origin at a content-addressed `/islands/`
 URL (the `/raw` document's `connect-src` names that directory), cached

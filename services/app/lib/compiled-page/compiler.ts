@@ -17,8 +17,8 @@
  * `JSON.parse(<lit>)`, so it is a string literal too, never an object literal the author shapes. Tag
  * and attribute NAMES come only from the validated AST and are re-checked against a strict grammar
  * (`safeTag`/`safeAttr`); a name outside it refuses the compile. Props are computed by the
- * interpreter's `rawBuildProps` (dangerous schemes, handlers and denied attributes dropped exactly
- * as the former React render did) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
+ * interpreter's `rawBuildProps` (rendering only: the markup policy — handlers, denied attributes, URL
+ * schemes — is publish validation's, lib/jsx/validate) and serialized by framework-free `reactAttrs`. Reactive expressions travel as data and are evaluated by the
  * runtime with lib/jsx/reactive. `codegen-safety.ts structureIndependent` is the proof.
  *
  * Pure and deterministic for one input.

@@ -257,8 +257,6 @@ export interface IslandPageData {
   /** A prepared version that cannot run carries its query errors into the reader. */
   state?: import('@/lib/story/data/dataflow').DataflowState;
   results: ServedResults | null;
-  /** The compiled app page uses its same-origin scoped POST query door, including for guests. */
-  appPage: boolean;
   queryUrl?: string;
   mutateUrl?: string;
   viewerUrl?: string;

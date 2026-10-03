@@ -8,7 +8,7 @@ export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
 export { archivedReadOnly, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
 export type { ArchivedRender } from './archived-version';
 export { artifactPageAnswer, artifactPageResponse } from './artifact-page';
-export type { ArtifactPageAnswer, CompiledStory } from './artifact-page';
+export type { ArtifactPageAnswer } from './artifact-page';
 export { artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';
 export { artifactAppPath } from './artifact-pwa';
 export { assetByteQuotaExceeded, assetBytesForToken, setAssetByteQuotaForTests } from './asset-quota';
@@ -27,5 +27,5 @@ export { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap'
 export { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from './tiles';
 export { WEB_ASSET_KINDS, WebAssetRefused, importForDocument, importWebAsset, lookupWebAssets, refreshWebAsset, refreshWebAssets, webAssetByHash } from './web-assets';
 export type { AssetWarning, WebAssetKind } from './web-assets';
-export { PAGES_SESSION_PATH, PAGES_SITE, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesRequestOf, pagesSessionUrl, pagesSiteFor } from './pages-origin';
+export { PAGES_SESSION_PATH, pagesSite, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesRequestOf, pagesSessionUrl, pagesSiteFor } from './pages-origin';
 export type { PagesRequest, PagesSite } from './pages-origin';

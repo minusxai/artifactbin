@@ -1,17 +1,17 @@
 /** Every document on its own origin: the APP__PAGES_HOST setting and the hostname ⇄ id mapping. */
 import { describe, expect, it } from 'vitest';
-import { parsePagesHost } from '@/lib/platform/config';
+import { parsePagesHost, requirePagesHost } from '@/lib/platform/config';
 import { idFromPagesHost, idFromPagesLabel, idFromPagesOrigin, isPagesApexHost, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesSiteFor } from '@/lib/serving/pages-origin';
 
 const prod = pagesSiteFor('pages.example.com', 'https://app.example.com')!;
 const dev = pagesSiteFor('lvh.me', 'http://app.lvh.me:11001')!;
 
 describe('APP__PAGES_HOST', () => {
-  it('is off when unset or blank, and a bare lowercase hostname when set', () => {
+  it('reads unset or blank as missing (the boot refuses it: requirePagesHost), and a bare lowercase hostname when set', () => {
     expect(parsePagesHost(undefined)).toBeNull();
     expect(parsePagesHost('  ')).toBeNull();
     expect(parsePagesHost(' Pages.Example.COM. ')).toBe('pages.example.com');
-    expect(pagesSiteFor(null, 'https://app.example.com')).toBeNull();
+    expect(requirePagesHost()).toBe('lvh.me');
   });
   it('refuses a scheme, a port, a path or a wildcard rather than guessing', () => {
     for (const bad of ['https://pages.example.com', 'pages.example.com:443', 'pages.example.com/x', '*.pages.example.com', 'pages_example.com']) {

@@ -86,7 +86,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'native-scripts', needsMail: false, seconds: 45, timeoutMs: 150_000 },
   { name: 'oauth-browser', needsMail: true, seconds: 3, timeoutMs: 60_000 },
   { name: 'reading-chrome', needsMail: false, seconds: 19, timeoutMs: 90_000 },
-  { name: 'reader-chrome', needsMail: true, serialGroup: 'clipboard', seconds: 24, timeoutMs: 110_000 },
   { name: 'web-assets', needsMail: true, seconds: 17, timeoutMs: 60_000 },
   { name: 'pdf', needsMail: false, seconds: 2, timeoutMs: 60_000 },
   // Boots its own production server with APP__PAGES_HOST=lvh.me (the runner's servers have none), signs in,

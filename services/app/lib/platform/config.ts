@@ -12,8 +12,9 @@ import { DEFAULT_UPLOAD_MAX_BYTES, normalizeOrigin } from '@artifactbin/contract
  * two spellings for one setting is a trap — a file carrying both, where the
  * namespaced one silently wins and the other reads as live — so an
  * unnamespaced name is simply not a setting.
- * Production hard-fails only when
- * AUTH__SECRET or APP__PUBLIC_BASE_URL is absent (see the composition root).
+ * Production hard-fails when
+ * AUTH__SECRET or APP__PUBLIC_BASE_URL is absent (see the composition root); every boot, development
+ * included, refuses without APP__PAGES_HOST (PAGES_HOST below).
  * Two deliberate exceptions, because they are conventions every host and
  * pooler documents: `DATABASE_URL` and `S3_URL`. `NODE_ENV` is the runtime's.
  * Guarded by lib/__tests__/env-namespacing.test.ts.
@@ -254,13 +255,14 @@ export function parseAliasOrigins(value: string | undefined): readonly string[] 
 export const ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
- * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/serving/pages-origin). The hostname documents are served
- * under, one label per document: `<hex(id)>.<pages host>`, and the app page frames that origin.
- * It MUST be a subdomain of the app's registrable domain (same site) — the frame's
- * `afbin_pages` cookie is SameSite=Lax — and the scheme and port are the public URL's
- * (`APP__PUBLIC_BASE_URL`), so development appends its port. A bare hostname: no scheme, port,
- * path or wildcard; a malformed value refuses the boot. Unset or empty is OFF: documents are served
- * exactly as before, inside the app page.
+ * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/serving/pages-origin) — the only way a document is rendered.
+ * The hostname documents are served under, one label per document: `<hex(id)>.<pages host>`, and the
+ * app page frames that origin. It MUST be a subdomain of the app's registrable domain (same site) —
+ * the frame's `afbin_pages` cookie is SameSite=Lax — and the scheme and port are the public URL's
+ * (`APP__PUBLIC_BASE_URL`), so development appends its port. A bare hostname: no scheme, port, path
+ * or wildcard. REQUIRED to serve: a malformed value refuses any import of this module, and an unset one
+ * refuses the boot (`requirePagesHost`, asked by the composition and the app server) — tooling that reads
+ * this module without serving (the teaching compiler, scripts) does not need it. `npm run setup` writes `lvh.me`.
  */
 export function parsePagesHost(value: string | undefined): string | null {
   const host = value?.trim().toLowerCase().replace(/\.$/, '') ?? '';
@@ -270,7 +272,14 @@ export function parsePagesHost(value: string | undefined): string | null {
   }
   return host;
 }
-export const PAGES_HOST = parsePagesHost(env('APP', 'PAGES_HOST'));
+const PAGES_HOST = parsePagesHost(env('APP', 'PAGES_HOST'));
+/** This deployment's pages host; unset refuses the boot with the setting's name. */
+export function requirePagesHost(): string {
+  if (!PAGES_HOST) {
+    throw new Error('APP__PAGES_HOST is required: the hostname every document is served under on its own origin (for example pages.example.com, or lvh.me in development with the app at http://app.lvh.me:<port>). Run `npm run setup` to write it.');
+  }
+  return PAGES_HOST;
+}
 
 /**
  * Where the EXPORT browser reaches this process. Internal by default, for the

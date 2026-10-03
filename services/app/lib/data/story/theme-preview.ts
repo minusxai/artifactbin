@@ -81,7 +81,7 @@ export async function buildThemePreviewDocument(theme: StoryThemeName, mode: 'li
     compiled, story: compiled.html, css: '', fontPreloads: parts.runtime.fontPreloads ?? [],
     title: parts.runtime.title, theme, colorMode: mode, snapshot: null,
     overlay: { values: {}, mermaidImages: {}, signedIn: false, doors: null },
-    chrome: null, spa: null, build, head: null,
+    build, head: null,
     sheets: documentStyleSheets({
       compiledCss, chrome: false, bare: false, theme,
       docFonts: parts.docFonts, authorCss: parts.runtime.authorCss,

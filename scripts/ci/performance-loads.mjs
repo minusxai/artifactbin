@@ -66,7 +66,7 @@ const child = spawn(process.execPath, [path.join(root, 'dist/server.mjs')], {
   cwd: path.join(root, 'services/app'), stdio: ['ignore', 'ignore', 'inherit'],
   env: {
     PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'production',
-    AUTH__SECRET: randomBytes(32).toString('hex'), APP__PORT: '5481', APP__PUBLIC_BASE_URL: base,
+    AUTH__SECRET: randomBytes(32).toString('hex'), APP__PORT: '5481', APP__PUBLIC_BASE_URL: base, APP__PAGES_HOST: 'pages.localhost',
     APP__ASSETS_ORIGIN: 'http://assets.localhost:5480', DATABASE_URL: 'pglite://memory',
     SQL__SERVICE_URL: '', BROWSER__SERVICE_URL: '', EVENTS__SERVICE_URL: '',
     EXPORT__INTERNAL_ORIGIN: base, OBJECT_STORE__LOCAL_DIR: path.join(scratch, 'objects'),

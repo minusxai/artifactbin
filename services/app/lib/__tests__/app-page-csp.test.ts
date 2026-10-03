@@ -10,7 +10,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer, pagesFrameSources } from '@/server/app';
+import { APP_CSP, APP_INLINE_SCRIPT_HASHES, appPagePolicy, createAppServer, pagesFrameSources } from '@/server/app';
+import { pagesSite } from '@/lib/serving/pages-origin';
 import { pagesSiteFor } from '@/lib/serving/pages-origin';
 import { DOMAIN_HOME_CSP } from '@/lib/serving';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/serving';
@@ -33,7 +34,7 @@ describe('the app CSP', () => {
     expect(APP_CSP).toContain("base-uri 'self'");
     for (const path of ['/login', '/docs-human', '/account']) {
       const res = await app.request(path);
-      expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
+      expect(res.headers.get('content-security-policy'), path).toBe(appPagePolicy(pagesSite()));
       expect(res.headers.get('x-content-type-options'), path).toBe('nosniff');
       expect(res.headers.get('referrer-policy'), path).toBe('strict-origin-when-cross-origin');
       expect(res.headers.get('permissions-policy'), path).toBe('camera=(), microphone=(), geolocation=()');
@@ -129,7 +130,6 @@ describe('the app CSP', () => {
     const site = pagesSiteFor('pages.example.com', 'https://app.example.com');
     expect(pagesFrameSources(site)).toEqual(['https://pages.example.com', 'https://*.pages.example.com']);
     expect(pagesFrameSources(pagesSiteFor('lvh.me', 'http://app.lvh.me:11001'))).toEqual(['http://lvh.me:11001', 'http://*.lvh.me:11001']);
-    expect(pagesFrameSources(null)).toEqual([]);
     const framing = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>', pagesSite: site });
     const csp = (await framing.request('https://app.example.com/login')).headers.get('content-security-policy')!;
     expect(csp.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://pages.example.com https://*.pages.example.com");

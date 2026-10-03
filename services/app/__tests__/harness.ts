@@ -174,3 +174,20 @@ export function useAppHarness(): AppHarness {
     db: () => database ?? getDb(),
   };
 }
+
+/**
+ * THE DOCUMENT AN APP PAGE FRAMES, as its reader's browser loads it (lib/serving/document-frame): the app page at
+ * `path` (asked with `init`, its reader's credentials), then the frame's first URL — the pages apex's session
+ * exchange, which spends the page's one-time ticket for the `afbin_pages` cookie — and then the document on its own
+ * origin with that cookie. Null when the app page draws no frame. `app` is `createAppServer()`'s.
+ */
+export async function framedDocument(app: { request(input: string | Request, init?: RequestInit): Response | Promise<Response> }, path: string, init: RequestInit = {}): Promise<Response | null> {
+  const page = await app.request(path, init);
+  const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())?.[1]?.replaceAll('&amp;', '&');
+  if (!src) return null;
+  const exchange = await app.request(src);
+  const next = exchange.headers.get('location');
+  if (!next) return null;
+  const cookie = /afbin_pages=([^;]*)/.exec(exchange.headers.get('set-cookie') ?? '')?.[1];
+  return app.request(next, { headers: { accept: 'text/html', ...(cookie ? { cookie: `afbin_pages=${cookie}` } : {}) } });
+}

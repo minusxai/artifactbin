@@ -14,10 +14,9 @@
  *    reader's place.
  *  - a version ping (a new `editId`) → the new version drawn IN PLACE by the one update path
  *    (./live-update: the story fragment fetched and morphed, islands kept or re-hydrated, the store
- *    surviving), falling back to a reload that keeps the reader's place. Once the app has adopted the
- *    page (solid/document/create-island-story installs `STORY_ADOPT_HOOK`) the app holds the
- *    document's stream and calls the same path itself; this stream still carries the `data` frames
- *    to the island store (closing it on adoption left an in-place editing reader's tables stale).
+ *    surviving), falling back to a reload that keeps the reader's place. While a page claims
+ *    `STORY_ADOPT_HOOK` it holds the document's stream and calls the same path itself; this stream
+ *    still carries the `data` frames to the island store.
  *
  * The stream reconnects on its own (lib/live-stream): any error or close reopens it with backoff,
  * heartbeat silence counts as dead, and a page coming back visible or online reopens a stale one.

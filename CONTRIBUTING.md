@@ -35,22 +35,23 @@ booting. One process per port per data dir: PGLite (the default dev database)
 may be owned by exactly one process, so a second checkout changes its port in
 `.env` rather than sharing the dir.
 
-### Documents on their own origins (`APP__PAGES_HOST`)
+### Documents on their own origins (`APP__PAGES_HOST`, required)
 
-With `APP__PAGES_HOST` set, every document is served at `<hex(id)>.<pages host>` and the app page frames
-it (services/app/server/pages-host.ts). The frame reads its reader from an `afbin_pages` cookie that is
-`SameSite=Lax`, so the app and the pages host must be the **same site**. In development that means
-browsing the app at a name under the pages host, not at `localhost`:
+Every document is served at `<hex(id)>.<pages host>` and the app page frames it (services/app/server/pages-host.ts,
+services/app/lib/serving/document-frame.ts); there is no other renderer, so the server refuses to boot without
+`APP__PAGES_HOST`. The frame reads its reader from an `afbin_pages` cookie that is `SameSite=Lax`, so the app and the
+pages host must be the **same site**. In development that means browsing the app at a name under the pages host, not
+at `localhost` — which is what `npm run setup` writes by default:
 
 ```sh
-npm run setup -- --yes --pages-host      # APP__PAGES_HOST=lvh.me, APP__PUBLIC_BASE_URL=http://app.lvh.me:<port>
+npm run setup -- --yes                   # APP__PAGES_HOST=lvh.me, APP__PUBLIC_BASE_URL=http://app.lvh.me:<port>
 npm run dev                              # then open http://app.lvh.me:<port>
 ```
 
 `lvh.me` and every name under it resolve to 127.0.0.1 in public DNS, so no hosts-file edit is needed;
 the login outbox and the CLI's device mint treat them as loopback. `npm run setup -- --pages-host <host>`
-names another host. Only when the setting is on does the dev server tell Vite `allowedHosts: ['.<pages
-host>', <app host>]` (its DNS-rebinding guard refuses unknown `Host`s, and every document is a new one)
-and `cors: false` (the app's origin gate, not Vite, answers CORS). Unset, nothing changes: documents run
-inside the app page as before. The browser proof is `node scripts/gates/gate-pages-origin.mjs <base>`;
-against a server without the setting it boots its own from `dist/server.mjs`.
+names another host (production: a subdomain of the app's registrable domain, such as `pages.example.com`). The dev
+server tells Vite `allowedHosts: ['.<pages host>', <app host>]` (its DNS-rebinding guard refuses unknown `Host`s, and
+every document is a new one) and `cors: false` (the app's origin gate, not Vite, answers CORS). The browser proof is
+`node scripts/gates/gate-pages-origin.mjs <base>`; the gate runner's own servers use `pages.localhost`, and the gates
+that need the pages cookie boot their own server at `app.lvh.me` from `dist/server.mjs`.

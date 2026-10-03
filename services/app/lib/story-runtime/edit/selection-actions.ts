@@ -25,12 +25,6 @@ export const SELECTION_ACTION_COARSE_CLASS = 'mx-selection-action--coarse';
 const SELECTION_ACTION_ATTR = 'data-mx-selection-action';
 const SELECTION_ACTIONS_CSS_ATTR = 'data-mx-selection-actions-css';
 /**
- * The reader's bottom dock, rendered into the served document itself
- * (lib/story/document renderReaderChrome). Named by its attribute rather than
- * imported: nothing in the reader's bundle may reach the server modules.
- */
-const READER_CHROME_ATTR = 'data-mx-reader-chrome';
-/**
  * How long a touch selection must sit still before the bubble appears.
  * Dragging a handle fires `selectionchange` continuously, and the bubble
  * belongs where the gesture ENDED — chasing every intermediate selection would
@@ -175,20 +169,8 @@ export function createFrameSelectionActions({
     return toolbar;
   };
 
-  /*
-   * The bottom of the space a touch bubble may occupy. The reader's dock is
-   * `display: none` while the document is framed and only `position: fixed`
-   * under 640px, so it counts only when it is really parked at the bottom of
-   * the viewport — a dock in ordinary flow, scrolled into the upper half, must
-   * not pull the bubble up off its words.
-   */
-  const clampToTouchSpace = (top: number, height: number) => {
-    const dock = doc.querySelector(`[${READER_CHROME_ATTR}]`)?.getBoundingClientRect();
-    const floor = dock && dock.height > 0 && dock.top > win.innerHeight / 2
-      ? Math.min(win.innerHeight - 8, dock.top - 8)
-      : win.innerHeight - 8;
-    return Math.max(8, Math.min(top, floor - height));
-  };
+  /** The space a touch bubble may occupy: the viewport, less an 8px margin (the document carries no chrome of the app's). */
+  const clampToTouchSpace = (top: number, height: number) => Math.max(8, Math.min(top, win.innerHeight - 8 - height));
 
   const showForSelection = () => {
     if (contextOpen) return;
