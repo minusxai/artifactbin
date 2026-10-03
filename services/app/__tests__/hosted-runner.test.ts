@@ -72,3 +72,14 @@ it('preserves an existing artifactbin session when naming the default hosted age
  expect((await db.query<{name:string}>("SELECT name FROM remote_agents WHERE id='external'")).rows[0]?.name).toBe('artifactbin');
  expect((await db.query<{name:string;info:{name:string}}>('SELECT name,info FROM remote_agents WHERE id=$1',[session.id])).rows[0]).toMatchObject({name:session.name,info:{name:session.name}});
 });
+
+it('reports owner-scoped pending and running work until terminal completion',async()=>{
+ const db=await harness.db();const hosted=await createHostedRemoteAgent({runner:idleRunner,secret:'activity-secret-'.repeat(3),model:'fixture'});
+ const session=await hosted.agent.ensure('alice');expect(session.activity).toBe('listening');
+ const {branchId}=await hosted.coordinator.dispatch({userId:'alice',artifactId:'doc',requestId:'activity',message:'review',model:'fixture'});
+ expect((await hosted.agent.ensure('alice')).activity).toBe('working');expect((await hosted.agent.view('alice',session.id,0)).session.activity).toBe('working');
+ await db.query("UPDATE hosted_branches SET status='running' WHERE id=$1",[branchId]);expect((await hosted.agent.ensure('alice')).activity).toBe('working');
+ await hosted.coordinator.dispatch({userId:'bob',artifactId:'chat',requestId:'other',message:'hi',model:'fixture'});
+ await db.query("UPDATE hosted_branches SET status='completed' WHERE id=$1",[branchId]);
+ expect((await hosted.agent.ensure('alice')).activity).toBe('listening');expect((await hosted.agent.view('alice',session.id,0)).session.activity).toBe('listening');
+});

@@ -41,7 +41,8 @@ export async function createHostedRemoteAgent(options: {
             }
             if (row.active)
                 await db.query('UPDATE remote_agents SET seen_at=now() WHERE id=$1', [id]);
-            return { ...row.info, online: row.active, controller: 'web' };
+            const busy = (await db.query<{busy:boolean}>("SELECT EXISTS(SELECT 1 FROM hosted_branches WHERE owner=$1 AND status IN ('pending','running')) AS busy", [owner])).rows[0]!.busy;
+            return { ...row.info, online: row.active, controller: 'web', activity: busy ? 'working' : 'listening' };
         },
         async view(owner, id, _since) {
             if (!agent.owns(owner, id))
