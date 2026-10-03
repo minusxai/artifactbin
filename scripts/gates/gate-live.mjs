@@ -514,7 +514,11 @@ async function readerLeg() {
 }
 
 const started = Date.now();
-await Promise.all([votesLeg(), shareLeg(), agentHydrates(), agentProse(), agentMode(), agentProseMode(), watchedLeg(), readerLeg()]);
+// The share leg runs alone first: alongside the reader and watched legs its owner's guest session read as `anon` on
+// the dataset page (/api/page/session) and the Share control never appeared — reproduced on a host server and in
+// the gate container, cause not yet established; the original sequential gate never met it.
+await shareLeg();
+await Promise.all([votesLeg(), agentHydrates(), agentProse(), agentMode(), agentProseMode(), watchedLeg(), readerLeg()]);
 check.note(`eight legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 await browser.close();
 check.done();

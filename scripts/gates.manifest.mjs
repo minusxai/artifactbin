@@ -33,15 +33,15 @@ export const GATE_SPECS = Object.freeze([
   // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
   // process (formerly offline-file, -firefox, -webkit and screenshot-comments: three shards' cross-browser setup).
-  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 60, timeoutMs: 180_000 },
+  { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 29, timeoutMs: 90_000 },
   // Guest start, OAuth consent and the login door, claim, fork, folders and CLI acceptance, one persona per leg
   // (formerly simpler-start, oauth-browser, app-flows AUTH, claim-flow, fork, folders and cli-conformance).
-  { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 45, timeoutMs: 140_000 },
+  { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 22, timeoutMs: 70_000 },
   // Writes reaching open pages with no reload (formerly live-data, live-reader, app-flows VIEWER and the
   // watched-then-edit half of inplace-edit section 3).
-  { name: 'live', needsMail: false, seconds: 40, timeoutMs: 120_000 },
+  { name: 'live', needsMail: false, seconds: 14, timeoutMs: 60_000 },
   // Browser sessions and test users through the real CLI, Linux + bubblewrap (formerly browser-sessions, testusers).
-  { name: 'sessions', needsMail: true, seconds: 45, timeoutMs: 140_000 },
+  { name: 'sessions', needsMail: true, seconds: 35, timeoutMs: 110_000 },
   { name: 'chart-width', needsMail: false, seconds: 3, timeoutMs: 90_000 },
   { name: 'comment-targets', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, seconds: 5, timeoutMs: 60_000 },

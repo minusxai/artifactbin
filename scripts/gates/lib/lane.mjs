@@ -18,6 +18,11 @@
 class LaneEnded extends Error {}
 
 const firstLine = (error) => String(error?.message ?? error).split('\n').find((line) => line.trim()) ?? String(error);
+/** A Playwright error's call log names the locator it waited for: print it beside the failed label. */
+const detail = (check, error) => {
+  const lines = String(error?.stack ?? error?.message ?? error).split('\n').filter((line) => line.trim());
+  if (lines.length > 1) check.note?.(lines.slice(1, 8).join(' | '));
+};
 
 /**
  * @param {((condition: unknown, label: string) => boolean)} check  the gate's checker
@@ -33,6 +38,7 @@ export function lane(check, name) {
     } catch (error) {
       if (error instanceof LaneEnded) throw error;
       check(false, `${label(text)} — ${firstLine(error)}`);
+      detail(check, error);
       throw new LaneEnded(text);
     }
     check(true, label(text));
@@ -47,7 +53,9 @@ export function lane(check, name) {
     try {
       await body();
     } catch (error) {
-      if (!(error instanceof LaneEnded)) check(false, `${label('the lane threw')} — ${firstLine(error)}`);
+      if (error instanceof LaneEnded) return;
+      check(false, `${label('the lane threw')} — ${firstLine(error)}`);
+      detail(check, error);
     }
   };
   return { step, must, run };
