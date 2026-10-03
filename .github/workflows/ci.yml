@@ -116,8 +116,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - name: Install isolated design validation dependencies
-        run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
       # A CLI CHANGE THAT SHIPS NO VERSION SHIPS NOWHERE: the publisher only uploads when the version
       # moved, so the source would sit on main, released to nobody, until someone noticed. The rule
       # and its wording live in scripts/lib/ci-plan.mjs, where they are tested.
@@ -384,8 +382,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - name: Install isolated design validation dependencies
-        run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
       # The export tests drive real headless Chromium (lib/export.ts). The
       # browser download is the slow half of the install; cache it on what pins
       # the browser (playwright-core's browsers.json), as the gates do — keyed on
@@ -669,10 +665,22 @@ jobs:
   # finds it (scripts/ci/ci.mjs `plan`) and selects nothing at all.
   #
   # The artifact IS the pass: it is written after `check`, so it only exists for a green run.
+  #
+  # IT ALSO REPORTS WHAT THE RUN COST — and, on a pull request, whether it may cost that. This was the
+  # separate `job timings` job, waiting on the same jobs as this one; folded in, it is one runner and
+  # one setup fewer per run, for one `gh api` call (see "every job's wall clock" below).
   test:
     name: test
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Reading the run's own job list (the wall-clock report below) is a scope the workflow does not
+    # grant. A job-level block REPLACES the workflow's, so `contents: read` is restated, not inherited.
+    permissions:
+      contents: read
+      actions: read
+    # `warm-caches` is deliberately NOT here: `notify-consumer` waits on this job, so waiting on a
+    # 15-minute cache warmer would put it on merge → production. It never runs on a pull request, and
+    # on main it is simply absent from the wall-clock table.
     needs:
       [
         plan,
@@ -700,6 +708,80 @@ jobs:
         env:
           CI__NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci/ci.mjs check
+      # WHAT THIS RUN ACTUALLY COST — and, on a pull request, whether it may cost that.
+      #
+      # The table was toothless on purpose, and that was right while the budget was a wish. It is not a
+      # wish any more: merge → production has to fit in seven minutes, and a job that runs long is what
+      # spends them. So on a PULL REQUEST a job over its budget fails this run, and the message names
+      # the step that took the longest, because "gates took 300s" is not something anyone can act on.
+      # On main it stays a summary: a push has nothing left to fix, and a slow runner there would turn
+      # this into a red merge button teaching everyone to re-run.
+      #
+      # Two budgets. 240s is the ordinary one, measured from what this branch achieves. The multi-platform
+      # CLI build is the exception: it compiles a standalone executable and drives real browsers against
+      # it, it runs only for a release, and it is the whole reason the rest of the run had to get out of
+      # its way. Its allowance is named here rather than hidden in a slower default for everything.
+      #
+      # `always()`: the table is most useful on a run that failed. Before the tested tree is recorded, so
+      # a pull request over budget never leaves a tested-tree artifact behind (the artifact IS the pass).
+      - name: every job's wall clock, over-budget named
+        if: always()
+        # A summary on main, a gate on a pull request.
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUDGET_S: '240'
+          # The release-only binary builds; see above. Measured on run 35334967117, which built all
+          # four platforms from a version bump: Intel 343s (its three folded proofs 131s together),
+          # macOS arm64 191s, Linux 192s and 174s. 420s leaves the slowest of those room to be slow
+          # without turning a release red, and still catches a build that has doubled.
+          SLOW_BUDGET_S: '420'
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016  # $slowest is a jq binding; the single quotes are what keep it one.
+          gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
+            --jq '.jobs[]
+                  | select(.name != "test")
+                  | select(.started_at != null and .completed_at != null)
+                  | ([ .steps[]?
+                       | select(.started_at != null and .completed_at != null)
+                       | { name: .name,
+                           seconds: ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) } ]
+                     | sort_by(.seconds) | last) as $slowest
+                  | [ ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)),
+                      .name, .conclusion,
+                      (($slowest.name // "-") + " " + (($slowest.seconds // 0) | tostring) + "s") ]
+                  | @tsv' \
+            | sort -rn > durations.tsv
+          over=0
+          : > over-budget.txt
+          {
+            echo "## Job wall clock (budget ${BUDGET_S}s, CLI binaries ${SLOW_BUDGET_S}s)"
+            echo
+            echo '| | job | seconds | result | slowest step |'
+            echo '| --- | --- | ---: | --- | --- |'
+            while IFS=$'\t' read -r seconds name conclusion slowest; do
+              budget="$BUDGET_S"
+              case "$name" in "CLI ("*|"CLI distributions"*) budget="$SLOW_BUDGET_S";; esac
+              mark=''
+              if [ "$seconds" -gt "$budget" ]; then
+                mark='OVER'
+                over=$((over + 1))
+                # Collected, not printed: this block's stdout is the step summary file.
+                printf '%s took %ss (budget %ss); its slowest step was %s\n' "$name" "$seconds" "$budget" "$slowest" >> over-budget.txt
+              fi
+              printf '| %s | %s | %s | %s | %s |\n' "$mark" "$name" "$seconds" "$conclusion" "$slowest"
+            done < durations.tsv
+            echo
+            if [ "$over" -eq 0 ]; then
+              echo "Every job finished inside its budget."
+            else
+              echo "${over} job(s) over budget. Fix the cause — do not raise the budget to meet the job."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do echo "::error::$line"; done < over-budget.txt
+          if [ "$over" -gt 0 ] && [ "${GITHUB_EVENT_NAME}" = pull_request ]; then exit 1; fi
       # On a pull request the checkout is refs/pull/N/merge — the tree a squash merge produces, which
       # is the tree the push to main will carry, PROVIDED no other PR moves the base in between. When
       # one does, the tree no longer matches, but the PATCH (recorded here too, when this is a pull
@@ -884,110 +966,12 @@ jobs:
           npx playwright install chromium
           node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 --phase=${{ matrix.phase }}
 
-  # WHAT THIS RUN ACTUALLY COST — and, on a pull request, whether it may cost that.
-  #
-  # The table was toothless on purpose, and that was right while the budget was a wish. It is not a
-  # wish any more: merge → production has to fit in seven minutes, and a job that runs long is what
-  # spends them. So on a PULL REQUEST a job over its budget fails this run, and the message names
-  # the step that took the longest, because "gates took 300s" is not something anyone can act on.
-  # On main it stays a summary: a push has nothing left to fix, and a slow runner there would turn
-  # this into a red merge button teaching everyone to re-run.
-  #
-  # Two budgets. 240s is the ordinary one, measured from what this branch achieves. The multi-platform
-  # CLI build is the exception: it compiles a standalone executable and drives real browsers against
-  # it, it runs only for a release, and it is the whole reason the rest of the run had to get out of
-  # its way. Its allowance is named here rather than hidden in a slower default for everything.
-  #
-  # Never part of the merge gate itself: absent from CI_JOBS and from the `test` roll-up's `needs`.
-  timings:
-    name: job timings
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs:
-      [
-        plan,
-        checks,
-        node,
-        ui,
-        build,
-        api,
-        gates,
-        cli,
-        cli-preview,
-        reference-compatibility,
-        warm-caches
-      ]
-    if: always()
-    # NOT behind `test` (nor `notify-consumer`, which waits on it): the roll-up is a 10s job that only
-    # reads its needs' results, and waiting for it added its whole length to every run's wall clock.
-    # This job measures the jobs that do the work.
-    # A summary on main, a gate on a pull request.
-    continue-on-error: ${{ github.event_name != 'pull_request' }}
-    # This is the one job here that reads the Actions API rather than the repository. A job-level
-    # block REPLACES the workflow's, so `contents: read` is restated rather than inherited.
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      # No checkout: the run's own job list is the only input.
-      - name: every job's wall clock, over-budget named
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUDGET_S: '240'
-          # The release-only binary builds; see above. Measured on run 35334967117, which built all
-          # four platforms from a version bump: Intel 343s (its three folded proofs 131s together),
-          # macOS arm64 191s, Linux 192s and 174s. 420s leaves the slowest of those room to be slow
-          # without turning a release red, and still catches a build that has doubled.
-          SLOW_BUDGET_S: '420'
-        run: |
-          set -euo pipefail
-          # shellcheck disable=SC2016  # $slowest is a jq binding; the single quotes are what keep it one.
-          gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
-            --jq '.jobs[]
-                  | select(.name != "job timings")
-                  | select(.started_at != null and .completed_at != null)
-                  | ([ .steps[]?
-                       | select(.started_at != null and .completed_at != null)
-                       | { name: .name,
-                           seconds: ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) } ]
-                     | sort_by(.seconds) | last) as $slowest
-                  | [ ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)),
-                      .name, .conclusion,
-                      (($slowest.name // "-") + " " + (($slowest.seconds // 0) | tostring) + "s") ]
-                  | @tsv' \
-            | sort -rn > durations.tsv
-          over=0
-          : > over-budget.txt
-          {
-            echo "## Job wall clock (budget ${BUDGET_S}s, CLI binaries ${SLOW_BUDGET_S}s)"
-            echo
-            echo '| | job | seconds | result | slowest step |'
-            echo '| --- | --- | ---: | --- | --- |'
-            while IFS=$'\t' read -r seconds name conclusion slowest; do
-              budget="$BUDGET_S"
-              case "$name" in "CLI ("*|"CLI distributions"*) budget="$SLOW_BUDGET_S";; esac
-              mark=''
-              if [ "$seconds" -gt "$budget" ]; then
-                mark='OVER'
-                over=$((over + 1))
-                # Collected, not printed: this block's stdout is the step summary file.
-                printf '%s took %ss (budget %ss); its slowest step was %s\n' "$name" "$seconds" "$budget" "$slowest" >> over-budget.txt
-              fi
-              printf '| %s | %s | %s | %s | %s |\n' "$mark" "$name" "$seconds" "$conclusion" "$slowest"
-            done < durations.tsv
-            echo
-            if [ "$over" -eq 0 ]; then
-              echo "Every job finished inside its budget."
-            else
-              echo "${over} job(s) over budget. Fix the cause — do not raise the budget to meet the job."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          while IFS= read -r line; do echo "::error::$line"; done < over-budget.txt
-          if [ "$over" -gt 0 ] && [ "${GITHUB_EVENT_NAME}" = pull_request ]; then exit 1; fi
-
+  # THE LINUX BINARY THE `cli` MATRIX ALREADY BUILT AND SMOKED is the one tested here: rebuilding it
+  # cost this job the whole SEA compile (prebuilt Node, Chromium archive, injection) for the same
+  # bytes. The bundle, types and host runtime that `npm pack` and the bundle conformance read are still
+  # built here (`npm run build -w services/cli`); only the executable comes from `afbin-ubuntu-24.04`.
   reference-compatibility:
-    needs: [ plan ]
+    needs: [ plan, cli ]
     if: needs.plan.outputs.reference-compatibility == 'true'
     name: CLI distributions against ID-first host
     runs-on: ubuntu-24.04
@@ -1019,12 +1003,14 @@ jobs:
             ~/.cache/ms-playwright
             ~/Library/Caches/ms-playwright
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/node_modules/playwright-core/browsers.json') }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: candidate/services/cli/.cache/chromium-archive
-          key: chromium-archive-candidate-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/node_modules/playwright-core/browsers.json', 'candidate/services/cli/scripts/runtime-archive.mjs') }}
-      - run: npm run build:binary -w services/cli
+      - run: npm run build -w services/cli
         working-directory: candidate
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: afbin-ubuntu-24.04
+          path: candidate/services/cli/dist
+      # Artifact transport does not preserve executable permissions.
+      - run: chmod +x candidate/services/cli/dist/afbin-linux-x64
       - name: Install real package artifacts outside both checkouts
         working-directory: candidate
         run: |
@@ -1099,7 +1085,7 @@ jobs:
   # 17:12:45 → Update Submodule start 17:14:09, run 36603331879/36603413942) for one `gh api` POST.
   # Doing it as a job HERE removes that hop entirely: `needs` gives the identical "only if every real
   # job passed" gate, no `if: always()` here so a genuine failure upstream skips this job the normal
-  # way, and it runs alongside `timings`/`release-cli` instead of waiting on a separate workflow's
+  # way, and it runs alongside `release-cli` instead of waiting on a separate workflow's
   # roundtrip.
   #
   # `success()`, not `!contains(needs.*.result,'failure')`, was the first attempt here and it never
