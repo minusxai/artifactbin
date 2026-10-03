@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS app.hosted_conversations (
   owner TEXT NOT NULL,
   artifact_id TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 0,
+  input_buffer TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (owner, artifact_id)
 );
 
@@ -94,6 +95,8 @@ ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS artifact_id TEXT N
 
 ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
 
+ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS input_buffer TEXT NOT NULL DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS app.hosted_branches (
   id TEXT NOT NULL,
   owner TEXT NOT NULL,
@@ -102,6 +105,7 @@ CREATE TABLE IF NOT EXISTS app.hosted_branches (
   input JSONB NOT NULL,
   program_source TEXT,
   run_id TEXT,
+  cancel_pending BOOLEAN NOT NULL DEFAULT false,
   cursor INTEGER NOT NULL DEFAULT 0,
   checkpoint JSONB,
   result JSONB,
@@ -123,6 +127,8 @@ ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS input JSONB NOT NULL;
 ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS program_source TEXT;
 
 ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS run_id TEXT;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS cancel_pending BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS cursor INTEGER NOT NULL DEFAULT 0;
 
