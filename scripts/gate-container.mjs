@@ -3,7 +3,7 @@
  * RUN BROWSER GATES IN A LINUX CONTAINER — from any worktree, several at once.
  *
  *   node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [--servers N] <gate-name ...>
- *   node scripts/gate-container.mjs hydration full-kit annotations
+ *   node scripts/gate-container.mjs kit-and-fonts media comments
  *
  * Gates flake under CPU contention, so on a shared machine they used to run one agent at a time.
  * Here each gate set runs in ONE container with a fixed CPU and memory quota, and the container
