@@ -7,7 +7,7 @@
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import type { Actor } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, mintToken, pagesSessionActor, revokeToken } from '@/lib/accounts';
@@ -164,6 +164,33 @@ describe('the pages session', () => {
     }
     expect((await app.request(`${APEX}/`)).status).toBe(404);
     expect((await app.request(`${APEX}/api/artifacts`)).status).toBe(404);
+  });
+
+  it('hands a browser session\'s scripted browser across as its token, and a plain bearer page fetch nothing', async () => {
+    const w = await world();
+    const app = framing();
+    // What the session transport (services/browser forwardSessionFetch) sends: the session's actor attached, the
+    // session mark, the addressed host, no Origin — and, on the pages site, the cookie the parent holds.
+    const owner: Actor = { credential: 'bearer', tokenId: w.token.id, userId: w.user.id };
+    const frameSrc = async (headers: Record<string, string>) => {
+      const html = await (await app.request(as(`${APP}/a/${w.secret}`, owner, { headers: { accept: 'text/html', ...headers } }))).text();
+      return new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
+    };
+    expect((await frameSrc({})).searchParams.has('ticket')).toBe(false);
+    const src = await frameSrc({ [BROWSER_SESSION_HEADER]: '1' });
+    expect(src.searchParams.get('ticket')).toMatch(/^[A-Za-z0-9_-]{30,}$/);
+    const exchanged = await app.request(as(src.href, owner, { headers: { [BROWSER_SESSION_HEADER]: '1' } }));
+    expect(exchanged.status).toBe(302);
+    const cookie = /afbin_pages=([^;]+)/.exec(exchanged.headers.get('set-cookie')!)![1]!;
+    expect(await pagesSessionActor(cookie)).toEqual({ credential: 'agent-cookie', userId: w.user.id, tokenId: w.token.id });
+    // The document's own door reads the private document as the session's reader.
+    const self = pagesOriginFor(w.secret, site);
+    const read = await app.request(as(`${self}/a/${w.secret}/query`, owner, { method: 'POST', headers: { [BROWSER_SESSION_HEADER]: '1', 'x-forwarded-host': new URL(self).host, cookie: `afbin_pages=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) }));
+    expect(read.status, await read.clone().text()).toBe(200);
+    expect(((await read.json()) as { tables: Record<string, { rows: Array<Record<string, unknown>> }> }).tables.counted!.rows[0]).toMatchObject({ n: 2 });
+    // The session mark with no transport behind it is nobody's session: a guest page, no ticket.
+    const unmarked = await (await app.request(`${APP}/a/${w.secret}`, { headers: { accept: 'text/html', [BROWSER_SESSION_HEADER]: '1', authorization: `Bearer ${w.token.token}` } })).text();
+    expect(unmarked).not.toMatch(/ticket=/);
   });
 
   it('spends a ticket once, within 60 s; a guest gets none; a revoked token ends the session it rode', async () => {

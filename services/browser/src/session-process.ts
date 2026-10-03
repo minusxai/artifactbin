@@ -8,13 +8,19 @@ import { createRequire } from 'node:module';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import type { Actor, BrowserSessionResult } from '@artifactbin/contracts';
-import { BROWSER_SESSION_HEADER, SESSION_LIMITS } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, FORWARDED_HOST, FORWARDED_PROTO, SESSION_LIMITS } from '@artifactbin/contracts';
 import { SESSION_WORKER_SOURCE } from './session-worker';
+import { createPagesCookieJar, sessionBrowserArgs, sessionOrigins, type PagesCookieJar } from './session-origins';
 import type { SessionSandboxChoice } from './session-config';
 import type { SessionWorker } from './sessions';
 
 export interface SessionProcessOptions {
   baseURL: string;
+  /**
+   * The deployment's pages host (APP__PAGES_HOST, read at `session-config`): every document is framed from
+   * `<hex id>.<pages host>`, so the session admits those origins and the apex's session exchange too.
+   */
+  pagesHost?: string;
   /** Trusted actor forwarding stays in the parent; no credential enters the worker. */
   request(request: Request, actor: Actor): Promise<Response>;
   browsersPath?: string;
@@ -29,30 +35,42 @@ export interface SessionProcessOptions {
 const require = createRequire(import.meta.url);
 
 /**
- * ONE SCRIPTED FETCH. Admits the session's own origin, drops every credential the
- * script supplied, and forwards the request as the actor the session browses as —
- * which is ANONYMOUS for a guest session and its creator otherwise. `run` applies the
- * process's bounded concurrency to the forwarded hop only; admission is refused before it.
+ * ONE SCRIPTED FETCH. Admits the session's own origins (the app's, and with a pages host its apex and
+ * its document origins, session-origins), drops every credential the script supplied, and forwards the
+ * request as the actor the session browses as — which is ANONYMOUS for a guest session and its creator
+ * otherwise. The pages cookie a document's frame earns from its ticket is the `jar`'s, held on this side:
+ * attached to the pages site's requests, never returned to the worker. `run` applies the process's bounded
+ * concurrency to the forwarded hop only; admission is refused before it.
  */
 export async function forwardSessionFetch(
   message: Record<string, unknown>,
   actor: Actor,
-  options: Pick<SessionProcessOptions, 'baseURL' | 'request'>,
+  options: Pick<SessionProcessOptions, 'baseURL' | 'request' | 'pagesHost'> & { jar?: PagesCookieJar },
   run: (task: () => Promise<void>) => Promise<void> = task => task(),
 ): Promise<{ status: number; headers: Record<string, string>; body: string }> {
   if (JSON.stringify(message).length > 100000) throw new Error('Request size limit exceeded');
   const url = new URL(String(message.url));
-  if (url.origin !== new URL(options.baseURL).origin || url.username || url.password) throw new Error('Origin is outside this session');
+  const origins = sessionOrigins(options.baseURL, options.pagesHost);
+  if (!origins.allows(url)) throw new Error('Origin is outside this session');
   // Drop cookies, authorization, actor and hop-by-hop headers from arbitrary script traffic.
   const supplied = new Headers(message.headers as Record<string, string>);
-  const headers = new Headers({ [BROWSER_SESSION_HEADER]: '1' });
+  // The host the page addressed, as a proxy names it (FORWARDED_HOST): the hop to the app may be a socket
+  // that loses `Host`, and a pages request is answered by which host it named.
+  const headers = new Headers({ [BROWSER_SESSION_HEADER]: '1', [FORWARDED_HOST]: url.host, [FORWARDED_PROTO]: url.protocol.slice(0, -1) });
   for (const name of ['accept', 'content-type', 'range', 'if-none-match']) if (supplied.has(name)) headers.set(name, supplied.get(name)!);
   const body = typeof message.body === 'string' ? Buffer.from(message.body, 'base64') : undefined;
   if (body && body.length > SESSION_LIMITS.scriptBytes) throw new Error('Request body limit exceeded');
   const request = new Request(url, { method: String(message.method), headers, ...(body ? { body } : {}), signal: AbortSignal.timeout(10000) });
   let fetched: { status: number; headers: Record<string, string>; body: string } | undefined;
   await run(async () => {
-    const response = await sessionRequest(request, next => options.request(next, actor));
+    const response = await sessionRequest(request, async next => {
+      const at = new URL(next.url);
+      const cookie = options.jar?.headerFor(at);
+      if (cookie) next.headers.set('cookie', cookie);
+      const answer = await options.request(next, actor);
+      options.jar?.store(at, answer);
+      return answer;
+    }, origins.allows);
     // Streams cannot be materialized indefinitely through this bounded bridge.
     if (response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Live event streams are unavailable in scripted sessions'); }
     const reader = response.body?.getReader();
@@ -125,6 +143,8 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
   let child: ChildProcess | undefined;
   let stopped = false;
   const requests = createSessionRequestQueue();
+  const jar = createPagesCookieJar(sessionOrigins(options.baseURL, options.pagesHost), options.pagesHost);
+  const browserArgs = sessionBrowserArgs(options.pagesHost);
   const closedListeners = new Set<() => void>();
   const close = async () => {
     if (stopped) return;
@@ -178,12 +198,12 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
       const receive = async (raw: unknown) => {
         if (!raw || typeof raw !== 'object') return;
         const message = raw as Record<string, unknown>;
-        if (message.type === 'hello') send({ type: 'init', baseURL: options.baseURL, ...(browserExecutable && !plain ? {executablePath: '/browsers/' + path.basename(browserExecutable)} : {}) });
+        if (message.type === 'hello') send({ type: 'init', baseURL: options.baseURL, ...(browserArgs.length ? { args: browserArgs } : {}), ...(browserExecutable && !plain ? {executablePath: '/browsers/' + path.basename(browserExecutable)} : {}) });
         if (message.type === 'ready') { rejectTask = undefined; resolve(); }
         if (message.type === 'fatal') rejectTask?.(new Error(String(message.error)));
         if (message.type === 'result') { resolveTask?.(message.value as Parameters<NonNullable<typeof resolveTask>>[0]); resolveTask = undefined; rejectTask = undefined; }
         if (message.type !== 'fetch' || stopped) return;
-        try { send({ type: 'fetched', id: message.id, ...await forwardSessionFetch(message, actor, options, requests.run) }); }
+        try { send({ type: 'fetched', id: message.id, ...await forwardSessionFetch(message, actor, { ...options, jar }, requests.run) }); }
         catch (error) { send({ type: 'fetched', id: message.id, error: String((error as Error).message).slice(0, 500) }); }
       };
       child!.stdout!.setEncoding('utf8');

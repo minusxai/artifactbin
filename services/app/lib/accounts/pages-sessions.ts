@@ -35,12 +35,19 @@ interface ActorSnapshot { credential: 'session' | 'agent-cookie'; userId: string
 const randomSecret = (bytes: number): string => crypto.randomBytes(bytes).toString('base64url');
 const codes = async () => createCodeStore(await getDb());
 
-/** The browser credentials a pages session may carry: an account session or an agent cookie — never a bearer. */
-function snapshotOf(actor: RequestActor): ActorSnapshot | null {
-  if (actor.credential !== 'session' && actor.credential !== 'agent-cookie') return null;
+/**
+ * The browser credentials a pages session may carry: an account session or an agent cookie — never a bearer.
+ * One browser reads as a bearer: a browser SESSION's scripted browser (`BROWSER_SESSION_HEADER` on a request
+ * the trusted session transport attached its actor to, lib/accounts/viewer `isBrowserSessionRequest`). It is
+ * a browser holding a token, so its pages session is exactly that: an agent cookie for that token.
+ */
+function snapshotOf(actor: RequestActor, browserSession: boolean): ActorSnapshot | null {
+  const credential = actor.credential === 'session' || actor.credential === 'agent-cookie' ? actor.credential
+    : actor.credential === 'bearer' && browserSession && actor.tokenId ? 'agent-cookie' : null;
+  if (!credential) return null;
   if (!actor.viewer?.userId && !actor.tokenId) return null;
   return {
-    credential: actor.credential,
+    credential,
     userId: actor.viewer?.userId ?? null,
     tokenId: actor.tokenId ?? null,
     email: actor.viewer?.email ?? null,
@@ -56,9 +63,12 @@ function snapshotOf(actor: RequestActor): ActorSnapshot | null {
  */
 export type PagesCarried = Readonly<Record<string, unknown>>;
 
-/** A one-time ticket for this reader, or null when there is nobody to hand across (a guest). */
-export async function issuePagesTicket(actor: RequestActor, carried: PagesCarried = {}, now = Date.now()): Promise<string | null> {
-  const snapshot = snapshotOf(actor);
+/**
+ * A one-time ticket for this reader, or null when there is nobody to hand across (a guest). `browserSession`
+ * says the app page is being served to a browser session's scripted browser (see `snapshotOf`).
+ */
+export async function issuePagesTicket(actor: RequestActor, carried: PagesCarried = {}, now = Date.now(), options: { browserSession?: boolean } = {}): Promise<string | null> {
+  const snapshot = snapshotOf(actor, options.browserSession === true);
   if (!snapshot) return null;
   const ticket = randomSecret(24);
   await (await codes()).issue({ kind: TICKET_KIND, secret: ticket, payload: { ...snapshot, carried: { ...carried } }, ttlMs: PAGES_TICKET_TTL_MS, now });

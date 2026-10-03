@@ -35,7 +35,7 @@ import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/document/inpu
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { getUserById, ownerUsername } from '@/lib/accounts/users';
 import { avatarUrl } from '@/lib/accounts/avatars';
-import { actorForArtifacts, browserSessionKind, roleFor, sessionActor } from '@/lib/accounts/viewer';
+import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, roleFor, sessionActor } from '@/lib/accounts/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import { canAnnotate, canEdit } from '@/lib/artifacts/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -98,7 +98,9 @@ async function admittedFrameSrc(request: Request, artifact: ArtifactRow, actor: 
   // The reader's "Allow once" grants live in an app-origin cookie the document's origin never sees: they ride the
   // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
   const carried = carriedTrust(request, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null });
-  return { src: pagesSessionUrl(site, `${origin}/${search}`, await issuePagesTicket(actor, carried)), origin };
+  // A browser session's scripted browser reads its frame as the session's actor (lib/accounts/pages-sessions).
+  const ticket = await issuePagesTicket(actor, carried, Date.now(), { browserSession: isBrowserSessionRequest(request) });
+  return { src: pagesSessionUrl(site, `${origin}/${search}`, ticket), origin };
 }
 
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {

@@ -46,7 +46,18 @@ function readSessionEnv(source: NodeJS.ProcessEnv) {
     sessions: wholeCount('BROWSER__SESSION_MAX', env('BROWSER', 'SESSION_MAX'), DEFAULT_SESSION_CAPACITY.sessions),
     sessionsPerActor: wholeCount('BROWSER__SESSION_MAX_PER_ACTOR', env('BROWSER', 'SESSION_MAX_PER_ACTOR'), DEFAULT_SESSION_CAPACITY.sessionsPerActor),
   };
-  return { cgroupRoot, capacity, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), names: namesRead() };
+  return { cgroupRoot, capacity, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), pagesHost: pagesHostFrom(env('APP', 'PAGES_HOST')), names: namesRead() };
+}
+
+/**
+ * The deployment's pages host, the same setting the app serves documents under (APP__PAGES_HOST): a session
+ * admits `<hex id>.<pages host>` and the apex because the app page frames every document from there.
+ */
+function pagesHostFrom(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const host = value.trim().toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/.test(host)) throw new Error(`APP__PAGES_HOST=${value} is not a bare hostname; browser sessions admit the document origins under it.`);
+  return host;
 }
 
 /** Digits only: `Number` would read ' 3' as 3 and '1e2' as 100, and a limit must mean what it says. */
@@ -70,10 +81,10 @@ function sandboxFrom(value: string | undefined, source: NodeJS.ProcessEnv): Sess
   return { mode: 'none' };
 }
 
-/** Every session setting a composition spreads into `createBrowser({ sessions })`, read once. */
-export function sessionProcessPaths(source: NodeJS.ProcessEnv): Pick<BrowserSessionOptions, 'cgroupRoot' | 'browsersPath' | 'sandbox' | 'capacity'> {
-  const { cgroupRoot, sandbox, capacity } = readSessionEnv(source);
-  return { cgroupRoot, sandbox, capacity, ...(source.PLAYWRIGHT_BROWSERS_PATH ? { browsersPath: source.PLAYWRIGHT_BROWSERS_PATH } : {}) };
+/** Every session setting a composition spreads into `createBrowser({ sessions })`, read once — the pages host included. */
+export function sessionProcessPaths(source: NodeJS.ProcessEnv): Pick<BrowserSessionOptions, 'cgroupRoot' | 'browsersPath' | 'sandbox' | 'capacity' | 'pagesHost'> {
+  const { cgroupRoot, sandbox, capacity, pagesHost } = readSessionEnv(source);
+  return { cgroupRoot, sandbox, capacity, ...(pagesHost ? { pagesHost } : {}), ...(source.PLAYWRIGHT_BROWSERS_PATH ? { browsersPath: source.PLAYWRIGHT_BROWSERS_PATH } : {}) };
 }
 
 /** Browser-service environment boundary; these credentials never enter a worker. */
