@@ -20,3 +20,5 @@ export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensB
 export type { SharedArtifactSummary, UserRow } from './users';
 export { actorForArtifacts, browserSessionKind, isOwner, requestOrSessionActor, roleFor, sessionActor, tokenActorForRequest } from './viewer';
 export type { RequestActor } from './viewer';
+export { PAGES_COOKIE, PAGES_SESSION_TTL_MS, PAGES_TICKET_TTL_MS, endPagesSession, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
+export type { PagesCarried } from './pages-sessions';

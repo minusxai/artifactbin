@@ -449,7 +449,7 @@ export interface AssembleOverlay {
   /** Whether the request carries a session: the signed-in hint, never the identity (that arrives after paint). */
   signedIn: boolean;
   /** Where the page queries, writes and fetches its overlay (lib/story/styles/markup-csp paths); absent on a capture. */
-  doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string } | null;
+  doors: { queryUrl: string; mutateUrl?: string; viewerUrl?: string; assetsUrl: string; direct?: true } | null;
   /** A capture's verified image import door, even though it has no query or mutation door. */
   assetsUrl?: string;
   /** An archived version's read-only reason (lib/archived-version); absent for the head. */
@@ -504,7 +504,14 @@ export interface AssembleInput {
    * island runtime holds the document's live stream only when both are present. Null or absent on a
    * capture, an archived version and the offline file.
    */
-  live?: { id: string; editId: string } | null;
+  live?: { id: string; editId: string; direct?: boolean } | null;
+  /**
+   * THE APP PAGE FRAMES THE DOCUMENT on its own origin (APP__PAGES_HOST, lib/serving/pages-origin): the
+   * story element holds one `<iframe>` at `src` (the pages session exchange, which redirects to the
+   * document's origin), sized to the viewport under the chrome, and the page carries no story, module,
+   * island data or behaviour of its own. Null or absent: the story is the page's, as before.
+   */
+  frame?: { src: string; title: string } | null;
   /**
    * A line of page furniture after the story root (and after the chrome), never inside it: a domain
    * post's attribution back to the app. Its CSS joins the head's styles.

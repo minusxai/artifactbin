@@ -22,13 +22,13 @@
 import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
 import { applyAnchor } from '@/lib/story-runtime/anchor';
 import { holdAnchor } from '@/lib/story-runtime/anchor-restore';
-import { applyColorMode, readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
+import { applyColorMode, persistReaderMode, readerMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import { chromeAfterSample, type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { wireOutline } from '@/lib/story-runtime/outline-nav';
 import { markScrollableTables } from '@/lib/story-runtime/table-scroll';
-import { STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
+import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryScrollMessage } from '@/lib/story-runtime/contract';
 import { startIslandLive } from './live';
-import { LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR } from './contract';
+import { LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, STORY_ROOT_SELECTOR } from './contract';
 import { PAGE_TAKEOVER_EVENT } from './page-lifetime';
 
 /**
@@ -54,6 +54,32 @@ function relayFrameScroll(win: Window, doc: Document): () => void {
   win.addEventListener('scroll', schedule, { passive: true });
   post();
   return () => win.removeEventListener('scroll', schedule);
+}
+
+/**
+ * A document framed on its OWN origin takes two things from the app page that frames it — and only from
+ * its parent, which `frame-ancestors` makes the app: the reader's colour choice (kept in `window.name`, so a
+ * live reload keeps it) and the address's `#hash`, so a link to a heading scrolls the frame.
+ */
+function followFramer(win: Window, doc: Document): () => void {
+  const onMessage = (event: MessageEvent) => {
+    if (event.source !== win.parent) return;
+    const data = event.data as { type?: unknown; mode?: unknown; hash?: unknown } | null;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === STORY_READER_MODE_MESSAGE && (data.mode === 'light' || data.mode === 'dark')) {
+      persistReaderMode(win, data.mode);
+      doc.documentElement.setAttribute('data-mx-reader-mode', data.mode);
+      for (const el of [doc.documentElement, doc.querySelector<HTMLElement>(STORY_ROOT_SELECTOR)]) applyColorMode(el, data.mode);
+    } else if (data.type === STORY_FRAME_HASH_MESSAGE && typeof data.hash === 'string' && /^#\S{1,512}$/.test(data.hash)) {
+      if (win.location.hash === data.hash) {
+        let target: Element | null = null;
+        try { target = doc.getElementById(decodeURIComponent(data.hash.slice(1))); } catch { /* malformed escape */ }
+        target?.scrollIntoView();
+      } else win.location.hash = data.hash;
+    }
+  };
+  win.addEventListener('message', onMessage);
+  return () => win.removeEventListener('message', onMessage);
 }
 
 /** The served chrome's visibility, sampled once per frame, until the element leaves the page (the app took over). */
@@ -93,10 +119,14 @@ export function startPage(doc: Document = document, win: Window = window): () =>
   // These document affordances also run inside a frame, like the legacy page entry. Nothing on the
   // app side re-wires them, so they must survive the SPA's takeover (persistent, not stops).
   persistent.push(markScrollableTables(doc), wireOutline(doc));
-  if (framed) {
+  // A document on its OWN origin (APP__PAGES_HOST) is the app page's viewport: it holds its own stream and
+  // reading place framed, as a top-level page does. Any other framed copy reports its scroll to the shell.
+  const direct = !!doc.body?.hasAttribute(LIVE_DIRECT_ATTR);
+  if (framed && !direct) {
     stops.push(relayFrameScroll(win, doc));
     return () => { for (const stop of stops.splice(0)) stop(); for (const stop of persistent.splice(0)) stop(); };
   }
+  if (framed) persistent.push(followFramer(win, doc));
   const id = doc.body?.getAttribute(LIVE_ID_ATTR);
   const editId = doc.body?.getAttribute(LIVE_EDIT_ATTR);
   const hasModule = !!doc.getElementById(ISLAND_DATA_ID);

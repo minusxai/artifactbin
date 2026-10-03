@@ -27,3 +27,5 @@ export { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap'
 export { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from './tiles';
 export { WEB_ASSET_KINDS, WebAssetRefused, importForDocument, importWebAsset, lookupWebAssets, refreshWebAsset, refreshWebAssets, webAssetByHash } from './web-assets';
 export type { AssetWarning, WebAssetKind } from './web-assets';
+export { PAGES_SESSION_PATH, PAGES_SITE, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, pagesApexOrigin, pagesLabel, pagesOriginFor, pagesRequestOf, pagesSessionUrl, pagesSiteFor } from './pages-origin';
+export type { PagesRequest, PagesSite } from './pages-origin';

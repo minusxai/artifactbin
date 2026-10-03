@@ -124,6 +124,11 @@ export interface CompiledReaderRequest {
    * Default true.
    */
   documentChrome?: boolean;
+  /**
+   * The app page FRAMES the document on its own origin (AssembleInput.frame): the page carries the
+   * chrome and one frame, and none of the story, its snapshot or its code.
+   */
+  frame?: AssembleInput['frame'];
 }
 
 export type CompiledReaderAnswer =
@@ -442,6 +447,30 @@ export async function compiledPageFor(row: ArtifactRow, page: PreparedPage, read
     if (!carriesScript(compiled)) {
       logOnce(row, 'unported', 'the stored compile does not carry the version\'s author script');
       return refuse('unported', 'the stored compile does not carry the version\'s author script');
+    }
+
+    if (reader.frame) {
+      // Nothing of the document runs here: its frame loads it, its snapshot and its code, on its own origin.
+      const assembled = assembleReaderPage({
+        compiled: { ...compiled, behaviors: [] },
+        story: '',
+        css: page.css,
+        fontPreloads: [...(reader.chromeFonts ?? [])],
+        title: page.title,
+        theme: page.theme,
+        colorMode: reader.colorMode ?? page.data.colorMode,
+        snapshot: null,
+        overlay: { values: {}, mermaidImages: {}, signedIn: reader.signedIn, doors: null },
+        chrome: reader.chrome,
+        spa: compiled.handoverContract === MIN_HANDOVER_CONTRACT && !usable.pinned ? reader.spa : null,
+        build,
+        head: reader.head,
+        live: null,
+        footer: null,
+        sheets: null,
+        frame: reader.frame,
+      });
+      return { mode: 'compiled', html: assembled.html, headers: assembled.headers };
     }
 
     const flow = page.declared?.flow ?? null;

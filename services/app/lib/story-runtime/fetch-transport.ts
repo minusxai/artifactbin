@@ -12,9 +12,9 @@
  * the app's own authenticated transport does. A guest page keeps the
  * anonymous GET above, unchanged.
  *
- * The relay (relay-transport.ts) stays the transport INSIDE a parent page:
- * the page holds the session a private document's queries need. The choice
- * is made once, by document-transport.ts. framework-free.
+ * DIRECT MODE (`{ session, credentials: 'include' }`): a document on its own
+ * origin (APP__PAGES_HOST) calls its absolute doors with its pages cookie,
+ * framed by the app page or not (lib/islands/boot). framework-free.
  */
 import { QUERY_REQUEST_PARAM } from './contract';
 import type { QueryTransport } from './store';
@@ -30,11 +30,16 @@ type QueryAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 
 export interface FetchTransportOptions {
   /** The page is signed in: every request goes to the session-reading POST doors with the session (see above). */
   session?: boolean;
+  /**
+   * The session doors' credentials mode: `same-origin` by default; `include` for a document on its own
+   * origin (APP__PAGES_HOST), whose absolute doors carry its `afbin_pages` cookie (server/pages-host).
+   */
+  credentials?: RequestCredentials;
 }
 
 export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, init) => fetch(i, init), mutateUrl?: string, options: FetchTransportOptions = {}): QueryTransport {
   const session = !!options.session;
-  const credentials: RequestCredentials = session ? 'same-origin' : 'omit';
+  const credentials: RequestCredentials = session ? (options.credentials ?? 'same-origin') : 'omit';
   const post = (url: string, body: unknown) => fetchFn(url, { method: 'POST', credentials, headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) });
   const ask = async (request: Record<string, unknown>): Promise<QueryAnswer> => {
     const localTables = request.localTables;
