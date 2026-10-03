@@ -1,0 +1,179 @@
+/**
+ * THE AUTHOR SCRIPT'S RUNTIME (`@mx/page-runtime`), loaded by boot when a page carries a script.
+ *
+ *  - `bindPage(store)`: the document's declared names as Preact signals over the page's one store. A Value is a
+ *    writable signal whose setter writes the store; a Query is a read-only signal of rows with `loading`, `error`
+ *    and `ready` beside it; a Mutation is an async function that resolves after commit and rejects with the
+ *    server's message. One store subscription pushes every change into the signals in one batch. The signals are
+ *    instances of signals-core's `Signal`, so the author's `effect` tracks them and Preact renders them in JSX.
+ *  - `startAuthorModule(...)`: loads the version's module (built at publish, lib/story/document/author-module.server)
+ *    with its vendor imports pointed at this build's chunks, hands it the bindings through the `page` module's
+ *    global, and mounts every component it exports where the markup placed one (`data-mx-mount`).
+ *
+ * Preact and signals-core are shared with the vendor chunks the script imports: one graph, one instance.
+ */
+// `@preact/signals`, not the core: importing it installs Preact's integration, so a component that reads a
+// signal's `.value` re-renders when it changes whether or not the author's script imported it itself.
+import { Signal, batch, signal } from '@preact/signals';
+import { h, render, type ComponentType } from 'preact';
+import type { DataflowStore } from '@/lib/story-runtime/store';
+import type { Row, Scalar } from '@/lib/story/data/dataflow';
+
+/** The global the generated `page` module reads at import (author-module.server PAGE_GLOBAL). */
+export const PAGE_GLOBAL = '__mxPageBindings';
+
+const base = Object.getOwnPropertyDescriptor(Signal.prototype, 'value') as PropertyDescriptor & { get: () => unknown; set: (v: unknown) => void };
+const push = (target: Signal<unknown>, value: unknown) => base.set.call(target, value);
+
+/** A declared Value: reads the store's current scalar, writes through the store so bound markup and queries follow. */
+class ValueSignal extends Signal<Scalar> {
+  constructor(private readonly store: DataflowStore, readonly name: string, initial: Scalar) { super(initial); }
+  override get value(): Scalar { return base.get.call(this) as Scalar; }
+  override set value(next: Scalar) { this.store.setValue(this.name, next); }
+}
+
+/** A declared Query: its rows, read-only; `loading`, `error` and `ready` describe the run in flight. */
+class QuerySignal extends Signal<Row[]> {
+  readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
+  private waiters: Array<{ resolve: (rows: Row[]) => void; reject: (error: Error) => void }> = [];
+  constructor(readonly name: string, initial: Row[]) { super(initial); }
+  override get value(): Row[] { return base.get.call(this) as Row[]; }
+  override set value(_next: Row[]) { throw new Error(`${this.name} is a query: its rows come from SQL and cannot be assigned`); }
+  /** The next settled result: now, if nothing is pending; else after the run in flight lands (rejects on a query error). */
+  get ready(): Promise<Row[]> {
+    if (!this.loading.peek()) {
+      const error = this.error.peek();
+      return error ? Promise.reject(new Error(error)) : Promise.resolve(this.peek());
+    }
+    return new Promise((resolve, reject) => this.waiters.push({ resolve, reject }));
+  }
+  settle(rows: Row[], error: string | null): void {
+    const waiters = this.waiters; this.waiters = [];
+    for (const w of waiters) error ? w.reject(new Error(error)) : w.resolve(rows);
+  }
+}
+
+export type MutationFn = (args?: Record<string, unknown>) => Promise<void>;
+export interface PageBindings {
+  value(name: string): ValueSignal | undefined;
+  query(name: string): QuerySignal | undefined;
+  mutation(name: string): MutationFn | undefined;
+  /** Any declared name as the signal the markup would bind: a Value or a Query. */
+  signal(name: string): ValueSignal | QuerySignal | undefined;
+  dispose(): void;
+}
+
+const bound = new WeakMap<DataflowStore, PageBindings>();
+
+export function bindPage(store: DataflowStore | null): PageBindings {
+  if (!store) return { value: () => undefined, query: () => undefined, mutation: () => undefined, signal: () => undefined, dispose: () => {} };
+  const cached = bound.get(store);
+  if (cached) return cached;
+  const state = store.getState();
+  const values = new Map<string, ValueSignal>();
+  const queries = new Map<string, QuerySignal>();
+  const mutations = new Map<string, MutationFn>();
+  for (const decl of store.flow.values) {
+    if (decl.kind === 'scalar' && decl.type !== 'table') values.set(decl.name, new ValueSignal(store, decl.name, state.values[decl.name] ?? null));
+    else queries.set(decl.name, new QuerySignal(decl.name, state.tables[decl.name]?.rows ?? []));
+  }
+  for (const decl of store.flow.queries) queries.set(decl.name, new QuerySignal(decl.name, state.tables[decl.name]?.rows ?? []));
+  for (const decl of store.flow.mutations) {
+    mutations.set(decl.name, async (args = {}) => {
+      const { _row, ...scalars } = args as { _row?: Record<string, Scalar> } & Record<string, Scalar>;
+      await store.mutate(decl.name, scalars, _row);
+    });
+  }
+  const sync = () => {
+    const next = store.getState();
+    const pending = store.pending();
+    batch(() => {
+      for (const [name, sig] of values) {
+        const v = next.values[name] ?? null;
+        if (sig.peek() !== v) push(sig, v);
+      }
+      for (const [name, sig] of queries) {
+        const rows = next.tables[name]?.rows;
+        const loading = pending.has(name);
+        const error = next.errors[name] ?? null;
+        if (rows && sig.peek() !== rows) push(sig, rows);
+        if (sig.error.peek() !== error) sig.error.value = error;
+        if (sig.loading.peek() !== loading) sig.loading.value = loading;
+        if (!loading) sig.settle(sig.peek(), error);
+      }
+    });
+  };
+  const stop = store.subscribe(sync);
+  const bindings: PageBindings = {
+    value: (name) => values.get(name),
+    query: (name) => queries.get(name),
+    mutation: (name) => mutations.get(name),
+    signal: (name) => values.get(name) ?? queries.get(name),
+    dispose: () => { stop(); bound.delete(store); },
+  };
+  bound.set(store, bindings);
+  return bindings;
+}
+
+/** Where the markup placed a component the script exports (compiler `data-mx-mount`). */
+const MOUNT_ATTR = 'data-mx-mount';
+const PROPS_ATTR = 'data-mx-props';
+const BIND_ATTR = 'data-mx-bind';
+
+type ComponentModule = Record<string, unknown>;
+
+function mountComponents(root: ParentNode, mod: ComponentModule, bindings: PageBindings): () => void {
+  const mounted: Array<[Element, ChildNode[]]> = [];
+  for (const el of root.querySelectorAll(`[${MOUNT_ATTR}]`)) {
+    const name = el.getAttribute(MOUNT_ATTR) ?? '';
+    const component = mod[name];
+    if (typeof component !== 'function') { console.error(`[page] the script exports no component named ${name}`); continue; }
+    let props: Record<string, unknown> = {};
+    try { props = JSON.parse(el.getAttribute(PROPS_ATTR) || '{}') as Record<string, unknown>; } catch { /* a compiler writes valid JSON */ }
+    let bind: Record<string, string> = {};
+    try { bind = JSON.parse(el.getAttribute(BIND_ATTR) || '{}') as Record<string, string>; } catch { /* idem */ }
+    for (const [prop, declared] of Object.entries(bind)) {
+      const sig = bindings.signal(declared);
+      if (sig) props[prop] = sig; else console.error(`[page] <${name} ${prop}> binds $${declared}, which is not declared`);
+    }
+    // The server-rendered children are the fallback: kept aside while the component renders, put back when it
+    // unmounts (edit mode stops the script), so the mount never shows as a hole.
+    const fallback = [...el.childNodes];
+    el.replaceChildren();
+    render(h(component as ComponentType<Record<string, unknown>>, props), el);
+    mounted.push([el, fallback]);
+  }
+  return () => { for (const [el, fallback] of mounted) if (el.isConnected) { render(null, el); el.replaceChildren(...fallback); } };
+}
+
+export interface AuthorModuleStart {
+  /** The module as built at publish: bare vendor specifiers, the `page` module inlined. */
+  source: string;
+  store: DataflowStore | null;
+  root: ParentNode;
+  /** Vendor specifier → this build's chunk URL (IslandPageData.vendor). */
+  vendor: Readonly<Record<string, string>>;
+}
+
+/** Point the module's bare vendor imports at this build's chunks, so the script and the runtime share one Preact. */
+export function resolveVendorImports(source: string, vendor: Readonly<Record<string, string>>, base: string = typeof document === 'undefined' ? 'http://localhost/' : document.baseURI): string {
+  // Absolute URLs: a blob: module has no hierarchical base, so a root-relative chunk path would not resolve from it.
+  vendor = Object.fromEntries(Object.entries(vendor).map(([spec, url]) => [spec, new URL(url, base).href]));
+  const specifiers = Object.keys(vendor).sort((a, b) => b.length - a.length).map((s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')).join('|');
+  if (!specifiers) return source;
+  return source.replace(new RegExp(`(["'])(${specifiers})\\1`, 'g'), (match, quote: string, spec: string) => (vendor[spec] ? `${quote}${vendor[spec]}${quote}` : match));
+}
+
+/** Run the version's module in this document. Returns the stop function: unmounts its components and drops its bindings. */
+export async function startAuthorModule(input: AuthorModuleStart): Promise<() => void> {
+  const bindings = bindPage(input.store);
+  (globalThis as Record<string, unknown>)[PAGE_GLOBAL] = bindings;
+  const code = resolveVendorImports(input.source, input.vendor);
+  const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+  let mod: ComponentModule;
+  try { mod = (await import(/* @vite-ignore */ url)) as ComponentModule; }
+  finally { URL.revokeObjectURL(url); }
+  const unmount = mountComponents(input.root, mod, bindings);
+  return () => { unmount(); };
+}

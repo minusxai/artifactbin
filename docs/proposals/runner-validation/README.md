@@ -87,3 +87,41 @@ Observed red → green: the full path first failed on missing browser shims and 
 API and cron need no separate VM: normal app APIs stay normal services; Lambda invocation authenticates, pins source and admits a run. Schedule occurrence `(scheduleId, scheduledAtUTC)` and dispatch outbox are committed together; occurrence is runner requestId. Define timezone/DST, missed occurrence coalescing and serialize same-schedule overlap. Automatic retries are submission retries, not replay of non-idempotent programs.
 
 The implementing agent should first land the narrow contract and validated user-aware Artifactbin adapter, then durable runner admission/receipts, worker launcher and fixed hosted-agent coordinator. Reuse the behavioral checks as acceptance tests. Generic user programs/external network, warm-pool capacity tuning and provider billing follow with their explicit tests. This PR adds validation only; it should not be treated as a deployable runner implementation.
+
+## Implementation gate — 3 October 2026
+
+Rebased operationally by merging latest fetched `origin/main` **4f35f3d6** into this validation branch, preserving PR #308's evidence. No changes to another agent's checkout or branch. The `native-scripts` branch was inspected at **0eb28194**; it is not merged here.
+
+### Boundary with section 2a
+
+The app owns parsing/publishing JSX, dataflow compilation, schema validation and access resolution. It produces the entry module and existing compiled declarations. The app-side Lambda adapter binds those declarations to the artifact version/user and bundles the entry with a **per-run, DOM-free `page` module**. RunnerService accepts executable JS, JSON input and trusted host capabilities. The runner does not parse JSX or depend on the browser's module loader. Arbitrary user-supplied SQL or identity is never accepted as a replacement for the bound declaration.
+
+Reuse the existing `Dataflow`/`CompiledDataflow` representation in the app; do not invent a second YAML manifest or duplicate its schema in runner contracts. The initial fixture substitutes only the app-side adapter/store, while using the native branch's actual generated page exports and actual signal classes, the real isolate worker and real SQLite service. A production data-operation adapter must still call the app's authenticated query/mutation paths (including policies, receipts and notifications); the fixture's direct SQLite writes are **not** evidence of that integration.
+
+`fixtures/native-*.ts.txt` are unchanged source snapshots from 0eb28194, for reproducible probes only:
+- author-module.server.ts SHA256 `f4e52179168693260c6fc6eae70816159dad33302190c1d08e547f0072b60f64`
+- page-runtime.ts SHA256 `2793e6c17af924a0c1c47cddd096f545fbfdf855f2bfa40e5301db056eb84be4`
+
+Do not turn these snapshots or the fixture store into product code. `page-fixture.mjs` extracts the pure page-module generator and bundles the binder; unused browser mount code is tree-shaken. The fixture has fixed declarations and host-selected SQL. Its fake store starts all queries pending and drives the real binder.
+
+### Claims checked and findings
+
+| Claim | Evidence / decision |
+| --- | --- |
+| Runner/Pi work can proceed without JSX syntax | Existing 22 real-handler runner cases pass after updating main. New fixture executes generated `page` imports inside the same isolate. No JSX parser required by runner. |
+| Native page exports can work without DOM | Five additional boundary cases use native generator/binder snapshots. Complete query → signal change → mutation → fresh query succeeds with `typeof document === 'undefined'`. |
+| Cold `.ready` always waits | **False in native snapshot:** pending store + newly bound query gives loading=false and resolves `[]`. Direct probe reproduces it. Initial sync fixes binding behavior in fixture. Fix upstream binder before final integration; not a runner blocker. |
+| Immediate refresh, errors and run isolation | Fixture proves synchronous pending state, real SQL mutation refresh, errors through `.ready`/mutation promise, superseded response suppression and isolated concurrent runs. Final real DataflowStore integration must repeat these checks. |
+| Existing browser compiler output is directly reusable | **False without a target:** browser output allows remote/CDN imports and runtime mounts DOM components. Reuse extraction/name generation with a restricted runner target; bundle pinned dependencies and exclude browser mounting. |
+| SQL can span every dataset kind | Narrower: imports support local/materialized tables; connected Postgres datasets use source queries. No promise of arbitrary cross-database federation. |
+| Credentials/identity and receipts | Existing real-handler authentication, spoof rejection, owner denial, controlled HTTP/SSE usage and persisted receipt tests cover the mechanism. Program receives no injected secrets. Production gateway/billing and deployment throughput are still product/deployment acceptance, not measured by fixtures. |
+
+### Work order, without waiting for 2a
+
+1. Shared RunnerService contract and local/HTTP transport; durable admission, owner-scoped getRun/events/cancel and receipts. Preserve bounded replay and idempotency tests. `inspect` in the harness becomes public `getRun`; events are cursor-based JSON polling, not SSE in v1.
+2. Restricted bundler, isolated workers and host capabilities; signed app operations and model forwarding. Complete lifecycle/cleanup/restart tests before exposure. No credentials or arbitrary network in program.
+3. Hosted coordinator + fixed Pi program, history/branches and remote work dispatch. Independent of `page`/JSX authoring.
+4. Lambda API and scheduler admit the same version-pinned program. Use compiled fixtures for development only; do not enable publishing/execution of JSX Lambdas until step 5.
+5. Integrate 2a: real extractor + restricted compiler + real DataflowStore binding + authenticated data operations. Cold-load race, rapid changes, errors, cancelled waiters, mutation invalidation, policies/notifications and browser/Lambda separation are the release gate. This is the only dependency on the syntax branch.
+
+**Decision:** proceed with runner/coordinator implementation on a new branch. The known 2a issues do not block that work, but do block declaring JSX Lambda integration complete. Production throughput, warm-pool acquisition and real-provider billing require deployment evidence; this validation makes no latency SLA or security-certification claim.

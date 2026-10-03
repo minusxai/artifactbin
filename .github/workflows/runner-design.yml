@@ -4,6 +4,7 @@ on:
     paths:
       - 'docs/proposals/runner-validation/**'
       - 'services/app/__tests__/runner-design.test.ts'
+      - 'services/app/__tests__/runner-page-boundary.test.ts'
       - '.github/workflows/runner-design.yml'
   workflow_dispatch:
 permissions:
@@ -39,7 +40,7 @@ jobs:
       - name: Prove the path with restricted Linux workers
         env:
           RUNNER_VALIDATION_DOCKER: runner-design-worker
-        run: npm test -- --files services/app/__tests__/runner-design.test.ts
+        run: npm test -- --files services/app/__tests__/runner-design.test.ts services/app/__tests__/runner-page-boundary.test.ts
       - name: Prove OS restrictions independently of V8
         run: node docs/proposals/runner-validation/os-boundary.mjs runner-design-worker
       - name: Prove real PostgreSQL concurrency
