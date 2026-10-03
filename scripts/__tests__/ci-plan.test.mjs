@@ -794,7 +794,7 @@ describe('CI job shape', () => {
     expect(pulls).toHaveLength(1);
     expect(pulls[0].if).toBe("steps.gate-browsers.outputs.postgres == 'true'");
 
-    const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts')));
+    const names = gateNamesOnDisk(readdirSync(path.join(root, 'scripts/gates')));
     const heaviest = (count) => Math.max(...Array.from({ length: count }, (_, offset) =>
       shardOf(names, { index: offset + 1, total: count }, shardWeight, { isolated: CI_ISOLATED_GATES }).reduce((sum, name) => sum + shardWeight(name), 0)));
     expect(heaviest(CI_GATE_SHARDS)).toBeLessThanOrEqual(heaviest(CI_GATE_SHARDS - 1));
