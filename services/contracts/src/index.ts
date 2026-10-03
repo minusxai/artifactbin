@@ -37,3 +37,5 @@ export * from './document-operation';
 export * from './document-update';
 
 export * from './mutation-notifications';
+
+export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunEvent, RunEventPage, RunReceipt, RunSnapshot, RunnerService } from './runner';
