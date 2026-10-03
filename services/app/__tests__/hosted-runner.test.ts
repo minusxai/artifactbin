@@ -48,8 +48,8 @@ it('persists terminal input across app replicas and cancels queued work before d
 it('shows persisted checkpoints and terminal error reasons in the existing terminal view',async()=>{
  const db=await harness.db();const hosted=await createHostedRemoteAgent({runner:idleRunner,secret:'view-secret-'.repeat(4),model:'fixture'});
  const session=await hosted.agent.ensure('alice');const branch=await hosted.coordinator.dispatch({userId:'alice',artifactId:'chat',requestId:'view',message:'hi',model:'fixture'});
- await db.query("UPDATE hosted_branches SET status='running',checkpoint=$2 WHERE id=$1",[branch.branchId,JSON.stringify([{role:'assistant',content:[{text:'checkpoint answer'}]}])]);
- expect((await hosted.agent.view('alice',session.id,0)).snapshot).toContain('checkpoint answer');
+ await db.query("UPDATE hosted_branches SET status='running',checkpoint=$2 WHERE id=$1",[branch.branchId,JSON.stringify([{role:'assistant',content:[{text:'checkpoint answer\nsecond line'}]}])]);
+ expect((await hosted.agent.view('alice',session.id,0)).snapshot).toContain('checkpoint answer\r\nsecond line');
  await db.query("UPDATE hosted_branches SET status='failed',result=$2 WHERE id=$1",[branch.branchId,JSON.stringify({receipt:{reason:'ai_unavailable'}})]);
  expect((await hosted.agent.view('alice',session.id,0)).snapshot).toContain('ai_unavailable');
 });
