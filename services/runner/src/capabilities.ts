@@ -1,4 +1,5 @@
-import type { RunnerJson } from '@artifactbin/contracts';
+import { createHash } from 'node:crypto';
+import type { Actor, RunnerJson } from '@artifactbin/contracts';
 import type { CapabilityContext, RunnerOptions } from './local';
 import { readModel, openaiMessages, boundedJson } from './model.mjs';
 export interface HostCapabilitiesOptions {
@@ -39,6 +40,8 @@ export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOption
         const service = operation === 'ai.open' ? 'ai' : 'artifactbin';
         const observation = { service, operation, durationMs: 0, status: null as number | null, requestId: null as string | null } as CapabilityContext['requests'][number];
         context.requests.push(observation);
+        // Reserve before awaiting: concurrent responses may finish in either order.
+        const key = `${context.runId}:${context.requests.length}`;
         try {
             if (service === 'artifactbin')
                 return await options.artifactbin({ ...context, observation }, operation, args);
@@ -67,7 +70,6 @@ export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOption
             const message = await readModel(response);
             message.model = model;
             context.usage.push({ model, inputTokens: message.usage?.input ?? null, outputTokens: message.usage?.output ?? null });
-            const key = `${context.runId}:${context.requests.length}`;
             streams.set(key, { runId: context.runId, message: { type: 'done', reason: message.stopReason, message } as unknown as RunnerJson, delivered: false });
             context.signal.addEventListener('abort', () => { streams.delete(key); }, { once: true });
             return { streamId: key };
@@ -78,3 +80,9 @@ export function hostCapabilities(options: HostCapabilitiesOptions): RunnerOption
     };
 }
 export { boundedJson };
+
+/** Identity and snapshot binding are chosen outside the program, on both transports. */
+export function runnerIdentity(context: CapabilityContext): Actor {
+    const {request, runId, callId} = context;
+    return {userId:request.userId,credential:'session',...(request.document && request.artifactId && request.artifactVersion && callId ? {runner:{runId,callId,artifactId:request.artifactId,version:request.artifactVersion,editId:request.document.editId,sourceHash:createHash('sha256').update(request.document.source).digest('hex')}} : {})};
+}

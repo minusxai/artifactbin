@@ -5,7 +5,7 @@ import { overHttp } from '@artifactbin/utils';
 import { runnerConfig } from './config';
 import { createRunner } from './local';
 import { runnerHttp } from './http';
-import { hostCapabilities, boundedJson } from './capabilities';
+import { hostCapabilities, boundedJson, runnerIdentity } from './capabilities';
 const config = runnerConfig(process.env);
 if (!config.secret || config.secret.length < 32 || !config.image || !config.appUrl)
     throw Error('Standalone runner requires CONTRACT__ACTOR_SECRET (32+ characters), RUNNER__WORKER_IMAGE and RUNNER__ARTIFACTBIN_BASE_URL');
@@ -14,7 +14,7 @@ const forward = overHttp(config.appUrl, config.secret);
 const runner = await createRunner({ db, dockerImage: config.image, maxConcurrent: config.concurrent, capabilities: hostCapabilities({ ai: config.ai, artifactbin: async (context, operation, args) => {
             if (!operation.startsWith('artifactbin.') && !['read', 'reply'].includes(operation))
                 throw Error('operation_not_allowed');
-            const response = await forward(new Request(config.appUrl + '/api/runner/operations', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: context.signal, body: JSON.stringify({ operation: operation.startsWith('artifactbin.') ? operation.slice(12) : operation, input: args, requestId: context.request.requestId }) }), { userId: context.request.userId, credential: 'session' });
+            const response = await forward(new Request(config.appUrl + '/api/runner/operations', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: context.signal, body: JSON.stringify({ operation: operation.startsWith('artifactbin.') ? operation.slice(12) : operation, input: args, requestId: context.request.requestId, documentSource: context.request.document?.source }) }), runnerIdentity(context));
             if (context.observation)
                 context.observation.status = response.status;
             if (!response.ok) {

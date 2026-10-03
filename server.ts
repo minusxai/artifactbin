@@ -121,7 +121,7 @@ async function main(): Promise<void> {
     const config=runnerConfig(env);for(const name of config.names)sessionEnvNames.add(name);
     const runner=await createRunner({db:queryable,dockerImage:config.image,maxConcurrent:config.concurrent,capabilities:hostCapabilities({ai:config.ai,artifactbin:async(ctx,operation,args)=>{
       if(!operation.startsWith('artifactbin.'))throw Error('operation_not_allowed');
-      const response=await localRunnerOperation(ctx.request.userId,operation.slice(12),args as Record<string,unknown>);
+      const response=await localRunnerOperation(ctx.request.userId,operation.slice(12),args as Record<string,unknown>,ctx);
       if(ctx.observation)ctx.observation.status=response.status;
       if(!response.ok){await response.body?.cancel();throw Error(`artifactbin_http_${response.status}`);}
       return boundedJson(response,1024*1024);

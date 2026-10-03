@@ -1,0 +1,33 @@
+import {expect,it} from 'vitest';
+import {useAppHarness,request} from './harness';
+import {createUser,mintToken,claimToken} from '@/lib/accounts';
+import {POST as publish} from '@/app/api/artifacts/route';
+import {getArtifactById,dataflowForRow} from '@/lib/artifacts';
+import {lambdaOperation} from '@/lib/runner/operations';
+import {runnerIdentity} from '../../runner/src/capabilities';
+import {signActor,verifyActor} from '@artifactbin/utils';
+const harness=useAppHarness();
+it('pins declarations, signs run identity, commits through existing receipts, and rechecks access',async()=>{
+ const db=await harness.db();const owner=await createUser({email:'mxmx_test_lambda_ops@example.com'});const token=await mintToken('lambda');await claimToken(owner.id,token.token);
+ const create=async(json:unknown)=>{const r=await publish(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
+ const dataset=await create({dataset:[{n:1}],access:'readwrite'});
+ const source=`<Helmet><Import name="data" src="ref:${dataset}" /><Query name="rows">{\`select n from data.rows\`}</Query><Mutation name="add">{\`insert into data.rows values (2)\`}</Mutation><Notify name="added" on="add">{\`select null as "to", 'Added row' as message\`}</Notify></Helmet><p>Run</p>`;
+ const id=await create({markup:source});const row=(await getArtifactById(id))!;
+ const ctx={runId:'run-a',callId:1,request:{userId:owner.id,requestId:'test',artifactId:id,artifactVersion:String(row.version),document:{source,editId:row.edit_id},program:{source:'export default()=>null',language:'javascript' as const},input:null},signal:new AbortController().signal,requests:[],usage:[]};
+ const identity=runnerIdentity(ctx),secret='test-actor-signing-secret-long-enough';expect(verifyActor(signActor(identity,secret),secret)).toEqual(identity);
+ const req=()=>request('/api/runner/operations',{method:'POST',actor:identity});
+ expect((await lambdaOperation(request('/api/runner/operations',{actor:{userId:owner.id,credential:'session'}}),'lambda_query',{values:{},only:['rows']},source)).status).toBe(403);
+ expect((await lambdaOperation(req(),'lambda_query',{values:{},only:['rows']},source+'x')).status).toBe(403);
+ // Current source changes, but this run still reads its admitted declarations.
+ await db.query('UPDATE artifacts SET source=$2,version=version+1,meta=$3 WHERE id=$1',[id,'<p>No data now</p>',{}]);
+ expect(await (await lambdaOperation(req(),'lambda_query',{values:{},only:['rows']},source)).json()).toMatchObject({tables:{rows:{rows:[{n:1}]}}});
+ const write=()=>lambdaOperation(req(),'lambda_mutate',{mutation:'add',args:{}},source);
+ const committed=await write();expect(committed.status,await committed.clone().text()).toBe(200);const result=await committed.json();expect(result.mutationRunId).toEqual(expect.any(String));expect(await (await write()).json()).toEqual(result);
+ expect((await db.query('SELECT id FROM notification_jobs WHERE mutation_run_id=$1',[result.mutationRunId])).rows).toHaveLength(1);
+ expect((await getArtifactById(dataset))?.version).toBe(2);
+ expect((await dataflowForRow(row,{viewer:{userId:owner.id,tokenId:null}}))?.state.tables.rows?.rows).toEqual([{n:1},{n:2}]);
+ const other=await createUser({email:'mxmx_test_lambda_other@example.com'});
+ expect((await lambdaOperation(request('/internal',{actor:{...identity,userId:other.id}}),'lambda_query',{values:{},only:['rows']},source)).status).toBe(404);
+ await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[id]);
+ expect((await write()).status).toBe(404);
+});

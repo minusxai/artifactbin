@@ -40,8 +40,8 @@ test('runtime packaging finds npm packages whose names also identify Node builti
 
 test('CLI runtime omits execution-only packages while retaining server externals',async()=>{
  const {EXTERNALS,CLI_RUNTIME_EXTERNALS}=await import('../build/runtime-externals.mjs');
- for(const name of ['esbuild','isolated-vm','@earendil-works/pi-agent-core','@earendil-works/pi-ai','abort-controller','fast-text-encoding','core-js','vite']){
+ for(const name of ['isolated-vm','@earendil-works/pi-agent-core','@earendil-works/pi-ai','abort-controller','fast-text-encoding','core-js','vite']){
   expect(EXTERNALS).toContain(name);expect(CLI_RUNTIME_EXTERNALS).not.toContain(name);
  }
- for(const name of ['pg','@electric-sql/pglite','playwright','playwright-core','@sqlite.org/sqlite-wasm','vega','vega-lite','vega-interpreter','harfbuzzjs','wawoff2','nunjucks'])expect(CLI_RUNTIME_EXTERNALS).toContain(name);
+ for(const name of ['esbuild','pg','@electric-sql/pglite','playwright','playwright-core','@sqlite.org/sqlite-wasm','vega','vega-lite','vega-interpreter','harfbuzzjs','wawoff2','nunjucks'])expect(CLI_RUNTIME_EXTERNALS).toContain(name);
 });

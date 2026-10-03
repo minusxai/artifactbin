@@ -12,5 +12,5 @@ export async function POST(request:Request){
   const owner=actorOf(request)?.userId,hosted=hostedRemoteAgent();if(!owner||!hosted||typeof body.requestId!=='string')return json({error:'unauthorized'},401);
   return hosted.operation(owner,body.requestId,body.operation==='conversation_history'?'history':body.operation,body.input as RunnerJson);
  }
- return runnerOperation(request,body.operation,body.input as Record<string,unknown>);
+ return runnerOperation(request,body.operation,body.input as Record<string,unknown>,typeof body.documentSource==='string'?body.documentSource:undefined);
 }

@@ -76,12 +76,44 @@ results, and marks unfinished runs interrupted rather than replaying side effect
 - `POST /api/artifacts/:id/schedules`: `{cron, timezone, input}`.
 - `GET /api/artifacts/:id/schedules`; `DELETE /api/schedules/:id`.
 
-The app selects the program and published version. A request cannot substitute
-source, user identity or a version. The authoring branch plugs in
-`lambdaPrograms(artifactId, userId) -> {version, program}` on `createAppHost`.
-**Until that real adapter is installed, artifact invocation/scheduling returns
-`lambda_authoring_unavailable`; test fixtures are never deployed as a compiler.**
-This is the agreed section 2a integration gate, not an implementation of its syntax.
+The default app resolver extracts the published JSX artifact's Helmet script and
+compiles its default-exported function with the existing dataflow store and Solid
+bindings. There is no new artifact storage format or separate Lambda parser.
+For example, inside the Helmet script:
+
+```ts
+import {signal, query, mutation} from 'page';
+const [region, setRegion] = signal('$region');
+const monthly = query('$monthly');
+const rename = mutation('$rename');
+export default async function(input) {
+  setRegion(input.region);
+  const rows = await monthly.ready;
+  await rename({from: input.region, to: input.newName});
+  return rows;
+}
+```
+
+Declarations use the same `<Import>`, `<Value default=…>`, `<Query>` and `<Mutation>`
+as browser artifacts. `monthly()`, `monthly.loading()` and `monthly.error()` are
+Solid accessors; `.ready` waits for the current query. Cold queries start pending.
+The compiler allows `page` and pure `solid-js` imports only; DOM, CDN modules,
+dynamic imports and `page.proxy` are refused for this headless entry point.
+Pi's fixed hosted program continues to use the runner's pinned Pi imports.
+
+The app pins source, edit ID, version and compiled program into each admitted run
+and schedule. The runner never accepts that identity from the program: it signs
+run/call ID, artifact/version/edit ID and source hash when calling the app. The
+app rechecks current artifact access and dataset policies, then evaluates the
+pinned declarations. It uses the existing mutation transaction/receipt and
+notification machinery; the run/call identity supplies the mutation key. A
+source mismatch or missing runner attestation is rejected. Editing a document
+after scheduling cannot silently change the scheduled code or its SQL.
+
+`lambdaPrograms(artifactId,userId)` remains an optional trusted host override;
+normal app startup installs the real JSX resolver. A document without an
+executable default export is refused. Browser scripts run natively on the
+document's own origin; Lambda execution remains a separate DOM-free isolate.
 
 A schedule occurrence is persisted before submission and supplies the runner's
 idempotency key. Submission retries deduplicate; executions are not retried.
@@ -120,5 +152,4 @@ npm test -- --files services/runner/__tests__/runner-service.test.ts services/ru
 The runner CI repeats these against the production worker image and checks OS
 restrictions and cleanup. Models in tests are deterministic HTTP/SSE fixtures;
 these are not measurements of paid-provider reliability, pricing or production
-throughput. Deployment activation, pool tuning and the separate 2a compiler are
-outside this PR's activation scope.
+throughput. Deployment activation and pool tuning are outside this PR's activation scope.

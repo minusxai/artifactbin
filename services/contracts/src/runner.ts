@@ -23,6 +23,8 @@ export interface RunStart {
   artifactId?: string;
   /** App pins the published version before submission; not an authorization grant. */
   artifactVersion?: string;
+  /** Trusted app snapshot; retained with the run/schedule, never supplied by author code. */
+  document?: { source: string; editId: string };
   program: { source: string; language: 'typescript' | 'javascript' };
   input: RunnerJson;
   /** Non-secret program configuration only, never host process.env. */

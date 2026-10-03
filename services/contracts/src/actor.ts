@@ -22,6 +22,8 @@ export interface Actor {
    * never secrets; the app reads them for claim and claimable.
    */
   heldTokenIds?: string[];
+  /** Runner-host attestation, absent from browser/token authentication. */
+  runner?: { runId: string; artifactId: string; version: string; editId: string; sourceHash: string; callId: number };
 }
 
 export const ANONYMOUS: Actor = { credential: 'none' };

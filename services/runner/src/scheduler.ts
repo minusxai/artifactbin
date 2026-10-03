@@ -10,6 +10,7 @@ export interface ScheduleInput {
     cron: string;
     timezone: string;
     program: RunStart['program'];
+    document?: RunStart['document'];
     input: RunnerJson;
 }
 interface ScheduleRow {
@@ -58,7 +59,7 @@ export async function createScheduler(db: TransactionalDatabase, runner: RunnerS
                             await db.transaction(async (tx) => { await tx.query("UPDATE runner_schedule_occurrences SET status='cancelled' WHERE request_id=$1", [item.request_id]); await tx.query('UPDATE runner_schedules SET enabled=false,active_request=NULL WHERE id=$1', [item.schedule_id]); });
                             continue;
                         }
-                        const { runId } = await runner.start({ requestId: `cron:${item.request_id}`, userId: s.userId, artifactId: s.artifactId, artifactVersion: s.version, program: s.program, input: s.input });
+                        const { runId } = await runner.start({ requestId: `cron:${item.request_id}`, userId: s.userId, artifactId: s.artifactId, artifactVersion: s.version, program: s.program, ...(s.document ? {document:s.document} : {}), input: s.input });
                         item.run_id = runId;
                         await db.query("UPDATE runner_schedule_occurrences SET run_id=$2,status='running' WHERE request_id=$1", [item.request_id, runId]);
                     }

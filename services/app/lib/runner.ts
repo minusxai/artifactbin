@@ -1,3 +1,7 @@
+import type {CapabilityContext} from '../../runner/src/local';
+import {runnerIdentity} from '../../runner/src/capabilities';
+import {lambdaOperation} from './runner/operations';
+import {resolveLambdaProgram} from './runner/resolve';
 import { createScheduler } from '../../runner/src/scheduler';
 import type { Db } from './platform/db';
 import { z } from 'zod';
@@ -9,13 +13,14 @@ import { OPERATIONS } from './operations/registry';
 import { runOperation } from './operations/http';
 import { services } from './platform/services';
 import { json, readJson, isCrossSiteRequest } from './http';
-/** The authoring branch supplies this adapter; no fixture is enabled in production. */
+/** Published JSX is the default resolver; deployments/tests may supply another trusted compiler. */
 export type LambdaProgramResolver = (artifactId: string, userId: string) => Promise<{
     version: string;
+    document?: RunStart['document'];
     program: RunStart['program'];
 } | null>;
-let resolveProgram: LambdaProgramResolver | undefined;
-export function setLambdaProgramResolver(resolver: LambdaProgramResolver | undefined) { resolveProgram = resolver; }
+let resolveProgram: LambdaProgramResolver = resolveLambdaProgram;
+export function setLambdaProgramResolver(resolver: LambdaProgramResolver | undefined) { resolveProgram = resolver ?? resolveLambdaProgram; }
 async function user(request: Request, write = false) { const actor = await sessionActor(request); if (!actor.viewer?.userId)
     return null; if (write && isCookieCredential(actor) && isCrossSiteRequest(request))
     return null; return actor.viewer.userId; }
@@ -26,15 +31,15 @@ export async function invokeArtifact(request: Request, artifactId: string) {
     const artifact = await getArtifactById(artifactId);
     if (!artifact || artifact.deleted_at || !await canReadArtifact(artifact, { userId, email: null }))
         return json({ error: 'not_found' }, 404);
-    if (!resolveProgram)
-        return json({ error: 'lambda_authoring_unavailable' }, 503);
-    const resolved = await resolveProgram(artifactId, userId);
+    let resolved: Awaited<ReturnType<LambdaProgramResolver>>;
+    try { resolved = await resolveProgram(artifactId,userId); }
+    catch(error) { return json({error:'invalid_lambda',detail:error instanceof Error?error.message:'Compilation failed'},400); }
     if (!resolved)
         return json({ error: 'not_executable' }, 400);
     const body = await readJson(request);
     if (!body || typeof body.requestId !== 'string')
         return json({ error: 'request_id_required' }, 400);
-    return json(await services().runner.start({ userId, artifactId, artifactVersion: resolved.version, requestId: `artifact:${artifactId}:${body.requestId}`, program: resolved.program, input: (body.input ?? null) as RunnerJson }), 202);
+    return json(await services().runner.start({ userId, artifactId, artifactVersion: resolved.version, requestId: `artifact:${artifactId}:${body.requestId}`, program: resolved.program, ...(resolved.document?{document:resolved.document}:{}), input: (body.input ?? null) as RunnerJson }), 202);
 }
 export async function runRequest(request: Request, runId: string, action: 'get' | 'events' | 'cancel') {
     const userId = await user(request, action === 'cancel');
@@ -55,7 +60,8 @@ export async function runRequest(request: Request, runId: string, action: 'get' 
     }
 }
 /** Trusted host uses the same operation registry and ACLs as the CLI. No caller-controlled identity. */
-export async function runnerOperation(request: Request, operation: string, input: Record<string, unknown>) {
+export async function runnerOperation(request: Request, operation: string, input: Record<string, unknown>, documentSource?:string) {
+    if(operation.startsWith('lambda_'))return lambdaOperation(request,operation,input,documentSource);
     const identity = actorOf(request);
     if (!identity?.userId)
         return json({ error: 'unauthorized' }, 401);
@@ -74,8 +80,8 @@ export async function runnerOperation(request: Request, operation: string, input
         return json({ error: 'invalid_operation_input' }, 400);
     return runOperation(operation, request, actor, parsed.data);
 }
-export function localRunnerOperation(userId: string, operation: string, input: Record<string, unknown>) {
-    return runnerOperation(attachActor(new Request('http://artifactbin.internal/internal/runner/operations', { method: 'POST' }), { userId, credential: 'session' }), operation, input);
+export function localRunnerOperation(userId: string, operation: string, input: Record<string, unknown>, context?:CapabilityContext) {
+    return runnerOperation(attachActor(new Request('http://artifactbin.internal/internal/runner/operations', { method: 'POST' }), context?runnerIdentity(context):{ userId, credential: 'session' }), operation, input, context?.request.document?.source);
 }
 let scheduler: Awaited<ReturnType<typeof createScheduler>> | undefined;
 export async function startLambdaSchedules(db: Db) {
@@ -99,14 +105,16 @@ export async function artifactSchedule(request: Request, artifactId: string) {
     const artifact = await getArtifactById(artifactId);
     if (!artifact || artifact.deleted_at || !await canReadArtifact(artifact, { userId, email: null }))
         return json({ error: 'not_found' }, 404);
-    const resolved = await resolveProgram?.(artifactId, userId);
+    let resolved: Awaited<ReturnType<LambdaProgramResolver>>;
+    try { resolved = await resolveProgram?.(artifactId,userId) ?? null; }
+    catch(error) { return json({error:'invalid_lambda',detail:error instanceof Error?error.message:'Compilation failed'},400); }
     if (!resolved)
-        return json({ error: 'lambda_authoring_unavailable' }, 503);
+        return json({ error: 'not_executable' }, 400);
     const body = await readJson(request);
     if (!body || typeof body.cron !== 'string' || typeof body.timezone !== 'string')
         return json({ error: 'invalid_schedule' }, 400);
     try {
-        return json(await scheduler.put({ userId, artifactId, version: resolved.version, program: resolved.program, cron: body.cron, timezone: body.timezone, input: (body.input ?? null) as RunnerJson }), 201);
+        return json(await scheduler.put({ userId, artifactId, version: resolved.version, program: resolved.program, ...(resolved.document?{document:resolved.document}:{}), cron: body.cron, timezone: body.timezone, input: (body.input ?? null) as RunnerJson }), 201);
     }
     catch {
         return json({ error: 'invalid_schedule' }, 400);

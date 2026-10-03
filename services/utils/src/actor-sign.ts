@@ -64,5 +64,10 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   if (typeof claims.email === 'string') actor.email = claims.email;
   if (typeof claims.emailVerified === 'boolean') actor.emailVerified = claims.emailVerified;
   if (Array.isArray(claims.heldTokenIds) && claims.heldTokenIds.every((t) => typeof t === 'string')) actor.heldTokenIds = claims.heldTokenIds.slice(0, 32);
+  if (claims.runner !== undefined) {
+    const r = claims.runner;
+    if (!r || !['runId','artifactId','version','editId','sourceHash'].every(k => typeof (r as unknown as Record<string,unknown>)[k] === 'string') || !Number.isSafeInteger(r.callId) || r.callId < 1) return null;
+    actor.runner = {runId:r.runId,artifactId:r.artifactId,version:r.version,editId:r.editId,sourceHash:r.sourceHash,callId:r.callId};
+  }
   return actor;
 }

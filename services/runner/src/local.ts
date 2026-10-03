@@ -10,6 +10,7 @@ const defaults: RunnerLimits = { timeoutMs: 30000, cpuMs: 200, memoryMiB: 64, ma
 const terminal = (s: string) => !['queued', 'running'].includes(s);
 export interface CapabilityContext {
     runId: string;
+    callId?: number;
     request: RunStart;
     signal: AbortSignal;
     requests: RunReceipt['requests'];
@@ -172,7 +173,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
             else {
                 if (msg.operation !== 'ai.next' && ++r.requestCount > r.limits.maxRequests)
                     throw Error('request_limit');
-                value = await options.capabilities({ runId: id, request: r.request, signal: r.controller.signal, requests: r.requests, usage: r.usage }, msg.operation, msg.args ?? null);
+                value = await options.capabilities({ runId: id, callId, request: r.request, signal: r.controller.signal, requests: r.requests, usage: r.usage }, msg.operation, msg.args ?? null);
             }
             if (!r.finishing)
                 r.child!.stdin.write(json({ type: 'response', id: callId, value }, 2 * 1024 * 1024) + '\n');
@@ -237,6 +238,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 throw Error('runner_closed');
             if (!input || typeof input.userId !== 'string' || !input.userId || input.userId.length > 256 || typeof input.requestId !== 'string' || !input.requestId || input.requestId.length > 256 || !['typescript', 'javascript'].includes(input.program?.language) || typeof input.program.source !== 'string')
                 throw Error('invalid_start');
+            if(input.document && (typeof input.document.source !== 'string' || typeof input.document.editId !== 'string' || !input.artifactId || !input.artifactVersion))throw Error('invalid_document');
             if(!Object.hasOwn(input,'input'))throw Error('invalid_start');
             json(input, 512 * 1024);
             const request = JSON.parse(JSON.stringify(input)) as RunStart;

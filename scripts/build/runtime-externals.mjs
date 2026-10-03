@@ -3,11 +3,13 @@
  * Keep those dependencies in the server boundary but out of the CLI archive.
  */
 const EXECUTION_EXTERNALS = [
-  'esbuild', 'isolated-vm', '@earendil-works/pi-agent-core', '@earendil-works/pi-ai',
+  'isolated-vm', '@earendil-works/pi-agent-core', '@earendil-works/pi-ai',
   'abort-controller', 'fast-text-encoding', 'core-js',
 ];
 export const EXTERNALS = [
   'pg', '@electric-sql/pglite',
+  // Native author modules and Lambda compilation are app-host responsibilities.
+  'esbuild',
   ...EXECUTION_EXTERNALS,
   'playwright', 'playwright-core',
   // The SQLite engine reads its own sqlite3.wasm beside its module.

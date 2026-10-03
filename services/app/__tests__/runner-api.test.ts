@@ -13,7 +13,7 @@ it('pins the server-selected artifact program, protects owner reads and composes
  const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:async()=>null});setServices({runner});close.push(()=>runner.close());
  const stop=await startLambdaSchedules(db);close.push(stop);
  const req=(path:string,input?:unknown,userId=owner.id)=>attachActor(new Request('http://localhost'+path,{method:input===undefined?'GET':'POST',headers:{'content-type':'application/json'},...(input===undefined?{}:{body:JSON.stringify(input)})}),{credential:'session',userId});
- expect((await invokeArtifact(req('/run',{requestId:'one'}),doc.id)).status).toBe(503);
+ expect((await invokeArtifact(req('/run',{requestId:'one'}),doc.id)).status).toBe(400);
  setLambdaProgramResolver(async id=>id===doc.id?{version:'pinned-1',program:{source:'export default i=>i',language:'typescript'}}:null);
  const response=await invokeArtifact(req('/run',{requestId:'one',input:12,userId:'forged',program:{source:'bad'}}),doc.id);expect(response.status).toBe(202);const {runId}=await response.json();
  for(let i=0;i<1200;i++){const result=await runner.getRun({userId:owner.id,runId});if(result.receipt)break;await new Promise(r=>setTimeout(r,10));}
