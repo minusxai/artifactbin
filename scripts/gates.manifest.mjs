@@ -50,21 +50,24 @@ export const GATE_SPECS = Object.freeze([
   { name: 'data-ux', needsMail: false, seconds: 16, timeoutMs: 60_000 },
   { name: 'dataflow', needsMail: true, seconds: 13, timeoutMs: 60_000 },
   // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
-  // run 36838282615 that held a runner to itself and set the run's critical path.
-  { name: 'editor-v2', needsMail: false, serialGroup: 'clipboard', seconds: 45, timeoutMs: 200_000 },
-  { name: 'editor-path', needsMail: true, seconds: 47, timeoutMs: 150_000 },
-  { name: 'editor-exits', needsMail: false, seconds: 42, timeoutMs: 120_000 },
+  // run 36838282615 that held a runner to itself and set the run's critical path. editor-path also
+  // carries hydration's compiled-page edit leg; editor-exits carries mobile's editor sections. Measured in
+  // one gate container (`--servers 1`, 4 CPUs): 28s/43s/41s; editor-engine's and editor-path's timeouts stay 3x
+  // their 45s/47s CI times (the container ran editor-v2's script 17s faster than CI did).
+  { name: 'editor-engine', needsMail: false, serialGroup: 'clipboard', seconds: 28, timeoutMs: 140_000 },
+  { name: 'editor-path', needsMail: true, seconds: 43, timeoutMs: 150_000 },
+  { name: 'editor-exits', needsMail: false, seconds: 41, timeoutMs: 130_000 },
   { name: 'editable-table', needsMail: true, seconds: 36, timeoutMs: 120_000 },
   { name: 'roadmap-views', needsMail: false, seconds: 8, timeoutMs: 60_000 },
   { name: 'fonts', needsMail: false, seconds: 39, timeoutMs: 150_000 },
   { name: 'folders', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   { name: 'fork', needsMail: true, seconds: 6, timeoutMs: 60_000 },
   { name: 'full-kit', needsMail: false, seconds: 33, timeoutMs: 60_000 },
-  { name: 'hydration', needsMail: true, seconds: 31, timeoutMs: 190_000 },
   { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', seconds: 47, timeoutMs: 110_000 },
   // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
   { name: 'row-images', needsMail: false, seconds: 16, timeoutMs: 60_000 },
-  { name: 'inplace-edit', needsMail: false, seconds: 66, timeoutMs: 180_000 },
+  // Reading → editing → agent write → exit, and typing that survives a remote edit: 35s in one gate container.
+  { name: 'inplace-edit', needsMail: false, seconds: 35, timeoutMs: 110_000 },
   // Frames a document on its own origin, so it boots its own production server with APP__PAGES_HOST=lvh.me
   // (scripts/gates/lib/pages-server; the runner's servers have none). Measured 10s against a dev server; its boot adds ~10s.
   { name: 'frame-editor', needsMail: false, seconds: 20, timeoutMs: 90_000 },
@@ -75,7 +78,6 @@ export const GATE_SPECS = Object.freeze([
   // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
   // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
   { name: 'mermaid-prerender', needsMail: false, seconds: 76, timeoutMs: 130_000 },
-  { name: 'mobile', needsMail: false, seconds: 21, timeoutMs: 100_000 },
   // The four native-scripts briefs end to end on a server it boots with APP__PAGES_HOST=lvh.me (./lib/pages-server):
   // frame, direct query, consent and the fetch door, in-frame editing with the script badge, a comment, afbin export.
   { name: 'native-scripts', needsMail: false, seconds: 45, timeoutMs: 150_000 },

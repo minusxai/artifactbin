@@ -1,28 +1,28 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 /**
- * THE EDITOR, end to end — the one editor there is.
+ * THE EDITOR ENGINE, end to end — the one editor there is (was gate-editor-v2).
  *
  * `services/app/lib/editor-v2` is the live engine: InPlaceEditor and the story
  * runtime's edit session import it, so what this gate drives in a real browser
  * is what a reader gets when they press Edit. Sections 1-3 are the engine's own
  * acceptance (native input, block structure, reversible layout, composition,
  * concurrency). The human PATH around it (entering, the source pane, version
- * history, a stranger who cannot save) is gate-editor-path.mjs, and every WAY
- * OUT is gate-editor-exits.mjs: split so no gate shard waits on one long script.
+ * history, a stranger who cannot save, the compiled page's handover) is gate-editor-path.mjs, and every
+ * WAY OUT (and the editor's chrome on a phone) is gate-editor-exits.mjs: split so no gate shard waits on
+ * one long script.
  *
  * The document is framed by the app page on its own origin: the text, its selection and the block chrome
  * (handles, drag preview, drop marker, block status) live INSIDE the frame; the toolbar, the insert menu, the
  * grid-cell control and the alerts are the page's.
  *
- *   usage: node scripts/gates/gate-editor-v2.mjs [base]
+ *   usage: node scripts/gates/gate-editor-engine.mjs [base]
  */
-import assert from 'node:assert/strict';
 import { launchChromium } from './lib/browser.mjs';
 import { DOCUMENT_FRAME, documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 
-const check = createChecker('editor');
+const check = createChecker('editor-engine');
 /** A step whose failure invalidates every step after it: report it, then stop. */
 const must = (condition, label) => { if (!check(condition, label)) throw new Error(label); };
 const base = process.argv[2] ?? 'http://localhost:3030';
@@ -215,7 +215,7 @@ try {
       return hit && button.contains(hit) ? [] : [button.getAttribute('aria-label')];
     }),
   );
-  assert.deepEqual(blockedControls, [], 'every selection control receives clicks at its visible center');
+  must(blockedControls.length === 0, `every selection control receives clicks at its visible center (${blockedControls.join(', ') || 'none blocked'})`);
   await doc().getByRole('button', { name: 'Delete selected block', exact: true }).click();
   await stored((s) => !s.includes('id="first"'), 'selected trash control deletes exactly its source block');
   await undo((s) => s.includes('id="first"'), 'node deletion restores its identity');

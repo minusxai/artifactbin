@@ -1,7 +1,9 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 /**
  * THE HUMAN PATH AROUND THE EDITOR — split out of gate-editor-v2.mjs (its section 4) so no gate
- * shard waits on one two-minute script. gate-editor-v2 drives the engine; this drives the way in.
+ * shard waits on one two-minute script. gate-editor-engine drives the engine; this drives the way in,
+ * ending with the compiled reader's handover to editing (was gate-hydration's edit leg): the served
+ * story stays mounted in its frame, becomes editable, publishes, and a reload is compiled again.
  *
  *   usage: node scripts/gates/gate-editor-path.mjs [base]
  */
@@ -10,7 +12,7 @@ import { documentFrame } from './lib/page-facts.mjs';
 import { expect } from 'playwright/test';
 import { createChecker } from './lib/assert.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { becomeAccountOwner, becomeOwner, startDocument } from '../lib/start-doc.mjs';
+import { becomeAccountOwner, becomeOwner, publishAs, startDocument } from '../lib/start-doc.mjs';
 import { startMailSink, isSignedInAs } from '../lib/mail-login.mjs';
 
 const check = createChecker('editor-path');
@@ -19,6 +21,69 @@ const must = (condition, label) => { if (!check(condition, label)) throw new Err
 const base = process.argv[2] ?? 'http://localhost:3030';
 const browser = await launchChromium();
 const sink = await startMailSink();
+
+/* ── The compiled reader's handover (from gate-hydration) ───────────────────── */
+const READER_HEADER = 'x-mx-reader';
+/** Poll an expression in a page or frame until it is truthy. */
+const waitFor = async (target, expr, ms = 20000) => {
+  for (const deadline = Date.now() + ms; Date.now() < deadline;) {
+    if (await target.evaluate(expr).catch(() => false)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+};
+/**
+ * The compiled page as served IN THE DOCUMENT'S FRAME: its story root (a body child, no wrapper) and every element
+ * in it, captured at DOMContentLoaded, before any island can have run. An init script runs in every frame; on the
+ * app page (which carries no story) it captures nothing.
+ */
+const COMPILED_PROBE = () => {
+  const state = (window.__compiledTakeover = { story: null, served: [] });
+  document.addEventListener('DOMContentLoaded', () => {
+    const story = document.querySelector('body > [data-mx-inline-story]');
+    if (!story) return;
+    state.story = story;
+    state.served = [...story.querySelectorAll('*')];
+  });
+};
+/** The islands' mode, read inside the document's frame on the served story element. */
+const COMPILED_MODE = () => window.__compiledTakeover?.story?.__mxIslands?.mode?.() ?? null;
+/**
+ * Serve `path` until it answers compiled (the compile is off the write path), or say what it answered. A WAIT, not
+ * a verdict: that a published or edited document is served with `x-mx-reader: compiled` is asserted over HTTP in
+ * services/app/__tests__/compiled-serve.test.ts; the frame probe below needs the compiled page to read.
+ */
+async function compiledServed(path) {
+  let served = null;
+  for (const end = Date.now() + 30000; Date.now() < end;) {
+    served = (await fetch(`${base}${path}`, { headers: { accept: 'text/html' } })).headers.get(READER_HEADER);
+    if (served === 'compiled') return 'compiled';
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return served ?? 'absent';
+}
+/** A page in `context` with the probe installed, opened on `path`, its document frame and its errors. */
+async function openCompiled(context, path) {
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`page error: ${String(e).slice(0, 300)}`));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`${m.text().slice(0, 300)} (${m.location().url})`); });
+  await page.addInitScript(COMPILED_PROBE);
+  await page.goto(`${base}${path}`, { waitUntil: 'load', timeout: 90000 });
+  const doc = await documentFrame(page, { timeout: 60000 });
+  return { page, doc, errors };
+}
+/** Poll the frame until the islands report `read`: returns the last mode seen. */
+async function modeWhenRead(page, ms = 30000) {
+  let mode = null;
+  for (const deadline = Date.now() + ms; Date.now() < deadline;) {
+    mode = await (await documentFrame(page)).evaluate(COMPILED_MODE).catch(() => null);
+    if (mode === 'read') return mode;
+    await page.waitForTimeout(100);
+  }
+  return mode;
+}
+
 try {
   /* ── 4. THE HUMAN PATH AROUND THE ENGINE ──────────────────────────────────
    *
@@ -267,6 +332,9 @@ try {
     const email = `mxmx_test_editor_${Date.now().toString(36)}@example.com`;
     const account = await becomeAccountOwner(accountPage, base, { sink, email });
     check(await isSignedInAs(accountPage, email), 'logging in with a code signs you in');
+    // Published first so its off-the-write-path compile overlaps the session leg below.
+    const compiledDoc = await publishAs(accountPage, { title: 'Compiled edit', visibility: 'unlisted', markup: '<article><h1>Compiled edit</h1><p id="para">Before the edit.</p>'
+      + '<Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">a</TabsContent><TabsContent value="b">b</TabsContent></Tabs></article>' });
     const owned = await account.publish({ title: 'Session edited', markup: '<div className="p-10"><h1>Session edited</h1></div>' });
     await accountPage.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
     await accountPage.waitForTimeout(1200);
@@ -285,6 +353,59 @@ try {
     const sessionStored = await accountPage.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), owned.id);
     check((sessionStored.markup ?? '').includes('Edited by the session'),
       'session-authed editing persists through /api/my/artifacts/<id>/edits with no save');
+
+    /*
+     * EDIT FROM THE COMPILED PAGE: the same story accepts the editor, the edit publishes, and a reload is
+     * compiled again. The anonymous and owner takeover verdicts and the static-hydration sweep of the same
+     * gate live in gate-kit-and-fonts.
+     */
+    {
+      const path = `/a/${compiledDoc.id}`;
+      const header = await compiledServed(path);
+      must(header === 'compiled', `edit: the new document reaches its compiled page (${READER_HEADER}: ${header})`);
+      const { page, doc: frame, errors } = await openCompiled(accountCtx, path);
+      check(await modeWhenRead(page) === 'read', 'edit: the owner\'s frame booted the compiled story');
+      const head = await accountPage.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), compiledDoc.id);
+      // The rail's Edit is the app bar's own button now (solid/document/DocumentChrome).
+      await page.click('header[aria-label="Page bar"] [aria-label="Edit"]');
+      await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
+      check(await waitFor(frame, 'window.__compiledTakeover.story.isConnected && document.querySelector("[data-mx-inline-story]") === window.__compiledTakeover.story && !!document.querySelector("#para")?.isContentEditable', 20000),
+        'edit: the compiled story stayed mounted in its frame and became editable');
+      check(await frame.evaluate(() => window.__compiledTakeover.story.__mxIslands?.mode?.()) === 'edit', 'edit: the islands entered edit mode');
+      await waitFor(frame, '!!document.querySelector("#para")?.isContentEditable', 20000);
+      // A click gives the frame the page's keyboard focus; the selection then takes the paragraph's whole text.
+      await frame.click('#para');
+      await frame.evaluate(() => {
+        const el = document.querySelector('#para');
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        getSelection().removeAllRanges();
+        getSelection().addRange(range);
+      });
+      // The keyboard goes to the focused frame.
+      await page.keyboard.type('Edited from the compiled page.');
+      await page.click('[aria-label="Exit edit mode"]');
+      let after = head;
+      for (const end = Date.now() + 20000; Date.now() < end && after.version <= head.version;) {
+        await page.waitForTimeout(500);
+        after = await accountPage.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), compiledDoc.id);
+      }
+      check(after.version > head.version && (after.markup ?? '').includes('Edited from the compiled page.'), `edit: the edit published (v${head.version} → v${after.version})`);
+      check(errors.length === 0, `edit: no page error (${errors.length}: ${errors[0] ?? ''})`);
+      await page.close();
+      // Waited for, not asserted: the header after an edit is compiled-serve.test.ts's ("an edited document is served compiled again").
+      let again = await compiledServed(path);
+      for (const end = Date.now() + 20000; end > Date.now() && again !== 'compiled';) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        again = await compiledServed(path);
+      }
+      const anonymous = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+      const { doc: reloadedDoc } = await openCompiled(anonymous, path);
+      check(await waitFor(reloadedDoc, 'document.querySelector("body > [data-mx-inline-story]")?.textContent?.includes("Edited from the compiled page.") ?? false', 10000),
+        `edit: the reloaded compiled page shows the edit (${READER_HEADER}: ${again})`);
+      await anonymous.close();
+    }
     await accountCtx.close();
   }
 

@@ -10,15 +10,10 @@
  * of timing luck can fake: the frame and the chart embed are the same objects
  * from reading, through typing and an agent's write, and back out again.
  *
- * The third section is the concurrency corner of the same promise: uncommitted
- * typing must survive a remote edit landing, and pressing edit after watching
- * an agent write must open on the live document rather than rewind to the one
- * the page was rendered with.
- *
- * The second half is the trust model. The author's <script> shares the frame's
- * realm with the editor, so a document that tries to forge an edit must write
- * nothing: the runtime mints its session nonce before that script exists
- * (lib/story-runtime/pristine), and the page drops everything unsigned.
+ * The second section is the concurrency corner of the same promise: uncommitted
+ * typing must survive a remote edit landing. (The trust model, an author script
+ * forging an edit, is gate-own-origin-script's; opening the editor on the live
+ * document after watching an agent write is gate-live's.)
  *
  * The document is framed by the app page on its own origin and scrolls in that frame: what is measured,
  * typed into and read is the frame's; where it sits ON SCREEN is the frame's offset plus its own.
@@ -174,60 +169,14 @@ const browser = await launchChromium();
   await page.close();
 }
 
-// ── 2. A document whose author script is hostile ────────────────────────────
-{
-  const AUTHOR = `
-    // Everything a script in this realm can reach, reaching for the write path.
-    try { window.top.postMessage({ type: 'mx:text-edit', path: '0.1', innerHtml: 'FORGED BY THE SCRIPT' }, '*'); } catch (e) {}
-    try { window.top.postMessage({ type: 'mx:text-edit', nonce: 'guessed', path: '0.1', innerHtml: 'FORGED WITH A GUESS' }, '*'); } catch (e) {}
-    // The framed document's own channel to the page: an envelope with a guessed key and a guessed nonce.
-    try { window.parent.postMessage({ type: 'mx:frame-bridge', key: 'guessed-guessed-guessed', payload: { kind: 'event', event: { type: 'mx:flow-edit', nonce: 'guessed', path: '0.1', expected: 'the author wrote this', replacement: 'FORGED THROUGH THE BRIDGE' } } }, '*'); } catch (e) {}
-    setTimeout(function () {
-      try { window.top.postMessage({ type: 'mx:text-edit', path: '0.1', innerHtml: 'FORGED LATE' }, '*'); } catch (e) {}
-    }, 2500);
-  `;
-  const markup = `<Helmet><script>{\`${AUTHOR}\`}</script></Helmet>`
-    + '<div data-design="tw" className="p-10"><h1 id="h">Scripted</h1><p id="lede">the author wrote this</p>'
-    + filler + '</div>';
-  const start = await publish(markup);
-  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-  await becomeOwner(page, BASE, start.token);
-  await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await inlineStory(page);
-  await sleep(6000);
+// A document whose author script is hostile (forges nothing, spends no version) is gate-own-origin-script's.
 
-  const at = await (await api(start.id, start.token, '', {})).json();
-  await openArtifactControls(page);
-  await page.click('[aria-label="Edit artifact"]');
-  await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
-  await sleep(5000);
-
-  const documentInFrame = await documentFrame(page);
-  const frame = () => documentInFrame;
-  check(await frame().evaluate(() => !!document.getElementById('lede')?.isContentEditable),
-    'and it is editable');
-
-  const now = await (await api(start.id, start.token, '', {})).json();
-  /*
-   * Assert the PARAGRAPH, not the absence of the word: the forged payloads
-   * appear in the author script's own source, so searching the markup for them
-   * finds the attempt rather than its result.
-   */
-  const lede = /<p id="lede">([^<]*)<\/p>/.exec(now.markup)?.[1] ?? '(gone)';
-  check(lede === 'the author wrote this', `nothing the author script forged reached the document ("${lede}")`);
-  check(now.version === at.version, `and it spent no versions trying (v${at.version} → v${now.version})`);
-  await page.close();
-}
-
-// ── 3. A human typing while an agent writes ─────────────────────────────────
+// ── 2. A human typing while an agent writes ─────────────────────────────────
 /*
  * The dangerous window: text the human has typed but NOT yet committed — the
  * engine commits on blur — while a remote change lands over the live stream.
  * Adopting the remote document then would remount the canvas and silently
- * discard what they were typing. The second half is the reverse entry order: a
- * reader can watch an agent write for minutes before pressing edit, so the
- * editor has to open on what they are LOOKING AT rather than on the markup the
- * page was server-rendered with.
+ * discard what they were typing.
  */
 {
   const start = await publish('<div className="p-8"><h1>Concurrent edit</h1>'
@@ -277,32 +226,8 @@ const browser = await launchChromium();
   check(/Typed by the human\./.test(await surface().locator('body').innerText()),
     'the editor still shows the human text');
 
-  const viewer = await browser.newPage();
-  await becomeOwner(viewer, BASE, start.token);
-  await viewer.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await sleep(2500);
-  const watched = await read();
-  await api(start.id, start.token, '/edits', {
-    method: 'POST',
-    // Append, so the later check can still anchor on the original text.
-    body: JSON.stringify({
-      edit_id: watched.edit_id,
-      old_string: 'Second paragraph.',
-      new_string: 'Second paragraph. Written while watching.',
-    }),
-  });
-  await sleep(3000);
-  check(/Written while watching/.test(await documentLocator(viewer).locator('body').innerText()),
-    'the viewer saw the live edit');
-  // Reading is chromeless until the artifact controls are opened.
-  await openArtifactControls(viewer);
-  await viewer.click('[aria-label="Edit artifact"]');
-  await sleep(4000);
-  check(/Written while watching/.test(await documentLocator(viewer).locator('body').innerText()),
-    'the editor opens on the LIVE document, not the page it was rendered with');
-  const headNow = await read();
-  check(headNow.version >= 2, `the document is on a real, advanced version (v${headNow.version})`);
-  await viewer.close();
+  // The reverse entry order (a reader watching an agent write, then pressing edit, opens on the LIVE
+  // document) is gate-live's.
   await page.close();
 }
 
