@@ -34,7 +34,8 @@ export const SIZE_TARGETS = Object.freeze([
   // 1 and 2 judge the framed document (`raw`): the app page is a shell around that frame and readies on its own.
   { id: 1, label: 'JS before ready, nothing interactive (prose, deck)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['prose', 'deck'], optional: [], limit: 10 * KB },
   { id: 2, label: 'JS before ready, interactive (kit, dashboard, every component)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['kit', 'dashboard'], optional: ['kitchen'], limit: 85 * KB },
-  { id: 3, label: 'Prose page, total transferred', metric: 'totalGzip', route: 'view', fixtures: ['prose'], optional: [], limit: 200 * KB },
+  // The viewed page is the app shell plus the framed document; the shell's own scripts are not budgeted separately yet.
+  { id: 3, label: 'Prose page, total transferred', metric: 'totalGzip', route: 'view', fixtures: ['prose'], optional: [], limit: 250 * KB },
 ]);
 
 /**

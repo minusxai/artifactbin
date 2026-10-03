@@ -67,7 +67,7 @@ const doc = await j(await api('/api/artifacts', { markup: doc1(ds.id) }));
 check(!!doc.id, `the dataflow document published (${doc.url ?? doc.error})`);
 const bad = await api('/api/artifacts', { markup: doc1(ds.id).replace('sum(revenue)', 'sum(revenu)') });
 const badBody = await j(bad);
-check(bad.status === 400 && badBody.error === 'invalid_sql' && /<Query name=\\"sales\\"> reads revenu — no such column/.test(JSON.stringify(badBody.details)),
+check(bad.status === 400 && badBody.error === 'invalid_sql' && /<Query> \\"sales\\" reads revenu — no such column/.test(JSON.stringify(badBody.details)),
   'a bad column is refused at publish, the compiler naming the query and the column');
 const retired = await api('/api/artifacts', { markup: `<Question data="ref:${ds.id}" />` });
 const retiredBody = await j(retired);
