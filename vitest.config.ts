@@ -145,6 +145,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
             'services/browser/__tests__/internal-assets.test.ts',
+            'services/browser/__tests__/session-pages.test.ts',
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
           ],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],

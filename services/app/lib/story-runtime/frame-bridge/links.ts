@@ -55,7 +55,12 @@ export function followAppLinks(win: Window, appOrigin: string, answerMs = NAVIGA
   const parent = win.parent;
   let waiting: { href: string; timer: number } | null = null;
   const settle = () => { if (waiting) { win.clearTimeout(waiting.timer); waiting = null; } };
-  const takeTop = (href: string) => { try { win.top!.location.href = appOrigin + href; } catch { /* the sandbox refused */ } };
+  const takeTop = (href: string) => {
+    let url: URL;
+    try { url = new URL(href, appOrigin); } catch { return; }
+    if (url.origin !== appOrigin) return;
+    try { win.top!.location.href = url.href; } catch { /* the sandbox refused */ }
+  };
 
   const onAnswer = (event: MessageEvent) => {
     if (!waiting || event.source !== parent || event.origin !== appOrigin) return;

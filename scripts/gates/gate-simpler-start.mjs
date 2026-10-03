@@ -20,9 +20,13 @@ const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('simpler-start');
 
 // ── 1. the human's leg: setup guide → document ──
-const browser = await launchChromium();
+// `navigator.clipboard` exists only in a secure context: the app is `app.lvh.me` over http, so this browser is told to
+// treat it as secure (what `localhost` was). The headless shell ignores the switch; the full browser honours it.
+const secureArgs = [`--unsafely-treat-insecure-origin-as-secure=${new URL(B).origin}`];
+const browser = await launchChromium({ channel: 'chrome', headless: true, args: secureArgs })
+  .catch(() => launchChromium({ channel: 'chromium', headless: true, args: secureArgs }));
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(B).origin });
 await page.goto(`${B}/docs-human`, { waitUntil: 'load' });
 const create = page.getByRole('button', { name: 'Create a live document for my agent', exact: true });
 await create.waitFor();

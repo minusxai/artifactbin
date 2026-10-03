@@ -50,9 +50,20 @@ const COMPILED_VERDICT = () => {
     same: !!story && story.isConnected && document.querySelector('[data-mx-inline-story]') === story,
     lost: story ? served.filter((n) => !story.contains(n)).length : -1,
     staticNodes: staticNodes.length,
-    staticChanged: staticNodes.filter(({ node, attrs, text }) => !story?.contains(node)
-      || JSON.stringify([...node.attributes].map((attr) => [attr.name, attr.value])) !== JSON.stringify(attrs)
-      || [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('') !== text).length,
+    ...(() => {
+      const textOf = (node) => [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('');
+      const changed = staticNodes.filter(({ node, attrs, text }) => !story?.contains(node)
+        || JSON.stringify([...node.attributes].map((attr) => [attr.name, attr.value])) !== JSON.stringify(attrs)
+        || textOf(node) !== text);
+      // The first changed node, named: what it was served as and what it is now.
+      const first = changed[0];
+      const staticChangedFirst = first ? {
+        tag: first.node.tagName, inStory: !!story?.contains(first.node),
+        served: { attrs: first.attrs, text: first.text.slice(0, 80) },
+        now: { attrs: [...first.node.attributes].map((attr) => [attr.name, attr.value]), text: textOf(first.node).slice(0, 80) },
+      } : null;
+      return { staticChanged: changed.length, staticChangedFirst };
+    })(),
     reactOwned: story ? [story, ...served].filter((n) => Object.keys(n).some((k) => k.startsWith('__reactFiber$'))).length : -1,
     mode: story?.__mxIslands?.mode?.() ?? null,
     framed: document.documentElement.classList.contains('mx-framed'),
@@ -194,7 +205,7 @@ async function runCompiledTakeover({ ownerContext, ownerPage, anonymous, kit, fi
     await page.waitForTimeout(500);
     const verdict = await (await documentFrame(page)).evaluate(COMPILED_VERDICT);
     check(verdict.captured && verdict.staticNodes > 0 && verdict.staticChanged === 0,
-      `static hydration ${fixture.key}: ${verdict.staticNodes} static nodes retained attributes and direct text (${verdict.staticChanged} changed)`);
+      `static hydration ${fixture.key}: ${verdict.staticNodes} static nodes retained attributes and direct text (${verdict.staticChanged} changed${verdict.staticChangedFirst ? `; first: ${JSON.stringify(verdict.staticChangedFirst)}` : ''})`);
     check(errors.length === 0, `static hydration ${fixture.key}: no page errors (${errors[0] ?? ''})`);
     await page.close();
   }
