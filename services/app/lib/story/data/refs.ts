@@ -177,16 +177,9 @@ export function findExternalSubresources(source: string): ValidationError[] {
         // (host allowlist, id-constructed URL). Validated here at the door —
         // publishing a player that renders "unsupported source" would tell the
         // author nothing (the findBrokenEmbeds principle below).
-        // A WEB URL in an image position is INPUT vocabulary, not a violation:
-        // the publish door imports it into the global URL cache and the served
-        // document is pointed at our copy (lib/story/assets/external-images,
-        // lib/web-assets). Exempted here so /api/preview — which never ingests
-        // — agrees with publish, per the always-on-error-array rule. Every
-        // other position stays rejected.
-        // The same exemption for a PDF a document links by URL: the publish
-        // door imports it under its own cap and the serve-time mapping points
-        // the card at our copy. Here rather than only at the import so
-        // /api/preview — which fetches nothing — agrees with publish.
+        // A WEB URL in an image position, or a PDF a <File> card links, is
+        // served as written: the document's CSP admits `img-src https:`, and
+        // publish fetches nothing. Every other position stays rejected.
         if (/^https?:\/\//i.test(value)
           && ((el.tag.toLowerCase() === 'img' && name === 'src')
             || (el.tag === 'Video' && name === 'poster')

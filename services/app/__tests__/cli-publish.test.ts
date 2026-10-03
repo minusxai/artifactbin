@@ -4,7 +4,7 @@
  * handler-transport setup, which `cli-harness.ts` now owns.
  */
 
-import { expect, it, vi, afterEach, beforeEach } from 'vitest';
+import { expect, it, afterEach, beforeEach } from 'vitest';
 import { writeFile, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { useAppHarness, request } from './harness';
@@ -96,15 +96,7 @@ describe('cli-sync-integration', () => {
 });
 
 describe('cli-plan-probe', () => {
-  it('refuses invalid publication before any import hook runs', async () => {
-    const importAsset = vi.fn(async () => null);
-    const result = await publishJsx({}, '<img src="https://example.com/probe.png" /><UnknownPlanningComponent />', { importAsset });
-    expect(result).toBeInstanceOf(Response);
-    expect((result as Response).status).toBe(400);
-    expect(importAsset).not.toHaveBeenCalled();
-  });
-
-  it('can reject the same invalid markup with the import capability withheld', async () => {
+  it('rejects invalid markup that names a web image', async () => {
     const result = await publishJsx({}, '<img src="https://example.com/probe.png" /><UnknownPlanningComponent />', {});
     expect(result).toBeInstanceOf(Response);
     expect((result as Response).status).toBe(400);

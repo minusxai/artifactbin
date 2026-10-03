@@ -127,8 +127,7 @@ Social preview: `<Helmet>` metas `artifactbin:og-image` and
 Repeated galleries: use [dataset image bindings](markup-repeat.md).
 
 - `<img src="ref:<imageId>" />` — an [uploaded image](publishing-datasets.md).
-  Web URLs also work: publish stores a copy, keeps your URL in the source,
-  and warns if fetching fails.
+  Web URLs also work and are served as written.
 - In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
 <!--bundle:skip-->

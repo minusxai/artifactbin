@@ -1,7 +1,6 @@
 import {isPersonMentionHref} from '../../annotations/person-mentions';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../validation/atlas-schemas';
 import {parseJsx} from '../../jsx/parse';
-import {collectExternalAssetUrls} from '../assets/external-images';
 import {canonicalText} from '../annotations/annotation-range';
 import type {JsxNode} from '../../jsx/types';
 import {parseAnnotationOperations} from '../annotations/annotation-edits';
@@ -66,19 +65,17 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
 export function prepareClientDocumentUpdate(base:ClientDocumentSnapshot,change:ClientDocumentChange):DocumentUpdate {
  return prepareClientDocument(base,change).update;
 }
-/** External reference shapes and cached assets are authoring inputs. Resolve
- * only the affected context before submitting the independent atomic commit. */
-export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>,onWarnings?:(warnings:NonNullable<DocumentResourcePreparation['warnings']>)=>void):Promise<DocumentUpdate> {
- return attachAuthoringContext(prepareClientDocument(base,change),prepareContext,onWarnings);
+/** External reference shapes are authoring inputs. Resolve only the affected
+ * context before submitting the independent atomic commit. */
+export async function prepareClientDocumentPublication(base:ClientDocumentSnapshot,change:ClientDocumentChange,prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>):Promise<DocumentUpdate> {
+ return attachAuthoringContext(prepareClientDocument(base,change),prepareContext);
 }
-/** Resolve a prepared update's authoring context (asset warnings, dataset bindings) and attach it. */
-export async function attachAuthoringContext(prepared:{update:DocumentUpdate;context?:string},prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>,onWarnings?:(warnings:NonNullable<DocumentResourcePreparation['warnings']>)=>void):Promise<DocumentUpdate> {
- if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.warnings?.length)onWarnings?.(resources.warnings);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
+/** Resolve a prepared update's authoring context (dataset bindings) and attach it. */
+export async function attachAuthoringContext(prepared:{update:DocumentUpdate;context?:string},prepareContext:(source:string)=>Promise<DocumentResourcePreparation|void>):Promise<DocumentUpdate> {
+ if(prepared.context){const resources=await prepareContext(prepared.context);if(resources?.datasetBindings?.length)prepared.update.datasetBindings=resources.datasetBindings;}
  return prepared.update;
 }
 export function needsAuthoringContext(source:string):boolean {
- const assets=collectExternalAssetUrls(source);
- if(assets.images.length||assets.fonts.length||assets.pdfs.length)return true;
  const parsed=parseJsx(source);if(!parsed.ok)return false;
  const needs=(nodes:JsxNode[]):boolean=>nodes.some(node=>{
   if(node.type!=='element')return false;

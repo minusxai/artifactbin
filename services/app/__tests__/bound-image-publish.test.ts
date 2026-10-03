@@ -87,16 +87,18 @@ describe('a bound src is a binding, not an external URL', () => {
     expect(JSON.stringify(body.details ?? body)).toContain('$nope');
   });
 
-  it('a LITERAL URL is still imported at publish — the two cases live side by side', async () => {
+  it('a LITERAL URL is not imported at publish either: it is served as written beside the bound one', async () => {
     hits.length = 0;
     const { res, body } = await publish(`${HELMET}<div><img src="${web}/logo.png" /><img src="$pick" /></div>`);
     expect(res.status).toBe(201);
-    expect(hits).toEqual(['/logo.png']);
+    expect(hits).toEqual([]);
     const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
-    expect(await page.text()).toContain(assetUrlFor(`${web}/logo.png`));
+    const html = await page.text();
+    expect(html).toContain(`src="${web}/logo.png"`);
+    expect(html).not.toContain(assetUrlFor(`${web}/logo.png`));
   });
 
-  it('a web URL in a NON-image position publishes as written: external subresources are allowed, and only `img src` is imported', async () => {
+  it('a web URL in a NON-image position publishes as written: external subresources are allowed', async () => {
     hits.length = 0;
     const url = `${web}/clip.mp4`;
     const { res, body } = await publish(`${HELMET}<div><img src="$pick" /><input value="$pick" /><Video src="${url}" poster="$pick" /></div>`);

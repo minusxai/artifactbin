@@ -45,10 +45,7 @@ describe('interactive elements a script can drive', () => {
    */
   it('refuses media it cannot serve self-contained — the URL gate, not the tag list', () => {
     expect(validate('<video src="data:video/mp4;base64,AAAA"></video>').length).toBeGreaterThan(0);
-    // An <img src> URL is IMPORTED at the door now (lib/story/assets/external-images)
-    // rather than refused, so the stored document is still self-contained —
-    // by owning a copy instead of by rejecting the author. Every OTHER
-    // subresource position keeps the hard refusal:
+    // An <img src> URL is served as written; every OTHER subresource position keeps the hard refusal:
     expect(findExternalSubresources('<img srcSet="https://cdn.example/x.png 1x" />').length).toBeGreaterThan(0);
     expect(findExternalSubresources('<div background="https://cdn.example/b.png" />').length).toBeGreaterThan(0);
   });

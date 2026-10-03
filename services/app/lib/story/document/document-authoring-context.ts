@@ -7,7 +7,7 @@ import {MAX_DOCUMENT_BYTES,type DocumentResourcePreparation} from '@artifactbin/
 import {getDb} from '../../platform/db';
 import { editorScope, type TokenActor } from '../../artifacts/access';
 import { refLoaderForActor } from '../../artifacts/dataflow';
-import { assetImporterFor, fontResolver } from '../../artifacts/store';
+import { fontResolver } from '../../artifacts/store';
 import {json} from '../../http/http';
 import {prepareJsx,applyPreparedJsx} from './jsx-tier';
 export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{
@@ -17,7 +17,7 @@ export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string
  if(!owner)return json({error:'not_found'},404);
  const prepared=await prepareJsx({},body.source,{loadRef:refLoaderForActor({tokenId:owner.token_id,userId:owner.user_id})});
  if(prepared instanceof Response)return prepared;
- const ready=body.dryRun===true?prepared.content:await applyPreparedJsx(prepared,{importAsset:assetImporterFor(owner.token_id,owner.user_id),resolveFont:fontResolver()});
+ const ready=body.dryRun===true?prepared.content:await applyPreparedJsx(prepared,{resolveFont:fontResolver()});
  if(ready instanceof Response)return ready;
  const datasetBindings:NonNullable<DocumentResourcePreparation['datasetBindings']>=[];
  const refs=(ready.meta.refs as Array<{id:string}>|undefined)??[];
@@ -28,5 +28,5 @@ export async function prepareDocumentAuthoringContext(actor:TokenActor,id:string
   const bound=retainUserScope(dataset,{meta:{userScopeDocument:id}});
   datasetBindings.push({id:dataset.id,version:dataset.version,source:bound.source,meta:{catalog:bound.meta.catalog,columns:bound.meta.columns,userScopeDocument:id}});
  }
- return json({valid:true,...(datasetBindings.length?{datasetBindings}:{}),...(ready.warnings?.length?{warnings:ready.warnings}:{})});
+ return json({valid:true,...(datasetBindings.length?{datasetBindings}:{})});
 }
