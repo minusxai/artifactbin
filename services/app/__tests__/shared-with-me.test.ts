@@ -14,7 +14,7 @@
  *  - unsharing removes the row (the dialog full-replaces the list),
  *  - a share whose artifact was deleted lists nothing (no dangling rows).
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { DELETE as deleteArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
@@ -22,14 +22,12 @@ import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/rout
 
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername, listSharedWithEmail, setUsername } from '@/lib/accounts';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function ownerFixture() {

@@ -6,7 +6,7 @@
  * keep their reference: a read is permitted, and copying it would freeze a live source.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { agentCookie, useAppHarness } from './harness';
+import { agentCookie, useAppHarness, setSession } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
@@ -18,10 +18,8 @@ import { viewersWritePolicy } from '@artifactbin/utils';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 /**
  * THE FAULT INJECTOR for the atomicity case. The copies and the page are one
  * transaction, and the only honest way to show that is to break it in the

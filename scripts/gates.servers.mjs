@@ -68,3 +68,16 @@ export function resolveServers({ args = [], bases = [], cpus } = {}) {
 export function runSecret(env = process.env) {
   return env.AUTH__SECRET || `gates-local-${randomBytes(16).toString('hex')}`;
 }
+
+/**
+ * HOW MANY OF THOSE SERVERS A SET CAN USE. A set made only of gates that lose races under a neighbour's
+ * browser load (gates.manifest.mjs `CI_ISOLATED_GATES` — CI gives them one shard together) runs on ONE
+ * server, one gate after another: two servers would put them beside each other, which is the load they
+ * were isolated from. Any other set, and a run that boots nothing (base URLs), keeps `servers`.
+ * @param {number} servers  what resolveServers chose
+ * @param {readonly string[]} names  the selected gates
+ * @param {readonly string[]} isolated
+ */
+export function serversFor(servers, names, isolated) {
+  return servers > 1 && names.length > 0 && names.every((name) => isolated.includes(name)) ? 1 : servers;
+}

@@ -5,7 +5,7 @@
  * twin creates a genuinely user-owned artifact, so it needs a token to hang it
  * on — ensureUserToken mints one 'web' token per account and reuses it.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as sessionCreate, GET as sessionList } from '@/app/api/my/artifacts/route';
@@ -16,18 +16,18 @@ import { storeImageContent } from '@/lib/story/data/data-tiers';
 import { mintToken } from '@/lib/accounts';
 import { createUser } from '@/lib/accounts';
 import type { StoredContent } from '@/lib/story/document/input';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as previewRoute } from '@/app/api/preview/route';
 import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { optimiseImage } from '@/lib/images/optimise';
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
 
 const BASE = 'http://localhost:3000';
 
 // The session routes read auth(); this file owns the mock (mutable id).
 const sessionUser = { id: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id } } : null) }));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

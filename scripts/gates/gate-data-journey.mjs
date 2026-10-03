@@ -633,7 +633,8 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       // loads, so a "data unavailable" flash during loading is seen; re-resolved each poll in case the page replaces it.
       const editFrame = () => p.locator(DOCUMENT_FRAME).elementHandle({ timeout: 150 }).then((h) => h?.contentFrame() ?? null, () => null);
       let sawUnavailable = false;
-      for (let i = 0; i < 70; i++) {
+      // Up to 30 s: the editor loads its chart engine beside the other legs on a loaded CI runner.
+      for (let i = 0; i < 200; i++) {
         await p.waitForTimeout(150);
         const fr = await editFrame();
         const txt = fr ? await fr.locator('body').innerText({ timeout: 1000 }).catch(() => '') : '';

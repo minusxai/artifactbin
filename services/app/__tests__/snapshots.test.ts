@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { renderedSchema } from '@/__tests__/rendered-schema';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -27,8 +27,8 @@ import { updateSharingFor } from '@/lib/artifacts';
 import { createSnapshotStore, drainSnapshotRevalidations, enableSnapshotRevalidations, snapshotKeyFor, snapshotStore } from '@/lib/compiled-page/snapshots.server';
 import { SNAPSHOT_INPUT_SETS_PER_ARTIFACT, SNAPSHOT_MAX_AGE_MS } from '@/lib/compiled-page/contract';
 
-vi.mock('@/auth', () => ({ auth: async () => null }));
 const harness = useAppHarness();
+beforeEach(() => setSession(null));
 // A serving process turns background revalidation on at its composition root; this file is one.
 enableSnapshotRevalidations();
 

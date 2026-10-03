@@ -14,7 +14,7 @@
  *     localStorage token had, and no more.
  */
 import { pagesSite } from '@/lib/serving/pages-origin';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DELETE as sessionDelete, POST as exchangeRoute } from '@/app/api/session/token/route';
 import { GET as listMine } from '@/app/api/my/artifacts/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
@@ -27,7 +27,7 @@ import { existingPaste } from '@/lib/serving';
 import { mintToken, resolveTokenById, revokeToken } from '@/lib/accounts';
 import { claimableTokensById, claimTokenById, createUser } from '@/lib/accounts';
 import { getArtifactFor } from '@/lib/artifacts';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { agentCookie, useAppHarness, request, setSession } from '@/__tests__/harness';
 
 // harness-exempt: cookie exercises the agent-session codec and cookie attributes themselves
 
@@ -35,9 +35,9 @@ const BASE = 'http://localhost:3000';
 
 /** A stand-in account session, so the account path can be exercised too. */
 const sessionUser = { id: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id } } : null) }));
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
 
 /** The Set-Cookie value the exchange handed back, as a bare cookie value. */
 const cookieFrom = (res: Response): string | null => {

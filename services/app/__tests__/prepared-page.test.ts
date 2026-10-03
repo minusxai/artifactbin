@@ -8,25 +8,28 @@
  * and the server render are wrapped (never replaced) so a hit can be shown to
  * call none of them.
  */
-import { framedDocument } from './harness';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { framedDocument, useAppHarness, request, setSession } from '@/__tests__/harness';
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { mintToken } from '@/lib/accounts';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { mintToken, claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer, BOOTSTRAP_ID } from '@/server/app';
-import { drainPreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
+import { drainPreparedPageWarmups, enablePreparedPageWarmups } from '@/lib/story/prepared/prepared-page.server';
 import { applyStyleOverrides } from '@/lib/story/styles/style-overrides';
 import { inlineStoryCss as realInlineStoryCss, inlineStoryNodes as realInlineStoryNodes } from '@/lib/story/styles/inline-css';
 import { prepareStoryRuntime } from '@/lib/story/prepared/prepare-runtime.server';
 import { storyBaseCss } from '@/lib/story/styles/story-base-css';
 import { readerStorySheet } from '@/lib/story/prepared/reader-sheet.server';
 import { observedSourceBody } from '@/__tests__/prepared-document';
-import { ISLAND_DATA_ID } from '@/lib/compiled-page/contract';
+import { ISLAND_DATA_ID, DOCUMENT_MODULE_PATH, type CompiledPage, type StoredCompile, READER_MODE_HEADER } from '@/lib/compiled-page/contract';
+import { readFileSync } from 'node:fs';
+import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { compiledPageFailures } from '@/lib/compiled-page/serve.server';
+import path from 'node:path';
 
 const spies = vi.hoisted(() => ({ parse: 0, css: 0, nodes: 0, render: 0 }));
 vi.mock('@/lib/jsx/parse', async (original) => {
@@ -41,10 +44,13 @@ vi.mock('@/lib/story/styles/inline-css', async (original) => {
     inlineStoryNodes: (...args: Parameters<typeof actual.inlineStoryNodes>) => { spies.nodes++; return actual.inlineStoryNodes(...args); },
   };
 });
+// The failure contract's inline budget (merged from compiled-fallback-policy.test.ts): zero for this file, so every
+// inline compile is "over budget" and logged; nothing else in this file reads the budget.
+vi.mock('@/lib/compiled-page/contract', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/compiled-page/contract')>()), COMPILE_INLINE_BUDGET_MS: 0 }));
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
 
 const harness = useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const asSession = (u: { id: string; email: string } | null) => { sessionUser.id = u?.id ?? ''; sessionUser.email = u?.email ?? ''; };
 const resetSpies = () => { spies.parse = 0; spies.css = 0; spies.nodes = 0; spies.render = 0; };
@@ -266,5 +272,168 @@ describe('the served HTML', () => {
     expect(style?.textContent).toContain('& more');
     expect(html.split(style!.textContent!.slice(0, 200)).length - 1).toBe(1);
     dom.window.close();
+  });
+});
+
+// Merged from prepared-page-compiled.test.ts.
+/**
+ * THE COMPILE BESIDE THE PREPARED PAGE (docs/phase2-architecture.md §2.1, §6; lib/story/prepared/prepared-page.server
+ * `PreparedPage.compiled`): every deployment stores the version's compiled page or its recorded
+ * failure in the same row as the prepared page, keyed with the compiler build. Real publish handler on the harness's
+ * isolated database.
+ */
+describe('the compile beside the prepared page', () => {
+  const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
+  const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
+
+  // Publish warms the head's prepared page after commit (warmPreparedPage), as the server does.
+  beforeAll(() => enablePreparedPageWarmups());
+  const WAS_UNPORTED = '<Helmet><Value name="rows" type="table" value={[{"k":"a"}]} /></Helmet><ul id="l"><For each={$rows} keyBy="k"><li id="i"><Separator id="s" /></li></For></ul>';
+
+  async function publish(markup: string): Promise<string> {
+    const user = await ensureUsername(await createUser({ email: `mxmx_test_compile_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const t = await mintToken('compile');
+    await claimToken(user.id, t.token);
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', title: 'Compiled', markup } }));
+    if (made.status !== 201) throw new Error(await made.text());
+    const id = ((await made.json()) as { id: string }).id;
+    await drainPreparedPageWarmups();
+    return id;
+  }
+  async function stored(id: string): Promise<{ key: string; compiled: StoredCompile | undefined }> {
+    const row = (await (await harness.db()).query<{ page_key: string; page: { compiled?: StoredCompile } }>('SELECT page_key, page FROM prepared_pages WHERE artifact_id = $1', [id])).rows[0]!;
+    return { key: row.page_key, compiled: row.page.compiled };
+  }
+
+  describe('the compiled page on the prepared page', () => {
+    it('a publish stores the compile, keyed by the compiler build', async () => {
+      const id = await publish(fixture('prose.jsx'));
+      const { key, compiled } = await stored(id);
+      expect(compiled).toMatchObject({ build: loadCompilerBuild().id, islands: [], module: null, ssr: null, unported: [] });
+      expect((compiled as { html: string }).html).toContain('A plain prose document');
+      expect(key).toMatch(/^v:\d+$/);
+    });
+
+    it('a page with islands: the browser module is served, the SSR module (the whole page) never is', async () => {
+      const id = await publish(fixture('kit.jsx'));
+      const compiled = (await stored(id)).compiled as CompiledPage;
+      expect(compiled.html).toContain('role="tablist"');
+      expect(compiled.module!.url).toBe(`${DOCUMENT_MODULE_PATH}/${compiled.module!.sha}.js`);
+      // Bound to the serving build's runtime; unversioned, a module naming the runtime by specifier is never served.
+      expect((await app.request(`${compiled.module!.url}?b=${loadCompilerBuild().id}`)).status).toBe(200);
+      expect((await app.request(compiled.module!.url)).status).toBe(404);
+      expect(compiled.ssr!.url).toBe(`islands-ssr/${compiled.ssr!.sha}`);
+      expect((await app.request(`${DOCUMENT_MODULE_PATH}/${compiled.ssr!.sha}.js`)).status).toBe(404);
+    });
+
+    it('a static component inside a row compiles with the Solid kit and stores its whole page', async () => {
+      // The row's Separator is a Solid kit component and its attributes are filled for each row.
+      // The refusal door in compiledFor remains for genuinely unported components.
+      const id = await publish(WAS_UNPORTED);
+      const compiled = (await stored(id)).compiled as CompiledPage;
+      expect(compiled).toMatchObject({ build: loadCompilerBuild().id, unported: [] });
+      expect('error' in compiled).toBe(false);
+      expect(compiled.reactStatic).toEqual([]);
+      expect(compiled.kit.islands).toContain('Separator');
+      expect(compiled.html).toContain('data-slot="separator"');
+    });
+  });
+});
+
+// Merged from compiled-fallback-policy.test.ts.
+/**
+ * THE FAILURE CONTRACT (docs/phase2-architecture.md §6; lib/compiled-page/serve.server). With no other
+ * renderer left, a missing compile or one below a hand-raised compatibility minimum is compiled inline and
+ * waited for; a compile from another build is served.
+ * The inline budget only decides whether that is logged as
+ * slow, and a compile that fails is a reported 500. Real routes, the harness's database, the reader
+ * inline budget at zero for this file (every inline compile is "over budget").
+ */
+describe('the compiled-page failure contract', () => {
+  const params = (id: string) => ({ params: Promise.resolve({ id }) });
+  const FIXTURES = path.resolve(process.cwd(), '../../scripts/fixtures/page-speed');
+  const fixture = (name: string) => readFileSync(path.join(FIXTURES, name), 'utf8');
+
+  async function owner() {
+    const user = await ensureUsername(await createUser({ email: `mxmx_test_policy_${Math.random().toString(36).slice(2, 8)}@example.com` }));
+    const t = await mintToken('policy'); await claimToken(user.id, t.token);
+    return { user, token: t.token };
+  }
+  async function publish(token: string, body: Record<string, unknown>): Promise<string> {
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
+    if (made.status !== 201) throw new Error(await made.text());
+    const id = ((await made.json()) as { id: string }).id;
+    await drainPreparedPageWarmups();
+    return id;
+  }
+  const raw = (id: string, search = '?reader=compiled') => rawRoute(request(`/a/${id}/raw${search}`), params(id));
+  const storedBuild = async (id: string) => (await (await harness.db()).query<{ build: string | null }>(`SELECT page->'compiled'->>'build' AS build FROM prepared_pages WHERE artifact_id = $1`, [id])).rows[0]!.build;
+  const storyText = (html: string) => new JSDOM(html).window.document.getElementById('mx-story-root')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+
+  describe('a compile from another build', () => {
+    it('the stored compile keeps serving without an inline compile', async () => {
+      const who = await owner();
+      const id = await publish(who.token, { title: 'Perf B kit', markup: fixture('kit.jsx') });
+      await (await harness.db()).query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled,build}', '"0000000000000000"') WHERE artifact_id = $1`, [id]);
+      const warn = vi.spyOn(console, 'warn');
+      const res = await raw(id);
+      expect(res.status).toBe(200);
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      expect(new JSDOM(await res.text()).window.document.querySelector('#mx-story-root [role="tablist"]')).toBeTruthy();
+      expect(warn.mock.calls.some(([line]) => String(line).includes(`${id} v`) && String(line).includes('compiled inline'))).toBe(false);
+      expect(await storedBuild(id)).toBe('0000000000000000');
+      warn.mockRestore();
+    });
+
+    it('concurrent readers below the format minimum share one inline compile', async () => {
+      const who = await owner();
+      const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
+      await (await harness.db()).query(`UPDATE prepared_pages SET page_format = 0 WHERE artifact_id = $1`, [id]);
+      const warn = vi.spyOn(console, 'warn');
+      const answers = await Promise.all([raw(id), raw(id), raw(id)]);
+      expect(answers.map((r) => r.headers.get(READER_MODE_HEADER))).toEqual(['compiled', 'compiled', 'compiled']);
+      expect(warn.mock.calls.filter(([line]) => String(line).includes(`${id} v`) && String(line).includes('compiled inline'))).toHaveLength(1);
+      warn.mockRestore();
+    });
+  });
+
+  describe('a version with no stored compile', () => {
+    it('compiled inline and served, and the compile is stored for the next read', async () => {
+      const who = await owner();
+      const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
+      await (await harness.db()).query(`UPDATE prepared_pages SET page = page - 'compiled' WHERE artifact_id = $1`, [id]);
+      expect(await storedBuild(id)).toBeNull();
+      const res = await raw(id);
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      expect(storyText(await res.text())).toContain('A plain prose document');
+      expect(await storedBuild(id)).toMatch(/^[0-9a-f]{16}$/);
+    });
+  });
+
+  describe('a compile that fails', () => {
+    const recordFailure = async (id: string) => {
+      const db = await harness.db();
+      const build = await storedBuild(id);
+      await db.query(`UPDATE prepared_pages SET page = jsonb_set(page, '{compiled}', $2::jsonb) WHERE artifact_id = $1`, [id, JSON.stringify({ build, error: 'boom', reason: 'compile-error' })]);
+    };
+
+    it('/raw and the document the app page frames answer 500, and every occurrence is reported', async () => {
+      const who = await owner();
+      const id = await publish(who.token, { title: 'Perf A prose', markup: fixture('prose.jsx') });
+      await recordFailure(id);
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const before = compiledPageFailures();
+      const res = await raw(id);
+      expect(res.status).toBe(500);
+      expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
+      expect(await res.text()).not.toContain('A plain prose document');
+      expect((await raw(id)).status).toBe(500);
+      // The app page is only the frame's shell; the document in its frame is the renderer's, and fails the same way.
+      const page = (await framedDocument(app, `/a/${id}?reader=compiled`, { headers: { accept: 'text/html' } }))!;
+      expect(page.status).toBe(500);
+      expect(compiledPageFailures() - before).toBe(3);
+      expect(error.mock.calls.filter(([line]) => String(line).includes(`FAILED ${id}`))).toHaveLength(3);
+      error.mockRestore();
+    });
   });
 });

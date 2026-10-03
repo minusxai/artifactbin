@@ -5,22 +5,20 @@
  * test passed, because the tests were the only caller handing over a decoded
  * '@'. These cases feed the ENCODED forms the router actually produces.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
+beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
-vi.mock('@/auth', () => ({
-  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
-}));
 
 
 async function outcome(p: Promise<unknown>): Promise<{ kind: 'render' | 'redirect' | 'notFound'; to?: string }> {

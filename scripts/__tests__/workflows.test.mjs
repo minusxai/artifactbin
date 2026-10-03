@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
+import { baseCommit, chooseBaseRun, triggerPaths } from '../ci/page-speed-base.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ciPath = path.join(root, '.github', 'workflows', 'ci.yml');
@@ -24,7 +25,7 @@ describe('the public repository boundary', () => {
 
 describe('workflow supply-chain pins', () => {
   it('uses immutable full commit SHAs for every third-party action', () => {
-    for (const file of ['ci.yml', 'cli-runtime.yml', 'release-cli.yml']) {
+    for (const file of ['ci.yml', 'cli-runtime.yml', 'release-cli.yml', 'codeql.yml', 'page-speed.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
       const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
       if (file !== 'release-cli.yml') expect(refs.length, file).toBeGreaterThan(0);
@@ -170,6 +171,67 @@ describe('Intel release acceptance consumes the tested binary',()=>{
     expect(proof.steps.some(step=>/npm run build/.test(step.run??''))).toBe(false);
     const bundledProof=ci.jobs.cli.steps.find(step=>step.name==='File preview from the actual executable');
     expect(bundledProof.if).toContain("matrix.os != 'macos-15-intel'");
-    for(const job of ['test','timings'])expect(ci.jobs[job].needs).toContain('cli-preview');
+    for(const job of ['test'])expect(ci.jobs[job].needs).toContain('cli-preview');
+  });
+});
+
+const workflow = (file) => yaml.parse(readFileSync(path.join(root, '.github/workflows', file), 'utf8'));
+
+describe('code scanning runs after merge, not on every pull request', () => {
+  it('analyses JavaScript/TypeScript and Actions on pushes to main and weekly, never on a pull request', () => {
+    const codeql = workflow('codeql.yml');
+    expect(codeql.on).not.toHaveProperty('pull_request');
+    expect(codeql.on.push.branches).toEqual(['main']);
+    expect(codeql.on.schedule).toHaveLength(1);
+    const analyze = codeql.jobs.analyze;
+    expect(analyze.strategy.matrix.language).toEqual(['actions', 'javascript-typescript']);
+    expect(analyze.permissions['security-events']).toBe('write');
+    const uses = analyze.steps.map((step) => step.uses ?? '');
+    expect(uses.some((use) => use.startsWith('github/codeql-action/init@'))).toBe(true);
+    expect(uses.some((use) => use.startsWith('github/codeql-action/analyze@'))).toBe(true);
+  });
+});
+
+describe('page speed: the base is main\'s own measurement of the same bytes', () => {
+  const speed = workflow('page-speed.yml');
+  it('measures only the head beside the report, never a second build of main', () => {
+    expect(Object.keys(speed.jobs).sort()).toEqual(['measure', 'report']);
+    expect(speed.jobs.measure.strategy).toBeUndefined();
+    const upload = speed.jobs.measure.steps.find((step) => step.uses?.startsWith('actions/upload-artifact'));
+    expect(upload.with).toMatchObject({ name: 'page-speed-head', path: 'page-speed/head.json' });
+    const report = speed.jobs.report;
+    expect(report.permissions.actions).toBe('read');
+    const find = report.steps.find((step) => step.run === 'node scripts/ci/page-speed-base.mjs');
+    expect(find.id).toBe('base');
+    const fromMain = report.steps.find((step) => step.with?.['run-id'] === '${{ steps.base.outputs.run-id }}');
+    expect(fromMain.if).toBe("steps.base.outputs.found == 'true'");
+    expect(fromMain.with.name).toBe('page-speed-head');
+    // The fallback measures the base only on a miss; the report and the size targets always run.
+    const measure = report.steps.find((step) => step.name === 'Measure base');
+    expect(measure.if).toBe("steps.base.outputs.found != 'true'");
+    expect(measure.run).toContain('page-speed/base.json');
+    for (const name of ['Report', 'Size targets']) expect(report.steps.find((step) => step.name === name).if, name).toBeUndefined();
+    expect(report.steps.find((step) => step.name === 'Size targets').run).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict');
+  });
+  it('reads the same trigger paths the workflow declares, for both events', () => {
+    const paths = triggerPaths(readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8'));
+    expect(paths).toEqual(speed.on.push.paths);
+    expect(paths).toEqual(speed.on.pull_request.paths);
+  });
+  it('takes the newest run with the same bytes and a live artifact, else none', async () => {
+    const runs = [{ id: 3, head_sha: 'c' }, { id: 2, head_sha: 'b' }, { id: 1, head_sha: 'a' }];
+    const same = new Set(['b', 'a']);
+    const sameBytes = (sha, base) => base === 'base' && same.has(sha);
+    expect(await chooseBaseRun(runs, 'base', { sameBytes, hasArtifact: async () => true })).toEqual(runs[1]);
+    expect(await chooseBaseRun(runs, 'base', { sameBytes, hasArtifact: async (id) => id === 1 })).toEqual(runs[2]);
+    expect(await chooseBaseRun(runs, 'base', { sameBytes, hasArtifact: async () => false })).toBeNull();
+    expect(await chooseBaseRun(runs, 'base', { sameBytes: () => false, hasArtifact: async () => true })).toBeNull();
+  });
+  it('picks the base the retired measure-base job picked', () => {
+    const known = (sha) => sha !== 'gone';
+    expect(baseCommit({ EVENT: 'pull_request', PR_BASE: 'pr', BEFORE: 'before' }, known)).toBe('pr');
+    expect(baseCommit({ EVENT: 'push', PR_BASE: '', BEFORE: 'before' }, known)).toBe('before');
+    expect(baseCommit({ EVENT: 'push', BEFORE: 'gone' }, known)).toBeNull();
+    expect(baseCommit({ EVENT: 'workflow_dispatch' }, known)).toBeNull();
   });
 });

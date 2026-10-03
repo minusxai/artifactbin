@@ -44,20 +44,22 @@ describe('the page-speed workflow', () => {
     for (const ref of refs) expect(ref).toMatch(/@[0-9a-f]{40}$/);
   });
 
-  it('measures base and head in parallel, then reports their artifacts', () => {
-    expect(workflow.jobs.measure.strategy.matrix.revision).toEqual(['base', 'head']);
+  it('measures the head only, then reports it against the base main already measured', () => {
+    expect(workflow.jobs.measure.strategy).toBeUndefined();
     const runs = workflow.jobs.measure.steps.map(step => step.run ?? '').join('\n');
     expect(runs).toContain('node scripts/ci/performance-loads.mjs');
     expect(runs).toContain('--size-only');
     expect(workflow.jobs.report.needs).toEqual(['measure']);
     expect(workflow.jobs.report.steps.some(step => String(step.uses).startsWith('actions/download-artifact@'))).toBe(true);
-    expect(workflow.jobs.report.steps.map(step => step.run ?? '').join('\n')).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown');
+    const report = workflow.jobs.report.steps.map(step => step.run ?? '').join('\n');
+    expect(report).toContain('node scripts/ci/page-speed-base.mjs');
+    expect(report).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown');
   });
 
   it('keeps full timing measurements on a manual run, while PRs use size only', () => {
     expect(workflow.on.workflow_dispatch).toBeDefined();
     const runs = workflow.jobs.measure.steps.map(step => step.run ?? '').join('\n');
-    expect(workflow.jobs.measure.steps.find(step => step.name === 'Measure selected revision').env.EVENT).toContain('github.event_name');
+    expect(workflow.jobs.measure.steps.find(step => step.name === 'Measure head').env.EVENT).toContain('github.event_name');
     expect(runs).toContain('if [ "$EVENT" = workflow_dispatch ]');
   });
 });

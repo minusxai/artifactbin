@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as internalMintRoute } from '@/app/api/internal/tokens/route';
+import { POST as startRoute } from '@/app/api/start/route';
 
 
 import { claimToken, createUser, getUserByEmail, listArtifactsByUser } from '@/lib/accounts';
@@ -62,13 +63,17 @@ describe('anonymous connections + claiming', () => {
     expect(named.name).toMatch(/^api-[0-9a-z]{6}$/);
   });
 
-  it('carries no in-process valve — the proxy\'s OAuth doors are the only count', async () => {
-    // A door is enforced in exactly one place. The app route serves the
-    // mint; the proxy counts the approval doors in front of it, so a caller
-    // reaching this handler directly is never refused here.
-    for (let i = 0; i < 12; i++) {
-      const res = await internalMintRoute(request('/api/internal/tokens', { method: 'POST', headers: { 'x-forwarded-for': '10.9.9.9' } }));
-      expect(res.status, `mint ${i + 1} of 12`).toBe(201);
+  // A door is enforced in exactly one place. The app routes serve the mint and
+  // the create; the proxy counts the approval doors in front of them, so a caller
+  // reaching these handlers directly is never refused here (the start case was
+  // start-flow.test.ts's).
+  it.each([
+    { door: 'mint', calls: 12, send: () => internalMintRoute(request('/api/internal/tokens', { method: 'POST', headers: { 'x-forwarded-for': '10.9.9.9' } })) },
+    { door: 'start', calls: 15, send: () => startRoute(request('/api/start', { method: 'POST' })) },
+  ])('$door carries no in-process valve — the proxy\'s doors are the only count', async ({ door, calls, send }) => {
+    for (let i = 0; i < calls; i++) {
+      const res = await send();
+      expect(res.status, `${door} ${i + 1} of ${calls}`).toBe(201);
     }
   });
 
