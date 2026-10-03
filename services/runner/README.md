@@ -34,15 +34,24 @@ visibility: private
 <p>A headless greeting function.</p>
 ```
 
-Invoke the published ID through `POST /api/artifacts/<id>/runs` with
-`{"requestId":"hello-1","input":{"name":"OSS"}}`. Authenticate with the
-app's session cookie or an account bearer credential in the Authorization
-header; session writes also require the app Origin. Poll `GET /api/runs/<runId>`
-until terminal; the completed output is `{"message":"Hello OSS"}`.
+Save `input.json` containing `{"name":"OSS"}`, then:
+
+```sh
+afbin runs start hello.jsx --request hello-1 --input input.json --json
+afbin runs status <runId> --json
+afbin runs events <runId> --after 0 --json
+```
+
+Source development uses `npm run afbin -- runs …`. Poll status until terminal;
+the completed output is `{"message":"Hello OSS"}`. `afbin runs cancel <runId>`
+requests cancellation; inspect status to observe cleanup. Read `afbin help lambdas`
+for declared-data examples, supported imports and event pagination.
 Reuse a request ID only for the same invocation to recover its existing run;
 a different input with that ID conflicts. A run can end failed, cancelled or
 interrupted, so inspect its status and receipt rather than assuming success.
-These are HTTP APIs, not CLI commands: `afbin run` and `afbin schedule` do not exist.
+The underlying HTTP API is documented below. Scheduling currently uses HTTP,
+with an app session cookie or an account bearer credential in the Authorization
+header; session writes also require the app Origin.
 
 Schedule the same published function with
 `POST /api/artifacts/<id>/schedules` and

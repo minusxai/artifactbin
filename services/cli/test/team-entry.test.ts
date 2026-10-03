@@ -11,6 +11,8 @@ import {PGlite} from '@electric-sql/pglite';
 import {serve} from '@hono/node-server';
 import {createRunner} from '../../runner/src/local';
 import {runnerHttp} from '../../runner/src/http';
+import {hostCapabilities,runnerIdentity,boundedJson} from '../../runner/src/capabilities';
+import {overHttp} from '@artifactbin/utils';
 
 test('foreground team process serves real login and excludes another database owner until shutdown',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'afbin-team-process-'));
@@ -18,7 +20,11 @@ test('foreground team process serves real login and excludes another database ow
  const port=(reservation.address() as {port:number}).port;await new Promise<void>(resolve=>reservation.close(()=>resolve()));
  const file=join(directory,'server.env');
  const db=new PGlite(),secret='mxmx_test_team_runner_signing_secret';
- const runner=await createRunner({db,capabilities:async()=>null});
+ const appOrigin=`http://app.lvh.me:${port}`,forward=overHttp(appOrigin,secret);
+ const runner=await createRunner({db,capabilities:hostCapabilities({artifactbin:async(context,operation,args)=>{
+  const response=await forward(new Request(appOrigin+'/api/runner/operations',{method:'POST',headers:{'content-type':'application/json'},signal:context.signal,body:JSON.stringify({operation:operation.replace(/^artifactbin\./,''),input:args,documentSource:context.request.document?.source})}),runnerIdentity(context));
+  if(!response.ok)throw Error('callback_http_'+response.status);return boundedJson(response,1024*1024);
+ }})});
  const controller=serve({fetch:runnerHttp(runner,secret).fetch,hostname:'127.0.0.1',port:0});
  if(!controller.listening)await new Promise<void>(resolve=>controller.once('listening',resolve));
  const runnerPort=(controller.address() as {port:number}).port;
@@ -56,13 +62,13 @@ test('foreground team process serves real login and excludes another database ow
   const mail=(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   const login=await post('/api/auth/sign-in/email-otp',{email,otp:mail.find(message=>message.to===email).otp});assert.equal(login.status,200);
   const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
-  const published=await post('/api/my/artifacts',{markup:'<Helmet><script>{`export default async input => ({message: "Hello " + input.name})`}</script></Helmet><p>Hello lambda</p>',visibility:'private'},cookie);
+  const published=await post('/api/my/artifacts',{markup:'<Helmet><Value name="items" type="table" value={[{n:42}]} /><Query name="answer">{`select n from items`}</Query><script>{`import {query} from "page"; const answer=query("$answer"); export default async input => ({message: "Hello " + input.name, rows: await answer.ready})`}</script></Helmet><p>Hello lambda</p>',visibility:'private'},cookie);
   assert.equal(published.status,201,await published.clone().text());const artifact=await published.json();
   const admitted=await post(`/api/artifacts/${artifact.id}/runs`,{requestId:'hello-1',input:{name:'OSS'}},cookie);
   assert.equal(admitted.status,202,await admitted.clone().text());const {runId}=await admitted.json();
   const deadline=Date.now()+15000;let result;
   do{const status=await fetch(origin+'/api/runs/'+runId,{headers:{cookie}});assert.equal(status.status,200);result=await status.json();if(result.receipt)break;await sleep(20);}while(Date.now()<deadline);
-  assert.equal(result.status,'completed',JSON.stringify(result));assert.deepEqual(result.output,{message:'Hello OSS'});
+  assert.equal(result.status,'completed',JSON.stringify(result));assert.deepEqual(result.output,{message:'Hello OSS',rows:[{n:42}]});
   const schedule=await post(`/api/artifacts/${artifact.id}/schedules`,{cron:'*/5 * * * *',timezone:'UTC',input:{name:'scheduled OSS'}},cookie);
   assert.equal(schedule.status,201,await schedule.clone().text());const {id:scheduleId}=await schedule.json();
   assert.equal((await fetch(origin+'/api/schedules/'+scheduleId,{method:'DELETE',headers:{origin,cookie}})).status,200);
