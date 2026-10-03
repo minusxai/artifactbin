@@ -1,3 +1,4 @@
+import {PUBLIC_BASE_URL} from '@/lib/platform/config';
 import {expect,it} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
 import {createUser} from '@/lib/accounts';
@@ -8,7 +9,7 @@ import {useAppHarness} from './harness';
 useAppHarness();
 it('teaches real operation inputs and creates, reads and edits with the observed version',async()=>{
  const owner=await createUser({email:'mxmx_test_hosted_tools@example.com'});
- const request=attachActor(new Request('http://localhost/api/runner/operations',{method:'POST'}),{userId:owner.id,credential:'session'});
+ const request=attachActor(new Request('http://artifactbin-app:3000/api/runner/operations',{method:'POST',headers:{'x-forwarded-host':'artifactbin-app:3000','x-forwarded-proto':'http'}}),{userId:owner.id,credential:'session'});
  const invoke=(name:string,input:Record<string,unknown>)=>runnerOperation(request,name,input);
  const tools=hostedOperationTools();
  expect(tools.find(tool=>tool.name==='create_artifact')?.parameters).toMatchObject({type:'object',properties:{markup:{type:'string'}}});
@@ -16,6 +17,7 @@ it('teaches real operation inputs and creates, reads and edits with the observed
  const created=await invoke('create_artifact',{markup:'<h1>First draft</h1>',title:'Agent draft',visibility:'private'});
  expect(created.status).toBe(201);
  const doc=await created.json();
+ expect(doc.url).toBe(`${PUBLIC_BASE_URL}/a/${doc.id}`);
  const read=await invoke('get_artifact',{id:doc.id});expect(read.status).toBe(200);
  const edited=await invoke('edit_document',{id:doc.id,edit_id:doc.edit_id,markup:'<h1>Revised draft</h1>'});
  expect(edited.status).toBe(200);

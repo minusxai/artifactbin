@@ -59,7 +59,7 @@ export async function createHostedRemoteAgent(options: {
                 const status = output?.receipt?.reason ? `${b.status}: ${output.receipt.reason}` : b.status;
                 const failure = text && ['failed','interrupted','cancelled'].includes(b.status) ? '\r\n'+status : '';
                 return `> ${input.message ?? ''}\r\n${text || status}${failure}\r\n`;
-            }).join('\r\n').slice(-128*1024).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g,'') + '\r\n> ' + inputBuffer;
+            }).join('\r\n').replace(/\r?\n/g,'\r\n').slice(-128*1024).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g,'') + '\r\n> ' + inputBuffer;
             return { session, generation: 'hosted-' + createHash('sha256').update(lines).digest('hex'), seq: rows.length, frames: [], snapshot: lines };
         },
         async input(owner, id, text) {

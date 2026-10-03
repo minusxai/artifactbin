@@ -1,3 +1,4 @@
+import {PUBLIC_BASE_URL} from './platform/config';
 import type {CapabilityContext} from '../../runner/src/local';
 import {runnerIdentity} from '../../runner/src/capabilities';
 import {lambdaOperation} from './runner/operations';
@@ -72,6 +73,12 @@ export async function runnerOperation(request: Request, operation: string, input
     const actor = actorForArtifacts(caller);
     if (!actor)
         return json({ error: 'unauthorized' }, 401);
+    // Internal transport addresses are never reader-facing artifact URLs.
+    const headers = new Headers(request.headers);
+    const publicUrl = new URL(PUBLIC_BASE_URL);
+    headers.set('x-forwarded-host', publicUrl.host);
+    headers.set('x-forwarded-proto', publicUrl.protocol.slice(0,-1));
+    request = attachActor(new Request(new URL('/api/runner/operations', publicUrl), {method:request.method,headers}),identity);
     if(operation==='edit_document')return editHostedDocument(request,actor,input);
     const allowed = new Set(['create_artifact', 'get_artifact', 'query_resource', 'mutate_dataset', 'annotate', 'list_artifacts', 'update_artifact']);
     if (!allowed.has(operation))
