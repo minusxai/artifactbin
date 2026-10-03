@@ -819,10 +819,27 @@ describe('CI job shape', () => {
   });
 
   it('does not rebuild the CLI before the binary builder rebuilds it', () => {
-    for (const job of ['cli', 'reference-compatibility']) {
+    for (const job of ['cli']) {
       const commands = ci().jobs[job].steps.map(step => step.run);
       expect(commands).not.toContain('npm run build -w services/cli');
     }
+  });
+
+  it('tests the Linux binary the release matrix built instead of compiling it again', () => {
+    const job = ci().jobs['reference-compatibility'];
+    expect(job.needs).toEqual(expect.arrayContaining(['plan', 'cli']));
+    expect(job['runs-on']).toBe('ubuntu-24.04');
+    const commands = job.steps.map(step => step.run ?? '');
+    expect(commands.some(command => command.includes('build:binary'))).toBe(false);
+    // The bundle, types and host runtime that `npm pack` and the bundle conformance read.
+    const build = job.steps.findIndex(step => step.run === 'npm run build -w services/cli');
+    const download = job.steps.findIndex(step => step.uses?.startsWith('actions/download-artifact'));
+    expect(job.steps[download]?.with).toMatchObject({ name: 'afbin-ubuntu-24.04', path: 'candidate/services/cli/dist' });
+    expect(download).toBeGreaterThan(build);
+    expect(build).toBeGreaterThan(-1);
+    expect(commands).toContain('chmod +x candidate/services/cli/dist/afbin-linux-x64');
+    expect(ci().jobs.cli.strategy.matrix.os).toContain('ubuntu-24.04');
+    expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-${{ matrix.os }}')?.with.path).toContain('services/cli/dist/afbin-*');
   });
 
   it('runs the CLI suite once and the per-platform binary smoke on every row', () => {
