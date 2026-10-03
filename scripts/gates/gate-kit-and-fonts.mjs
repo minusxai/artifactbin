@@ -497,7 +497,7 @@ try {
       state.served = [...story.querySelectorAll('*')];
       state.staticNodes = [...story.querySelectorAll('[data-mx-ast]')]
         // Floating content (a pinned-open tooltip or popover) is positioned at runtime: its style and side are the popper's.
-        .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"], [data-story-floating], [aria-busy]'))
+        .filter((node) => !node.closest('[data-hk^="s"], [aria-label="Question embed"], [aria-label="DataTable embed"], [data-mx-mermaid-state], [data-slot="avatar-fallback"], [data-slot="tabs-content"], [data-slot="tooltip-trigger"], [data-story-floating], [aria-busy]'))
         .map((node) => ({ node, attrs: [...node.attributes].map((attr) => [attr.name, attr.value]),
           text: [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('').trim() }));
     });
