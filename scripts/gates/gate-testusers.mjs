@@ -107,7 +107,7 @@ try {
   const joined = await cli(['sessions', 'script', 'new', '--as', testuser.id], `${driver}
     const page = await context.newPage(); const nav = await page.goto(${JSON.stringify(`/a/${copy}`)});
     const ready = await until(page).then(() => true, () => false);
-    if (!ready) return { debug: { status: nav?.status(), url: page.url(), body: (await page.content()).slice(0, 1500) } };
+    if (!ready) return { debug: { status: nav?.status(), url: page.url(), frames: page.frames().map(f => f.url()), body: (await page.content()).slice(0, 1500) } };
     const receipt = await mutate(page, 'join');
     await page.getByRole('button', { name: 'Join this tab' }).waitFor();
     const balances = await people(page);
