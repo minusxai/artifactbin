@@ -16,7 +16,7 @@ import { ArtifactRow } from '../artifacts/access';
 import { getArtifactById } from '../artifacts/store';
 import { referencedArtifactForRow } from '../artifacts/dataflow';
 import { declarationsOf } from '../story/document/index';
-import { scriptModuleOrigins } from './script-origins';
+import { scriptModuleOrigins, scriptRenderAllowance } from './script-origins';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '../serving/og-card';
 import { VERSION_PARAM } from '../serving/archived-version';
 import { mintExportKey } from '../serving/export-read-key';
@@ -41,8 +41,6 @@ const EXPORT_WIDTH = 1200;
 const EXPORT_VIEWPORT_HEIGHT = 630; // og card ratio; fullPage grows past it as needed
 const RENDER_TIMEOUT_MS = 30_000;
 const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after mount
-/** How long a script document's components get to replace their fallback before the shot is taken anyway. */
-const MOUNT_WAIT_MS = 5_000;
 /** How long to wait before the single re-render (see renderArtifactImage). */
 const RENDER_RETRY_MS = 1_000;
 
@@ -220,7 +218,7 @@ function renderRequest(
     sameOriginOnly: true,
     ...(ASSETS_ORIGIN ? { assetOrigin: ASSETS_ORIGIN } : {}),
     // A script document runs its script for the shot: its module hosts load, and its components get to mount.
-    ...(input.scriptOrigins?.length ? { allowedOrigins: input.scriptOrigins, waitForMountsMs: MOUNT_WAIT_MS } : {}),
+    ...scriptRenderAllowance(input.scriptOrigins ?? []),
     settleMs: PAGE_SETTLE_MS,
     timeoutMs: RENDER_TIMEOUT_MS,
   };

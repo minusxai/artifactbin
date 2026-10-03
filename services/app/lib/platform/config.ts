@@ -358,3 +358,7 @@ export const EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
  * (`APP__SCHEMA` + a literal). Default `events`; prod names its own.
  */
 export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
+
+/** Optional runner HTTP boundary; otherwise the composition root registers a local runner. */
+export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
+export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');

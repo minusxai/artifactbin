@@ -1,0 +1,22 @@
+{
+  "name": "@artifactbin/runner",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./local": "./src/local.ts"
+  },
+  "dependencies": {
+    "@artifactbin/contracts": "*",
+    "@artifactbin/utils": "*",
+    "@earendil-works/pi-agent-core": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "abort-controller": "3.0.0",
+    "core-js": "3.45.1",
+    "esbuild": "0.28.2",
+    "fast-text-encoding": "1.0.6",
+    "isolated-vm": "5.0.4",
+    "cron-parser": "5.4.0"
+  }
+}

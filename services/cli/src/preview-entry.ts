@@ -1,6 +1,6 @@
 import {renderSocialPreviewImage} from '../../app/lib/story/assets/social-preview-image.server';
 import {socialPreviewCrop,socialPreviewImage} from '../../app/lib/story/assets/social-preview';
-import {CARD_WIDTH,CARD_HEIGHT} from '../../app/lib/serving/og-card';
+import {previewRenderRequest} from './preview-render';
 import {createBrowser} from '@artifactbin/browser/local';
 import {chromiumExecutable} from './standalone-browser';
 import type {LocalImageOptions} from './local-image-options';
@@ -66,7 +66,7 @@ export async function exportPreviewImage(options:LocalImageOptions,assets:string
    if(!response.ok||!response.headers.get('content-type')?.startsWith('image/'))throw new CliError('render_failed','The selected cover image could not be read.');
    return renderSocialPreviewImage(Buffer.from(await response.arrayBuffer()),document.body,options.format);
   }
-  const result=await browser.render({url:session.url+'/?capture=1',format:options.format,viewport:options.og?{width:CARD_WIDTH,height:CARD_HEIGHT}:{width:1200,height:630},selector:'[data-afbin-export-ready] [data-mx-story-root]',capture:options.page?{slide:options.page}:options.og?{card:socialPreviewCrop(document.body)}:'full',sameOriginOnly:true,waitForManagedFrames:true,timeoutMs:30000});
+  const result=await browser.render(previewRenderRequest({url:session.url,source:document.body,format:options.format,...(options.page?{page:options.page}:{}),...(options.og?{card:socialPreviewCrop(document.body)}:{})}));
   const failure=session.failure();if(failure)throw new CliError('render_failed',failure);
   if(!result.ok)throw new CliError(result.reason==='no_slide'?'slide_not_found':'render_failed',result.reason==='no_slide'?`Document has ${result.slides} slides.`:result.detail??'Local image rendering failed.');
   return Buffer.from(result.bytes);

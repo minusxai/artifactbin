@@ -8,6 +8,7 @@
  * renderer's `allowedOrigins`): a declared `*.` wildcard is not admitted. Nothing else: whatever else the script
  * fetches at run time stays blocked in a capture. Empty for a document without a script.
  */
+import type { PageRequest } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx/parse';
 import { splitHelmet } from '@/lib/story/document/helmet';
 import { ESM_CDN_ORIGIN } from '@/lib/story/document/author-module.server';
@@ -30,4 +31,16 @@ export function scriptModuleOrigins(source: string): string[] {
     try { origins.add(new URL(spec).origin); } catch { /* the build refuses a malformed URL; nothing to admit */ }
   }
   return [...origins];
+}
+
+/** How long a script document's components get to replace their fallback before the shot is taken anyway. */
+export const MOUNT_WAIT_MS = 5_000;
+
+/**
+ * What a render of a script document asks of the browser beyond its own origin: the module hosts `origins` names
+ * (`scriptModuleOrigins`) admitted, and its component mounts waited for. Nothing for a document without a script.
+ * One policy for the server's exporter (./exporter) and the CLI's local export (services/cli preview-render).
+ */
+export function scriptRenderAllowance(origins: readonly string[]): Pick<PageRequest, 'allowedOrigins' | 'waitForMountsMs'> {
+  return origins.length ? { allowedOrigins: [...origins], waitForMountsMs: MOUNT_WAIT_MS } : {};
 }

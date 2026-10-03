@@ -1,3 +1,4 @@
+import {hostedRemoteAgent} from './hosted-interface';
 import {remoteAgents} from './agents';
 import { requestOrSessionActor } from "../accounts/viewer";
 import { refusesCrossSite } from "../accounts/auth";
@@ -78,7 +79,7 @@ export async function remoteRoute(
     else if(body.type==='stop')await remoteAgents.stop(owner,id);
     else if (body.type === "input") await remoteAgents.input(owner, id, body.data);
     else if (body.type === "control")
-      remoteSessions.control(owner, id, body.controller, body.cols, body.rows);
+      {if(!hostedRemoteAgent()?.owns(owner,id))remoteSessions.control(owner, id, body.controller, body.cols, body.rows);}
     else throw new RemoteError("Invalid operation");
     return json({ ok: true });
   } catch (error) {

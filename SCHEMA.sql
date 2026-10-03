@@ -32,6 +32,158 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.runner_runs (
+  id TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  request_key TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  status TEXT NOT NULL,
+  request JSONB NOT NULL,
+  admitted_at TEXT NOT NULL,
+  started_at TEXT,
+  receipt JSONB,
+  output JSONB,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS request_key TEXT NOT NULL;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS fingerprint TEXT NOT NULL;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS status TEXT NOT NULL;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS request JSONB NOT NULL;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS admitted_at TEXT NOT NULL;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS started_at TEXT;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS receipt JSONB;
+
+ALTER TABLE app.runner_runs ADD COLUMN IF NOT EXISTS output JSONB;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_request ON app.runner_runs (owner, request_key);
+
+CREATE TABLE IF NOT EXISTS app.runner_events (
+  run_id TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  event JSONB NOT NULL,
+  PRIMARY KEY (run_id, sequence)
+);
+
+ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS run_id TEXT NOT NULL;
+
+ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL;
+
+ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS event JSONB NOT NULL;
+
+CREATE TABLE IF NOT EXISTS app.hosted_conversations (
+  owner TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (owner, artifact_id)
+);
+
+ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+
+ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS app.hosted_branches (
+  id TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  request_key TEXT NOT NULL,
+  input JSONB NOT NULL,
+  program_source TEXT,
+  run_id TEXT,
+  cursor INTEGER NOT NULL DEFAULT 0,
+  checkpoint JSONB,
+  result JSONB,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS request_key TEXT NOT NULL;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS input JSONB NOT NULL;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS program_source TEXT;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS run_id TEXT;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS cursor INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS checkpoint JSONB;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS result JSONB;
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+
+ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hosted_request ON app.hosted_branches (owner, request_key);
+
+CREATE INDEX IF NOT EXISTS idx_hosted_pending ON app.hosted_branches (status, created_at);
+
+CREATE TABLE IF NOT EXISTS app.runner_schedules (
+  id TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  spec JSONB NOT NULL,
+  next_due_at TIMESTAMPTZ NOT NULL,
+  active_request TEXT,
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+
+ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS spec JSONB NOT NULL;
+
+ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS next_due_at TIMESTAMPTZ NOT NULL;
+
+ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS active_request TEXT;
+
+ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS app.runner_schedule_occurrences (
+  request_id TEXT NOT NULL,
+  schedule_id TEXT NOT NULL,
+  scheduled_at TIMESTAMPTZ NOT NULL,
+  spec JSONB NOT NULL,
+  run_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  PRIMARY KEY (request_id)
+);
+
+ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS request_id TEXT NOT NULL;
+
+ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS schedule_id TEXT NOT NULL;
+
+ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ NOT NULL;
+
+ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS spec JSONB NOT NULL;
+
+ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS run_id TEXT;
+
+ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_occurrence ON app.runner_schedule_occurrences (schedule_id, scheduled_at);
+
 CREATE TABLE IF NOT EXISTS app.pages_sessions (
   id_hash TEXT NOT NULL,
   credential TEXT NOT NULL,

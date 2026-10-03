@@ -14,7 +14,8 @@ let mockRole = 'commenter';
 let mockTitle: string | null = 'A copy';
 let mockArchived: { version: number; head: number } | null = null;
 let served: HTMLElement | null = null;
-vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, archived: mockArchived, surface: { id: 'doc12345', title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+let mockCsp: Record<string, unknown> | undefined;
+vi.mock('@/web/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', title: mockTitle, format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/web/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 
 import { DocumentPage } from '../pages/Document';
@@ -23,6 +24,7 @@ beforeEach(() => {
   mockRole = 'commenter';
   mockTitle = 'A copy';
   mockArchived = null;
+  mockCsp = undefined;
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
@@ -172,6 +174,26 @@ it('the controls panel opened beside the open rail paints above it', async () =>
     delete (HTMLElement.prototype as unknown as Record<string, unknown>).showPopover;
     delete (HTMLElement.prototype as unknown as Record<string, unknown>).hidePopover;
   }
+});
+
+/*
+ * The consent bar is first-party UI with its own trusted root, in the slot above the frame — EARLIER in the page than the
+ * navigation layer. The bar's panels (and every popover and dialog, lib/islands/trusted-portal) must still open in the
+ * navigation layer, the top-layer overlay ordered above the rail, never in the bar's ordinary root.
+ */
+it('opens the bar\'s panels in the navigation layer while the consent bar holds a trusted root earlier in the page', () => {
+  const hosts = { connect: ['https://api.open-meteo.com'], script: [], style: [], img: [], frame: [], media: [] };
+  mockCsp = { status: 'blocked', denied: false, extensions: hosts, asking: hosts };
+  mount();
+  const roots = [...document.querySelectorAll('[data-trusted-ui]')];
+  const bar = roots.findIndex((root) => root.shadowRoot!.querySelector('[aria-label="Document network access"]'));
+  const navigation = roots.findIndex((root) => root.getAttribute('data-trusted-layer') === 'navigation');
+  expect(bar, 'the consent bar is drawn in a trusted root').toBeGreaterThanOrEqual(0);
+  expect(bar, 'and that root comes before the navigation layer').toBeLessThan(navigation);
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  expect((controls().getRootNode() as ShadowRoot).host).toBe(roots[navigation]);
+  fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+  expect((within(panelRoot()).getByRole('navigation', { name: 'Menu' }).getRootNode() as ShadowRoot).host).toBe(roots[navigation]);
 });
 
 it('an owner reaches the social preview from the sharing dialog the rail opens', async () => {

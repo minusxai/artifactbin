@@ -4,7 +4,8 @@ import {join} from 'node:path';
 /** Build-time package discovery uses Node's search order, independent of runtime exports. */
 export async function packageRoot(name,from){
  const require=createRequire(join(from,'package.json'));
- for(const base of require.resolve.paths(name)??[]){
+ // A declared npm dependency may share a Node builtin name (buffer, string_decoder).
+ for(const base of require.resolve.paths(name+'/package.json')??[]){
   const directory=join(base,name);
   try{
    const pkg=JSON.parse(await readFile(join(directory,'package.json'),'utf8'));

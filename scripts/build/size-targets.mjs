@@ -21,7 +21,10 @@
  * document's. Target 3 reads the prose view's `totalGzip`: every response body
  * a reader's page loads, the shell and its frame together. The production
  * prose page is measured separately after a deploy; the lab's prose view is
- * its proxy here.
+ * its proxy here. Target 4 budgets the shell itself: `jsBeforeReadyGzip` on the
+ * `view` route, the app page's own script bytes finished by its ready (the
+ * page's resource timing never lists the frame's, so the document's scripts are
+ * never counted there).
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -29,13 +32,15 @@ import { fileURLToPath } from 'node:url';
 
 const KB = 1024;
 
-/** The three targets. `fixtures` are the lab keys whose maximum is judged; `optional` ones count only when present. */
+/** The four targets. `fixtures` are the lab keys whose maximum is judged; `optional` ones count only when present. */
 export const SIZE_TARGETS = Object.freeze([
   // 1 and 2 judge the framed document (`raw`): the app page is a shell around that frame and readies on its own.
   { id: 1, label: 'JS before ready, nothing interactive (prose, deck)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['prose', 'deck'], optional: [], limit: 10 * KB },
   { id: 2, label: 'JS before ready, interactive (kit, dashboard, every component)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['kit', 'dashboard'], optional: ['kitchen'], limit: 85 * KB },
-  // The viewed page is the app shell plus the framed document; the shell's own scripts are not budgeted separately yet.
+  // The viewed page is the app shell plus the framed document.
   { id: 3, label: 'Prose page, total transferred', metric: 'totalGzip', route: 'view', fixtures: ['prose'], optional: [], limit: 250 * KB },
+  // The shell's own scripts: the `view` route's JS before ready, which never counts the framed document's, on every page kind it frames.
+  { id: 4, label: 'App shell JS before the document frame is ready', metric: 'jsBeforeReadyGzip', route: 'view', fixtures: ['prose', 'deck', 'kit', 'dashboard'], optional: ['kitchen'], limit: 50 * KB },
 ]);
 
 /**

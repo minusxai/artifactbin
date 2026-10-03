@@ -1,3 +1,6 @@
+import {createHostedRemoteAgent} from '@/lib/remote/hosted';
+import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
+import {startLambdaSchedules,setLambdaProgramResolver,type LambdaProgramResolver} from '@/lib/runner';
 import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
 export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
@@ -13,6 +16,9 @@ import {setServices,services,type Services} from '@/lib/platform';
 import {createAppServer,type AppServerOptions} from './app';
 export interface AppHostOptions extends AppServerOptions {
  services?:Partial<Services>;
+ lambdaPrograms?:LambdaProgramResolver;
+ /** Hosted deployment opt-in; OSS never supplies this. */
+ hostedAgent?:{secret:string;model:string};
  notificationDelivery?:NotificationDelivery;
  documentEditorPolicy?:DocumentEditorPolicy;
  mutationInvocation?:MutationInvocationFactory;
@@ -40,6 +46,13 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  await useSqlExtensions(options.sqlExtensions);
  if(options.services)setServices(options.services);
  await options.initialize?.(db);
+ setLambdaProgramResolver(options.lambdaPrograms);
+ const stopSchedules=await startLambdaSchedules(db);
+ const hosted=options.hostedAgent?await createHostedRemoteAgent({...options.hostedAgent,runner:services().runner}):undefined;
+ setHostedRemoteAgent(hosted?.agent);
+ let ticking:Promise<void>|undefined;
+ const timer=hosted?setInterval(()=>{if(!ticking)ticking=hosted.tick().catch(error=>console.error('[hosted-agent] dispatch failed',error instanceof Error?error.message:'unknown')).finally(()=>{ticking=undefined;});},1000):undefined;
+ timer?.unref();
  const stopBackgroundTasks=await startAppBackgroundTasks(db);
  // Custom domains' daily TXT re-check: at boot, then every 24h, flag or no flag (lib/custom-domains).
  const stopRecheck=startDomainRecheck();
@@ -49,7 +62,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  const fetch=options.identity?.(request).fetch??((incoming:Request)=>Promise.resolve(app.fetch(incoming)));
  let closing:Promise<void>|undefined;
  return {fetch,request,close:()=>closing??=(async()=>{
-  try{await stopBackgroundTasks();await stopRecheck();await stopHarvester();await services().events.close?.();await options.shutdown?.();}
+  try{clearInterval(timer);await ticking;setHostedRemoteAgent(undefined);setLambdaProgramResolver(undefined);await stopSchedules();await stopBackgroundTasks();await stopRecheck();await stopHarvester();await services().events.close?.();await options.shutdown?.();}
   finally{await db.close();}
  })()};
 }

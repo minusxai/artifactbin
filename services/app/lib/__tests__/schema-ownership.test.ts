@@ -97,6 +97,12 @@ it('mutation run jobs and one recipient result per run belong to the app',()=>{
 });
 it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});
 
+it('co-hosted runner persistence is declared once with owner-scoped admission and occurrence uniqueness',()=>{
+ const sql=renderedSchema().schema;
+ for(const table of ['runner_runs','runner_events','hosted_conversations','hosted_branches','runner_schedules','runner_schedule_occurrences'])expect(declared()['app.'+table]).toBe('app');
+ expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_request ON app.runner_runs (owner, request_key)');
+ expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_occurrence ON app.runner_schedule_occurrences (schedule_id, scheduled_at)');
+});
 it('the pages sessions behind the documents\' own origins belong to the app and store only a cookie hash',()=>{
  expect(declared()['app.pages_sessions']).toBe('app');
  expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.pages_sessions \([\s\S]*?id_hash TEXT NOT NULL[\s\S]*?PRIMARY KEY \(id_hash\)/);
