@@ -116,6 +116,21 @@ export function bindPage(store: DataflowStore | null): PageBindings {
   return bindings;
 }
 
+/** What `window.page` holds: the declared names as signals, for a browser session to drive the page. */
+export type PublicPage = Pick<PageBindings, 'value' | 'query' | 'mutation' | 'signal'>;
+declare global { interface Window { page?: PublicPage } }
+
+/**
+ * Install `window.page` over this store's bindings (the same signals the script imports from `page`). Returns its
+ * remover, which also drops the bindings (boot calls it on edit and dispose).
+ */
+export function exposePage(win: Window, store: DataflowStore): () => void {
+  const bindings = bindPage(store);
+  const api: PublicPage = Object.freeze({ value: bindings.value, query: bindings.query, mutation: bindings.mutation, signal: bindings.signal });
+  win.page = api;
+  return () => { if (win.page === api) delete win.page; bindings.dispose(); };
+}
+
 /** Where the markup placed a component the script exports (compiler `data-mx-mount`). */
 const MOUNT_ATTR = 'data-mx-mount';
 const PROPS_ATTR = 'data-mx-props';

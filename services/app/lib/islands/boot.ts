@@ -41,11 +41,6 @@ import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './mod
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
 import { loadChart } from './chart';
-import type { PageBindings } from './page-runtime';
-
-/** What `window.page` holds: the page's declared names as signals, for a browser session to drive the page. */
-export type PublicPage = Pick<PageBindings, 'value' | 'query' | 'mutation' | 'signal'>;
-declare global { interface Window { page?: PublicPage } }
 
 /**
  * One island of the per-document module: its hydration key prefix (`IslandRef.renderId`), its component,
@@ -203,33 +198,6 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   let disposed = false;
   let stopAuthor = () => {};
   let authorGeneration = 0;
-  /** The page runtime chunk of the serving build (the page data's `vendor`), or null when the page names none. */
-  const loadPageRuntime = async (): Promise<typeof import('./page-runtime') | null> => {
-    const runtimeUrl = readPageData(doc).vendor?.['@mx/page-runtime'];
-    return runtimeUrl ? (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime') : null;
-  };
-  let unexposePage = () => {};
-  let pageGeneration = 0;
-  /**
-   * `window.page`: the declared names as the page runtime binds them over this store (the bindings are cached
-   * per store, so these are the very signals the author's script imports). Top-level only, while reading.
-   */
-  const exposePage = async () => {
-    const generation = ++pageGeneration;
-    unexposePage();
-    if (!store || win.parent !== win) return;
-    const runtime = await loadPageRuntime();
-    if (!runtime || generation !== pageGeneration || disposed || mode !== 'read') return;
-    const bindings = runtime.bindPage(store);
-    const api: PublicPage = Object.freeze({ value: bindings.value, query: bindings.query, mutation: bindings.mutation, signal: bindings.signal });
-    win.page = api;
-    unexposePage = () => {
-      unexposePage = () => {};
-      if (win.page === api) delete win.page;
-      bindings.dispose();
-    };
-  };
-  const stopPage = () => { ++pageGeneration; unexposePage(); };
   /**
    * Run the version's script IN THIS DOCUMENT: the page runtime (`@mx/page-runtime`, a chunk of the serving build
    * named by the page data) binds the declared names as signals over this store, loads the module with its vendor
@@ -238,14 +206,18 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const restartAuthor = async (source: string | null) => {
     const generation = ++authorGeneration;
     stopAuthor();
-    if (!source) return;
+    // `window.page` (top-level, a page that declares data) comes from the same runtime, script or not.
+    const exposes = !!store && win.parent === win;
+    if (!source && !exposes) return;
     const vendor = readPageData(doc).vendor ?? {};
-    const runtime = await loadPageRuntime();
-    if (!runtime) { console.error('[islands] the page names a script but no runtime for it'); return; }
+    const runtimeUrl = vendor['@mx/page-runtime'];
+    if (!runtimeUrl) { if (source) console.error('[islands] the page names a script but no runtime for it'); return; }
+    const runtime = (await import(/* @vite-ignore */ runtimeUrl)) as typeof import('./page-runtime');
     if (generation !== authorGeneration || disposed || mode !== 'read') return;
-    const stop = await runtime.startAuthorModule({ source, store, root, vendor });
-    if (generation !== authorGeneration || disposed || mode !== 'read') { stop(); return; }
-    stopAuthor = () => { stopAuthor = () => {}; stop(); };
+    const hide = exposes ? runtime.exposePage(win, store!) : () => {};
+    const stop = source ? await runtime.startAuthorModule({ source, store, root, vendor }) : () => {};
+    if (generation !== authorGeneration || disposed || mode !== 'read') { stop(); hide(); return; }
+    stopAuthor = () => { stopAuthor = () => {}; stop(); hide(); };
   };
   const islandDocument: MorphableIslandDocument = {
     morph: { islands, hydrate, modules: new WeakMap([[module.ISLANDS, module]]), trees: new WeakMap(module.TREE ? [[module.TREE, module]] : []), restartAuthor },
@@ -266,14 +238,12 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
         runtime.setPaused(false);
         openLive(data.results?.since ?? null);
         followUrl();
-        void exposePage().catch((error: unknown) => console.error('[islands] window.page did not load', error));
         const script = readPageData(doc).authorScript;
         void restartAuthor(typeof script === 'string' && script ? script : null).catch((error: unknown) => console.error('[islands] author host failed', error));
         emit({ type: 'mode', mode });
         return;
       }
       stopAuthor();
-      stopPage();
       // The interpreter owns edits and their live updates. A version ping from this compiled
       // lifetime must not reload the page while its editor is saving a new source.
       stopLive();
@@ -291,7 +261,6 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
       if (disposed) return;
       disposed = true;
       stopAuthor();
-      stopPage();
       disposeIslands();
       stopLive();
       stopUrl();
@@ -328,8 +297,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     }).catch((error: unknown) => console.error('[islands] write status did not load', error));
     if (page && !data.hold?.length) page.engine.prepare(flow!, []);
     const authorScript = typeof data.authorScript === 'string' && data.authorScript ? data.authorScript : null;
-    if (authorScript) void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
-    void exposePage().catch((error: unknown) => console.error('[islands] window.page did not load', error));
+    void restartAuthor(authorScript).catch((error: unknown) => console.error('[islands] author host failed', error));
   }
   return islandDocument;
 }
