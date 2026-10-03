@@ -431,7 +431,7 @@ export async function publishMarkupForArtifact(current:ArtifactRow,source:string
    return response.json();
   });
   return {source:identity.source,meta:metaOverride,ids:identity.ids,aliases:identity.aliases,update};
- }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[String(error)]},400);}
+ }catch(error){return error instanceof Response?error:json({error:'invalid_jsx',details:[`${error}`]},400);}
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {

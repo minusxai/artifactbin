@@ -6,6 +6,7 @@ import { canReadArtifact, type ArtifactRow } from '../artifacts/access';
 import { getArtifactById } from '../artifacts/store';
 import { referencedArtifactForRow } from '../artifacts/dataflow';
 import { sessionActor } from '../accounts/viewer';
+import { escapeAttr } from '@artifactbin/utils/escape';
 import { ID_RE } from '../platform/ids-shape';
 import { artifactAppPath, type ArtifactManifest } from './artifact-pwa';
 
@@ -71,7 +72,7 @@ export const artifactPwaEnabled = (row: PwaRow): boolean => settingsForRow(row).
 /** Discovery belongs to the actual app document, including the compiled reader. */
 export function withArtifactAppHead(html: string, row: ArtifactRow): string {
   if (!artifactPwaEnabled(row)) return html;
-  const base = artifactAppPath(row.id);
-  const theme = artifactManifest(row).theme_color;
+  const base = escapeAttr(artifactAppPath(row.id));
+  const theme = escapeAttr(artifactManifest(row).theme_color);
   return html.replace('</head>', () => `<link data-mx-pwa rel="manifest" href="${base}manifest.webmanifest" crossorigin="use-credentials"><link data-mx-pwa rel="apple-touch-icon" href="${base}icon-192.png"><meta data-mx-pwa name="theme-color" content="${theme}"></head>`);
 }

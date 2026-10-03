@@ -277,7 +277,7 @@ export function convertDocument(source: string, lookups: ConvertLookups): Docume
     if (result.manual.length) { manual.push(...result.manual.map(at)); continue; }
     if (ref && !postgres) {
       edits.push(removal(source, sourceAttr!));
-      changes.push({ rule: 'source', declaration: name, detail: `source="ref:${ref}" became the Import ${imports.get(ref)}` });
+      changes.push({ rule: 'source', declaration: name, detail: `the source ref:${ref} became the Import ${imports.get(ref)}` });
     }
     if (result.sql !== child.sql) {
       edits.push({ start: child.node.start, end: child.node.end, text: serializeJsx([{ type: 'expression', value: { static: true, json: result.sql }, source: '', start: 0, end: 0 }]) });

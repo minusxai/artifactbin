@@ -20,7 +20,7 @@
  * request but one — code view's extras script from the file's own origin
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
-import { escapeHtml } from '@artifactbin/utils/escape';
+import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/serving/agent-discovery-tags';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { withModuleDataId } from '@/lib/compiled-page/carriers';
@@ -106,14 +106,14 @@ const ARTIFACT_FILE_BROKEN = 'This file is damaged and cannot be opened. Downloa
  * a data: fetch, a Blob URL or a module would each be refused somewhere.
  */
 export const ARTIFACT_FILE_BOOT = `(function(){
-var d=document,status=d.getElementById(${JSON.stringify(ARTIFACT_FILE_IDS.boot)});
+var d=document,status=d.getElementById(${scriptJson(ARTIFACT_FILE_IDS.boot)});
 function fail(m){if(status){status.textContent=m;status.setAttribute('role','alert');}}
-if(typeof DecompressionStream!=='function'||typeof Response!=='function'||typeof Uint8Array!=='function'){fail(${JSON.stringify(ARTIFACT_FILE_UNSUPPORTED)});return;}
+if(typeof DecompressionStream!=='function'||typeof Response!=='function'||typeof Uint8Array!=='function'){fail(${scriptJson(ARTIFACT_FILE_UNSUPPORTED)});return;}
 function unpack(id){var el=d.getElementById(id);if(!el)return Promise.resolve(null);var raw=atob((el.textContent||'').replace(/\\s+/g,''));var bytes=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'))).text();}
 function run(code){var s=d.createElement('script');s.textContent=code;d.body.appendChild(s);}
 try{
-unpack(${JSON.stringify(ARTIFACT_FILE_IDS.code)}).then(function(code){run(code);var compiled=d.getElementById(${JSON.stringify(ARTIFACT_FILE_IDS.compiledCode)});if(compiled){Promise.resolve(window.__afbinOfflineReady).then(function(){return unpack(${JSON.stringify(ARTIFACT_FILE_IDS.compiledCode)});}).then(function(next){if(next)run(next);},function(){fail(${JSON.stringify(ARTIFACT_FILE_BROKEN)});});}},function(){fail(${JSON.stringify(ARTIFACT_FILE_BROKEN)});});
-}catch(e){fail(${JSON.stringify(ARTIFACT_FILE_BROKEN)});}
+unpack(${scriptJson(ARTIFACT_FILE_IDS.code)}).then(function(code){run(code);var compiled=d.getElementById(${scriptJson(ARTIFACT_FILE_IDS.compiledCode)});if(compiled){Promise.resolve(window.__afbinOfflineReady).then(function(){return unpack(${scriptJson(ARTIFACT_FILE_IDS.compiledCode)});}).then(function(next){if(next)run(next);},function(){fail(${scriptJson(ARTIFACT_FILE_BROKEN)});});}},function(){fail(${scriptJson(ARTIFACT_FILE_BROKEN)});});
+}catch(e){fail(${scriptJson(ARTIFACT_FILE_BROKEN)});}
 })();`;
 
 /** The boot placeholder's look: system fonts, centred, both colour schemes. */

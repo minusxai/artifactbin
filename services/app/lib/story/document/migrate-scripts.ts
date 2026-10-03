@@ -21,6 +21,7 @@
  * byte for byte.
  */
 import { parseSync, traverse, type NodePath, type types as t } from '@babel/core';
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { parseJsx } from '@/lib/jsx/parse';
 import type { JsxElement, JsxNode } from '@/lib/jsx/types';
 import { splitHelmet, type HelmetContent } from './helmet';
@@ -582,7 +583,7 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     const innerIds = idsOf(iframe.children.filter((c) => c.type === 'element' && c.tag !== 'style' && c.tag !== 'script'));
     for (const [id] of innerIds) if ((ids.get(id) ?? 0) > (innerIds.get(id) ?? 0)) refused ??= `the id "${id}" inside it is also used outside it`;
     const label = stringAttr(iframe, 'title') ?? 'Iframe';
-    if (refused) { markupNote(iframe.start, `<Iframe title="${label}"> was not inlined: ${refused}`); continue; }
+    if (refused) { markupNote(iframe.start, `<Iframe> "${label}" was not inlined: ${refused}`); continue; }
     let id = stringAttr(iframe, 'id');
     if (!id) { do id = `migrated-frame-${++generated}`; while (ids.has(id)); ids.set(id, 1); }
     frames.push({ iframe, id, css: css.join('\n'), scripts, content, label, height: numberAttr(iframe, 'height') });
@@ -604,7 +605,7 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
     const list: Piece[] = [];
     for (const code of frame.scripts) {
       const ast = parseScript(code);
-      if (!ast) { unresolvedParse.push(parseFailure(`the script of <Iframe title="${frame.label}">`)); continue; }
+      if (!ast) { unresolvedParse.push(parseFailure(`the script of <Iframe> "${frame.label}"`)); continue; }
       const piece = { code, ast, framed: true };
       list.push(piece);
       namesOf(ast, taken);
@@ -696,8 +697,8 @@ export function migrateDocumentScripts(source: string): DocumentMigration {
   for (const frame of frames) {
     const style = frame.height ? ` style={{ minHeight: '${frame.height}px' }}` : '';
     const label = frame.label === 'Iframe' ? '' : ` role="group" aria-label=${JSON.stringify(frame.label)}`;
-    docEdits.push({ start: frame.iframe.start, end: frame.iframe.end, text: `{/* ${IFRAME_NOTE} */}\n<div id="${frame.id}"${label}${style}>${frame.content}</div>` });
-    appliedMarkup.push(`<Iframe title="${frame.label}"> → inlined as <div id="${frame.id}">, its style scoped into the Helmet style, its script merged into the Helmet script`);
+    docEdits.push({ start: frame.iframe.start, end: frame.iframe.end, text: `{/* ${IFRAME_NOTE} */}\n<div id="${escapeHtml(frame.id)}"${label}${style}>${frame.content}</div>` });
+    appliedMarkup.push(`<Iframe> "${frame.label}" → inlined as the <div> with id "${frame.id}", its style scoped into the Helmet style, its script merged into the Helmet script`);
   }
   flushHelmetInserts();
 

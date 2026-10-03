@@ -86,8 +86,8 @@ it('installs into a clean home outside the checkout by default, and names the ve
 });
 it('installs noninteractively without SHELL or a controlling terminal', () => {
   // macOS sh may populate SHELL itself; unset it inside the shell to reproduce Linux CI reliably.
-  const result = spawnSync('sh', ['-c', 'installer=$1; shift; unset SHELL; . "$installer"', 'installer-test', script], {
-    encoding: 'utf8', cwd: home, env: baseEnv(), timeout: 20000,
+  const result = spawnSync('sh', ['-c', 'installer=$INSTALLER_UNDER_TEST; unset INSTALLER_UNDER_TEST SHELL; . "$installer"'], {
+    encoding: 'utf8', cwd: home, env: { ...baseEnv(), INSTALLER_UNDER_TEST: script }, timeout: 20000,
   });
   expect(result.status, result.stderr).toBe(0);
   expect(result.stderr).toBe('');

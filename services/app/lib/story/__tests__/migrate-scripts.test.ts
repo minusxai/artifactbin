@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parseJsx } from '@/lib/jsx/parse';
 import { migrateDocumentScripts, scopeCss } from '@/lib/story/document/migrate-scripts';
 import { validateMarkupStructure } from '@/lib/story/document/local-validation';
 import { authorModuleNames, buildAuthorModule } from '@/lib/story/document/author-module.server';
@@ -72,6 +73,15 @@ describe('the rules', () => {
     expect(source).toContain('.lede { font-weight: 600; }\n/* migrated from Iframe "Counter canvas" */\n#Ab3d {margin:16px;font:16px system-ui} #Ab3d canvas, #Ab3d button');
     expect(source).toContain('/* migrated from Iframe "Counter canvas" (#Ab3d) */');
     expect(source).toContain("const [count, setCount] = signal('$count');");
+  });
+
+  it('keeps an inlined Iframe\'s id intact when it holds a double quote', () => {
+    const { source, unresolved } = migrateDocumentScripts(`<Helmet><title>t</title></Helmet><Iframe id='a"b' title="T"><p>x</p><script>{\`console.log(1)\`}</script></Iframe>`);
+    expect(unresolved).toEqual([]);
+    const parsed = parseJsx(source);
+    expect(parsed.ok).toBe(true);
+    const div = parsed.ok ? parsed.nodes.find((n) => n.type === 'element' && n.tag === 'div') : undefined;
+    expect(div?.type === 'element' && div.attributes.find((a) => a.name === 'id')?.value).toMatchObject({ static: true, json: 'a"b' });
   });
 
   it('leaves an Iframe it cannot inline where it is, marked, and changes nothing else', () => {
