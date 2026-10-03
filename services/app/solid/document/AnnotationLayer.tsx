@@ -429,8 +429,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           if (picked) {
             setSelection(picked);
             const rect = picked.captureRect ?? picked.rect;
-            // An inline runtime reports page-client coordinates already.
-            if (picking === 'area') void capture.capture({ ...rect });
+            // The rect is in the document's viewport: the page's capture adds where that viewport sits (an inline
+            // runtime's is the page's own, at 0,0; a framed document's is the iframe's box).
+            const at = props.runtimeRef ? documentRect({ runtimeRef: props.runtimeRef }) : undefined;
+            if (picking === 'area') void capture.capture({ ...rect, x: rect.x + (at?.left ?? 0), y: rect.y + (at?.top ?? 0) });
             setOpenId(null);
             setFailure(null);
           } else capture.reset();
