@@ -362,12 +362,13 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
       const signature = storyUpdatePartsShared(editorSource.current())?.declarations ?? null;
       if (signature === null || signature === ranSignature) return;
       if (!hasDeclarations(signature)) { ranSignature = signature; return; }
-      ranSignature = signature;
       setDataflowPending(true);
       void backend.previewQueries(editorSource.current()).then((body) => {
         if (!alive) return;
         setDataflowPending(false);
         if (!body) return;
+        // Only completed previews are reusable: a source edit can cancel an in-flight result.
+        ranSignature = signature;
         const next = { values: {}, tables: body.tables, errors: body.errors };
         compiledFlow = body.flow ?? null;
         setDataflowState(next);

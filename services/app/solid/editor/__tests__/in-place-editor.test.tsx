@@ -55,10 +55,9 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
-function mountEditor() {
+function mountEditor(source = SOURCE, backend = fakeBackend()) {
   const runtime = fakeRuntime();
-  const backend = fakeBackend();
-  const art = { id: 'doc12345', version: 3, edit_id: 'edit-3', title: 'A note', theme: null, template: null, colorMode: null, markup: SOURCE };
+  const art = { id: 'doc12345', version: 3, edit_id: 'edit-3', title: 'A note', theme: null, template: null, colorMode: null, markup: source };
   const view = render(() => <Router><Route path="/" component={() => (
     <InPlaceEditor art={art} backend={backend} runtimeRef={runtime.runtimeRef} sessionNonce={NONCE} />
   )} /></Router>);
@@ -105,4 +104,18 @@ it('Ctrl-Z inside a text field is left to the field', async () => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(queued).toEqual([]);
   expect(view.getByRole('button', { name: 'Undo' })).not.toBeDisabled();
+});
+
+
+it('retries query preview when an intervening edit discards the pending result', async () => {
+  const backend = fakeBackend();
+  let finish!: (value: null) => void;
+  const preview = vi.mocked(backend.previewQueries);
+  preview.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const { emit } = mountEditor('<Helmet><Query name="costs">{`select 1 as spend`}</Query></Helmet><p>Hello there</p>', backend);
+  await vi.waitFor(() => expect(preview).toHaveBeenCalledTimes(1));
+  emit({ type: STORY_TEXT_EDIT_MESSAGE, path: '0', innerHtml: 'Updated while loading' });
+  finish(null);
+  await vi.waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
+  expect(preview.mock.calls[1]![0]).toContain('Updated while loading');
 });
