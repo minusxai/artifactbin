@@ -81,10 +81,11 @@ describe('the file, for a coding agent asked to edit it', () => {
     expect(note).toBe(
       'artifactbin offline file for "Q3 - -> review \\u003c!- - plan" (https://app.artifactbin.dev/a/Ab12Cd). '
       + 'To edit the document, change the top-level "source" string (the second key) in the <script id="afbin-file"> JSON below. '
-      + 'It is artifactbin JSX (reference: https://app.artifactbin.dev/llms.txt; the afbin CLI: curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh, then "afbin help markup"). '
+      + 'It is artifactbin JSX (reference: https://app.artifactbin.dev/llms.txt; prepare Node/npm using https://app.artifactbin.dev/llms.txt, then "npx @artifactbin/cli@latest help markup"). '
       + 'Keep the JSON valid and write "<" as \\u003c inside it. '
       + 'Leave "#afbin-code" untouched. '
-      + 'The file rebuilds everything else from "source" when it is opened, and shows validation errors if the markup is invalid. '
+      + 'Static markup/text edits rebuild on open; compiler-dependent widgets require local CLI preview. Invalid markup shows validation errors. '
+      + 'To return to JSX, run "npx @artifactbin/cli@latest import file.jsx.html"; publication is explicit. '
       + 'Comments are in "threads".',
     );
   });
@@ -102,7 +103,7 @@ describe('the file, for a coding agent asked to edit it', () => {
     const help = doc.head.querySelector('link[rel="help"]');
     expect(help?.getAttribute('href')).toBe('https://app.artifactbin.dev/llms.txt');
     expect(help?.getAttribute('title')).toBe(AGENT_HELP_TITLE);
-    expect(doc.head.querySelector('meta[name="afbin"]')?.getAttribute('content')).toContain('curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh');
+    expect(doc.head.querySelector('meta[name="afbin"]')?.getAttribute('content')).toContain('npx --yes @artifactbin/cli@latest');
   });
 
   it('puts the JSON before the code, with the top-level source as its second key', () => {

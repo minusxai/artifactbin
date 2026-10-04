@@ -12,3 +12,24 @@ description: Install Node and run afbin through npm, including prepared offline 
 - Command examples below use `afbin` as shorthand: always invoke them as `npx --yes @artifactbin/cli@latest <command>` (Windows: `npx.cmd`).
 
 The CLI uses browser approval or email sign-in for remote work. Direct HTTP clients require email authentication. Local preview remains local until explicit publication.
+
+## One local editing journey
+
+Write `report.jsx`, then run each command through npm:
+
+```sh
+npx --yes @artifactbin/cli@latest preview report.jsx
+npx --yes @artifactbin/cli@latest export report.jsx --format html
+npx --yes @artifactbin/cli@latest import report.jsx.html
+npx --yes @artifactbin/cli@latest push report.jsx
+```
+
+Preview binds localhost and edits the source without sign-in or cloud requests. `--share` explicitly enables network access; anyone who can reach that server may edit. Close preview when finished.
+
+HTML export defaults to `report.jsx.html`, a self-contained offline file that opens normally in a browser. Web downloads and browser Save use the same `.jsx.html` suffix. JSX source stays `.jsx`; PNG, CSV and other formats keep their own extensions. Save edits and comments from the offline browser before importing its downloaded file.
+
+Import reads that HTML file locally. With no `--output`, `report.jsx.html` becomes `report.jsx` (legacy `.html` is also accepted). Use `--output revised.jsx` to choose another JSX destination. Existing local documents reconcile against their baseline; conflicts preserve copies instead of silently replacing your work. Tracked remote destinations are refused. Import has no `--force`, does not publish, and never writes to stdout.
+
+Push is the explicit cloud publication step. It preserves remote identity and refuses conflicting remote changes. Browser approval in the CLI may continue as a guest; `auth --email <email>` is available for headless use. Direct HTTP clients require email authentication and cannot use guest browser approval.
+
+Before disconnecting, cache an exact npm package version and prepare any required browser assets. Substitute that version in the offline command above for every local operation. npm packaging does not sandbox the CLI or guarantee that arbitrary commands avoid network access.

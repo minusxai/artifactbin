@@ -21,7 +21,7 @@
  * (lib/offline/extras) — so a forgotten fetch fails closed instead of calling home.
  */
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
-import { agentDiscovery, agentDiscoveryHead, afbinInstallCommand } from '@/lib/serving/agent-discovery-tags';
+import { agentDiscovery, agentDiscoveryHead } from '@/lib/serving/agent-discovery-tags';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { withModuleDataId } from '@/lib/compiled-page/carriers';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
@@ -73,10 +73,11 @@ export function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveU
   const title = JSON.stringify(file.metadata.title).replace(/</g, '\\u003c');
   return `artifactbin offline file for ${title} (${file.liveUrl}). `
     + 'To edit the document, change the top-level "source" string (the second key) in the <script id="afbin-file"> JSON below. '
-    + `It is artifactbin JSX (reference: ${help.url}; the afbin CLI: ${afbinInstallCommand(file.origin)}, then "afbin help markup"). `
+    + `It is artifactbin JSX (reference: ${help.url}; prepare Node/npm using ${help.url}, then "npx @artifactbin/cli@latest help markup"). `
     + 'Keep the JSON valid and write "<" as \\u003c inside it. '
     + 'Leave "#afbin-code" untouched. '
-    + 'The file rebuilds everything else from "source" when it is opened, and shows validation errors if the markup is invalid. '
+    + 'Static markup/text edits rebuild on open; compiler-dependent widgets require local CLI preview. Invalid markup shows validation errors. '
+    + 'To return to JSX, run "npx @artifactbin/cli@latest import file.jsx.html"; publication is explicit. '
     + 'Comments are in "threads".';
 }
 
