@@ -80,3 +80,14 @@ test('moving a local document keeps its identity and discussion, and status disc
   output.length=0;assert.equal(await runCli(['status','--json'],ctx),0);assert.match(output.join(''),/renamed.jsx/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+ test('portable publication dry run stays local without discovery or credentials',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-push-plan-'));
+ try{
+ await writeFile(join(root,'draft.jsx'),'<p id="p">Unpublished</p>');
+ const out:string[]=[];const context={cwd:root,home:join(root,'home'),env:{},stdout:(s:string)=>out.push(s),stderr:()=>{},fetch:async()=>assert.fail('offline dry run must not fetch')};
+ assert.equal(await runCli(['add','draft.jsx','--json'],context),0,out.join(''));out.length=0;
+ assert.equal(await runCli(['push','draft.jsx','--dry-run','--json'],context),0,out.join(''));
+ assert.equal(JSON.parse(out[0]!).local_only,true);assert.equal(JSON.parse(out[0]!).operations[0].status,'would_publish');
+ }finally{await rm(root,{recursive:true,force:true});}
+});

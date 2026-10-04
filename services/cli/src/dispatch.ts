@@ -1,3 +1,5 @@
+import {importLocalHtml} from './local-html-import';
+import {publishLocalWorkspace} from './local-publication';
 import {registerLocalFiles,findLocalWorkspace,moveLocalFile} from './local-workspace';
 import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
@@ -135,6 +137,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
+  if(command==='import'){emit(await importLocalHtml(workspace,positionals[0]!,typeof flags.output==='string'?flags.output:undefined));return 0;}
+  const portable=!!await findLocalWorkspace(workspace.root);
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await (await findLocalWorkspace(workspace.root)?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   const account=await accountPlan(workspace,parsed);
@@ -224,9 +228,9 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log',selectedAddresses);
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,aliases:selectedAddresses,writable:true});
-  if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
-  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin(),serverAddresses(await identity()));if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
-  if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
+  if(command==='push'&&!account&&!portable&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
+  if(command==='push'&&!account&&!portable&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin(),serverAddresses(await identity()));if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
+  if(command==='push'&&!account&&!portable&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
    const result=await finishLocalPush(workspace,positionals,{force:!!flags.force,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(result){emit(result);return 0;}
   }
   if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined,selectedAddresses);if(!targets.length){emit({operations:[]});return 0;}}
@@ -239,8 +243,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    * deployment is only ever a name a link or a tracking record may carry — never a
    * destination, and never a place a credential is sent.
    */
+  if(command==='push'&&!account&&portable&&flags['dry-run']){emit(await publishLocalWorkspace(workspace,positionals,new HttpClient({connection:{server:selectedServer,token:''}}),{dryRun:true,force:!!flags.force}));return 0;}
   const resolved=await identity();
-  await checkUpdateNotice({home,server:resolved.canonical,env:context.env,fetch:context.fetch,stderr});
   const server=serverOrigin()===undefined?undefined:resolved.canonical;
   const serverAliases=serverAddresses(resolved);
 
@@ -275,7 +279,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
   // login JavaScript. Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,onRelease:release=>checkUpdateNotice({home,server:connection!.server,env:context.env,stderr,release}),account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='runs'){
    const action=positionals[0];let id=positionals[1];
    if(action==='start'){
@@ -333,6 +337,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account){
+   if(portable){emit(await publishLocalWorkspace(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined}));return 0;}
    if(!flags['dry-run']){const selected=await inspectWorkspace(workspace,positionals.length?positionals:undefined);await addFiles(workspace,selected.filter(file=>file.bytes&&!file.tracked&&!file.document?.metadata.head_version&&!file.resource?.head_version).map(file=>resolve(workspace.root,file.path)),client);workspace=await loadWorkspace(workspace.cwd,home);}
    const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});
    // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and

@@ -1,3 +1,4 @@
+import {renderLocalHtml} from './local-html-runtime';
 import {renderLocalImage} from './local-image-runtime';
 import type {LocalImageRenderer} from './local-image-options';
 import {localIdentities} from './identities';
@@ -5,7 +6,7 @@ import {basename,extname,join,relative,resolve} from 'node:path';
 import {stat} from 'node:fs/promises';
 import {stringify} from 'yaml';
 import {CliError} from './errors';
-import {atomicWrite,digest,localBackup,readOptional} from './files';
+import {atomicWrite,localBackup,readOptional} from './files';
 import {confinedPath} from './journal';
 import {resolveReference} from './reference';
 import {parseResourceFile,readResourceSource} from './resource-file';
@@ -37,11 +38,11 @@ export function serverRenderer(server:string,client?:HttpClient):Renderer{
 
 const RENDERED=['png','jpg','html'] as const;
 const RENDERER_FIX='push the draft, or export csv/json/yaml/original';
-const EXTENSIONS:Record<string,string>={png:'png',jpg:'jpg',html:'html',csv:'csv',json:'json',yaml:'yaml'};
+const EXTENSIONS:Record<string,string>={png:'png',jpg:'jpg',html:'jsx.html',csv:'csv',json:'json',yaml:'yaml'};
 const rendered=(format:string):format is typeof RENDERED[number]=>RENDERED.includes(format as never);
 
 interface ExportOptions {
- localImage?:LocalImageRenderer;type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
+ localHtml?:typeof renderLocalHtml;localImage?:LocalImageRenderer;type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
  server:string;/** Verified other addresses of `server`. */aliases?:readonly string[];client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
 }
 interface ExportTarget {ref:string;format:string;id?:string;path?:string;version?:number;render:boolean}
@@ -58,7 +59,7 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
  if((options.og||options.refresh)&&!['png','jpg'].includes(format))throw new CliError('unsupported_format','--og and --refresh require an image export.','Use --format png or jpg.');
  if(options.og&&options.page!==undefined)throw new CliError('invalid_flags','--og cannot be combined with --page.');
  if(options.page!==undefined&&format!=='png'&&format!=='jpg')throw new CliError('unsupported_format',`--page selects one slide of an image export, not ${format}.`,'Use --format png or jpg with --page, or export the whole resource.');
- const localFiles=['png','jpg'].includes(format)?await localIdentities(workspace):{};
+ const localFiles=rendered(format)?await localIdentities(workspace):{};
  const targets:ExportTarget[]=[];
  for(const input of refs){
   const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server,aliases:[...options.aliases??[]]});
@@ -77,7 +78,7 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
    const atVersion=ref.version!==undefined;
    const path=ref.kind==='path'?ref.path:atVersion||/^https?:\/\//.test(input)?undefined:localFiles[ref.id];
    if(atVersion&&path!==undefined)throw new CliError('unsupported_version_export',`${input} names a local file and a version.`,`Export the published id at that version, e.g. afbin export <id>@${ref.version} --format ${format}, or the file as it stands.`);
-   targets.push({ref:input,format,render:true,...(ref.version!==undefined?{version:ref.version}:{}),...(path!==undefined?{path,...(format==='html'?{id:publishedHead(workspace,path)}:{})}:{id:ref.kind==='id'?ref.id:undefined})});
+   targets.push({ref:input,format,render:true,...(ref.version!==undefined?{version:ref.version}:{}),...(path!==undefined?{path}:{id:ref.kind==='id'?ref.id:undefined})});
   }else targets.push({ref:input,format,render:false,...(ref.kind==='id'?{id:ref.id,...(ref.version?{version:ref.version}:{})}:{path:ref.path,...(ref.version?{version:ref.version}:{})})});
  }
  const destinations=await plan(workspace,targets,options);
@@ -85,7 +86,7 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
  // writes nothing and never sets up credentials.
  if(options.dryRun){
   options.emit({dry_run:true,operations:targets.map((target,index)=>({ref:target.ref,format:target.format,...(destinations[index]?{path:destinations[index]}:{output:'-'}),
-   requires:target.render?(target.path!==undefined&&target.format!=='html'?'local_rendering':'server_rendering'):'local_conversion',status:'would_write'}))});
+   requires:target.render?(target.path!==undefined?'local_rendering':'server_rendering'):'local_conversion',status:'would_write'}))});
   return true;
  }
  if(targets.some(target=>target.id!==undefined&&!options.client))return false;
@@ -110,27 +111,15 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
 /** `--format` wins; otherwise a recognized output extension names it. A disagreement is an error. */
 function selectFormat(refs:string[],options:ExportOptions):string{
  const output=options.output&&options.output!=='-'?extname(options.output).toLowerCase().slice(1):'';
- const inferred=output==='yml'?'yaml':output==='jpeg'?'jpg':Object.hasOwn(EXTENSIONS,output)?output:undefined;
+ const inferred=output==='yml'?'yaml':output==='jpeg'?'jpg':output==='html'?'html':Object.hasOwn(EXTENSIONS,output)?output:undefined;
  if(options.format&&inferred&&inferred!==options.format&&refs.length===1)throw new CliError('invalid_format',`--format ${options.format} and the output filename disagree.`,`Name the file ${EXTENSIONS[options.format]}, or export --format ${inferred}.`);
  if(options.format)return options.format;
  if(inferred&&refs.length===1)return inferred;
  throw new CliError('invalid_format','The export representation is not determined.','Add --format png|jpg|html|csv|json|yaml|original, or name an --output file with a known extension.');
 }
 
-/** Rendering photographs a published head, so a local file must prove it still is that head. */
-function publishedHead(workspace:Workspace,path:string):string{
- const tracked=workspace.tracking?.files[path];
- if(!tracked)throw new CliError('renderer_unavailable',`${path} is not tracked as a published artifact, so there is no head to render.`,RENDERER_FIX);
- return tracked.id;
-}
-async function unchangedHead(workspace:Workspace,path:string):Promise<void>{
- // `file` is the sha256 of the local bytes last accepted, so the comparison needs no stored copy of them.
- const tracked=workspace.tracking!.files[path];
- const bytes=await readOptional(await confinedPath(workspace.root,path));
- if(!bytes||digest(bytes)!==tracked.file)throw new CliError('renderer_unavailable',`${path} differs from its observed head; drafts are never uploaded for rendering.`,RENDERER_FIX);
-}
-
 async function renderTarget(workspace:Workspace,target:ExportTarget,options:ExportOptions):Promise<Buffer>{
+ if(target.path!==undefined&&target.format==='html')return(options.localHtml??renderLocalHtml)({cwd:workspace.root,home:workspace.home,path:target.path});
  if(target.path!==undefined&&(target.format==='png'||target.format==='jpg'))return (options.localImage??renderLocalImage)({cwd:workspace.root,home:workspace.home,path:target.path,server:options.server,format:target.format,page:options.page,og:options.og});
  const renderer=serverRenderer(options.server,options.client);
  const result=target.format==='html'
@@ -194,7 +183,6 @@ function serialize(rows:Record<string,unknown>[],format:string):Buffer{
 
 /** Destinations are decided for every target before anything is rendered or written. */
 async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOptions):Promise<(string|undefined)[]>{
- for(const target of targets)if(target.format==='html'&&target.path!==undefined)await unchangedHead(workspace,target.path);
  if(options.output==='-')return targets.map(()=>undefined);
  const outputPath=options.output?await confinedPath(workspace.root,resolve(workspace.cwd,options.output)).catch(error=>{
   // `--output /tmp/x.png` from a workspace elsewhere: an agent tried it in three tasks and got a generic failure.

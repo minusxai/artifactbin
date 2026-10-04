@@ -74,12 +74,10 @@ describe('exporting and opening a published artifact', () => {
    }finally{await h.cleanup();}
   });
 
-  test('HTML still requires a published head, a published version renders, and a local file has no version',async()=>{
+  test('published versions render remotely and local version suffixes are refused',async()=>{
    const h=await harness('afbin-seed-export-refuse-');
    try{
     await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Edited locally</p>'));
-    assert.notEqual(await h.invoke(['export','report.jsx','--format','html','--json']),0);
-    assert.equal(h.last().error.code,'renderer_unavailable');assert.equal(h.network(),0);
     // A LOCAL FILE is a draft, not a history: the bytes on disk are the head.
     assert.notEqual(await h.invoke(['export','report.jsx@2','--format','png','--json'],()=>Response.json({})),0);
     assert.equal(h.last().error.code,'unsupported_version_export');assert.equal(h.network(),0);
@@ -236,5 +234,18 @@ test('image download refuses ambiguous requests, escapes and failed responses wi
   assert.notEqual(await h.invoke([...base,'--output','bad.webp','--json'],()=>new Response('<html>login</html>',{headers:{'Content-Type':'text/html'}})),0);
   await assert.rejects(readFile(join(h.root,'bad.webp')),/ENOENT/);
   assert.equal(await readFile(join(h.root,'keep.webp'),'utf8'),'keep');
+ }finally{await h.cleanup();}
+});
+
+ test('local HTML exports the current draft without credentials and defaults to jsx.html',async()=>{
+ const h=await cliHarness('local-html-export-',{token:null});
+ try{
+  await writeFile(join(h.root,'draft.jsx'),'<p>Unsynced</p>');
+  const workspace=await loadWorkspace(h.root,h.root);let calls=0;
+  const options={format:'html',server:'https://example.com',emit:()=>{},localHtml:async()=>{calls++;return Buffer.from('<!doctype html>local draft');}};
+  assert.equal(await exportResources(workspace,['draft.jsx'],{...options,dryRun:true,emit:value=>assert.equal((value as any).operations[0].requires,'local_rendering')}),true);
+  assert.equal(calls,0);assert.equal(await exportResources(workspace,['draft.jsx'],options),true);
+  assert.equal(calls,1);assert.equal(await readFile(join(h.root,'draft.jsx.html'),'utf8'),'<!doctype html>local draft');
+  assert.equal(h.network(),0);
  }finally{await h.cleanup();}
 });
