@@ -7,6 +7,8 @@
  * one-pager for an agent that has nothing installed — whose first line is the
  * blurb every discovery surface (the meta tag) repeats.
  */
+import { DEFAULT_SERVER } from '@artifactbin/contracts';
+import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, skillExample, skillTree } from '../skills';
 import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, llmsText } from '@/lib/serving';
@@ -91,5 +93,17 @@ describe('llms.txt and the discovery head', () => {
     expect(AGENT_HELP_TITLE).toBe('Agents: read this to create, edit, or operate artifacts on the CLI using afbin');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
     expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @artifactbin/cli@latest. Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1">`);
+  });
+});
+
+describe('npm setup keeps installed skills on the selected server',()=>{
+  it.each(['https://docs.example','http://127.0.0.1:5001/'])('selects self-hosted origins on Unix and Windows: %s',(base)=>{
+    const host=base.replace(/\/$/,'');
+    expect(afbinInstallCommand(base).split('\n')[1]).toBe(`npx --yes @artifactbin/cli@latest setup --server '${host}'`);
+    expect(afbinWindowsInstallCommand(base).split('\n')[1]).toBe(`npx.cmd --yes @artifactbin/cli@latest setup --server '${host}'`);
+  });
+  it.each([DEFAULT_SERVER,`${DEFAULT_SERVER}/`])('keeps the public setup command simple: %s',(base)=>{
+    expect(afbinInstallCommand(base).split('\n')[1]).toBe('npx --yes @artifactbin/cli@latest setup');
+    expect(afbinWindowsInstallCommand(base).split('\n')[1]).toBe('npx.cmd --yes @artifactbin/cli@latest setup');
   });
 });

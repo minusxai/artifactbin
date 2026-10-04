@@ -1,3 +1,4 @@
+import { DEFAULT_SERVER } from '@artifactbin/contracts';
 import { escapeHtml } from '@artifactbin/utils/escape';
 /**
  * The agent-discovery tags themselves — pure and node-free, so the offline
@@ -9,10 +10,13 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 export interface AgentDiscovery {url:string;instruction:string}
 export const AGENT_HELP_TITLE='Agents: read this to create, edit, or operate artifacts on the CLI using afbin';
 const origin=(base:string)=>base.replace(/\/$/,'');
-/** The CLI's one-line install on `base`. */
-export const afbinInstallCommand=(base:string):string=>`afbin_node_setup="$(mktemp)" && curl -fsSL ${origin(base)}/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"\nnpx --yes @artifactbin/cli@latest setup`;
+/** Shell quoting is platform-specific; keep even a supplied origin one argument. */
+const quoted=(value:string,windows=false):string=>`'${windows?value.replaceAll("'","''"):value.replaceAll("'",`'"'"'`)}'`;
+const setupServer=(base:string,windows=false):string=>origin(base)===DEFAULT_SERVER?'':` --server ${quoted(origin(base),windows)}`;
+/** Prepare Node in this terminal, then install skills for the selected server. */
+export const afbinInstallCommand=(base:string):string=>`afbin_node_setup="$(mktemp)" && curl -fsSL ${quoted(`${origin(base)}/chat/ensure-node.sh`)} -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"\nnpx --yes @artifactbin/cli@latest setup${setupServer(base)}`;
 /** PowerShell uses .cmd to work under its default script execution policy. */
-export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${origin(base)}/chat/ensure-node.ps1 | Invoke-Expression\nnpx.cmd --yes @artifactbin/cli@latest setup`;
+export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/ensure-node.ps1`,true)} | Invoke-Expression\nnpx.cmd --yes @artifactbin/cli@latest setup${setupServer(base,true)}`;
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
  return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @artifactbin/cli@latest. Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1`};
