@@ -101,7 +101,7 @@ export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string
  process.chdir(resolve(assetsRoot));
  const design=resolveStoredStoryDesign(document.metadata.theme,document.metadata.colorMode);
  const prepared=await prepareStoryRuntime({source:document.body,compiledCss:await compileStoryCss(document.body,{force:true}),theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode,refData,title:document.metadata.title??input.path,chrome:true,dataflow:{flow,hold:Object.keys(input.held)}});
- const island:StoryIslandData={...prepared.data,nodes:splitHelmet((parseJsx(document.body) as {ok:true;nodes:JsxNode[]}).nodes).body,refData,dataflow:{flow,hold:Object.keys(input.held)}};
+ const island:StoryIslandData={...prepared.data,refData,dataflow:{flow,hold:Object.keys(input.held)}};
  delete island.queryUrl;delete island.mutateUrl;delete island.assetsUrl;delete island.sqliteWasm;
  let compiled=await compileDocument({data:island,flow,authorScript:prepared.authorScript,capture:false});
  const {ssr:_ssr,graph:_graph,...sharedBuild}=compilerBuild();compiled={...compiled,sharedBuild};

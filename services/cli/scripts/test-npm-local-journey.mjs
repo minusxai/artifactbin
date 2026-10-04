@@ -48,6 +48,27 @@ async function post(origin,path,data){const response=await fetch(origin+path,{me
 const body=source=>source.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,'');
 
 let active,browser;
+const diagnostics=resolve('test-results','local-journey');
+const browserEvents=[],trackedPages=[];
+function trackPage(page,label){
+ trackedPages.push({page,label});
+ page.on('pageerror',error=>browserEvents.push({page:label,type:'pageerror',message:error.stack??error.message}));
+ page.on('console',message=>browserEvents.push({page:label,type:'console',level:message.type(),message:message.text()}));
+ page.on('requestfailed',request=>browserEvents.push({page:label,type:'requestfailed',url:request.url(),error:request.failure()?.errorText}));
+ return page;
+}
+async function retainDiagnostics(error){
+ await mkdir(diagnostics,{recursive:true});
+ await writeFile(join(diagnostics,'failure.json'),JSON.stringify({error:error.stack??String(error),entry,scratch,remoteRequests,browserEvents},null,2));
+ for(const [label,path] of [['exported',join(copy,'report.jsx.html')],['saved',join(recovery,'report.jsx.html')],['source',join(copy,'report.jsx')]]){
+  try{const content=await readFile(path,'utf8');await writeFile(join(diagnostics,label+(label==='source'?'.jsx':'.html')),content);if(label!=='source')await writeFile(join(diagnostics,label+'-carrier.json'),JSON.stringify(payload(content),null,2));}catch(reason){await writeFile(join(diagnostics,label+'-unavailable.txt'),String(reason));}
+ }
+ for(const {page,label} of trackedPages){
+  if(page.isClosed())continue;
+  try{await writeFile(join(diagnostics,label+'-dom.html'),await page.content());await writeFile(join(diagnostics,label+'-runtime.json'),JSON.stringify(await page.evaluate(()=>({url:location.href,ready:document.documentElement.getAttribute('data-mx-ready'),headings:[...document.querySelectorAll('h1,h2,h3')].map(node=>({text:node.textContent,path:node.getAttribute('data-mx-ast')})),file:window.__afbinOfflineFile??null})),null,2));await page.screenshot({path:join(diagnostics,label+'.png'),fullPage:true});}catch(reason){await writeFile(join(diagnostics,label+'-unavailable.txt'),String(reason));}
+ }
+ console.error('Installed local journey diagnostics retained at '+diagnostics);
+}
 try{
  await writeFile(join(workspace,'sales.csv'),'amount\n10\n20\n');
  const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4KsAAAAASUVORK5CYII=','base64');
@@ -75,7 +96,7 @@ try{
  assert.deepEqual((await post(active.origin,'/query',{file:'report.jsx',values:{}})).tables.sales.rows,[{total:30}]);
  browser=await chromium.launch();const context=await browser.newContext({acceptDownloads:true});
  let remoteBrowserRequests=0;await context.route(/^https?:/,route=>{if(new URL(route.request().url()).origin===active.origin)return route.continue();remoteBrowserRequests++;return route.abort();});
- const page=await context.newPage();await page.goto(active.url);await page.getByRole('heading',{name:'Local report',exact:true}).waitFor();await page.getByRole('img',{name:'Portable image'}).evaluate(element=>element.decode());
+ const page=trackPage(await context.newPage(),'preview');await page.goto(active.url);await page.getByRole('heading',{name:'Local report',exact:true}).waitFor();await page.getByRole('img',{name:'Portable image'}).evaluate(element=>element.decode());
  await context.close();await active.close();active=undefined;
  assert.equal(remoteBrowserRequests,0);
  await command(copy,profiles[1],['export','report.jsx','--format','html','--json']);
@@ -83,7 +104,7 @@ try{
  assert.equal(file.artifactId,ids['report.jsx']);assert.equal(file.threads[0].id,thread.id);assert.deepEqual(Object.keys(file.localWorkspace.assets).sort(),[ids['sales.csv'],ids['pixel.png']].sort());
  const offline=await browser.newContext({acceptDownloads:true});await offline.addInitScript(()=>{delete window.showSaveFilePicker;});
  let offlineRequests=0;await offline.route(/^https?:/,route=>{offlineRequests++;return route.abort();});
- const offlinePage=await offline.newPage();await offlinePage.goto(pathToFileURL(exported).href);await offlinePage.getByRole('heading',{name:'Local report',exact:true}).waitFor({timeout:30000});
+ const offlinePage=trackPage(await offline.newPage(),'offline');await offlinePage.goto(pathToFileURL(exported).href);await offlinePage.getByRole('heading',{name:'Local report',exact:true}).waitFor({timeout:30000});
  await offlinePage.getByRole('img',{name:'Portable image'}).evaluate(element=>element.decode());
  await offlinePage.getByRole('button',{name:'Edit',exact:true}).click();
  const name=offlinePage.getByRole('dialog',{name:'What should we call you?'});if(await name.count()){await name.getByRole('textbox',{name:'Your name'}).fill('Offline tester');await name.getByRole('button',{name:'Save',exact:true}).click();await name.waitFor({state:'hidden'});}
@@ -93,9 +114,9 @@ try{
  await offlinePage.getByRole('button',{name:'Done editing',exact:true}).click();
  const downloaded=await Promise.all([offlinePage.waitForEvent('download'),offlinePage.getByRole('button',{name:'Save',exact:true}).click()]);
  const savedHtml=join(recovery,'report.jsx.html');await downloaded[0].saveAs(savedHtml);
- const reopened=await offline.newPage();await reopened.goto(pathToFileURL(savedHtml).href);await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
- assert.equal(offlineRequests,0);await offline.close();
  const incoming=payload(await readFile(savedHtml,'utf8'));assert.match(incoming.source,/Offline saved report/);assert.equal(incoming.threads[0].id,thread.id);
+ const reopened=trackPage(await offline.newPage(),'reopened');await reopened.goto(pathToFileURL(savedHtml).href);await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
+ assert.equal(offlineRequests,0);await offline.close();
  const imported=await jsonCommand(recovery,profiles[2],['import','report.jsx.html','--output','recovered.jsx','--json']);assert.equal(imported.path,'recovered.jsx');
  const restoredIds=await jsonCommand(recovery,profiles[2],['add','recovered.jsx','sales.csv','pixel.png','--json']);assert.equal(restoredIds['recovered.jsx'],ids['report.jsx']);assert.equal(restoredIds['sales.csv'],ids['sales.csv']);assert.equal(restoredIds['pixel.png'],ids['pixel.png']);assert.deepEqual(await readFile(join(recovery,'pixel.png')),image);
  active=await preview(recovery,profiles[2],'recovered.jsx');assert.match((await get(active.origin,'/document?file=recovered.jsx')).body,/Offline saved report/);
@@ -103,6 +124,9 @@ try{
  assert.deepEqual((await post(active.origin,'/query',{file:'recovered.jsx',values:{}})).tables.sales.rows,[{total:30}]);
  assert.equal(remoteRequests,0,'No installed CLI command may reach the selected unavailable remote service');
  console.log('PASS installed npm add/preview SQL+image, accepted/stale saves, comments/restart, fresh-home workspace copy, HTML file edit/save/reopen/import, stable IDs/assets/threads, zero remote requests');
+}catch(error){
+ try{await retainDiagnostics(error);}catch(diagnosticError){console.error('Could not retain journey diagnostics',diagnosticError);}
+ throw error;
 }finally{
  if(active)await active.close();if(browser)await browser.close();await new Promise(done=>unavailable.close(done));await rm(scratch,{recursive:true,force:true});
 }

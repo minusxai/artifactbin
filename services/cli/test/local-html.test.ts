@@ -4,6 +4,7 @@ import {mkdtemp,writeFile,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {prepareLocalHtml,exportLocalHtml} from '../src/local-html';
+import {storyBodyFor} from '../../app/lib/story/document/body';
 import {registerLocalFiles} from '../src/local-workspace';
 import {loadWorkspace} from '../src/workspace';
 import {localIdentities} from '../src/identities';
@@ -45,4 +46,13 @@ test('imports a remote-style downloaded file with held SQL rows and embedded ima
 test('embedding image references does not replace literal reference examples in authored text',()=>fixture(async(root,home)=>{
  await writeFile(join(root,'picture.png'),Buffer.from('image bytes'));const workspace=await loadWorkspace(root,home),assigned=await registerLocalFiles(workspace,['picture.png']),id=assigned['picture.png']!;await writeFile(join(root,'report.jsx'),`<p id="words">Literal ref:${id} is an example</p><img src="ref:${id}" />`);
  const cwd=process.cwd();try{const file=readArtifactFileHtml((await exportLocalHtml({cwd:root,home,path:'report.jsx'},resolve('../app'))).toString());assert.match(JSON.stringify(file.island.nodes),new RegExp('Literal ref:'+id+' is an example'));assert.match(JSON.stringify(file.island.refData),/data:image\/png;base64,/);}finally{process.chdir(cwd);}
+}));
+
+test('exported compiler paths and editor nodes use the same canonical HTML nesting',()=>fixture(async(root,home)=>{
+ await writeFile(join(root,'report.jsx'),'<p id="wrap">Before<div id="nested">Inside</div>After</p>');
+ const cwd=process.cwd();try{
+  const file=readArtifactFileHtml((await exportLocalHtml({cwd:root,home,path:'report.jsx'},resolve('../app'))).toString());
+  assert.deepEqual(file.island.nodes,storyBodyFor(file.source)!.body);
+  assert.match(file.compiled!.html,/data-mx-ast="/);
+ }finally{process.chdir(cwd);}
 }));
