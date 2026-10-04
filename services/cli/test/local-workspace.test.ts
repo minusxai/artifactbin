@@ -9,6 +9,7 @@ import {localIdentities} from '../src/identities';
 import {startPreview} from '../src/preview/session';
 import {registerLocalFiles,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles,saveLocalFile} from '../src/local-workspace';
 import {digest} from '../src/files';
+import {localHistoryHead} from '../src/local-history';
 
 test('fresh preview and add use portable identities without discovery or credentials',async()=>{
  const root=await mkdtemp(join(tmpdir(),'local-workspace-'));
@@ -72,11 +73,13 @@ test('moving a local document keeps its identity and discussion, and status disc
  try{
   await writeFile(join(root,'report.jsx'),'<p id="text">Draft</p>');const workspace=await loadWorkspace(root,join(root,'home'));
   const ids=await registerLocalFiles(workspace,['report.jsx']);const store=await localWorkspaceState(root);
+  store.put(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/report.jsx',{artifactId:'remote'});
   store.put(LOCAL_WORKSPACE_SCOPE,'preview-comment','note',{id:'note',file:'report.jsx',node:'text',name:'Sam',text:'Keep'});
   const output:string[]=[];const ctx={cwd:root,home:workspace.home,env:{},stdout:(v:string)=>output.push(v),stderr:()=>{},fetch:async()=>assert.fail('local move and status must not fetch')};
   assert.equal(await runCli(['mv','report.jsx','renamed.jsx','--json'],ctx),0,output.join(''));
   assert.equal((await localIdentities(await loadWorkspace(root,workspace.home)))[ids['report.jsx']!],'renamed.jsx');
   assert.equal(store.get<{file:string}>(LOCAL_WORKSPACE_SCOPE,'preview-comment','note')?.value.file,'renamed.jsx');
+  assert.equal(store.get<{artifactId:string}>(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/renamed.jsx')?.value.artifactId,'remote');
   output.length=0;assert.equal(await runCli(['status','--json'],ctx),0);assert.match(output.join(''),/renamed.jsx/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -119,4 +122,16 @@ test('moving a local document keeps its identity and discussion, and status disc
  assert.equal(JSON.parse(output[0]!).annotations[0].thread.length,2);
  session=await startPreview({root,files:['draft.jsx'],home:context.home});
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+ test('a refused move into another history leaves no pending move and preserves both files',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-move-history-'));
+ try{
+ await writeFile(join(root,'draft.jsx'),'<p>Current</p>');await writeFile(join(root,'old.jsx'),'<p>Archived</p>');
+ const workspace=await loadWorkspace(root,join(root,'home'));await registerLocalFiles(workspace,['draft.jsx','old.jsx']);
+ await localHistoryHead(root,'old.jsx');await rm(join(root,'old.jsx'));
+ const out:string[]=[];assert.equal(await runCli(['mv','draft.jsx','old.jsx','--json'],{cwd:root,home:workspace.home,env:{},stdout:s=>out.push(s),stderr:()=>{},fetch:async()=>assert.fail('local move must not fetch')}),2);
+ assert.match(out.join(''),/history_conflict/);assert.match(await readFile(join(root,'draft.jsx'),'utf8'),/Current/);
+ assert.equal((await localWorkspaceState(root)).get(LOCAL_WORKSPACE_SCOPE,'identity-move','current'),null);
+ }finally{await rm(root,{recursive:true,force:true});}
 });

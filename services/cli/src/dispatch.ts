@@ -1,3 +1,4 @@
+import {collectionFilters} from './collection-filters';
 import {localCommentCommand} from './local-comments-command';
 import {localHistory,localHistoryHead} from './local-history';
 import {importLocalHtml} from './local-html-import';
@@ -199,6 +200,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const verified=localValidation.valid?await verifiedSummary(workspace,positionals):undefined;
    emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
   if(command==='log'&&portable&&!urlArgument()){
+   const filters=collectionFilters('log',flags.filter as string[]|undefined);
+   if(filters.author)throw new CliError('unsupported_local_filter','Local history does not record verified author identities. Use since or until.');
    const known=await localIdentities(workspace),results=[];
    for(const input of positionals){
     const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:declaredServer});
@@ -207,7 +210,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
     const head=await localHistoryHead(workspace.root,path),entries=await localHistory(workspace.root,path);
     const offset=flags.cursor===undefined?0:Number(flags.cursor),limit=flags.limit===undefined?100:Number(flags.limit);
     if(!Number.isSafeInteger(offset)||offset<0)throw new CliError('invalid_cursor','A local history cursor must be a nonnegative integer.');
-    const selected=ref.version===undefined?entries:entries.filter(entry=>entry.version===ref.version);
+    const selected=entries.filter(entry=>(ref.version===undefined||entry.version===ref.version)&&(!filters.since||Date.parse(entry.at)>=Date.parse(filters.since))&&(!filters.until||Date.parse(entry.at)<=Date.parse(filters.until)));
     results.push({path,local:true,head,versions:selected.slice(offset,offset+limit),next_cursor:offset+limit<selected.length?String(offset+limit):null});
    }
    emit(results.length===1?results[0]:{operations:results});return 0;

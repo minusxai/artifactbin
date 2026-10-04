@@ -1,3 +1,4 @@
+import {recordLocalHistory} from './local-history';
 /** An HTML file is untrusted data. Parse its JSON carrier, never run its embedded reader or author scripts. */
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {readFile,stat,realpath,lstat} from 'node:fs/promises';
@@ -144,6 +145,7 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
   const metadata={...(current?.metadata??{}),...Object.fromEntries(fields.map(key=>[key,merged[key]])),id:identity};
   changes.unshift({path,before:original?digest(original):null,data:Buffer.from(writeDocument({metadata,body:file.source}))});
   await stageLocalFiles(workspace.root,changes,store=>{
+   if(original)recordLocalHistory(store,path,original,changes[0]!.data!);
    store.put(scope,'draft-identity',path,{id:identity});
    if(!provenance)store.put(scope,'archive','import-baseline/'+path,{artifactId:file.artifactId,origin:file.origin,base:file.base,source:file.source});
    for(const [id,asset] of assets)store.put(scope,'draft-identity',asset.path,{id});

@@ -134,6 +134,7 @@ async function recoverLocalMove(root:string):Promise<void>{
  }
  store.transaction(()=>{
   moveLocalHistory(store,pending.from,pending.to);
+  const baseline=store.get(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+pending.from);if(baseline){store.put(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+pending.to,baseline.value,{data:baseline.data});store.delete(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+pending.from);}
   store.delete(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.to,{id:pending.id});
   const tracked=store.get(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);if(tracked){store.delete(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'tracked',pending.to,tracked.value);}
   for(const kind of ['preview-comment','preview-thread'] as const)for(const row of store.list<{file:string}>(LOCAL_WORKSPACE_SCOPE,kind))if(row.value.file===pending.from)store.put(LOCAL_WORKSPACE_SCOPE,kind,row.key,{...row.value,file:pending.to});
@@ -151,6 +152,8 @@ export async function moveLocalFile(workspace:Workspace,from:string,to:string):P
   if(!id)throw new CliError('unregistered_file','Register the source before moving it.');
   if(await readOptional(await confinedPath(root,to)))throw new CliError('file_exists','Move destination already exists.');
   const bytes=await readFile(await confinedPath(root,from));
+  assertLocalHistoryMove(store,from,to);
+  if(store.get(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+to))throw new CliError('move_conflict','The destination has another imported baseline. Choose a new path.');
   store.put(LOCAL_WORKSPACE_SCOPE,'identity-move','current',{from,to,id,hash:digest(bytes)} satisfies LocalMove);await recoverLocalMove(root);
  });
 }
