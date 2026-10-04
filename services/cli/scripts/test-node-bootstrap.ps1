@@ -98,13 +98,34 @@ $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
 [IO.File]::WriteAllText((Join-Path $root 'child.ps1'),$child)
 $entry="Invoke-Expression ([IO.File]::ReadAllText('"+$root.Replace("'","''")+"\child.ps1'))"
 $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($entry))
+function Start-StandardProcess([string]$Encoded,[string]$Label) {
+  $process=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-EncodedCommand',$Encoded) -WorkingDirectory $root -Credential $credential -LoadUserProfile -PassThru -RedirectStandardOutput (Join-Path $root ($Label+'.stdout')) -RedirectStandardError (Join-Path $root ($Label+'.stderr'))
+  # Cache the owned handle before waiting: PS5.1 credential launches otherwise lose ExitCode.
+  $null=$process.Handle
+  return $process
+}
+function Wait-StandardExit([Diagnostics.Process]$Process,[int]$Timeout) {
+  if(!$Process.WaitForExit($Timeout)){throw 'Standard-user child timed out'}
+  $Process.WaitForExit()
+  $Process.Refresh()
+  $code=$Process.ExitCode
+  if($null -eq $code -or $code -isnot [int]){throw 'Standard-user child did not provide an integer exit code'}
+  return $code
+}
 try {
-  $process=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-EncodedCommand',$encoded) -WorkingDirectory $root -Credential $credential -LoadUserProfile -PassThru -RedirectStandardOutput (Join-Path $root 'stdout') -RedirectStandardError (Join-Path $root 'stderr')
-  if(!$process.WaitForExit(600000)){throw 'Bootstrap timed out'}
-  Get-Content (Join-Path $root 'stdout')
-  Write-Output ('Standard-user child exit: '+$process.ExitCode)
+  foreach($expected in @(0,7)) {
+    $probe=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("exit $expected"))
+    $process=Start-StandardProcess $probe ('exit-'+$expected)
+    try{$observed=Wait-StandardExit $process 30000}finally{$process.Dispose()}
+    if($observed -ne $expected){throw "Standard-user exit contract: expected $expected, observed $observed"}
+    Write-Output ("Standard-user exit contract: $observed")
+  }
+  $process=Start-StandardProcess $encoded 'bootstrap'
+  try{$exitCode=Wait-StandardExit $process 600000}finally{$process.Dispose()}
+  Get-Content (Join-Path $root 'bootstrap.stdout')
+  Write-Output ('Standard-user child exit: '+$exitCode)
   if(Test-Path (Join-Path $root 'failed.json')){Get-Content (Join-Path $root 'failed.json')}
-  if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $root 'passed.json'))){Get-Content (Join-Path $root 'stderr');throw 'Standard-user Node bootstrap failed'}
+  if($exitCode -ne 0 -or !(Test-Path (Join-Path $root 'passed.json'))){Get-Content (Join-Path $root 'bootstrap.stderr');throw 'Standard-user Node bootstrap failed'}
   Get-Content (Join-Path $root 'passed.json')
 } finally {
   Remove-LocalUser -Name $identity -ErrorAction SilentlyContinue
