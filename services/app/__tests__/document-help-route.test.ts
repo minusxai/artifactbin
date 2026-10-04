@@ -65,6 +65,9 @@ describe('GET /a/:id (the document itself)', () => {
     expect(text).toContain('POST '+BASE+'/api/auth/sign-in/email-otp');
     expect(text).toContain('POST '+BASE+'/api/authentication/token');
     expect(text).toContain('Authorization: Bearer <access_token>');
+    expect(text).toContain('function buildPlainTextUpdate(snapshot, nodeId, before, after)');
+    expect(text).toContain('patch.claims');
+    expect(text).toContain('/api/artifacts/<id>/edits');
     expect(text).toContain('HTTP client does not need Node or the CLI');
     expect(text).toContain('guest browser approval is CLI-only');
     expect(text).toContain('Local and offline edits do not call these HTTP endpoints');

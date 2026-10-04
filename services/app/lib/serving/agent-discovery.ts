@@ -19,7 +19,8 @@ export {AGENT_HELP_TITLE,agentDiscovery,agentDiscoveryHead,type AgentDiscovery} 
 const BASE_TAG='[[ base ]]';
 let source:string|null=null;
 function llmsSource():string{
- return source??=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/llms.txt'),'utf8');
+ return source??=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/llms.txt'),'utf8')+'\n'
+  +readFileSync(path.resolve(process.cwd(),'skills/artifactbin/references/http-api.md'),'utf8').replace(/^---\n[\s\S]*?\n---\n/,'');
 }
 const origin=(base:string)=>base.replace(/\/$/,'');
 /** The one sentence that says what artifactbin is: line 1 of llms.txt. */
