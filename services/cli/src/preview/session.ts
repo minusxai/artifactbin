@@ -1,5 +1,6 @@
 import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile} from '../local-workspace';
 import {workspaceStateEnv} from '../config';
+import {localHistory,localHistoryHead} from '../local-history';
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
 import {createPreviewEditor} from './editor';
@@ -118,7 +119,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     await saveLocalFile(root,file,current.revision,bytes).catch(error=>{if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;});
     return read(file);
  };
- const editor=createPreviewEditor({read,write:save});
+ const editor=createPreviewEditor({read,write:save,history:file=>localHistory(root,file),version:async(file,revision)=>{
+  try{return (await localHistoryHead(root,file,revision)).version;}catch(error){if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;}
+ }});
  const comments=await State.open(root,workspaceStateEnv(root));
  await migrateLocalDiscussion(root,home,comments);
  let url='';
@@ -175,6 +178,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    if(target.pathname==='/editor')return json(await serial(async()=>{
     if(input.operation==='load')return editor.load(input.file);
     if(input.operation==='commit')return editor.commit(input.file,input);
+    if(input.operation==='versions')return editor.versions(input.file);
+    if(input.operation==='version')return editor.version(input.file,input.version);
+    if(input.operation==='revert')return editor.revert(input.file,input);
     const current=await read(input.file);
     if(input.operation==='prepare'){
      if(typeof input.markup!=='string')throw new Refusal(400,'Invalid markup');

@@ -4,6 +4,7 @@ import {readFile,lstat,realpath,link,unlink} from 'node:fs/promises';
 import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
+import {recordLocalHistory} from './local-history';
 import {stateFor,readState} from './state-access';
 import {workspaceStateEnv} from './config';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
@@ -113,7 +114,7 @@ export async function saveLocalFile(root:string,path:string,before:string,data:B
  await withLocalLock(root,async()=>{
   await recoverLocalFiles(root);const current=await readFile(await confinedPath(root,path));
   if(digest(current)!==before)throw new CliError('stale_save','File changed; draft retained.');
-  await stageLocalFiles(root,[{path,before,data}],state=>state.put(LOCAL_WORKSPACE_SCOPE,'archive',`history/${path}/${randomUUID()}`,{path,before,at:new Date().toISOString()},{data:current}));
+  await stageLocalFiles(root,[{path,before,data}],state=>recordLocalHistory(state,path,current,data));
   await recoverLocalFiles(root);
  });
 }
