@@ -2,8 +2,9 @@
 
 `afbin remote --history history.md claude --chrome` starts a detached worker and
 returns its session ID, name, terminal URL and `starting` status. No local TTY is
-required. The child still runs in a PTY, with the user's ordinary harness settings
-and permission checks. `--foreground` retains the previous attached terminal flow.
+required. The child still runs in a PTY, with the user's harness settings and
+the managed permission defaults below. `--foreground` retains the previous
+attached terminal flow.
 All afbin flags precede the executable; the executable's arguments are preserved.
 
 Names default to the executable basename. Managed names match
@@ -11,6 +12,26 @@ Names default to the executable basename. Managed names match
 per account and deployment. Use `--name claude2` for another Claude instance.
 Mentions retain session IDs, so a newly launched Claude never inherits an old
 session's comments. Colors derive consistently from the session ID.
+
+## Permission defaults
+
+Unless you supply an explicit permission mode, managed Claude sessions append
+`--dangerously-skip-permissions` and Codex sessions append `--yolo`. OpenCode
+uses a per-process automatic permission configuration when none is supplied.
+These defaults allow unattended work and can bypass the harness's normal
+approval or sandbox protections. They apply on the machine running the harness.
+
+To retain approvals, pass an explicit mode after the executable, for example:
+
+```sh
+afbin remote claude --permission-mode default
+afbin remote codex --sandbox workspace-write --ask-for-approval on-request
+```
+
+Explicit Claude permission modes and Codex permission, sandbox or profile options
+suppress the injected defaults. An existing OpenCode permission configuration is
+preserved. Pi has no built-in tool approval prompts. Artifact access checks on the
+server still apply.
 
 ## Boundaries
 
@@ -92,7 +113,8 @@ macOS and Linux are supported; Windows background mode is refused (use WSL or
 foreground). A detached process survives launcher exit, not machine reboot or an
 agent host that kills all descendants. A browser-only chat agent cannot launch a
 local worker without a shell-capable tool. No Claude Channels, Codex bridge,
-permission bypass flags, global daemon or terminal-prose parser is used.
+global daemon or terminal-prose parser is used.
+Harness permission defaults are described above.
 
 ## Verification
 

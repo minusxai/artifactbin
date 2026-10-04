@@ -88,3 +88,12 @@ it.each([true, false])('uses stop only for online managed agents (online=%s)', a
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/managed', expect.objectContaining({ method: online ? 'POST' : 'DELETE' })));
   if (!online) await waitFor(() => expect(screen.queryByRole('button', { name: 'Open Review' })).toBeNull());
 });
+
+it('keeps install and remote startup commands on the app origin', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })));
+  open('');
+  expect(screen.getByText(`curl -fsSL ${window.location.origin}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`, { normalizer: text => text })).toBeInTheDocument();
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Choose your agent' }), { target: { value: 'codex' } });
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
+});
