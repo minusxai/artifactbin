@@ -43,15 +43,15 @@ describe('the installed short skill',()=>{
   expect(fewTurns).not.toMatch(/Skip[^.]*exporting/);
   expect(fewTurns).not.toContain('write the whole document');
   expect(fewTurns.length).toBeLessThan(600);
-  const native=bullet('- Markup for content, data and layout');
+  const native=bullet('- The kit covers content, layout');
   expect(native).toBeDefined();
-  for(const text of ['text, data, charts, tables, controls and motion','Helmet `<script>`','(Solid, any npm library)','any npm library','for behaviour','its exported components mount by name'])expect(native).toContain(text);
+  for(const text of ['content, layout, data, charts, tables, controls and motion','Helmet `<script>`','(Solid, npm)','for behaviour','exported components mount by name'])expect(native).toContain(text);
   // The managed frame is gone: the brief must not send an agent to it.
   expect(sheet).not.toContain('<Iframe>');
   // The bundle the CLI ships carries the same two bullets: a copy edit without
   // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
   expect(teaching.files['SKILL.md']).toContain('push a FIRST designed version within six calls of the pull');
-  expect(teaching.files['SKILL.md']).toContain('- Markup for content, data and layout');
+  expect(teaching.files['SKILL.md']).toContain(native);
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });
  it('uses the same push for create and update with local validation',()=>{
