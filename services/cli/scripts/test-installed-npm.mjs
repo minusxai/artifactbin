@@ -1,0 +1,12 @@
+/** Avoid shell-specific path/glob substitution when invoking native consumer proofs. */
+import {readFile} from 'node:fs/promises';
+import {join,dirname,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
+const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const installed=(await readFile(join(process.env.RUNNER_TEMP??tmpdir(),'npm-proof/installed-path.txt'),'utf8')).trim();
+const mode=process.argv[2];
+const args=mode==='terminal'?['scripts/test-npm-terminal.mjs',installed]:mode==='preview'?['--import','tsx','scripts/test-preview.ts',installed]:null;
+if(!args)throw new Error('Choose terminal or preview.');
+execFileSync(process.execPath,args,{cwd:cli,stdio:'inherit',env:process.env,timeout:1200000});

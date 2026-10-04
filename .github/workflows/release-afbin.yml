@@ -1,15 +1,9 @@
 name: Release afbin
 
-# Bumps the CLI version and COMMITS IT STRAIGHT TO MAIN. There is no release branch and no release
-# PR: a version-only push is recognised by main's own CI (scripts/lib/ci-plan.mjs `isVersionOnlyBump`),
-# which then runs only `checks` and the five binary builds — the version is baked into the
-# binaries, so they must be built — and `release-cli.yml` uploads those tested bytes to GitHub
-# Releases. Dispatch to published: about six minutes, with nobody in the loop.
-#
-# The push needs `AUTOMATION_TOKEN` (a PAT held by a repository admin, the same secret the server
-# repository uses): the ruleset on main requires a pull request except for admins, and a push made
-# with the repository token starts no workflow at all. Without the secret the job fails before it
-# changes anything.
+# Maintainer dispatch bumps the npm CLI version on main. CI builds one npm tarball,
+# tests those exact bytes on every supported platform, then release-cli.yml publishes it.
+# AUTOMATION_TOKEN is required because a repository-token push cannot start CI or
+# bypass main's PR requirement. This operation does not ship a standalone executable.
 
 on:
   workflow_dispatch:
@@ -46,7 +40,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Bump the CLI, its installer and its release pointer
+      - name: Bump the npm CLI and release pointer
         id: bump
         env:
           LEVEL: ${{ inputs.level }}
@@ -72,4 +66,4 @@ jobs:
           # (scripts/ci/ci.mjs plan). Never forced: a main that moved since checkout refuses the push
           # and the dispatch is simply run again.
           git push origin HEAD:main
-          echo "Released afbin $VERSION as $(git rev-parse HEAD) on main; its CI builds and publishes the binaries." >> "$GITHUB_STEP_SUMMARY"
+          echo "Released afbin $VERSION as $(git rev-parse HEAD) on main; its CI tests and publishes the npm package." >> "$GITHUB_STEP_SUMMARY"

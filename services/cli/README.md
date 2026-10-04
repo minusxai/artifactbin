@@ -27,67 +27,29 @@ For a shared host see [team on a network](../../docs/extraction/team.md#team-on-
 
 ## Install and authenticate
 
-Windows 11 x64 (PowerShell 5.1 or 7):
+Node 22.13 or newer, npm and npx are required. The helper reuses a healthy existing installation or installs official Node 24 LTS into user-owned storage, verifies its checksum, and prepares PATH. No administrator, Homebrew or winget is required.
+
+Windows x64, PowerShell 5.1 or 7:
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing https://app.artifactbin.dev/chat/install.ps1 -OutFile install-afbin.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-afbin.ps1
+Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1 | Invoke-Expression
+npx.cmd --yes @artifactbin/cli@latest setup
+npx.cmd --yes @artifactbin/cli@latest preview report.jsx
 ```
 
-This installs for the current user in `%LOCALAPPDATA%\artifactbin\bin`, verifies both download
-and executable checksums, adds the directory to user PATH and installs selected agent skills.
-No administrator or Node installation is needed. Open a new terminal afterward. Use `-Yes`
-for unattended installation, `-Harness codex` to select a skill, `-Dir` for another destination,
-and `-Version X.Y.Z` for a specific release. Use your own server's `/chat/install.ps1` URL for
-self-hosted installations. The command allows this script for one process without changing your
-saved execution policy; organization-enforced policies still apply.
-
-To upgrade Windows, close every afbin process and rerun the installer. `afbin update` explains
-this requirement; background self-updates are disabled. Windows ARM64 and background remote
-agents are outside this release's supported scope. The executable is unsigned; desktop trust
-prompts depend on local policy. Native Windows CI verifies installation and packaged services.
-
-macOS/Linux:
+macOS arm64/x64 and Linux arm64/x64 (glibc, bash or zsh):
 
 ```sh
-curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
+afbin_node_setup="$(mktemp)" && curl -fsSL https://app.artifactbin.dev/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
+npx --yes @artifactbin/cli@latest setup
+npx --yes @artifactbin/cli@latest preview report.jsx
 ```
 
-The installer needs `curl`, `gzip`, a SHA-256 tool and a POSIX shell: it downloads the standalone executable for this
-platform as gzip, verifies both compressed and executable SHA-256 checksums and installs it in `~/.local/bin` (`--dir` and `--version`
-select another destination or release). A failed verification leaves an existing installation
-untouched; an installation that already is the requested release is left alone without a download,
-and verified downloads are kept in `~/.cache/afbin` so a reinstall never fetches twice. The installer
-then runs `afbin setup`: a checklist starts with detected agents selected (or your saved choices).
-Use ↑/↓ to move, Space to toggle and Enter to install. Skills appear together under an indented
-summary, followed by any restart instructions. Run `afbin setup` again to change your selection;
-unchecking a previously installed skill leaves its files in place and opts out of future updates.
-For an unattended install, use `sh install.sh --yes`; without a terminal the defaults are accepted
-automatically, with no sign-in or waiting for browser approval. The interactive installer runs
-`afbin auth` after successful skill setup; if sign-in is cancelled, run `afbin auth` later.
-Skill setup stays offline. `afbin setup --service sql` checks the built-in SQL engine. A server with a CLI built beside it
-(`npm run build:binary -w services/cli`) serves that build
-itself, so `curl http://localhost:3030/chat/install.sh | sh` downloads the binary from that server.
-On a terminal the installer colours its output and shows a download progress bar;
-`NO_COLOR` turns colour off and `FORCE_COLOR` turns it on elsewhere. Self-hosted servers serve the
-same script, pinned to the release they were built with;
-`/install.sh` is the separate self-hosted **server** installer.
+The Windows `.cmd` spelling runs under ordinary Restricted PowerShell without changing execution policy. The Unix helper must be sourced so this terminal receives PATH immediately. If a download fails, install Node LTS from https://nodejs.org/en/download and rerun the npx command.
 
-macOS/Linux standalone releases use Node's small-ICU build: English locale formatting is included; other locale
-formatting may fall back to English. Unicode normalization, IDN URLs and the Intl APIs remain.
-Local CSV/JSON/document queries run on SQLite (the official wasm build, the same engine the server
-runs), which every build carries — the executables and `dist/afbin.mjs` embed its wasm, so the bundle
-runs with nothing installed beside it: there is nothing to download, and no local rows are uploaded.
-Running from source uses the installed `@sqlite.org/sqlite-wasm` dependency's own file.
-For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS base URL with an optional path prefix (HTTP loopback
-also works); the service packages (Chromium) are then fetched from `<base>/afbin-vVERSION/<package>`. A locally built server
-uses `CLI__SERVICE_BASE_URL=http://localhost:3030/chat/releases`. Checksums stay pinned in the executable.
-Local JSX image export uses the cached preview runtime and lazily downloaded Chromium: `afbin export report.jsx --output report.png`. It renders current local bytes and registered ID dependencies without publishing or rewriting source. A locally registered ID also selects its local file; other IDs and explicit artifact URLs use their server. PNG/JPG support `--page` and `--og`. `--format html` saves the offline file from the server's `/a/<id>/download`: one self-contained `.html` that opens, edits and comments without a connection (`<id>@N` saves that version's file). It still requires a published head, and the server refuses a document too large for one file with a message saying so.
+There is one afbin distribution: `@artifactbin/cli` on npm. No standalone executable or self-updater is supported. `@latest` resolves the latest published package when launched online; it does not update a running process hourly. Close a running preview before restarting with a newer package. Pin a version for reproducible use (`npx --yes @artifactbin/cli@VERSION ...`). Warm the npm cache and Chromium before disconnecting, then use `npm exec --offline --yes --package=@artifactbin/cli@VERSION -- afbin ...`. A cold cache cannot install offline. Package installation does not download Chromium; rendering downloads it on first use.
 
-Remove it again with `curl -fsSL https://app.artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
-executable, `~/.artifactbin`, cached downloads and the agent skills afbin manages, and never touches
-your project files. `--keep-state` keeps your sign-in and the download cache, `--dry-run`
-only lists, and `--dir` names a custom executable location.
+Existing standalone users keep their project files and `~/.artifactbin` state. Remove the old executable from PATH and stop any old processes, then use the commands above. Do not run the old uninstall script when migrating: it can remove credentials and skills. Agents must use npx commands rather than an old `afbin` executable found on PATH.
 
 The default remote server is `https://app.artifactbin.dev`. Explicit `--server`,
 `ARTIFACTBIN_URL`, and saved host settings still take precedence. Credentials remain
@@ -96,8 +58,7 @@ on the new host. `afbin config set host https://app.artifactbin.dev` updates a s
 host preference.
 
 Authentication opens browser approval and saves credentials privately in `~/.artifactbin/hosts/<origin-id>/credentials.env`.
-Skill setup supports Claude Code, Codex, pi and OpenCode and remembers your choices. Standalone executables
-for Windows x64 and macOS/Linux arm64/x64 and versioned local skill bundles are published in GitHub releases.
+Skill setup supports Claude Code, Codex, pi and OpenCode and remembers your choices. The npm package includes versioned local skill bundles.
 
 ```sh
 afbin pull <artifact-url> report.jsx
@@ -132,31 +93,8 @@ For automation, use `setup --yes --json --harness pi --harness opencode`, or `--
 A pending browser approval returns its URL and expiry; approve it and rerun setup. `--yes` does not
 approve the browser or imply `--force`. No noninteractive prompt waits for input.
 
-Managed standalone installations check for updates in a detached background process, at most
-once an hour. Normal commands only inspect local state and launch the worker; they never wait for
-update network requests. Failed or interrupted attempts retry after an hour on a later invocation.
-The worker uses an OS-held lock (released even after SIGKILL), 30-second download stall timeouts
-and a five-minute overall deadline. It downloads checksummed releases from the configured server's
-release pointer (`/chat/release.json`) and atomically replaces the executable. Running commands
-continue normally; the next invocation runs the new binary and synchronizes selected skills locally.
-An older invocation cannot downgrade newer skills. Modified skill files are backed up before updates.
-Exactly one previous binary is kept, as `~/.artifactbin/binary-backups/afbin-<replaced version>`; each
-successful update prunes the older backups it supersedes. Skill backups follow the same rule: one copy
-per harness, as `~/.artifactbin/skill-backups/<harness>-<replaced version>`, older ones pruned.
+Connected commands may show an update notice at most hourly; notices never install or replace software. Local commands and pinned invocations make no update-check request. A compatible old package continues normally. An incompatible request fails before applying changes and reports the required version with the npx command to run. `@latest` is launch-time npm resolution, not background installation.
 
-Export `CLI__AUTO_UPDATE=0` to disable background updates. Export `CLI__VERSION_PIN=X.Y.Z` to
-disable automatic changes and restrict explicit updates to that server-advertised release. Pins do
-not download arbitrary versions: use the installer's `--version` to install a particular release.
-Source/npm installations remain managed by their package manager and never self-update.
-
-`afbin update` still performs an explicit foreground update of the standalone executable and selected
-skills, reporting errors and recovering interrupted installations. In a terminal it names the release,
-draws the download's progress on stderr, and only then asks which harnesses get the skill; `--json`,
-`--yes`, `--harness` and a non-terminal run never prompt or draw progress, and a resumed update keeps
-the selection it journaled. `afbin update --dry-run` previews
-changes. Background workers never write skills, change saved harness selections, authenticate,
-or print into the invoking command. Setup and subsequent local skill synchronization report restart
-instructions for Claude Code and Codex, which load skills at startup; running sessions do not reload.
 A server must deploy its new release pointer after the release has published before users discover it.
 
 ## Local development
@@ -256,38 +194,6 @@ const exitCode = await runRemote({
 
 `onSession` is called again after session recovery, with the same URL when the server supports recovery. `interactive: false`, `onOutput`, and an AbortSignal support embedding in a process without a local TTY. The server relay is `services/app/lib/remote/registry.ts`; thin authenticated HTTP routes wrap its account-scoped interface. Wire types live in `services/contracts/src/remote.ts`.
 
-## Standalone executable
-
-```sh
-npm run build:binary -w services/cli
-# services/cli/dist/afbin-<platform>-<arch>[.exe]
-```
-
-Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Terminal native files extract into a private temporary directory for the process lifetime; SQL uses the verified persistent cache described above. Each of the five release targets has its own build and smoke gate. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
-
-On macOS/Linux the build downloads the small-ICU Node executable pinned in `runtime-lock.json`, verifies both
-compressed and executable SHA-256, and reuses a verified local copy. A cache miss downloads the
-same versioned release asset; ordinary builds never compile Node. `CLI__NODE` is an explicit raw-runtime
-build/test override. GitHub's dependency cache is only an acceleration layer, not the runtime's
-source of availability.
-
-To update Node or its build recipe, change `scripts/small-node.mjs` and run the dedicated
-**Build CLI Node runtimes** workflow with a new `cli-node-v<version>-r<revision>` tag. This is the
-infrequent source compilation step. It publishes prepared runtimes and upstream notices in a
-separate prerelease; it does not advance the user-facing CLI release pointer. Download those
-assets into one directory, then run from the repository root:
-
-```sh
-node services/cli/scripts/pin-runtime.mjs cli-node-v22.22.3-r2 /path/to/runtime-assets
-```
-
-Review and commit the resulting `services/cli/runtime-lock.json`, then require the five-target
-CLI CI to pass using those downloaded bytes. Existing runtime revisions are never overwritten.
-
-Linux and Intel Mac packaging also need Python 3.8–3.14. The build creates a private virtual
-environment and installs hash-pinned LIEF 0.17.6 to preserve ELF native symbol lookup and Mach-O
-TLS. Python and LIEF are build tools.
-
 ## Lambdas
 
 Publish a JSX artifact whose Helmet script default-exports an async function,
@@ -308,46 +214,8 @@ The account and the app server can access the terminal content and input. Keep t
 
 ## Publishing a CLI release
 
-CI builds and smoke-tests Windows x64 and macOS/Linux on arm64/x64. A version bump publishes the exact
-assets from successful main CI; unrelated merges leave existing releases unchanged.
+Run `npm run release:cli` in the CLI PR. Main CI builds `npm run build -w services/cli`, then `npm run pack:release -w services/cli` creates one tarball with an isolated npm consumer shrinkwrap. That exact artifact is installed outside the checkout on Windows x64 and macOS/Linux arm64/x64, with Node 22 and 24. Native acceptance verifies SQLite, sharp, node-pty shutdown, warmed offline npm execution, preview and exports. Chromium stays lazy at package install.
 
-**A release is a version and nothing else.** When the whole diff is the version lines
-`npm run release:cli` writes — in
-`services/cli/package.json`, `package-lock.json`, `services/app/public/chat/install.sh`,
-`services/app/public/chat/release.json` — CI selects
-only `checks`, the five binary builds with their smoke tests, and Intel browser proofs in a
-dependent job consuming the exact uploaded executable (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
-already passed; what a release must prove is that the binaries build and run. Any other file in the
-same change makes it an ordinary run again.
+Successful main CI triggers `release-cli.yml`, resolves any tested-run receipt, and publishes the tested tarball to npm using OIDC trusted publishing. Configure `@artifactbin/cli`'s trusted publisher for this repository and workflow before the first release; no npm bearer token is embedded in installers or repository files. The package is public and immutable per version. There are no SEA/executable or platform-specific runtime release assets in this release path. The GitHub release records the same tested tarball for traceability.
 
-**A CLI source change without a bump is refused.** `checks` fails a pull request that touches
-`services/cli/src/**` or `services/cli/scripts/**` and carries no version bump, naming the release
-command below. Prose and the CLI's own tests are exempt.
-
-1. Run `npm run release:cli -- [patch|minor|major]` from the repository root (patch by default).
-   This updates the CLI package, lockfile, installer and release pointer together.
-2. Land the version files in the pull request that changes the CLI. Teaching is generated
-   automatically from authored references and command registries; do not commit `src/generated/teaching.json`. For a bump-only release of what is already on main, dispatch `Release afbin` instead: it
-   commits the version straight to main (admin PAT), and that push selects only `checks` and the
-   five binary builds.
-3. Successful main CI triggers `Release tested afbin CLI`, which tags that exact commit and
-   publishes all five tested executables, host runtimes, Chromium packages and checksums.
-   It publishes the bytes CI built: the run main CI's `tested-run` artifact names when the tree was
-   tested elsewhere, the main run itself otherwise. Whether there is a release to publish is that
-   run's artifacts: all five binaries, their manifests naming this version, publish; none (a merge
-   that did not change the version) publish nothing; some is an error. So a bump rebase-merged below
-   other commits publishes from the head's run. The release stays draft until every asset is
-   attached. Published releases are immutable.
-4. Deploy a matching server/installer only after publication succeeds. Rollback keeps the
-   previous release available; installers also accept `--version` explicitly.
-
-Windows uses the official Node executable from nodejs.org, pinned by URL, size and SHA-256 in `runtime-lock.json`. Update its pin from the matching official SHASUMS256.txt when advancing Node.
-
-The separate `Build CLI Node runtimes` workflow is manual maintenance for a new pinned
-Node runtime revision. Ordinary CLI builds download and verify the existing runtime.
-
-A missing release produces a clear download error and leaves any existing installation untouched.
-
-### Standalone download boundaries
-
-The executable carries the CLI and checksum manifests. First preview/serve downloads the versioned `afbin-runtime-<platform>-<arch>.gz` into the private runtime cache. Chromium retains a separate lazy package; the SQLite engine's wasm is embedded in the executable. Verified caches work offline; cold first use needs network access. npm installations include their runtime. PGLite in the standalone host includes its ESM runtime, WASM/data and filesystem adapters, without optional extensions, alternate CJS distributions, types or source maps. CI exercises initialization, transactions, restart, preview and real host publication. Size reports separate core and host runtime; core downloads are capped at 35 MB on macOS/Linux platforms (Windows uses the official full-ICU Node executable).
+No local production build or npm publication is part of ordinary development. Use FAST validate and focused tests, then the combined PR's final CI matrix. Clean Windows 11 desktop policies remain separate from the native Windows Server runner's coverage.
