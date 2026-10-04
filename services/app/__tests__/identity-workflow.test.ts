@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
 import {useAppHarness,request} from './harness';
-import {mintToken} from '@/lib/accounts';
+import {mintToken,createGuestOwner,mergeGuestUsers} from '@/lib/accounts';
 import {POST as create,GET as list} from '@/app/api/artifacts/route';
 import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import {reserveIds} from '@/lib/artifacts';
@@ -243,5 +243,28 @@ it('CLI browser guest credentials publish local public and unlisted documents wi
   }
   expect(calls.some(call=>call.path==='/api/artifacts/reservations')).toBe(true);expect(calls.filter(call=>call.path==='/api/artifacts'&&call.method==='POST')).toHaveLength(2);
   expect(await Promise.all(['public.jsx','unlisted.jsx'].map(file=>readFile(join(cli.root,file),'utf8')))).toEqual(originals);
+ }finally{await cli.cleanup();}
+});
+
+it('an adopted browser guest workspace continues with a new account token while another actor is refused before writes',async()=>{
+ const calls:CliCall[]=[];const accounts:string[]=[];const transport=artifactTransport(calls);
+ const cli=await cliWorkspace('guest-claim-publication',{fetch:async(input,init)=>{accounts.push(new Headers(init?.headers).get('X-Artifactbin-Account')??'');return transport(input,init);}});
+ try{
+  const guest=await createGuestOwner({name:'mxmx_test_claim_guest'}),guestCli=await mintToken('mxmx_test_guest_cli',guest.userId);await cli.useToken(guestCli.token);await writeFile(join(cli.root,'report.jsx'),'---\nvisibility: unlisted\n---\n<p>Guest draft</p>');
+  const ids=await cli.invoke(['add','report.jsx']);await cli.invoke(['push','report.jsx']);
+  const initial=await publication(cli.root),localId=ids['report.jsx'],remoteId=initial.ids[localId];
+  const user=await createUser({email:'mxmx_test_claimed_publication@example.test'});await mergeGuestUsers(user.id,[guest.tokenId]);expect((await(await getDb()).query('SELECT kind,merged_into_user_id FROM users WHERE id=$1',[guest.userId])).rows).toEqual([{kind:'guest',merged_into_user_id:user.id}]);
+  const account=await mintToken('mxmx_test_claimed_token',user.id);await cli.useToken(account.token);
+  const source=(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Guest draft','Claimed account edit');await writeFile(join(cli.root,'report.jsx'),source);
+  calls.length=0;accounts.length=0;await cli.invoke(['push','report.jsx']);
+  expect(calls[0]).toMatchObject({method:'GET',path:'/api/artifacts'});expect(accounts[0]).toBe(guest.userId);
+  expect(calls.filter(call=>call.method==='POST').map(call=>call.path)).toEqual([`/api/artifacts/${remoteId}/edits`]);
+  expect(await publication(cli.root)).toMatchObject({account:guest.userId,ids:initial.ids});expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(source);
+  expect((await(await getDb()).query('SELECT id,version,user_id FROM artifacts')).rows).toEqual([{id:remoteId,version:2,user_id:user.id}]);
+  const unrelated=await createUser({email:'mxmx_test_foreign_claimed_publication@example.test'}),foreign=await mintToken('mxmx_test_foreign_claim_token',unrelated.id);await cli.useToken(foreign.token);
+  const refusedSource=source.replace('Claimed account edit','Foreign proposal');await writeFile(join(cli.root,'report.jsx'),refusedSource);calls.length=0;
+  const result=await cli.run(['push','report.jsx']);expect(result.code).not.toBe(0);expect(result.result.error.code).toBe('account_mismatch');expect(calls.map(call=>`${call.method} ${call.path}`)).toEqual(['GET /api/artifacts']);
+  expect(await publication(cli.root)).toMatchObject({account:guest.userId,ids:initial.ids});expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(refusedSource);
+  expect((await(await getDb()).query('SELECT id,version FROM artifacts')).rows).toEqual([{id:remoteId,version:2}]);
  }finally{await cli.cleanup();}
 });

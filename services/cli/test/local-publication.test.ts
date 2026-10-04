@@ -63,7 +63,12 @@ test('lost reply recovery publishes newer local edits without duplicating create
 test('dry-run makes no network or filesystem writes; a bound publication rejects another account before writes',async()=>{
  const f=await fixture();try{
   const result=await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{dryRun:true});assert.ok(result);assert.equal(f.calls.length,0);await assert.rejects(readFile(join(f.workspace.root,'.artifactbin/publications')));
-  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});const count=f.calls.length;f.client.account='usr_other';await assert.rejects(publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{}),/account/i);assert.equal(f.calls.length,count);
+  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});const count=f.calls.length;let checks=0;
+  const other=new HttpClient({connection:f.client.connection,home:f.workspace.home,account:'usr_other',fetch:async(input,init)=>{
+   checks++;assert.equal(new URL(String(input)).pathname,'/api/artifacts');assert.equal(init?.method,'GET');assert.equal(new Headers(init?.headers).get('X-Artifactbin-Account'),'usr_one');
+   return Response.json({error:'account_mismatch'},{status:409});
+  }});
+  await assert.rejects(publishLocalWorkspace(f.workspace,['child.jsx'],other,{}),/account/i);assert.equal(checks,1);assert.equal(other.account,'usr_other');assert.equal(f.calls.length,count);
  }finally{await f.cleanup();}
 });
 

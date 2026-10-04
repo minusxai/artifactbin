@@ -141,9 +141,19 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
  const publication=join(workspace.root,'.artifactbin','publications',digest(client.connection.server).slice(0,24));
  await confinedPath(workspace.root,publication);
  const manifestPath=join(publication,'manifest.json'),home=join(publication,'private'),root=join(publication,'files');
+ const existing=await readOptional(manifestPath),stored:Publication|undefined=existing?JSON.parse(existing.toString()):undefined;
+ if(stored&&(stored.format!==1||typeof stored.server!=='string'||!client.sameServer(stored.server)||typeof stored.account!=='string'||!stored.account))throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
+ if(stored&&client.account!==stored.account){
+  const previousAccount=client.account;client.account=stored.account;
+  try{
+   // The authenticated server verifies this historical guest/account pin and
+   // echoes it only for the same owner or a verified guest adoption alias.
+   await client.request('/artifacts?limit=1');
+  }catch(error){client.account=previousAccount;throw error;}
+ }
  if(!client.account)await client.request('/artifacts?limit=1');
  if(!client.account)throw new CliError('account_required','Publication requires an authenticated account.');
- const existing=await readOptional(manifestPath);let manifest:Publication=existing?JSON.parse(existing.toString()):{format:1,server:client.connection.server,account:client.account,root,inputs:{},ids:{}};
+ let manifest:Publication=stored??{format:1,server:client.connection.server,account:client.account,root,inputs:{},ids:{}};
  if(manifest.format!==1||!client.sameServer(manifest.server)||manifest.account!==client.account)throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
  const imported:Array<{path:string;localId:string;head:Snapshot;baseline:ImportedBaseline}>=[];
  const portable=await readLocalWorkspaceState(workspace.root),pathIds=Object.fromEntries(Object.entries(identities).map(([id,path])=>[path,id]));
