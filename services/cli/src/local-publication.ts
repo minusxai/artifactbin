@@ -4,12 +4,12 @@
  * this copy. The existing push journal remains the single HTTP write protocol.
  */
 import {mkdir,readFile} from 'node:fs/promises';
-import {dirname,extname,join,relative,resolve} from 'node:path';
+import {dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {CliError} from './commands';
 import {withPrivateStateHome} from './config';
 import {digest,readOptional,atomicWrite} from './files';
 import {confinedPath} from './journal';
-import {localIdentities,addFiles} from './identities';
+import {localIdentities,addFiles,moveFile} from './identities';
 import {parseDocument,writeDocument} from './document';
 import {parseResourceFile,writeResourceFile,readResourceSource} from './resource-file';
 import {referenceIds} from './preview/graph';
@@ -17,41 +17,52 @@ import {datasetFileRows,datasetFileBytes,isDatasetFile} from './dataset-file';
 import {reconcileDocument} from './reconcile';
 import {stampNodeIds} from '../../app/lib/story/document/node-ids';
 import {push} from './sync';
-import {loadWorkspace,type Workspace} from './workspace';
+import {loadWorkspace,saveTracking,type Workspace,type Snapshot} from './workspace';
 import {stateFor} from './state-access';
 import {withLock} from './state';
 import {readPendingRequest} from './pending-request';
+import {readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
+import {snapshotDocument} from './local';
+import {canonicalizeMarkup} from '../../app/lib/story/document/canonical-source';
+import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import type {HttpClient} from './http';
+export interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;local_source_preserved?:boolean}
 interface Options {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
-interface Input {localId?:string;bytes:string;hash:string}
+interface Input {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
+interface ImportedBaseline {artifactId:string;origin:string;base:{version:number;editId:string;source:string};source:string}
 interface Publication {format:1;server:string;account:string;root:string;inputs:Record<string,Input>;ids:Record<string,string>}
 const fence=['id','edit_id','head_version','state','version'] as const;
 /** Exact resource addresses only; arbitrary IDs and prose are not rewritten. */
 function rewrite(value:string,ids:Record<string,string>):string{
  return value.replace(/\bref:([A-Za-z0-9]{6,12})(?![A-Za-z0-9])/g,(whole,id:string)=>ids[id]?`ref:${ids[id]}`:whole)
-  .replace(/\/a\/([A-Za-z0-9]{6,12})(?![A-Za-z0-9])/g,(whole,id:string)=>ids[id]?`/a/${ids[id]}`:whole);
+  .replace(/(?<![A-Za-z0-9:/.-])\/a\/([A-Za-z0-9]{6,12})(?![A-Za-z0-9])/g,(whole,id:string)=>ids[id]?`/a/${ids[id]}`:whole);
 }
 function rowReferences(value:unknown):Set<string>{
  const found=new Set<string>();const visit=(item:unknown)=>{if(typeof item==='string'){for(const match of item.matchAll(/(?:\bref:|\/a\/)([A-Za-z0-9]{6,12})(?![A-Za-z0-9])/g))found.add(match[1]!);}else if(Array.isArray(item))item.forEach(visit);else if(item&&typeof item==='object')Object.values(item).forEach(visit);};visit(value);return found;
 }
-async function dependencies(workspace:Workspace,paths:string[],identities:Record<string,string>):Promise<string[]>{
- const ordered:string[]=[],active=new Set<string>(),done=new Set<string>();
+async function dependencies(workspace:Workspace,paths:string[],identities:Record<string,string>):Promise<{paths:string[];sources:string[]}>{
+ const ordered:string[]=[],sources=new Set<string>(),active=new Set<string>(),done=new Set<string>();
  async function visit(path:string):Promise<void>{
-  path=relative(workspace.root,await confinedPath(workspace.root,path));if(done.has(path))return;
+  path=relative(workspace.root,await confinedPath(workspace.root,path)).split(sep).join('/');if(path.split('/').includes('.artifactbin'))throw new CliError('invalid_path','Workspace state cannot be published as content.');if(done.has(path))return;
   if(active.has(path))throw new CliError('dependency_cycle',`Cyclic publication reference: ${path}.`);
   active.add(path);const bytes=await readFile(await confinedPath(workspace.root,path));const extension=extname(path).toLowerCase();
   let refs=new Set<string>();
-  if(extension==='.jsx')refs=referenceIds(parseDocument(bytes.toString()).body);
+  if(extension==='.jsx'){const body=parseDocument(bytes.toString()).body;const checked=validateMarkupStructure(body);if(checked.errors.length)throw new CliError('validation_failed',`Local validation failed for ${path}.`,'Correct the source before publishing.',{errors:checked.errors});refs=referenceIds(body);}
   else if(isDatasetFile(path))refs=rowReferences(datasetFileRows(path,bytes));
   else if(['.yaml','.yml'].includes(extension)){
    const resource=parseResourceFile(bytes.toString()),source=await readResourceSource(resource,path,workspace.root);
-   if(source)await visit(source.path);
-   refs=rowReferences(resource);
+   if(source){
+    if(source.path.split(sep).includes('.artifactbin'))throw new CliError('invalid_path','Workspace state cannot be a publication source.');
+    sources.add(source.path.split(sep).join('/'));
+    const content=Buffer.from(source.bytes,'base64');
+    refs=extname(source.path).toLowerCase()==='.jsx'?referenceIds(parseDocument(content.toString()).body):isDatasetFile(source.path)?rowReferences(datasetFileRows(source.path,content)):new Set<string>();
+   }
+   for(const id of rowReferences(resource))refs.add(id);
   }
   for(const id of refs)if(identities[id])await visit(identities[id]!);
   active.delete(path);done.add(path);ordered.push(path);
  }
- for(const path of paths.length?paths:Object.values(identities))await visit(resolve(workspace.cwd,path));return ordered;
+ for(const path of paths.length?paths:Object.values(identities))await visit(resolve(workspace.cwd,path));return{paths:ordered,sources:[...sources].filter(path=>!done.has(path))};
 }
 async function saveManifest(path:string,manifest:Publication):Promise<void>{
  await atomicWrite(path,JSON.stringify(manifest,null,2)+'\n');
@@ -73,39 +84,86 @@ function mappedBytes(path:string,bytes:Buffer,ids:Record<string,string>,remote?:
  }
  return bytes;
 }
-export async function publishLocalWorkspace(workspace:Workspace,paths:string[],client:HttpClient,options:Options={}):Promise<unknown>{
- const identities=await localIdentities(workspace),ordered=await dependencies(workspace,paths,identities);
+export async function publishLocalWorkspace(workspace:Workspace,paths:string[],client:HttpClient,options:Options={}):Promise<LocalPublicationResult>{
+ const identities=await localIdentities(workspace),graph=await dependencies(workspace,paths,identities),ordered=graph.paths;
  if(options.dryRun)return{dry_run:true,local_only:true,operations:ordered.map(path=>({path,status:'would_publish'}))};
  const publication=join(workspace.root,'.artifactbin','publications',digest(client.connection.server).slice(0,24));
+ await confinedPath(workspace.root,publication);
  const manifestPath=join(publication,'manifest.json'),home=join(publication,'private'),root=join(publication,'files');
  if(!client.account)await client.request('/artifacts?limit=1');
  if(!client.account)throw new CliError('account_required','Publication requires an authenticated account.');
  const existing=await readOptional(manifestPath);let manifest:Publication=existing?JSON.parse(existing.toString()):{format:1,server:client.connection.server,account:client.account,root,inputs:{},ids:{}};
  if(manifest.format!==1||!client.sameServer(manifest.server)||manifest.account!==client.account)throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
+ const imported:Array<{path:string;localId:string;head:Snapshot;baseline:ImportedBaseline}>=[];
+ const portable=await readLocalWorkspaceState(workspace.root),pathIds=Object.fromEntries(Object.entries(identities).map(([id,path])=>[path,id]));
+ for(const path of ordered){
+  const baseline=portable?.get<ImportedBaseline>(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+path)?.value;
+  if(!baseline)continue;
+  if(typeof baseline.origin!=='string'||!client.sameServer(baseline.origin))throw new CliError('import_server_mismatch',`The imported ${path} belongs to another server.`,'Select the original server before publishing.');
+  const localId=pathIds[path];if(!localId||manifest.ids[localId])continue;
+  const head=await client.request<Snapshot>(`/artifacts/${baseline.artifactId}`);
+  if((head.capabilities as {edit?:boolean}|undefined)?.edit!==true)throw new CliError('edit_required',`Your account cannot edit the original artifact for ${path}.`,'Sign in with an account allowed to edit it.');
+  if(head.id!==baseline.artifactId||typeof head.markup!=='string'||typeof head.edit_id!=='string'||typeof head.state!=='string'||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','The original artifact snapshot is incomplete.');
+  if(head.version!==baseline.base.version||head.edit_id!==baseline.base.editId||canonicalizeMarkup(head.markup)!==canonicalizeMarkup(baseline.base.source))throw new CliError('import_conflict',`The original artifact changed since ${path} was downloaded.`,'Preserve your local proposal and compare it with the current remote source before resolving.',{path,base:baseline.base.source,local:baseline.source,remote:head.markup,head});
+  imported.push({path,localId,head,baseline});
+ }
  await mkdir(root,{recursive:true,mode:0o700});
  return withPrivateStateHome(home,join(home,'.artifactbin'),()=>withLock(home,publication,async()=>{
+  const latest=await readOptional(manifestPath);if(latest)manifest=JSON.parse(latest.toString());
+  if(manifest.format!==1||!client.sameServer(manifest.server)||manifest.account!==client.account)throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
   // The state store travels with the workspace. Only its scope contains an
   // absolute path; rebase it before ordinary journal recovery or discovery.
   const state=await stateFor(home);if(manifest.root!==root){state.rebaseScope(manifest.root,root);manifest={...manifest,root};await saveManifest(manifestPath,manifest);}
   let stage=await loadWorkspace(root,home);
+  for(const {path,localId,head,baseline} of imported.filter(binding=>!manifest.ids[binding.localId])){
+   const target=await confinedPath(root,path);await mkdir(dirname(target),{recursive:true});const bytes=Buffer.from(writeDocument(snapshotDocument(head)));await atomicWrite(target,bytes);
+   await saveTracking(stage,{server:client.connection.server,account:client.account!,set:{[path]:{id:head.id,file:digest(bytes),url:`${client.connection.server}/a/${head.id}`,snapshot:head}}});
+   manifest.ids[localId]=head.id;
+   const local=parseDocument((await readFile(await confinedPath(workspace.root,path))).toString());const original=Buffer.from(writeDocument({...local,body:baseline.base.source}));
+   manifest.inputs[path]={localId,bytes:original.toString('base64'),hash:digest(original),ids:{}};
+  }
+  if(imported.length){await saveManifest(manifestPath,manifest);stage=await loadWorkspace(root,home);}
   if(await readPendingRequest(home,root)){
    await push(stage,[],client,{});stage=await loadWorkspace(root,home);
   }
+  const reverse=Object.fromEntries(Object.entries(identities).map(([id,path])=>[path,id]));
+  const stageIds=await localIdentities(stage);
+  for(const path of ordered){
+   const localId=reverse[path],remoteId=localId&&manifest.ids[localId],oldPath=remoteId&&stageIds[remoteId];
+   if(oldPath&&oldPath!==path){
+    if(await readOptional(await confinedPath(root,path)))throw new CliError('publication_path_conflict',`The publication copy already contains ${path}.`);
+    await mkdir(dirname(await confinedPath(root,path)),{recursive:true});
+    await moveFile(stage,oldPath,path);stage=await loadWorkspace(root,home);
+   }
+   const prior=localId&&Object.entries(manifest.inputs).find(([previous,input])=>previous!==path&&input.localId===localId);
+   if(prior){manifest.inputs[path]=prior[1];delete manifest.inputs[prior[0]];}
+  }
+  await saveManifest(manifestPath,manifest);
+  // Resource YAML points at a source file, not a second artifact. Preserve its
+  // path spelling and rewrite only resource addresses inside the source copy.
+  for(const path of graph.sources){
+   const target=await confinedPath(root,path);await mkdir(dirname(target),{recursive:true});
+   const bytes=await readFile(await confinedPath(workspace.root,path));await atomicWrite(target,bytes);
+  }
   // Materialize unassigned copies first so addFiles can recover its own
   // reservation pool after an interruption. Never carry a local fence to HTTP.
-  const reverse=Object.fromEntries(Object.entries(identities).map(([id,path])=>[path,id]));
   for(const path of ordered){
    const target=await confinedPath(root,path),bytes=await readFile(await confinedPath(workspace.root,path));
    if(!await readOptional(target)){await mkdir(dirname(target),{recursive:true});await atomicWrite(target,mappedBytes(path,bytes,manifest.ids));}
   }
-  const assigned=await addFiles(stage,ordered.map(path=>join(root,path)),client);
-  for(const [path,id] of Object.entries(assigned))if(reverse[path])manifest.ids[reverse[path]!]=id;
+  const registered=Object.fromEntries(Object.entries(await localIdentities(stage)).map(([id,path])=>[path,id]));
+  const assigned={...registered,...await addFiles(stage,ordered.filter(path=>!registered[path]).map(path=>join(root,path)),client)};
+  for(const [path,id] of Object.entries(assigned))if(reverse[path.split(sep).join('/')])manifest.ids[reverse[path.split(sep).join('/')]!]=id;
   await saveManifest(manifestPath,manifest);stage=await loadWorkspace(root,home);
+  for(const path of graph.sources){
+   const target=await confinedPath(root,path),bytes=await readFile(await confinedPath(workspace.root,path));
+   await atomicWrite(target,isDatasetFile(path)?mappedBytes(path,bytes,manifest.ids):extname(path).toLowerCase()==='.jsx'?Buffer.from(rewrite(bytes.toString(),manifest.ids)):bytes);
+  }
   for(const path of ordered){
-   const bytes=await readFile(await confinedPath(workspace.root,path)),hash=digest(bytes),previous=manifest.inputs[path];if(previous?.hash===hash)continue;
+   const bytes=await readFile(await confinedPath(workspace.root,path)),hash=digest(bytes),previous=manifest.inputs[path];if(previous?.hash===hash&&JSON.stringify(previous.ids??{})===JSON.stringify(manifest.ids))continue;
    const target=await confinedPath(root,path),remote=await readFile(target);let mapped=mappedBytes(path,bytes,manifest.ids,remote);
    if(previous&&extname(path).toLowerCase()==='.jsx'){
-    const base=parseDocument(mappedBytes(path,Buffer.from(previous.bytes,'base64'),manifest.ids,remote).toString());const local=parseDocument(mapped.toString()),confirmed=parseDocument(remote.toString());
+    const base=parseDocument(mappedBytes(path,Buffer.from(previous.bytes,'base64'),previous.ids??manifest.ids,remote).toString());const local=parseDocument(mapped.toString()),confirmed=parseDocument(remote.toString());
     // Server-assigned node IDs are normalization, not an intervening user edit.
     // Match them before computing changes; keep author originals unchanged.
     base.body=stampNodeIds(base.body,{previousSource:confirmed.body}).source;
@@ -114,7 +172,7 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
     if(!merged.ok)throw new CliError('merge_conflict',`Publication normalization overlaps local changes in ${path}.`,'Preserve the local source and inspect its publication copy.',{base:writeDocument(base),local:writeDocument(local),remote:writeDocument(confirmed),fields:merged.fields});
     mapped=Buffer.from(writeDocument(merged.document));
    }
-   await atomicWrite(target,mapped);manifest.inputs[path]={bytes:bytes.toString('base64'),hash,...(reverse[path]?{localId:reverse[path]}:{})};
+   await atomicWrite(target,mapped);manifest.inputs[path]={bytes:bytes.toString('base64'),hash,ids:{...manifest.ids},...(reverse[path]?{localId:reverse[path]}:{})};
   }
   // Persist the frozen local input before HTTP: retries recover exactly these
   // bytes, then stage newer local changes against the confirmed remote head.
