@@ -1,5 +1,4 @@
 /* @jsxImportSource solid-js */
-import { DEFAULT_SERVER } from '@artifactbin/contracts';
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
 import { Terminal } from '@xterm/xterm';
@@ -191,13 +190,14 @@ function CopyCommand(props: { label: string; command: string }): JSX.Element {
 
 function InstallInstructions(): JSX.Element {
   const [harness, setHarness] = createSignal('claude');
+  const origin = window.location.origin;
   return <div class="mt-4 space-y-4">
-    <CopyCommand label="Install CLI" command={`curl -fsSL ${DEFAULT_SERVER}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`} />
+    <CopyCommand label="Install CLI" command={`curl -fsSL ${origin}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`} />
     <p class="text-xs text-muted">Remote agents: macOS and Linux · Intel and ARM. On Windows, use WSL for remote agents; native artifact commands have a PowerShell installer.</p>
-    <CopyCommand label="Install Windows CLI for artifacts" command={`Invoke-WebRequest -UseBasicParsing ${DEFAULT_SERVER}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} />
-    <p class="text-xs text-muted">Run afbin to sign in and choose an installed agent, or use the explicit command below.</p>
+    <CopyCommand label="Install Windows CLI for artifacts" command={`Invoke-WebRequest -UseBasicParsing ${origin}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} />
+    <p class="text-xs text-muted">Use the command below to sign in to this server and start your installed agent.</p>
     <div><label for="remote-harness" class="mb-2 block text-sm">Choose your agent</label><select id="remote-harness" value={harness()} onChange={(event) => setHarness(event.currentTarget.value)} class="w-full rounded border border-edge bg-surface p-2 text-sm"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="pi">Pi</option><option value="opencode">OpenCode</option></select></div>
-    <CopyCommand label="Start a session" command={`afbin remote ${harness()}`} />
+    <CopyCommand label="Start a session" command={`afbin remote --server '${origin}' ${harness()}`} />
     <p class="text-xs text-muted">Your agent must already be installed. Type @ in an artifact comment to mention an online session.</p>
   </div>;
 }

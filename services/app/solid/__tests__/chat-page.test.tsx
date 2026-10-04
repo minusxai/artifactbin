@@ -110,3 +110,12 @@ it('keeps offline and ended sessions behind history without hiding a directly op
   expect(screen.getByRole('button', { name: 'Open Old review' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.queryByRole('button', { name: 'Open Offline agent' })).toBeNull();
 });
+
+it('keeps install and remote startup commands on the app origin', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })));
+  open('');
+  expect(screen.getByText(`curl -fsSL ${window.location.origin}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`, { normalizer: text => text })).toBeInTheDocument();
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Choose your agent' }), { target: { value: 'codex' } });
+  expect(screen.getByText(`afbin remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
+});
