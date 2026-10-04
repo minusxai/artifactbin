@@ -44,8 +44,8 @@ test('Windows archive names cannot alias or address device files and alternate s
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('Windows update directs users to the installer before touching state or network',async()=>{
- await assert.rejects(updateCli({platform:'win32',home:'/unused',server:'https://example.test',harnesses:[],fetch:async()=>assert.fail('no network')}),error=>error instanceof Error&&/close.*afbin.*installer/i.test(error.message));
+test('Windows update gives npm instructions before touching state or network',async()=>{
+ assert.match((await updateCli({platform:'win32',home:'/unused',server:'https://example.test',harnesses:[],fetch:async()=>assert.fail('no network')})).command,/npx/);
  let launched=false,updated=false;
  const options={platform:'win32',standalone:true,home:'/unused',server:'https://example.test',launch:()=>{launched=true;},update:async()=>{updated=true;}};
  await scheduleBackgroundUpdate(options);await runBackgroundUpdate(options);

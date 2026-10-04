@@ -116,6 +116,18 @@ async function browserOwner(o: OAuthRoutesOptions, request: Request, actor: Acto
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
   const resource = (request: Request) => `${base(request)}${API_RESOURCE_PATH}`;
+  // Direct integrations obtain a bearer from an email-verified session, without device/browser grants.
+  app.post('/api/authentication/token', async (c) => {
+    const actor=c.get('actor') ?? ANONYMOUS;
+    if(actor.credential!=='session'||!actor.userId||!actor.email||actor.emailVerified!==true)
+      return new Response(JSON.stringify({error:'email_auth_required',hint:'Sign in using the email OTP endpoints first.'}),{status:401,headers:{'Content-Type':'application/json',...NO_STORE}});
+    if(c.req.header('origin')!==base(c.req.raw))
+      return new Response(JSON.stringify({error:'forbidden'}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
+    try{
+      const minted=await mintFor(o,c.req.raw,{userId:actor.userId,resource:resource(c.req.raw),scope:ARTIFACT_SCOPE});
+      return new Response(JSON.stringify({id:minted.id,access_token:minted.token,token_type:'Bearer',expires_in:minted.expiresIn,scope:ARTIFACT_SCOPE}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
+    }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
+  });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
   app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(base(c.req.raw))));

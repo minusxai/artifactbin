@@ -89,7 +89,7 @@ export class HttpClient {
     throw new CliError('auth_required','auth_required: sign-in is required.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.',{http_status:401});
    }
    const protocol=response.headers.get('X-Artifactbin-Protocol');
-   if(protocol&&protocol!==String(CLI_PROTOCOL_VERSION))throw new CliError('protocol_mismatch','The CLI and server use different write protocols. Update both before publishing.');
+   if(response.ok&&protocol&&protocol!==String(CLI_PROTOCOL_VERSION))throw new CliError('protocol_mismatch','The CLI and server use different write protocols. Update both before publishing.');
    const account=response.headers.get('X-Artifactbin-Account');
    if(account){if(this.account&&this.account!==account)throw new CliError('account_mismatch','The server account differs from this workspace.','Use the workspace account credentials.');this.account=account;}
    if(response.ok&&binary)return{bytes:Buffer.from(await response.arrayBuffer()),contentType:response.headers.get('Content-Type')??'application/octet-stream'};

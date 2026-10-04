@@ -103,3 +103,8 @@ test('refresh honors the process ARTIFACTBIN_HOME when no env override is suppli
   await rm(home,{recursive:true,force:true});
  }
 });
+
+test('incompatible server errors retain the required release and npm instruction before protocol validation',async()=>{
+ const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async()=>Response.json({error:'cli_update_required',required_protocol:99,required_version:'2.0.0',hint:'Run npx --yes @artifactbin/cli@2.0.0, then retry.'},{status:426,headers:{'X-Artifactbin-Protocol':'99'}})});
+ await assert.rejects(client.request('/artifacts','POST',{markup:'<p />'}),(error:unknown)=>error instanceof CliError&&error.code==='cli_update_required'&&error.fix?.includes('npx')===true&&(error.details as any).required_version==='2.0.0');
+});

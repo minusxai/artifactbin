@@ -152,7 +152,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     routeCtx?: { params: Promise<Record<string, string>> },
   ): Promise<Response> => {
     const protocol=request.headers.get('X-Artifactbin-Protocol');
-    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,hint:'Run afbin update, then retry with the current write contract.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION)}});
+    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,hint:'Run npx --yes @artifactbin/cli@latest <command>, then retry with the current write contract.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION)}});
     const auth = request.headers.get('authorization') ?? '';
     const presented = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
     const resolved = presented ? await resolveToken(presented) : null;
