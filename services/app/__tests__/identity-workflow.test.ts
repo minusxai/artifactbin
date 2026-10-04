@@ -261,10 +261,29 @@ it('an adopted browser guest workspace continues with a new account token while 
   expect(calls.filter(call=>call.method==='POST').map(call=>call.path)).toEqual([`/api/artifacts/${remoteId}/edits`]);
   expect(await publication(cli.root)).toMatchObject({account:guest.userId,ids:initial.ids});expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(source);
   expect((await(await getDb()).query('SELECT id,version,user_id FROM artifacts')).rows).toEqual([{id:remoteId,version:2,user_id:user.id}]);
+  await writeFile(join(cli.root,'next.jsx'),'<p>New after sign-in</p>');const nextIds=await cli.invoke(['add','next.jsx']);const nextSource=await readFile(join(cli.root,'next.jsx'),'utf8');
+  await cli.invoke(['push','next.jsx']);const nextRemote=(await publication(cli.root)).ids[nextIds['next.jsx']];
+  expect(nextRemote).not.toBe(remoteId);expect(await readFile(join(cli.root,'next.jsx'),'utf8')).toBe(nextSource);
+  expect((await(await getDb()).query('SELECT user_id,version FROM artifacts WHERE id=$1',[nextRemote])).rows).toEqual([{user_id:user.id,version:1}]);
   const unrelated=await createUser({email:'mxmx_test_foreign_claimed_publication@example.test'}),foreign=await mintToken('mxmx_test_foreign_claim_token',unrelated.id);await cli.useToken(foreign.token);
   const refusedSource=source.replace('Claimed account edit','Foreign proposal');await writeFile(join(cli.root,'report.jsx'),refusedSource);calls.length=0;
   const result=await cli.run(['push','report.jsx']);expect(result.code).not.toBe(0);expect(result.result.error.code).toBe('account_mismatch');expect(calls.map(call=>`${call.method} ${call.path}`)).toEqual(['GET /api/artifacts']);
   expect(await publication(cli.root)).toMatchObject({account:guest.userId,ids:initial.ids});expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(refusedSource);
-  expect((await(await getDb()).query('SELECT id,version FROM artifacts')).rows).toEqual([{id:remoteId,version:2}]);
+  expect((await(await getDb()).query('SELECT id,version FROM artifacts ORDER BY id')).rows).toEqual([{id:remoteId,version:2},{id:nextRemote,version:1}].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0));
  }finally{await cli.cleanup();}
+});
+
+it('guest adoption preserves reservation replay and unused IDs despite an account batch with the same nonce',async()=>{
+ const guest=await createGuestOwner({name:'mxmx_test_reserved_adoption'}),guestToken=await mintToken('guest-reserved',guest.userId);
+ const account=await createUser({email:'mxmx_test_reserved_adopted@example.test'}),accountToken=await mintToken('account-reserved',account.id),other=await mintToken('foreign-reserved',(await createUser({email:'mxmx_test_reserved_foreign@example.test'})).id);
+ const batch='batch_shared_adoption_001';
+ const allocate=(token:string,pin?:string)=>reserve(request('/api/artifacts/reservations',{method:'POST',token,headers:{'Idempotency-Key':batch,...(pin?{'X-Artifactbin-Account':pin}:{})}}));
+ const guestIds=(await(await allocate(guestToken.token)).json()).ids,accountIds=(await(await allocate(accountToken.token)).json()).ids;
+ expect(guestIds.some((id:string)=>accountIds.includes(id))).toBe(false);
+ await mergeGuestUsers(account.id,[guest.tokenId]);
+ expect((await(await allocate(accountToken.token,guest.userId)).json()).ids).toEqual(guestIds);
+ expect((await(await allocate(accountToken.token)).json()).ids).toEqual(accountIds);
+ const publish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:guestIds[0],markup:'<p>After adoption</p>'}}));
+ expect((await publish(other.token)).status).toBe(403);expect((await publish(accountToken.token)).status).toBe(201);expect((await publish(accountToken.token)).status).toBe(409);
+ expect((await(await allocate(accountToken.token,guest.userId)).json()).ids).toEqual(guestIds);
 });
