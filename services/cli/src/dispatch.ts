@@ -1,3 +1,4 @@
+import {localCommentCommand} from './local-comments-command';
 import {localHistory,localHistoryHead} from './local-history';
 import {importLocalHtml} from './local-html-import';
 import {publishLocalWorkspace} from './local-publication';
@@ -241,6 +242,9 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    emit(await openResources(workspace,positionals,{server:selectedServer,aliases:selectedAddresses,json,launch}));return 0;
   }
   if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
+  let commentBody=typeof flags.body==='string'?flags.body:undefined;
+  if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
+  if(command==='comment'&&portable){const local=await localCommentCommand(workspace,parsed,commentBody);if(local!==undefined){emit(local);return 0;}}
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log',selectedAddresses);
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,aliases:selectedAddresses,writable:true});
   if(command==='push'&&!account&&!portable&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
@@ -249,8 +253,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const result=await finishLocalPush(workspace,positionals,{force:!!flags.force,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(result){emit(result);return 0;}
   }
   if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined,selectedAddresses);if(!targets.length){emit({operations:[]});return 0;}}
-  let commentBody=typeof flags.body==='string'?flags.body:undefined;
-  if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
   if(commentBody!==undefined&&(!commentBody.trim()||commentBody.length>100000))throw new CliError('invalid_comment','Comment text must contain 1–100000 characters.');
   /*
    * THE REMOTE BOUNDARY. From here every byte this command sends goes to ONE origin: the

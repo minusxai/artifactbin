@@ -104,3 +104,19 @@ test('moving a local document keeps its identity and discussion, and status disc
  const result=JSON.parse(output[0]!);assert.equal(result.local,true);assert.equal(result.versions[0].version,1);assert.match(result.versions[0].source,/Original/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+ test('CLI discussion uses the portable editor store before authentication',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-cli-comment-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+ await writeFile(join(root,'draft.jsx'),'<p id="p">Discuss locally</p>');
+ const output:string[]=[];const context={cwd:root,home:join(root,'home'),env:{},stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local discussion must not fetch')};
+ assert.equal(await runCli(['add','draft.jsx','--json'],context),0,output.join(''));output.length=0;
+ assert.equal(await runCli(['comment','draft.jsx','--node','p','--body','Local note','--json'],context),0,output.join(''));
+ const thread=JSON.parse(output[0]!);assert.equal(thread.local,true);output.length=0;
+ assert.equal(await runCli(['comment','draft.jsx','--thread',thread.id,'--body','Reply','--state','resolved','--json'],context),0,output.join(''));
+ assert.equal(JSON.parse(output[0]!).status,'resolved');output.length=0;
+ assert.equal(await runCli(['comment','draft.jsx','--filter','state=all','--json'],context),0,output.join(''));
+ assert.equal(JSON.parse(output[0]!).annotations[0].thread.length,2);
+ session=await startPreview({root,files:['draft.jsx'],home:context.home});
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
