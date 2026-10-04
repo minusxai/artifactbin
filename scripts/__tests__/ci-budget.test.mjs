@@ -13,13 +13,17 @@ it('keeps npm release jobs in the existing CLI budget and ordinary jobs in their
  }
  expect(jobs['cli-pack'].name).toBe('CLI npm pack');
 });
-it('reuses the normalized whole-install cache under Node22 before consumer runtime selection',()=>{
+it('reuses checkout tooling only for experience checks before consumer runtime selection',()=>{
  const jobs=workflow().jobs,native=jobs.cli.steps,preview=jobs['cli-preview'].steps;
  const cache=native.find(step=>step.id==='install'),reference=preview.find(step=>step.id==='install');
  expect(cache).toBeDefined();expect(cache.with).toEqual(reference.with);
  const fingerprint=native.findIndex(step=>step.run==='node scripts/ci/ci.mjs lock-fingerprint'),cached=native.indexOf(cache),install=native.findIndex(step=>step.run==='npm ci');
  expect(fingerprint).toBeLessThan(cached);expect(cached).toBeLessThan(install);
- expect(native[install].if).toBe("steps.install.outputs.cache-hit != 'true'");
+ expect(jobs.cli.strategy.matrix.phase).toEqual(['native','experience']);
+ expect(native[fingerprint].if).toBe("matrix.phase == 'experience'");
+ expect(cache.if).toBe("matrix.phase == 'experience'");
+ expect(native[install].if).toBe("matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'");
+ expect(native.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");
  const runtimes=native.filter(step=>step.uses?.startsWith('actions/setup-node@'));
  expect(runtimes.map(step=>step.with['node-version'])).toEqual(['22.22.3','${{ matrix.node }}']);
  expect(native.indexOf(runtimes[1])).toBeGreaterThan(install);
