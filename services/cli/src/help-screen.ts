@@ -14,10 +14,10 @@ const TAGLINE='Artifactbin: Google docs for agents';
 function topicEntries(s:Style):Entry[]{
  const groups=new Map<string,string[]>();
  for(const topic of ['brief',...Object.keys(helpTopics).sort()]){
-  const group=['brief','commands','example'].includes(topic)?'Start here':topic==='templates'||topic.startsWith('templates-')||topic in examples?'Templates':topic==='themes'||topic.startsWith('themes-')?'Themes':topic.startsWith('publishing')?'Publishing':topic==='markup'||topic.startsWith('markup-')?'Markup':'Authoring';
+  const group=['brief','commands','example'].includes(topic)?'Start here':topic==='templates'||topic.startsWith('templates-')||topic in examples?'Templates':topic==='themes'||topic.startsWith('themes-')?'Themes':topic==='design-systems'||topic.startsWith('system-')?'Design systems':topic.startsWith('publishing')?'Publishing':topic==='markup'||topic.startsWith('markup-')?'Markup':'Authoring';
   groups.set(group,[...(groups.get(group)??[]),topic]);
  }
- return ['Start here','Authoring','Markup','Templates','Themes','Publishing'].map(group=>({label:`  ${s.dim(group)}`,text:groups.get(group)!.map(topic=>s.cyan(topic)).join(', ')}));
+ return ['Start here','Authoring','Markup','Templates','Themes','Design systems','Publishing'].map(group=>({label:`  ${s.dim(group)}`,text:groups.get(group)!.map(topic=>s.cyan(topic)).join(', ')}));
 }
 /** The first clause of a command's description: enough for one overview row. */
 export function summary(command:Command):string{return command.description.split(/[;.]/)[0].trim();}
