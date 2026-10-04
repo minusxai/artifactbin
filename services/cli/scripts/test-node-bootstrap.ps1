@@ -48,7 +48,7 @@ if(@($userPath -split ';' | Where-Object {$_ -eq $private}).Count -ne 1){throw '
 $env:PATH=[Environment]::GetEnvironmentVariable('PATH','Machine')+';'+$userPath
 $null=& npx.cmd --version;if($LASTEXITCODE -ne 0){throw 'Future PATH failed'}
 # The exact release tarball runs through npx.cmd under the same non-admin policy.
-$env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
+$env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
 $result=& npx.cmd --yes --package '__ROOT__\candidate.tgz' afbin query $rows --json
 if($LASTEXITCODE -ne 0 -or !(($result | Out-String).Contains('10'))){throw 'Standard-user npx candidate query failed'}

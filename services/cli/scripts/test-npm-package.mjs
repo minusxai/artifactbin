@@ -15,7 +15,7 @@ const proof=ci?join(process.env.RUNNER_TEMP??tmpdir(),'npm-proof'):process.argv[
 const root=await mkdtemp(join(tmpdir(),'afbin npm é '));
 const npm=process.env.npm_execpath;
 if(!npm)throw new Error('Run through npm run test:npm-package -w services/cli -- <tarball>');
-const env={...process.env,npm_config_cache:join(root,'cache'),ARTIFACTBIN_HOME:join(root,'home'),PLAYWRIGHT_BROWSERS_PATH:join(root,'chromium'),CLI__AUTO_UPDATE:'0',ARTIFACTBIN_URL:'http://127.0.0.1:1'};
+const env={...process.env,HOME:join(root,'home'),USERPROFILE:join(root,'home'),ARTIFACTBIN_SKILLS:'off',npm_config_cache:join(root,'cache'),ARTIFACTBIN_HOME:join(root,'home'),PLAYWRIGHT_BROWSERS_PATH:join(root,'chromium'),CLI__AUTO_UPDATE:'0',ARTIFACTBIN_URL:'http://127.0.0.1:1'};
 const run=args=>execFileSync(process.execPath,[npm,...args],{cwd:root,env,encoding:'utf8',timeout:300000});
 try{
  await writeFile(join(root,'package.json'),'{}\n');

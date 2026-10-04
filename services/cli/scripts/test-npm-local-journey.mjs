@@ -18,7 +18,7 @@ await new Promise(done=>unavailable.listen(0,'127.0.0.1',done));
 const server=`http://127.0.0.1:${unavailable.address().port}`;
 const profiles=[join(scratch,'first-home'),join(scratch,'second-home'),join(scratch,'import-home')];
 for(const home of profiles)await mkdir(home);
-const environment=home=>({...process.env,HOME:home,USERPROFILE:home,ARTIFACTBIN_HOME:home,ARTIFACTBIN_URL:server,CLI__AUTO_UPDATE:'0'});
+const environment=home=>({...process.env,HOME:home,USERPROFILE:home,ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:home,ARTIFACTBIN_URL:server,CLI__AUTO_UPDATE:'0'});
 async function command(cwd,home,args,timeout=180000){
  const child=spawn(process.execPath,[entry,...args],{cwd,env:environment(home),stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',chunk=>stdout+=chunk);child.stderr.on('data',chunk=>stderr+=chunk);
