@@ -16,6 +16,8 @@ const powershell = join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0
 const npm = join(dirname(process.execPath), 'npm.cmd');
 const quote = value => "'" + value.replaceAll("'", "''") + "'";
 const env = { ...process.env, ARTIFACTBIN_HOME: join(root, 'state'), CLI__AUTO_UPDATE: 'off', CLI__SERVICE_BASE_URL: 'http://127.0.0.1:1', npm_config_cache: join(root, 'cold cache'), PLAYWRIGHT_BROWSERS_PATH: join(root, 'cold browsers') };
+// The workflow launches through PowerShell 7. Its inherited module path is invalid for 5.1.
+env.PSModulePath = join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/Modules');
 delete env.NODE_PATH;
 delete env.NODE_OPTIONS;
 delete env.ARTIFACTBIN_TOKEN;
@@ -24,7 +26,7 @@ const evidence = [];
 let stage = 'privilege';
 const record = message => { evidence.push(message); console.log('ok ' + message); };
 async function ps(script, cwd = workspace) {
-  return exec(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from("$ErrorActionPreference='Stop'; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; " + script, 'utf16le').toString('base64')], { cwd, env, timeout: 240000, maxBuffer: 8 * 1024 * 1024 });
+  return exec(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from("$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; " + script, 'utf16le').toString('base64')], { cwd, env, timeout: 240000, maxBuffer: 8 * 1024 * 1024 });
 }
 const command = (file, args) => `& ${quote(file)} ${args.map(quote).join(' ')}; if ($LASTEXITCODE -ne 0) { throw "Command failed: $LASTEXITCODE" }`;
 try {
@@ -76,8 +78,8 @@ try {
   record('Installed CLI queries local CSV with unavailable cloud endpoint, outside repository');
   stage = 'native dependencies';
   const packageRoot = join(prefix, 'node_modules/@artifactbin/cli');
-  const probe = join(root, 'native.cjs');
-  await writeFile(probe, `const assert=require('node:assert/strict'); const {createRequire}=require('node:module'); const r=createRequire(${JSON.stringify(join(packageRoot, 'package.json'))}); (async()=>{const png=await r('sharp')({create:{width:2,height:2,channels:4,background:'#ffffff'}}).png().toBuffer(); assert.equal(png.subarray(1,4).toString(),'PNG'); const pty=r('node-pty').spawn(process.env.ComSpec,['/d','/c','echo npm_native_ok'],{cols:80,rows:24}); let text=''; const timer=setTimeout(()=>{pty.kill();process.exit(2)},15000); pty.onData(data=>text+=data); pty.onExit(()=>{clearTimeout(timer);assert.match(text,/npm_native_ok/);console.log('sharp and ConPTY executed')})})().catch(e=>{console.error(e);process.exit(1)});`);
+  const probe = join(root, 'native.mjs');
+  await writeFile(probe, `import assert from 'node:assert/strict'; import {createRequire} from 'node:module'; const r=createRequire(${JSON.stringify(join(packageRoot, 'package.json'))}); (async()=>{const png=await r('sharp')({create:{width:2,height:2,channels:4,background:'#ffffff'}}).png().toBuffer(); assert.equal(png.subarray(1,4).toString(),'PNG'); const pty=r('node-pty').spawn(process.env.ComSpec,['/d','/c','echo npm_native_ok'],{cols:80,rows:24}); let text=''; const timer=setTimeout(()=>{pty.kill();process.exit(2)},15000); pty.onData(data=>text+=data); pty.onExit(()=>{clearTimeout(timer);assert.match(text,/npm_native_ok/);console.log('sharp and ConPTY executed')})})().catch(e=>{console.error(e);process.exit(1)});`);
   await ps(command(process.execPath, [probe]));
   record('Installed sharp native DLL and node-pty ConPTY actually execute');
   stage = 'npx cache';
