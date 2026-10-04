@@ -84,7 +84,7 @@ export async function buildThemePreviewDocument(theme: StoryThemeName, mode: 'li
     build, head: null,
     sheets: documentStyleSheets({
       compiledCss, chrome: false, bare: false, theme,
-      docFonts: parts.docFonts, authorCss: parts.runtime.authorCss,
+      docFonts: parts.docFonts, systemCss: parts.baseRecipe.systemCss ?? '', authorCss: parts.runtime.authorCss,
     }),
   }).html;
 }

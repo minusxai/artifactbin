@@ -112,8 +112,8 @@ names, npm libraries, exported components — [scripts](markup-scripts.md).
   bespoke accent (`text-[#e2483d]`) is legitimate for the one bold moment —
   it will not follow a later theme switch.
 - `theme`, `template` and `colorMode` are top-level fields of the YAML fence
-  atop the file you push, not Helmet content. No genre named →
-  **default to `scrolly`**; torn → ask the user. `colorMode`
+  atop the file you push, not Helmet content. No page type named → pick
+  it from the content's shape ([templates.md](templates.md)); torn → ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
 <!--bundle:skip-->

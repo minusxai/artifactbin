@@ -101,10 +101,10 @@ describe('advanced HTTP parity',()=>{
     // The zod schema deliberately does NOT enum the theme: a retired name must
     // reach the publish pipeline, whose 400 names the successor — an agent's
     // only route out. A schema enum would answer with a generic zod error.
-    const res = await operationHttp(t.token, 'create_artifact', { markup: '<p>x</p>', theme: 'nocturne' });
+    const res = await operationHttp(t.token, 'create_artifact', { markup: '<p>x</p>', theme: 'classical' });
     expect(res.isError).toBe(true);
     expect(res.data.error).toBe('retired_theme');
-    expect(String(res.data.hint)).toContain('modernist');
+    expect(String(res.data.hint)).toContain('manuscript');
   });
 
   it('edit_artifact speaks the concurrent-edit protocol: accept, then doc_changed with head to rebase on', async () => {

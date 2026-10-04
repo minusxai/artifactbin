@@ -151,10 +151,10 @@ describe('runSqliteSyntaxMigrationBatch', () => {
 
   it('writes a retired theme as the theme readers already show in its place', async () => {
     const { tokenId } = await owner();
-    await legacy('aaaaaa', tokenId, HALF, { theme: 'nocturne' });
+    await legacy('aaaaaa', tokenId, HALF, { theme: 'classical' });
     const report = await runSqliteSyntaxMigrationBatch(await harness.db(), { batchSize: 10 });
     expect(report.documents).toEqual([expect.objectContaining({ artifactId: 'aaaaaa', outcome: 'converted' })]);
-    expect((await head('aaaaaa')).meta).toMatchObject({ theme: 'modernist', colorMode: 'dark', dataSyntax: 2 });
+    expect((await head('aaaaaa')).meta).toMatchObject({ theme: 'manuscript', dataSyntax: 2 });
   });
 
   it('reports what the publish door refused in words, when its markup no longer validates', async () => {

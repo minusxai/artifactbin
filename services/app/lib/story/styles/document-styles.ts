@@ -33,6 +33,12 @@ export interface DocumentStylesInput {
   theme: string | null | undefined;
   /** The Helmet's font slot overrides. */
   docFonts: DocumentFonts;
+  /**
+   * The design system's faces and classes when the document names one (the base-sheet recipe's
+   * `systemCss`, from lib/data/story/story-system-sheets), else empty. The TEXT, as the recipe
+   * carries it: this module is reached from the browser and must not import the sheets.
+   */
+  systemCss: string;
   /** The author's own `<style>`. */
   authorCss: string | null;
 }
@@ -61,6 +67,8 @@ export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[]
     // The slot override LAST among the font styles: the document's own ask beats the theme. Its own sheet,
     // because the Google `@import` it opens with must be the first rule of a stylesheet (./document-fonts).
     fontVars ? { attr: 'data-mx-font-vars', css: fontVars } : null,
+    // A design system's faces and classes, after the fonts and before the author's own CSS, which may override any of them.
+    input.systemCss ? { attr: 'data-mx-system', css: input.systemCss } : null,
     input.authorCss ? { attr: 'data-mx-author', css: input.authorCss } : null,
   ];
   return sheets.filter((sheet): sheet is DocumentSheet => sheet !== null);

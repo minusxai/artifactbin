@@ -1,8 +1,7 @@
 ---
 name: templates-deck
 description: >-
-  The deck genre in full: beats, layout grammar, a copyable skeleton, Do/Don't. Read only for a long or intricate deck — the brief's sketch is enough for a short, plain one.
-read_first_max: 6144
+  The deck page type: the reader's job, three compositions the thesis chooses between, what the runtime needs from Slide nodes, the slide types, and the rules.
 order: 2
 ---
 ## Read first
@@ -11,116 +10,99 @@ order: 2
 
 [[ template.personality ]]
 
-Beats: [[ template.beats | join(' → ') ]]
+Beats, as options rather than a sequence: [[ template.beats | join(' · ') ]]
 
-Voice: a keynote. Every slide headline is a spoken sentence ("Retention pays for the price
-increase"), never a label ("Retention"). One idea per slide. A good slide is ~40% empty —
-put the air BELOW the content, not around it.
+Voice: a keynote. Every slide headline is a spoken sentence ("Retention
+pays for the price increase"), never a label ("Retention"). One idea per
+slide. A good slide is about 40% empty; put the air BELOW the content, not
+around it. The design system owns the stage's type scale, the one big
+number and the footer rule (its reference carries a deck specimen when it
+fits); the thesis owns which slides exist and in what order. Pick ONE
+composition and build that.
 
-Skeleton (cover → divider → chart slide; extend the pattern per act):
+## Contents
+
+Compositions · What the runtime needs · Slide types · Rules.
+
+## Compositions
+
+- **Decision programme.** Experience, evidence, options, cost, unknowns and
+  a final motion, each slide its own composition, for a board asked to
+  approve something. Rejected default: a cover, a contents slide and a run
+  of identical chart slides.
+- **Analytical briefing.** A small set of legible comparisons builds toward
+  an explicit recommendation; the chart slides carry the argument and the
+  text slides are few.
+- **Narrative keynote.** Acts opened by full-bleed dividers, quiet paper
+  slides between, a twist and a close; for a story told to a room rather
+  than a decision put to it.
+
+## What the runtime needs
+
+- `<Helmet>` is the FIRST top-level node, before `<SlideDeck>`, never inside it.
+- Every slide is a `<Slide title="…">`, with a short spoken title: Slide
+  fills the reader's real viewport (`--mx-vh`, platform-provided) as a flex
+  column and powers the overview rail and present-mode paging. Give it no
+  height of your own; never a raw `<section>` for a slide; no fixed or
+  sticky chrome.
+
+Skeleton of the runtime pieces (publishable as is; the slides are yours):
 
   <Helmet><Import name="sales" src="ref:abc123" /><Query name="q">{`select month, sum(revenue) revenue from sales.rows group by 1 order by 1`}</Query></Helmet>
   <div data-design="tw" className="@container px-6 @2xl:px-12">
     <SlideDeck>
-      <Slide title="Cover" className="border-b border-border py-14">
-        <p className="text-xs uppercase tracking-widest font-semibold text-primary">Company · Quarter</p>
-        <hr className="mt-3" />
-        <h1 className="animate-fade-up mt-auto text-6xl @2xl:text-8xl font-bold tracking-tight max-w-4xl">The title states the one finding</h1>
-        <p className="animate-fade-up [animation-delay:200ms] mt-6 text-lg text-muted-foreground max-w-xl">A standfirst no longer than the breath it takes to say it.</p>
-        <div className="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Author</span><span>Date</span></div>
-      </Slide>
-      <Slide title="Act one" className="justify-center bg-primary text-primary-foreground -mx-6 @2xl:-mx-12 px-6 @2xl:px-12">
-        <span className="text-9xl font-bold text-primary-foreground/25">01</span>
-        <h2 className="mt-2 text-4xl @2xl:text-5xl font-semibold">Act title, mirrored in the contents</h2>
+      <Slide title="The one finding" className="border-b border-border py-14">
+        <p className="t-label">Company · Quarter</p>
+        <h1 className="t-display-l mt-auto max-w-4xl">The title states the one finding</h1>
+        <div className="mt-auto pt-10 flex justify-between t-body-s"><span>Author</span><span>Date</span></div>
       </Slide>
       <Slide title="The takeaway, spoken" className="border-b border-border py-14">
-        <p className="text-xs uppercase tracking-widest font-semibold text-primary">01 · ACT NAME</p>
-        <hr className="mt-3 mb-10" />
-        <h2 className="text-3xl @2xl:text-5xl font-semibold max-w-3xl">The headline is the takeaway, spoken aloud</h2>
+        <h2 className="t-display-m max-w-3xl">The headline is the takeaway, spoken aloud</h2>
         <div className="mt-10 max-w-5xl"><Question data="$q" viz={{"kind":"vega-lite","spec":{}}} height="440px" /></div>
-        <p className="mt-4 text-sm text-muted-foreground max-w-prose">One line under the chart: what to remember when the slide is gone.</p>
-        <div className="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title — date</span><span className="font-semibold">07</span></div>
+        <p className="mt-4 t-body-s max-w-prose">One line under the chart: what to remember when the slide is gone.</p>
       </Slide>
     </SlideDeck>
   </div>
 
-## Rules
-
-Type register (the theme's pairing, spent the keynote way): display does the speaking —
-huge spoken headlines, few words; the utility face runs the chrome — kickers, footer
-meta, slide numbers, contents rows; body appears only in standfirsts and captions,
-never in paragraphs.
-
-`<Helmet>` (title, styles) is the FIRST top-level node, BEFORE `<SlideDeck>` — never inside it.
-
-THE SLIDE (every CONTENT slide — accent dividers are the one exemption, see below;
-no fixed or sticky chrome — a slide is a tall section):
-- `<Slide>` already fills the reader's real viewport (`--mx-vh`, platform-provided, with
-  a headless fallback) as a flex column — add the dressing per slide.
-  Give it no height of your own; never a raw `<section>` for a slide — Slide is what
-  powers the reader's slide overview and present-mode paging.
-- Give EVERY slide a short spoken `title` (it names the slide in the overview rail and the
-  present controls).
-- HEADER BAND on every content slide: kicker + hairline, then the slide h2 — the
-  skeleton's exact classes, the same band on every slide.
-- FOOTER META closes every content slide, the same row every time: deck title and date
-  left, the slide number right.
-
-ACTS AND COLOR RHYTHM (the interleaving that makes it feel designed):
-- EVERY deck ships at least one full-bleed solid-accent divider slide, however short it is.
-<!--bundle:skip-->
-  A deck of quiet paper slides is the failure this genre exists to prevent — the divider is
-  not decoration you drop when slides are scarce, it is the one slide that makes the rest
-  read as a deck. Asked for N slides, the divider is one of the N; spend it, don't skip it.
-<!--/bundle:skip-->
-- Group slides into 2-4 numbered acts, and each act OPENS with a divider. Under 6 slides,
-  run ONE act: cover → divider → content → content → close. Above that, one divider per act.
-- The divider is a `<Slide>` like every other (the skeleton's second), minus the header
-  band and footer meta: a giant TONE-ON-TONE act numeral (same hue, darker — or a darker
-  literal of the accent) over the act title. Nothing else on the slide.
-- Dividers are the ONLY saturated slides; everything between is quiet paper. That alternation
-  (paper… paper… ACCENT… paper) is the pulse of the deck — never color a content slide's ground.
-- The contents slide lists the acts as numbered rows (accent numerals, hairline row rules,
-  `tabular-nums`) whose titles mirror the dividers EXACTLY.
+## Slide types
 
 SLIDE TYPES (pick per beat; each stays one idea):
-- Act divider (MANDATORY, at least one per deck — the skeleton's middle slide): pick it
-  FIRST, before any content slot, then mirror its title in the contents slide.
-- Statement: at most 3 one-line bullets with square accent markers
-  (`<span className="inline-block size-2 bg-primary mr-3">`), then air. No paragraphs.
-- Columns (2 or 3): equal cells on one gutter, and EACH COLUMN OPENS UNDER A RULE
-  (`<div className="border-t-2 border-foreground pt-3">` heading + short copy); columns top-align
-  and share the line rhythm. Collapse to one column on phones (`@2xl:grid-cols-3`).
-- Quadrants: 2x2 grid with hairline cross rules (`divide-x divide-y divide-border`) and tiny
-  muted axis labels at the edges ("← less … more →").
-- Chart slide: claim headline + ONE `<Question>` (430-460px, ≥ 60% width) + one takeaway line
-  under it. Restyle via `viz` override: all series in grays, ONE accent element (the bar/line
-  being discussed), direct labels, no legend where possible. Never two charts on a slide.
-- Big-number slide: one enormous accent figure — a styled single-value embed
-  (`valueColor` = the accent, huge `valueFontSize`) — plus a two-line muted caption. NOTHING else.
-  Use once or twice as an act's exclamation point.
-- Table slide: a compact table; uppercase tracked `<th>`, hairline row rules, `tabular-nums`.
+- Act divider: a full-bleed slide in a saturated ground with a giant
+  tone-on-tone numeral over the act title, nothing else. The narrative
+  keynote opens each act with one; a decision deck may use none.
+- Statement: at most three one-line bullets, then air. No paragraphs.
+- Columns (2 or 3): equal cells on one gutter, each opening under a rule;
+  collapse to one column on phones (`@2xl:grid-cols-3`).
+- Quadrants: a 2×2 with hairline cross rules and tiny muted axis labels.
+- Chart slide: a claim headline, ONE `<Question>` (430 to 460px, most of the
+  width), one takeaway line under it. Gray series, one accented element,
+  direct labels. Never two charts on a slide.
+- Big number: one enormous accent figure from a styled single-value embed
+  plus a two-line muted caption, nothing else; once or twice per deck.
+- Table slide: a compact table, uppercase tracked `<th>`, hairline rows,
+  `tabular-nums`.
 <!--bundle:skip-->
-- Quote slide: display-size quote in `text-muted-foreground` (softer than headlines, not black),
-  hanging quote mark, `— attribution` line. A breather between dense slides.
-- Timeline: a horizontal rail — uppercase tracked date labels over square nodes over bold
-  labels + muted notes, one left edge per milestone; the CURRENT step is the one accent square.
+- Quote slide: a display-size quote in the muted ink, a hanging quote mark,
+  an attribution line. A breather between dense slides.
+- Timeline: a horizontal rail of dated nodes; the current step is the one
+  accent square.
 <!--/bundle:skip-->
-- Cover and Close share one grammar — the skeleton's cover. The close restates the lead
-  number and the next step, then contact.
+- Cover and close share one grammar; the close restates the lead number and
+  the next step.
 
-<!--bundle:skip-->
+## Rules
+
 Do
-- Ship at least one solid-accent divider slide — a five-slide deck still gets one.
 - Speakable headlines; huge type, few words; the air below the content.
-- At most a cover entrance (`animate-fade-up`, staggered) — slides page, they don't
-  perform.
-- One accent element per figure; contents ↔ dividers mirrored to the word.
-<!--/bundle:skip-->
+- The same header band and footer meta on every content slide, so the deck
+  reads as one object.
+- At most a cover entrance (`animate-fade-up`, staggered); slides page, they
+  don't perform.
+
 Don't
-- Ship a deck of nothing but paper slides; color a CONTENT slide's ground (the divider is
-  the exception, and it is the only one).
-- Two charts on a slide; paragraphs (three lines max).
-- Scroll-snap/parallax tricks; cramming a slide to avoid adding one — add the slide.
+- Two charts on a slide; paragraphs (three lines max); a content slide's
+  ground coloured when the deck has dividers.
+- Scroll-snap or parallax tricks; cramming a slide to avoid adding one. Add
+  the slide.
 
 Components: [markup.md](markup.md); publish API: [publishing.md](publishing.md).

@@ -1,0 +1,711 @@
+{
+ "slug": "drafting",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Drafting cover: a gridded sheet with a bracket drawn in plan, dimension lines and a title block</title>\n<rect className=\"d-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/><line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"288\" className=\"d-grid\"/><line x1=\"24\" y1=\"0\" x2=\"24\" y2=\"288\" className=\"d-grid\"/><line x1=\"48\" y1=\"0\" x2=\"48\" y2=\"288\" className=\"d-grid\"/><line x1=\"72\" y1=\"0\" x2=\"72\" y2=\"288\" className=\"d-grid\"/><line x1=\"96\" y1=\"0\" x2=\"96\" y2=\"288\" className=\"d-grid\"/><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"288\" className=\"d-grid\"/><line x1=\"144\" y1=\"0\" x2=\"144\" y2=\"288\" className=\"d-grid\"/><line x1=\"168\" y1=\"0\" x2=\"168\" y2=\"288\" className=\"d-grid\"/><line x1=\"192\" y1=\"0\" x2=\"192\" y2=\"288\" className=\"d-grid\"/><line x1=\"216\" y1=\"0\" x2=\"216\" y2=\"288\" className=\"d-grid\"/><line x1=\"240\" y1=\"0\" x2=\"240\" y2=\"288\" className=\"d-grid\"/><line x1=\"264\" y1=\"0\" x2=\"264\" y2=\"288\" className=\"d-grid\"/><line x1=\"288\" y1=\"0\" x2=\"288\" y2=\"288\" className=\"d-grid\"/><line x1=\"312\" y1=\"0\" x2=\"312\" y2=\"288\" className=\"d-grid\"/><line x1=\"336\" y1=\"0\" x2=\"336\" y2=\"288\" className=\"d-grid\"/><line x1=\"360\" y1=\"0\" x2=\"360\" y2=\"288\" className=\"d-grid\"/><line x1=\"384\" y1=\"0\" x2=\"384\" y2=\"288\" className=\"d-grid\"/><line x1=\"408\" y1=\"0\" x2=\"408\" y2=\"288\" className=\"d-grid\"/><line x1=\"432\" y1=\"0\" x2=\"432\" y2=\"288\" className=\"d-grid\"/><line x1=\"456\" y1=\"0\" x2=\"456\" y2=\"288\" className=\"d-grid\"/><line x1=\"480\" y1=\"0\" x2=\"480\" y2=\"288\" className=\"d-grid\"/><line x1=\"0\" y1=\"0\" x2=\"480\" y2=\"0\" className=\"d-grid\"/><line x1=\"0\" y1=\"24\" x2=\"480\" y2=\"24\" className=\"d-grid\"/><line x1=\"0\" y1=\"48\" x2=\"480\" y2=\"48\" className=\"d-grid\"/><line x1=\"0\" y1=\"72\" x2=\"480\" y2=\"72\" className=\"d-grid\"/><line x1=\"0\" y1=\"96\" x2=\"480\" y2=\"96\" className=\"d-grid\"/><line x1=\"0\" y1=\"120\" x2=\"480\" y2=\"120\" className=\"d-grid\"/><line x1=\"0\" y1=\"144\" x2=\"480\" y2=\"144\" className=\"d-grid\"/><line x1=\"0\" y1=\"168\" x2=\"480\" y2=\"168\" className=\"d-grid\"/><line x1=\"0\" y1=\"192\" x2=\"480\" y2=\"192\" className=\"d-grid\"/><line x1=\"0\" y1=\"216\" x2=\"480\" y2=\"216\" className=\"d-grid\"/><line x1=\"0\" y1=\"240\" x2=\"480\" y2=\"240\" className=\"d-grid\"/><line x1=\"0\" y1=\"264\" x2=\"480\" y2=\"264\" className=\"d-grid\"/><line x1=\"0\" y1=\"288\" x2=\"480\" y2=\"288\" className=\"d-grid\"/>\n<rect className=\"d-frame\" x=\"12.5\" y=\"12.5\" width=\"455\" height=\"263\"/>\n<path className=\"d-ink2\" d=\"M120 72 h168 v40 h-56 v96 h-56 v-96 h-56 z\"/>\n<circle className=\"d-ink2\" cx=\"148\" cy=\"92\" r=\"8\"/><circle className=\"d-ink2\" cx=\"260\" cy=\"92\" r=\"8\"/><circle className=\"d-ink2\" cx=\"204\" cy=\"188\" r=\"10\"/>\n<line className=\"d-dim\" x1=\"120\" y1=\"54\" x2=\"288\" y2=\"54\"/><polygon className=\"d-arrow\" points=\"120,54 128,50 128,58\"/><polygon className=\"d-arrow\" points=\"288,54 280,50 280,58\"/><text x=\"204\" y=\"48\" className=\"d-dim-t\" textAnchor=\"middle\">168.0</text>\n<line className=\"d-dim\" x1=\"306\" y1=\"72\" x2=\"306\" y2=\"208\"/><polygon className=\"d-arrow\" points=\"306,72 302,80 310,80\"/><polygon className=\"d-arrow\" points=\"306,208 302,200 310,200\"/><text x=\"316\" y=\"144\" className=\"d-dim-t\">136.0</text>\n<path className=\"d-rev\" d=\"M330 180 c6 -10 16 -10 22 0 c6 -10 16 -10 22 0 c6 -10 16 -10 22 0 c0 8 0 16 0 24 c-6 10 -16 10 -22 0 c-6 10 -16 10 -22 0 c-6 10 -16 10 -22 0 c0 -8 0 -16 0 -24 z\"/><text x=\"340\" y=\"196\" className=\"d-rev-t\">REV B</text>\n<rect className=\"d-block\" x=\"296.5\" y=\"228.5\" width=\"171\" height=\"47\"/><line className=\"d-ink1\" x1=\"296.5\" y1=\"244.5\" x2=\"467.5\" y2=\"244.5\"/><line className=\"d-ink1\" x1=\"380.5\" y1=\"228.5\" x2=\"380.5\" y2=\"275.5\"/>\n<text x=\"302\" y=\"240\" className=\"d-blk-t\">DWG BR-042</text><text x=\"386\" y=\"240\" className=\"d-blk-t\">SHEET 1/7</text><text x=\"302\" y=\"262\" className=\"d-blk-t\">SCALE 1:2</text><text x=\"386\" y=\"262\" className=\"d-blk-t\">REV B · OCT 26</text></svg>",
+ "name": "Drafting",
+ "tagline": "Every line is a measurement.",
+ "mood": "Technical",
+ "jobs": "Plans, specs, explainers, process stories",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Archivo",
+   "ital,wdth,wght@0,62..125,400;0,62..125,500;0,62..125,700;0,62..125,900;1,62..125,400"
+  ],
+  [
+   "Archivo Narrow",
+   "wght@500;700"
+  ],
+  [
+   "IBM Plex Mono",
+   "ital,wght@0,400;0,500;0,700;1,400"
+  ]
+ ],
+ "families": {
+  "display": "\"Archivo\", \"Arial Narrow\", system-ui, sans-serif",
+  "sans": "\"Archivo\", system-ui, sans-serif",
+  "mono": "\"IBM Plex Mono\", ui-monospace, Menlo, monospace",
+  "narrow": "\"Archivo Narrow\", \"Arial Narrow\", sans-serif"
+ },
+ "tokens": [
+  {
+   "name": "vellum",
+   "light": "#eeede6",
+   "dark": "#0f1b2d",
+   "usage": "Page ground: cool drafting vellum by day, Prussian blueprint by night.",
+   "group": "Grounds"
+  },
+  {
+   "name": "vellum-raised",
+   "light": "#f7f6f1",
+   "dark": "#15253d",
+   "usage": "Sheets, panels, fields.",
+   "group": "Grounds"
+  },
+  {
+   "name": "vellum-sunk",
+   "light": "#e3e1d7",
+   "dark": "#0a1322",
+   "usage": "Wells, code, title-block cells.",
+   "group": "Grounds"
+  },
+  {
+   "name": "grid",
+   "light": "#d9d7cc",
+   "dark": "#1f3350",
+   "usage": "The 24px drafting grid and hairline rules. Visible, never loud.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#16181c",
+   "dark": "#e9eef7",
+   "usage": "Line-work and primary text. 1px for construction, 2px for the object.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#4a4f58",
+   "dark": "#9fb0c8",
+   "usage": "Secondary text, dimension figures, notes.",
+   "group": "Ink"
+  },
+  {
+   "name": "cobalt",
+   "light": "#2a5bd7",
+   "dark": "#8fb4ff",
+   "usage": "The annotation colour: dimensions, leaders, links, the primary action.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-cobalt",
+   "light": "#ffffff",
+   "dark": "#0a1322",
+   "usage": "Text on cobalt fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "cobalt-soft",
+   "light": "#dfe7fb",
+   "dark": "#1b2f55",
+   "usage": "Ground for selected rows and info notes.",
+   "group": "Brand"
+  },
+  {
+   "name": "vermilion",
+   "light": "#ff4a1c",
+   "dark": "#ff7a4d",
+   "usage": "The revision colour: what changed, what is wrong, the one highlighted part.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-vermilion",
+   "light": "#16181c",
+   "dark": "#16181c",
+   "usage": "Text on vermilion fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "vermilion-soft",
+   "light": "#ffe0d6",
+   "dark": "#3b1a10",
+   "usage": "Ground for revision clouds and error notes.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#1f7a4d",
+   "dark": "#6fd49a",
+   "usage": "Verified, passed, released. Always with a word.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#dcefe3",
+   "dark": "#113426",
+   "usage": "Ground for verified rows.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#8a6200",
+   "dark": "#f2c14e",
+   "usage": "Assumed, pending review.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#f7ebc6",
+   "dark": "#33290a",
+   "usage": "Ground for assumptions.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#c2320a",
+   "dark": "#ff7a4d",
+   "usage": "Failed, blocked. Shares vermilion in Night.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#ffe0d6",
+   "dark": "#3b1a10",
+   "usage": "Ground for failures.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "vellum",
+  "foreground": "ink",
+  "card": "vellum-raised",
+  "card-foreground": "ink",
+  "popover": "vellum-raised",
+  "popover-foreground": "ink",
+  "primary": "cobalt",
+  "primary-foreground": "on-cobalt",
+  "secondary": "cobalt-soft",
+  "secondary-foreground": "cobalt",
+  "muted": "vellum-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "vellum-sunk",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "vellum",
+  "border": "grid",
+  "input": "grid",
+  "ring": "cobalt",
+  "chart-1": "cobalt",
+  "chart-2": "vermilion",
+  "chart-3": "ink",
+  "chart-4": "positive",
+  "chart-5": "ink-muted"
+ },
+ "radius_contract": "0px",
+ "extra_vars": {
+  "chip-radius": "0px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(48px, 8vw, 104px)",
+   "lh": ".9",
+   "weight": 900,
+   "ls": "-0.03em",
+   "tt": "uppercase",
+   "sample": "Sheet 1 of 7 · routing record",
+   "usage": "One per sheet. Poster-weight Archivo in caps; the subject as a title block."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(32px, 4.5vw, 56px)",
+   "lh": ".95",
+   "weight": 900,
+   "ls": "-0.025em",
+   "tt": "uppercase",
+   "sample": "Sheet 2 · exploded view",
+   "usage": "Section openers, sheet titles."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "22px",
+   "lh": "26px",
+   "weight": 700,
+   "ls": "-0.01em",
+   "sample": "Booking flow, revision B",
+   "usage": "Panel titles, figure titles."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "16px",
+   "lh": "26px",
+   "weight": 400,
+   "sample": "A service workshop takes in a batch of 100 returned units. Every one is opened, inspected part by part, and routed down one of three paths.",
+   "usage": "Reading text. Archivo at a wide leading reads like a spec, not a brochure."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "19px",
+   "weight": 400,
+   "sample": "Dimensions in millimetres unless stated.",
+   "usage": "Notes, captions, helper text."
+  },
+  {
+   "name": "label",
+   "family": "narrow",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 700,
+   "ls": "0.12em",
+   "tt": "uppercase",
+   "sample": "Fig. 04 · Section A-A",
+   "usage": "Eyebrows, figure numbers, title-block cells. Archivo Narrow in caps."
+  },
+  {
+   "name": "dim",
+   "family": "mono",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 500,
+   "sample": "146.7",
+   "usage": "Dimension figures on drawings and in tables. Tabular.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "numeral",
+   "family": "mono",
+   "size": "40px",
+   "lh": "44px",
+   "weight": 500,
+   "ls": "-0.02em",
+   "sample": "60 / 25 / 15",
+   "usage": "KPI figures and allocations.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "PUT /api/bookings/:id · 409 on conflict",
+   "usage": "Code, paths, API contracts."
+  }
+ ],
+ "idea_headline": "A drawing set, not a document.",
+ "idea": "Drafting treats every page as a numbered sheet from an engineering drawing set: a gridded vellum, a frame, a title block, and the subject drawn in line-work with its dimensions. The reader is handed something measured. Cobalt annotates; vermilion marks the revision.",
+ "use_for": "Implementation plans, specs and RFCs, process explainers, product teardowns, scroll stories where one object comes apart or goes together.",
+ "avoid_when": "Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status colours, or any page whose reader is not expected to inspect.",
+ "principles_headline": "Draw the subject. Dimension it. Number the sheet.",
+ "principles": [
+  [
+   "The object is drawn, not pictured.",
+   "Line-work in ink at 2px for the object and 1px for construction. Photographs are for marketing; a drawing is for understanding."
+  ],
+  [
+   "Every number has a leader.",
+   "Figures attach to the thing they measure with a dimension line and arrowheads. A figure floating in a card is a rumour."
+  ],
+  [
+   "Cobalt annotates, vermilion revises.",
+   "Two colours only. Cobalt for dimensions, links and the primary action; vermilion for what changed, what failed, the one part the reader must find."
+  ],
+  [
+   "The grid shows.",
+   "A 24px grid is the page texture. Elements snap to it; margins are multiples of it."
+  ],
+  [
+   "Sheets, not sections.",
+   "Each major part of the page is a sheet with its own title block: number, title, revision, scale. Reading the title blocks reads the plan."
+  ]
+ ],
+ "voice": [
+  "Imperative and precise: \"Book one slot. Refuse the second.\" Not \"Users should be able to…\"",
+  "State the unit once in the title block, then never repeat it.",
+  "Mark assumptions as assumptions, in caution; mark verified results as verified, in positive.",
+  "Revision notes say what changed and why, in one line each."
+ ],
+ "colour_headline": "Ink on vellum, cobalt annotations, one vermilion revision.",
+ "colour_note": "Day is a cool grey-white vellum with a visible grid. Night is the same sheet as a blueprint: Prussian ground, pale line-work, cobalt lifted to sky-blue and vermilion warmed. Status colours are for ledgers and tables, never for the drawing itself.",
+ "chart_series": [
+  "cobalt",
+  "vermilion",
+  "ink",
+  "positive",
+  "ink-muted"
+ ],
+ "chart_note": "Cobalt is the measured series; vermilion is the exception or the revision; ink is the baseline. Charts in Drafting look like figures: axis lines in ink, grid in the grid token, direct labels in the dim role.",
+ "type_headline": "Archivo for the sheet, Plex Mono for the measurements.",
+ "type_note": "Archivo at 900 in caps gives titles the weight of a stencil; at 400 it reads like a spec. Archivo Narrow carries the title-block apparatus. IBM Plex Mono carries every figure and every path.",
+ "space_headline": "A 24px grid, a 12px frame, 2px for the object.",
+ "space": [
+  [
+   "grid · 24px",
+   "The drafting grid. Margins and gaps are multiples: 24, 48, 72."
+  ],
+  [
+   "space-2 · 8px",
+   "Inside controls and title-block cells."
+  ],
+  [
+   "space-3 · 12px",
+   "The frame inset; control padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "Control padding-x."
+  ],
+  [
+   "space-6 · 24px",
+   "Panel padding, figure gutters."
+  ],
+  [
+   "space-12 · 48px",
+   "Between sheets."
+  ],
+  [
+   "space-16 · 64px",
+   "Page gutters on wide screens."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Everything. A drawing has no rounded corners."
+  ],
+  [
+   "frame · 1px ink",
+   "Every sheet and panel is framed in 1px ink. Panels inside a sheet use the grid token instead."
+  ],
+  [
+   "object · 2px ink",
+   "The subject is drawn at 2px; construction lines, leaders and dimensions at 1px."
+  ],
+  [
+   "arrowheads",
+   "Closed 8px triangles in the line colour, drawn as polygons. No SVG markers."
+  ]
+ ],
+ "depth": [
+  [
+   "shadow",
+   "None. A sheet lies flat. Hover reveals by changing the line colour to cobalt, not by lifting."
+  ],
+  [
+   "focus",
+   "A 2px cobalt outline, offset 2px, on every control."
+  ],
+  [
+   "revision cloud",
+   "A scalloped outline in vermilion around the changed region, with a REV tag."
+  ],
+  [
+   "motion",
+   "Lines draw in (stroke-dashoffset, 600ms ease-out) on first reveal. Exploded parts translate along their axis as the reader scrolls. Reduced motion shows the finished drawing."
+  ]
+ ],
+ "components_headline": "The kit becomes a title block.",
+ "components_note": "Kit components take Drafting through the contract: square, 1px edges, cobalt primary, vellum grounds. Authored classes add the title-block cells, the dimension figures and the revision marks.",
+ "buttons": "<Button>Book slot</Button><Button variant=\"secondary\">Save draft</Button><Button variant=\"outline\">Export sheet</Button><Button variant=\"ghost\">Cancel</Button><button className=\"d-btn d-btn-primary\">Book slot</button><button className=\"d-btn\">Export sheet</button><button className=\"d-btn d-btn-rev\">Mark revision</button>",
+ "buttons_note": "Kit buttons left; authored d-btn right: 1px ink frame, Archivo Narrow caps, cobalt primary. The revision button is vermilion and appears once per sheet at most.",
+ "tags": "<Badge>Cobalt</Badge><Badge variant=\"secondary\">Selected</Badge><Badge variant=\"outline\">Draft</Badge><Badge variant=\"destructive\">Blocked</Badge><span className=\"d-tag\">REV B</span><span className=\"d-tag d-tag-ok\">VERIFIED</span><span className=\"d-tag d-tag-assume\">ASSUMED</span><span className=\"d-tag d-tag-rev\">CHANGED</span>",
+ "tags_note": "Tags are title-block cells: Archivo Narrow caps in a 1px frame. State tags say the state in a word.",
+ "fields_note": "Fields are framed cells with the label in the title-block role above. Focus is a cobalt outline; there is no glow and no fill change.",
+ "stats": "<div className=\"d-stat\"><span className=\"t-label\">Returned units</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"total\" /></span><span className=\"d-note\">batch RW-0417</span></div><div className=\"d-stat\"><span className=\"t-label\">Back in use</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"reuse\" /></span><span className=\"d-note d-ok\">verified · 60%</span></div>",
+ "stats_note": "A Stat is a dimension: label above, mono numeral, the source or state below. Stats sit in a row of framed cells sharing their borders, like a title block.",
+ "callouts": "<Alert><AlertTitle>Slot already booked</AlertTitle><AlertDescription>Pick another hour or another machine.</AlertDescription></Alert><div className=\"d-note-box d-note-info\"><strong>Note 3.</strong> Dimensions in millimetres. Tolerance ±0.5 unless stated.</div><div className=\"d-note-box d-note-assume\"><strong>Assumed.</strong> Equipment ids are stable across the migration. Verify before task 4.</div><div className=\"d-note-box d-note-rev\"><strong>REV B.</strong> Cancel now requires the booking owner; anonymous cancel removed.</div>",
+ "callouts_note": "Callouts are numbered notes in the margin. Assumptions take caution; revisions take vermilion; information takes cobalt.",
+ "chart_comp_note": "Charts are figures: ink axes, grid in the grid token, cobalt for the measured series, vermilion for the exception. Give every figure a Fig. number in the label role.",
+ "table_note": "Tables are bills of materials: narrow caps headers, mono figures right-aligned, 1px grid rules. Never striped.",
+ "card": "<div className=\"d-sheet\"><div className=\"d-sheet-body\"><p className=\"t-label\">Fig. 02 · Booking flow</p><h3 className=\"t-title\">One slot per machine per hour</h3><p className=\"d-sheet-p\">The API reserves the row with a unique index on (machine, hour). A second request gets 409 and the UI offers the next free hour.</p></div><div className=\"d-titleblock\"><span><b>DWG</b> BN-007</span><span><b>SHEET</b> 2/7</span><span><b>SCALE</b> NTS</span><span><b>REV</b> B</span></div></div>",
+ "card_note": "A card is a sheet: framed, with a title block along its bottom edge carrying number, sheet, scale and revision. Hover turns the frame cobalt.",
+ "motifs_headline": "Dimension lines, revision clouds, title blocks.",
+ "motifs_note": "Drafting draws with the apparatus of a drawing set. Put the data on the drawing: a count becomes a dimension, a share becomes a section, a change becomes a cloud.",
+ "motifs": [
+  {
+   "title": "The dimension line",
+   "usage": "A measured figure attached to its object with a 1px cobalt line and 8px closed arrowheads, the figure in the dim role above the line. Use it for counts, widths, durations.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Dimension line</title><rect className=\"d-ink2\" x=\"80\" y=\"56\" width=\"320\" height=\"64\"/><line className=\"d-dim\" x1=\"80\" y1=\"36\" x2=\"400\" y2=\"36\"/><polygon className=\"d-arrow\" points=\"80,36 88,32 88,40\"/><polygon className=\"d-arrow\" points=\"400,36 392,32 392,40\"/><line className=\"d-ext\" x1=\"80\" y1=\"28\" x2=\"80\" y2=\"52\"/><line className=\"d-ext\" x1=\"400\" y1=\"28\" x2=\"400\" y2=\"52\"/><text x=\"240\" y=\"30\" className=\"d-dim-t\" textAnchor=\"middle\">100 units · 60 service · 25 parts · 15 recycle</text><line className=\"d-rev-l\" x1=\"272\" y1=\"56\" x2=\"272\" y2=\"120\"/><line className=\"d-rev-l\" x1=\"352\" y1=\"56\" x2=\"352\" y2=\"120\"/><text x=\"176\" y=\"94\" className=\"d-blk-t\" textAnchor=\"middle\">SERVICE 60</text><text x=\"312\" y=\"94\" className=\"d-blk-t\" textAnchor=\"middle\">PARTS 25</text><text x=\"376\" y=\"94\" className=\"d-blk-t\" textAnchor=\"middle\">15</text></svg>"
+  },
+  {
+   "title": "The revision cloud",
+   "usage": "A scalloped vermilion outline around the region that changed since the last revision, with a REV tag. One cloud per sheet; if everything changed, the sheet is new.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Revision cloud</title><rect className=\"d-ink1\" x=\"40.5\" y=\"40.5\" width=\"400\" height=\"80\"/><line className=\"d-ink1\" x1=\"40\" y1=\"80\" x2=\"440\" y2=\"80\"/><line className=\"d-ink1\" x1=\"240\" y1=\"40\" x2=\"240\" y2=\"120\"/><path className=\"d-rev\" d=\"M250 48 c8 -12 20 -12 28 0 c8 -12 20 -12 28 0 c8 -12 20 -12 28 0 c8 -12 20 -12 28 0 c8 -12 20 -12 28 0 c8 -12 20 -12 28 0 c10 10 10 22 0 32 c10 10 10 22 0 32 c-8 12 -20 12 -28 0 c-8 12 -20 12 -28 0 c-8 12 -20 12 -28 0 c-8 12 -20 12 -28 0 c-8 12 -20 12 -28 0 c-8 12 -20 12 -28 0 c-10 -10 -10 -22 0 -32 c-10 -10 -10 -22 0 -32 z\"/><text x=\"262\" y=\"70\" className=\"d-rev-t\">REV B · cancel requires owner</text><text x=\"52\" y=\"66\" className=\"d-blk-t\">CANCEL</text><text x=\"52\" y=\"106\" className=\"d-blk-t\">ANY USER</text></svg>"
+  },
+  {
+   "title": "The title block",
+   "usage": "A framed strip of cells at the bottom of every sheet: drawing number, title, sheet x/y, scale, revision, date. Reading the title blocks reads the plan.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Title block</title><rect className=\"d-block\" x=\"24.5\" y=\"48.5\" width=\"431\" height=\"64\"/><line className=\"d-ink1\" x1=\"24.5\" y1=\"80.5\" x2=\"455.5\" y2=\"80.5\"/><line className=\"d-ink1\" x1=\"150.5\" y1=\"48.5\" x2=\"150.5\" y2=\"112.5\"/><line className=\"d-ink1\" x1=\"350.5\" y1=\"48.5\" x2=\"350.5\" y2=\"112.5\"/><text x=\"32\" y=\"68\" className=\"d-blk-t\">DWG RW-0417</text><text x=\"158\" y=\"68\" className=\"d-blk-t\">ROUTING RECORD · RW-0417</text><text x=\"358\" y=\"68\" className=\"d-blk-t\">SHEET 1/7</text><text x=\"32\" y=\"100\" className=\"d-blk-t\">SCALE NTS</text><text x=\"158\" y=\"100\" className=\"d-blk-t\">FICTIONAL · ILLUSTRATIVE</text><text x=\"358\" y=\"100\" className=\"d-blk-t\">REV A · OCT 26</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Drafting.",
+ "sample_note": "A scroll story opener as sheet 1 of 7: the subject drawn and dimensioned, the three paths as a split dimension, and the title block that promises the rest of the set.",
+ "sample": "<div className=\"d-sample\"><div className=\"d-sample-in\">\n  <div className=\"d-sample-sheet\">\n    <div className=\"d-sample-top\"><span className=\"t-label\">Batch RW-0417 · Teardown and routing record</span><span className=\"t-label d-muted\">Fictional · figures illustrative</span></div>\n    <div className=\"d-sample-grid\">\n      <div>\n        <h2 className=\"t-display-xl d-sample-h\">A batch of <span className=\"d-vermilion\">100</span> returned units</h2>\n        <p className=\"t-body d-sample-lede\">A service workshop takes in a batch of 100 returned units. Every one is opened, inspected part by part, and routed down one of three paths. Scroll to take the first one apart.</p>\n        <div className=\"d-stat-row\"><div className=\"d-stat\"><span className=\"t-label\">Back in use</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"reuse\" /></span></div><div className=\"d-stat\"><span className=\"t-label\">Donor for parts</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"donor\" /></span></div><div className=\"d-stat\"><span className=\"t-label\">Recycled</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"recycle\" /></span></div></div>\n      </div>\n      <div className=\"d-sample-fig\"><svg viewBox=\"0 0 400 420\"><title>Unit in plan with dimensions</title><rect className=\"d-ink2\" x=\"120\" y=\"40\" width=\"160\" height=\"320\" rx=\"0\"/><rect className=\"d-ink1\" x=\"132\" y=\"60\" width=\"136\" height=\"260\"/><circle className=\"d-ink1\" cx=\"200\" cy=\"340\" r=\"10\"/><rect className=\"d-ink1\" x=\"180\" y=\"48\" width=\"40\" height=\"4\"/><line className=\"d-dim\" x1=\"120\" y1=\"24\" x2=\"280\" y2=\"24\"/><polygon className=\"d-arrow\" points=\"120,24 128,20 128,28\"/><polygon className=\"d-arrow\" points=\"280,24 272,20 272,28\"/><text x=\"200\" y=\"18\" className=\"d-dim-t\" textAnchor=\"middle\">71.5</text><line className=\"d-dim\" x1=\"304\" y1=\"40\" x2=\"304\" y2=\"360\"/><polygon className=\"d-arrow\" points=\"304,40 300,48 308,48\"/><polygon className=\"d-arrow\" points=\"304,360 300,352 308,352\"/><text x=\"314\" y=\"204\" className=\"d-dim-t\">146.7</text><path className=\"d-rev\" d=\"M40 300 c6 -10 16 -10 22 0 c6 -10 16 -10 22 0 c0 8 0 16 0 24 c-6 10 -16 10 -22 0 c-6 10 -16 10 -22 0 c0 -8 0 -16 0 -24 z\"/><text x=\"48\" y=\"316\" className=\"d-rev-t\">FATE ?</text><line className=\"d-lead\" x1=\"84\" y1=\"312\" x2=\"132\" y2=\"312\"/></svg></div>\n    </div>\n    <div className=\"d-sample-bottom\"><DataTable data=\"$table\" rowKey=\"path\" height=\"180px\" columns={[{\"col\":\"path\",\"title\":\"Path\"},{\"col\":\"phones\",\"title\":\"Units\",\"align\":\"right\"},{\"col\":\"share\",\"title\":\"Share %\",\"fmt\":\".0f\",\"align\":\"right\",\"bar\":true},{\"col\":\"state\",\"title\":\"State\"}]} /></div>\n    <div className=\"d-titleblock\"><span><b>DWG</b> RW-0417-SL</span><span><b>TITLE</b> ROUTING RECORD · BATCH RW-0417</span><span><b>SHEET</b> 1/7</span><span><b>SCALE</b> NTS</span><span><b>REV</b> A · 02 OCT 26</span></div>\n  </div>\n</div></div>",
+ "dos": [
+  "Draw the subject in ink line-work and attach every figure with a dimension line.",
+  "Frame every sheet and give it a title block.",
+  "Cobalt for annotation, vermilion for the one revision.",
+  "Snap to the 24px grid; let it show."
+ ],
+ "donts": [
+  "No photographs as the hero; no rounded corners; no shadows.",
+  "No status colour on the drawing itself.",
+  "No floating numbers; a figure without a leader is a rumour.",
+  "No more than one revision cloud per sheet."
+ ],
+ "binding_losses": "The grid texture, the dimension and arrowhead styles, the title block and the revision cloud have no contract slot; they are d-* classes and inline SVG. Kit tables take the grid rules and mono figures but not the narrow caps header.",
+ "footer": "Vellum first, Blueprint second. Fonts: Archivo 400/500/700/900, Archivo Narrow 500/700, IBM Plex Mono 400/500/700, all Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "path": "Back in use",
+    "phones": 60,
+    "share": 60,
+    "state": "verified",
+    "step": "Inspect",
+    "minutes": 12
+   },
+   {
+    "path": "Donor for parts",
+    "phones": 25,
+    "share": 25,
+    "state": "verified",
+    "step": "Open",
+    "minutes": 4
+   },
+   {
+    "path": "Recycled",
+    "phones": 15,
+    "share": 15,
+    "state": "verified",
+    "step": "Test",
+    "minutes": 9
+   }
+  ],
+  "queries": {
+   "series": "select path, phones from rows order by phones desc",
+   "table": "select path, phones, share, state from rows order by phones desc",
+   "totals": "select sum(phones) as total, max(case when path = 'Back in use' then phones end) as reuse, max(case when path = 'Donor for parts' then phones end) as donor, max(case when path = 'Recycled' then phones end) as recycle from rows"
+  },
+  "segments": [
+   "Plan",
+   "Section",
+   "Detail"
+  ],
+  "segment_default": "Plan",
+  "select_label": "View",
+  "input_placeholder": "Find a part",
+  "switch_label": "Show dimensions",
+  "tabs": [
+   "Sheet 1",
+   "Sheet 2",
+   "Sheet 3"
+  ],
+  "tab_body": "Sheet 1: the subject in plan with overall dimensions.",
+  "progress_label": "Tasks verified · 4 of 11",
+  "progress": 36,
+  "chart_title": "Fig. 03 · Units by path",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": "bar",
+    "encoding": {
+     "y": {
+      "field": "path",
+      "type": "nominal",
+      "title": "Path",
+      "sort": "-x"
+     },
+     "x": {
+      "field": "phones",
+      "type": "quantitative",
+      "title": "Units"
+     },
+     "color": {
+      "field": "path",
+      "type": "nominal",
+      "legend": null
+     }
+    }
+   }
+  },
+  "row_key": "path",
+  "table_columns": [
+   {
+    "col": "path",
+    "title": "Path"
+   },
+   {
+    "col": "phones",
+    "title": "Units",
+    "align": "right"
+   },
+   {
+    "col": "share",
+    "title": "Share %",
+    "fmt": ".0f",
+    "align": "right",
+    "bar": true
+   },
+   {
+    "col": "state",
+    "title": "State"
+   }
+  ],
+  "table_height": "180px"
+ },
+ "css": "\n.ds-drafting { --ds-cover-bg: var(--ds-vellum); background-image: linear-gradient(var(--ds-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ds-grid) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .ds-section h2, .ds-drafting .ds-cover-name { font-family: var(--font-display); text-transform: uppercase; }\n.ds-drafting .ds-chip { border-radius: 0; font-family: \"Archivo Narrow\", sans-serif; }\n.ds-drafting .ds-comp, .ds-drafting .ds-motif, .ds-drafting .ds-note, .ds-drafting .ds-voice, .ds-drafting .ds-code { border-color: var(--ds-ink); }\n.ds-drafting .d-paper { fill: var(--ds-vellum); } .ds-drafting .d-grid { stroke: var(--ds-grid); stroke-width: 1; } .ds-drafting .d-frame { fill: none; stroke: var(--ds-ink); stroke-width: 1; }\n.ds-drafting .d-ink2 { fill: none; stroke: var(--ds-ink); stroke-width: 2; } .ds-drafting .d-ink1 { fill: none; stroke: var(--ds-ink); stroke-width: 1; } .ds-drafting .d-block { fill: var(--ds-vellum-raised); stroke: var(--ds-ink); stroke-width: 1; }\n.ds-drafting .d-dim { stroke: var(--ds-cobalt); stroke-width: 1; } .ds-drafting .d-ext { stroke: var(--ds-cobalt); stroke-width: 1; stroke-dasharray: 3 3; } .ds-drafting .d-arrow { fill: var(--ds-cobalt); } .ds-drafting .d-lead { stroke: var(--ds-vermilion); stroke-width: 1; }\n.ds-drafting .d-dim-t { font-family: var(--font-mono); font-size: 12px; font-weight: 500; fill: var(--ds-cobalt); } .ds-drafting .d-blk-t { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; fill: var(--ds-ink); }\n.ds-drafting .d-rev { fill: var(--ds-vermilion-soft); stroke: var(--ds-vermilion); stroke-width: 1.5; } .ds-drafting .d-rev-t { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; fill: var(--ds-vermilion); } .ds-drafting .d-rev-l { stroke: var(--ds-vermilion); stroke-width: 1; stroke-dasharray: 4 3; }\n.ds-drafting .d-muted { color: var(--ds-ink-muted); } .ds-drafting .d-vermilion { color: var(--ds-vermilion); } .ds-drafting .d-ok { color: var(--ds-positive); }\n.ds-drafting .d-btn { font-family: \"Archivo Narrow\", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; line-height: 18px; padding: 10px 16px; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); color: var(--ds-ink); cursor: pointer; transition: border-color 120ms, color 120ms; }\n.ds-drafting .d-btn:hover { border-color: var(--ds-cobalt); color: var(--ds-cobalt); } .ds-drafting .d-btn:focus-visible { outline: 2px solid var(--ds-cobalt); outline-offset: 2px; }\n.ds-drafting .d-btn-primary { background: var(--ds-cobalt); color: var(--ds-on-cobalt); border-color: var(--ds-cobalt); } .ds-drafting .d-btn-primary:hover { color: var(--ds-on-cobalt); border-color: var(--ds-ink); }\n.ds-drafting .d-btn-rev { background: var(--ds-vermilion); color: var(--ds-on-vermilion); border-color: var(--ds-vermilion); } .ds-drafting .d-btn-rev:hover { color: var(--ds-on-vermilion); border-color: var(--ds-ink); }\n.ds-drafting .d-tag { display: inline-flex; padding: 3px 8px; border: 1px solid var(--ds-ink); font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; background: var(--ds-vellum-raised); color: var(--ds-ink); }\n.ds-drafting .d-tag-ok { color: var(--ds-positive); border-color: var(--ds-positive); background: var(--ds-positive-soft); } .ds-drafting .d-tag-assume { color: var(--ds-caution); border-color: var(--ds-caution); background: var(--ds-caution-soft); } .ds-drafting .d-tag-rev { color: var(--ds-vermilion); border-color: var(--ds-vermilion); background: var(--ds-vermilion-soft); }\n.ds-drafting .d-stat { display: grid; gap: 6px; padding: 16px 20px; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); min-width: 160px; } .ds-drafting .d-stat + .d-stat { border-left: 0; }\n.ds-drafting .ds-stats { gap: 0; } .ds-drafting .d-stat-row { display: flex; flex-wrap: wrap; margin-top: 28px; } .ds-drafting .d-note { font-size: 12px; color: var(--ds-ink-muted); font-family: var(--font-mono); }\n.ds-drafting .d-note-box { padding: 12px 14px; border: 1px solid var(--ds-ink); border-left-width: 4px; font-size: 14px; line-height: 1.5; background: var(--ds-vellum-raised); }\n.ds-drafting .d-note-info { border-left-color: var(--ds-cobalt); } .ds-drafting .d-note-assume { border-left-color: var(--ds-caution); background: var(--ds-caution-soft); } .ds-drafting .d-note-rev { border-left-color: var(--ds-vermilion); background: var(--ds-vermilion-soft); }\n.ds-drafting .d-sheet { border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); display: grid; transition: border-color 120ms; } .ds-drafting .d-sheet:hover { border-color: var(--ds-cobalt); }\n.ds-drafting .d-sheet-body { padding: 20px 24px; } .ds-drafting .d-sheet h3 { margin: 6px 0 0; } .ds-drafting .d-sheet-p { margin: 10px 0 0; line-height: 1.55; color: var(--ds-ink-muted); max-width: 56ch; }\n.ds-drafting .d-titleblock { display: flex; flex-wrap: wrap; border-top: 1px solid var(--ds-ink); } .ds-drafting .d-titleblock span { padding: 8px 12px; border-right: 1px solid var(--ds-ink); font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; flex: 1 1 auto; } .ds-drafting .d-titleblock span:last-child { border-right: 0; } .ds-drafting .d-titleblock b { color: var(--ds-ink-muted); margin-right: 6px; font-weight: 700; }\n.ds-drafting .d-sample { padding: 40px 20px 64px; } .ds-drafting .d-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-drafting .d-sample-sheet { border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); background-image: linear-gradient(var(--ds-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ds-grid) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .d-sample-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--ds-ink); }\n.ds-drafting .d-sample-grid { display: grid; gap: 24px; padding: 24px; } .ds-drafting .d-sample-h { margin: 0; max-width: 12ch; } .ds-drafting .d-sample-lede { margin-top: 20px; max-width: 48ch; }\n.ds-drafting .d-sample-fig svg { display: block; width: 100%; max-width: 400px; height: auto; margin: 0 auto; } .ds-drafting .d-sample-bottom { padding: 0 24px 24px; }\n@container (min-width: 760px) { .ds-drafting .d-sample { padding: 56px 40px 80px; } .ds-drafting .d-sample-grid { grid-template-columns: 3fr 2fr; padding: 48px 24px 24px; } }\n\n.ds-drafting { --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-cobalt); --ds-hand-fill2: var(--ds-vermilion); --ds-hand-muted: var(--ds-vellum-sunk); --ds-hand-ground: var(--ds-vellum-raised); --ds-hand-stroke: 1.5; --ds-hand-cap: square; --ds-hand-bg: var(--ds-vellum);\n  --ds-tpl-edge: 1px solid var(--ds-ink); --ds-tpl-radius: 0; --ds-tpl-rule: 1px solid var(--ds-ink); --ds-tag-radius: 0; --ds-slide-bg: var(--ds-vellum-raised); --ds-slide-title-bg: var(--ds-cobalt); --ds-slide-title-fg: var(--ds-on-cobalt); --ds-slide-split-a: var(--ds-cobalt); --ds-slide-split-b: var(--ds-vermilion); --ds-slide-split-b-fg: var(--ds-on-vermilion); --ds-hero-bg: var(--ds-vellum-raised); }\n.ds-drafting .ds-hand-art, .ds-drafting .ds-tpl-figure { background-image: linear-gradient(var(--ds-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ds-grid) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .h-ink { stroke-linejoin: miter; } .ds-drafting .h-outline-fill { stroke-width: 1.5; }\n.ds-drafting .h-num { font-family: var(--font-mono); font-weight: 500; letter-spacing: -.02em; } .ds-drafting .h-text { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; }\n.ds-drafting .ds-tpl-tag { font-family: \"Archivo Narrow\", sans-serif; letter-spacing: .12em; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); }\n.ds-drafting .ds-tpl-tag.is-ok { border-color: var(--ds-positive); } .ds-drafting .ds-tpl-tag.is-warn { border-color: var(--ds-caution); } .ds-drafting .ds-tpl-tag.is-bad { border-color: var(--ds-vermilion); color: var(--ds-vermilion); background: var(--ds-vermilion-soft); }\n.ds-drafting .ds-tpl-brand, .ds-drafting .ds-tpl-slide-h, .ds-drafting .ds-tpl-hero-h, .ds-drafting .ds-tpl-ed-h { text-transform: uppercase; }\n.ds-drafting .ds-tpl-stage-top, .ds-drafting .ds-tpl-stage-foot { font-family: \"Archivo Narrow\", sans-serif; font-weight: 700; }\n.ds-drafting .ds-tpl-kpi, .ds-drafting .ds-tpl-tile, .ds-drafting .ds-tpl-step { background: var(--ds-vellum-raised); }\n.ds-drafting .ds-tpl-dropcap { color: var(--ds-cobalt); } .ds-drafting .ds-tpl-pull { border-top-color: var(--ds-cobalt); }\n\n.ds-drafting .h-fill.h-outline-fill { fill: var(--ds-cobalt-soft); stroke: var(--ds-cobalt); stroke-width: 3.5; }\n.ds-drafting .h-fill2.h-outline-fill { fill: var(--ds-vermilion-soft); stroke: var(--ds-vermilion); stroke-width: 3.5; }\n\n.ds-drafting .ds-tpl-tile { overflow-x: auto; }\n",
+ "btn_primary": "d-btn d-btn-primary",
+ "btn_secondary": "d-btn",
+ "hand": {
+  "mode": "outline",
+  "shadow": false,
+  "headline": "Line-work, dimensioned, on the grid.",
+  "note": "Drafting draws the subject the way a drawing set would: the object in 1.5px ink line-work with square caps, nothing filled, construction at 1px, and cobalt only for the dimension or the one part being measured. Vermilion marks the revision. A drawing without a figure attached to it is unfinished.",
+  "rules": [
+   [
+    "Stroke",
+    "1.5px ink for the object, square caps and mitred joins. 1px grid lines for construction."
+   ],
+   [
+    "Fill",
+    "None. Cobalt as an outline marks the measured part; vermilion marks the revised one."
+   ],
+   [
+    "Shadow",
+    "None. A sheet lies flat."
+   ],
+   [
+    "Texture",
+    "The 24px grid behind every drawing."
+   ],
+   [
+    "Figures",
+    "Dimension figures in the mono dim role, attached with a 1px cobalt leader and closed arrowheads."
+   ],
+   [
+    "Motion",
+    "Lines draw in (stroke-dashoffset, 600ms ease-out) on first reveal; exploded parts translate along their axis."
+   ]
+  ]
+ },
+ "motion": [
+  [
+   "Hover",
+   "The frame turns cobalt, 120ms. Nothing lifts."
+  ],
+  [
+   "Press",
+   "The fill inverts to ink for the press. No scale."
+  ],
+  [
+   "Focus",
+   "A 2px cobalt outline offset 2px on every control."
+  ],
+  [
+   "Reveal",
+   "Line-work draws in over 600ms with stroke-dashoffset; text appears complete."
+  ],
+  [
+   "Scroll",
+   "Exploded parts translate along one axis as the reader scrolls; the sticky figure is the template's job."
+  ],
+  [
+   "Charts",
+   "Bars grow from the axis over 300ms; figures count up in the dim role."
+  ]
+ ],
+ "tpl": {
+  "brand": "Drafting",
+  "dash_title": "Sheet 4 · Routing record",
+  "kpis": [
+   [
+    "Units in batch",
+    "total",
+    "",
+    "",
+    "",
+    "batch RW-0417"
+   ],
+   [
+    "Back in service",
+    "reuse",
+    "",
+    "",
+    "",
+    "verified · 60%"
+   ],
+   [
+    "Harvested for parts",
+    "donor",
+    "",
+    "",
+    "",
+    "verified · 25%"
+   ]
+  ],
+  "dash_table_title": "Fig. 05 · Bill of paths",
+  "slide_eyebrow": "Design review",
+  "slide_title": "One slot per machine per hour.",
+  "slide_sub": "The database decides who wins a contested slot; the interface only reports it.",
+  "slide_foot": "DWG BN-007 · REV B",
+  "slide_stat_label": "Fig. 02 · Back in service",
+  "slide_stat_col": "reuse",
+  "slide_stat_suffix": "",
+  "slide_body": "Of 100 returned units, this many went back into service after inspection. The remainder were harvested or recycled, as dimensioned on sheet 3.",
+  "split": [
+   "IN SERVICE · 60",
+   "PARTS · 25"
+  ],
+  "ed_kicker": "Spec · Section 3",
+  "ed_headline": "How a booking is refused",
+  "ed_deck": "A partial unique index on (equipment, slot) is the whole concurrency story. The second request to arrive gets a 409 and the next free hour. Here is the sequence, dimensioned.",
+  "ed_byline": "Drawn by the platform team · Rev B · 2 Oct 2026",
+  "ed_body": "Two requests for the same slot arrive within twenty milliseconds. Both pass the availability check, because the check reads a snapshot. Both attempt the insert. The index admits one row; the second insert fails with a unique violation that the API translates into a 409 and a suggestion. The user who lost never sees a success message that is later withdrawn.",
+  "ed_pull_col": "total",
+  "ed_pull_label": "Units inspected",
+  "steps": [
+   [
+    "A batch of 100 units arrives.",
+    "Each square is one unit, drawn in plan. Inspection sorts them into three paths within a shift."
+   ],
+   [
+    "Three paths, dimensioned.",
+    "Sixty go back into service, twenty-five are opened for parts, fifteen are recycled. Every count is a dimension on the sheet."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One batch of 100, by path · figures illustrative",
+  "app_rows": [
+   [
+    "Drill press · Slot A",
+    "10:00 · bench 2",
+    "Booked",
+    "ok"
+   ],
+   [
+    "Laser cutter · Slot B",
+    "11:00 · awaiting induction",
+    "Assumed",
+    "warn"
+   ],
+   [
+    "Soldering · Slot A",
+    "10:00 · double request",
+    "Refused 409",
+    "bad"
+   ],
+   [
+    "Lathe · Slot C",
+    "12:00 · open",
+    "Open",
+    "idle"
+   ]
+  ],
+  "app_cta": "Book slot",
+  "app_cta2": "Save sheet",
+  "landing_eyebrow": "Drafting · plans you can measure",
+  "landing_headline": "Every line is a measurement.",
+  "landing_sub": "Specs, plans and explainers drawn as a numbered drawing set: the subject in line-work, every figure attached to the thing it measures, revisions clouded.",
+  "cta": "Open a sheet",
+  "cta2": "See the set",
+  "features": [
+   [
+    "Drawn, not pictured",
+    "The subject is line-work the reader can inspect, with dimensions attached."
+   ],
+   [
+    "Numbered sheets",
+    "Each section is a sheet with a title block: number, title, scale, revision."
+   ],
+   [
+    "Revisions clouded",
+    "What changed is circled in vermilion with a REV tag. One cloud per sheet."
+   ]
+  ]
+ }
+}

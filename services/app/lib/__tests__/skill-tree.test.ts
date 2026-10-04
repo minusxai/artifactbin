@@ -67,6 +67,26 @@ describe('the rules, each seen to fire on a literal tree', () => {
     expect(readFirstBlock('## Read first\n\nA\n\n## B\n\nC')).toBe('\n\nA\n\n');
   });
   /**
+   * `kind: data` lifts the reading caps — bytes, lines, the Contents rule, Read first — because the
+   * file is pasted from once, not held open. It lifts nothing else: the frontmatter, the first
+   * heading and the mention check still fire.
+   */
+  it('a data reference is exempt from the reading caps and from nothing else', () => {
+    const big = `## Read first\n\n${'x'.repeat(3000)}\n\n${Array.from({ length: 520 }, (_, i) => `## S${i}\n\nline`).join('\n')}\n`;
+    const guide = buildSkillTree({ 'artifactbin/SKILL.md': ok('artifactbin'), 'artifactbin/references/system-x.md': ok('system-x', big) });
+    const problems = validateSkillTree(guide, render);
+    expect(problems).toContainEqual(expect.stringMatching(/system-x\.md: \d+ B rendered, cap 8192/));
+    expect(problems).toContainEqual(expect.stringMatching(/system-x\.md: \d+ lines, cap 500/));
+    expect(problems).toContainEqual(expect.stringMatching(/system-x\.md: the Read first block is \d+ B/));
+    const data = buildSkillTree({ 'artifactbin/SKILL.md': ok('artifactbin'), 'artifactbin/references/system-x.md': `---\nname: system-x\nkind: data\ndescription: A system to paste from.\n---\n${big}` });
+    expect(validateSkillTree(data, render)).toEqual([]);
+    expect(data.get('artifactbin/references/system-x.md')?.kind).toBe('data');
+    const stillChecked = buildSkillTree({ 'artifactbin/SKILL.md': ok('artifactbin'), 'artifactbin/references/system-x.md': `---\nname: system-x\nkind: data\ndescription: A system to paste from.\n---\n## Intro\n\nSee \`nowhere.md\`.\n` });
+    const rest = validateSkillTree(stillChecked, render);
+    expect(rest).toContainEqual(expect.stringContaining('system-x.md: the first heading must be "## Read first"'));
+    expect(rest).toContainEqual(expect.stringContaining('"nowhere.md" names no file'));
+  });
+  /**
    * A file NAMED in prose is a link an agent will follow by hand, and the tree
    * writes most of them that way: the dispatch table is `publishing.md`, the
    * reading path is `references/design.md`. `skillLinks` strips code spans
@@ -171,17 +191,31 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
    * here — each over one file, one of them with 8192 hard-coded instead of the constant. One walk
    * over the rendered tree covers every one of them, and covers a file added tomorrow too.
    */
-  it('keeps every rendered file — the brief and every reference — within its reading budget',()=>{
-    for(const file of tree.files)expect(Buffer.byteLength(render(file)),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
+  it('keeps every rendered guide — the brief and every reference — within its reading budget',()=>{
+    for(const file of tree.files)if(file.kind==='guide')expect(Buffer.byteLength(render(file)),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
     expect(tree.files.length).toBeGreaterThan(10);
     expect(tree.files.some(file=>!file.ref),'the brief itself must be in the sweep').toBe(true);
+  });
+  /**
+   * The data references are the design systems and nothing else: a binding block, type roles,
+   * components and specimens an agent reads once at the bind step and pastes from. Their shape is
+   * the CLI's design-systems test; here only that no other file slips out of the budget by
+   * declaring itself data, and that the catalogue which lists them is itself a guide.
+   */
+  it('the data references are exactly the design systems, and the catalogue that lists them is a guide',()=>{
+    const data=tree.files.filter(file=>file.kind==='data').map(file=>file.file).sort();
+    expect(data.length).toBe(13);
+    for(const file of data)expect(file).toMatch(/^system-[a-z]+\.md$/);
+    expect(tree.get('artifactbin/references/design-systems.md')?.kind).toBe('guide');
+    // The real tree always reports the brief's links to CLI-only topics (see above); the systems themselves must be clean.
+    expect(validateSkillTree(tree,render).filter(problem=>/system-[a-z]+\.md/.test(problem))).toEqual([]);
   });
   it('is ONE skill — the brief over its references, nothing else preloaded', () => {
     expect(tree.dirs.map((d) => d.name)).toEqual(['artifactbin']);
     expect(tree.files.filter((f) => !f.ref)).toHaveLength(1);
   });
-  it('carries one reference per theme and per template, named after the registry', () => {
-    for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)?.name).toBe(`themes-${t.name}`);
+  it('carries one reference per template, named after the registry, and none per theme since themes left teaching', () => {
+    for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)).toBeUndefined();
     for (const t of STORY_TEMPLATES) expect(tree.get(`artifactbin/references/templates-${t.name}.md`)?.name).toBe(`templates-${t.name}`);
   });
   it('uses the CLI-owned root within its budget',()=>{
@@ -224,8 +258,8 @@ describe('each topic is taught by exactly its owner', () => {
       expect(owners(fp)).toEqual(owner);
     });
   }
-  it('a theme one-liner lives on the themes index and its own page, nowhere else', () => {
-    for (const t of STORY_THEMES) expect(owners(t.description).sort(), t.name).toEqual([`${R}/themes-${t.name}.md`, `${R}/themes.md`]);
+  it('a theme one-liner is taught nowhere: the six are legacy values a note names, not a choice', () => {
+    for (const t of STORY_THEMES) expect(owners(t.description), t.name).toEqual([]);
   });
   it('a template one-liner lives on the templates index and its own page, nowhere else', () => {
     for (const t of STORY_TEMPLATES) expect(owners(t.description).sort(), t.name).toEqual([`${R}/templates-${t.name}.md`, `${R}/templates.md`]);

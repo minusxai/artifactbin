@@ -1,0 +1,759 @@
+{
+ "slug": "sorbet",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Sorbet cover: a strawberry blob sticker, a mango tag, a lime dot, a blueberry pill and sprinkles on cream</title>\n<rect className=\"sb-cream\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<rect className=\"sb-f-straw\" x=\"217\" y=\"161\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(58 217 161)\"/><rect className=\"sb-f-mango\" x=\"375\" y=\"130\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(49 375 130)\"/><rect className=\"sb-f-lime\" x=\"282\" y=\"53\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(5 282 53)\"/><rect className=\"sb-f-blue\" x=\"228\" y=\"177\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-37 228 177)\"/><rect className=\"sb-f-grape\" x=\"45\" y=\"87\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-49 45 87)\"/><rect className=\"sb-f-straw\" x=\"259\" y=\"256\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(21 259 256)\"/><rect className=\"sb-f-mango\" x=\"20\" y=\"283\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-3 20 283)\"/><rect className=\"sb-f-lime\" x=\"314\" y=\"177\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-40 314 177)\"/><rect className=\"sb-f-blue\" x=\"299\" y=\"240\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-52 299 240)\"/><rect className=\"sb-f-grape\" x=\"29\" y=\"55\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-30 29 55)\"/><rect className=\"sb-f-straw\" x=\"288\" y=\"224\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-19 288 224)\"/><rect className=\"sb-f-mango\" x=\"211\" y=\"243\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(6 211 243)\"/><rect className=\"sb-f-lime\" x=\"112\" y=\"85\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-60 112 85)\"/><rect className=\"sb-f-blue\" x=\"318\" y=\"132\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-25 318 132)\"/><rect className=\"sb-f-grape\" x=\"195\" y=\"159\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(59 195 159)\"/><rect className=\"sb-f-straw\" x=\"403\" y=\"204\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-20 403 204)\"/><rect className=\"sb-f-mango\" x=\"364\" y=\"148\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-57 364 148)\"/><rect className=\"sb-f-lime\" x=\"34\" y=\"221\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-9 34 221)\"/><rect className=\"sb-f-blue\" x=\"52\" y=\"84\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-52 52 84)\"/><rect className=\"sb-f-grape\" x=\"460\" y=\"244\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-60 460 244)\"/><rect className=\"sb-f-straw\" x=\"102\" y=\"267\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-54 102 267)\"/><rect className=\"sb-f-mango\" x=\"226\" y=\"282\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-10 226 282)\"/><rect className=\"sb-f-lime\" x=\"201\" y=\"163\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-35 201 163)\"/><rect className=\"sb-f-blue\" x=\"374\" y=\"78\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-49 374 78)\"/><rect className=\"sb-f-grape\" x=\"149\" y=\"4\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-8 149 4)\"/><rect className=\"sb-f-straw\" x=\"364\" y=\"34\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-29 364 34)\"/><rect className=\"sb-f-mango\" x=\"339\" y=\"3\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-1 339 3)\"/><rect className=\"sb-f-lime\" x=\"383\" y=\"51\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(11 383 51)\"/><rect className=\"sb-f-blue\" x=\"90\" y=\"147\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(33 90 147)\"/><rect className=\"sb-f-grape\" x=\"369\" y=\"121\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-11 369 121)\"/><rect className=\"sb-f-straw\" x=\"56\" y=\"121\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-33 56 121)\"/><rect className=\"sb-f-mango\" x=\"0\" y=\"249\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(42 0 249)\"/><rect className=\"sb-f-lime\" x=\"285\" y=\"287\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-58 285 287)\"/><rect className=\"sb-f-blue\" x=\"101\" y=\"114\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(49 101 114)\"/>\n<g transform=\"translate(10 10)\"><path className=\"sb-shadow\" d=\"M160 60 c40 -40 120 -30 140 10 c20 40 40 90 -10 120 c-50 30 -130 20 -150 -20 c-20 -40 -20 -80 20 -110 z\" transform=\"translate(40 40)\"/></g><path className=\"sb-rim\" d=\"M160 60 c40 -40 120 -30 140 10 c20 40 40 90 -10 120 c-50 30 -130 20 -150 -20 c-20 -40 -20 -80 20 -110 z\" transform=\"translate(40 40)\"/><path className=\"sb-f-straw sb-outline\" d=\"M160 60 c40 -40 120 -30 140 10 c20 40 40 90 -10 120 c-50 30 -130 20 -150 -20 c-20 -40 -20 -80 20 -110 z\" transform=\"translate(40 40)\"/>\n<text x=\"230\" y=\"150\" className=\"sb-cover-word\" textAnchor=\"middle\">pop</text>\n<g transform=\"translate(7 7)\"><rect className=\"sb-shadow\" x=\"330\" y=\"40\" width=\"120\" height=\"56\" rx=\"28\" transform=\"rotate(-8 390 68)\"/></g><rect className=\"sb-rim\" x=\"330\" y=\"40\" width=\"120\" height=\"56\" rx=\"28\" transform=\"rotate(-8 390 68)\"/><rect className=\"sb-f-mango sb-outline\" x=\"330\" y=\"40\" width=\"120\" height=\"56\" rx=\"28\" transform=\"rotate(-8 390 68)\"/>\n<text x=\"390\" y=\"76\" className=\"sb-sticker-t\" textAnchor=\"middle\" transform=\"rotate(-8 390 68)\">NEW!</text>\n<g transform=\"translate(7 7)\"><circle className=\"sb-shadow\" cx=\"400\" cy=\"200\" r=\"40\"/></g><circle className=\"sb-rim\" cx=\"400\" cy=\"200\" r=\"40\"/><circle className=\"sb-f-lime sb-outline\" cx=\"400\" cy=\"200\" r=\"40\"/>\n<text x=\"400\" y=\"208\" className=\"sb-sticker-t\" textAnchor=\"middle\">YUM</text>\n<g transform=\"translate(7 7)\"><rect className=\"sb-shadow\" x=\"40\" y=\"220\" width=\"150\" height=\"44\" rx=\"22\"/></g><rect className=\"sb-rim\" x=\"40\" y=\"220\" width=\"150\" height=\"44\" rx=\"22\"/><rect className=\"sb-f-blue sb-outline\" x=\"40\" y=\"220\" width=\"150\" height=\"44\" rx=\"22\"/>\n<text x=\"115\" y=\"248\" className=\"sb-sticker-t sb-on-blue\" textAnchor=\"middle\">TAP ME</text>\n<path className=\"sb-wave\" d=\"M0 282 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0\"/></svg>",
+ "name": "Sorbet",
+ "tagline": "Candy colours, plum ink, one spring.",
+ "mood": "Fun",
+ "jobs": "Consumer apps, launches, kids and food, celebrations, playful data",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Fredoka",
+   "wght@500;600;700"
+  ],
+  [
+   "Nunito",
+   "ital,wght@0,400;0,600;0,700;1,400"
+  ],
+  [
+   "DM Mono",
+   "wght@400;500"
+  ]
+ ],
+ "families": {
+  "display": "\"Fredoka\", \"Arial Rounded MT Bold\", system-ui, sans-serif",
+  "sans": "\"Nunito\", system-ui, sans-serif",
+  "mono": "\"DM Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "cream",
+   "light": "#fff9f2",
+   "dark": "#221433",
+   "usage": "Page ground: cream white by day; the night parlour, deep plum, after dark.",
+   "group": "Grounds"
+  },
+  {
+   "name": "cream-raised",
+   "light": "#ffffff",
+   "dark": "#2e1c45",
+   "usage": "Cards, stickers, fields.",
+   "group": "Grounds"
+  },
+  {
+   "name": "cream-sunk",
+   "light": "#ffefe3",
+   "dark": "#1a0f29",
+   "usage": "Wells, the sprinkle band ground, code.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#f0d9d0",
+   "dark": "#45306a",
+   "usage": "Soft rules. Never the edge of a sticker; stickers use ink.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#2b1b3d",
+   "dark": "#fff4f8",
+   "usage": "Plum ink: text, the 3px sticker outline, the hard drop. Never black.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#6e5a80",
+   "dark": "#c9b6d9",
+   "usage": "Secondary text and captions.",
+   "group": "Ink"
+  },
+  {
+   "name": "rim",
+   "light": "#ffffff",
+   "dark": "#2e1c45",
+   "usage": "The sticker rim: a 3px halo outside the ink outline, like a die-cut sticker.",
+   "group": "Ink"
+  },
+  {
+   "name": "strawberry",
+   "light": "#ff5c8a",
+   "dark": "#ff6e98",
+   "usage": "The brand. Primary actions, the hero blob, the first chart series.",
+   "group": "Candy"
+  },
+  {
+   "name": "on-strawberry",
+   "light": "#2b1b3d",
+   "dark": "#2b1b3d",
+   "usage": "Text on strawberry.",
+   "group": "Candy"
+  },
+  {
+   "name": "strawberry-soft",
+   "light": "#ffe1ea",
+   "dark": "#4a2340",
+   "usage": "Ground for selected rows and the strawberry tag.",
+   "group": "Candy"
+  },
+  {
+   "name": "mango",
+   "light": "#ffb01f",
+   "dark": "#ffbb3d",
+   "usage": "The second candy: NEW stickers, prices, the sun.",
+   "group": "Candy"
+  },
+  {
+   "name": "lime",
+   "light": "#8be04d",
+   "dark": "#9beb5e",
+   "usage": "The third candy: done, fresh, yes.",
+   "group": "Candy"
+  },
+  {
+   "name": "blueberry",
+   "light": "#5b7cff",
+   "dark": "#7a95ff",
+   "usage": "The fourth candy: links, focus, the second chart series.",
+   "group": "Candy"
+  },
+  {
+   "name": "on-blueberry",
+   "light": "#ffffff",
+   "dark": "#120a1f",
+   "usage": "Text on blueberry.",
+   "group": "Candy"
+  },
+  {
+   "name": "grape",
+   "light": "#b96cff",
+   "dark": "#c78aff",
+   "usage": "The fifth candy: the fifth series, a sprinkle.",
+   "group": "Candy"
+  },
+  {
+   "name": "lilac",
+   "light": "#eadff5",
+   "dark": "#3b2a55",
+   "usage": "The quiet fill: muted shapes in drawings, the inactive track.",
+   "group": "Candy"
+  },
+  {
+   "name": "positive",
+   "light": "#3e8a14",
+   "dark": "#9beb5e",
+   "usage": "Done, fresh, yes. Lime as text is darkened on cream.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#e6f8d6",
+   "dark": "#213a14",
+   "usage": "Ground for done rows and positive tags.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#9a5e00",
+   "dark": "#ffbb3d",
+   "usage": "Almost, low, soon. Mango as text is darkened on cream.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#fff0cc",
+   "dark": "#3d2b08",
+   "usage": "Ground for caveats.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#c2185b",
+   "dark": "#ff6e98",
+   "usage": "Sold out, oops, no. Strawberry as text is darkened on cream.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#ffe1ea",
+   "dark": "#4a2340",
+   "usage": "Ground for sold-out rows.",
+   "group": "Status"
+  }
+ ],
+ "status_alias": {},
+ "contract": {
+  "background": "cream",
+  "foreground": "ink",
+  "card": "cream-raised",
+  "card-foreground": "ink",
+  "popover": "cream-raised",
+  "popover-foreground": "ink",
+  "primary": "strawberry",
+  "primary-foreground": "on-strawberry",
+  "secondary": "strawberry-soft",
+  "secondary-foreground": "ink",
+  "muted": "cream-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "lilac",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "cream",
+  "border": "line",
+  "input": "line",
+  "ring": "blueberry",
+  "chart-1": "strawberry",
+  "chart-2": "blueberry",
+  "chart-3": "mango",
+  "chart-4": "lime",
+  "chart-5": "grape"
+ },
+ "radius_contract": "20px",
+ "extra_vars": {
+  "chip-radius": "999px",
+  "drop": {
+   "light": "6px 6px 0 0 #2b1b3d",
+   "dark": "6px 6px 0 0 #fff4f8"
+  },
+  "sticker": {
+   "light": "0 0 0 3px #ffffff, 7px 7px 0 0 #2b1b3d",
+   "dark": "0 0 0 3px #2e1c45, 7px 7px 0 0 #fff4f8"
+  },
+  "spring": "cubic-bezier(.34,1.56,.64,1)"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(48px, 8vw, 104px)",
+   "lh": ".95",
+   "weight": 700,
+   "ls": "-0.02em",
+   "sample": "Weekends, but louder",
+   "usage": "One per page. Fredoka bold; one word may sit on a sticker."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(32px, 4.5vw, 56px)",
+   "lh": "1.02",
+   "weight": 700,
+   "ls": "-0.01em",
+   "sample": "Twelve stalls, one park",
+   "usage": "Section openers."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "24px",
+   "lh": "28px",
+   "weight": 600,
+   "sample": "Food court",
+   "usage": "Card titles, sticker words."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "17px",
+   "lh": "27px",
+   "weight": 400,
+   "sample": "Pick a stall, grab a ticket, come hungry. The food court opens at ten and the band starts at noon.",
+   "usage": "Reading and UI text. Nunito, round and soft."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "14px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "Tickets are free; the churros are not.",
+   "usage": "Captions and helper text."
+  },
+  {
+   "name": "label",
+   "family": "display",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 600,
+   "ls": "0.08em",
+   "tt": "uppercase",
+   "sample": "New this week",
+   "usage": "Eyebrows, tags, sticker text. Fredoka caps."
+  },
+  {
+   "name": "numeral",
+   "family": "display",
+   "size": "52px",
+   "lh": "52px",
+   "weight": 700,
+   "ls": "-0.02em",
+   "sample": "1,240",
+   "usage": "Counts and prices. Fredoka bold, tabular.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "ticket #0042 · sat · 10:00",
+   "usage": "Ticket numbers, timestamps, receipts."
+  }
+ ],
+ "idea_headline": "A sheet of stickers, peeled onto the page.",
+ "idea": "Sorbet is pop: five candy colours on cream, every shape die-cut with a plum outline, a white rim and a hard drop, like stickers on a lunchbox. Headlines are chunky, corners are fat, and exactly one thing springs when you touch it. The colours do the shouting, so the words never have to.",
+ "use_for": "Consumer apps and launches, kids and food subjects, events and celebrations, playful counters, pickers and polls, anything that should feel like a good day.",
+ "avoid_when": "Serious, institutional or grieving subjects, dense data, long reading, or any page where candy would read as not listening.",
+ "principles_headline": "Five candies, plum ink, one spring.",
+ "principles": [
+  [
+   "Everything is a sticker.",
+   "A shape gets a 3px plum outline, a white rim and a hard drop. Flat things without an outline are ground, not content."
+  ],
+  [
+   "Plum, never black.",
+   "Ink is deep plum. It keeps the candies from going garish and the page from going corporate."
+  ],
+  [
+   "Five candies, in order.",
+   "Strawberry leads; blueberry, mango, lime and grape follow. They are the chart series and the sticker colours. Status borrows lime, mango and strawberry."
+  ],
+  [
+   "Fat corners, pill controls.",
+   "20px on cards and stickers, full pills on buttons, tags and fields. Nothing has a sharp corner."
+  ],
+  [
+   "One spring per touch.",
+   "A pressed thing dips and springs back once with an overshoot. One hero element may float. Nothing else moves on its own."
+  ]
+ ],
+ "voice": [
+  "Short, warm, concrete: \"Grab a ticket.\"",
+  "Say what things cost and what they include: \"Tickets are free; the churros are not.\"",
+  "Bad news is cheerful and honest: \"Churros are gone for today.\"",
+  "One exclamation mark per page, and it lives on a sticker."
+ ],
+ "colour_headline": "Cream, five candies, plum ink.",
+ "colour_note": "Day is cream white with the candies at full saturation and plum ink. Night is the parlour after close: deep plum walls, cream-pink ink, the candies unchanged so stickers glow. Status text is darkened on cream so lime, mango and strawberry words stay readable; on night the candies serve as text directly.",
+ "chart_series": [
+  "strawberry",
+  "blueberry",
+  "mango",
+  "lime",
+  "grape"
+ ],
+ "chart_note": "The five candies in order. Rounded bar ends, no gridlines heavier than the soft rule, direct labels where they fit.",
+ "type_headline": "Fredoka shouts, Nunito chats, DM Mono counts tickets.",
+ "type_note": "Fredoka at 600 and 700 for headlines, titles, labels, sticker words and numerals. Nunito for body. DM Mono for ticket numbers and timestamps.",
+ "space_headline": "Fat corners, a 3px outline, a 7px drop.",
+ "space": [
+  [
+   "space-2 · 8px",
+   "Inside pills; the sprinkle gap."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y."
+  ],
+  [
+   "space-5 · 20px",
+   "Control padding-x; sticker padding."
+  ],
+  [
+   "space-6 · 24px",
+   "Card padding."
+  ],
+  [
+   "space-8 · 32px",
+   "Between stickers so drops never touch."
+  ],
+  [
+   "space-12 · 48px",
+   "Section breaks."
+  ],
+  [
+   "scoop · 40px",
+   "The scoop diameter in a stack; sticker dots are 16px."
+  ]
+ ],
+ "edges": [
+  [
+   "radius · 20px",
+   "Cards, blobs, panels."
+  ],
+  [
+   "pill",
+   "Buttons, tags, fields, stickers."
+  ],
+  [
+   "outline · 3px ink",
+   "Every sticker and control. The rule that makes it a sticker."
+  ],
+  [
+   "rim · 3px white",
+   "A halo outside the outline: the die-cut edge. Box-shadow spread, no blur."
+  ],
+  [
+   "wave",
+   "Section dividers are a wavy SVG rule, 8px amplitude, 40px wavelength."
+  ]
+ ],
+ "depth": [
+  [
+   "drop",
+   "A hard 7px offset in ink under every sticker and button. No blur."
+  ],
+  [
+   "focus",
+   "A 3px blueberry outline, offset 3px, rounded."
+  ],
+  [
+   "press",
+   "translateY(4px) and the drop shrinks to 3px; then the spring back."
+  ]
+ ],
+ "motion": [
+  [
+   "Spring",
+   "One easing for everything: cubic-bezier(.34,1.56,.64,1), 160ms. Hover scales 1.03; press dips 4px; both overshoot once."
+  ],
+  [
+   "Float",
+   "One hero sticker may use the kit animate-float. Never more than one."
+  ],
+  [
+   "Reveal",
+   "Stickers reveal with reveal-scale, staggered 100ms, like being peeled on."
+  ],
+  [
+   "Charts",
+   "Bars grow from the baseline with the spring, 300ms."
+  ],
+  [
+   "Never",
+   "No confetti, no spinners, no infinite loops besides the one float."
+  ]
+ ],
+ "components_headline": "Stickers, pills, scoops and a speech bubble.",
+ "components_note": "Kit components take Sorbet through the contract: cream grounds, strawberry primary, 20px radius, soft rules. Authored classes add the outline, the rim, the drop and the spring: sb-sticker on a card, sb-btn on a button.",
+ "btn_primary": "sb-btn sb-btn-primary",
+ "btn_secondary": "sb-btn",
+ "buttons": "<Button>Grab a ticket</Button><Button variant=\"secondary\">Save a stall</Button><Button variant=\"outline\">See the map</Button><Button variant=\"ghost\">Not now</Button><button className=\"sb-btn sb-btn-primary\">Grab a ticket</button><button className=\"sb-btn sb-btn-mango\">New this week</button><button className=\"sb-btn\">See the map</button>",
+ "buttons_note": "Kit buttons left; authored sb-btn right: pills with the outline, rim and drop. The primary is strawberry, mango is for the one new thing. Press for the spring.",
+ "tags": "<Badge>Strawberry</Badge><Badge variant=\"secondary\">Saved</Badge><Badge variant=\"outline\">Free</Badge><Badge variant=\"destructive\">Sold out</Badge><span className=\"sb-tag sb-tag-straw\">Food</span><span className=\"sb-tag sb-tag-blue\">Music</span><span className=\"sb-tag sb-tag-mango\">Craft</span><span className=\"sb-tag sb-tag-lime\">Open</span><span className=\"sb-sticker-chip\">New!</span>",
+ "tags_note": "Tags are candy pills with an ink outline. The sticker chip is rotated 6° with the rim and drop: one per view, for the newest thing.",
+ "fields_note": "Fields are cream pills with the 3px outline; focus is a blueberry outline. Labels are Fredoka caps.",
+ "stats": "<div className=\"sb-stat sb-sticker\"><span className=\"t-label\">Visitors</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"visitors\" format=\",.0f\" /></span><span className=\"sb-small\">this weekend · 12 stalls</span></div><div className=\"sb-stat sb-sticker sb-stat-mango\"><span className=\"t-label\">Happy rating</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"rating\" format=\".1f\" /></span><div className=\"sb-scoops\"><i className=\"sb-scoop sb-f-straw\"></i><i className=\"sb-scoop sb-f-blue\"></i><i className=\"sb-scoop sb-f-mango\"></i><i className=\"sb-scoop sb-f-lime\"></i><i className=\"sb-scoop sb-f-grape\"></i></div></div>",
+ "stats_note": "A Stat is a sticker card: Fredoka label, a big figure, the small print. The scoop stack under a rating is one scoop per point, in candy order.",
+ "callouts": "<Alert><AlertTitle>Churros are gone for today</AlertTitle><AlertDescription>The stall sold 310 by noon. Try the waffles two stalls down.</AlertDescription></Alert><div className=\"sb-bubble sb-bubble-lime\"><strong>Open now.</strong> The food court is serving until six.</div><div className=\"sb-bubble sb-bubble-mango\"><strong>Almost.</strong> Twelve craft tickets left for the 2 pm slot.</div><div className=\"sb-bubble sb-bubble-straw\"><strong>Gone.</strong> The 4 pm band is full. The 6 pm set has room.</div>",
+ "callouts_note": "Callouts are speech bubbles: a sticker with a tail, a bold lead word, one sentence. Lime for yes, mango for almost, strawberry for no.",
+ "chart_comp_note": "Charts are the candies in order with rounded bar ends. For counts under ten, prefer a scoop stack to a bar.",
+ "table_note": "Tables are the stall list: Fredoka names, DM Mono counts, soft rules, a candy tag in the last column.",
+ "card": "<div className=\"sb-card sb-sticker\"><span className=\"sb-sticker-chip sb-card-chip\">New!</span><p className=\"t-label\">Stall 07</p><h3 className=\"t-title\">Churro Bros</h3><p className=\"sb-card-p\">Cinnamon churros, chocolate dip, a queue by eleven. Sold 310 last Saturday and ran out at noon.</p><div className=\"sb-row\"><span className=\"sb-tag sb-tag-straw\">Food</span><button className=\"sb-btn sb-btn-primary sb-btn-sm\">Save stall</button></div></div>",
+ "card_note": "A card is a sticker: outline, rim, drop, and one chip peeled onto its corner. Titles are Fredoka; facts are Nunito.",
+ "hand": {
+  "mode": "flat",
+  "shadow": true,
+  "headline": "Fat outlines, flat candy, a hard drop.",
+  "note": "Sorbet draws like a sticker sheet: every shape gets a 3px plum outline with round caps, flat candy fills, a hard 6px drop, and nothing else. No gradients, no texture, no thin lines. Whatever the artifact is about, draw it as a sticker.",
+  "rules": [
+   [
+    "Stroke",
+    "3px ink, round caps and joins, on every shape."
+   ],
+   [
+    "Fill",
+    "Flat candy: strawberry first, blueberry second; lilac for quiet parts."
+   ],
+   [
+    "Shadow",
+    "A hard 6px drop in ink under the main body. No blur."
+   ],
+   [
+    "Rim",
+    "Big stickers get a 3px white rim outside the outline. Small ones do not."
+   ],
+   [
+    "Figures",
+    "Fredoka bold for the one number; DM Mono caps for labels."
+   ],
+   [
+    "Motion",
+    "A drawing may float (one per page) or spring on hover; it never fades in."
+   ]
+  ]
+ },
+ "motifs_headline": "Stickers, blobs, sprinkles, waves, bubbles.",
+ "motifs_note": "Sorbet draws with the sticker sheet. The data lives in the stickers: a count is a stack of scoops, a share is a row of candy dots, the new thing wears the chip.",
+ "motifs": [
+  {
+   "title": "The sticker",
+   "usage": "Any shape, outlined 3px in ink, with a white rim and a hard drop. Rotate a chip 6° to make it feel peeled on. One rotated chip per view.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Stickers</title><rect className=\"sb-cream\" x=\"0\" y=\"0\" width=\"480\" height=\"160\"/><g transform=\"translate(7 7)\"><rect className=\"sb-shadow\" x=\"36\" y=\"44\" width=\"140\" height=\"64\" rx=\"32\" transform=\"rotate(-6 106 76)\"/></g><rect className=\"sb-rim\" x=\"36\" y=\"44\" width=\"140\" height=\"64\" rx=\"32\" transform=\"rotate(-6 106 76)\"/><rect className=\"sb-f-mango sb-outline\" x=\"36\" y=\"44\" width=\"140\" height=\"64\" rx=\"32\" transform=\"rotate(-6 106 76)\"/><text x=\"106\" y=\"84\" className=\"sb-sticker-t\" textAnchor=\"middle\" transform=\"rotate(-6 106 76)\">NEW!</text><g transform=\"translate(7 7)\"><circle className=\"sb-shadow\" cx=\"260\" cy=\"80\" r=\"40\"/></g><circle className=\"sb-rim\" cx=\"260\" cy=\"80\" r=\"40\"/><circle className=\"sb-f-lime sb-outline\" cx=\"260\" cy=\"80\" r=\"40\"/><text x=\"260\" y=\"88\" className=\"sb-sticker-t\" textAnchor=\"middle\">OPEN</text><g transform=\"translate(7 7)\"><rect className=\"sb-shadow\" x=\"330\" y=\"52\" width=\"120\" height=\"56\" rx=\"20\"/></g><rect className=\"sb-rim\" x=\"330\" y=\"52\" width=\"120\" height=\"56\" rx=\"20\"/><rect className=\"sb-f-blue sb-outline\" x=\"330\" y=\"52\" width=\"120\" height=\"56\" rx=\"20\"/><text x=\"390\" y=\"86\" className=\"sb-sticker-t sb-on-blue\" textAnchor=\"middle\">12 LEFT</text></svg>"
+  },
+  {
+   "title": "The blob and the sprinkles",
+   "usage": "An organic rounded panel in one candy as a hero ground, with a scatter of candy dashes as texture. Sprinkles go in bands, never over text.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Blob and sprinkles</title><rect className=\"sb-cream\" x=\"0\" y=\"0\" width=\"480\" height=\"160\"/><rect className=\"sb-f-straw\" x=\"299\" y=\"119\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(41 299 119)\"/><rect className=\"sb-f-mango\" x=\"331\" y=\"135\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(23 331 135)\"/><rect className=\"sb-f-lime\" x=\"443\" y=\"5\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-1 443 5)\"/><rect className=\"sb-f-blue\" x=\"372\" y=\"40\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-54 372 40)\"/><rect className=\"sb-f-grape\" x=\"432\" y=\"18\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(0 432 18)\"/><rect className=\"sb-f-straw\" x=\"417\" y=\"61\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-47 417 61)\"/><rect className=\"sb-f-mango\" x=\"275\" y=\"2\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-33 275 2)\"/><rect className=\"sb-f-lime\" x=\"196\" y=\"29\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(51 196 29)\"/><rect className=\"sb-f-blue\" x=\"368\" y=\"26\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(42 368 26)\"/><rect className=\"sb-f-grape\" x=\"35\" y=\"99\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-4 35 99)\"/><rect className=\"sb-f-straw\" x=\"61\" y=\"0\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(51 61 0)\"/><rect className=\"sb-f-mango\" x=\"3\" y=\"124\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-39 3 124)\"/><rect className=\"sb-f-lime\" x=\"419\" y=\"46\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-35 419 46)\"/><rect className=\"sb-f-blue\" x=\"259\" y=\"108\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-34 259 108)\"/><rect className=\"sb-f-grape\" x=\"87\" y=\"155\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-35 87 155)\"/><rect className=\"sb-f-straw\" x=\"464\" y=\"143\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-22 464 143)\"/><rect className=\"sb-f-mango\" x=\"10\" y=\"66\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(59 10 66)\"/><rect className=\"sb-f-lime\" x=\"70\" y=\"10\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-22 70 10)\"/><rect className=\"sb-f-blue\" x=\"392\" y=\"94\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(16 392 94)\"/><rect className=\"sb-f-grape\" x=\"325\" y=\"54\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-21 325 54)\"/><rect className=\"sb-f-straw\" x=\"171\" y=\"49\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(29 171 49)\"/><rect className=\"sb-f-mango\" x=\"152\" y=\"77\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(30 152 77)\"/><rect className=\"sb-f-lime\" x=\"85\" y=\"41\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(60 85 41)\"/><rect className=\"sb-f-blue\" x=\"11\" y=\"120\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(48 11 120)\"/><rect className=\"sb-f-grape\" x=\"194\" y=\"88\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-7 194 88)\"/><rect className=\"sb-f-straw\" x=\"176\" y=\"93\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-59 176 93)\"/><rect className=\"sb-f-mango\" x=\"217\" y=\"113\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(19 217 113)\"/><rect className=\"sb-f-lime\" x=\"458\" y=\"31\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(36 458 31)\"/><rect className=\"sb-f-blue\" x=\"118\" y=\"131\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-1 118 131)\"/><rect className=\"sb-f-grape\" x=\"165\" y=\"57\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(7 165 57)\"/><rect className=\"sb-f-straw\" x=\"120\" y=\"74\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(15 120 74)\"/><rect className=\"sb-f-mango\" x=\"359\" y=\"128\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(50 359 128)\"/><rect className=\"sb-f-lime\" x=\"142\" y=\"69\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-49 142 69)\"/><rect className=\"sb-f-blue\" x=\"100\" y=\"82\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-14 100 82)\"/><rect className=\"sb-f-grape\" x=\"441\" y=\"54\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(58 441 54)\"/><rect className=\"sb-f-straw\" x=\"337\" y=\"15\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(27 337 15)\"/><rect className=\"sb-f-mango\" x=\"152\" y=\"28\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-50 152 28)\"/><rect className=\"sb-f-lime\" x=\"301\" y=\"115\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-21 301 115)\"/><rect className=\"sb-f-blue\" x=\"478\" y=\"26\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-54 478 26)\"/><rect className=\"sb-f-grape\" x=\"39\" y=\"96\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(58 39 96)\"/><g transform=\"translate(8 8)\"><path className=\"sb-shadow\" d=\"M60 40 c40 -34 110 -30 150 6 c40 36 30 80 -10 96 c-40 16 -120 14 -150 -20 c-30 -34 -24 -60 10 -82 z\" transform=\"translate(120 0)\"/></g><path className=\"sb-rim\" d=\"M60 40 c40 -34 110 -30 150 6 c40 36 30 80 -10 96 c-40 16 -120 14 -150 -20 c-30 -34 -24 -60 10 -82 z\" transform=\"translate(120 0)\"/><path className=\"sb-f-straw sb-outline\" d=\"M60 40 c40 -34 110 -30 150 6 c40 36 30 80 -10 96 c-40 16 -120 14 -150 -20 c-30 -34 -24 -60 10 -82 z\" transform=\"translate(120 0)\"/><text x=\"290\" y=\"92\" className=\"sb-blob-t\" textAnchor=\"middle\">hello</text></svg>"
+  },
+  {
+   "title": "The wavy rule",
+   "usage": "Sections are divided by a wave, not a line: 8px amplitude, 40px wavelength, 3px ink. Fill the space below it in a candy for a band.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Wavy rule</title><rect className=\"sb-cream\" x=\"0\" y=\"0\" width=\"480\" height=\"160\"/><path className=\"sb-f-blue\" d=\"M0 80 q20 -8 40 0q20 8 40 0q20 -8 40 0q20 8 40 0q20 -8 40 0q20 8 40 0q20 -8 40 0q20 8 40 0q20 -8 40 0q20 8 40 0q20 -8 40 0q20 8 40 0 V160 H0 Z\"/><path className=\"sb-wave\" d=\"M0 80 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0 q20.0 -8 40 0 q20.0 8 40 0\"/><text x=\"240\" y=\"130\" className=\"sb-blob-t sb-on-blue\" textAnchor=\"middle\">band</text></svg>"
+  },
+  {
+   "title": "The speech bubble",
+   "usage": "A callout is a sticker with a tail: a bold lead word, one sentence, in lime, mango or strawberry for yes, almost, no.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Speech bubbles</title><rect className=\"sb-cream\" x=\"0\" y=\"0\" width=\"480\" height=\"160\"/><g transform=\"translate(7 7)\"><path className=\"sb-shadow\" d=\"M40 40 h180 a20 20 0 0 1 20 20 v40 a20 20 0 0 1 -20 20 h-120 l-24 22 v-22 h-36 a20 20 0 0 1 -20 -20 v-40 a20 20 0 0 1 20 -20 z\"/></g><path className=\"sb-rim\" d=\"M40 40 h180 a20 20 0 0 1 20 20 v40 a20 20 0 0 1 -20 20 h-120 l-24 22 v-22 h-36 a20 20 0 0 1 -20 -20 v-40 a20 20 0 0 1 20 -20 z\"/><path className=\"sb-f-lime sb-outline\" d=\"M40 40 h180 a20 20 0 0 1 20 20 v40 a20 20 0 0 1 -20 20 h-120 l-24 22 v-22 h-36 a20 20 0 0 1 -20 -20 v-40 a20 20 0 0 1 20 -20 z\"/><text x=\"130\" y=\"86\" className=\"sb-sticker-t\" textAnchor=\"middle\">OPEN NOW</text><g transform=\"translate(7 7)\"><path className=\"sb-shadow\" d=\"M280 40 h160 a20 20 0 0 1 20 20 v40 a20 20 0 0 1 -20 20 h-40 v22 l-24 -22 h-96 a20 20 0 0 1 -20 -20 v-40 a20 20 0 0 1 20 -20 z\"/></g><path className=\"sb-rim\" d=\"M280 40 h160 a20 20 0 0 1 20 20 v40 a20 20 0 0 1 -20 20 h-40 v22 l-24 -22 h-96 a20 20 0 0 1 -20 -20 v-40 a20 20 0 0 1 20 -20 z\"/><path className=\"sb-f-mango sb-outline\" d=\"M280 40 h160 a20 20 0 0 1 20 20 v40 a20 20 0 0 1 -20 20 h-40 v22 l-24 -22 h-96 a20 20 0 0 1 -20 -20 v-40 a20 20 0 0 1 20 -20 z\"/><text x=\"360\" y=\"86\" className=\"sb-sticker-t\" textAnchor=\"middle\">ALMOST</text></svg>"
+  }
+ ],
+ "sample_headline": "A first screen in Sorbet.",
+ "sample_note": "A weekend-market app opener: the sticker headline on a blob, three stall stickers with counts, the scoop-stack rating, and the stalls below.",
+ "sample": "<div className=\"sb-sample\"><div className=\"sb-sample-in\">\n  <div className=\"sb-sample-top\"><span className=\"t-display-l sb-brand\">Scoop</span><span className=\"t-label sb-muted\">Weekend market · Sat 03 Oct</span></div>\n  <div className=\"sb-hero\">\n    <div className=\"sb-hero-words\">\n      <span className=\"sb-sticker-chip sb-hero-chip\">This weekend!</span>\n      <h2 className=\"t-display-xl sb-sample-h\">Weekends, but <span className=\"sb-word\">louder.</span></h2>\n      <p className=\"t-body sb-sample-lede\">Twelve stalls, one park, a band at noon. Tickets are free; the churros are not.</p>\n      <div className=\"sb-row-start\"><button className=\"sb-btn sb-btn-primary\">Grab a ticket</button><button className=\"sb-btn\">See the map</button></div>\n    </div>\n    <div className=\"sb-hero-art animate-float\"><svg viewBox=\"0 0 320 300\"><title>A strawberry blob sticker with the visitor count</title><rect className=\"sb-f-straw\" x=\"148\" y=\"112\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-43 148 112)\"/><rect className=\"sb-f-mango\" x=\"60\" y=\"203\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-17 60 203)\"/><rect className=\"sb-f-lime\" x=\"161\" y=\"269\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-50 161 269)\"/><rect className=\"sb-f-blue\" x=\"107\" y=\"281\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(29 107 281)\"/><rect className=\"sb-f-grape\" x=\"13\" y=\"114\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(30 13 114)\"/><rect className=\"sb-f-straw\" x=\"303\" y=\"285\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-6 303 285)\"/><rect className=\"sb-f-mango\" x=\"50\" y=\"71\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-46 50 71)\"/><rect className=\"sb-f-lime\" x=\"42\" y=\"262\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(15 42 262)\"/><rect className=\"sb-f-blue\" x=\"20\" y=\"207\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(41 20 207)\"/><rect className=\"sb-f-grape\" x=\"239\" y=\"31\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-23 239 31)\"/><rect className=\"sb-f-straw\" x=\"66\" y=\"67\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(41 66 67)\"/><rect className=\"sb-f-mango\" x=\"135\" y=\"26\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-26 135 26)\"/><rect className=\"sb-f-lime\" x=\"292\" y=\"119\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-17 292 119)\"/><rect className=\"sb-f-blue\" x=\"259\" y=\"60\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(53 259 60)\"/><rect className=\"sb-f-grape\" x=\"2\" y=\"123\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(54 2 123)\"/><rect className=\"sb-f-straw\" x=\"121\" y=\"148\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-57 121 148)\"/><rect className=\"sb-f-mango\" x=\"76\" y=\"221\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(48 76 221)\"/><rect className=\"sb-f-lime\" x=\"36\" y=\"179\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-45 36 179)\"/><rect className=\"sb-f-blue\" x=\"245\" y=\"59\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(49 245 59)\"/><rect className=\"sb-f-grape\" x=\"65\" y=\"2\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-50 65 2)\"/><rect className=\"sb-f-straw\" x=\"43\" y=\"275\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(4 43 275)\"/><rect className=\"sb-f-mango\" x=\"27\" y=\"149\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(57 27 149)\"/><rect className=\"sb-f-lime\" x=\"63\" y=\"21\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(-36 63 21)\"/><rect className=\"sb-f-blue\" x=\"204\" y=\"28\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(14 204 28)\"/><rect className=\"sb-f-grape\" x=\"47\" y=\"282\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(32 47 282)\"/><rect className=\"sb-f-straw\" x=\"307\" y=\"16\" width=\"14\" height=\"5\" rx=\"2.5\" transform=\"rotate(11 307 16)\"/><g transform=\"translate(10 10)\"><path className=\"sb-shadow\" d=\"M160 60 c40 -40 120 -30 140 10 c20 40 40 90 -10 120 c-50 30 -130 20 -150 -20 c-20 -40 -20 -80 20 -110 z\" transform=\"translate(-10 40) scale(1.05)\"/></g><path className=\"sb-rim\" d=\"M160 60 c40 -40 120 -30 140 10 c20 40 40 90 -10 120 c-50 30 -130 20 -150 -20 c-20 -40 -20 -80 20 -110 z\" transform=\"translate(-10 40) scale(1.05)\"/><path className=\"sb-f-straw sb-outline\" d=\"M160 60 c40 -40 120 -30 140 10 c20 40 40 90 -10 120 c-50 30 -130 20 -150 -20 c-20 -40 -20 -80 20 -110 z\" transform=\"translate(-10 40) scale(1.05)\"/><text x=\"228\" y=\"166\" className=\"sb-blob-n\" textAnchor=\"middle\">1,240</text><text x=\"228\" y=\"200\" className=\"sb-blob-t\" textAnchor=\"middle\">came last weekend</text></svg></div>\n  </div>\n  <div className=\"sb-stalls\">\n    <div className=\"sb-stall sb-sticker\"><i className=\"sb-dot sb-f-straw\"></i><div><span className=\"t-title\">Food court</span><span className=\"sb-small\">5 stalls · open 10–6</span></div><span className=\"sb-tag sb-tag-lime\">Open</span></div>\n    <div className=\"sb-stall sb-sticker\"><i className=\"sb-dot sb-f-mango\"></i><div><span className=\"t-title\">Craft tent</span><span className=\"sb-small\">4 stalls · 12 tickets left</span></div><span className=\"sb-tag sb-tag-mango\">Almost</span></div>\n    <div className=\"sb-stall sb-sticker\"><i className=\"sb-dot sb-f-blue\"></i><div><span className=\"t-title\">Bandstand</span><span className=\"sb-small\">3 sets · 4 pm is full</span></div><span className=\"sb-tag sb-tag-straw\">4 pm full</span></div>\n  </div>\n  <div className=\"sb-sample-bottom\">\n    <div className=\"sb-panel sb-sticker\"><p className=\"t-label\">Visitors by day and stall</p><Question data=\"$series\" height=\"220px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":{\"type\":\"bar\",\"cornerRadiusEnd\":10},\"encoding\":{\"x\":{\"field\":\"day\",\"type\":\"ordinal\",\"title\":\"Day\"},\"y\":{\"field\":\"visitors\",\"type\":\"quantitative\",\"title\":\"Visitors\"},\"color\":{\"field\":\"stall\",\"type\":\"nominal\",\"title\":\"Stall\"},\"xOffset\":{\"field\":\"stall\"}}}}} /></div>\n    <div className=\"sb-panel sb-sticker\"><p className=\"t-label\">The stalls</p><DataTable data=\"$table\" rowKey=\"stall\" height=\"220px\" columns={[{\"col\":\"stall\",\"title\":\"Stall\"},{\"col\":\"visitors\",\"title\":\"Visitors\",\"align\":\"right\",\"bar\":true},{\"col\":\"sold\",\"title\":\"Sold\",\"align\":\"right\"},{\"col\":\"status\",\"title\":\"Status\"}]} /></div>\n  </div>\n  <p className=\"sb-small sb-center\">Demo market · every number is synthetic</p>\n</div></div>",
+ "dos": [
+  "Outline, rim, drop: every content shape is a sticker.",
+  "Plum ink, never black; candies at full saturation.",
+  "Pills for controls, 20px for cards, waves for dividers.",
+  "One spring per touch; one floating hero; one rotated chip per view."
+ ],
+ "donts": [
+  "No black text, no grey grounds, no thin lines.",
+  "No gradients, no blur, no confetti.",
+  "No more than one exclamation mark per page.",
+  "No candy as body text on cream; status words use the darkened variants."
+ ],
+ "binding_losses": "The sticker outline, rim and drop, the spring easing, the wave, the speech bubble tail and the scoop stack have no contract slot; they are sb-* classes, the --ds-sticker and --ds-spring properties and inline SVG. Lilac rides the accent slot so kit components get the quiet fill.",
+ "footer": "Cream first, night parlour second. Fonts: Fredoka 500/600/700, Nunito 400/600/700 and italic, DM Mono 400/500, all Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "day": "Sat",
+    "stall": "Food",
+    "visitors": 420,
+    "sold": 310,
+    "status": "Open"
+   },
+   {
+    "day": "Sat",
+    "stall": "Craft",
+    "visitors": 180,
+    "sold": 96,
+    "status": "Almost"
+   },
+   {
+    "day": "Sat",
+    "stall": "Music",
+    "visitors": 260,
+    "sold": 200,
+    "status": "4 pm full"
+   },
+   {
+    "day": "Sun",
+    "stall": "Food",
+    "visitors": 390,
+    "sold": 280,
+    "status": "Open"
+   },
+   {
+    "day": "Sun",
+    "stall": "Craft",
+    "visitors": 150,
+    "sold": 84,
+    "status": "Almost"
+   },
+   {
+    "day": "Sun",
+    "stall": "Music",
+    "visitors": 240,
+    "sold": 190,
+    "status": "Open"
+   }
+  ],
+  "queries": {
+   "series": "select day, stall, visitors from rows order by rowid",
+   "table": "select stall, sum(visitors) as visitors, sum(sold) as sold, max(status) as status from rows group by stall order by visitors desc",
+   "totals": "select sum(visitors) as visitors, sum(sold) as sold, 12 as stalls, 4.8 as rating from rows"
+  },
+  "segments": [
+   "Sat",
+   "Sun",
+   "Both"
+  ],
+  "segment_default": "Sat",
+  "select_label": "Stall",
+  "input_placeholder": "Find a stall",
+  "switch_label": "Only open stalls",
+  "tabs": [
+   "Stalls",
+   "Tickets",
+   "Map"
+  ],
+  "tab_body": "Stalls: twelve, three almost full.",
+  "progress_label": "Tickets claimed · 72%",
+  "progress": 72,
+  "chart_title": "Visitors by day and stall",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar",
+     "cornerRadiusEnd": 10
+    },
+    "encoding": {
+     "x": {
+      "field": "day",
+      "type": "ordinal",
+      "title": "Day"
+     },
+     "y": {
+      "field": "visitors",
+      "type": "quantitative",
+      "title": "Visitors"
+     },
+     "color": {
+      "field": "stall",
+      "type": "nominal",
+      "title": "Stall"
+     },
+     "xOffset": {
+      "field": "stall"
+     }
+    }
+   }
+  },
+  "row_key": "stall",
+  "table_columns": [
+   {
+    "col": "stall",
+    "title": "Stall"
+   },
+   {
+    "col": "visitors",
+    "title": "Visitors",
+    "align": "right",
+    "bar": true
+   },
+   {
+    "col": "sold",
+    "title": "Sold",
+    "align": "right"
+   },
+   {
+    "col": "status",
+    "title": "Status"
+   }
+  ],
+  "table_height": "180px"
+ },
+ "tpl": {
+  "brand": "Scoop",
+  "dash_title": "Weekend market · Live",
+  "kpis": [
+   [
+    "Visitors",
+    "visitors",
+    "",
+    "",
+    ",.0f",
+    "▲ 18% vs last weekend"
+   ],
+   [
+    "Tickets claimed",
+    "sold",
+    "",
+    "",
+    ",.0f",
+    "across 12 stalls"
+   ],
+   [
+    "Happy rating",
+    "rating",
+    "",
+    "",
+    ".1f",
+    "from 96 reviews"
+   ]
+  ],
+  "dash_table_title": "Stalls",
+  "slide_eyebrow": "Market recap",
+  "slide_title": "The market doubled.",
+  "slide_sub": "Twice the stalls, twice the visitors, and the churros still ran out by noon.",
+  "slide_foot": "Synthetic data · Oct 2026",
+  "slide_stat_label": "Visitors",
+  "slide_stat_col": "visitors",
+  "slide_stat_fmt": ",.0f",
+  "slide_body": "People through the gate across both days. Saturday wins; Sunday catches up after lunch.",
+  "split": [
+   "FOOD · 50%",
+   "CRAFT + MUSIC · 50%"
+  ],
+  "ed_kicker": "Market · Feature",
+  "ed_headline": "The stall that sold out by noon",
+  "ed_deck": "Churro Bros sold 310 in two hours and then stood there smiling. What one small queue says about the whole market.",
+  "ed_byline": "By the market crew · 3 Oct 2026 · 4 min read",
+  "ed_body": "By eleven the queue for churros ran past the craft tent, and by noon the sign went up. Nobody minded. The waffles two stalls down had their best day, the band drew a crowd that had nowhere else to be, and the gate count kept climbing until six. One sold-out stall turned out to be the market working as intended.",
+  "ed_pull_col": "sold",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "Tickets claimed",
+  "steps": [
+   [
+    "A hundred people walk in.",
+    "Each sticker is one visitor; the colour is the stall they head for first."
+   ],
+   [
+    "By noon, the picture changes.",
+    "Food fills first, then music. Craft stays steady all day. The unit grid shows the split without a legend."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One hundred visitors, by first stop · synthetic",
+  "app_rows": [
+   [
+    "Food court",
+    "5 stalls · open 10–6",
+    "Open",
+    "ok"
+   ],
+   [
+    "Craft tent",
+    "4 stalls · 12 tickets left",
+    "Almost",
+    "warn"
+   ],
+   [
+    "Bandstand",
+    "4 pm set",
+    "Full",
+    "bad"
+   ],
+   [
+    "Kids corner",
+    "Opens at 2 pm",
+    "Later",
+    "idle"
+   ]
+  ],
+  "app_cta": "Add a stall",
+  "app_cta2": "Save",
+  "landing_eyebrow": "Scoop · weekend markets",
+  "landing_headline": "Weekends, but louder.",
+  "landing_sub": "Find the stalls, grab a ticket, skip the queue. Every market in the city, one sticker sheet.",
+  "cta": "Grab a ticket",
+  "cta2": "See the map",
+  "features": [
+   [
+    "Free tickets",
+    "Claim a slot for the busy stalls; the churros are still not free."
+   ],
+   [
+    "Live counts",
+    "See which stalls are open, almost full, or gone for today."
+   ],
+   [
+    "One sticker sheet",
+    "Every market you follow, peeled onto one page."
+   ]
+  ]
+ },
+ "css": "\n.ds-sorbet { --ds-cover-bg: var(--ds-cream); --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-strawberry); --ds-hand-fill2: var(--ds-blueberry); --ds-hand-muted: var(--ds-lilac); --ds-hand-ground: var(--ds-cream-raised); --ds-hand-stroke: 3; --ds-hand-cap: round; --ds-hand-shadow: var(--ds-ink); --ds-hand-bg: var(--ds-cream-sunk);\n  --ds-tpl-edge: 3px solid var(--ds-ink); --ds-tpl-radius: 20px; --ds-tpl-rule: 3px solid var(--ds-ink); --ds-tpl-tile-shadow: var(--ds-drop); --ds-tpl-shadow: none; --ds-slide-bg: var(--ds-cream-raised); --ds-slide-fg: var(--ds-ink); --ds-slide-title-bg: var(--ds-strawberry); --ds-slide-title-fg: var(--ds-on-strawberry); --ds-slide-split-a: var(--ds-strawberry); --ds-slide-split-a-fg: var(--ds-on-strawberry); --ds-slide-split-b: var(--ds-blueberry); --ds-slide-split-b-fg: var(--ds-on-blueberry); --ds-hero-bg: var(--ds-cream-sunk); --ds-tag-radius: 999px; }\n.ds-sorbet .ds-section h2, .ds-sorbet .ds-cover-name { font-family: var(--font-display); font-weight: 700; letter-spacing: -.01em; }\n.ds-sorbet .ds-eyebrow, .ds-sorbet .ds-chip { font-family: var(--font-display); font-weight: 600; } .ds-sorbet .ds-chip { border-radius: 999px; border-width: 2px; opacity: 1; }\n.ds-sorbet .h-num { font-family: var(--font-display); font-weight: 700; } .ds-sorbet .h-plate, .ds-sorbet .h-text { font-family: var(--font-mono); }\n.ds-sorbet .sb-cream { fill: var(--ds-cream); }\n.ds-sorbet .sb-f-straw { fill: var(--ds-strawberry); background: var(--ds-strawberry); } .ds-sorbet .sb-f-mango { fill: var(--ds-mango); background: var(--ds-mango); } .ds-sorbet .sb-f-lime { fill: var(--ds-lime); background: var(--ds-lime); } .ds-sorbet .sb-f-blue { fill: var(--ds-blueberry); background: var(--ds-blueberry); } .ds-sorbet .sb-f-grape { fill: var(--ds-grape); background: var(--ds-grape); }\n.ds-sorbet .sb-shadow { fill: var(--ds-hand-ink); stroke: var(--ds-hand-ink); stroke-width: 3; stroke-linejoin: round; } .ds-sorbet .sb-rim { fill: var(--ds-rim); stroke: var(--ds-rim); stroke-width: 9; stroke-linejoin: round; } .ds-sorbet .sb-outline { stroke: var(--ds-hand-ink); stroke-width: 3; stroke-linejoin: round; }\n.ds-sorbet .sb-wave { fill: none; stroke: var(--ds-hand-ink); stroke-width: 3; stroke-linecap: round; }\n.ds-sorbet .sb-sticker-t { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: .06em; fill: var(--ds-hand-ink); } .ds-sorbet .sb-on-blue { fill: var(--ds-on-blueberry); color: var(--ds-on-blueberry); }\n.ds-sorbet .sb-cover-word { font-family: var(--font-display); font-weight: 700; font-size: 72px; fill: var(--ds-hand-ink); } .ds-sorbet .sb-blob-t { font-family: var(--font-display); font-weight: 600; font-size: 22px; fill: var(--ds-hand-ink); } .ds-sorbet .sb-blob-n { font-family: var(--font-display); font-weight: 700; font-size: 64px; letter-spacing: -.02em; fill: var(--ds-hand-ink); }\n.ds-sorbet .sb-muted { color: var(--ds-ink-muted); } .ds-sorbet .sb-word { color: var(--ds-strawberry); }\n.ds-sorbet .sb-sticker { border: 3px solid var(--ds-ink); border-radius: 20px; background: var(--ds-cream-raised); box-shadow: var(--ds-sticker); }\n.ds-sorbet .sb-btn { font-family: var(--font-display); font-size: 16px; font-weight: 600; line-height: 20px; padding: 11px 22px; border: 3px solid var(--ds-ink); border-radius: 999px; background: var(--ds-cream-raised); color: var(--ds-ink); box-shadow: var(--ds-drop); cursor: pointer; transition: transform 160ms var(--ds-spring), box-shadow 160ms var(--ds-spring); }\n.ds-sorbet .sb-btn:hover { transform: scale(1.03); } .ds-sorbet .sb-btn:active { transform: translateY(4px); box-shadow: 2px 2px 0 0 var(--ds-ink); } .ds-sorbet .sb-btn:focus-visible { outline: 3px solid var(--ds-blueberry); outline-offset: 3px; }\n.ds-sorbet .sb-btn-primary { background: var(--ds-strawberry); color: var(--ds-on-strawberry); } .ds-sorbet .sb-btn-mango { background: var(--ds-mango); } .ds-sorbet .sb-btn-sm { padding: 7px 16px; font-size: 14px; }\n.ds-sorbet .sb-tag { display: inline-flex; align-items: center; padding: 3px 12px; border: 2px solid var(--ds-ink); border-radius: 999px; font-family: var(--font-display); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; background: var(--ds-cream-raised); color: var(--ds-ink); line-height: 16px; }\n.ds-sorbet .sb-tag-straw { background: var(--ds-strawberry); } .ds-sorbet .sb-tag-blue { background: var(--ds-blueberry); color: var(--ds-on-blueberry); } .ds-sorbet .sb-tag-mango { background: var(--ds-mango); } .ds-sorbet .sb-tag-lime { background: var(--ds-lime); }\n.ds-sorbet .sb-sticker-chip { display: inline-flex; padding: 5px 14px; border: 3px solid var(--ds-ink); border-radius: 999px; background: var(--ds-mango); color: var(--ds-ink); font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: .04em; box-shadow: var(--ds-sticker); transform: rotate(-6deg); }\n.ds-sorbet .ds-tpl-tag { border: 2px solid var(--ds-ink); font-family: var(--font-display); } .ds-sorbet .ds-tpl-tag.is-ok { background: var(--ds-lime); color: var(--ds-ink); } .ds-sorbet .ds-tpl-tag.is-warn { background: var(--ds-mango); color: var(--ds-ink); } .ds-sorbet .ds-tpl-tag.is-bad { background: var(--ds-strawberry); color: var(--ds-ink); } .ds-sorbet .ds-tpl-tag.is-idle { background: var(--ds-lilac); }\n.ds-sorbet .sb-stat { display: grid; gap: 6px; padding: 18px 22px; min-width: 190px; } .ds-sorbet .sb-stat-mango { background: var(--ds-mango); color: var(--ds-ink); } .ds-sorbet .sb-stat-mango .t-label, .ds-sorbet .sb-stat-mango .sb-small { color: var(--ds-ink); }\n.ds-sorbet .sb-scoops { display: flex; margin-top: 4px; } .ds-sorbet .sb-scoop { display: inline-block; width: 28px; height: 28px; border-radius: 999px; border: 3px solid var(--ds-ink); margin-right: -8px; }\n.ds-sorbet .sb-small { font-family: var(--font-body); font-size: 13px; color: var(--ds-ink-muted); line-height: 1.4; } .ds-sorbet .ds-stats { gap: 24px; }\n.ds-sorbet .sb-bubble { position: relative; padding: 14px 20px; border: 3px solid var(--ds-ink); border-radius: 20px; background: var(--ds-cream-raised); box-shadow: var(--ds-sticker); font-size: 15px; line-height: 1.4; margin-bottom: 8px; } .ds-sorbet .sb-bubble strong { font-family: var(--font-display); font-weight: 600; }\n.ds-sorbet .sb-bubble::after { content: \"\"; position: absolute; left: 28px; bottom: -14px; width: 20px; height: 20px; background: inherit; border-right: 3px solid var(--ds-ink); border-bottom: 3px solid var(--ds-ink); transform: rotate(45deg) skew(10deg, 10deg); }\n.ds-sorbet .sb-bubble-lime { background: var(--ds-lime); } .ds-sorbet .sb-bubble-mango { background: var(--ds-mango); } .ds-sorbet .sb-bubble-straw { background: var(--ds-strawberry); } .ds-sorbet .ds-callouts { gap: 20px; }\n.ds-sorbet .sb-dot { display: inline-block; width: 40px; height: 40px; border-radius: 999px; border: 3px solid var(--ds-ink); }\n.ds-sorbet .sb-card { position: relative; padding: 24px; display: grid; gap: 6px; } .ds-sorbet .sb-card-chip { position: absolute; top: -14px; right: 18px; } .ds-sorbet .sb-card h3 { margin: 0; } .ds-sorbet .sb-card-p { margin: 4px 0 8px; line-height: 1.5; color: var(--ds-ink-muted); max-width: 52ch; }\n.ds-sorbet .sb-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; } .ds-sorbet .sb-row-start { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; }\n.ds-sorbet .sb-sample { background: var(--ds-cream); padding: 24px 20px 48px; } .ds-sorbet .sb-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-sorbet .sb-sample-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; } .ds-sorbet .sb-brand { font-size: 32px; }\n.ds-sorbet .sb-hero { display: grid; gap: 32px; margin-top: 28px; align-items: center; } .ds-sorbet .sb-hero-chip { margin-bottom: 20px; } .ds-sorbet .sb-sample-h { margin: 0; max-width: 11ch; } .ds-sorbet .sb-sample-lede { margin-top: 16px; max-width: 42ch; }\n.ds-sorbet .sb-hero-art svg { display: block; width: min(100%, 360px); height: auto; margin: 0 auto; }\n.ds-sorbet .sb-stalls { display: grid; gap: 24px; margin-top: 40px; } .ds-sorbet .sb-stall { display: grid; grid-template-columns: 40px 1fr auto; gap: 14px; align-items: center; padding: 14px 18px; } .ds-sorbet .sb-stall div { display: grid; }\n.ds-sorbet .sb-sample-bottom { display: grid; gap: 24px; margin-top: 40px; } .ds-sorbet .sb-panel { padding: 16px 20px; min-width: 0; } .ds-sorbet .sb-panel .t-label { display: block; margin-bottom: 10px; }\n.ds-sorbet .sb-center { display: block; text-align: center; margin-top: 28px; }\n.ds-sorbet .ds-tpl-kpi, .ds-sorbet .ds-tpl-tile, .ds-sorbet .ds-tpl-step { box-shadow: var(--ds-drop); } .ds-sorbet .ds-tpl-figure { box-shadow: var(--ds-drop); }\n.ds-sorbet .ds-tpl-stage-title .ds-tpl-stage-foot { border-top-width: 3px; }\n@container (min-width: 760px) { .ds-sorbet .sb-sample { padding: 32px 40px 64px; } .ds-sorbet .sb-hero { grid-template-columns: 3fr 2fr; } .ds-sorbet .sb-stalls { grid-template-columns: 1fr 1fr 1fr; } .ds-sorbet .sb-sample-bottom { grid-template-columns: 1fr 1fr; } }\n"
+}

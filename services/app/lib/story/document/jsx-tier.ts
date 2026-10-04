@@ -26,7 +26,7 @@ import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { RETIRED_STORY_THEMES } from '@/lib/data/story/story-themes';
 import { authorModuleNames, buildAuthorModule, type AuthorModule } from './author-module.server';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
-import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
+import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../../http/http';
 import { MAX_CONTENT_BYTES, type ContentInputCtx, type StoredContent } from './input';
 import { documentFonts, invalidFontFamilies } from '../styles/document-fonts';
@@ -66,10 +66,10 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // NEW publish must learn the live vocabulary, same pattern as the retired
   // input formats in lib/story/document/input.ts.
   if (typeof theme === 'string' && theme in RETIRED_STORY_THEMES) {
-    return json({ error: 'retired_theme', hint: RETIRED_STORY_THEMES[theme].hint, allowed: STORY_THEME_NAMES }, 400);
+    return json({ error: 'retired_theme', hint: RETIRED_STORY_THEMES[theme].hint, allowed: STORY_DESIGN_NAMES }, 400);
   }
-  if (theme !== null && !STORY_THEME_NAMES.includes(theme as never)) {
-    return json({ error: 'unknown_theme', allowed: STORY_THEME_NAMES }, 400);
+  if (theme !== null && !STORY_DESIGN_NAMES.includes(theme as never)) {
+    return json({ error: 'unknown_theme', allowed: STORY_DESIGN_NAMES }, 400);
   }
   const template = body.template ?? null;
   if (template !== null && !STORY_TEMPLATE_NAMES.includes(template as never)) {

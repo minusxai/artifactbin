@@ -1,0 +1,208 @@
+{
+ "pageTypes": [
+  "dashboard",
+  "deck",
+  "editorial",
+  "scrolly",
+  "plan",
+  "app",
+  "landing"
+ ],
+ "heads": [
+  "Dashboard",
+  "Deck",
+  "Editorial",
+  "Scrolly",
+  "Plan",
+  "App",
+  "Landing"
+ ],
+ "roster": [
+  "volta",
+  "phosphor",
+  "drafting",
+  "meridian",
+  "dossier",
+  "riso",
+  "almanac",
+  "redline",
+  "nocturne",
+  "broadsheet",
+  "signout",
+  "sorbet",
+  "arcade"
+ ],
+ "fit": {
+  "volta": [
+   2,
+   2,
+   0,
+   2,
+   1,
+   2,
+   2
+  ],
+  "phosphor": [
+   2,
+   0,
+   0,
+   0,
+   2,
+   2,
+   1
+  ],
+  "drafting": [
+   1,
+   1,
+   2,
+   2,
+   2,
+   0,
+   1
+  ],
+  "meridian": [
+   2,
+   1,
+   1,
+   0,
+   2,
+   2,
+   2
+  ],
+  "dossier": [
+   0,
+   1,
+   2,
+   1,
+   2,
+   0,
+   1
+  ],
+  "riso": [
+   0,
+   1,
+   1,
+   2,
+   0,
+   0,
+   2
+  ],
+  "almanac": [
+   0,
+   1,
+   2,
+   2,
+   0,
+   1,
+   2
+  ],
+  "redline": [
+   0,
+   2,
+   0,
+   1,
+   1,
+   0,
+   2
+  ],
+  "nocturne": [
+   0,
+   1,
+   2,
+   2,
+   0,
+   0,
+   1
+  ],
+  "broadsheet": [
+   0,
+   0,
+   2,
+   1,
+   0,
+   0,
+   0
+  ],
+  "signout": [
+   1,
+   0,
+   0,
+   0,
+   1,
+   2,
+   0
+  ],
+  "sorbet": [
+   1,
+   1,
+   0,
+   1,
+   0,
+   2,
+   2
+  ],
+  "arcade": [
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   2
+  ]
+ },
+ "sources": {
+  "volta": "Volta Design System artifact, ported",
+  "phosphor": "Ten Systems gallery, extended with a paper mode",
+  "drafting": "Scrolly winner (exploded phone) + plan winner (drafting set)",
+  "meridian": "New: the sleek professional one",
+  "dossier": "editorial_opus-c + plan_opus-c (paper, ink, violet, lime)",
+  "riso": "scrolly_opus-c (risograph picture book)",
+  "almanac": "scrolly_codex_2 (warm studio editorial)",
+  "redline": "slides_codex_1 (paper / red / dark poster deck)",
+  "nocturne": "editorial_opus-a + b, generalised: lamplit dark editorial",
+  "broadsheet": "JSX editorial winner, improved",
+  "signout": "App winner (sign-out sheet), improved",
+  "sorbet": "Gallery, reworked as sticker pop",
+  "arcade": "Gallery, reworked: bright cabinet palette, CRT night"
+ },
+ "pageIds": {
+  "volta": "f44VNS",
+  "phosphor": "ODaz7L",
+  "drafting": "anUtqy",
+  "meridian": "9q4LBf",
+  "dossier": "hOMxYy",
+  "riso": "XcH5C6",
+  "almanac": "bvesY2",
+  "redline": "u67xgH",
+  "nocturne": "CSOdyM",
+  "broadsheet": "VkwtHV",
+  "signout": "6JFzhT",
+  "sorbet": "0Mboti",
+  "arcade": "IBtSRG"
+ },
+ "noFit": "No listed system fits <subject>: <one-line reason>.\nNearest: <system>, losing <what the subject needs that it lacks>.\nNew: <Name> · <mood> · <display family> + <body family> · paper <hex>, ink <hex>, one accent <hex> · one principle.\nPick the nearest, approve the new one, or name a brand to bind.",
+ "record": "{/* design: system=<Name> · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}",
+ "losses": [
+  {
+   "title": "Font meta weights",
+   "text": "The font-* meta fetches three weights only, where a system's own faces load their full set; spend it on a family no system carries."
+  },
+  {
+   "title": "Utilities win",
+   "text": "Tailwind utilities compile !important: a size or family utility replaces a type role on the same element. Layout utilities only on role-bearing elements."
+  },
+  {
+   "title": "Kit reads the contract only",
+   "text": "Kit components and charts follow the contract keys; a system idea with no slot (a hard edge, a highlighter) reaches only the authored classes."
+  },
+  {
+   "title": "Unthemed ground",
+   "text": "The fence `theme` is the only door: a fence without one paints no ground, loads no faces and defines no type roles or classes, so a page that copies a system's class names without naming it gets the neutral contract (probed 3 Oct 2026)."
+  },
+  {
+   "title": "Charts in a dark panel",
+   "text": "A Vega chart in a locally darkened panel takes the panel's chart tokens for its series but keeps the document's axis ink (probed 3 Oct 2026): keep charts on the page ground."
+  }
+ ]
+}

@@ -14,7 +14,7 @@ import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepare
 import {prepareStoryRuntime} from '../../../app/lib/story/prepared/prepare-runtime.server';
 import {compileStoryCss} from '../../../app/lib/data/story/story-css.server';
 import {validateMarkupStructure} from '../../../app/lib/story/document/local-validation';
-import {STORY_THEME_NAMES,type StoryThemeName} from '../../../app/lib/validation/atlas-schemas';
+import {STORY_DESIGN_NAMES,type StoryDesignName} from '../../../app/lib/validation/atlas-schemas';
 import {collectRefUses} from '../../../app/lib/story/data/refs';
 import {State,withLock} from '../state';
 import {configDir} from '../config';
@@ -76,7 +76,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const flow=await compiledFor(file,revision,declared);
   const assetsUrl='/image?file='+encodeURIComponent(file);
   const cached=preparedCache.get(file);
-  const prepared=options.assets?(cached?.revision===revision?cached.value:await prepareStoryRuntime({source:doc.body,compiledCss:await compileStoryCss(doc.body,{force:true}),theme:STORY_THEME_NAMES.includes(doc.metadata.theme as StoryThemeName)?doc.metadata.theme as StoryThemeName:null,template:doc.metadata.template??null,colorMode:doc.metadata.colorMode??null,refData,assetsUrl,title:doc.metadata.title??file,chrome:!options.capture,dataflow:{flow}})):undefined;
+  const prepared=options.assets?(cached?.revision===revision?cached.value:await prepareStoryRuntime({source:doc.body,compiledCss:await compileStoryCss(doc.body,{force:true}),theme:STORY_DESIGN_NAMES.includes(doc.metadata.theme as StoryDesignName)?doc.metadata.theme as StoryDesignName:null,template:doc.metadata.template??null,colorMode:doc.metadata.colorMode??null,refData,assetsUrl,title:doc.metadata.title??file,chrome:!options.capture,dataflow:{flow}})):undefined;
   if(prepared)preparedCache.set(file,{revision,value:prepared});
   return {prepared,source,body:doc.body,metadata:doc.metadata,revision:digest(source),declared,flow,data:{...prepared?.data,nodes:splitHelmet(authored.nodes).body,refData,assetsUrl,colorMode:prepared?.data.colorMode??'light' as const,chrome:!options.capture,dataflow:{flow}}};
  };
@@ -232,9 +232,12 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     values=ran.values;story=await renderStoryHtml(compiled,{values:ran.values,results:{tables:ran.tables,errors:ran.errors}});
    }
    const assembled=assembleDocument({compiled,prepared:current.prepared,colorMode:current.data.colorMode,file,capture:!!options.capture,story,values});
-   let html=assembled.html.replace('<head>',`<head><base href="${base}">`)
-    .replace('</body>',`<link rel="stylesheet" href="/bundle/chrome.css"><script type="module" src="/bundle/client.js"></script></body>`);
+   let html=assembled.html.replace('<head>',`<head><base href="${base}">`);
+   // A capture is the document alone, as /a/:id/raw serves it. The editor's chrome sheet is the app's own
+   // globals, whose `body` rules (a mono family, 14px) would restyle every element the design's root family
+   // reaches, and its client mounts nothing under `?capture=1` anyway (preview/client.tsx).
    if(options.capture)html=html.replace('<body','<body data-afbin-export-ready=""');
+   else html=html.replace('</body>',`<link rel="stylesheet" href="/bundle/chrome.css"><script type="module" src="/bundle/client.js"></script></body>`);
    res.setHeader('Content-Type','text/html');
    for(const [name,value] of Object.entries(assembled.headers))res.setHeader(name,value);
    return res.end(html);

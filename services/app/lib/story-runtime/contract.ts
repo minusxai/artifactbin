@@ -12,7 +12,7 @@ import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { ImageRefData, RefDataMap } from '@/lib/story/data/ref-data';
 import type { DataflowState, Row, Scalar } from '@/lib/story/data/dataflow';
-import type { StoryThemeName } from '@/lib/validation/story-theme-names';
+import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/datasets/local-state';
 import type { ManagedAssetKind } from './managed-assets';
@@ -238,7 +238,7 @@ export interface EditDraft {
   /** The editor's current head pointer; a page chrome snapshot may lag its own save. */
   editId: string;
   /** The theme the editor shows NOW (null: none). Always sent: the stored theme lags a pick until its save lands. */
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
   colorMode: 'light' | 'dark';
   /**
    * A saved VERSION shown for reading while editing is paused (version history). Drawn like a draft even with

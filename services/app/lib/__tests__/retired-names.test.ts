@@ -67,7 +67,8 @@ const SCANS: Scan[] = [
     label: 'no retired theme name is used as a value outside the alias table',
     dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, 'scripts'],
     extensions: /\.(tsx?|mjs)$/,
-    pattern: /['"](classical|broadsheet|nocturne)['"]/,
+    // broadsheet and nocturne returned as design systems (lib/data/story/story-systems) on 3 Oct 2026.
+    pattern: /['"](classical)['"]/,
     allow: [`${APP}/lib/data/story/story-themes.ts`],
     proof: { atLeast: 50, contains: `${APP}/lib/data/story/story-themes.ts` },
   },
@@ -162,7 +163,7 @@ describe('retired names are dead names', () => {
  * right are two different claims, and only the second one tells you what the product is.
  */
 describe('the surviving vocabulary', () => {
-  it('is exactly six themes, and the theme docs teach exactly those six', async () => {
+  it('is exactly six themes, and no theme guide teaches them any more', async () => {
     const { STORY_THEME_NAMES } = await import('@/lib/validation/atlas-schemas');
     expect([...STORY_THEME_NAMES]).toEqual(['modernist', 'organic', 'industry', 'terminal', 'manuscript', 'pop']);
     const { readdirSync } = await import('node:fs');
@@ -170,7 +171,7 @@ describe('the surviving vocabulary', () => {
       .filter((f) => f.startsWith('themes-'))
       .map((f) => f.replace(/^themes-/, '').replace(/\.md$/, ''))
       .sort();
-    expect(documented).toEqual(['industry', 'manuscript', 'modernist', 'organic', 'pop', 'terminal']);
+    expect(documented).toEqual([]);
   });
 
   it('is exactly the surviving artifact formats', async () => {

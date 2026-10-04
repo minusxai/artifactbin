@@ -6,7 +6,8 @@
  */
 import { Type, type Static, type TSchema } from 'typebox';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
-import { STORY_THEME_NAMES, type StoryThemeName } from './story-theme-names';
+import { STORY_THEME_NAMES, type StoryThemeName, type StoryDesignName } from './story-theme-names';
+import { STORY_SYSTEM_NAMES, type StorySystemName } from './story-system-names';
 
 /** Shared helper: a string enum with an optional description. */
 const StringEnum = <const T extends readonly string[]>(values: T, description?: string) =>
@@ -23,12 +24,17 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
  * typebox; it is re-exported here for every schema-side caller.
  */
 export { STORY_THEME_NAMES, type StoryThemeName };
+export { STORY_SYSTEM_NAMES, type StorySystemName };
+/** Everything a fence `theme` may name: the six themes, then the design systems (lib/data/story/story-systems). */
+export const STORY_DESIGN_NAMES: readonly StoryDesignName[] = [...STORY_THEME_NAMES, ...STORY_SYSTEM_NAMES];
+export type { StoryDesignName };
 
 /**
- * The story templates — the document's structural GENRE (beat structure +
- * layout grammar), orthogonal to the design theme.
+ * The story templates — the document's PAGE TYPE (beat structure + layout
+ * grammar, and the runtime behaviour that comes with it: the contents rail for
+ * editorial and plan, present mode for a deck), orthogonal to the design.
  */
-export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard', 'plan'] as const;
+export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard', 'plan', 'app', 'landing'] as const;
 export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
 
 export const StoryContent = Type.Object({
@@ -48,7 +54,7 @@ export const StoryContent = Type.Object({
     '<Grid><GridItem x={0} y={0} w={8} h={5}>…</GridItem>…</Grid>: 12 columns × 86px rows.'),
   format: Type.Optional(Type.Union([Type.Literal('jsx'), Type.Null()], { description:
     "'jsx' = the story field holds shadcn JSX source rendered by the story interpreter" })),
-  theme: Type.Optional(Nullable(StringEnum(STORY_THEME_NAMES,
+  theme: Type.Optional(Nullable(StringEnum(STORY_DESIGN_NAMES,
     "Design theme for the story (format:'jsx' only) — picks the named design PERSONALITY (fonts, corner " +
     'radius, chart palette, a light AND a dark token set) the story renders with. One of the six built-in ' +
     'themes; omit/null for the neutral default. Components and utility classes are identical across themes ' +
@@ -56,7 +62,8 @@ export const StoryContent = Type.Object({
   template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
     "Story template (format:'jsx' only) — the document's structural genre: 'editorial' (long-read magazine " +
     "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling), 'dashboard' " +
-    '(a Grid of draggable KPI/chart tiles with minimal prose), plan (visual proposals, flows and milestones). ' +
+    '(a Grid of draggable KPI/chart tiles with minimal prose), plan (visual proposals, flows and milestones), ' +
+    "'app' (a tool people operate: state, actions, outcomes), 'landing' (one offering, one next action). " +
     'METADATA ONLY: it records intent and drives ' +
     'the structure YOU write; no automatic CSS or layout is applied.'))),
   colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],

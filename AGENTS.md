@@ -92,7 +92,8 @@ From the repo root; keep this list current.
   Never use them to bypass deferral.
 - `npm run build:islands -w services/app` — the shared reader islands and manifest.
 - Generated inputs: `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`,
-  `generate:theme-previews`, `generate:og`.
+  `generate:theme-previews`, `generate:og`, `generate:design-systems` (the runtime registry and the
+  agent references from `design-systems/specs`; `-- pages` the specimen pages into `tmp/`).
 - `npm run release:cli` — bump the CLI release; see Change checks.
 
 ## Change checks

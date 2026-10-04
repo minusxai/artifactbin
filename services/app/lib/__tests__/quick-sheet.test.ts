@@ -12,8 +12,9 @@ describe('the installed short skill',()=>{
   * A person is waiting on a blank page. The FIRST wording of this rule was exhortative ("publish a
   * FIRST version in your first few calls") and MEASURED not to move anything: on local21, six tasks
   * across pi and opencode, the first markup write landed at 156–366 s and every task published
-  * exactly one version. So the rule is now countable — three calls of the pull, and a first push
-  * carrying only the title and the section headings — because an agent can check a count against
+  * exactly one version. So the rule is countable — six calls of the pull, and a first push carrying
+  * the fence with its system, the title, real opening copy and one substantive section (a designed
+  * first impression, since 3 Oct 2026; headings alone was the slop the taste work found) — because an agent can check a count against
   * its own transcript and cannot check "early". The tests follow: they assert the NUMBER and the
   * CONTENT of that first push, not the encouragement.
   *
@@ -23,14 +24,14 @@ describe('the installed short skill',()=>{
   * satisfy them, and on the shipped `teaching.json` too — the generated bundle is the copy the CLI
   * actually hands an agent.
   */
- it('counts the first push — three calls, title and headings — then fills sections, and markup for content, the script for behaviour',()=>{
+ it('counts the first push — six calls, a designed opening — then fills the rest, and markup for content, the script for behaviour',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
   const fewTurns=bullet('- Few turns');
   expect(fewTurns).toBeDefined();
   // Countable, not exhortative: a number of calls and a named payload for the first push.
-  expect(fewTurns).toContain('push a FIRST version within three calls of the pull');
-  expect(fewTurns).toMatch(/title and section headings, one line each/);
-  expect(fewTurns).toMatch(/fill the sections in later pushes/);
+  expect(fewTurns).toContain('push a FIRST designed version within six calls of the pull');
+  expect(fewTurns).toMatch(/the fence, the title, real opening copy and one substantive section/);
+  expect(fewTurns).toMatch(/fill the rest in later pushes/);
   expect(fewTurns).toContain('waiting on a blank page');
   expect(fewTurns).toMatch(/is not re-checking/);
   // Vague encouragement is the failure mode this replaced; it must not come back.
@@ -49,7 +50,7 @@ describe('the installed short skill',()=>{
   expect(sheet).not.toContain('<Iframe>');
   // The bundle the CLI ships carries the same two bullets: a copy edit without
   // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
-  expect(teaching.files['SKILL.md']).toContain('push a FIRST version within three calls of the pull');
+  expect(teaching.files['SKILL.md']).toContain('push a FIRST designed version within six calls of the pull');
   expect(teaching.files['SKILL.md']).toContain('- Markup for content, data and layout');
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });
@@ -60,11 +61,11 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('YAML fence');
   expect(sheet).toContain('edit_id');
  });
- it('routes design and vocabulary before the chosen template and theme',()=>{
-  const positions=['references/design.md','references/markup.md','references/templates-<name>.md','references/themes-<name>.md'].map(s=>sheet.indexOf(s));
+ it('routes design and vocabulary before the chosen page type and design system',()=>{
+  const positions=['references/design.md','references/markup.md','references/templates-<name>.md','references/design-systems.md'].map(s=>sheet.indexOf(s));
   expect(positions.every(x=>x>=0)).toBe(true);
   expect(positions).toEqual([...positions].sort((a,b)=>a-b));
-  expect(sheet).toContain('afbin help themes');
+  expect(sheet).toContain('afbin help design-systems');
   expect(sheet).toContain('afbin help templates');
  });
  it('teaches responsive containers, static JSX and appropriate chart primitives through the example',()=>{
@@ -80,7 +81,7 @@ describe('the installed short skill',()=>{
   // more to reach for, so it says there is nothing more: a theme carries the palette, so a design
   // skill, a palette tool or image tooling is a turn spent on something the document already has.
   expect(sheet).toContain('no other skill, palette tool or image tooling is needed');
-  expect(sheet).toContain('the theme carries the palette');
+  expect(sheet).toContain('the design system carries the palette');
   expect(sheet).toContain('does not verify appearance');
   expect(sheet).toContain('For visual review');
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');

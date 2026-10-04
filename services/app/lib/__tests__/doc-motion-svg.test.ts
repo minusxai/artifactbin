@@ -102,9 +102,10 @@ describe('templates are genre references, not contracts', () => {
     expect(doc).toMatch(/omit|without a template|bespoke/i);
   });
 
-  it('scrolly is the default when the ask does not name a genre; truly torn → ask the user', () => {
+  it('no page type is a default: the content picks it; truly torn → ask the user', () => {
+    // The scrolly default went with the page-type guides (3 Oct 2026): it made every unnamed ask a scrolly.
     for (const doc of [buildTemplatesDoc(BASE), buildMarkupDoc(BASE)]) {
-      expect(doc).toMatch(/default to `?scrolly`?/i);
+      expect(doc).not.toMatch(/default to `?scrolly`?/i);
       expect(doc).toMatch(/ask (the )?user|clarify with (the )?user/i);
     }
   });

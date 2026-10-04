@@ -28,6 +28,7 @@ import type { IslandPageData } from '@/lib/islands/contract';
 import { backfillCompiledPages, matchesBackfillFilters, type BackfillOptions, type BackfillSelector } from '@/lib/compiled-page/backfill.server';
 import { preparedCssVersion, stylesheetVersion } from '@/lib/story/prepared/css-version.server';
 import { STORY_BASE_SHEETS } from '@/lib/story/styles/story-base-css';
+import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-system-sheets';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 
@@ -828,7 +829,8 @@ describe('the compiled-page backfill', () => {
       expect(changedBare).not.toEqual(STORY_BASE_SHEETS);
       expect(stylesheetVersion('vtw', changedBare)).not.toBe(version);
       expect(stylesheetVersion('vtw2', STORY_BASE_SHEETS)).not.toBe(version);
-      expect(preparedCssVersion()).toBe(stylesheetVersion(storyCssCompileVersion(), STORY_BASE_SHEETS));
+      // The design systems' faces and classes ride the base sheet per document, so the version hashes them too.
+      expect(preparedCssVersion()).toBe(stylesheetVersion(storyCssCompileVersion(), [...STORY_BASE_SHEETS, STORY_SYSTEMS_SHEET]));
     });
 
     it('a page prepared under an older stylesheet is re-prepared: behind its next read, and by the stale backfill through the server', async () => {

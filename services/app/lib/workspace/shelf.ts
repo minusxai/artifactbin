@@ -52,8 +52,8 @@ export interface ShelfRow extends ShelfItem {
   /** The trail root->parent, so a folder's own subtree can be greyed in the picker. */
   ancestor_ids?: string[];
   views?: number;
-  /** Server-rendered spline (inline SVG). Absent = draw none. */
-  sparkline?: string;
+  /** Server-rendered spline (inline SVG). Absent or null = draw none. */
+  sparkline?: string | null;
 }
 
 export interface Shelf<T> {

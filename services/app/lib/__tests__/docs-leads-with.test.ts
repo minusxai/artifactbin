@@ -15,7 +15,6 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, renderDoc } from '../skills';
-import { STORY_THEMES } from '../data/story/story-themes';
 
 const BASE = 'https://example.test';
 
@@ -26,13 +25,6 @@ describe('the markup skill teaches vocabulary before configuration', () => {
   });
   it('puts the Helmet/CSS/script configuration AFTER the skeleton', () => {
     expect(doc.indexOf('## `<Helmet>`')).toBeGreaterThan(doc.indexOf('## Skeleton'));
-  });
-});
-
-describe('each theme file states its identity', () => {
-  it.each(STORY_THEMES.map((theme) => [theme.name, theme] as const))('%s: description, fonts and default mode', (_name, theme) => {
-    const doc = renderDoc(`artifactbin/references/themes-${theme.name}.md`, BASE);
-    for (const needle of [theme.description, 'Fonts:', 'Default mode:']) expect(doc, needle).toContain(needle);
   });
 });
 
@@ -54,7 +46,7 @@ describe('the brief — the one text every agent reads', () => {
   it('does not forbid h-screen / vh — the platform rewrites both on every path', () => {
     expect(sheet).not.toMatch(/never vh/i);
   });
-  it('keeps the hard rules with the example they govern, and routes theme and template AFTER both', () => {
+  it('keeps the hard rules with the example they govern, and routes the page type and the design system AFTER both', () => {
     // The brief is: Read first (what an artifact is, the CLI loop), then ONE example that carries
     // the data block AND the document rules as comments beside the lines they govern, then the
     // reference list. That ORDER is the rule; how many bytes each part takes is editorial.
@@ -62,7 +54,7 @@ describe('the brief — the one text every agent reads', () => {
     const example = sheet.indexOf('```jsx');
     const data = sheet.indexOf('<Query');
     const bodyRules = sheet.indexOf('static JSX', example);
-    const theme = sheet.indexOf('afbin help themes', sheet.indexOf('## Read next'));
+    const theme = sheet.indexOf('afbin help design-systems', sheet.indexOf('## Read next'));
     expect(rules).toBeGreaterThan(-1);
     expect(example).toBeGreaterThan(rules);
     // Nothing about themes or templates sits between the rules and the example.

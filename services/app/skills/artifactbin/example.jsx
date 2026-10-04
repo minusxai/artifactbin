@@ -2,7 +2,7 @@
 # CLI maintains id, edit_id, head_version, state and version.
 title: Q3 sales review
 template: dashboard
-theme: modernist
+theme: volta
 visibility: unlisted
 ---
 <Helmet>

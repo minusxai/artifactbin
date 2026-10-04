@@ -1,0 +1,782 @@
+{
+ "slug": "almanac",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Almanac cover: an arch-topped panel with a translucent offset shadow, a field of one hundred small units, one terracotta numeral</title>\n<rect className=\"al-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<path className=\"al-shadow\" d=\"M44 288 V128 A100 100 0 0 1 244 128 V288 Z\"/>\n<path className=\"al-band\" d=\"M28 288 V112 A100 100 0 0 1 228 112 V288 Z\"/>\n<text x=\"128\" y=\"206\" className=\"al-num\" textAnchor=\"middle\">60</text>\n<text x=\"128\" y=\"236\" className=\"al-mono\" textAnchor=\"middle\">OF ONE HUNDRED</text>\n<line className=\"al-line\" x1=\"60\" y1=\"256\" x2=\"196\" y2=\"256\"/>\n<rect className=\"al-fill\" x=\"300\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"316\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"332\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"348\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"364\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"380\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"396\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"412\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"428\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"444\" y=\"60\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"300\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"316\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"332\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"348\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"364\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"380\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"396\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"412\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"428\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"444\" y=\"76\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"300\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"316\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"332\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"348\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"364\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"380\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"396\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"412\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"428\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"444\" y=\"92\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"300\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"316\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"332\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"348\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"364\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"380\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"396\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"412\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"428\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"444\" y=\"108\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"300\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"316\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"332\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"348\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"364\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"380\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"396\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"412\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"428\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"444\" y=\"124\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"300\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"316\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"332\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"348\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"364\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"380\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"396\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"412\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"428\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill\" x=\"444\" y=\"140\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"300\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"316\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"332\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"348\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"364\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"380\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"396\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"412\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"428\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"444\" y=\"156\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"300\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"316\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"332\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"348\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"364\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"380\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"396\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"412\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"428\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"444\" y=\"172\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"300\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"316\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"332\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"348\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-fill2\" x=\"364\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"380\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"396\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"412\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"428\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"444\" y=\"188\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"300\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"316\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"332\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"348\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"364\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"380\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"396\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"412\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"428\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/><rect className=\"al-muted\" x=\"444\" y=\"204\" width=\"11\" height=\"12\" rx=\"5.5\"/>\n<text x=\"300\" y=\"44\" className=\"al-mono\">ONE BATCH · THREE OUTCOMES</text>\n<line className=\"al-line\" x1=\"300\" y1=\"236\" x2=\"459\" y2=\"236\"/>\n<text x=\"300\" y=\"256\" className=\"al-serif-i\">kept</text><text x=\"372\" y=\"256\" className=\"al-serif-i\">parts</text><text x=\"432\" y=\"256\" className=\"al-serif-i\">rest</text></svg>",
+ "name": "Almanac",
+ "tagline": "Warm paper, one green ink, one terracotta word.",
+ "mood": "Warm",
+ "jobs": "Scrolly explainers, landing pages, long reads, annual reports",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Instrument Serif",
+   "ital@0;1"
+  ],
+  [
+   "DM Sans",
+   "opsz,wght@9..40,400;9..40,500;9..40,700"
+  ],
+  [
+   "DM Mono",
+   "wght@400;500"
+  ]
+ ],
+ "families": {
+  "display": "\"Instrument Serif\", Georgia, serif",
+  "sans": "\"DM Sans\", system-ui, sans-serif",
+  "mono": "\"DM Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "paper",
+   "light": "#F2E7D6",
+   "dark": "#1B241B",
+   "usage": "Page ground: warm, uncoated. In Night the ink becomes the ground.",
+   "group": "Grounds"
+  },
+  {
+   "name": "card",
+   "light": "#F8F1E6",
+   "dark": "#243024",
+   "usage": "Cards, tickets, dialogs: a lighter sheet on the paper.",
+   "group": "Grounds"
+  },
+  {
+   "name": "band",
+   "light": "#E7CFB4",
+   "dark": "#2E3B2E",
+   "usage": "The hero band and arch panels: a deeper warm ground that holds one big thing.",
+   "group": "Grounds"
+  },
+  {
+   "name": "screen",
+   "light": "#C8D1A9",
+   "dark": "#3A4A36",
+   "usage": "The soft green ground inside a device or a figure.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-sunk",
+   "light": "#E8DBC6",
+   "dark": "#141B14",
+   "usage": "Wells, code, inactive tracks, stripes.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#CBBFA9",
+   "dark": "#3C4A3C",
+   "usage": "Hairlines at a quarter strength. The only border in the system.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#374836",
+   "dark": "#F2E7D6",
+   "usage": "Forest green: all text, all rules, the first series.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#6B7A69",
+   "dark": "#A9B5A6",
+   "usage": "Secondary text at 65%: captions, notes, metadata.",
+   "group": "Ink"
+  },
+  {
+   "name": "accent",
+   "light": "#B44E30",
+   "dark": "#E07A58",
+   "usage": "Terracotta: the one word in a headline, the filled button, the progress bar, the second series.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-accent",
+   "light": "#F2E7D6",
+   "dark": "#1B241B",
+   "usage": "Text on terracotta.",
+   "group": "Brand"
+  },
+  {
+   "name": "accent-soft",
+   "light": "#F0D9CD",
+   "dark": "#4A2A1E",
+   "usage": "Ground for accent tags and the selected state.",
+   "group": "Brand"
+  },
+  {
+   "name": "mauve",
+   "light": "#846B94",
+   "dark": "#B7A3C4",
+   "usage": "The third series and nothing else.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#3E6B3C",
+   "dark": "#8FC28C",
+   "usage": "Success text and the kept share, with a word.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#DCE6C9",
+   "dark": "#263A26",
+   "usage": "Ground for success callouts and positive tags.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#8C6A1E",
+   "dark": "#E0B65A",
+   "usage": "Warnings as text: an ochre on paper.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#F3E5BE",
+   "dark": "#3E3218",
+   "usage": "Ground for warning callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#B44E30",
+   "dark": "#E07A58",
+   "usage": "Errors share the terracotta; there is no second red.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#F0D9CD",
+   "dark": "#4A2A1E",
+   "usage": "Ground for error callouts.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "paper",
+  "foreground": "ink",
+  "card": "card",
+  "card-foreground": "ink",
+  "popover": "card",
+  "popover-foreground": "ink",
+  "primary": "accent",
+  "primary-foreground": "on-accent",
+  "secondary": "band",
+  "secondary-foreground": "ink",
+  "muted": "paper-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "accent-soft",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "on-accent",
+  "border": "line",
+  "input": "line",
+  "ring": "accent",
+  "chart-1": "ink",
+  "chart-2": "accent",
+  "chart-3": "mauve",
+  "chart-4": "positive",
+  "chart-5": "caution"
+ },
+ "radius_contract": "4px",
+ "extra_vars": {
+  "shadow-soft": {
+   "light": "23px 23px 0 0 #b44e3020",
+   "dark": "23px 23px 0 0 #e07a5826"
+  },
+  "shadow-soft-sm": {
+   "light": "12px 12px 0 0 #b44e3020",
+   "dark": "12px 12px 0 0 #e07a5826"
+  },
+  "chip-radius": "0"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(64px, 10.4vw, 160px)",
+   "lh": ".92",
+   "weight": 400,
+   "ls": "-0.055em",
+   "sample": "Life, after.",
+   "usage": "One per page. Instrument Serif at 400 with the tracking pulled tight; the italic carries the emphasised word."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(40px, 5.5vw, 78px)",
+   "lh": ".98",
+   "weight": 400,
+   "ls": "-0.045em",
+   "sample": "A different kind of upgrade.",
+   "usage": "Section openers and chapter heads."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "40px",
+   "lh": "42px",
+   "weight": 400,
+   "ls": "-0.03em",
+   "sample": "Return to use",
+   "usage": "Card titles and page titles."
+  },
+  {
+   "name": "title",
+   "family": "sans",
+   "size": "24px",
+   "lh": "1.2",
+   "weight": 500,
+   "ls": "-0.03em",
+   "sample": "Sixty get another everyday.",
+   "usage": "Sub-heads inside steps and features."
+  },
+  {
+   "name": "numeral-xl",
+   "family": "display",
+   "size": "clamp(72px, 9vw, 120px)",
+   "lh": "1",
+   "weight": 400,
+   "ls": "-0.07em",
+   "sample": "60",
+   "usage": "The outcome numbers. Instrument Serif, tracked to -.07em, one per block.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "18px",
+   "lh": "1.7",
+   "weight": 400,
+   "sample": "Some come back whole. Some give something of themselves.",
+   "usage": "Step paragraphs and lead copy at a generous 1.7 leading."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "16px",
+   "lh": "1.6",
+   "weight": 400,
+   "sample": "Every device is assessed before its next path is decided.",
+   "usage": "Default reading and UI text."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "1.5",
+   "weight": 400,
+   "sample": "A fictional workshop story",
+   "usage": "Captions, notes, footer lines."
+  },
+  {
+   "name": "label",
+   "family": "mono",
+   "size": "11px",
+   "lh": "1.6",
+   "weight": 400,
+   "ls": "0.06em",
+   "tt": "uppercase",
+   "sample": "Field notes / 001",
+   "usage": "Eyebrows, nav links, legends, chapter numbers. Caps from CSS."
+  },
+  {
+   "name": "numeral",
+   "family": "display",
+   "size": "48px",
+   "lh": "1",
+   "weight": 400,
+   "ls": "-0.06em",
+   "sample": "240",
+   "usage": "KPI figures in tiles and tickets.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "12px",
+   "lh": "1.6",
+   "weight": 400,
+   "sample": "batch 001 · 60 / 25 / 15",
+   "usage": "Code, IDs, table figures."
+  }
+ ],
+ "idea_headline": "A field guide, set warm.",
+ "idea": "Almanac is the studio that prints field guides: warm paper, one green ink for everything written, one terracotta word where the eye should land, and hairlines so light they feel drawn. Numbers go enormous in a serif and sit still. Panels have arched tops. Buttons are outlines until you touch them. It is calm without being beige, because the one accent is earned.",
+ "use_for": "Scrolly explainers, landing pages for small makers and civic things, long reads, annual and impact reports, anything that wants to feel made by hand and read slowly.",
+ "avoid_when": "Dense operational dashboards, dev tools, anything that must feel fast or cold, and pages that need more than one accent per view.",
+ "principles_headline": "One ink, one word, one arch.",
+ "principles": [
+  [
+   "One ink writes everything.",
+   "Text, rules, figures, the first series: all forest green. Colour never carries meaning the ink could carry."
+  ],
+  [
+   "One terracotta word.",
+   "The accent lands on the emphasised word in a headline, the filled button, the second series. Twice on a view is once too many."
+  ],
+  [
+   "Hairlines, not boxes.",
+   "Separation is a 1px rule at a quarter strength above a block. Cards are rare and cast a soft terracotta shadow when they exist."
+  ],
+  [
+   "Numbers sit still.",
+   "Outcome numbers are set in the serif at -.07em, one per block, with the sentence under them. They are read, not scanned."
+  ],
+  [
+   "Arches hold the thing.",
+   "A panel with a rounded top holds one object: a device, a figure, a number. Everything else stays on the paper."
+  ]
+ ],
+ "voice": [
+  "Plain, kind, present tense: \"Sixty phones return to use.\"",
+  "Numbers spelled in the sentence, set as figures in the block.",
+  "Eyebrows in mono caps with a slash: \"FIELD NOTES / 001\".",
+  "Say what is invented: \"A fictional workshop story\" sits in the hero caption."
+ ],
+ "colour_headline": "Paper, green ink, terracotta, and a mauve for the third series.",
+ "colour_note": "Paper first. Night turns the ink into the ground and lifts the terracotta so it still lands. There is no blue anywhere; the mauve exists only as a chart series. Status text shares the green and the terracotta; warnings are an ochre. Tags are tints of the same inks.",
+ "chart_series": [
+  "ink",
+  "accent",
+  "mauve",
+  "positive",
+  "caution"
+ ],
+ "chart_note": "Green, terracotta, mauve: the three outcome colours from the field. Two more only when a chart truly has five series.",
+ "type_headline": "Instrument Serif for the big and the italic; DM Sans for reading; DM Mono for the small caps.",
+ "type_note": "Three Google-hosted families. Instrument Serif at 400 (there is no bold) carries display and numerals, tracked tight; the italic is the emphasised word. DM Sans at 400/500 reads at 1.6–1.7 leading. DM Mono at 11px caps carries eyebrows, legends and nav.",
+ "space_headline": "A generous rhythm: 1.7 leading, 45px gaps, 180px arches.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Legend pip gaps."
+  ],
+  [
+   "space-2 · 8px",
+   "Gaps inside controls."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y; the dialog action gap."
+  ],
+  [
+   "space-4 · 16px",
+   "Default stack gap; unit-field gaps on wide screens are 9–10px."
+  ],
+  [
+   "space-6 · 24px",
+   "Ticket and step padding; the summary row."
+  ],
+  [
+   "space-10 · 40px",
+   "Outcome-grid gaps; section-head margin."
+  ],
+  [
+   "space-16 · 64px",
+   "Section padding on wide screens."
+  ],
+  [
+   "space-28 · 112px",
+   "The hero top; chapter padding."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Buttons, tickets, cards, tiles. Square, with a hairline."
+  ],
+  [
+   "radius-4 · units",
+   "The small shapes in a field: 4px, or 50% 50% 12% 12% for the pip variant."
+  ],
+  [
+   "arch · 180px 180px 0 0",
+   "Panels that hold one thing. The signature edge."
+  ],
+  [
+   "hairline · 1px at 25%",
+   "The only border. Above blocks, between details, under the nav."
+  ]
+ ],
+ "depth": [
+  [
+   "shadow-soft",
+   "23px 23px 0 terracotta at 12%. On the device in a hero and on dialogs. Nothing else floats."
+  ],
+  [
+   "shadow-soft-sm",
+   "12px 12px 0 at 12% on tickets when they are interactive."
+  ],
+  [
+   "ground",
+   "The band and the screen tints stand in for elevation."
+  ],
+  [
+   "grain",
+   "None. Almanac is clean paper."
+  ]
+ ],
+ "motion": [
+  [
+   "Hover",
+   "Outlined buttons fill with ink and lift 2px, 200ms. The device straightens from its 12° tilt to 3°, 500ms."
+  ],
+  [
+   "Reveal",
+   "Sections and steps use the kit reveal-up at 650ms, 160ms stagger."
+  ],
+  [
+   "Field",
+   "Units outside the active outcome fade to 15% and scale to .88 over 600ms. The active ones fill."
+  ],
+  [
+   "Progress",
+   "A 3px terracotta progress line along the top of the page, driven by scroll in the live reader."
+  ],
+  [
+   "Loop",
+   "One ambient float at most, on the hero device. No marquee."
+  ],
+  [
+   "Reduced motion",
+   "Everything visible, nothing moves; the field stays fully filled."
+  ]
+ ],
+ "components_headline": "The kit on warm paper; the arch, the field and the outline are classes.",
+ "components_note": "Kit components take Almanac through the contract: paper and card grounds, terracotta primary, band secondary, hairline borders, 4px radius. The outlined button, the arch and the unit field are classes on authored elements: al-btn, al-arch, al-field.",
+ "buttons": "<Button>Book a place</Button><Button variant=\"secondary\">Read the story</Button><Button variant=\"outline\">Follow the batch</Button><Button variant=\"ghost\">Skip</Button><button className=\"al-btn al-btn-fill\">Book a place</button><button className=\"al-btn\">Follow the batch ↓</button>",
+ "buttons_note": "Kit buttons on the left; authored al-btn on the right: a 1px outline in ink that fills on hover, text in mono caps, a wide gap before the arrow. The filled variant is terracotta and there is one per view.",
+ "tags": "<Badge>Kept</Badge><Badge variant=\"secondary\">Band</Badge><Badge variant=\"outline\">Outline</Badge><Badge variant=\"destructive\">Lost</Badge><span className=\"al-tag\">Field notes</span><span className=\"al-tag al-tag-ink\">Kept</span><span className=\"al-tag al-tag-accent\">Parts</span><span className=\"al-tag al-tag-positive\">● Returned</span>",
+ "tags_note": "Tags are mono caps with a hairline, square. Status tags carry a pip or a word with the colour.",
+ "fields_note": "Fields are the card ground with a hairline; the focus ring is terracotta. Labels are mono caps.",
+ "stats": "<div className=\"al-outcome\"><span className=\"t-numeral-xl\"><Number data=\"$totals\" col=\"kept\" /></span><h3 className=\"t-title\">get another everyday.</h3><p className=\"t-body-s\">of 100 · back in use</p></div><div className=\"al-outcome\"><span className=\"t-numeral-xl al-accent\"><Number data=\"$totals\" col=\"parts\" /></span><h3 className=\"t-title\">help another along.</h3><p className=\"t-body-s\">of 100 · donor parts</p></div>",
+ "stats_note": "An outcome block: a hairline on top, the number enormous in the serif, the sentence under it, the share in small text. Three across on wide screens.",
+ "callouts": "<Alert><AlertTitle>A fictional workshop story</AlertTitle><AlertDescription>The batch is invented; every figure is shown as arithmetic.</AlertDescription></Alert><div className=\"al-callout\"><strong>Note.</strong> A fact about the batch, set between two hairlines.</div><div className=\"al-callout al-callout-positive\"><strong>Booked.</strong> Your place on Saturday is held.</div><div className=\"al-callout al-callout-negative\"><strong>No places left.</strong> The next workshop opens on the 24th.</div>",
+ "callouts_note": "A callout is text between two hairlines, with a soft tint when it carries status. The text stays ink.",
+ "chart_comp_note": "Charts take green, terracotta and mauve in that order. Bars are flat; lines are ink at 2px; axes are hairlines.",
+ "table_note": "Tables are ink on paper with hairline rows and serif figures; no container border.",
+ "card": "<div className=\"al-ticket\"><h3 className=\"t-display-m\">Saturday workshop</h3><p className=\"t-body-s al-muted\">Repair with us · places are free</p><div className=\"al-ticket-details\"><span className=\"t-label\">Date</span><span className=\"t-label\">Sat 10 Oct · 10:00</span></div><div className=\"al-ticket-details\"><span className=\"t-label\">Places</span><span className=\"t-label\"><Number data=\"$totals\" col=\"places_left\" /> of 20 left</span></div><div className=\"ds-row\"><button className=\"al-btn al-btn-fill\">Book a place</button><button className=\"al-btn\">Details</button></div></div>",
+ "card_note": "A ticket: the card ground, a serif title, details between hairlines, two buttons. It casts the soft shadow only when it opens as a dialog.",
+ "hand": {
+  "mode": "flat",
+  "shadow": true,
+  "headline": "Flat ink, hairline edges, a shadow you can see through.",
+  "note": "Almanac draws any subject with flat fills in green and terracotta, 1.5px ink outlines with round caps, and a terracotta shadow at 12% slipped 6px behind the main body. Small things are rounded; big panels get an arch. No gradients, no texture; the warmth comes from the paper and the ink.",
+  "rules": [
+   [
+    "Stroke",
+    "1.5px forest green, round caps and joins."
+   ],
+   [
+    "Fill",
+    "Flat green for the main share, terracotta for the second, paper-sunk for the rest."
+   ],
+   [
+    "Shadow",
+    "Terracotta at 12%, offset 6px, only behind the main body."
+   ],
+   [
+    "Corner",
+    "Small shapes 4–6px or pill; panels arched 180px at the top."
+   ],
+   [
+    "Figures",
+    "DM Mono caps at 11px; Instrument Serif for the one number."
+   ],
+   [
+    "Motion",
+    "The drawing may float once or tilt 12° and straighten on hover."
+   ]
+  ]
+ },
+ "motifs_headline": "The arch, the field, and the ticket.",
+ "motifs_note": "Three devices from the field guide: a panel that holds one thing, a hundred small shapes that show a share, and a card whose details sit between hairlines. Each is drawn with the hand variables, so it ports.",
+ "motifs": [
+  {
+   "title": "The arch",
+   "usage": "A panel with a 180px rounded top on the band ground, one object centred inside, the soft shadow slipped behind. Use it for the hero device, a figure, or one big number.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>The arch: a panel with a rounded top, the thing inside it centred, a translucent shadow slipped behind</title><rect className=\"al-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"200\"/>\n<path className=\"al-shadow\" d=\"M164 200 V96 A80 80 0 0 1 324 96 V200 Z\"/><path className=\"al-band\" d=\"M150 200 V84 A80 80 0 0 1 310 84 V200 Z\"/>\n<text x=\"230\" y=\"150\" className=\"al-num\" textAnchor=\"middle\">25</text><text x=\"230\" y=\"176\" className=\"al-mono\" textAnchor=\"middle\">PARTS</text>\n<text x=\"24\" y=\"36\" className=\"al-mono\">RADIUS 180PX 180PX 0 0 · SHADOW 23PX 23PX 0 AT 12%</text></svg>"
+  },
+  {
+   "title": "The unit field",
+   "usage": "One hundred small rounded shapes in a grid, coloured by outcome in green, terracotta and outline. Each shape is one of something; the caption says what.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>The unit field: one hundred small rounded shapes, coloured by outcome</title><rect className=\"al-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"200\"/><rect className=\"al-fill\" x=\"40\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"60\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"80\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"100\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"120\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"140\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"160\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"180\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"200\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"220\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"240\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"260\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"280\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"300\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"320\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"340\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"360\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"380\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"400\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"420\" y=\"44\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"40\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"60\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"80\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"100\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"120\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"140\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"160\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"180\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"200\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"220\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"240\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"260\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"280\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"300\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"320\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"340\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"360\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"380\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"400\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"420\" y=\"68\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"40\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"60\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"80\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"100\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"120\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"140\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"160\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"180\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"200\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"220\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"240\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"260\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"280\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"300\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"320\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"340\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"360\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"380\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"400\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill\" x=\"420\" y=\"92\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"40\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"60\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"80\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"100\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"120\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"140\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"160\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"180\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"200\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"220\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"240\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"260\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"280\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"300\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"320\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"340\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"360\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"380\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"400\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"420\" y=\"116\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"40\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"60\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"80\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"100\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-fill2\" x=\"120\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"140\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"160\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"180\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"200\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"220\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"240\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"260\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"280\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"300\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"320\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"340\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"360\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"380\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"400\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><rect className=\"al-outline\" x=\"420\" y=\"140\" width=\"12\" height=\"16\" rx=\"6\"/><text x=\"40\" y=\"188\" className=\"al-mono\">EACH SHAPE IS ONE OF A HUNDRED · 60 / 25 / 15</text><line className=\"al-line\" x1=\"40\" y1=\"170\" x2=\"440\" y2=\"170\"/></svg>"
+  },
+  {
+   "title": "The ticket",
+   "usage": "A card with a serif title, details between two hairlines, and an outlined button that fills on hover. Dialogs, bookings, summaries.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>The ticket: a card whose details sit between two hairlines, with an outlined button that fills on hover</title><rect className=\"al-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"200\"/>\n<rect className=\"al-shadow\" x=\"72\" y=\"36\" width=\"340\" height=\"150\"/><rect className=\"al-card\" x=\"60\" y=\"24\" width=\"340\" height=\"150\"/>\n<text x=\"84\" y=\"60\" className=\"al-serif-t\">Saturday workshop</text><text x=\"84\" y=\"80\" className=\"al-mono\">PLACES · 12 OF 20</text>\n<line className=\"al-line\" x1=\"84\" y1=\"96\" x2=\"376\" y2=\"96\"/><text x=\"84\" y=\"116\" className=\"al-mono\">DATE</text><text x=\"376\" y=\"116\" className=\"al-mono\" textAnchor=\"end\">SAT 10 OCT · 10:00</text><line className=\"al-line\" x1=\"84\" y1=\"128\" x2=\"376\" y2=\"128\"/>\n<rect className=\"al-btn-o\" x=\"84\" y=\"142\" width=\"120\" height=\"30\"/><text x=\"144\" y=\"161\" className=\"al-mono\" textAnchor=\"middle\">BOOK A PLACE</text>\n<rect className=\"al-btn-f\" x=\"216\" y=\"142\" width=\"96\" height=\"30\"/><text x=\"264\" y=\"161\" className=\"al-mono al-on-fill\" textAnchor=\"middle\">HOVER</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Almanac.",
+ "sample_note": "A landing opener for a neighbourhood tool library: the nav on a hairline, the headline with one italic terracotta word, the device in an arch with the soft shadow, then three outcome blocks fed by data.",
+ "sample": "<div className=\"al-sample\">\n  <div className=\"al-nav\"><span className=\"al-wordmark\">the lending shed.</span><span className=\"t-label al-navlinks\">Field notes / 001 · The breakdown ↗</span></div>\n  <div className=\"al-hero\">\n    <div className=\"al-hero-words\">\n      <h2 className=\"t-display-xl al-hero-h\">Borrow the drill. <em>Keep</em> the weekend.</h2>\n      <p className=\"t-body-l al-hero-p\">A neighbourhood tool library: four hundred tools, one shed, and a Saturday workshop where things get fixed instead of replaced.</p>\n      <span className=\"al-btn al-scroll\">Follow a tool <span>↓</span></span>\n    </div>\n    <div className=\"al-arch\"><div className=\"al-device\"><span className=\"al-device-n t-numeral-xl\"><Number data=\"$totals\" col=\"kept\" /></span><span className=\"al-device-m\">of 100 tools came back whole.</span><span className=\"t-label\">A fictional shed</span></div></div>\n    <div className=\"al-hero-cap t-label\"><span>Batch / 001</span><span>100 tools / three paths</span></div>\n  </div>\n  <div className=\"al-outcomes\">\n    <div className=\"al-outcome\"><span className=\"t-numeral-xl\"><Number data=\"$totals\" col=\"kept\" /></span><h3 className=\"t-title\">came back whole.</h3><p className=\"t-body\">Cleaned, oiled, back on the shelf for the next person.</p></div>\n    <div className=\"al-outcome\"><span className=\"t-numeral-xl al-accent\"><Number data=\"$totals\" col=\"parts\" /></span><h3 className=\"t-title\">gave a part away.</h3><p className=\"t-body\">A motor here, a battery there. They keep others running.</p></div>\n    <div className=\"al-outcome\"><span className=\"t-numeral-xl al-mauve\"><Number data=\"$totals\" col=\"retired\" /></span><h3 className=\"t-title\">were simply done.</h3><p className=\"t-body\">Weighed, sorted and sent to the recycler as clean metal.</p></div>\n  </div>\n  <div className=\"al-breakdown\">\n    <div className=\"al-total-bar\"><span className=\"al-r60 t-numeral\">60</span><span className=\"al-r25 t-numeral\">25</span><span className=\"al-r15 t-numeral\">15</span></div>\n    <p className=\"t-label al-eq\">60 + 25 + 15 = 100 · every tool has a next destination · figures illustrative</p>\n  </div>\n</div>",
+ "dos": [
+  "One terracotta word per headline; the rest stays green.",
+  "Hairlines above blocks, never boxes around them.",
+  "Numbers enormous in the serif, with the sentence underneath.",
+  "Hold one thing in an arch; leave the rest on the paper."
+ ],
+ "donts": [
+  "No bold serif (there is none); emphasis is the italic.",
+  "No blue, no second red; mauve is a chart series only.",
+  "No drop shadows except the terracotta one at 12%.",
+  "No more than one filled button per view."
+ ],
+ "binding_losses": "The arch, the translucent offset shadow, the hairline-at-a-quarter rule, the band and screen grounds, and the unit field have no contract slot. They are carried as --ds-* properties and the al-* classes above; kit components take paper, ink and terracotta but stay square.",
+ "footer": "Paper first, Night second. Fonts: Instrument Serif 400 + italic, DM Sans 400/500/700, DM Mono 400/500, Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "month": "Jun",
+    "path": "Kept",
+    "tools": 14
+   },
+   {
+    "month": "Jun",
+    "path": "Parts",
+    "tools": 6
+   },
+   {
+    "month": "Jun",
+    "path": "Retired",
+    "tools": 4
+   },
+   {
+    "month": "Jul",
+    "path": "Kept",
+    "tools": 16
+   },
+   {
+    "month": "Jul",
+    "path": "Parts",
+    "tools": 7
+   },
+   {
+    "month": "Jul",
+    "path": "Retired",
+    "tools": 3
+   },
+   {
+    "month": "Aug",
+    "path": "Kept",
+    "tools": 15
+   },
+   {
+    "month": "Aug",
+    "path": "Parts",
+    "tools": 6
+   },
+   {
+    "month": "Aug",
+    "path": "Retired",
+    "tools": 4
+   },
+   {
+    "month": "Sep",
+    "path": "Kept",
+    "tools": 15
+   },
+   {
+    "month": "Sep",
+    "path": "Parts",
+    "tools": 6
+   },
+   {
+    "month": "Sep",
+    "path": "Retired",
+    "tools": 4
+   }
+  ],
+  "queries": {
+   "series": "select month, path, tools from rows order by month, path",
+   "table": "select path, sum(tools) as tools, round(100.0*sum(tools)/(select sum(tools) from rows)) as share from rows group by path order by tools desc",
+   "totals": "select sum(tools) as tools, sum(case when path='Kept' then tools end) as kept, sum(case when path='Parts' then tools end) as parts, sum(case when path='Retired' then tools end) as retired, round(100.0*sum(case when path='Kept' then tools end)/sum(tools)) as kept_pct, 8 as places_left from rows"
+  },
+  "segments": [
+   "Month",
+   "Quarter",
+   "Year"
+  ],
+  "segment_default": "Month",
+  "select_label": "Path",
+  "input_placeholder": "Find a tool",
+  "switch_label": "Show retired",
+  "tabs": [
+   "Story",
+   "Breakdown",
+   "Workshops"
+  ],
+  "tab_body": "Story: the batch, one chapter per path.",
+  "progress_label": "Batch assessed · 72%",
+  "progress": 72,
+  "chart_title": "Tools by path, month by month",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar"
+    },
+    "encoding": {
+     "x": {
+      "field": "month",
+      "type": "ordinal",
+      "title": "Month",
+      "sort": [
+       "Jun",
+       "Jul",
+       "Aug",
+       "Sep"
+      ]
+     },
+     "y": {
+      "field": "tools",
+      "type": "quantitative",
+      "title": "Tools"
+     },
+     "color": {
+      "field": "path",
+      "type": "nominal",
+      "title": "Path"
+     },
+     "xOffset": {
+      "field": "path"
+     }
+    }
+   }
+  },
+  "row_key": "path",
+  "table_columns": [
+   {
+    "col": "path",
+    "title": "Path"
+   },
+   {
+    "col": "tools",
+    "title": "Tools",
+    "align": "right"
+   },
+   {
+    "col": "share",
+    "title": "Share %",
+    "fmt": ".0f",
+    "align": "right",
+    "bar": true
+   }
+  ],
+  "table_height": "200px"
+ },
+ "btn_primary": "al-btn al-btn-fill",
+ "btn_secondary": "al-btn",
+ "tpl": {
+  "brand": "the lending shed.",
+  "dash_title": "Batch 001 · tools by path",
+  "kpis": [
+   [
+    "Tools in",
+    "tools",
+    "",
+    "",
+    null,
+    "one batch, four months"
+   ],
+   [
+    "Came back whole",
+    "kept",
+    "",
+    "",
+    null,
+    "cleaned and reshelved"
+   ],
+   [
+    "Kept share",
+    "kept_pct",
+    "",
+    "%",
+    null,
+    "▲ 4 pts vs last batch"
+   ]
+  ],
+  "dash_table_title": "By path",
+  "slide_eyebrow": "Impact review",
+  "slide_title": "A different kind of upgrade.",
+  "slide_sub": "One hundred tools, three paths, and the weekend they gave back.",
+  "slide_foot": "A fictional shed · figures illustrative",
+  "slide_stat_label": "Kept share",
+  "slide_stat_col": "kept_pct",
+  "slide_stat_suffix": "%",
+  "slide_body": "Of every hundred tools lent out, this many came back whole and went straight back on the shelf.",
+  "split": [
+   "KEPT · 60",
+   "PARTS + RETIRED · 40"
+  ],
+  "ed_kicker": "Field notes / 002",
+  "ed_headline": "Life, after low battery.",
+  "ed_deck": "Some come back whole. Some give something of themselves. Every tool in the shed has a next destination, and this is how a hundred of them found theirs.",
+  "ed_byline": "Words and pictures: the shed · a fictional story",
+  "ed_body": "The shed takes in a hundred tools a season. Each one is assessed on a Saturday before its next path is decided: back on the shelf, into the parts drawer, or off to the recycler. Sixty come back whole after a clean and an oiling. Twenty-five give a motor or a battery to another tool. Fifteen are simply done, and they leave as clean metal.",
+  "ed_pull_col": "kept",
+  "ed_pull_label": "Tools kept, of 100",
+  "steps": [
+   [
+    "One batch, one hundred possibilities.",
+    "A hundred tools arrive over a season. Each small shape is one of them; nothing is decided yet."
+   ],
+   [
+    "Sixty get another everyday.",
+    "They come back whole: cleaned, oiled, reshelved. Their story continues as complete tools."
+   ]
+  ],
+  "step_caption": "Batch / 001 · each shape is one tool · illustrative",
+  "app_rows": [
+   [
+    "Cordless drill · 014",
+    "Returned Sat · oiled",
+    "Kept",
+    "ok"
+   ],
+   [
+    "Jigsaw · 031",
+    "Blade missing",
+    "Pending",
+    "warn"
+   ],
+   [
+    "Sander · 007",
+    "Motor burnt out",
+    "Retired",
+    "bad"
+   ],
+   [
+    "Ladder · 102",
+    "Not yet assessed",
+    "Intake",
+    "idle"
+   ]
+  ],
+  "app_cta": "Lend a tool",
+  "app_cta2": "Save",
+  "landing_eyebrow": "The lending shed",
+  "landing_headline": "Borrow the drill. Keep the weekend.",
+  "landing_sub": "Four hundred tools, one shed, and a Saturday workshop where things get fixed instead of replaced. Free to join.",
+  "cta": "Find the shed",
+  "cta2": "Follow a tool",
+  "features": [
+   [
+    "Borrow",
+    "Any tool for a week. Bring it back on a Saturday."
+   ],
+   [
+    "Fix",
+    "Workshops every Saturday, places are free, tea is on."
+   ],
+   [
+    "Pass on",
+    "A tool that is done gives its parts to the next one."
+   ]
+  ]
+ },
+ "css": "\n.ds-almanac { --ds-cover-bg: var(--ds-paper); --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-ink); --ds-hand-fill2: var(--ds-accent); --ds-hand-muted: var(--ds-paper-sunk); --ds-hand-ground: var(--ds-card); --ds-hand-stroke: 1.5; --ds-hand-cap: round; --ds-hand-shadow: #b44e3020; --ds-hand-bg: var(--ds-paper);\n  --ds-tpl-edge: 1px solid var(--ds-line); --ds-tpl-radius: 0; --ds-tpl-rule: 1px solid var(--ds-line); --ds-tpl-tile-shadow: none; --ds-tag-radius: 0;\n  --ds-slide-bg: var(--ds-paper); --ds-slide-fg: var(--ds-ink); --ds-slide-title-bg: var(--ds-band); --ds-slide-title-fg: var(--ds-ink); --ds-slide-split-a: var(--ds-ink); --ds-slide-split-a-fg: var(--ds-paper); --ds-slide-split-b: var(--ds-accent); --ds-slide-split-b-fg: var(--ds-on-accent); --ds-hero-bg: var(--ds-band); }\n.dark .ds-almanac { --ds-hand-shadow: #e07a5826; }\n.ds-almanac .ds-cover-name, .ds-almanac .ds-section h2 { font-weight: 400; }\n.ds-almanac .ds-chip { font-family: var(--font-mono); font-weight: 400; border-color: var(--ds-line); }\n.ds-almanac .ds-principle-n { font-family: var(--font-display); font-weight: 400; font-size: 40px; letter-spacing: -.05em; color: var(--ds-accent); }\n.ds-almanac .ds-tpl-slide-h, .ds-almanac .ds-tpl-hero-h, .ds-almanac .ds-tpl-ed-h, .ds-almanac .ds-tpl-brand, .ds-almanac .ds-tpl-slide-big, .ds-almanac .ds-tpl-dropcap { font-weight: 400; letter-spacing: -.05em; }\n.ds-almanac .ds-tpl-brand { letter-spacing: -.07em; font-family: var(--font-body); font-weight: 600; font-size: 22px; text-transform: lowercase; }\n.ds-almanac .h-num { font-weight: 400; letter-spacing: -.06em; font-size: 48px; }\n.ds-almanac .al-paper { fill: var(--ds-paper); } .ds-almanac .al-card { fill: var(--ds-card); stroke: var(--ds-line); stroke-width: 1; }\n.ds-almanac .al-band { fill: var(--ds-band); } .ds-almanac .al-shadow { fill: var(--ds-hand-shadow); }\n.ds-almanac .al-fill { fill: var(--ds-hand-fill, var(--ds-ink)); } .ds-almanac .al-fill2 { fill: var(--ds-hand-fill2, var(--ds-accent)); } .ds-almanac .al-muted { fill: var(--ds-hand-muted, var(--ds-paper-sunk)); } .ds-almanac .al-outline { fill: none; stroke: var(--ds-hand-ink, var(--ds-ink)); stroke-width: 1.2; }\n.ds-almanac .al-line { stroke: var(--ds-line); stroke-width: 1; }\n.ds-almanac .al-num { font-family: var(--font-display); font-size: 84px; letter-spacing: -.07em; fill: var(--ds-hand-ink, var(--ds-ink)); } .ds-almanac .al-mono { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; fill: var(--ds-hand-ink, var(--ds-ink)); }\n.ds-almanac .al-serif-i { font-family: var(--font-display); font-style: italic; font-size: 20px; letter-spacing: -.02em; fill: var(--ds-hand-ink, var(--ds-ink)); } .ds-almanac .al-serif-t { font-family: var(--font-display); font-size: 26px; letter-spacing: -.03em; fill: var(--ds-ink); }\n.ds-almanac .al-btn-o { fill: none; stroke: var(--ds-hand-ink, var(--ds-ink)); stroke-width: 1; } .ds-almanac .al-btn-f { fill: var(--ds-hand-ink, var(--ds-ink)); } .ds-almanac .al-on-fill { fill: var(--ds-paper); }\n.ds-almanac .al-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 30px; padding: 15px 22px; border: 1px solid currentColor; background: transparent; color: inherit; font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; line-height: 1; cursor: pointer; transition: background 200ms, color 200ms, transform 200ms; }\n.ds-almanac .al-btn:hover { background: var(--ds-ink); color: var(--ds-paper); transform: translateY(-2px); }\n.ds-almanac .al-btn:focus-visible { outline: 3px solid var(--ds-accent); outline-offset: 6px; }\n.ds-almanac .al-btn-fill { background: var(--ds-accent); border-color: var(--ds-accent); color: var(--ds-on-accent); } .ds-almanac .al-btn-fill:hover { background: var(--ds-ink); border-color: var(--ds-ink); }\n.ds-almanac .al-tag { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--ds-line); font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; line-height: 1; color: var(--ds-ink); }\n.ds-almanac .al-tag-ink { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-paper); } .ds-almanac .al-tag-accent { background: var(--ds-accent); border-color: var(--ds-accent); color: var(--ds-on-accent); } .ds-almanac .al-tag-positive { background: var(--ds-positive-soft); border-color: var(--ds-positive-soft); color: var(--ds-positive); }\n.ds-almanac .al-outcome { border-top: 1px solid var(--ds-line); padding-top: 22px; display: grid; gap: 12px; align-content: start; min-width: 200px; }\n.ds-almanac .al-outcome h3 { margin: 0; } .ds-almanac .al-outcome p { margin: 0; color: var(--ds-ink-muted); }\n.ds-almanac .al-accent { color: var(--ds-accent); } .ds-almanac .al-mauve { color: var(--ds-mauve); } .ds-almanac .al-muted { color: var(--ds-ink-muted); }\n.ds-almanac .ds-stats { gap: 40px; align-items: start; }\n.ds-almanac .al-callout { padding: 16px 0; border-top: 1px solid var(--ds-line); border-bottom: 1px solid var(--ds-line); line-height: 1.6; font-size: 16px; } .ds-almanac .al-callout strong { font-weight: 500; }\n.ds-almanac .al-callout-positive { background: var(--ds-positive-soft); padding: 16px 18px; border: 0; } .ds-almanac .al-callout-negative { background: var(--ds-negative-soft); padding: 16px 18px; border: 0; }\n.ds-almanac .al-ticket { background: var(--ds-card); border: 1px solid var(--ds-line); padding: 32px 30px; max-width: 520px; display: grid; gap: 6px; }\n.ds-almanac .al-ticket h3 { margin: 0; } .ds-almanac .al-ticket p { margin: 0; }\n.ds-almanac .al-ticket-details { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--ds-line); } .ds-almanac .al-ticket-details + .al-ticket-details { border-top: 0; margin-top: -8px; border-bottom: 1px solid var(--ds-line); margin-bottom: 14px; }\n.ds-almanac .al-sample { background: var(--ds-paper); }\n.ds-almanac .al-nav { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 25px 20px; border-bottom: 1px solid var(--ds-line); }\n.ds-almanac .al-wordmark { font-family: var(--font-body); font-size: 23px; font-weight: 600; letter-spacing: -.07em; }\n.ds-almanac .al-hero { position: relative; display: grid; gap: 40px; padding: 56px 20px 72px; background: var(--ds-band); }\n.ds-almanac .al-hero-h { margin: 0; max-width: 11ch; } .ds-almanac .al-hero-h em { color: var(--ds-accent); }\n.ds-almanac .al-hero-p { margin: 28px 0 0; max-width: 400px; font-size: 17px; }\n.ds-almanac .al-scroll { margin-top: 36px; border: 0; border-bottom: 1px solid currentColor; padding: 0 0 12px; gap: 40px; } .ds-almanac .al-scroll:hover { background: transparent; color: inherit; transform: none; }\n.ds-almanac .al-arch { position: relative; justify-self: center; width: min(100%, 360px); padding: 56px 28px 36px; background: var(--ds-screen); border-radius: 180px 180px 0 0; box-shadow: var(--ds-shadow-soft); display: grid; place-items: center; text-align: center; transform: rotate(-3deg); transition: transform 500ms; }\n.ds-almanac .al-arch:hover { transform: rotate(0deg) translateY(-8px); }\n.ds-almanac .al-device { display: grid; gap: 10px; justify-items: center; }\n.ds-almanac .al-device-n { font-size: clamp(72px, 10vw, 115px); line-height: 1; }\n.ds-almanac .al-device-m { font-size: 22px; line-height: 1.1; letter-spacing: -.04em; max-width: 14ch; }\n.ds-almanac .al-hero-cap { display: flex; justify-content: space-between; gap: 25px; grid-column: 1 / -1; color: var(--ds-ink-muted); }\n.ds-almanac .al-outcomes { display: grid; gap: 40px; padding: 56px 20px 0; }\n.ds-almanac .al-breakdown { padding: 56px 20px 72px; }\n.ds-almanac .al-total-bar { display: flex; height: 96px; border-radius: 70px 70px 0 0; overflow: hidden; }\n.ds-almanac .al-total-bar span { display: flex; align-items: center; padding: 20px; font-size: 48px; letter-spacing: -.06em; }\n.ds-almanac .al-r60 { width: 60%; background: var(--ds-ink); color: var(--ds-paper); } .ds-almanac .al-r25 { width: 25%; background: var(--ds-accent); color: var(--ds-on-accent); } .ds-almanac .al-r15 { width: 15%; background: var(--ds-mauve); color: var(--ds-paper); }\n.ds-almanac .al-eq { margin: 24px 0 0; color: var(--ds-ink-muted); }\n.ds-almanac .ds-tpl-tag.is-idle { background: var(--ds-paper-sunk); }\n.ds-almanac .ds-tpl-figure, .ds-almanac .ds-tpl-hero-art { border-radius: 180px 180px 0 0; padding: 40px 24px 16px; background: var(--ds-screen); box-shadow: var(--ds-shadow-soft-sm); }\n.ds-almanac .ds-tpl-hero-art { background: var(--ds-screen); }\n.ds-almanac .ds-tpl-kpi, .ds-almanac .ds-tpl-tile, .ds-almanac .ds-tpl-step { border: 0; border-top: 1px solid var(--ds-line); background: transparent; padding-left: 0; padding-right: 0; }\n.ds-almanac .ds-tpl-stage-title .ds-tpl-stage-foot { border-top-color: var(--ds-ink); }\n@container (min-width: 760px) {\n  .ds-almanac .al-nav { padding: 25px 40px; }\n  .ds-almanac .al-hero { grid-template-columns: 1.25fr 1fr; align-items: center; padding: 72px 40px 80px; }\n  .ds-almanac .al-arch { transform: rotate(-6deg); }\n  .ds-almanac .al-outcomes { grid-template-columns: 1fr 1fr 1fr; padding: 72px 40px 0; }\n  .ds-almanac .al-breakdown { padding: 64px 40px 80px; }\n}\n"
+}

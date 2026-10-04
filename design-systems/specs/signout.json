@@ -1,0 +1,717 @@
+{
+ "slug": "signout",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Signout cover: hazard tape, a sheet grid of cells with one hatched and one picked, a 2px rule and a stamp</title>\n<rect className=\"so-kraft\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<g className=\"so-haz\"><rect x=\"0\" y=\"0\" width=\"480\" height=\"12\"/><g className=\"so-haz-ink\"><polygon points=\"0,0 16,0 8,10 -8,10\" /><polygon points=\"32,0 48,0 40,10 24,10\" /><polygon points=\"64,0 80,0 72,10 56,10\" /><polygon points=\"96,0 112,0 104,10 88,10\" /><polygon points=\"128,0 144,0 136,10 120,10\" /><polygon points=\"160,0 176,0 168,10 152,10\" /><polygon points=\"192,0 208,0 200,10 184,10\" /><polygon points=\"224,0 240,0 232,10 216,10\" /><polygon points=\"256,0 272,0 264,10 248,10\" /><polygon points=\"288,0 304,0 296,10 280,10\" /><polygon points=\"320,0 336,0 328,10 312,10\" /><polygon points=\"352,0 368,0 360,10 344,10\" /><polygon points=\"384,0 400,0 392,10 376,10\" /><polygon points=\"416,0 432,0 424,10 408,10\" /><polygon points=\"448,0 464,0 456,10 440,10\" /><polygon points=\"480,0 496,0 488,10 472,10\" /></g></g>\n<text x=\"24\" y=\"66\" className=\"so-cond\">SHEET 01</text><text x=\"200\" y=\"52\" className=\"so-blk\">SIGN-OUT · ROW IS A THING · COLUMN IS AN HOUR</text><text x=\"200\" y=\"66\" className=\"so-blk so-muted-f\">OPEN · YOURS · TAKEN</text>\n<line className=\"so-rule2\" x1=\"24\" y1=\"82\" x2=\"456\" y2=\"82\"/>\n<defs><clipPath id=\"so-h1\"><rect x=\"208\" y=\"144\" width=\"112\" height=\"48\"/></clipPath><clipPath id=\"so-h2\"><rect x=\"88\" y=\"200\" width=\"112\" height=\"48\"/></clipPath></defs>\n<g className=\"so-grid\">\n<rect x=\"24\" y=\"98\" width=\"56\" height=\"38\"/><rect x=\"88\" y=\"98\" width=\"112\" height=\"38\"/><rect x=\"208\" y=\"98\" width=\"112\" height=\"38\"/><rect x=\"328\" y=\"98\" width=\"128\" height=\"38\"/>\n<rect x=\"24\" y=\"144\" width=\"56\" height=\"48\"/><rect x=\"88\" y=\"144\" width=\"112\" height=\"48\"/><rect x=\"208\" y=\"144\" width=\"112\" height=\"48\"/><rect x=\"328\" y=\"144\" width=\"128\" height=\"48\"/>\n<rect x=\"24\" y=\"200\" width=\"56\" height=\"48\"/><rect x=\"88\" y=\"200\" width=\"112\" height=\"48\"/><rect x=\"208\" y=\"200\" width=\"112\" height=\"48\"/><rect x=\"328\" y=\"200\" width=\"128\" height=\"48\"/>\n</g>\n<text x=\"32\" y=\"122\" className=\"so-blk\">ROW</text><text x=\"96\" y=\"122\" className=\"so-blk\">A · 10:00</text><text x=\"216\" y=\"122\" className=\"so-blk\">B · 11:00</text><text x=\"336\" y=\"122\" className=\"so-blk\">C · 12:00</text>\n<text x=\"40\" y=\"174\" className=\"so-cond-s\">01</text><text x=\"96\" y=\"172\" className=\"so-blk\">OPEN</text><g clipPath=\"url(#so-h1)\" className=\"so-hatch\" transform=\"translate(208 144)\"><line x1=\"-40\" y1=\"0\" x2=\"0\" y2=\"40\" /><line x1=\"-32\" y1=\"0\" x2=\"8\" y2=\"40\" /><line x1=\"-24\" y1=\"0\" x2=\"16\" y2=\"40\" /><line x1=\"-16\" y1=\"0\" x2=\"24\" y2=\"40\" /><line x1=\"-8\" y1=\"0\" x2=\"32\" y2=\"40\" /><line x1=\"0\" y1=\"0\" x2=\"40\" y2=\"40\" /><line x1=\"8\" y1=\"0\" x2=\"48\" y2=\"40\" /><line x1=\"16\" y1=\"0\" x2=\"56\" y2=\"40\" /><line x1=\"24\" y1=\"0\" x2=\"64\" y2=\"40\" /><line x1=\"32\" y1=\"0\" x2=\"72\" y2=\"40\" /><line x1=\"40\" y1=\"0\" x2=\"80\" y2=\"40\" /><line x1=\"48\" y1=\"0\" x2=\"88\" y2=\"40\" /><line x1=\"56\" y1=\"0\" x2=\"96\" y2=\"40\" /><line x1=\"64\" y1=\"0\" x2=\"104\" y2=\"40\" /><line x1=\"72\" y1=\"0\" x2=\"112\" y2=\"40\" /><line x1=\"80\" y1=\"0\" x2=\"120\" y2=\"40\" /><line x1=\"88\" y1=\"0\" x2=\"128\" y2=\"40\" /><line x1=\"96\" y1=\"0\" x2=\"136\" y2=\"40\" /><line x1=\"104\" y1=\"0\" x2=\"144\" y2=\"40\" /><line x1=\"112\" y1=\"0\" x2=\"152\" y2=\"40\" /><line x1=\"120\" y1=\"0\" x2=\"160\" y2=\"40\" /><line x1=\"128\" y1=\"0\" x2=\"168\" y2=\"40\" /><line x1=\"136\" y1=\"0\" x2=\"176\" y2=\"40\" /><line x1=\"144\" y1=\"0\" x2=\"184\" y2=\"40\" /><line x1=\"152\" y1=\"0\" x2=\"192\" y2=\"40\" /></g><text x=\"216\" y=\"172\" className=\"so-blk so-on-hatch\">TAKEN</text><rect className=\"so-pick\" x=\"328\" y=\"144\" width=\"128\" height=\"48\"/><text x=\"336\" y=\"172\" className=\"so-blk so-on-pick\">YOURS</text>\n<text x=\"40\" y=\"230\" className=\"so-cond-s\">02</text><g clipPath=\"url(#so-h2)\" className=\"so-hatch\" transform=\"translate(88 200)\"><line x1=\"-40\" y1=\"0\" x2=\"0\" y2=\"40\" /><line x1=\"-32\" y1=\"0\" x2=\"8\" y2=\"40\" /><line x1=\"-24\" y1=\"0\" x2=\"16\" y2=\"40\" /><line x1=\"-16\" y1=\"0\" x2=\"24\" y2=\"40\" /><line x1=\"-8\" y1=\"0\" x2=\"32\" y2=\"40\" /><line x1=\"0\" y1=\"0\" x2=\"40\" y2=\"40\" /><line x1=\"8\" y1=\"0\" x2=\"48\" y2=\"40\" /><line x1=\"16\" y1=\"0\" x2=\"56\" y2=\"40\" /><line x1=\"24\" y1=\"0\" x2=\"64\" y2=\"40\" /><line x1=\"32\" y1=\"0\" x2=\"72\" y2=\"40\" /><line x1=\"40\" y1=\"0\" x2=\"80\" y2=\"40\" /><line x1=\"48\" y1=\"0\" x2=\"88\" y2=\"40\" /><line x1=\"56\" y1=\"0\" x2=\"96\" y2=\"40\" /><line x1=\"64\" y1=\"0\" x2=\"104\" y2=\"40\" /><line x1=\"72\" y1=\"0\" x2=\"112\" y2=\"40\" /><line x1=\"80\" y1=\"0\" x2=\"120\" y2=\"40\" /><line x1=\"88\" y1=\"0\" x2=\"128\" y2=\"40\" /><line x1=\"96\" y1=\"0\" x2=\"136\" y2=\"40\" /><line x1=\"104\" y1=\"0\" x2=\"144\" y2=\"40\" /><line x1=\"112\" y1=\"0\" x2=\"152\" y2=\"40\" /><line x1=\"120\" y1=\"0\" x2=\"160\" y2=\"40\" /><line x1=\"128\" y1=\"0\" x2=\"168\" y2=\"40\" /><line x1=\"136\" y1=\"0\" x2=\"176\" y2=\"40\" /><line x1=\"144\" y1=\"0\" x2=\"184\" y2=\"40\" /><line x1=\"152\" y1=\"0\" x2=\"192\" y2=\"40\" /></g><text x=\"96\" y=\"228\" className=\"so-blk so-on-hatch\">TAKEN</text><text x=\"216\" y=\"228\" className=\"so-blk\">OPEN</text><text x=\"336\" y=\"228\" className=\"so-blk\">OPEN</text>\n<g transform=\"rotate(-10 392 268)\"><rect className=\"so-stamp\" x=\"336\" y=\"252\" width=\"112\" height=\"30\"/><text x=\"392\" y=\"273\" className=\"so-stamp-t\" textAnchor=\"middle\">SIGNED</text></g>\n<text x=\"24\" y=\"274\" className=\"so-blk so-muted-f\">ONE VERMILION PER SHEET · HATCH MEANS TAKEN</text></svg>",
+ "name": "Signout",
+ "tagline": "Pick a machine. Pick an hour. Sign the sheet.",
+ "mood": "Utilitarian",
+ "jobs": "Booking apps, intake forms, rosters, inventories",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Barlow Condensed",
+   "ital,wght@0,500;0,700;0,800;1,700"
+  ],
+  [
+   "Barlow",
+   "wght@400;500;600"
+  ],
+  [
+   "JetBrains Mono",
+   "wght@400;500;600;700"
+  ]
+ ],
+ "families": {
+  "display": "\"Barlow Condensed\", \"Arial Narrow\", sans-serif",
+  "sans": "\"Barlow\", system-ui, sans-serif",
+  "mono": "\"JetBrains Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "kraft",
+   "light": "#f3ecdc",
+   "dark": "#14201a",
+   "usage": "Page ground: kraft paper by day; the chalkboard at night.",
+   "group": "Grounds"
+  },
+  {
+   "name": "kraft-raised",
+   "light": "#faf6ec",
+   "dark": "#1b2a22",
+   "usage": "Sheets, slots, fields.",
+   "group": "Grounds"
+  },
+  {
+   "name": "kraft-sunk",
+   "light": "#e8dfca",
+   "dark": "#0e1712",
+   "usage": "Wells, column heads, code.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#c9bc9c",
+   "dark": "#35493d",
+   "usage": "Hairline rules; the grid of the sheet; the hatch.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#16140f",
+   "dark": "#ede6d6",
+   "usage": "Marker by day, chalk by night: all text, the 2px grid, the stamp outline.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#5b5344",
+   "dark": "#a9b3a4",
+   "usage": "Secondary text, timestamps, the small print.",
+   "group": "Ink"
+  },
+  {
+   "name": "vermilion",
+   "light": "#e5481b",
+   "dark": "#ff6a3d",
+   "usage": "The pick: your slot, the primary action, the stamp. One per view.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-vermilion",
+   "light": "#16140f",
+   "dark": "#16140f",
+   "usage": "Text on vermilion fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "vermilion-soft",
+   "light": "#f9d9cc",
+   "dark": "#3a1d14",
+   "usage": "Ground for the selected row and the picked slot halo.",
+   "group": "Brand"
+  },
+  {
+   "name": "hazard",
+   "light": "#f2b705",
+   "dark": "#f2b705",
+   "usage": "Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is ink.",
+   "group": "Brand"
+  },
+  {
+   "name": "hazard-soft",
+   "light": "#f8ecc0",
+   "dark": "#3a2f08",
+   "usage": "Ground for warnings.",
+   "group": "Brand"
+  },
+  {
+   "name": "caution",
+   "light": "#7a5a00",
+   "dark": "#f2b705",
+   "usage": "Warnings as text: hazard darkened on kraft, the tape itself on the chalkboard.",
+   "group": "Status"
+  },
+  {
+   "name": "open",
+   "light": "#1f7a4d",
+   "dark": "#7fd99f",
+   "usage": "Open, available, confirmed: the stamp green. Always with a word.",
+   "group": "Status"
+  },
+  {
+   "name": "open-soft",
+   "light": "#d9ebdf",
+   "dark": "#17352a",
+   "usage": "Ground for confirmed bookings.",
+   "group": "Status"
+  },
+  {
+   "name": "booked",
+   "light": "#5b5344",
+   "dark": "#a9b3a4",
+   "usage": "Signed out by someone else: hatched, never red.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#b3261e",
+   "dark": "#ff6a5a",
+   "usage": "Failed, overdue, broken.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#f3d4d0",
+   "dark": "#3a1a14",
+   "usage": "Ground for failures.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "kraft",
+  "foreground": "ink",
+  "card": "kraft-raised",
+  "card-foreground": "ink",
+  "popover": "kraft-raised",
+  "popover-foreground": "ink",
+  "primary": "vermilion",
+  "primary-foreground": "on-vermilion",
+  "secondary": "vermilion-soft",
+  "secondary-foreground": "ink",
+  "muted": "kraft-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "kraft-sunk",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "kraft",
+  "border": "line",
+  "input": "line",
+  "ring": "vermilion",
+  "chart-1": "ink",
+  "chart-2": "vermilion",
+  "chart-3": "hazard",
+  "chart-4": "open",
+  "chart-5": "ink-muted"
+ },
+ "status_alias": {
+  "positive": "open",
+  "positive-soft": "open-soft",
+  "caution-soft": "hazard-soft"
+ },
+ "radius_contract": "0px",
+ "extra_vars": {
+  "chip-radius": "0px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(56px, 9vw, 120px)",
+   "lh": ".86",
+   "weight": 800,
+   "ls": "-0.01em",
+   "tt": "uppercase",
+   "sample": "Pick a machine. Pick an hour.",
+   "usage": "One per sheet. Barlow Condensed at 800 in caps: a marker on kraft."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(36px, 5vw, 64px)",
+   "lh": ".9",
+   "weight": 800,
+   "ls": "-0.01em",
+   "tt": "uppercase",
+   "sample": "My bookings",
+   "usage": "Section and panel titles."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "28px",
+   "lh": "28px",
+   "weight": 700,
+   "tt": "uppercase",
+   "sample": "Drill press",
+   "usage": "Row titles: the machine, the person, the item."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "16px",
+   "lh": "24px",
+   "weight": 400,
+   "sample": "Three machines, three 50-minute slots, ten minutes between bookings to sweep up. Hatched slots are signed out by another member.",
+   "usage": "Instructions and reading text. Barlow, plain."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 400,
+   "sample": "Hakko FX-951 · with extractor",
+   "usage": "Specs, captions, helper text."
+  },
+  {
+   "name": "label",
+   "family": "display",
+   "size": "12px",
+   "lh": "14px",
+   "weight": 700,
+   "ls": "0.1em",
+   "tt": "uppercase",
+   "sample": "Slot B · 11:00",
+   "usage": "Column heads, slot labels, stamps. Condensed caps."
+  },
+  {
+   "name": "numeral",
+   "family": "mono",
+   "size": "36px",
+   "lh": "40px",
+   "weight": 600,
+   "ls": "-0.02em",
+   "sample": "8/9",
+   "usage": "Counts: open slots, members, hours. Mono, tabular.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "#0417 · Sat 03 Oct · 11:00–11:50",
+   "usage": "Booking ids, times, the shop log."
+  }
+ ],
+ "idea_headline": "The sheet on the wall, made clickable.",
+ "idea": "Signout is the clipboard sign-out sheet every shared workshop has: kraft paper, a marker-black grid, hazard tape along the top, hatching where someone else has already signed, a stamp when you have. It makes a booking tool feel like a thing you can put your hand on, and it keeps the state honest: open, yours, or taken.",
+ "use_for": "Booking and reservation apps, intake and sign-up forms, rosters and shift sheets, inventories and loan logs, any tool where people claim slots or things.",
+ "avoid_when": "Reading-heavy pages, luxury or editorial subjects, dashboards with many simultaneous metrics, or anything that needs to feel soft.",
+ "principles_headline": "Open, yours, or taken.",
+ "principles": [
+  [
+   "Three states, three treatments.",
+   "Open is a blank cell. Yours is vermilion. Taken is hatched in ink. No fourth state, no colour for taken: a hatch says it without shouting."
+  ],
+  [
+   "The grid is the interface.",
+   "Rows are things, columns are times. The reader picks a cell, not a card. The grid has a 2px ink frame and 1px rules."
+  ],
+  [
+   "Marker on kraft.",
+   "Condensed caps in heavy black, like a marker. One vermilion element per view: the pick, the primary button, or the stamp."
+  ],
+  [
+   "Hazard means care.",
+   "A hazard stripe marks what needs reading before acting: a machine with a safety note, a form that will be sent, a slot you are about to release."
+  ],
+  [
+   "Stamp it.",
+   "A confirmed action lands as a rotated stamp: SIGNED OUT, RETURNED, BOOKED. Stamps are the receipt."
+  ]
+ ],
+ "voice": [
+  "Imperative, short, on the sheet: \"Pick a machine. Pick an hour.\"",
+  "Say who and when: \"Signed out by R. Okafor, 11:00–11:50.\"",
+  "Label the prototype as a prototype, in the small print on every sheet.",
+  "Empty states say what to do, not that there is nothing: \"Nothing on the bench. Pick a machine above.\""
+ ],
+ "colour_headline": "Kraft, marker black, one vermilion, a hazard stripe.",
+ "colour_note": "Day is the paper: clean kraft with marker-black ink and a hot vermilion pick. Night is the chalkboard: green-black ground, chalk-white ink, the vermilion lifted, the hazard tape unchanged. Taken slots are hatched in ink (or chalk) in both modes; they never take a colour.",
+ "chart_series": [
+  "ink",
+  "vermilion",
+  "hazard",
+  "open",
+  "ink-muted"
+ ],
+ "chart_note": "Charts are marker drawings: ink first, vermilion for the exception, hazard for the warning. Utilisation is better shown as a filled grid than as a bar chart.",
+ "type_headline": "Barlow Condensed shouts, Barlow explains, JetBrains logs.",
+ "type_note": "Barlow Condensed at 800 and 700 in caps carries titles, row names and labels. Barlow carries instructions. JetBrains Mono carries ids, times and the shop log.",
+ "space_headline": "A 2px frame, 1px rules, 8px hatching.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Inside stamps and tags."
+  ],
+  [
+   "space-2 · 8px",
+   "Cell padding on dense sheets; the hatch pitch."
+  ],
+  [
+   "space-3 · 12px",
+   "Cell padding on roomy sheets; control padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "Control padding-x; gap between sheets."
+  ],
+  [
+   "space-6 · 24px",
+   "Sheet padding."
+  ],
+  [
+   "space-12 · 48px",
+   "Between sections."
+  ],
+  [
+   "space-16 · 64px",
+   "Page gutters on wide screens."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Everything. Paper is cut square and tape is straight."
+  ],
+  [
+   "frame · 2px ink",
+   "The sheet and the grid."
+  ],
+  [
+   "rule · 1px line",
+   "Cells and rows inside the grid."
+  ],
+  [
+   "hatch · 45° ink, 8px pitch",
+   "The taken state. Drawn with clipped lines, never a pattern fill."
+  ]
+ ],
+ "depth": [
+  [
+   "shadow",
+   "None. The sheet is pinned flat. A picked cell is vermilion, not raised."
+  ],
+  [
+   "focus",
+   "A 2px vermilion outline, offset 0, inside the cell."
+  ],
+  [
+   "stamp",
+   "A 2px ink box rotated −10°, Condensed caps inside; lands once (scale 1.15 → 1, 140ms)."
+  ],
+  [
+   "motion",
+   "Cells change state instantly. The only motion is the stamp landing and the hazard stripe scrolling on a warning (optional, reduced-motion safe)."
+  ]
+ ],
+ "components_headline": "A grid, a stamp, a hatch.",
+ "components_note": "Kit components take Signout through the contract: kraft grounds, vermilion primary, zero radius, line rules. Authored classes add the sheet frame, the slot cells, the hatch and the stamp.",
+ "buttons": "<Button>Sign out</Button><Button variant=\"secondary\">Hold</Button><Button variant=\"outline\">Return</Button><Button variant=\"ghost\">Cancel</Button><button className=\"so-btn so-btn-primary\">Sign out</button><button className=\"so-btn\">Return</button><button className=\"so-btn so-btn-haz\">Release slot</button>",
+ "buttons_note": "Kit buttons left; authored so-btn right: Condensed caps in a 2px frame; the primary is vermilion; the hazard variant is for actions that affect someone else.",
+ "tags": "<Badge>Yours</Badge><Badge variant=\"secondary\">Held</Badge><Badge variant=\"outline\">Open</Badge><Badge variant=\"destructive\">Overdue</Badge><span className=\"so-tag so-tag-open\">Open</span><span className=\"so-tag so-tag-pick\">Your pick</span><span className=\"so-tag so-tag-taken\">Signed out</span><span className=\"so-stamp-i\">Booked</span>",
+ "tags_note": "Tags are condensed caps in a 1px frame. Open is outlined, yours is vermilion, taken is hatched. The stamp is the receipt.",
+ "fields_note": "Fields are cells on the sheet: a 2px ink rule below, Condensed caps label above. Focus is a vermilion outline inside the cell.",
+ "stats": "<div className=\"so-stat\"><span className=\"t-label\">Open slots</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"open\" /><span className=\"so-of\">/<Number data=\"$totals\" col=\"slots\" /></span></span><span className=\"so-small\">Sat 03 Oct · three machines</span></div><div className=\"so-stat so-stat-pick\"><span className=\"t-label\">Yours</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"mine\" /></span><span className=\"so-small\">#0417 · 11:00 drill press</span></div>",
+ "stats_note": "A Stat is a count on the sheet: label, a mono numeral with its denominator, the small print. The vermilion Stat is yours.",
+ "callouts": "<Alert><AlertTitle>Slot already signed out</AlertTitle><AlertDescription>R. Okafor has the sewing machine at 11:00. Pick 10:00 or noon.</AlertDescription></Alert><div className=\"so-note so-note-haz\"><strong>Read before you sign.</strong> The soldering station needs the extractor on; the switch is behind the bench.</div><div className=\"so-note so-note-open\"><strong>Booked.</strong> Drill press, Sat 03 Oct, 11:00–11:50. It is on your sheet.</div><div className=\"so-note so-note-neg\"><strong>Overdue.</strong> The sewing machine was due back at 11:50. Return it or extend before 12:00.</div>",
+ "callouts_note": "Callouts are notes clipped to the sheet: a bold lead word, one sentence of action. Hazard for care, open for confirmations, negative for overdue.",
+ "chart_comp_note": "Charts in Signout are mostly grids. When a bar chart is right, ink first, vermilion for yours, hazard for the warning.",
+ "table_note": "Tables are the shop log: mono times, Condensed caps headers, 1px rules, a state tag at the end. Overdue rows take negative-soft.",
+ "card": "<div className=\"so-sheet\"><div className=\"so-sheet-haz\"></div><div className=\"so-sheet-body\"><p className=\"t-label\">Sheet 01 · Saturday 03 October</p><h3 className=\"t-display-l\">Pick a machine. Pick an hour.</h3><div className=\"so-grid\"><div className=\"so-cell so-head\">Machine</div><div className=\"so-cell so-head\">10:00</div><div className=\"so-cell so-head\">11:00</div><div className=\"so-cell so-head\">12:00</div><div className=\"so-cell so-row-h\"><span className=\"t-display-m\">Drill press</span><span className=\"so-small\">Clausing 2286 · 15&quot; floor</span></div><div className=\"so-cell so-open\">Open</div><div className=\"so-cell so-pick\">Your pick</div><div className=\"so-cell so-open\">Open</div><div className=\"so-cell so-row-h\"><span className=\"t-display-m\">Sewing machine</span><span className=\"so-small\">Juki DDL-8700 · industrial</span></div><div className=\"so-cell so-open\">Open</div><div className=\"so-cell so-taken\"><span>Signed out</span><span className=\"so-small\">R. Okafor</span></div><div className=\"so-cell so-open\">Open</div><div className=\"so-cell so-row-h\"><span className=\"t-display-m\">Soldering station</span><span className=\"so-small\">Hakko FX-951 · with extractor</span></div><div className=\"so-cell so-open\">Open</div><div className=\"so-cell so-open\">Open</div><div className=\"so-cell so-open\">Open</div></div><p className=\"so-small so-sheet-foot\">Prototype · all data synthetic · no real accounts</p></div></div>",
+ "card_note": "A card is a sheet: hazard tape, a title, the grid of cells in their three states, and the small print. This is the whole app in one component.",
+ "motifs_headline": "Hatching, hazard tape, and a stamp.",
+ "motifs_note": "Signout draws with what is on the workshop wall. The data lives in the cells: a slot is open, yours or hatched; a warning is tape; a confirmation is a stamp.",
+ "motifs": [
+  {
+   "title": "The hatch",
+   "usage": "45° ink lines at an 8px pitch, clipped to the cell. It means taken by someone else. Never use a colour for this state; the hatch reads at any size and in both modes.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Hatched cell</title><defs><clipPath id=\"so-m1\"><rect x=\"40\" y=\"40\" width=\"200\" height=\"80\"/></clipPath></defs><rect className=\"so-cell-f\" x=\"40\" y=\"40\" width=\"200\" height=\"80\"/><g clipPath=\"url(#so-m1)\" className=\"so-hatch\" transform=\"translate(40 40)\"><line x1=\"-80\" y1=\"0\" x2=\"0\" y2=\"80\" /><line x1=\"-72\" y1=\"0\" x2=\"8\" y2=\"80\" /><line x1=\"-64\" y1=\"0\" x2=\"16\" y2=\"80\" /><line x1=\"-56\" y1=\"0\" x2=\"24\" y2=\"80\" /><line x1=\"-48\" y1=\"0\" x2=\"32\" y2=\"80\" /><line x1=\"-40\" y1=\"0\" x2=\"40\" y2=\"80\" /><line x1=\"-32\" y1=\"0\" x2=\"48\" y2=\"80\" /><line x1=\"-24\" y1=\"0\" x2=\"56\" y2=\"80\" /><line x1=\"-16\" y1=\"0\" x2=\"64\" y2=\"80\" /><line x1=\"-8\" y1=\"0\" x2=\"72\" y2=\"80\" /><line x1=\"0\" y1=\"0\" x2=\"80\" y2=\"80\" /><line x1=\"8\" y1=\"0\" x2=\"88\" y2=\"80\" /><line x1=\"16\" y1=\"0\" x2=\"96\" y2=\"80\" /><line x1=\"24\" y1=\"0\" x2=\"104\" y2=\"80\" /><line x1=\"32\" y1=\"0\" x2=\"112\" y2=\"80\" /><line x1=\"40\" y1=\"0\" x2=\"120\" y2=\"80\" /><line x1=\"48\" y1=\"0\" x2=\"128\" y2=\"80\" /><line x1=\"56\" y1=\"0\" x2=\"136\" y2=\"80\" /><line x1=\"64\" y1=\"0\" x2=\"144\" y2=\"80\" /><line x1=\"72\" y1=\"0\" x2=\"152\" y2=\"80\" /><line x1=\"80\" y1=\"0\" x2=\"160\" y2=\"80\" /><line x1=\"88\" y1=\"0\" x2=\"168\" y2=\"80\" /><line x1=\"96\" y1=\"0\" x2=\"176\" y2=\"80\" /><line x1=\"104\" y1=\"0\" x2=\"184\" y2=\"80\" /><line x1=\"112\" y1=\"0\" x2=\"192\" y2=\"80\" /><line x1=\"120\" y1=\"0\" x2=\"200\" y2=\"80\" /><line x1=\"128\" y1=\"0\" x2=\"208\" y2=\"80\" /><line x1=\"136\" y1=\"0\" x2=\"216\" y2=\"80\" /><line x1=\"144\" y1=\"0\" x2=\"224\" y2=\"80\" /><line x1=\"152\" y1=\"0\" x2=\"232\" y2=\"80\" /><line x1=\"160\" y1=\"0\" x2=\"240\" y2=\"80\" /><line x1=\"168\" y1=\"0\" x2=\"248\" y2=\"80\" /><line x1=\"176\" y1=\"0\" x2=\"256\" y2=\"80\" /><line x1=\"184\" y1=\"0\" x2=\"264\" y2=\"80\" /><line x1=\"192\" y1=\"0\" x2=\"272\" y2=\"80\" /></g><rect className=\"so-frame\" x=\"40\" y=\"40\" width=\"200\" height=\"80\"/><rect className=\"so-cell-f\" x=\"256\" y=\"40\" width=\"200\" height=\"80\"/><rect className=\"so-frame\" x=\"256\" y=\"40\" width=\"200\" height=\"80\"/><text x=\"272\" y=\"66\" className=\"so-blk\">OPEN</text><text x=\"56\" y=\"66\" className=\"so-blk so-on-hatch\">SIGNED OUT · R. OKAFOR</text></svg>"
+  },
+  {
+   "title": "The hazard stripe",
+   "usage": "Yellow and ink chevrons along the top edge of anything that needs reading before acting: a sheet, a warning, a destructive button. 10px tall, never animated by default.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Hazard stripe</title><rect className=\"so-haz-f\" x=\"24\" y=\"40\" width=\"432\" height=\"14\"/><g className=\"so-haz-ink\"><polygon points=\"24,40 40,40 32,54 16,54\" /><polygon points=\"56,40 72,40 64,54 48,54\" /><polygon points=\"88,40 104,40 96,54 80,54\" /><polygon points=\"120,40 136,40 128,54 112,54\" /><polygon points=\"152,40 168,40 160,54 144,54\" /><polygon points=\"184,40 200,40 192,54 176,54\" /><polygon points=\"216,40 232,40 224,54 208,54\" /><polygon points=\"248,40 264,40 256,54 240,54\" /><polygon points=\"280,40 296,40 288,54 272,54\" /><polygon points=\"312,40 328,40 320,54 304,54\" /><polygon points=\"344,40 360,40 352,54 336,54\" /><polygon points=\"376,40 392,40 384,54 368,54\" /><polygon points=\"408,40 424,40 416,54 400,54\" /><polygon points=\"440,40 456,40 448,54 432,54\" /></g><rect className=\"so-cell-f\" x=\"24\" y=\"54\" width=\"432\" height=\"66\"/><rect className=\"so-frame\" x=\"24\" y=\"54\" width=\"432\" height=\"66\"/><text x=\"40\" y=\"84\" className=\"so-cond-s\">READ BEFORE YOU SIGN</text><text x=\"40\" y=\"106\" className=\"so-blk so-muted-f\">THE EXTRACTOR SWITCH IS BEHIND THE BENCH</text></svg>"
+  },
+  {
+   "title": "The stamp",
+   "usage": "A rotated 2px box with Condensed caps: SIGNED OUT, RETURNED, BOOKED. It is the receipt; it lands once and stays.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Stamp</title><rect className=\"so-cell-f\" x=\"40\" y=\"40\" width=\"300\" height=\"80\"/><rect className=\"so-frame\" x=\"40\" y=\"40\" width=\"300\" height=\"80\"/><text x=\"56\" y=\"70\" className=\"so-blk\">#0417 · DRILL PRESS</text><text x=\"56\" y=\"98\" className=\"so-blk so-muted-f\">SAT 03 OCT · 11:00–11:50</text><g transform=\"rotate(-10 390 80)\"><rect className=\"so-stamp\" x=\"334\" y=\"64\" width=\"112\" height=\"32\"/><text x=\"390\" y=\"86\" className=\"so-stamp-t\" textAnchor=\"middle\">SIGNED OUT</text></g></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Signout.",
+ "sample_note": "A sign-out app opener: hazard tape, the marker title, the sheet grid with one hatched slot and your pick, the bookings column and the shop log.",
+ "sample": "<div className=\"so-sample\"><div className=\"so-sample-in\">\n  <div className=\"so-sheet-haz\"></div>\n  <div className=\"so-sample-top\"><div><span className=\"t-display-xl so-brand\">Toolroom<span className=\"so-vermilion\">.</span></span></div><div className=\"so-sample-meta\"><span className=\"t-label\">A shared workshop · equipment sign-out sheet</span><div className=\"so-meta-row\"><div className=\"so-stat\"><span className=\"t-label\">Demo day</span><span className=\"t-numeral so-num-s\">Sat 03 Oct</span></div><div className=\"so-stat\"><span className=\"t-label\">Open slots</span><span className=\"t-numeral so-num-s\"><Number data=\"$totals\" col=\"open\" />/<Number data=\"$totals\" col=\"slots\" /></span></div><div className=\"so-stat so-stat-pick\"><span className=\"t-label\">Member</span><span className=\"t-numeral so-num-s\">#0417</span></div></div></div></div>\n  <div className=\"so-steps\"><span className=\"so-step so-step-on\">01 Choose</span><span className=\"so-step\">02 Review</span><span className=\"so-step\">03 Booked</span></div>\n  <div className=\"so-sample-grid\">\n    <div>\n      <p className=\"t-label so-muted\">Sheet 01 · Saturday 03 October 2026</p>\n      <h2 className=\"t-display-l so-sample-h\">Pick a machine. Pick an hour.</h2>\n      <p className=\"t-body so-sample-lede\">Three machines, three 50-minute slots, ten minutes between bookings to sweep up. Hatched slots are signed out by another member.</p>\n      <div className=\"so-grid\"><div className=\"so-cell so-head\">Machine</div><div className=\"so-cell so-head\">Slot A · 10:00</div><div className=\"so-cell so-head\">Slot B · 11:00</div><div className=\"so-cell so-head\">Slot C · 12:00</div><div className=\"so-cell so-row-h\"><span className=\"t-display-m\">Drill press</span><span className=\"so-small\">Clausing 2286 · 15&quot; floor</span></div><div className=\"so-cell so-open\">Open<span className=\"so-small\">10:00–10:50</span></div><div className=\"so-cell so-pick\">Your pick<span className=\"so-small\">11:00–11:50</span></div><div className=\"so-cell so-open\">Open<span className=\"so-small\">12:00–12:50</span></div><div className=\"so-cell so-row-h\"><span className=\"t-display-m\">Sewing machine</span><span className=\"so-small\">Juki DDL-8700 · industrial</span></div><div className=\"so-cell so-open\">Open<span className=\"so-small\">10:00–10:50</span></div><div className=\"so-cell so-taken\"><span>Signed out</span><span className=\"so-small\">R. Okafor</span></div><div className=\"so-cell so-open\">Open<span className=\"so-small\">12:00–12:50</span></div><div className=\"so-cell so-row-h\"><span className=\"t-display-m\">Soldering station</span><span className=\"so-small\">Hakko FX-951 · with extractor</span></div><div className=\"so-cell so-open\">Open<span className=\"so-small\">10:00–10:50</span></div><div className=\"so-cell so-open\">Open<span className=\"so-small\">11:00–11:50</span></div><div className=\"so-cell so-open\">Open<span className=\"so-small\">12:00–12:50</span></div></div>\n      <div className=\"so-legend\"><span><i className=\"so-leg so-leg-open\"></i>Open</span><span><i className=\"so-leg so-leg-pick\"></i>Your pick</span><span><i className=\"so-leg so-leg-taken\"></i>Signed out</span></div>\n    </div>\n    <div className=\"so-side\">\n      <div className=\"so-panel\"><p className=\"t-display-l so-panel-h\">My bookings</p><div className=\"so-empty\"><p className=\"t-label\">Nothing on the bench</p><p className=\"so-small\">You haven&#39;t booked a machine for demo day. Pick an open slot on the sheet.</p></div><button className=\"so-btn so-btn-primary\">Review pick</button></div>\n      <div className=\"so-panel\"><p className=\"t-label so-muted\">Shop log · synthetic</p><DataTable data=\"$table\" rowKey=\"id\" height=\"220px\" columns={[{\"col\":\"when\",\"title\":\"When\"},{\"col\":\"machine\",\"title\":\"Machine\"},{\"col\":\"member\",\"title\":\"Member\"},{\"col\":\"status\",\"title\":\"Status\"}]} /></div>\n    </div>\n  </div>\n  <p className=\"so-small so-sheet-foot\">Prototype · machines, members and dates are synthetic · bookings live only in this tab and reset on reload</p>\n</div></div>",
+ "dos": [
+  "Three states: open blank, yours vermilion, taken hatched.",
+  "Frame every sheet in 2px ink and put hazard tape where care is needed.",
+  "Condensed caps for titles and labels; plain Barlow for instructions.",
+  "Stamp confirmations; log everything with a time."
+ ],
+ "donts": [
+  "No colour for the taken state; hatch it.",
+  "No rounded corners, shadows or gradients.",
+  "No second accent; hazard is a warning, not a brand.",
+  "No empty state that says \"nothing here\" without saying what to do."
+ ],
+ "binding_losses": "The hatch, the hazard stripe, the stamp and the sheet grid have no contract slot; they are so-* classes and inline SVG. Kit tables take the rules and mono figures but not the condensed caps header.",
+ "footer": "Kraft first, chalkboard second. Fonts: Barlow Condensed 500/700/800 and italic 700, Barlow 400/500/600, JetBrains Mono 400–700, all Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "id": 1,
+    "when": "Sat 03 Oct 11:00",
+    "machine": "Sewing machine",
+    "member": "R. Okafor",
+    "status": "Upcoming",
+    "slot": "11:00",
+    "open": 0
+   },
+   {
+    "id": 2,
+    "when": "Thu 01 Oct 14:00",
+    "machine": "Soldering station",
+    "member": "J. Mbeki",
+    "status": "Done",
+    "slot": "10:00",
+    "open": 1
+   },
+   {
+    "id": 3,
+    "when": "Thu 01 Oct 10:00",
+    "machine": "Drill press",
+    "member": "A. Lindqvist",
+    "status": "Done",
+    "slot": "12:00",
+    "open": 1
+   },
+   {
+    "id": 4,
+    "when": "Wed 30 Sep 19:00",
+    "machine": "Drill press",
+    "member": "R. Okafor",
+    "status": "Done",
+    "slot": "10:00",
+    "open": 1
+   },
+   {
+    "id": 5,
+    "when": "Tue 29 Sep 11:00",
+    "machine": "Soldering station",
+    "member": "T. Haddad",
+    "status": "Cancelled",
+    "slot": "11:00",
+    "open": 1
+   }
+  ],
+  "queries": {
+   "series": "select machine, count(*) as bookings from rows group by machine order by bookings desc",
+   "table": "select id, \"when\", machine, member, status from rows order by id",
+   "totals": "select 8 as open, 9 as slots, 1 as mine from rows limit 1"
+  },
+  "segments": [
+   "Choose",
+   "Review",
+   "Booked"
+  ],
+  "segment_default": "Choose",
+  "select_label": "Machine",
+  "input_placeholder": "Member number",
+  "switch_label": "Show past bookings",
+  "tabs": [
+   "Sheet",
+   "My bookings",
+   "Log"
+  ],
+  "tab_body": "Sheet: three machines, three slots, one hatched.",
+  "progress_label": "Step 1 of 3",
+  "progress": 33,
+  "chart_title": "Bookings by machine, last 7 days",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": "bar",
+    "encoding": {
+     "y": {
+      "field": "machine",
+      "type": "nominal",
+      "title": "Machine",
+      "sort": "-x"
+     },
+     "x": {
+      "field": "bookings",
+      "type": "quantitative",
+      "title": "Bookings",
+      "axis": {
+       "tickMinStep": 1
+      }
+     },
+     "color": {
+      "field": "machine",
+      "type": "nominal",
+      "legend": null
+     }
+    }
+   }
+  },
+  "row_key": "id",
+  "table_columns": [
+   {
+    "col": "when",
+    "title": "When"
+   },
+   {
+    "col": "machine",
+    "title": "Machine"
+   },
+   {
+    "col": "member",
+    "title": "Member"
+   },
+   {
+    "col": "status",
+    "title": "Status"
+   }
+  ],
+  "table_height": "220px"
+ },
+ "css": "\n.ds-signout { --ds-cover-bg: var(--ds-kraft); }\n.ds-signout .ds-section h2, .ds-signout .ds-cover-name { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: -0.01em; }\n.ds-signout .ds-section h2 { font-size: clamp(40px, 5.5vw, 72px); line-height: .9; }\n.ds-signout .ds-eyebrow, .ds-signout .ds-chip { font-family: var(--font-display); font-weight: 700; letter-spacing: .1em; }\n.ds-signout .ds-chip { border-radius: 0; border-width: 2px; }\n.ds-signout .so-kraft { fill: var(--ds-kraft); } .ds-signout .so-haz rect, .ds-signout .so-haz-f { fill: var(--ds-hazard); } .ds-signout .so-haz-ink polygon { fill: var(--ds-ink); }\n.ds-signout .so-cond { font-family: var(--font-display); font-weight: 800; font-size: 44px; fill: var(--ds-ink); } .ds-signout .so-cond-s { font-family: var(--font-display); font-weight: 700; font-size: 20px; fill: var(--ds-ink); }\n.ds-signout .so-blk { font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: .1em; fill: var(--ds-ink); } .ds-signout .so-muted-f { fill: var(--ds-ink-muted); } .ds-signout .so-on-pick { fill: var(--ds-on-vermilion); } .ds-signout .so-on-hatch { fill: var(--ds-ink); }\n.ds-signout .so-rule2 { stroke: var(--ds-ink); stroke-width: 2; } .ds-signout .so-grid rect { fill: var(--ds-kraft-raised); stroke: var(--ds-ink); stroke-width: 1.5; } .ds-signout .so-cell-f { fill: var(--ds-kraft-raised); } .ds-signout .so-frame { fill: none; stroke: var(--ds-ink); stroke-width: 2; }\n.ds-signout .so-hatch line { stroke: var(--ds-ink); stroke-width: 1.5; opacity: .55; } .ds-signout .so-pick { fill: var(--ds-vermilion); }\n.ds-signout .so-stamp { fill: none; stroke: var(--ds-ink); stroke-width: 2.5; } .ds-signout .so-stamp-t { font-family: var(--font-display); font-weight: 800; font-size: 16px; letter-spacing: .1em; fill: var(--ds-ink); }\n.ds-signout .so-muted { color: var(--ds-ink-muted); } .ds-signout .so-vermilion { color: var(--ds-vermilion); }\n.ds-signout .so-btn { font-family: var(--font-display); font-size: 16px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; line-height: 18px; padding: 10px 16px; border: 2px solid var(--ds-ink); background: var(--ds-kraft-raised); color: var(--ds-ink); cursor: pointer; transition: background 100ms; }\n.ds-signout .so-btn:hover { background: var(--ds-kraft-sunk); } .ds-signout .so-btn:focus-visible { outline: 2px solid var(--ds-vermilion); outline-offset: 2px; }\n.ds-signout .so-btn-primary { background: var(--ds-vermilion); color: var(--ds-on-vermilion); border-color: var(--ds-ink); } .ds-signout .so-btn-primary:hover { background: var(--ds-vermilion); }\n.ds-signout .so-btn-haz { background: var(--ds-hazard); color: var(--ds-ink); } .ds-signout .so-btn-haz:hover { background: var(--ds-hazard); }\n.ds-signout .so-tag { display: inline-flex; padding: 3px 8px; border: 1px solid var(--ds-ink); font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; background: var(--ds-kraft-raised); }\n.ds-signout .so-tag-open { color: var(--ds-open); border-color: var(--ds-open); } .ds-signout .so-tag-pick { background: var(--ds-vermilion); color: var(--ds-on-vermilion); } .ds-signout .so-tag-taken { background: repeating-linear-gradient(45deg, var(--ds-kraft-raised) 0 5px, var(--ds-line) 5px 7px); color: var(--ds-ink-muted); }\n.ds-signout .so-stamp-i { display: inline-flex; padding: 4px 10px; border: 2px solid var(--ds-ink); font-family: var(--font-display); font-size: 14px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; transform: rotate(-8deg); }\n.ds-signout .so-stat { display: grid; gap: 4px; padding: 12px 16px; border: 2px solid var(--ds-ink); background: var(--ds-kraft-raised); min-width: 150px; } .ds-signout .so-stat-pick { background: var(--ds-vermilion); } .ds-signout .so-stat-pick .t-label, .ds-signout .so-stat-pick .so-small { color: var(--ds-on-vermilion); }\n.ds-signout .so-of { font-size: 20px; color: var(--ds-ink-muted); } .ds-signout .so-small { font-family: var(--font-body); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ds-ink-muted); line-height: 1.4; } .ds-signout .ds-stats { gap: 16px; }\n.ds-signout .so-note { padding: 12px 16px; border: 2px solid var(--ds-ink); font-size: 15px; line-height: 1.5; background: var(--ds-kraft-raised); } .ds-signout .so-note strong { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }\n.ds-signout .so-note-haz { border-top: 10px solid var(--ds-hazard); background: var(--ds-hazard-soft); } .ds-signout .so-note-open { background: var(--ds-open-soft); } .ds-signout .so-note-neg { background: var(--ds-negative-soft); }\n.ds-signout .so-sheet { border: 2px solid var(--ds-ink); background: var(--ds-kraft-raised); } .ds-signout .so-sheet-haz { height: 10px; background: repeating-linear-gradient(-45deg, var(--ds-hazard) 0 12px, var(--ds-ink) 12px 24px); }\n.ds-signout .so-sheet-body { padding: 20px 24px 16px; } .ds-signout .so-sheet h3 { margin: 6px 0 16px; } .ds-signout .so-sheet-foot { margin: 14px 0 0; }\n.ds-signout .so-grid { display: grid; grid-template-columns: minmax(140px, 1.4fr) repeat(3, minmax(0, 1fr)); border: 2px solid var(--ds-ink); background: var(--ds-kraft-raised); margin-top: 24px; }\n.ds-signout .so-cell { padding: 8px 8px; border-right: 1px solid var(--ds-line); border-bottom: 1px solid var(--ds-line); font-family: var(--font-display); font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; display: grid; gap: 2px; align-content: start; min-height: 58px; min-width: 0; overflow-wrap: normal; }\n.ds-signout .so-row-h .t-display-m { font-size: 17px; line-height: 19px; }\n@container (min-width: 760px) { .ds-signout .so-row-h .t-display-m { font-size: 28px; line-height: 28px; } }\n@container (min-width: 760px) { .ds-signout .so-cell { padding: 10px 12px; font-size: 14px; letter-spacing: .06em; } }\n.ds-signout .so-grid { grid-template-columns: minmax(96px, 1.4fr) repeat(3, minmax(0, 1fr)); }\n.ds-signout .so-cell:nth-child(4n) { border-right: 0; } .ds-signout .so-head { background: var(--ds-kraft-sunk); font-size: 11px; letter-spacing: .1em; color: var(--ds-ink-muted); min-height: 0; }\n.ds-signout .so-row-h { background: var(--ds-kraft-raised); } .ds-signout .so-row-h .t-display-m { text-transform: uppercase; }\n.ds-signout .so-open { color: var(--ds-ink); } .ds-signout .so-open:hover { background: var(--ds-kraft-sunk); cursor: pointer; }\n.ds-signout .so-pick { background: var(--ds-vermilion); color: var(--ds-on-vermilion); } .ds-signout .so-pick .so-small { color: var(--ds-on-vermilion); }\n.ds-signout .so-taken { background: repeating-linear-gradient(45deg, var(--ds-kraft-raised) 0 6px, var(--ds-line) 6px 8px); color: var(--ds-ink-muted); }\n.ds-signout .so-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 13px; } .ds-signout .so-legend span { display: inline-flex; align-items: center; gap: 6px; } .ds-signout .so-leg { display: inline-block; width: 16px; height: 16px; border: 1px solid var(--ds-ink); } .ds-signout .so-leg-pick { background: var(--ds-vermilion); } .ds-signout .so-leg-taken { background: repeating-linear-gradient(45deg, var(--ds-kraft-raised) 0 3px, var(--ds-line) 3px 5px); }\n.ds-signout .so-sample { background: var(--ds-kraft); padding: 0 20px 48px; border-bottom: 2px solid var(--ds-ink); } .ds-signout .so-sample-in { max-width: 1140px; margin: 0 auto; border: 2px solid var(--ds-ink); background: var(--ds-kraft); }\n.ds-signout .so-sample-top { display: grid; gap: 16px; padding: 20px 24px; border-bottom: 2px solid var(--ds-ink); } .ds-signout .so-brand { font-size: clamp(48px, 7vw, 80px); line-height: .85; }\n.ds-signout .so-meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; } .ds-signout .so-num-s { font-size: 18px; line-height: 22px; }\n.ds-signout .so-steps { display: flex; border-bottom: 2px solid var(--ds-ink); } .ds-signout .so-step { flex: 1; padding: 8px 24px; font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--ds-ink-muted); border-right: 1px solid var(--ds-line); } .ds-signout .so-step-on { color: var(--ds-ink); box-shadow: inset 0 -4px 0 var(--ds-vermilion); }\n.ds-signout .so-sample-grid { display: grid; gap: 24px; padding: 24px; } .ds-signout .so-sample-h { margin: 6px 0 0; } .ds-signout .so-sample-lede { margin-top: 12px; max-width: 52ch; }\n.ds-signout .so-side { display: grid; gap: 16px; align-content: start; } .ds-signout .so-panel { border: 2px solid var(--ds-ink); background: var(--ds-kraft-raised); padding: 16px 18px; min-width: 0; } .ds-signout .so-panel-h { margin: 0 0 12px; }\n.ds-signout .so-empty { border: 2px dashed var(--ds-line); padding: 16px; margin-bottom: 12px; } .ds-signout .so-empty p { margin: 0; } .ds-signout .so-empty .so-small { margin-top: 4px; }\n.ds-signout .so-sample .so-sheet-foot { padding: 0 24px 20px; margin: 0; }\n@container (min-width: 760px) { .ds-signout .so-sample { padding: 0 40px 64px; } .ds-signout .so-sample-top { grid-template-columns: auto 1fr; align-items: end; } .ds-signout .so-sample-grid { grid-template-columns: 3fr 2fr; } }\n\n.ds-signout { --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-vermilion); --ds-hand-fill2: var(--ds-ink); --ds-hand-muted: var(--ds-kraft-sunk); --ds-hand-ground: var(--ds-kraft-raised); --ds-hand-stroke: 2; --ds-hand-cap: square; --ds-hand-tex: 1.5; --ds-hand-bg: var(--ds-kraft);\n  --ds-tpl-edge: 2px solid var(--ds-ink); --ds-tpl-radius: 0; --ds-tpl-rule: 2px solid var(--ds-ink); --ds-tpl-tile-shadow: none; --ds-slide-bg: var(--ds-kraft-raised); --ds-slide-fg: var(--ds-ink); --ds-slide-title-bg: var(--ds-vermilion); --ds-slide-title-fg: var(--ds-on-vermilion); --ds-slide-split-a: var(--ds-kraft-raised); --ds-slide-split-a-fg: var(--ds-ink); --ds-slide-split-b: var(--ds-vermilion); --ds-slide-split-b-fg: var(--ds-on-vermilion); --ds-hero-bg: var(--ds-kraft); --ds-tag-radius: 0; }\n.ds-signout .h-text, .ds-signout .h-num { font-family: var(--font-display); font-weight: 700; } .ds-signout .h-text { letter-spacing: .1em; font-size: 11px; }\n.ds-signout .h-tex-fill2 line { opacity: .55; }\n.ds-signout .ds-tpl-tag { border: 1px solid var(--ds-ink); font-family: var(--font-display); font-weight: 700; letter-spacing: .1em; } .ds-signout .ds-tpl-tag.is-idle { background: var(--ds-kraft-sunk); color: var(--ds-ink-muted); }\n.ds-signout .ds-tpl-split-a { border: 2px solid var(--ds-ink); } .ds-signout .ds-tpl-stage-title .ds-tpl-stage-foot { border-top-width: 2px; }\n.ds-signout .ds-tpl-dropcap { font-family: var(--font-display); font-weight: 800; }\n.ds-signout .so-stamp-i { animation: so-land 90ms ease-out both; }\n@keyframes so-land { from { transform: rotate(-8deg) scale(1.15); } to { transform: rotate(-8deg) scale(1); } }\n@media (prefers-reduced-motion: reduce) { .ds-signout .so-stamp-i { animation: none; } }\n",
+ "btn_primary": "so-btn so-btn-primary",
+ "btn_secondary": "so-btn",
+ "hand": {
+  "mode": "hatch",
+  "shadow": false,
+  "headline": "A marker, a ruler, and hatching for everything filled.",
+  "note": "Signout draws the way a sheet on the wall is drawn: 2px marker lines with square caps, no fills except hatching. The pick is hatched in vermilion, the taken parts in ink, and the quiet parts stay kraft. No shadows, no curves that a ruler could not make.",
+  "rules": [
+   [
+    "Stroke",
+    "2px ink, square caps and joins. Every edge is ruled."
+   ],
+   [
+    "Fill",
+    "None. A filled region is hatched at 45°, 6px pitch: vermilion for the pick, ink for taken."
+   ],
+   [
+    "Shadow",
+    "None. The sheet is pinned flat."
+   ],
+   [
+    "Texture",
+    "The hatch is the only texture; the hazard chevron is the only ornament."
+   ],
+   [
+    "Figures",
+    "Condensed caps for the number; mono caps at 11px for labels."
+   ],
+   [
+    "Motion",
+    "A drawing never moves. A stamp lands on it."
+   ]
+  ]
+ },
+ "motion": [
+  [
+   "Hover",
+   "An open cell darkens to kraft-sunk, 100ms linear. Nothing lifts."
+  ],
+  [
+   "Press",
+   "Instant. The cell becomes vermilion on release."
+  ],
+  [
+   "Focus",
+   "A 2px vermilion outline inside the cell."
+  ],
+  [
+   "Stamp",
+   "The one animation: scale 1.15 to 1 in 90ms ease-out, once, then it stays."
+  ],
+  [
+   "Reveal",
+   "None. The sheet is simply there. Reduced motion changes nothing."
+  ],
+  [
+   "Hazard",
+   "The stripe may scroll on a live warning (12px per second); off by default."
+  ]
+ ],
+ "tpl": {
+  "brand": "Toolroom",
+  "dash_title": "Shop floor · This week",
+  "kpis": [
+   [
+    "Open slots",
+    "open",
+    "",
+    "",
+    null,
+    "of 9 today"
+   ],
+   [
+    "Slots on the sheet",
+    "slots",
+    "",
+    "",
+    null,
+    "three machines · three hours"
+   ],
+   [
+    "Yours",
+    "mine",
+    "",
+    "",
+    null,
+    "#0417 · drill press · 11:00"
+   ]
+  ],
+  "dash_table_title": "Shop log",
+  "slide_eyebrow": "Shop meeting",
+  "slide_title": "The drill press is booked solid.",
+  "slide_sub": "Eight of nine slots went on Saturday; the soldering station sat empty.",
+  "slide_foot": "Synthetic data · Oct 2026",
+  "slide_stat_label": "Open slots",
+  "slide_stat_col": "open",
+  "slide_body": "Slots still open on the sheet for Saturday. One is yours; the hatched one is taken.",
+  "split": [
+   "OPEN · 8",
+   "TAKEN · 1"
+  ],
+  "ed_kicker": "Workshop · Notice",
+  "ed_headline": "Who had the drill press, and when",
+  "ed_deck": "A week on the sign-out sheet: five bookings, one cancellation, and the hour nobody wants. What the shop log says about a shared bench.",
+  "ed_byline": "Posted on the wall · 3 Oct 2026",
+  "ed_body": "The drill press was signed out four times this week and the soldering station once, which is the same shape as every week since the sheet went up. The 10:00 slot goes first; the noon slot goes last. The one cancellation came from a member who booked two machines for the same hour and read the hazard note too late.",
+  "ed_pull_col": "slots",
+  "ed_pull_label": "Slots on the sheet",
+  "steps": [
+   [
+    "A hundred bookings on one sheet.",
+    "Each cell is a booking; hatched cells were taken by another member before you looked."
+   ],
+   [
+    "Most of them are the same machine.",
+    "The drill press takes the first column. Everything else is open most of the day."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One hundred bookings, by outcome · synthetic",
+  "app_rows": [
+   [
+    "Drill press",
+    "Clausing 2286 · 15\" floor",
+    "Open",
+    "ok"
+   ],
+   [
+    "Sewing machine",
+    "Juki DDL-8700 · industrial",
+    "Taken 11:00",
+    "warn"
+   ],
+   [
+    "Soldering station",
+    "Hakko FX-951 · extractor off",
+    "Overdue",
+    "bad"
+   ],
+   [
+    "Laser cutter",
+    "Needs induction",
+    "Not yet",
+    "idle"
+   ]
+  ],
+  "app_cta": "Sign out",
+  "app_cta2": "Return",
+  "landing_eyebrow": "Toolroom · shared workshops",
+  "landing_headline": "Pick a machine. Pick an hour.",
+  "landing_sub": "The sign-out sheet on the wall, made clickable. Open, yours, or taken, and nothing else to learn.",
+  "cta": "Open the sheet",
+  "cta2": "See a shop",
+  "features": [
+   [
+    "Three states",
+    "Open is blank, yours is vermilion, taken is hatched. No fourth state."
+   ],
+   [
+    "The grid is the app",
+    "Rows are things, columns are hours. Pick a cell."
+   ],
+   [
+    "Stamped receipts",
+    "Every booking lands as a stamp and goes in the log with a time."
+   ]
+  ]
+ }
+}

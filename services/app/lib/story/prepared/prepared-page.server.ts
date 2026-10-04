@@ -55,7 +55,7 @@ import { servedResultsFor } from './served-results.server';
 import type { StoryBaseCssRecipe } from '../styles/story-base-css';
 import type { ServedStoryRuntime } from './prepared-runtime';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { createSpeculationRulesStore } from '@/lib/compiled-page/modules.server';
 import { archiveSharedBuild } from '@/lib/compiled-page/shared-builds.server';
@@ -77,7 +77,7 @@ export interface PreparedPage {
   /** The raw authored `<style>`: the editor's door only (never the reader payload). */
   authorCss: string | null;
   authorScript: string | null;
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
   title: string;
   fontPreloads: string[];
   lazyCode: LazyCode;
@@ -210,7 +210,7 @@ async function compiledFor(row: ArtifactRow, page: PreparedPage, refData: Reader
 
 /** Parse, isolate and render one version. The only place a served document is compiled. */
 async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: ReturnType<typeof compilerBuild>): Promise<PreparedPage> {
-  const meta = (row.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null; compiledCss?: string | null; cssCompileVersion?: string | null; refs?: Array<{ id: string; kind: string }> };
+  const meta = (row.meta ?? {}) as { theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null; template?: string | null; compiledCss?: string | null; cssCompileVersion?: string | null; refs?: Array<{ id: string; kind: string }> };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const source = row.source ?? '';
   const assetUrls = collectExternalAssetUrls(source).all;

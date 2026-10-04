@@ -1,5 +1,5 @@
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import type { StoryBaseCssRecipe } from '../styles/story-base-css';
 import type { StyleOverride } from '../styles/style-overrides';
 
@@ -14,7 +14,14 @@ export interface PreparedStoryRuntime {
   compiledCss: string | null;
   authorCss: string | null;
   authorScript: string | null;
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
+  /**
+   * How `baseCss` was built: the Helmet's font slots and the design system's sheet text. With `theme`,
+   * `compiledCss` and `authorCss` it is everything the standalone document's sheets are built from
+   * (lib/story/styles/document-styles), so a renderer holding only this object (the CLI's local
+   * capture) serves the same sheets /a/<id>/raw does.
+   */
+  base: StoryBaseCssRecipe;
   title: string;
   /** Cached critical font URLs for discovery in the initial server head. */
   fontPreloads?: string[];
@@ -43,7 +50,7 @@ export interface ServedStoryRuntime {
   /** How to rebuild the raw base sheet, for the lazy path that re-isolates after a live or editor update. */
   base: StoryBaseCssRecipe;
   authorScript: string | null;
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
   title: string;
   fontPreloads?: string[];
 }
