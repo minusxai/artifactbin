@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable `.jsx`: a YAML fence, HTML and kit JSX styled with Tailwind `className`. Datasets/media are artifacts too.
+artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media are artifacts too.
 
 npm CLI: local files/browser approval. Direct HTTP: email auth without CLI installation; [HTTP API](references/http-api.md).
 
@@ -22,7 +22,7 @@ npm CLI: local files/browser approval. Direct HTTP: email auth without CLI insta
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork deliberately: copy the file and remove those five fields.
-- Publishing does not verify appearance. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, the design system supplies palette and type.
+- Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 
 `afbin -h` and `afbin help <topic>` work offline; `afbin help` prints this file’s location.
@@ -38,9 +38,9 @@ Before writing, read `afbin help <page type>` for design and markup; skipping th
 ## Read next
 
 - [design](references/design.md) — visual design.
-- [markup](references/markup.md) — allowlist and layout; then [data](references/markup-data.md) and its [worked example](references/markup-data-example.md).
-- [page types](references/templates.md) — `afbin help templates` lists the seven, then `references/templates-<name>.md` for the one picked.
-- [design systems](references/design-systems.md) — `afbin help design-systems`; pick one, then its `system-<slug>.md`; [worked briefs](references/worked-briefs.md) show the thesis.
+- [markup](references/markup.md); [data](references/markup-data.md) and [example](references/markup-data-example.md).
+- [page types](references/templates.md) — `afbin help templates`, then `references/templates-<name>.md`.
+- [design systems](references/design-systems.md) — `afbin help design-systems`, then `system-<slug>.md`; [worked briefs](references/worked-briefs.md).
 - [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
 - [errors](references/errors.md) — refusal codes and fixes.
 - [comments](references/publishing-annotations.md) — `afbin comment`; `afbin help remote-review`.
