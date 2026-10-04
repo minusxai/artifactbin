@@ -195,7 +195,12 @@ Poll `afbin runs status <runId>` for its terminal status, output and receipt;
 `afbin runs events <runId>` reads emitted events and `afbin runs cancel <runId>`
 requests cancellation. `afbin help lambdas` has complete authoring examples.
 Source dev includes a local runner; packaged hosts need the
-[separate signed runner](../runner/README.md). Cron schedules use the app's HTTP API.
+[separate signed runner](../runner/README.md). Local preview, editing, SQL queries,
+comments and exports run on your machine without that service. Executing a
+published Lambda uses the selected server's runner; packaged `afbin serve`
+requires `RUNNER__SERVICE_URL` and its signing secret, and otherwise returns
+`runner_unavailable`. It does not install or start a local JavaScript execution
+sandbox. Cron schedules use the app's HTTP API.
 
 ## V0 boundaries
 

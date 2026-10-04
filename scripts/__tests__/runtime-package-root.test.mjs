@@ -45,3 +45,16 @@ test('CLI runtime omits execution-only packages while retaining server externals
  }
  for(const name of ['esbuild','pg','@electric-sql/pglite','playwright','playwright-core','@sqlite.org/sqlite-wasm','vega','vega-lite','vega-interpreter','harfbuzzjs','wawoff2','nunjucks'])expect(CLI_RUNTIME_EXTERNALS).toContain(name);
 });
+
+
+test('remote-runner host assets exclude local execution workers while app hosts retain them',async()=>{
+ const {copyRunnerAssets}=await import('../build/copy-runner-assets.mjs');
+ const root=await mkdtemp(join(tmpdir(),'afbin-runner-assets-'));
+ try{
+  const local=join(root,'local'),remote=join(root,'remote');await mkdir(local);await mkdir(remote);
+  await copyRunnerAssets(local);
+  expect((await readdir(local)).sort()).toEqual(['agent.ts.txt','runner-worker.mjs']);
+  await copyRunnerAssets(remote,{remoteRunner:true});
+  expect(await readdir(remote)).toEqual([]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
