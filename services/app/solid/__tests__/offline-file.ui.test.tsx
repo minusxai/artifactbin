@@ -126,6 +126,88 @@ describe('Solid offline file', () => {
     expect(screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(true);
   });
 
+  it('renders added structure after accepting source, saving and reopening', async () => {
+    const file = fixture();
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const source = screen.getByRole('textbox', { name: 'Markup source' });
+    const next = file.source.replace('Regional sales</h1>', 'Regional sales</h1><section id="new-section"><h2>Added offline</h2><p>A new paragraph.</p></section>');
+    fireEvent.input(source, { target: { value: next } });
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(screen.getByRole('heading', { name: 'Added offline' })).toBeTruthy();
+    disposeSolidOfflineFile();
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    shell(saved); await mountSolidOfflineFile();
+    expect(screen.getByRole('heading', { name: 'Added offline' })).toBeTruthy();
+    expect(document.querySelector('#new-section')?.textContent).toContain('A new paragraph.');
+    expect(saved.compiled).toEqual(file.compiled);
+  });
+
+  it('keeps rejected textarea drafts unsaved and refuses Save without discarding them', async () => {
+    const file = fixture();
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const source = screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement;
+    const rejected = file.source.replace('Regional sales</h1>', 'Regional sales</h1><script>alert(1)</script>');
+    fireEvent.input(source, { target: { value: rejected } });
+    const picker = vi.fn(); vi.stubGlobal('showSaveFilePicker', picker);
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getAllByRole('status').some((status) => status.textContent?.includes('not saved'))).toBe(true));
+    expect(picker).not.toHaveBeenCalled();
+    expect(source.value).toBe(rejected);
+    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
+  });
+
+  it('retains newer rejected typing when an earlier accepted save finishes', async () => {
+    const file = fixture(); await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const textarea = screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement;
+    const accepted = file.source.replace('Regional sales</h1>', 'Changed heading</h1>');
+    fireEvent.input(textarea, { target: { value: accepted } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const newer = `${accepted}<script>bad()</script>`;
+    fireEvent.input(textarea, { target: { value: newer } });
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
+    expect(textarea.value).toBe(newer);
+    expect(document.body.textContent).toContain('Unsaved changes');
+  });
+
+  it('restores a rejected source draft separately from the last valid document', async () => {
+    const file = fixture();
+    const rejected = `${file.source}<script>bad()</script>`;
+    writeDraft(file, new Date('2026-10-04T00:00:00Z'), rejected);
+    shell(file);
+    const opening = mountSolidOfflineFile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    await opening;
+    expect((screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement).value).toBe(rejected);
+    expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
+    expect(document.body.textContent).toContain('Unsaved changes');
+  });
+
+  it('refuses new compiled components without saving or blanking the valid reader', async () => {
+    const file = fixture();
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const source = screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement;
+    const next = file.source.replace('Regional sales</h1>', 'Regional sales</h1><Card><p>New kit shell</p></Card>');
+    fireEvent.input(source, { target: { value: next } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
+    expect(source.value).toBe(next);
+    expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
+    expect(document.body.textContent).toContain('local compiler');
+  });
+
   it('edits the paragraph at the edited path, not the first paragraph with the same words', async () => {
     const file = withTwice(fixture());
     expect(file.source.split(TWICE)).toHaveLength(3);

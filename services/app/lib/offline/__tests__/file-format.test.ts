@@ -8,6 +8,22 @@ describe('parseArtifactFile', () => {
     expect(parseArtifactFile(JSON.parse(JSON.stringify(file)))).toEqual(file);
   });
 
+  it('round trips local workspace provenance and rejects unsafe embedded asset paths', () => {
+    const localWorkspace = { documentId: 'Local1', baseDigest: 'baseline', assets: {
+      'plot.png': { path: 'assets/plot.png', contentType: 'image/png', base64: 'QUJD' },
+    } };
+    const file = { ...artifactFile(), localWorkspace };
+    expect(parseArtifactFile(file)).toEqual(file);
+    for (const path of ['../outside', '/absolute', 'C:\\outside', 'assets/../outside', 'assets/./plot.png']) {
+      expect(() => parseArtifactFile({ ...file, localWorkspace: { ...localWorkspace, assets: {
+        x: { ...localWorkspace.assets['plot.png'], path },
+      } } })).toThrow(ArtifactFileError);
+    }
+    expect(() => parseArtifactFile({ ...file, localWorkspace: { ...localWorkspace, assets: {
+      x: { path: 'assets/x', contentType: 'image/png', base64: '<script>' },
+    } } })).toThrow(ArtifactFileError);
+  });
+
   it('refuses a newer format with a message that says to update, not that the file is broken', () => {
     const newer = { ...artifactFile(), format: 2 };
     expect(() => parseArtifactFile(newer)).toThrow(ArtifactFileError);

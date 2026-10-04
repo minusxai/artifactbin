@@ -30,11 +30,11 @@ export function writeName(name: string): boolean {
 
 export const draftKey = (file: Pick<ArtifactFile, 'artifactId' | 'downloadedAt'>) => `${DRAFT_PREFIX}${file.artifactId}:${file.downloadedAt}`;
 
-export interface Draft { savedAt: string; file: ArtifactFile }
+export interface Draft { savedAt: string; file: ArtifactFile; sourceDraft?: string }
 
 /** Keeps the file's current state; past the quota (or with no storage) it skips silently. */
-export function writeDraft(file: ArtifactFile, at = new Date()): void {
-  try { store()?.setItem(draftKey(file), JSON.stringify({ savedAt: at.toISOString(), file } satisfies Draft)); } catch { /* quota or no storage: the draft is a convenience */ }
+export function writeDraft(file: ArtifactFile, at = new Date(), sourceDraft?: string): void {
+  try { store()?.setItem(draftKey(file), JSON.stringify({ savedAt: at.toISOString(), file, ...(sourceDraft !== undefined ? { sourceDraft } : {}) } satisfies Draft)); } catch { /* quota or no storage: the draft is a convenience */ }
 }
 
 export function clearDraft(file: Pick<ArtifactFile, 'artifactId' | 'downloadedAt'>): void {
@@ -58,11 +58,12 @@ export function readDraft(file: ArtifactFile): Draft | null {
   try { raw = store()?.getItem(draftKey(file)) ?? null; } catch { return null; }
   if (!raw) return null;
   try {
-    const value = JSON.parse(raw) as { savedAt?: unknown; file?: unknown };
+    const value = JSON.parse(raw) as { savedAt?: unknown; file?: unknown; sourceDraft?: unknown };
     if (typeof value.savedAt !== 'string') return null;
-    const draft = { savedAt: value.savedAt, file: parseArtifactFile(value.file) };
+    if (value.sourceDraft !== undefined && typeof value.sourceDraft !== 'string') return null;
+    const draft: Draft = { savedAt: value.savedAt, file: parseArtifactFile(value.file), ...(typeof value.sourceDraft === 'string' ? { sourceDraft: value.sourceDraft } : {}) };
     if (draft.file.artifactId !== file.artifactId || draft.file.downloadedAt !== file.downloadedAt) return null;
-    const same = JSON.stringify(draft.file) === JSON.stringify(file);
+    const same = JSON.stringify(draft.file) === JSON.stringify(file) && (draft.sourceDraft === undefined || draft.sourceDraft === file.source);
     return !same && Date.parse(draft.savedAt) > fileTime(file) ? draft : null;
   } catch {
     return null;

@@ -148,7 +148,7 @@ const agentFiles = {
   invalid: path.join(work, 'agent-invalid.html'),
   query: path.join(work, 'agent-query.html'),
 };
-writeFileSync(agentFiles.valid, agentEdited(coreHtml, (s) => s.replace('Regional sales</h1>', 'Sales, edited by an agent</h1>')));
+writeFileSync(agentFiles.valid, agentEdited(coreHtml, (s) => s.replace('Regional sales</h1>', 'Sales, edited by an agent</h1><section id="offline-added-section"><h2>Added offline section</h2><p>Structure travels with the saved file.</p></section>')));
 writeFileSync(agentFiles.invalid, agentEdited(coreHtml, (s) => s.replace('<Button run', '<p>{$missing}</p>\n  <Button run')));
 writeFileSync(agentFiles.query, agentEdited(coreHtml, (s) => s.replace('select region, month, revenue from sales_data.rows where', 'select region, month, revenue * 2 as revenue from sales_data.rows where')));
 
@@ -448,7 +448,12 @@ async function editing(engineName, browser) {
     await step('invalid code refused, not applied', async () => {
       await plain.fill(`${await plain.inputValue()}\n<p>{$missing}</p>`);
       await expect(reopened.getByRole('status').filter({ hasText: /not saved — .*\$missing.* refers to nothing declared/ })).toBeVisible({ timeout: 10_000 });
-      await expect(saveButton(reopened)).toBeDisabled();
+      await expect(saveButton(reopened)).toBeEnabled();
+      const rejected = await plain.inputValue();
+      await saveButton(reopened).click();
+      await expect(reopened.getByRole('alert').filter({ hasText: 'Fix the source before saving' })).toBeVisible();
+      await expect(plain).toHaveValue(rejected);
+      await expect(reopened.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
       await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
     });
     check(empty(await violations(reopened)), `${name}: CSP violations in the reopened copy`);
@@ -596,6 +601,11 @@ async function editedByAnAgent(engineName, browser) {
     await page.goto(pathToFileURL(agentFiles.valid).href);
     const saved = await step('rebuilt from the new source, journal line, Save writes it', async () => {
       await expect(page.getByRole('heading', { name: 'Sales, edited by an agent' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole('heading', { name: 'Added offline section' })).toBeVisible();
+      await expect(page.locator('#offline-added-section')).toContainText('Structure travels with the saved file.');
+      await page.getByRole('button', { name: 'Region', exact: true }).click();
+      await page.getByRole('option', { name: 'west', exact: true }).click();
+      await expect(page.getByRole('table').first().getByRole('row').filter({ hasNot: page.getByRole('columnheader') })).toHaveCount(westRows.length);
       await expect(page.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
       await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
       await page.getByRole('button', { name: /^Changes/ }).click();
@@ -606,6 +616,11 @@ async function editedByAnAgent(engineName, browser) {
     });
     const written = savedFile(saved.html);
     check(written.source.includes('>Sales, edited by an agent</h1>'), `${name}: the saved file keeps the agent's text`);
+    check(JSON.stringify(written.island.nodes).includes('Added offline section'), `${name}: added structure is retained in the saved snapshot`);
+    const savedPage = await watchedPage(context, sink);
+    await savedPage.goto(pathToFileURL(path.join(work, `agent-saved-${engineName}.html`)).href);
+    await expect(savedPage.getByRole('heading', { name: 'Added offline section' })).toBeVisible({ timeout: 20_000 });
+    await savedPage.close();
     check(JSON.stringify(written.island.nodes).includes('Sales, edited by an agent'), `${name}: and the rebuilt render`);
     check(same(written.journal.map((e) => e.summary), [CHANGED_OUTSIDE]), `${name}: the journal says the file was changed outside`);
     check(empty(await violations(page)), `${name}: CSP violations`);
