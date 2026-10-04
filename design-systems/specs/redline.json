@@ -1,0 +1,728 @@
+{
+ "slug": "redline",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Redline cover: a paper panel, a red panel and an ink panel; a giant condensed word, a dotmatrix, a split bar and a stamp</title>\n<rect className=\"rl-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<rect className=\"rl-red\" x=\"0\" y=\"0\" width=\"300\" height=\"200\"/>\n<text x=\"16\" y=\"36\" className=\"rl-svg-mono rl-on-red\">REDLINE / 01</text><text x=\"284\" y=\"36\" className=\"rl-svg-mono rl-on-red\" textAnchor=\"end\">BRIEF Nº 02</text>\n<text x=\"12\" y=\"166\" className=\"rl-svg-huge rl-on-red\">MORE</text>\n<rect className=\"rl-ink\" x=\"300\" y=\"0\" width=\"180\" height=\"200\"/>\n<text x=\"316\" y=\"36\" className=\"rl-svg-mono rl-on-ink\">EVIDENCE</text>\n<circle className=\"rl-dot-red\" cx=\"324\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"336\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"348\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"360\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"372\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"384\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"396\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"408\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"420\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"432\" cy=\"64\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"324\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"336\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"348\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"360\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"372\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"384\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"396\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"408\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"420\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"432\" cy=\"76\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"324\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"336\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"348\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"360\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"372\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"384\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"396\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"408\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"420\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"432\" cy=\"88\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"324\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"336\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"348\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"360\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"372\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"384\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"396\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"408\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"420\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"432\" cy=\"100\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"324\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"336\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"348\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"360\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"372\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"384\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"396\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"408\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"420\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"432\" cy=\"112\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"324\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"336\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"348\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"360\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"372\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"384\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"396\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"408\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"420\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"432\" cy=\"124\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"324\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-red\" cx=\"336\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"348\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"360\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"372\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"384\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"396\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"408\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"420\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"432\" cy=\"136\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"324\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"336\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"348\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"360\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"372\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"384\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"396\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"408\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"420\" cy=\"148\" r=\"4.2\"/><circle className=\"rl-dot-paper\" cx=\"432\" cy=\"148\" r=\"4.2\"/>\n<text x=\"316\" y=\"184\" className=\"rl-svg-mono rl-on-ink\">62 OF 80 · RETURN</text>\n<text x=\"16\" y=\"248\" className=\"rl-svg-big\">ROOM.</text>\n<rect className=\"rl-ink\" x=\"200\" y=\"216\" width=\"168\" height=\"36\"/><rect className=\"rl-red\" x=\"368\" y=\"216\" width=\"96\" height=\"36\"/>\n<text x=\"212\" y=\"240\" className=\"rl-svg-mono rl-on-ink\">240 TODAY</text><text x=\"378\" y=\"240\" className=\"rl-svg-mono rl-on-red\">+160</text>\n<g transform=\"rotate(-4 420 272)\"><rect className=\"rl-stamp-rim\" x=\"372\" y=\"258\" width=\"96\" height=\"26\"/><text x=\"420\" y=\"276\" className=\"rl-svg-stamp\" textAnchor=\"middle\">PROPOSAL</text></g>\n<g transform=\"translate(16 268)\"><rect className=\"rl-ink\" x=\"0\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"10\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"20\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"30\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"40\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"50\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"60\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"70\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"80\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"90\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"100\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"110\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"120\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"130\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"140\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"150\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"160\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/><rect className=\"rl-ink\" x=\"170\" y=\"0\" width=\"3\" height=\"12\" transform=\"skewX(-20)\"/></g>\n</svg>",
+ "name": "Redline",
+ "tagline": "One word. Then the number.",
+ "mood": "Poster",
+ "jobs": "Slides, decision briefs, launch pages, posters",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Barlow Condensed",
+   "ital,wght@0,500;0,700;0,800;1,700"
+  ],
+  [
+   "DM Sans",
+   "opsz,wght@9..40,400;9..40,500;9..40,700"
+  ],
+  [
+   "DM Mono",
+   "wght@400;500"
+  ]
+ ],
+ "families": {
+  "display": "\"Barlow Condensed\", Impact, \"Arial Narrow\", sans-serif",
+  "sans": "\"DM Sans\", system-ui, sans-serif",
+  "mono": "\"DM Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "paper",
+   "light": "#EEEADE",
+   "dark": "#20201D",
+   "usage": "Page ground and the paper slide surface.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-raised",
+   "light": "#F6F3EA",
+   "dark": "#2A2A26",
+   "usage": "Cards, fields, the paper stage inside an ink page.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-sunk",
+   "light": "#E2DDCC",
+   "dark": "#171715",
+   "usage": "Wells, tracks, table stripes, off dots.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#C9C3B0",
+   "dark": "#3D3D37",
+   "usage": "Hairline rules: list rows, footers, the slide foot.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#20201D",
+   "dark": "#EEEADE",
+   "usage": "Type, rules, the ink slide surface, the ink half of the split bar.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-soft",
+   "light": "#5C5A52",
+   "dark": "#B3B0A3",
+   "usage": "Secondary text, captions, muted eyebrows.",
+   "group": "Ink"
+  },
+  {
+   "name": "on-ink",
+   "light": "#EEEADE",
+   "dark": "#20201D",
+   "usage": "Type on an ink surface.",
+   "group": "Ink"
+  },
+  {
+   "name": "red",
+   "light": "#EC402B",
+   "dark": "#EC402B",
+   "usage": "The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-red",
+   "light": "#20201D",
+   "dark": "#20201D",
+   "usage": "Type on red: ink, never paper, so red surfaces stay printed, not glowing.",
+   "group": "Brand"
+  },
+  {
+   "name": "red-ink",
+   "light": "#C8321F",
+   "dark": "#FF6A55",
+   "usage": "Red as text on paper: one word in a headline, a link, a delta.",
+   "group": "Brand"
+  },
+  {
+   "name": "red-soft",
+   "light": "#F9D5CF",
+   "dark": "#4A1D17",
+   "usage": "Ground for selected rows and red callouts; text on it is ink.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#2A9D5C",
+   "dark": "#5EC98A",
+   "usage": "Up, done, approved. Always with a word or a glyph.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#D7EFE0",
+   "dark": "#143524",
+   "usage": "Ground for success callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#B8841A",
+   "dark": "#F0BD57",
+   "usage": "Pending, waiting, at capacity.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#FAECC9",
+   "dark": "#42310A",
+   "usage": "Ground for warning callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#EC402B",
+   "dark": "#EC402B",
+   "usage": "Down, failed, refused. The same red: errors are loud, there is one red.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#F9D5CF",
+   "dark": "#4A1D17",
+   "usage": "Ground for error callouts.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "paper",
+  "foreground": "ink",
+  "card": "paper-raised",
+  "card-foreground": "ink",
+  "popover": "paper-raised",
+  "popover-foreground": "ink",
+  "primary": "red",
+  "primary-foreground": "on-red",
+  "secondary": "ink",
+  "secondary-foreground": "on-ink",
+  "muted": "paper-sunk",
+  "muted-foreground": "ink-soft",
+  "accent": "red-soft",
+  "accent-foreground": "red-ink",
+  "destructive": "negative",
+  "destructive-foreground": "on-red",
+  "border": "line",
+  "input": "line",
+  "ring": "red",
+  "chart-1": "red",
+  "chart-2": "ink",
+  "chart-3": "ink-soft",
+  "chart-4": "positive",
+  "chart-5": "caution"
+ },
+ "radius_contract": "0px",
+ "extra_vars": {
+  "chip-radius": "0px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(80px, 18vw, 240px)",
+   "lh": ".82",
+   "weight": 700,
+   "ls": "-0.025em",
+   "tt": "uppercase",
+   "sample": "More room.",
+   "usage": "The cover word. One per deck or page; it may run off the stage."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(48px, 7.5vw, 104px)",
+   "lh": ".9",
+   "weight": 700,
+   "ls": "-0.025em",
+   "tt": "uppercase",
+   "sample": "The evidence",
+   "usage": "Slide titles and section openers."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "44px",
+   "lh": "40px",
+   "weight": 700,
+   "ls": "-0.02em",
+   "tt": "uppercase",
+   "sample": "Capacity today",
+   "usage": "Page titles, big labels beside a number."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "24px",
+   "lh": "26px",
+   "weight": 700,
+   "ls": "-0.01em",
+   "tt": "uppercase",
+   "sample": "Repeat customers",
+   "usage": "Card titles, list heads, feature titles."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "19px",
+   "lh": "1.5",
+   "weight": 400,
+   "sample": "Customers return. But service takes time.",
+   "usage": "Decks and the one sentence under a number."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "16px",
+   "lh": "1.55",
+   "weight": 400,
+   "sample": "The wait signals a service constraint; it does not establish demand for a second site.",
+   "usage": "Reading and interface text."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 400,
+   "sample": "Source: supplied brief. Proposal, not an approved investment.",
+   "usage": "Captions, sources, the slide foot."
+  },
+  {
+   "name": "label",
+   "family": "mono",
+   "size": "11px",
+   "lh": "16px",
+   "weight": 400,
+   "ls": "0.09em",
+   "tt": "uppercase",
+   "sample": "Loop / 02",
+   "usage": "Eyebrows, toplines, list numbers, stamp text. Mono caps through CSS."
+  },
+  {
+   "name": "numeral",
+   "family": "display",
+   "size": "64px",
+   "lh": "56px",
+   "weight": 700,
+   "ls": "-0.03em",
+   "extra": "font-variant-numeric: tabular-nums",
+   "sample": "240",
+   "usage": "KPI figures and the giant slide number. Condensed, tabular."
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "38 / 100 · repeat",
+   "usage": "Code, ratios, list figures."
+  }
+ ],
+ "idea_headline": "A poster that makes a decision.",
+ "idea": "Redline sets a brief the way a good poster does: one condensed word that fills the surface, one number big enough to read from the back of the room, one red. Three surfaces (paper, red, ink) give a deck its rhythm, and small printed devices (a dotmatrix, a stamp, a split bar, a stripe) carry the figures. Everything is flat ink on stock. Nothing glows.",
+ "use_for": "Slide decks and decision briefs, launch and campaign pages, one-page proposals, posters, anything whose first screen must be read in a second and remembered.",
+ "avoid_when": "Long reading (condensed caps tire past a paragraph), dashboards with many simultaneous numbers, subjects that need warmth, softness or more than one colour.",
+ "principles_headline": "Five rules, printed in one colour.",
+ "principles": [
+  [
+   "One word fills the surface.",
+   "The cover word is set at .82 leading and may run past the edge. It is the whole slide; the sentence below it is small."
+  ],
+  [
+   "One number, big enough for the back row.",
+   "A slide carries one figure in the numeral role. Supporting figures go in the list rows at a tenth of the size."
+  ],
+  [
+   "Three surfaces, one red.",
+   "Paper is the default, red is the moment, ink is the evidence. A deck changes surface no more than every third slide."
+  ],
+  [
+   "Devices carry the data.",
+   "Dotmatrix for a share, split bar for a sum, list rows for a ranking, stamp for a status. No decorative shapes."
+  ],
+  [
+   "Red is the only colour.",
+   "It is the surface, the accent and the error at once. Green and amber exist for status words, never as design."
+  ]
+ ],
+ "voice": [
+  "Short declaratives, present tense: \"Customers return. Service takes time.\"",
+  "Say what a number is and what it is not: \"An illustrative throughput, not a demand forecast.\"",
+  "Toplines name the deck and the slide: LOOP / 02.",
+  "No exclamation marks. The type is already shouting."
+ ],
+ "colour_headline": "Paper, ink, red. That is the palette.",
+ "colour_note": "Day first: paper ground, ink type, red for the surface that matters. Night is the ink slide as the page: ink ground, paper type, the red unchanged. Type on red is always ink, so red stays printed rather than lit. Status words use green and amber; the error colour is the red itself.",
+ "chart_series": [
+  "red",
+  "ink",
+  "ink-soft",
+  "positive",
+  "caution"
+ ],
+ "chart_note": "Red is the series the slide is about; ink is the comparison; ink-soft the baseline. Prefer the split bar or the dotmatrix to a chart when the figure is one share or one sum.",
+ "type_headline": "Barlow Condensed shouts, DM Sans explains, DM Mono files.",
+ "type_note": "Barlow Condensed at 700, uppercase, tracked to -.025em and set with .82 leading for the cover word and .9 for titles. DM Sans carries every sentence. DM Mono carries toplines, list numbers and stamps at 11px with .09em tracking.",
+ "space_headline": "Stage units on slides, a 4px base on pages.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Gap in a stamp, dot gap in a dotmatrix."
+  ],
+  [
+   "space-2 · 8px",
+   "Inside controls."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding; list-row padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "Default stack gap."
+  ],
+  [
+   "space-6 · 24px",
+   "Card padding."
+  ],
+  [
+   "space-10 · 40px",
+   "Between a title and its number."
+  ],
+  [
+   "stage-x · 4.2cqw",
+   "Slide side padding, in container units so a slide scales."
+  ],
+  [
+   "stage-y · 3.6cqw",
+   "Slide top padding; the foot sits 2.2cqw from the bottom."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Everything. Buttons, fields, cards, stages, tags. A poster has no rounded corners."
+  ],
+  [
+   "rule · 1px",
+   "Line-coloured hairlines on list rows, the foot and the topline."
+  ],
+  [
+   "rule · 2px",
+   "currentColor, under a metric row or a slide section."
+  ],
+  [
+   "edge · 2px",
+   "Stamps and outline buttons use a 2px currentColor border."
+  ]
+ ],
+ "depth": [
+  [
+   "flat",
+   "No shadows, no elevation. Surfaces change colour instead of height."
+  ],
+  [
+   "watermark",
+   "A giant word at 20% opacity, rotated -12°, behind a decision slide. One per deck."
+  ],
+  [
+   "photo",
+   "Grayscale, multiplied onto red at 88%. Never full colour."
+  ]
+ ],
+ "motion": [
+  [
+   "Hover",
+   "Buttons invert to ink, 200ms. Rows do not react."
+  ],
+  [
+   "Press",
+   "No movement; the fill darkens."
+  ],
+  [
+   "Focus",
+   "3px outline in red on paper, in paper on ink; 5px offset."
+  ],
+  [
+   "Enter",
+   "A slide enters with a 12px slide-in and fade over 420ms; its headline rises 20px over 650ms (kit animate-fade-up)."
+  ],
+  [
+   "Reveal",
+   "Long pages reveal sections with reveal-up; the dotmatrix fills dot by dot with a 20ms stagger."
+  ],
+  [
+   "Loop",
+   "None. A marquee is allowed on a launch page only, once, for a list of names."
+  ]
+ ],
+ "components_headline": "The kit wears paper and red; the devices are classes.",
+ "components_note": "Kit components take Redline through the contract: paper grounds, red primary, ink secondary, zero radius. The stage, the dotmatrix, the split bar, the stamp and the list row are authored rl-* classes written against the hand variables, so they port.",
+ "buttons": "<Button>Approve the site</Button><Button variant=\"secondary\">Request numbers</Button><Button variant=\"outline\">Download brief</Button><Button variant=\"ghost\">Later</Button><button className=\"rl-btn rl-btn-primary\">Approve the site</button><button className=\"rl-btn rl-btn-ink\">Request numbers</button><button className=\"rl-btn\">Download brief</button>",
+ "buttons_note": "Kit buttons on the left; authored rl-btn on the right: condensed caps, 2px edge, square, inverted on hover. One red button per surface. On a red surface the primary is ink.",
+ "tags": "<Badge>Red</Badge><Badge variant=\"secondary\">Ink</Badge><Badge variant=\"outline\">Draft</Badge><Badge variant=\"destructive\">Refused</Badge><span className=\"rl-tag\">Loop / 02</span><span className=\"rl-tag rl-tag-red\">Proposal</span><span className=\"rl-tag is-ok\">▲ Approved</span><span className=\"rl-tag is-warn\">Waiting</span><span className=\"rl-tag is-bad\">▼ Refused</span>",
+ "tags_note": "Tags are mono caps in a 1px box. Status tags carry a glyph or a word with the colour; the red tag is a surface, not a status.",
+ "fields_note": "Fields are paper-raised with a 1px line edge, square, with condensed caps labels above. Focus is a 3px red outline. The segmented control fills its active segment red with ink type.",
+ "stats": "<div className=\"rl-stat\"><span className=\"t-label\">Repairs / month</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"orders\" format=\",.0f\" /></span><span className=\"rl-stat-note\">today, across one site</span></div><div className=\"rl-stat rl-stat-red\"><span className=\"t-label\">Added capacity</span><span className=\"t-numeral\">+<Number data=\"$totals\" col=\"added\" /></span><span className=\"rl-stat-note\">if the second site opens</span></div><div className=\"rl-stat\"><span className=\"t-label\">Days waiting</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"wait_days\" format=\".0f\" /></span><span className=\"rl-stat-note\">median, last quarter</span></div>",
+ "stats_note": "A stat is a mono label, a condensed numeral and one sentence, over a 2px rule. The red stat is the one the slide is about. Figures come from data.",
+ "callouts": "<Alert><AlertTitle>Proposal, not an approved investment</AlertTitle><AlertDescription>Every figure is illustrative until finance signs.</AlertDescription></Alert><div className=\"rl-callout rl-callout-red\"><strong>Red means the moment.</strong> The one thing this slide asks you to decide.</div><div className=\"rl-callout rl-callout-ok\"><strong>▲ Approved.</strong> The second site opens in Q2.</div><div className=\"rl-callout rl-callout-bad\"><strong>▼ Refused.</strong> Demand is not established. Bring the waiting-list data.</div>",
+ "callouts_note": "A callout states the decision, then the condition. Status grounds are the soft tokens; the type stays ink.",
+ "chart_comp_note": "Charts take red first, ink second, square marks, no grid beyond the baseline. Use a chart only when a device cannot carry the figure.",
+ "table_note": "Tables are list rows: a mono number, a condensed name, a sentence, each on a 1px top rule. No zebra, no cell borders.",
+ "card": "<div className=\"rl-card\"><p className=\"t-label\">Loop / 03 · The proposal</p><h3 className=\"t-display-m\">More room. Same mission.</h3><div className=\"rl-bar\"><span className=\"rl-bar-a\">240</span><span className=\"rl-bar-b\">+160</span></div><div className=\"rl-bar-labels\"><span>Current repairs / month</span><span>Added capacity / month</span></div><p className=\"rl-card-body\">The second site adds capacity equal to two-thirds of today&#39;s volume. 400 a month is an illustrative throughput, not a demand forecast.</p><button className=\"rl-btn rl-btn-primary\">Approve the site</button></div>",
+ "card_note": "A card is a paper stage in miniature: topline, condensed title, one device, one sentence, one action. Flat, square, hairline-edged.",
+ "motifs_headline": "Dots, bars, stamps, stripes.",
+ "motifs_note": "Redline draws with flat ink on stock: 2px square-capped strokes, flat red or ink fills, no shadow. Its own devices below; each carries a figure, none is decoration.",
+ "motifs": [
+  {
+   "title": "The dotmatrix",
+   "usage": "One hundred dots, ten by ten; the on dots are red and count the share. Label the ratio beside it in mono. For a share of a hundred, prefer this to a pie.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Dotmatrix: 38 of 100</title><circle className=\"rl-dot-on\" cx=\"40\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"56\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"72\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"88\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"104\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"120\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"136\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"152\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"168\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"184\" cy=\"28\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"40\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"56\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"72\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"88\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"104\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"120\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"136\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"152\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"168\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"184\" cy=\"44\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"40\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"56\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"72\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"88\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"104\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"120\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"136\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"152\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"168\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"184\" cy=\"60\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"40\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"56\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"72\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"88\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"104\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"120\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"136\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot-on\" cx=\"152\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"168\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"184\" cy=\"76\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"40\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"56\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"72\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"88\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"104\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"120\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"136\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"152\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"168\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"184\" cy=\"92\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"40\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"56\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"72\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"88\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"104\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"120\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"136\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"152\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"168\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"184\" cy=\"108\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"40\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"56\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"72\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"88\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"104\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"120\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"136\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"152\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"168\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"184\" cy=\"124\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"40\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"56\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"72\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"88\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"104\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"120\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"136\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"152\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"168\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"184\" cy=\"140\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"40\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"56\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"72\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"88\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"104\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"120\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"136\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"152\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"168\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"184\" cy=\"156\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"40\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"56\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"72\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"88\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"104\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"120\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"136\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"152\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"168\" cy=\"172\" r=\"5.5\"/><circle className=\"rl-dot\" cx=\"184\" cy=\"172\" r=\"5.5\"/><text x=\"232\" y=\"92\" className=\"rl-svg-big\">38</text><text x=\"232\" y=\"118\" className=\"rl-svg-mono rl-svg-soft\">OF EVERY 100 CUSTOMERS</text><text x=\"232\" y=\"136\" className=\"rl-svg-mono rl-svg-soft\">ARE REPEAT CUSTOMERS</text></svg>"
+  },
+  {
+   "title": "The split bar and the stripe",
+   "usage": "One sum as one bar: ink for what exists, red for what is added, the figures inside each half. The stripe is a 110° hatch band that closes a section or underlines a total.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Split bar: 240 plus 160</title><rect className=\"h-fill2\" x=\"24\" y=\"48\" width=\"259\" height=\"64\"/><rect className=\"h-fill\" x=\"283\" y=\"48\" width=\"173\" height=\"64\"/><text x=\"40\" y=\"92\" className=\"rl-svg-bar rl-on-ink\">240</text><text x=\"299\" y=\"92\" className=\"rl-svg-bar rl-on-red\">+160</text><text x=\"24\" y=\"134\" className=\"rl-svg-mono rl-svg-soft\">CURRENT REPAIRS / MONTH</text><text x=\"456\" y=\"134\" className=\"rl-svg-mono rl-svg-soft\" textAnchor=\"end\">ADDED CAPACITY / MONTH</text><g transform=\"translate(24 160)\"><rect className=\"h-fill2\" x=\"0\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"10\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"20\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"30\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"40\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"50\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"60\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"70\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"80\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"90\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"100\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"110\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"120\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"130\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"140\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"150\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"160\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"170\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"180\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"190\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"200\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"210\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"220\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"230\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"240\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"250\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"260\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"270\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"280\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"290\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"300\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"310\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"320\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"330\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"340\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"350\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"360\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"370\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"380\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"390\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"400\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"410\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"420\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/><rect className=\"h-fill2\" x=\"430\" y=\"0\" width=\"3\" height=\"10\" transform=\"skewX(-20)\"/></g></svg>"
+  },
+  {
+   "title": "The stamp and the watermark",
+   "usage": "A status lands as a mono stamp in a 2px box rotated -4°. Behind a decision slide, the decision word sits at 20% opacity, rotated -12°, as a watermark. One each per deck.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Stamp and watermark</title><text x=\"150\" y=\"150\" className=\"rl-svg-mark\" transform=\"rotate(-12 240 100)\" textAnchor=\"middle\">YES</text><text x=\"24\" y=\"60\" className=\"rl-svg-big\">DECISION</text><text x=\"24\" y=\"92\" className=\"rl-svg-mono rl-svg-soft\">OPEN THE SECOND SITE IN Q2</text><g transform=\"rotate(-4 356 140)\"><rect className=\"rl-stamp-rim\" x=\"284\" y=\"122\" width=\"144\" height=\"36\"/><text x=\"356\" y=\"146\" className=\"rl-svg-stamp\" textAnchor=\"middle\">PROPOSAL · NOT APPROVED</text></g></svg>"
+  }
+ ],
+ "sample_headline": "Three slides in Redline.",
+ "sample_note": "A decision brief as a deck: the paper cover with the word that fills it, the red evidence slide with one number from the data, and the ink decision slide with its stamp and watermark. Each stage is 16:9 and scales with its container.",
+ "sample": "<div className=\"rl-sample\"><div className=\"rl-sample-in\">\n  <div className=\"rl-deck\">\n    <div className=\"rl-stage rl-stage-paper\">\n      <div className=\"rl-top\"><span className=\"rl-brand\">loop</span><span>Brief Nº 02</span><span>The second site</span></div>\n      <h2 className=\"rl-cover-word\">More<br/>room.</h2>\n      <p className=\"rl-cover-sub\">A second repair site. A proposal for more capacity, not a forecast of demand.</p>\n      <div className=\"rl-foot\"><span>Loop / 01</span><span>Synthetic brief · Oct 2026</span></div>\n    </div>\n    <div className=\"rl-stage rl-stage-red\">\n      <div className=\"rl-top\"><span>Loop / 02</span><span>The evidence</span></div>\n      <div className=\"rl-stat-row\"><span className=\"rl-huge\"><Number data=\"$totals\" col=\"orders\" format=\",.0f\" /></span><h3 className=\"rl-stat-h\">repairs<br/>a month</h3></div>\n      <div className=\"rl-metric-bottom\"><div><strong><Number data=\"$totals\" col=\"wait_days\" format=\".0f\" /> days</strong><p>median wait</p></div><div><strong><Number data=\"$totals\" col=\"utilisation\" />%</strong><p>of capacity used</p></div></div>\n      <div className=\"rl-foot\"><span>Loop / 02</span><span>Source: supplied brief</span></div>\n    </div>\n    <div className=\"rl-stage rl-stage-ink\">\n      <span className=\"rl-mark\" aria-hidden=\"true\">Yes</span>\n      <div className=\"rl-top\"><span>Loop / 03</span><span>The decision</span></div>\n      <h2 className=\"rl-decision\">Open the second site in Q2.</h2>\n      <p className=\"rl-decision-copy\">Capacity is the constraint we can prove. Demand is the one we cannot. Approve the site; hold the hiring until the waiting list is measured.</p>\n      <span className=\"rl-stamp\">Proposal · not approved</span>\n      <div className=\"rl-foot\"><span>Loop / 03</span><span>Decision requested</span></div>\n    </div>\n  </div>\n  <div className=\"rl-list\">\n    <div className=\"rl-list-row\"><span className=\"t-label\">01</span><h4 className=\"t-title\">Capacity</h4><p>Both sites together handle 400 a month if today&#39;s output holds.</p></div>\n    <div className=\"rl-list-row\"><span className=\"t-label\">02</span><h4 className=\"t-title\">Waiting</h4><p>Eleven days median. The wait is a service constraint, not proof of demand.</p></div>\n    <div className=\"rl-list-row\"><span className=\"t-label\">03</span><h4 className=\"t-title\">Ask</h4><p>Approve the lease. Hold hiring until the waiting list is measured for one quarter.</p></div>\n  </div>\n</div></div>",
+ "dos": [
+  "One word per cover, set to fill the surface.",
+  "One number per slide, in the numeral role.",
+  "Change surface (paper, red, ink) no more than every third slide.",
+  "Carry figures in devices: dotmatrix, split bar, list rows.",
+  "Set type on red in ink."
+ ],
+ "donts": [
+  "No second colour; status words use green and amber, nothing else does.",
+  "No rounded corners, no shadows, no gradients.",
+  "No full-colour photos: grayscale, multiplied onto red.",
+  "No paragraphs in condensed caps.",
+  "No two red elements on one surface."
+ ],
+ "binding_losses": "The three surfaces (red and ink as full slides), the split bar, the dotmatrix, the stamp, the watermark and the stripe have no contract slot. They are carried as --ds-* properties and the rl-* classes; kit components follow paper, ink and red but not the surface rhythm.",
+ "footer": "Day first, Night second. Fonts: Barlow Condensed 500/700/800 + italic 700, DM Sans 400/500/700, DM Mono 400/500, all Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "month": "Jun",
+    "orders": 210,
+    "capacity": 240,
+    "wait_days": 6,
+    "repeat": 34
+   },
+   {
+    "month": "Jul",
+    "orders": 226,
+    "capacity": 240,
+    "wait_days": 8,
+    "repeat": 36
+   },
+   {
+    "month": "Aug",
+    "orders": 238,
+    "capacity": 240,
+    "wait_days": 11,
+    "repeat": 38
+   },
+   {
+    "month": "Sep",
+    "orders": 240,
+    "capacity": 240,
+    "wait_days": 12,
+    "repeat": 40
+   }
+  ],
+  "queries": {
+   "series": "select month, orders, capacity, wait_days from rows order by month desc",
+   "table": "select month, orders, capacity, wait_days, repeat from rows order by month desc",
+   "totals": "select max(orders) as orders, round(avg(wait_days)) as wait_days, 160 as added, round(100.0*sum(orders)/sum(capacity)) as utilisation, max(repeat) as repeat from rows"
+  },
+  "segments": [
+   "Evidence",
+   "Proposal",
+   "Decision"
+  ],
+  "segment_default": "Evidence",
+  "select_label": "Slide",
+  "input_placeholder": "Search the deck",
+  "switch_label": "Show sources",
+  "tabs": [
+   "Evidence",
+   "Proposal",
+   "Decision"
+  ],
+  "tab_body": "Evidence: three numbers from the brief, nothing projected.",
+  "progress_label": "Capacity used · 95%",
+  "progress": 95,
+  "chart_title": "Repairs against capacity, monthly",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar"
+    },
+    "encoding": {
+     "x": {
+      "field": "month",
+      "type": "ordinal",
+      "sort": [
+       "Jun",
+       "Jul",
+       "Aug",
+       "Sep"
+      ],
+      "title": "Month"
+     },
+     "y": {
+      "field": "orders",
+      "type": "quantitative",
+      "title": "Repairs"
+     }
+    }
+   }
+  },
+  "row_key": "month",
+  "table_columns": [
+   {
+    "col": "month",
+    "title": "Month"
+   },
+   {
+    "col": "orders",
+    "title": "Repairs",
+    "align": "right"
+   },
+   {
+    "col": "capacity",
+    "title": "Capacity",
+    "align": "right"
+   },
+   {
+    "col": "wait_days",
+    "title": "Wait (d)",
+    "align": "right"
+   },
+   {
+    "col": "repeat",
+    "title": "Repeat %",
+    "align": "right",
+    "bar": true
+   }
+  ],
+  "table_height": "220px"
+ },
+ "btn_primary": "rl-btn rl-btn-primary",
+ "btn_secondary": "rl-btn",
+ "hand": {
+  "mode": "flat",
+  "shadow": false,
+  "headline": "Flat ink on stock.",
+  "note": "Redline draws like a one-colour screen print: a 2px square-capped ink line, flat red for the part that matters, flat ink for the rest, sunk paper for the quiet parts. No shadow, no texture, no gradient; the figure sits in the display face. The subject is the artifact's; the hand is this.",
+  "rules": [
+   [
+    "Stroke",
+    "2px ink, square caps and joins."
+   ],
+   [
+    "Fill",
+    "Flat red for the one thing; flat ink for the comparison; sunk paper for the rest."
+   ],
+   [
+    "Shadow",
+    "None. Depth comes from the surface change, never from an offset."
+   ],
+   [
+    "Figures",
+    "DM Mono caps at 11px; Barlow Condensed for the one number."
+   ],
+   [
+    "Surface",
+    "A drawing may sit on paper, red or ink; on red its fills swap to ink."
+   ],
+   [
+    "Motion",
+    "A dotmatrix may fill dot by dot. Nothing else moves."
+   ]
+  ]
+ },
+ "tpl": {
+  "brand": "loop",
+  "dash_title": "Brief Nº 02 · Capacity",
+  "kpis": [
+   [
+    "Repairs / month",
+    "orders",
+    "",
+    "",
+    ",.0f",
+    "at capacity since Sep"
+   ],
+   [
+    "Days waiting",
+    "wait_days",
+    "",
+    "",
+    ".0f",
+    "median, last quarter"
+   ],
+   [
+    "Capacity used",
+    "utilisation",
+    "",
+    "%",
+    null,
+    "across one site"
+   ]
+  ],
+  "dash_table_title": "By month",
+  "slide_eyebrow": "The second site",
+  "slide_title": "More room.",
+  "slide_sub": "A second repair site: a proposal for more capacity, not a forecast of demand.",
+  "slide_foot": "Synthetic brief · Oct 2026",
+  "slide_stat_label": "The evidence",
+  "slide_stat_col": "orders",
+  "slide_stat_fmt": ",.0f",
+  "slide_body": "Repairs a month, at capacity for the second month. Customers return; service takes time.",
+  "split": [
+   "240 TODAY",
+   "+160 ADDED"
+  ],
+  "ed_kicker": "Loop / Field notes 02",
+  "ed_headline": "Room for the next repair",
+  "ed_deck": "The workshop is full. The waiting list is eleven days long. Here is the case for a second site, and the one number it cannot prove.",
+  "ed_byline": "Loop · Brief Nº 02 · October 2026",
+  "ed_body": "Two hundred and forty repairs a month is the ceiling of one room with four benches, and the room has been at it since August. The wait has climbed from six days to twelve. Thirty-eight of every hundred customers come back, which says the work is good; it does not say the work will grow. A second site adds a hundred and sixty a month of room. Whether it adds a hundred and sixty of demand is the question this brief leaves open.",
+  "ed_pull_col": "orders",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "repairs a month · at capacity",
+  "steps": [
+   [
+    "One hundred repairs come in.",
+    "Each square is one repair. Red is finished inside the week; ink is waiting; sunk is referred elsewhere."
+   ],
+   [
+    "Sixty leave within the week.",
+    "The rest wait a median of twelve days. The waiting is where the second site would act."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One hundred repairs, by outcome · synthetic",
+  "app_rows": [
+   [
+    "Lease · Unit 7",
+    "Signed · 36 months",
+    "Approved",
+    "ok"
+   ],
+   [
+    "Hiring · two technicians",
+    "Held until Q2 numbers",
+    "Waiting",
+    "warn"
+   ],
+   [
+    "Fit-out · benches",
+    "Quote refused · over budget",
+    "Refused",
+    "bad"
+   ],
+   [
+    "Demand study",
+    "Not started",
+    "Open",
+    "idle"
+   ]
+  ],
+  "app_cta": "New item",
+  "app_cta2": "Save brief",
+  "landing_eyebrow": "Loop repairs · Second site",
+  "landing_headline": "More room for the next ride.",
+  "landing_sub": "A second workshop in Q2, with a hundred and sixty more repairs a month. Same technicians, same mission, half the wait.",
+  "cta": "Book a repair",
+  "cta2": "Read the brief",
+  "features": [
+   [
+    "Half the wait",
+    "Twelve days today. Six when the second room opens."
+   ],
+   [
+    "Same hands",
+    "The crew moves between sites; the standard does not."
+   ],
+   [
+    "One red",
+    "Every price, every promise, printed in one colour so you can read it from the street."
+   ]
+  ]
+ },
+ "css": "\n.ds-redline { --ds-cover-bg: var(--ds-paper); --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-red); --ds-hand-fill2: var(--ds-ink); --ds-hand-muted: var(--ds-paper-sunk); --ds-hand-ground: var(--ds-paper-raised); --ds-hand-stroke: 2; --ds-hand-cap: square; --ds-hand-bg: var(--ds-paper);\n  --ds-tpl-edge: 1px solid var(--ds-line); --ds-tpl-radius: 0; --ds-tpl-rule: 2px solid var(--ds-ink); --ds-tag-radius: 0; --ds-slide-bg: var(--ds-paper-raised); --ds-slide-title-bg: var(--ds-red); --ds-slide-title-fg: var(--ds-on-red); --ds-slide-split-a: var(--ds-ink); --ds-slide-split-a-fg: var(--ds-on-ink); --ds-slide-split-b: var(--ds-red); --ds-slide-split-b-fg: var(--ds-on-red); --ds-hero-bg: var(--ds-red); --ds-hero-fg: var(--ds-on-red); --ds-hero-muted: var(--ds-on-red); }\n.ds-redline .ds-section h2, .ds-redline .ds-tpl-brand, .ds-redline .ds-tpl-slide-h, .ds-redline .ds-tpl-hero-h, .ds-redline .ds-tpl-ed-h, .ds-redline .ds-tpl-step h4, .ds-redline .ds-tpl-feat h4, .ds-redline .ds-tpl-head h3, .ds-redline .ds-tpl-row-name, .ds-redline .ds-tpl-dropcap { font-family: var(--font-display); text-transform: uppercase; letter-spacing: -.02em; }\n.ds-redline .ds-tpl-brand { font-style: italic; text-transform: lowercase; letter-spacing: -.06em; font-size: 24px; }\n.ds-redline .ds-chip { border-width: 1px; border-color: var(--ds-ink); font-family: var(--font-mono); font-weight: 400; }\n.ds-redline .ds-principle-n { font-family: var(--font-mono); font-size: 14px; color: var(--ds-red-ink); }\n.ds-redline .ds-tpl-tag { font-family: var(--font-mono); font-weight: 400; border: 1px solid currentColor; }\n.ds-redline .ds-tpl-tag.is-idle { background: transparent; }\n.ds-redline .ds-tpl-slide-h { font-size: 13cqw; line-height: .85; }\n.ds-redline .ds-tpl-slide-big { font-size: 28cqw; }\n.ds-redline .ds-tpl-hero .ds-tpl-kicker { color: var(--ds-on-red); }\n.ds-redline .ds-tpl-hero .rl-btn { border-color: var(--ds-on-red); color: var(--ds-on-red); } .ds-redline .ds-tpl-hero .rl-btn-primary { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-on-ink); } .ds-redline .ds-tpl-hero .rl-btn-primary:hover { background: var(--ds-paper); border-color: var(--ds-paper); color: var(--ds-ink); }\n.ds-redline .ds-tpl-hero .h-ground { fill: var(--ds-paper); } .ds-redline .ds-tpl-hero .h-fill { fill: var(--ds-ink); } .ds-redline .ds-tpl-hero .h-fill2 { fill: var(--ds-paper-sunk); }\n/* svg vocabulary */\n.ds-redline .rl-paper { fill: var(--ds-paper); } .ds-redline .rl-red { fill: var(--ds-hand-fill); } .ds-redline .rl-ink { fill: var(--ds-hand-ink); }\n.ds-redline .rl-dot { fill: var(--ds-hand-muted); } .ds-redline .rl-dot-on, .ds-redline .rl-dot-red { fill: var(--ds-hand-fill); } .ds-redline .rl-dot-paper { fill: var(--ds-paper); opacity: .35; }\n.ds-redline .rl-stamp-rim { fill: none; stroke: currentColor; stroke-width: 2; stroke: var(--ds-hand-ink); }\n.ds-redline .rl-svg-mono { font-family: var(--font-mono); font-size: 10px; letter-spacing: .09em; fill: var(--ds-hand-ink); } .ds-redline .rl-svg-soft { fill: var(--ds-ink-soft); }\n.ds-redline .rl-on-red { fill: var(--ds-on-red); } .ds-redline .rl-on-ink { fill: var(--ds-on-ink); }\n.ds-redline .rl-svg-huge { font-family: var(--font-display); font-weight: 700; font-size: 150px; letter-spacing: -.025em; fill: var(--ds-hand-ink); }\n.ds-redline .rl-svg-big { font-family: var(--font-display); font-weight: 700; font-size: 72px; letter-spacing: -.025em; fill: var(--ds-hand-ink); }\n.ds-redline .rl-svg-bar { font-family: var(--font-display); font-weight: 700; font-size: 40px; letter-spacing: -.03em; }\n.ds-redline .rl-svg-stamp { font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; fill: var(--ds-hand-ink); }\n.ds-redline .rl-svg-mark { font-family: var(--font-display); font-weight: 700; font-size: 220px; letter-spacing: -.03em; fill: var(--ds-hand-fill); opacity: .2; }\n/* authored components */\n.ds-redline .rl-btn { font-family: var(--font-display); font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: -.005em; line-height: 20px; padding: 10px 18px; border: 2px solid var(--ds-ink); border-radius: 0; background: transparent; color: var(--ds-ink); cursor: pointer; transition: background 200ms, color 200ms; }\n.ds-redline .rl-btn:hover { background: var(--ds-ink); color: var(--ds-on-ink); }\n.ds-redline .rl-btn:focus-visible { outline: 3px solid var(--ds-red); outline-offset: 5px; }\n.ds-redline .rl-btn-primary { background: var(--ds-red); border-color: var(--ds-red); color: var(--ds-on-red); } .ds-redline .rl-btn-primary:hover { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-on-ink); }\n.ds-redline .rl-btn-ink { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-on-ink); } .ds-redline .rl-btn-ink:hover { background: var(--ds-red); border-color: var(--ds-red); color: var(--ds-on-red); }\n.ds-redline .rl-tag { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; line-height: 16px; padding: 3px 8px; border: 1px solid var(--ds-ink); color: var(--ds-ink); }\n.ds-redline .rl-tag-red { background: var(--ds-red); border-color: var(--ds-red); color: var(--ds-on-red); }\n.ds-redline .rl-tag.is-ok { background: var(--ds-positive-soft); color: var(--ds-positive); border-color: var(--ds-positive); } .ds-redline .rl-tag.is-warn { background: var(--ds-caution-soft); color: var(--ds-caution); border-color: var(--ds-caution); } .ds-redline .rl-tag.is-bad { background: var(--ds-negative-soft); color: var(--ds-negative); border-color: var(--ds-negative); }\n.ds-redline .rl-stat { display: grid; gap: 6px; padding: 14px 0 0; border-top: 2px solid var(--ds-ink); min-width: 170px; } .ds-redline .rl-stat-red .t-numeral { color: var(--ds-red-ink); } .ds-redline .rl-stat-note { font-size: 13px; color: var(--ds-ink-soft); }\n.ds-redline .rl-callout { padding: 14px 16px; border: 1px solid var(--ds-ink); line-height: 1.5; font-size: 15px; } .ds-redline .rl-callout strong { font-family: var(--font-display); font-size: 18px; text-transform: uppercase; font-weight: 700; }\n.ds-redline .rl-callout-red { background: var(--ds-red); border-color: var(--ds-red); color: var(--ds-on-red); } .ds-redline .rl-callout-ok { background: var(--ds-positive-soft); } .ds-redline .rl-callout-bad { background: var(--ds-negative-soft); }\n.ds-redline .rl-card { display: grid; gap: 12px; justify-items: start; padding: 24px; border: 1px solid var(--ds-line); background: var(--ds-paper-raised); max-width: 560px; } .ds-redline .rl-card h3 { margin: 0; } .ds-redline .rl-card-body { margin: 0; line-height: 1.5; color: var(--ds-ink-soft); }\n.ds-redline .rl-bar { display: flex; width: 100%; height: 64px; margin-top: 8px; } .ds-redline .rl-bar span { display: flex; align-items: center; padding: 0 16px; font-family: var(--font-display); font-weight: 700; font-size: 32px; letter-spacing: -.03em; }\n.ds-redline .rl-bar-a { flex: 3; background: var(--ds-hand-fill2); color: var(--ds-on-ink); } .ds-redline .rl-bar-b { flex: 2; background: var(--ds-hand-fill); color: var(--ds-on-red); }\n.ds-redline .rl-bar-labels { display: flex; justify-content: space-between; gap: 16px; width: 100%; font-size: 13px; color: var(--ds-ink-soft); }\n.ds-redline .rl-stamp { display: inline-block; font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; border: 2px solid currentColor; padding: 8px 10px; transform: rotate(-4deg); }\n.ds-redline .rl-list { border-top: 1px solid var(--ds-line); }\n.ds-redline .rl-list-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 4px 16px; padding: 16px 0; border-bottom: 1px solid var(--ds-line); align-items: baseline; } .ds-redline .rl-list-row h4 { margin: 0; } .ds-redline .rl-list-row p { margin: 0; grid-column: 2; line-height: 1.5; color: var(--ds-ink-soft); }\n/* sample: three stages */\n.ds-redline .rl-sample { background: var(--ds-paper-sunk); padding: 40px 20px 56px; }\n.ds-redline .rl-sample-in { max-width: 1180px; margin: 0 auto; }\n.ds-redline .rl-deck { display: grid; gap: 16px; }\n.ds-redline .rl-stage { container-type: inline-size; aspect-ratio: 16 / 9; position: relative; overflow: hidden; display: flex; flex-direction: column; padding: 3.6cqw 4.2cqw; background: var(--ds-paper); color: var(--ds-ink); }\n.ds-redline .rl-stage-red { background: var(--ds-red); color: var(--ds-on-red); } .ds-redline .rl-stage-ink { background: var(--ds-ink); color: var(--ds-on-ink); }\n.ds-redline .rl-top, .ds-redline .rl-foot { display: flex; justify-content: space-between; gap: 2cqw; font-family: var(--font-mono); font-size: 2.2cqw; letter-spacing: .09em; text-transform: uppercase; }\n.ds-redline .rl-top { position: relative; z-index: 2; } .ds-redline .rl-foot { margin-top: auto; padding-top: 2cqw; border-top: 1px solid currentColor; opacity: .75; font-size: 2cqw; text-transform: none; letter-spacing: .02em; position: relative; z-index: 2; }\n.ds-redline .rl-brand { font-family: var(--font-display); font-weight: 700; font-style: italic; font-size: 4.2cqw; letter-spacing: -.06em; text-transform: lowercase; line-height: 1; }\n.ds-redline .rl-cover-word { margin: 3cqw 0 0; font-family: var(--font-display); font-weight: 700; font-size: 21cqw; line-height: .82; letter-spacing: -.025em; text-transform: uppercase; }\n.ds-redline .rl-cover-sub { margin: 3cqw 0 0; font-size: 2.8cqw; line-height: 1.4; max-width: 46%; }\n.ds-redline .rl-stat-row { display: flex; align-items: center; gap: 3cqw; margin-top: 3cqw; }\n.ds-redline .rl-huge { font-family: var(--font-display); font-weight: 700; font-size: 26cqw; line-height: .85; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }\n.ds-redline .rl-stat-h { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 8cqw; line-height: .9; text-transform: uppercase; letter-spacing: -.02em; }\n.ds-redline .rl-metric-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; margin-top: 3cqw; padding-top: 2cqw; border-top: 2px solid currentColor; }\n.ds-redline .rl-metric-bottom strong { display: block; font-family: var(--font-display); font-weight: 700; font-size: 7cqw; line-height: .9; letter-spacing: -.02em; } .ds-redline .rl-metric-bottom p { margin: .6cqw 0 0; font-size: 2.6cqw; }\n.ds-redline .rl-mark { position: absolute; right: 4cqw; top: 18cqw; font-family: var(--font-display); font-weight: 700; font-size: 40cqw; line-height: 1; text-transform: uppercase; letter-spacing: -.03em; transform: rotate(-12deg); opacity: .2; color: var(--ds-red); pointer-events: none; }\n.ds-redline .rl-decision { position: relative; z-index: 1; margin: 3cqw 0 0; font-family: var(--font-display); font-weight: 700; font-size: 11cqw; line-height: .88; letter-spacing: -.02em; text-transform: uppercase; max-width: 72%; }\n.ds-redline .rl-decision-copy { position: relative; z-index: 1; margin: 3cqw 0 0; font-size: 2.8cqw; line-height: 1.4; max-width: 60%; }\n.ds-redline .rl-stage .rl-stamp { position: relative; z-index: 1; align-self: flex-start; margin-top: 3cqw; font-size: 2cqw; padding: 1.2cqw 1.6cqw; }\n.ds-redline .rl-list { margin-top: 32px; }\n@container (min-width: 760px) { .ds-redline .rl-sample { padding: 56px 40px 72px; } .ds-redline .rl-deck { grid-template-columns: 1fr 1fr; } .ds-redline .rl-deck .rl-stage-paper { grid-column: 1 / -1; } .ds-redline .rl-list-row { grid-template-columns: 48px 200px minmax(0, 1fr); } .ds-redline .rl-list-row p { grid-column: 3; } }\n"
+}

@@ -1,0 +1,804 @@
+{
+ "slug": "volta",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Volta cover: a volt slab, an acid screen of stripes, a cobalt pill</title>\n<defs><clipPath id=\"volta-acidclip\"><rect x=\"208\" y=\"72\" width=\"144\" height=\"176\"/></clipPath></defs>\n<rect className=\"v-edge\" x=\"32\" y=\"0\" width=\"160\" height=\"216\"/><rect className=\"v-volt v-rim\" x=\"24\" y=\"-8\" width=\"160\" height=\"216\"/>\n<rect className=\"v-edge\" x=\"216\" y=\"80\" width=\"144\" height=\"176\"/><rect className=\"v-acid v-rim\" x=\"208\" y=\"72\" width=\"144\" height=\"176\"/>\n<g clipPath=\"url(#volta-acidclip)\" className=\"v-stripe\"><line x1=\"16\" y1=\"248\" x2=\"192\" y2=\"72\" /><line x1=\"32\" y1=\"248\" x2=\"208\" y2=\"72\" /><line x1=\"48\" y1=\"248\" x2=\"224\" y2=\"72\" /><line x1=\"64\" y1=\"248\" x2=\"240\" y2=\"72\" /><line x1=\"80\" y1=\"248\" x2=\"256\" y2=\"72\" /><line x1=\"96\" y1=\"248\" x2=\"272\" y2=\"72\" /><line x1=\"112\" y1=\"248\" x2=\"288\" y2=\"72\" /><line x1=\"128\" y1=\"248\" x2=\"304\" y2=\"72\" /><line x1=\"144\" y1=\"248\" x2=\"320\" y2=\"72\" /><line x1=\"160\" y1=\"248\" x2=\"336\" y2=\"72\" /><line x1=\"176\" y1=\"248\" x2=\"352\" y2=\"72\" /><line x1=\"192\" y1=\"248\" x2=\"368\" y2=\"72\" /><line x1=\"208\" y1=\"248\" x2=\"384\" y2=\"72\" /><line x1=\"224\" y1=\"248\" x2=\"400\" y2=\"72\" /><line x1=\"240\" y1=\"248\" x2=\"416\" y2=\"72\" /><line x1=\"256\" y1=\"248\" x2=\"432\" y2=\"72\" /><line x1=\"272\" y1=\"248\" x2=\"448\" y2=\"72\" /><line x1=\"288\" y1=\"248\" x2=\"464\" y2=\"72\" /><line x1=\"304\" y1=\"248\" x2=\"480\" y2=\"72\" /><line x1=\"320\" y1=\"248\" x2=\"496\" y2=\"72\" /><line x1=\"336\" y1=\"248\" x2=\"512\" y2=\"72\" /><line x1=\"352\" y1=\"248\" x2=\"528\" y2=\"72\" /><line x1=\"368\" y1=\"248\" x2=\"544\" y2=\"72\" /><line x1=\"384\" y1=\"248\" x2=\"560\" y2=\"72\" /></g>\n<rect className=\"v-edge\" x=\"384\" y=\"32\" width=\"112\" height=\"240\" rx=\"56\"/><rect className=\"v-cobalt v-rim\" x=\"376\" y=\"24\" width=\"112\" height=\"240\" rx=\"56\"/>\n<rect className=\"v-edge\" x=\"24\" y=\"232\" width=\"64\" height=\"32\"/></svg>",
+ "name": "Volta",
+ "tagline": "Loud where it counts. Quiet everywhere else.",
+ "mood": "Loud",
+ "jobs": "Data products, dashboards, launch pages",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Bricolage Grotesque",
+   "opsz,wght@12..96,700;12..96,800"
+  ],
+  [
+   "Instrument Sans",
+   "ital,wght@0,400;0,500;0,600;1,400"
+  ],
+  [
+   "JetBrains Mono",
+   "wght@400;500;600;700"
+  ]
+ ],
+ "families": {
+  "display": "\"Bricolage Grotesque\", \"Arial Black\", system-ui, sans-serif",
+  "sans": "\"Instrument Sans\", system-ui, sans-serif",
+  "mono": "\"JetBrains Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "paper",
+   "light": "#f3eee4",
+   "dark": "#121110",
+   "usage": "Page ground. The default surface for everything.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-raised",
+   "light": "#fbf8f2",
+   "dark": "#1c1a18",
+   "usage": "Cards, fields, menus: anything that sits on paper.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-sunk",
+   "light": "#e7dfcf",
+   "dark": "#0a0908",
+   "usage": "Wells, code blocks, inactive tracks, table stripes.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#d3c9b5",
+   "dark": "#34302a",
+   "usage": "Hairline dividers and quiet borders. Never the sole edge of a control.",
+   "group": "Grounds"
+  },
+  {
+   "name": "edge",
+   "light": "#14110f",
+   "dark": "#f3eee4",
+   "usage": "The hard 2px edge on controls and cards, and the hard offset shadow.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink",
+   "light": "#14110f",
+   "dark": "#f3eee4",
+   "usage": "Primary text and icons on every paper ground.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#5a5348",
+   "dark": "#a69e90",
+   "usage": "Secondary text, captions, placeholders.",
+   "group": "Ink"
+  },
+  {
+   "name": "volt",
+   "light": "#ff4d1a",
+   "dark": "#ff5f2e",
+   "usage": "The brand. Primary actions and the one number that must be seen. Fill only.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-volt",
+   "light": "#14110f",
+   "dark": "#14110f",
+   "usage": "Text and icons on volt fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "volt-ink",
+   "light": "#b5300a",
+   "dark": "#ff8a63",
+   "usage": "Volt as text: links and inline emphasis on paper.",
+   "group": "Brand"
+  },
+  {
+   "name": "volt-soft",
+   "light": "#ffd9cb",
+   "dark": "#3d1a0f",
+   "usage": "Tinted ground for volt tags and selected rows; text on it is volt-ink.",
+   "group": "Brand"
+  },
+  {
+   "name": "acid",
+   "light": "#d6f43a",
+   "dark": "#d6f43a",
+   "usage": "The highlighter: new tags, the active tab marker, one insight card. Never body text.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-acid",
+   "light": "#14110f",
+   "dark": "#14110f",
+   "usage": "Text on acid fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "cobalt",
+   "light": "#2236d1",
+   "dark": "#7484ff",
+   "usage": "Data and focus: the first chart series, the focus ring, info callouts.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-cobalt",
+   "light": "#ffffff",
+   "dark": "#0a0908",
+   "usage": "Text on cobalt fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "cobalt-soft",
+   "light": "#dde1ff",
+   "dark": "#161c45",
+   "usage": "Ground for info callouts; text on it is ink.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#16683f",
+   "dark": "#5fd394",
+   "usage": "Positive deltas and success text, always with a ▲ or a word.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#d5efdf",
+   "dark": "#0f2a1c",
+   "usage": "Ground for success callouts and positive tags.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#7d5900",
+   "dark": "#f2c14e",
+   "usage": "Warnings, always with a word.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#fbedc4",
+   "dark": "#2e2405",
+   "usage": "Ground for warning callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#b5300a",
+   "dark": "#ff8a63",
+   "usage": "Negative deltas and errors. Shares volt-ink: errors are loud, not a separate red.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#ffd9cb",
+   "dark": "#3d1a0f",
+   "usage": "Ground for error callouts.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "paper",
+  "foreground": "ink",
+  "card": "paper-raised",
+  "card-foreground": "ink",
+  "popover": "paper-raised",
+  "popover-foreground": "ink",
+  "primary": "volt",
+  "primary-foreground": "on-volt",
+  "secondary": "volt-soft",
+  "secondary-foreground": "volt-ink",
+  "muted": "paper-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "paper-sunk",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "paper",
+  "border": "line",
+  "input": "line",
+  "ring": "cobalt",
+  "chart-1": "cobalt",
+  "chart-2": "volt",
+  "chart-3": "ink-muted",
+  "chart-4": "positive",
+  "chart-5": "caution"
+ },
+ "radius_contract": "4px",
+ "extra_vars": {
+  "shadow-hard": {
+   "light": "4px 4px 0 0 #14110f",
+   "dark": "4px 4px 0 0 #ff5f2e"
+  },
+  "shadow-hard-lg": {
+   "light": "8px 8px 0 0 #14110f",
+   "dark": "8px 8px 0 0 #ff5f2e"
+  },
+  "focus-ring": {
+   "light": "0 0 0 2px #f3eee4, 0 0 0 4px #2236d1",
+   "dark": "0 0 0 2px #121110, 0 0 0 4px #7484ff"
+  },
+  "chip-radius": "4px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(56px, 9vw, 112px)",
+   "lh": ".9",
+   "weight": 800,
+   "ls": "-0.035em",
+   "sample": "Make it loud.",
+   "usage": "One per page, at most. Hero headlines and covers."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(36px, 5vw, 60px)",
+   "lh": ".95",
+   "weight": 800,
+   "ls": "-0.03em",
+   "sample": "Numbers first.",
+   "usage": "Section openers, empty-state headlines."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "40px",
+   "lh": "40px",
+   "weight": 700,
+   "ls": "-0.02em",
+   "sample": "Weekly revenue",
+   "usage": "Page titles."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "22px",
+   "lh": "28px",
+   "weight": 700,
+   "ls": "-0.01em",
+   "sample": "Retention by cohort",
+   "usage": "Card and dialog titles."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "18px",
+   "lh": "28px",
+   "weight": 400,
+   "sample": "Ask a question in plain words and get a chart back.",
+   "usage": "Lead paragraphs."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "15px",
+   "lh": "22px",
+   "weight": 400,
+   "sample": "Revenue grew 12% week over week, driven by annual plans.",
+   "usage": "Default UI and reading text."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 400,
+   "sample": "Updated 4 minutes ago",
+   "usage": "Captions, helper text, dense table cells."
+  },
+  {
+   "name": "label",
+   "family": "sans",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 600,
+   "ls": "0.08em",
+   "tt": "uppercase",
+   "sample": "Active users",
+   "usage": "Eyebrows, tab labels, tag text. Caps come from CSS, never the copy."
+  },
+  {
+   "name": "numeral",
+   "family": "mono",
+   "size": "40px",
+   "lh": "44px",
+   "weight": 600,
+   "ls": "-0.02em",
+   "sample": "$48,210",
+   "usage": "KPI figures. Tabular by nature: digits never jump.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "SELECT count(*) FROM orders",
+   "usage": "Code, SQL, IDs, table numbers."
+  }
+ ],
+ "idea_headline": "A risograph print of a dashboard.",
+ "idea": "Paper-and-ink calm everywhere, then one hit of electric vermilion exactly where the eye should land. Hard edges, hard shadows, no blur, no gradients. Volta is for data products that refuse to be beige: the restraint is what makes the one loud thing land.",
+ "use_for": "Analytics products, operational dashboards, pricing and launch pages, anything where one number or one action must dominate a busy screen.",
+ "avoid_when": "Long reading (the hard edges tire over 800 words), luxury or institutional subjects, and anything that needs more than one loud element per view.",
+ "principles_headline": "Five rules, and the first one is the system.",
+ "principles": [
+  [
+   "One loud thing per view.",
+   "Volt marks the primary action or the number that matters. If two things are volt, neither is."
+  ],
+  [
+   "Numbers are the hero.",
+   "Figures are set in the mono numeral role: tabular, big, never decorative. Text explains; the number carries."
+  ],
+  [
+   "Edges, not elevation.",
+   "Separation comes from the 2px edge and the hard offset shadow. There is no blur anywhere in the system."
+  ],
+  [
+   "A shadow promises a click.",
+   "Only interactive things cast a shadow. Static cards are flat on the paper."
+  ],
+  [
+   "Square by default.",
+   "Zero radius for containers, 4px for controls, a pill only for things that move (switches) or pulse (status dots)."
+  ]
+ ],
+ "voice": [
+  "Plain, short, specific. Lead with the fact, then the meaning: \"Annual plans drove 70% of growth.\"",
+  "Sentence case everywhere; uppercase only through the label style.",
+  "Errors are fixes: \"No table called orderz. Did you mean orders?\" Never \"Something went wrong.\"",
+  "Second person, no exclamation marks, no emoji."
+ ],
+ "colour_headline": "Three paper grounds, one ink, one volt.",
+ "colour_note": "Two themes: Paper (light, first and fallback) and Night. In Night the hard shadow turns volt, so interactive things glow. Volt is a fill only (2.9:1 on paper); volt as text is volt-ink. Status never relies on colour alone: always a word, a ▲/▼ or a glyph.",
+ "chart_series": [
+  "cobalt",
+  "volt",
+  "ink-muted",
+  "positive",
+  "caution"
+ ],
+ "chart_note": "The focal series is always cobalt; volt is the comparison; the neutral third series is ink-muted. Series are ordered by lightness so they stay distinct without hue.",
+ "type_headline": "Bricolage shouts, Instrument explains, JetBrains counts.",
+ "type_note": "Three Google-hosted families. Display is Bricolage Grotesque at 800 and 700 with tight tracking and tight leading; one display-xl per page at most. Instrument Sans carries reading and UI. JetBrains Mono carries every figure.",
+ "space_headline": "A 4px base, a 2px edge, a 4px shadow.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Icon-to-label gap, tag padding-y."
+  ],
+  [
+   "space-2 · 8px",
+   "Gaps inside controls; the hard-shadow offset on cards."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "Control padding-x, default stack gap."
+  ],
+  [
+   "space-6 · 24px",
+   "Card padding, cover insets."
+  ],
+  [
+   "space-8 · 32px",
+   "Gaps between cards so hard shadows never touch."
+  ],
+  [
+   "space-12 · 48px",
+   "Section breaks."
+  ],
+  [
+   "space-16 · 64px",
+   "Page gutters on wide screens."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Cards, callouts, tables, cover blocks. Square by default."
+  ],
+  [
+   "radius-sm · 4px",
+   "Buttons, fields, tags."
+  ],
+  [
+   "radius-pill",
+   "Switch tracks, status dots. The only round thing: it signals \"this moves\"."
+  ],
+  [
+   "edge · 2px",
+   "Every control and interactive card has a 2px edge in the edge colour. The hairline is decorative only."
+  ]
+ ],
+ "depth": [
+  [
+   "shadow-hard",
+   "4px 4px 0 edge. Buttons and interactive cards at rest. In Night it is volt."
+  ],
+  [
+   "shadow-hard-lg",
+   "8px 8px 0 edge. Hero cards, dialogs, Stat."
+  ],
+  [
+   "pressed",
+   "The shadow collapses as the element moves into it (80ms ease-out)."
+  ],
+  [
+   "focus-ring",
+   "A 2px paper gap, then 2px solid cobalt. Every control; never removed."
+  ],
+  [
+   "motion",
+   "Fast and physical. Hover lifts 2px; press drives into the shadow; the switch thumb overshoots, the only bounce. No fade longer than 160ms."
+  ]
+ ],
+ "components_headline": "The kit wears the tokens; the edge and shadow are yours to add.",
+ "components_note": "Kit components take Volta through the contract: paper grounds, volt primary, cobalt ring, 4px radius. The signature hard edge and offset shadow are classes you put on authored elements: v-hard on a card, v-btn on a button.",
+ "buttons": "<Button>Run query</Button><Button variant=\"secondary\">Save view</Button><Button variant=\"outline\">Export</Button><Button variant=\"ghost\">Cancel</Button><button className=\"v-btn v-btn-primary\">Run query</button><button className=\"v-btn v-btn-acid\">Ask Volta</button><button className=\"v-btn\">Export</button>",
+ "buttons_note": "Kit buttons on the left; authored v-btn on the right with the 2px edge and hard shadow. One primary per view. Acid is reserved for AI-assisted actions, never destructive ones.",
+ "tags": "<Badge>Volt</Badge><Badge variant=\"secondary\">Selected</Badge><Badge variant=\"outline\">Draft</Badge><Badge variant=\"destructive\">Failed</Badge><span className=\"v-tag v-tag-acid\">New</span><span className=\"v-tag v-tag-positive\">▲ 12%</span><span className=\"v-tag v-tag-caution\">Stale</span><span className=\"v-tag v-tag-cobalt\">Info</span>",
+ "tags_note": "Tags are the label role in caps. Status tags carry a glyph or a word with the colour, never colour alone.",
+ "fields_note": "Fields sit on paper-raised with the 2px edge; the focus ring is cobalt with a paper gap. Labels are the label role above the field.",
+ "stats": "<div className=\"v-stat\"><span className=\"t-label\">Revenue</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"revenue\" prefix=\"$\" format=\",.0f\" /></span><span className=\"v-delta v-up\">▲ 12% vs last week</span></div><div className=\"v-stat v-stat-accent\"><span className=\"t-label\">Annual plans</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"annual_share\" suffix=\"%\" /></span><span className=\"v-delta\">of growth</span></div>",
+ "stats_note": "Stat is a label, a big mono numeral and a delta with a ▲/▼ glyph. One accented Stat per row, for the number that matters most. Figures come from data, never typed.",
+ "callouts": "<Alert><AlertTitle>No table called orderz</AlertTitle><AlertDescription>Did you mean orders?</AlertDescription></Alert><div className=\"v-callout v-callout-info\"><strong>Cobalt means information.</strong> A hint about the data, not an alarm.</div><div className=\"v-callout v-callout-positive\"><strong>Saved.</strong> Your view is shared with the team.</div><div className=\"v-callout v-callout-negative\"><strong>Query timed out after 5s.</strong> Add a date filter and run it again.</div>",
+ "callouts_note": "A callout states the fact, then the fix. Status grounds are the soft tokens; the text stays ink.",
+ "chart_comp_note": "Charts take the chart tokens in order: cobalt first, volt for the comparison. No gradient fills; direct labels where they fit.",
+ "table_note": "Tables are ink on paper with hairline rows and mono figures; the hard edge belongs to the container, not to each cell.",
+ "card": "<div className=\"v-hard v-card\"><p className=\"t-label\">Insight</p><h3 className=\"t-title\">Annual plans drove 70% of growth</h3><p className=\"v-card-body\">Monthly plans added 1,120 customers but 410 churned inside 90 days. Annual plans added 640 and kept 612. Reorder the pricing page.</p><button className=\"v-btn v-btn-primary\">Open cohort</button></div>",
+ "card_note": "An interactive card casts shadow-hard-lg and lifts on hover; a static card is flat with a hairline. Card titles are the title role.",
+ "motifs_headline": "Stripes, slabs, and the misregistered print.",
+ "motifs_note": "Volta draws with flat blocks and a 4px stripe screen, like a two-colour riso print whose plates slipped by one shadow. Use one device per page, and let the data live inside it.",
+ "motifs": [
+  {
+   "title": "The stripe screen",
+   "usage": "A 4px edge stripe at a 16px pitch, clipped inside a block. Use it as the texture of a selected or pending region, or as a bar fill for the \"unknown\" share.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Stripe screen</title><defs><clipPath id=\"volta-m1\"><rect x=\"24\" y=\"24\" width=\"432\" height=\"152\"/></clipPath></defs><rect className=\"v-edge\" x=\"32\" y=\"32\" width=\"432\" height=\"152\"/><rect className=\"v-acid v-rim\" x=\"24\" y=\"24\" width=\"432\" height=\"152\"/><g clipPath=\"url(#volta-m1)\" className=\"v-stripe\"><line x1=\"-160\" y1=\"200\" x2=\"40\" y2=\"0\" /><line x1=\"-144\" y1=\"200\" x2=\"56\" y2=\"0\" /><line x1=\"-128\" y1=\"200\" x2=\"72\" y2=\"0\" /><line x1=\"-112\" y1=\"200\" x2=\"88\" y2=\"0\" /><line x1=\"-96\" y1=\"200\" x2=\"104\" y2=\"0\" /><line x1=\"-80\" y1=\"200\" x2=\"120\" y2=\"0\" /><line x1=\"-64\" y1=\"200\" x2=\"136\" y2=\"0\" /><line x1=\"-48\" y1=\"200\" x2=\"152\" y2=\"0\" /><line x1=\"-32\" y1=\"200\" x2=\"168\" y2=\"0\" /><line x1=\"-16\" y1=\"200\" x2=\"184\" y2=\"0\" /><line x1=\"0\" y1=\"200\" x2=\"200\" y2=\"0\" /><line x1=\"16\" y1=\"200\" x2=\"216\" y2=\"0\" /><line x1=\"32\" y1=\"200\" x2=\"232\" y2=\"0\" /><line x1=\"48\" y1=\"200\" x2=\"248\" y2=\"0\" /><line x1=\"64\" y1=\"200\" x2=\"264\" y2=\"0\" /><line x1=\"80\" y1=\"200\" x2=\"280\" y2=\"0\" /><line x1=\"96\" y1=\"200\" x2=\"296\" y2=\"0\" /><line x1=\"112\" y1=\"200\" x2=\"312\" y2=\"0\" /><line x1=\"128\" y1=\"200\" x2=\"328\" y2=\"0\" /><line x1=\"144\" y1=\"200\" x2=\"344\" y2=\"0\" /><line x1=\"160\" y1=\"200\" x2=\"360\" y2=\"0\" /><line x1=\"176\" y1=\"200\" x2=\"376\" y2=\"0\" /><line x1=\"192\" y1=\"200\" x2=\"392\" y2=\"0\" /><line x1=\"208\" y1=\"200\" x2=\"408\" y2=\"0\" /><line x1=\"224\" y1=\"200\" x2=\"424\" y2=\"0\" /><line x1=\"240\" y1=\"200\" x2=\"440\" y2=\"0\" /><line x1=\"256\" y1=\"200\" x2=\"456\" y2=\"0\" /><line x1=\"272\" y1=\"200\" x2=\"472\" y2=\"0\" /><line x1=\"288\" y1=\"200\" x2=\"488\" y2=\"0\" /><line x1=\"304\" y1=\"200\" x2=\"504\" y2=\"0\" /><line x1=\"320\" y1=\"200\" x2=\"520\" y2=\"0\" /><line x1=\"336\" y1=\"200\" x2=\"536\" y2=\"0\" /><line x1=\"352\" y1=\"200\" x2=\"552\" y2=\"0\" /><line x1=\"368\" y1=\"200\" x2=\"568\" y2=\"0\" /><line x1=\"384\" y1=\"200\" x2=\"584\" y2=\"0\" /><line x1=\"400\" y1=\"200\" x2=\"600\" y2=\"0\" /><line x1=\"416\" y1=\"200\" x2=\"616\" y2=\"0\" /><line x1=\"432\" y1=\"200\" x2=\"632\" y2=\"0\" /><line x1=\"448\" y1=\"200\" x2=\"648\" y2=\"0\" /><line x1=\"464\" y1=\"200\" x2=\"664\" y2=\"0\" /><line x1=\"480\" y1=\"200\" x2=\"680\" y2=\"0\" /><line x1=\"496\" y1=\"200\" x2=\"696\" y2=\"0\" /></g></svg>"
+  },
+  {
+   "title": "The split bar",
+   "usage": "One number split into its parts as a single bar with hard edges: 240 + 160, annual against monthly. Label every segment inside it; no legend.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Split bar</title><rect className=\"v-edge\" x=\"32\" y=\"72\" width=\"432\" height=\"64\"/><rect className=\"v-cobalt v-rim\" x=\"24\" y=\"64\" width=\"302\" height=\"64\"/><rect className=\"v-volt v-rim\" x=\"326\" y=\"64\" width=\"130\" height=\"64\"/><text x=\"40\" y=\"104\" className=\"v-svg-label v-on-cobalt\">ANNUAL · 70%</text><text x=\"340\" y=\"104\" className=\"v-svg-label\">MONTHLY · 30%</text><text x=\"24\" y=\"48\" className=\"v-svg-mono\">GROWTH, LAST 90 DAYS</text><text x=\"24\" y=\"168\" className=\"v-svg-mono v-muted-fill\">n = 1,760 NEW CUSTOMERS · SYNTHETIC</text></svg>"
+  },
+  {
+   "title": "The status dot",
+   "usage": "The one round thing. A volt dot pulses for live, a positive dot for healthy, an ink dot for idle; each sits next to a word.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Status dots</title><circle className=\"v-volt v-rim\" cx=\"60\" cy=\"100\" r=\"18\"/><text x=\"96\" y=\"106\" className=\"v-svg-label\">LIVE</text><circle className=\"v-positive v-rim\" cx=\"200\" cy=\"100\" r=\"18\"/><text x=\"236\" y=\"106\" className=\"v-svg-label\">HEALTHY</text><circle className=\"v-edge\" cx=\"364\" cy=\"100\" r=\"18\"/><text x=\"400\" y=\"106\" className=\"v-svg-label\">IDLE</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Volta.",
+ "sample_note": "A product analytics opening: the finding as a headline, one volt number, the comparison in cobalt, and a ledger below. Everything else is paper.",
+ "sample": "<div className=\"v-sample\"><div className=\"v-sample-in\">\n  <div className=\"v-sample-top\"><span className=\"t-label\">Volta analytics · Weekly review</span><span className=\"t-label v-muted\">Synthetic data · 2 Oct 2026</span></div>\n  <h2 className=\"t-display-l v-sample-h\">Annual plans drove <span className=\"v-volt-ink\">70%</span> of growth.</h2>\n  <p className=\"t-body-l v-sample-lede\">Monthly plans add more customers and lose most of them inside a quarter. The pricing page still leads with monthly.</p>\n  <div className=\"v-sample-stats\">\n    <div className=\"v-stat v-stat-accent\"><span className=\"t-label\">Revenue, 90 days</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"revenue\" prefix=\"$\" format=\",.0f\" /></span><span className=\"v-delta v-up\">▲ 12% vs prior</span></div>\n    <div className=\"v-stat\"><span className=\"t-label\">New customers</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"customers\" format=\",.0f\" /></span><span className=\"v-delta\">1,120 monthly · 640 annual</span></div>\n    <div className=\"v-stat\"><span className=\"t-label\">Kept at 90 days</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"kept_pct\" suffix=\"%\" /></span><span className=\"v-delta v-down\">▼ 4 pts vs prior</span></div>\n  </div>\n  <div className=\"v-sample-grid\">\n    <div className=\"v-hard v-panel\"><p className=\"t-label\">Revenue by plan, weekly</p><Question data=\"$series\" height=\"280px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":{\"type\":\"line\",\"strokeWidth\":3},\"encoding\":{\"x\":{\"field\":\"week\",\"type\":\"ordinal\",\"title\":\"Week\"},\"y\":{\"field\":\"revenue\",\"type\":\"quantitative\",\"title\":\"Revenue ($)\"},\"color\":{\"field\":\"plan\",\"type\":\"nominal\",\"title\":\"Plan\"}}}}} /></div>\n    <div className=\"v-hard v-panel\"><p className=\"t-label\">Cohorts</p><DataTable data=\"$table\" rowKey=\"plan\" height=\"280px\" columns={[{\"col\":\"plan\",\"title\":\"Plan\"},{\"col\":\"customers\",\"title\":\"New\",\"align\":\"right\"},{\"col\":\"kept\",\"title\":\"Kept\",\"align\":\"right\"},{\"col\":\"kept_pct\",\"title\":\"Kept %\",\"fmt\":\".0f\",\"align\":\"right\",\"bar\":true}]} /></div>\n  </div>\n</div></div>",
+ "dos": [
+  "One volt element per view.",
+  "Figures in the numeral role, tabular.",
+  "Hard 2px edges and offset shadows on anything you can click.",
+  "Let the finding be the headline; put the number next to it in volt."
+ ],
+ "donts": [
+  "No blur, no gradients, no soft shadows.",
+  "No volt as text on paper; use volt-ink.",
+  "No two primaries side by side.",
+  "No rounded cards; radius is 0 for containers."
+ ],
+ "binding_losses": "The hard edge as distinct from the hairline, the acid highlighter, the soft status grounds and raised versus sunk paper have no contract slot. They are carried as --ds-* properties and the v-* classes above; kit components follow ink and paper but not the hard edge.",
+ "footer": "Paper first, Night second. Fonts: Bricolage Grotesque 700/800, Instrument Sans 400/500/600, JetBrains Mono 400–700, all Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "week": "W1",
+    "plan": "Annual",
+    "revenue": 18200,
+    "customers": 150,
+    "kept": 144
+   },
+   {
+    "week": "W1",
+    "plan": "Monthly",
+    "revenue": 9100,
+    "customers": 260,
+    "kept": 170
+   },
+   {
+    "week": "W2",
+    "plan": "Annual",
+    "revenue": 19400,
+    "customers": 160,
+    "kept": 153
+   },
+   {
+    "week": "W2",
+    "plan": "Monthly",
+    "revenue": 9600,
+    "customers": 280,
+    "kept": 182
+   },
+   {
+    "week": "W3",
+    "plan": "Annual",
+    "revenue": 21800,
+    "customers": 170,
+    "kept": 162
+   },
+   {
+    "week": "W3",
+    "plan": "Monthly",
+    "revenue": 9900,
+    "customers": 290,
+    "kept": 178
+   },
+   {
+    "week": "W4",
+    "plan": "Annual",
+    "revenue": 24100,
+    "customers": 160,
+    "kept": 153
+   },
+   {
+    "week": "W4",
+    "plan": "Monthly",
+    "revenue": 10200,
+    "customers": 290,
+    "kept": 180
+   }
+  ],
+  "queries": {
+   "series": "select week, plan, revenue from rows order by week, plan",
+   "table": "select plan, sum(customers) as customers, sum(kept) as kept, round(100.0*sum(kept)/sum(customers)) as kept_pct from rows group by plan order by customers desc",
+   "totals": "select sum(revenue) as revenue, sum(customers) as customers, round(100.0*sum(kept)/sum(customers)) as kept_pct, 70 as annual_share from rows"
+  },
+  "segments": [
+   "Week",
+   "Month",
+   "Quarter"
+  ],
+  "segment_default": "Week",
+  "select_label": "Window",
+  "input_placeholder": "Search tables",
+  "switch_label": "Compare to prior",
+  "tabs": [
+   "Overview",
+   "Cohorts",
+   "SQL"
+  ],
+  "tab_body": "Overview: the finding, the number, the comparison.",
+  "progress_label": "Backfill · 62%",
+  "progress": 62,
+  "chart_title": "Revenue by plan, weekly",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar"
+    },
+    "encoding": {
+     "x": {
+      "field": "week",
+      "type": "ordinal",
+      "title": "Week"
+     },
+     "y": {
+      "field": "revenue",
+      "type": "quantitative",
+      "title": "Revenue ($)"
+     },
+     "color": {
+      "field": "plan",
+      "type": "nominal",
+      "title": "Plan"
+     },
+     "xOffset": {
+      "field": "plan"
+     }
+    }
+   }
+  },
+  "row_key": "plan",
+  "table_columns": [
+   {
+    "col": "plan",
+    "title": "Plan"
+   },
+   {
+    "col": "customers",
+    "title": "New",
+    "align": "right"
+   },
+   {
+    "col": "kept",
+    "title": "Kept",
+    "align": "right"
+   },
+   {
+    "col": "kept_pct",
+    "title": "Kept %",
+    "fmt": ".0f",
+    "align": "right",
+    "bar": true
+   }
+  ],
+  "table_height": "200px"
+ },
+ "css": "\n.ds-volta { --ds-cover-bg: var(--ds-paper); }\n.ds-volta .ds-section h2 { font-family: var(--font-display); }\n.ds-volta .ds-chip { border-width: 2px; border-color: var(--ds-edge); }\n.ds-volta .v-edge { fill: var(--ds-edge); } .ds-volta .v-volt { fill: var(--ds-volt); } .ds-volta .v-acid { fill: var(--ds-acid); } .ds-volta .v-cobalt { fill: var(--ds-cobalt); } .ds-volta .v-positive { fill: var(--ds-positive); }\n.ds-volta .v-rim { stroke: var(--ds-edge); stroke-width: 2; } .ds-volta .v-stripe line { stroke: var(--ds-edge); stroke-width: 4; }\n.ds-volta .v-svg-label { font-family: var(--font-body); font-size: 13px; font-weight: 600; letter-spacing: .08em; fill: var(--ds-ink); } .ds-volta .v-on-cobalt { fill: var(--ds-on-cobalt); }\n.ds-volta .v-svg-mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; fill: var(--ds-ink); } .ds-volta .v-muted-fill { fill: var(--ds-ink-muted); }\n.ds-volta .v-muted { color: var(--ds-ink-muted); } .ds-volta .v-volt-ink { color: var(--ds-volt-ink); }\n.ds-volta .v-btn { font-family: var(--font-body); font-size: 15px; font-weight: 600; line-height: 20px; padding: 10px 16px; border: 2px solid var(--ds-edge); border-radius: 4px; background: var(--ds-paper-raised); color: var(--ds-ink); box-shadow: var(--ds-shadow-hard); cursor: pointer; transition: transform 80ms ease-out, box-shadow 80ms ease-out; }\n.ds-volta .v-btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 0 var(--ds-edge); }\n.ds-volta .v-btn:active { transform: translate(4px, 4px); box-shadow: 0 0 0 0 var(--ds-edge); }\n.ds-volta .v-btn:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }\n.ds-volta .v-btn-primary { background: var(--ds-volt); color: var(--ds-on-volt); } .ds-volta .v-btn-acid { background: var(--ds-acid); color: var(--ds-on-acid); }\n.dark .ds-volta .v-btn:hover { box-shadow: 6px 6px 0 0 var(--ds-volt); }\n.ds-volta .v-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; line-height: 16px; background: var(--ds-paper-sunk); color: var(--ds-ink); }\n.ds-volta .v-tag-acid { background: var(--ds-acid); color: var(--ds-on-acid); } .ds-volta .v-tag-positive { background: var(--ds-positive-soft); color: var(--ds-positive); } .ds-volta .v-tag-caution { background: var(--ds-caution-soft); color: var(--ds-caution); } .ds-volta .v-tag-cobalt { background: var(--ds-cobalt-soft); color: var(--ds-cobalt); }\n.ds-volta .v-stat { display: grid; gap: 6px; padding: 20px 24px; background: var(--ds-paper-raised); border: 2px solid var(--ds-edge); box-shadow: var(--ds-shadow-hard-lg); min-width: 200px; }\n.ds-volta .v-stat-accent { background: var(--ds-volt); color: var(--ds-on-volt); } .ds-volta .v-stat-accent .t-label, .ds-volta .v-stat-accent .v-delta { color: var(--ds-on-volt); }\n.ds-volta .ds-stats { gap: 32px; }\n.ds-volta .v-delta { font-size: 13px; color: var(--ds-ink-muted); } .ds-volta .v-up { color: var(--ds-positive); } .ds-volta .v-down { color: var(--ds-negative); }\n.ds-volta .v-callout { padding: 14px 16px; border: 2px solid var(--ds-edge); line-height: 1.5; font-size: 15px; } .ds-volta .v-callout strong { font-weight: 600; }\n.ds-volta .v-callout-info { background: var(--ds-cobalt-soft); } .ds-volta .v-callout-positive { background: var(--ds-positive-soft); } .ds-volta .v-callout-negative { background: var(--ds-negative-soft); }\n.ds-volta .v-hard { border: 2px solid var(--ds-edge); box-shadow: var(--ds-shadow-hard-lg); background: var(--ds-paper-raised); }\n.ds-volta .v-card { padding: 24px; display: grid; gap: 10px; justify-items: start; transition: transform 120ms ease-out; } .ds-volta .v-card:hover { transform: translate(-2px, -2px); }\n.ds-volta .v-card h3 { margin: 0; } .ds-volta .v-card-body { margin: 0; line-height: 1.5; color: var(--ds-ink-muted); max-width: 52ch; } .ds-volta .v-card .v-btn { margin-top: 8px; }\n.ds-volta .v-sample { background: var(--ds-paper); padding: 40px 20px 64px; border-top: 2px solid var(--ds-edge); border-bottom: 2px solid var(--ds-edge); }\n.ds-volta .v-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-volta .v-sample-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; border-bottom: 2px solid var(--ds-edge); }\n.ds-volta .v-sample-h { margin-top: 32px; max-width: 16ch; }\n.ds-volta .v-sample-lede { margin-top: 16px; max-width: 56ch; color: var(--ds-ink-muted); }\n.ds-volta .v-sample-stats { display: grid; gap: 32px; margin-top: 36px; }\n.ds-volta .v-sample-grid { display: grid; gap: 32px; margin-top: 40px; }\n.ds-volta .v-panel { padding: 20px; min-width: 0; } .ds-volta .v-panel .t-label { display: block; margin-bottom: 12px; }\n@container (min-width: 760px) { .ds-volta .v-sample { padding: 56px 40px 80px; } .ds-volta .v-sample-stats { grid-template-columns: 1fr 1fr 1fr; } .ds-volta .v-sample-grid { grid-template-columns: 3fr 2fr; } }\n\n.ds-volta { --ds-hand-ink: var(--ds-edge); --ds-hand-fill: var(--ds-volt); --ds-hand-fill2: var(--ds-cobalt); --ds-hand-muted: var(--ds-paper-sunk); --ds-hand-ground: var(--ds-paper-raised); --ds-hand-stroke: 2; --ds-hand-cap: square; --ds-hand-shadow: var(--ds-edge); --ds-hand-bg: var(--ds-paper);\n  --ds-tpl-edge: 2px solid var(--ds-edge); --ds-tpl-radius: 0; --ds-tpl-tile-shadow: var(--ds-shadow-hard); --ds-tpl-rule: 2px solid var(--ds-edge); --ds-tag-radius: 4px; --ds-slide-title-bg: var(--ds-volt); --ds-slide-title-fg: var(--ds-on-volt); --ds-slide-split-b: var(--ds-cobalt); --ds-slide-split-b-fg: var(--ds-on-cobalt); }\n.dark .ds-volta { --ds-hand-shadow: var(--ds-volt); }\n.ds-volta .h-num { font-family: var(--font-mono); font-weight: 600; }\n.ds-volta .ds-tpl-tag.is-idle { background: var(--ds-paper-sunk); }\n.ds-volta .ds-tpl-stage-title .ds-tpl-stage-foot { border-top-width: 2px; }\n.ds-volta .ds-tpl-split-a { color: var(--ds-on-volt); }\n",
+ "btn_primary": "v-btn v-btn-primary",
+ "btn_secondary": "v-btn",
+ "hand": {
+  "mode": "flat",
+  "shadow": true,
+  "headline": "Flat blocks, a 2px edge, one slipped shadow.",
+  "note": "Volta draws like a two-colour riso print: flat fills in volt and cobalt, a square-capped 2px edge in ink, and a hard shadow offset by 6px as if the second plate slipped. No gradients, no rounded strokes, no texture except the stripe screen. The subject is whatever the artifact is about; the hand is this.",
+  "rules": [
+   [
+    "Stroke",
+    "2px ink, square caps, square joins. Every shape has it."
+   ],
+   [
+    "Fill",
+    "Flat volt or cobalt; sunk paper for the quiet parts."
+   ],
+   [
+    "Shadow",
+    "6px hard offset in ink (volt in Night). Only on the main body of the drawing."
+   ],
+   [
+    "Texture",
+    "The 4px stripe screen, clipped inside a block, for pending or unknown regions."
+   ],
+   [
+    "Figures",
+    "Mono caps at 11px for labels; the display face for the one number."
+   ],
+   [
+    "Motion",
+    "A drawing may lift 2px on hover; it never fades in."
+   ]
+  ]
+ },
+ "motion": [
+  [
+   "Hover",
+   "Interactive things lift 2px and the shadow grows by 2px, 80ms ease-out."
+  ],
+  [
+   "Press",
+   "The element drives into its shadow: translate 4px, shadow 0. 80ms."
+  ],
+  [
+   "Focus",
+   "A 2px paper gap then 2px cobalt. Never removed."
+  ],
+  [
+   "Reveal",
+   "Sections use the kit reveal-up with 120ms stagger; nothing longer than 400ms."
+  ],
+  [
+   "Loop",
+   "One ambient loop per page at most: the live status dot pulses. No marquee."
+  ],
+  [
+   "Charts",
+   "Bars grow from the baseline on first paint; no easing longer than 300ms."
+  ]
+ ],
+ "tpl": {
+  "brand": "Volta",
+  "dash_title": "Weekly review · Revenue",
+  "kpis": [
+   [
+    "Revenue, 90 days",
+    "revenue",
+    "$",
+    "",
+    ",.0f",
+    "▲ 12% vs prior"
+   ],
+   [
+    "New customers",
+    "customers",
+    "",
+    "",
+    ",.0f",
+    "1,120 monthly · 640 annual"
+   ],
+   [
+    "Kept at 90 days",
+    "kept_pct",
+    "",
+    "%",
+    null,
+    "▼ 4 pts vs prior"
+   ]
+  ],
+  "dash_table_title": "Cohorts",
+  "slide_eyebrow": "Pricing review",
+  "slide_title": "Annual plans drove 70% of growth.",
+  "slide_sub": "Monthly plans add more customers and lose most of them inside a quarter.",
+  "slide_foot": "Synthetic data · Oct 2026",
+  "slide_stat_label": "Kept at 90 days",
+  "slide_stat_col": "kept_pct",
+  "slide_stat_suffix": "%",
+  "slide_body": "Of every 100 new customers, this many are still paying at day 90. Annual cohorts keep 96 of 100.",
+  "split": [
+   "ANNUAL · 70%",
+   "MONTHLY · 30%"
+  ],
+  "ed_kicker": "Pricing · Feature",
+  "ed_headline": "The plan that kept its customers",
+  "ed_deck": "Monthly plans bring the crowd. Annual plans keep it. A quarter of synthetic numbers on why the pricing page should lead with the one that stays.",
+  "ed_byline": "By the analytics team · 2 Oct 2026 · 6 min read",
+  "ed_body": "Monthly plans added 1,120 customers in ninety days and lost 410 of them before the quarter ended. Annual plans added 640 and kept 612. The pricing page still leads with monthly, because that is what every pricing page does. The numbers say the opposite order would have kept more people.",
+  "ed_pull_col": "revenue",
+  "ed_pull_prefix": "$",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "Revenue, 90 days",
+  "steps": [
+   [
+    "One hundred customers walk in.",
+    "Sixty pick monthly, forty pick annual. Each square is one customer; the colour is the plan."
+   ],
+   [
+    "Ninety days later.",
+    "The monthly squares thin out: 37 of the 60 remain. The annual block is nearly whole."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One batch of 100, by outcome · synthetic",
+  "app_rows": [
+   [
+    "Nightly backfill",
+    "Runs 02:00 · 4m 12s",
+    "Healthy",
+    "ok"
+   ],
+   [
+    "Stripe sync",
+    "Last run 11 min ago",
+    "Stale",
+    "warn"
+   ],
+   [
+    "Cohort export",
+    "Failed on step 3",
+    "Failed",
+    "bad"
+   ],
+   [
+    "Weekly digest",
+    "Scheduled · Mon 09:00",
+    "Idle",
+    "idle"
+   ]
+  ],
+  "app_cta": "New job",
+  "app_cta2": "Save",
+  "landing_eyebrow": "Volta analytics",
+  "landing_headline": "Ask a question. Get the number.",
+  "landing_sub": "Plain-words questions over your warehouse, answered with a chart and the SQL that made it. No dashboards to build first.",
+  "cta": "Start free",
+  "cta2": "See a demo",
+  "features": [
+   [
+    "Numbers first",
+    "The figure leads; the chart explains it; the SQL is one click away."
+   ],
+   [
+    "One loud thing",
+    "Every answer marks the number that matters and nothing else."
+   ],
+   [
+    "Your warehouse",
+    "Postgres, BigQuery, Snowflake. Read-only, in your region."
+   ]
+  ]
+ }
+}

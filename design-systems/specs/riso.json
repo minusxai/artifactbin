@@ -1,0 +1,792 @@
+{
+ "slug": "riso",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Riso cover: three inks over one key plate, misregistered by a hair, with a halftone screen and a registration mark</title>\n<defs><clipPath id=\"riso-dotclip\"><rect x=\"250\" y=\"0\" width=\"230\" height=\"150\"/></clipPath></defs>\n<rect className=\"ri-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<g clipPath=\"url(#riso-dotclip)\" className=\"ri-dots-pink\"><circle cx=\"258\" cy=\"6\" r=\"2.2\"/><circle cx=\"276\" cy=\"6\" r=\"2.2\"/><circle cx=\"294\" cy=\"6\" r=\"2.2\"/><circle cx=\"312\" cy=\"6\" r=\"2.2\"/><circle cx=\"330\" cy=\"6\" r=\"2.2\"/><circle cx=\"348\" cy=\"6\" r=\"2.2\"/><circle cx=\"366\" cy=\"6\" r=\"2.2\"/><circle cx=\"384\" cy=\"6\" r=\"2.2\"/><circle cx=\"402\" cy=\"6\" r=\"2.2\"/><circle cx=\"420\" cy=\"6\" r=\"2.2\"/><circle cx=\"438\" cy=\"6\" r=\"2.2\"/><circle cx=\"456\" cy=\"6\" r=\"2.2\"/><circle cx=\"474\" cy=\"6\" r=\"2.2\"/><circle cx=\"267\" cy=\"15\" r=\"2.2\"/><circle cx=\"285\" cy=\"15\" r=\"2.2\"/><circle cx=\"303\" cy=\"15\" r=\"2.2\"/><circle cx=\"321\" cy=\"15\" r=\"2.2\"/><circle cx=\"339\" cy=\"15\" r=\"2.2\"/><circle cx=\"357\" cy=\"15\" r=\"2.2\"/><circle cx=\"375\" cy=\"15\" r=\"2.2\"/><circle cx=\"393\" cy=\"15\" r=\"2.2\"/><circle cx=\"411\" cy=\"15\" r=\"2.2\"/><circle cx=\"429\" cy=\"15\" r=\"2.2\"/><circle cx=\"447\" cy=\"15\" r=\"2.2\"/><circle cx=\"465\" cy=\"15\" r=\"2.2\"/><circle cx=\"258\" cy=\"24\" r=\"2.2\"/><circle cx=\"276\" cy=\"24\" r=\"2.2\"/><circle cx=\"294\" cy=\"24\" r=\"2.2\"/><circle cx=\"312\" cy=\"24\" r=\"2.2\"/><circle cx=\"330\" cy=\"24\" r=\"2.2\"/><circle cx=\"348\" cy=\"24\" r=\"2.2\"/><circle cx=\"366\" cy=\"24\" r=\"2.2\"/><circle cx=\"384\" cy=\"24\" r=\"2.2\"/><circle cx=\"402\" cy=\"24\" r=\"2.2\"/><circle cx=\"420\" cy=\"24\" r=\"2.2\"/><circle cx=\"438\" cy=\"24\" r=\"2.2\"/><circle cx=\"456\" cy=\"24\" r=\"2.2\"/><circle cx=\"474\" cy=\"24\" r=\"2.2\"/><circle cx=\"267\" cy=\"33\" r=\"2.2\"/><circle cx=\"285\" cy=\"33\" r=\"2.2\"/><circle cx=\"303\" cy=\"33\" r=\"2.2\"/><circle cx=\"321\" cy=\"33\" r=\"2.2\"/><circle cx=\"339\" cy=\"33\" r=\"2.2\"/><circle cx=\"357\" cy=\"33\" r=\"2.2\"/><circle cx=\"375\" cy=\"33\" r=\"2.2\"/><circle cx=\"393\" cy=\"33\" r=\"2.2\"/><circle cx=\"411\" cy=\"33\" r=\"2.2\"/><circle cx=\"429\" cy=\"33\" r=\"2.2\"/><circle cx=\"447\" cy=\"33\" r=\"2.2\"/><circle cx=\"465\" cy=\"33\" r=\"2.2\"/><circle cx=\"258\" cy=\"42\" r=\"2.2\"/><circle cx=\"276\" cy=\"42\" r=\"2.2\"/><circle cx=\"294\" cy=\"42\" r=\"2.2\"/><circle cx=\"312\" cy=\"42\" r=\"2.2\"/><circle cx=\"330\" cy=\"42\" r=\"2.2\"/><circle cx=\"348\" cy=\"42\" r=\"2.2\"/><circle cx=\"366\" cy=\"42\" r=\"2.2\"/><circle cx=\"384\" cy=\"42\" r=\"2.2\"/><circle cx=\"402\" cy=\"42\" r=\"2.2\"/><circle cx=\"420\" cy=\"42\" r=\"2.2\"/><circle cx=\"438\" cy=\"42\" r=\"2.2\"/><circle cx=\"456\" cy=\"42\" r=\"2.2\"/><circle cx=\"474\" cy=\"42\" r=\"2.2\"/><circle cx=\"267\" cy=\"51\" r=\"2.2\"/><circle cx=\"285\" cy=\"51\" r=\"2.2\"/><circle cx=\"303\" cy=\"51\" r=\"2.2\"/><circle cx=\"321\" cy=\"51\" r=\"2.2\"/><circle cx=\"339\" cy=\"51\" r=\"2.2\"/><circle cx=\"357\" cy=\"51\" r=\"2.2\"/><circle cx=\"375\" cy=\"51\" r=\"2.2\"/><circle cx=\"393\" cy=\"51\" r=\"2.2\"/><circle cx=\"411\" cy=\"51\" r=\"2.2\"/><circle cx=\"429\" cy=\"51\" r=\"2.2\"/><circle cx=\"447\" cy=\"51\" r=\"2.2\"/><circle cx=\"465\" cy=\"51\" r=\"2.2\"/><circle cx=\"258\" cy=\"60\" r=\"2.2\"/><circle cx=\"276\" cy=\"60\" r=\"2.2\"/><circle cx=\"294\" cy=\"60\" r=\"2.2\"/><circle cx=\"312\" cy=\"60\" r=\"2.2\"/><circle cx=\"330\" cy=\"60\" r=\"2.2\"/><circle cx=\"348\" cy=\"60\" r=\"2.2\"/><circle cx=\"366\" cy=\"60\" r=\"2.2\"/><circle cx=\"384\" cy=\"60\" r=\"2.2\"/><circle cx=\"402\" cy=\"60\" r=\"2.2\"/><circle cx=\"420\" cy=\"60\" r=\"2.2\"/><circle cx=\"438\" cy=\"60\" r=\"2.2\"/><circle cx=\"456\" cy=\"60\" r=\"2.2\"/><circle cx=\"474\" cy=\"60\" r=\"2.2\"/><circle cx=\"267\" cy=\"69\" r=\"2.2\"/><circle cx=\"285\" cy=\"69\" r=\"2.2\"/><circle cx=\"303\" cy=\"69\" r=\"2.2\"/><circle cx=\"321\" cy=\"69\" r=\"2.2\"/><circle cx=\"339\" cy=\"69\" r=\"2.2\"/><circle cx=\"357\" cy=\"69\" r=\"2.2\"/><circle cx=\"375\" cy=\"69\" r=\"2.2\"/><circle cx=\"393\" cy=\"69\" r=\"2.2\"/><circle cx=\"411\" cy=\"69\" r=\"2.2\"/><circle cx=\"429\" cy=\"69\" r=\"2.2\"/><circle cx=\"447\" cy=\"69\" r=\"2.2\"/><circle cx=\"465\" cy=\"69\" r=\"2.2\"/><circle cx=\"258\" cy=\"78\" r=\"2.2\"/><circle cx=\"276\" cy=\"78\" r=\"2.2\"/><circle cx=\"294\" cy=\"78\" r=\"2.2\"/><circle cx=\"312\" cy=\"78\" r=\"2.2\"/><circle cx=\"330\" cy=\"78\" r=\"2.2\"/><circle cx=\"348\" cy=\"78\" r=\"2.2\"/><circle cx=\"366\" cy=\"78\" r=\"2.2\"/><circle cx=\"384\" cy=\"78\" r=\"2.2\"/><circle cx=\"402\" cy=\"78\" r=\"2.2\"/><circle cx=\"420\" cy=\"78\" r=\"2.2\"/><circle cx=\"438\" cy=\"78\" r=\"2.2\"/><circle cx=\"456\" cy=\"78\" r=\"2.2\"/><circle cx=\"474\" cy=\"78\" r=\"2.2\"/><circle cx=\"267\" cy=\"87\" r=\"2.2\"/><circle cx=\"285\" cy=\"87\" r=\"2.2\"/><circle cx=\"303\" cy=\"87\" r=\"2.2\"/><circle cx=\"321\" cy=\"87\" r=\"2.2\"/><circle cx=\"339\" cy=\"87\" r=\"2.2\"/><circle cx=\"357\" cy=\"87\" r=\"2.2\"/><circle cx=\"375\" cy=\"87\" r=\"2.2\"/><circle cx=\"393\" cy=\"87\" r=\"2.2\"/><circle cx=\"411\" cy=\"87\" r=\"2.2\"/><circle cx=\"429\" cy=\"87\" r=\"2.2\"/><circle cx=\"447\" cy=\"87\" r=\"2.2\"/><circle cx=\"465\" cy=\"87\" r=\"2.2\"/><circle cx=\"258\" cy=\"96\" r=\"2.2\"/><circle cx=\"276\" cy=\"96\" r=\"2.2\"/><circle cx=\"294\" cy=\"96\" r=\"2.2\"/><circle cx=\"312\" cy=\"96\" r=\"2.2\"/><circle cx=\"330\" cy=\"96\" r=\"2.2\"/><circle cx=\"348\" cy=\"96\" r=\"2.2\"/><circle cx=\"366\" cy=\"96\" r=\"2.2\"/><circle cx=\"384\" cy=\"96\" r=\"2.2\"/><circle cx=\"402\" cy=\"96\" r=\"2.2\"/><circle cx=\"420\" cy=\"96\" r=\"2.2\"/><circle cx=\"438\" cy=\"96\" r=\"2.2\"/><circle cx=\"456\" cy=\"96\" r=\"2.2\"/><circle cx=\"474\" cy=\"96\" r=\"2.2\"/><circle cx=\"267\" cy=\"105\" r=\"2.2\"/><circle cx=\"285\" cy=\"105\" r=\"2.2\"/><circle cx=\"303\" cy=\"105\" r=\"2.2\"/><circle cx=\"321\" cy=\"105\" r=\"2.2\"/><circle cx=\"339\" cy=\"105\" r=\"2.2\"/><circle cx=\"357\" cy=\"105\" r=\"2.2\"/><circle cx=\"375\" cy=\"105\" r=\"2.2\"/><circle cx=\"393\" cy=\"105\" r=\"2.2\"/><circle cx=\"411\" cy=\"105\" r=\"2.2\"/><circle cx=\"429\" cy=\"105\" r=\"2.2\"/><circle cx=\"447\" cy=\"105\" r=\"2.2\"/><circle cx=\"465\" cy=\"105\" r=\"2.2\"/><circle cx=\"258\" cy=\"114\" r=\"2.2\"/><circle cx=\"276\" cy=\"114\" r=\"2.2\"/><circle cx=\"294\" cy=\"114\" r=\"2.2\"/><circle cx=\"312\" cy=\"114\" r=\"2.2\"/><circle cx=\"330\" cy=\"114\" r=\"2.2\"/><circle cx=\"348\" cy=\"114\" r=\"2.2\"/><circle cx=\"366\" cy=\"114\" r=\"2.2\"/><circle cx=\"384\" cy=\"114\" r=\"2.2\"/><circle cx=\"402\" cy=\"114\" r=\"2.2\"/><circle cx=\"420\" cy=\"114\" r=\"2.2\"/><circle cx=\"438\" cy=\"114\" r=\"2.2\"/><circle cx=\"456\" cy=\"114\" r=\"2.2\"/><circle cx=\"474\" cy=\"114\" r=\"2.2\"/><circle cx=\"267\" cy=\"123\" r=\"2.2\"/><circle cx=\"285\" cy=\"123\" r=\"2.2\"/><circle cx=\"303\" cy=\"123\" r=\"2.2\"/><circle cx=\"321\" cy=\"123\" r=\"2.2\"/><circle cx=\"339\" cy=\"123\" r=\"2.2\"/><circle cx=\"357\" cy=\"123\" r=\"2.2\"/><circle cx=\"375\" cy=\"123\" r=\"2.2\"/><circle cx=\"393\" cy=\"123\" r=\"2.2\"/><circle cx=\"411\" cy=\"123\" r=\"2.2\"/><circle cx=\"429\" cy=\"123\" r=\"2.2\"/><circle cx=\"447\" cy=\"123\" r=\"2.2\"/><circle cx=\"465\" cy=\"123\" r=\"2.2\"/><circle cx=\"258\" cy=\"132\" r=\"2.2\"/><circle cx=\"276\" cy=\"132\" r=\"2.2\"/><circle cx=\"294\" cy=\"132\" r=\"2.2\"/><circle cx=\"312\" cy=\"132\" r=\"2.2\"/><circle cx=\"330\" cy=\"132\" r=\"2.2\"/><circle cx=\"348\" cy=\"132\" r=\"2.2\"/><circle cx=\"366\" cy=\"132\" r=\"2.2\"/><circle cx=\"384\" cy=\"132\" r=\"2.2\"/><circle cx=\"402\" cy=\"132\" r=\"2.2\"/><circle cx=\"420\" cy=\"132\" r=\"2.2\"/><circle cx=\"438\" cy=\"132\" r=\"2.2\"/><circle cx=\"456\" cy=\"132\" r=\"2.2\"/><circle cx=\"474\" cy=\"132\" r=\"2.2\"/><circle cx=\"267\" cy=\"141\" r=\"2.2\"/><circle cx=\"285\" cy=\"141\" r=\"2.2\"/><circle cx=\"303\" cy=\"141\" r=\"2.2\"/><circle cx=\"321\" cy=\"141\" r=\"2.2\"/><circle cx=\"339\" cy=\"141\" r=\"2.2\"/><circle cx=\"357\" cy=\"141\" r=\"2.2\"/><circle cx=\"375\" cy=\"141\" r=\"2.2\"/><circle cx=\"393\" cy=\"141\" r=\"2.2\"/><circle cx=\"411\" cy=\"141\" r=\"2.2\"/><circle cx=\"429\" cy=\"141\" r=\"2.2\"/><circle cx=\"447\" cy=\"141\" r=\"2.2\"/><circle cx=\"465\" cy=\"141\" r=\"2.2\"/></g>\n<g className=\"ri-mult\"><rect className=\"ri-blue\" x=\"44\" y=\"52\" width=\"216\" height=\"196\"/></g>\n<g className=\"ri-mult\"><circle className=\"ri-pink\" cx=\"298\" cy=\"166\" r=\"104\"/></g>\n<g className=\"ri-mult\"><polygon className=\"ri-yellow\" points=\"150,252 330,252 240,88\"/></g>\n<g className=\"ri-key-line\" transform=\"translate(5 4)\"><rect x=\"44\" y=\"52\" width=\"216\" height=\"196\"/><circle cx=\"298\" cy=\"166\" r=\"104\"/><polygon points=\"150,252 330,252 240,88\"/></g>\n<g className=\"ri-key-line\"><circle cx=\"430\" cy=\"42\" r=\"14\"/><line x1=\"408\" y1=\"42\" x2=\"452\" y2=\"42\"/><line x1=\"430\" y1=\"20\" x2=\"430\" y2=\"64\"/></g>\n<text x=\"24\" y=\"36\" className=\"ri-mono\">PLATE 1 · KEY</text><text x=\"24\" y=\"282\" className=\"ri-mono\">BLUE · PINK · YELLOW · 3 PASSES</text></svg>",
+ "name": "Riso",
+ "tagline": "Three inks, one key plate, a hair out of register.",
+ "mood": "Printed",
+ "jobs": "Scrolly stories, picture-book explainers, posters, zines",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Fraunces",
+   "ital,opsz,wght,SOFT,WONK@0,9..144,500,100,1;0,9..144,900,100,1;1,9..144,500,100,1"
+  ],
+  [
+   "Space Mono",
+   "ital,wght@0,400;0,700;1,400"
+  ]
+ ],
+ "families": {
+  "display": "\"Fraunces\", Georgia, serif",
+  "sans": "\"Fraunces\", Georgia, serif",
+  "mono": "\"Space Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "paper",
+   "light": "#F3ECDC",
+   "dark": "#1C2340",
+   "usage": "Page ground: uncoated stock. In Night the key plate becomes the page.",
+   "group": "Grounds"
+  },
+  {
+   "name": "sheet",
+   "light": "#FBF6EA",
+   "dark": "#263054",
+   "usage": "Cards, step cards, proofs: a whiter sheet laid on the paper.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-sunk",
+   "light": "#E8DFC6",
+   "dark": "#151b33",
+   "usage": "Wells, code, inactive tracks, table stripes.",
+   "group": "Grounds"
+  },
+  {
+   "name": "manila",
+   "light": "#F1DFA6",
+   "dark": "#F1DFA6",
+   "usage": "Luggage tags and folio stock: physical card, the same in both modes. Text on it is on-yellow.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#CFC5AD",
+   "dark": "#3A4470",
+   "usage": "Hairlines and quiet borders. The 2px key edge is the real border.",
+   "group": "Grounds"
+  },
+  {
+   "name": "key",
+   "light": "#1C2340",
+   "dark": "#F3ECDC",
+   "usage": "The key plate: text, edges, hard shadows. Every other ink sits on top of it.",
+   "group": "Ink"
+  },
+  {
+   "name": "key-2",
+   "light": "#3A3F5C",
+   "dark": "#B9BED6",
+   "usage": "Secondary text, imprints, captions.",
+   "group": "Ink"
+  },
+  {
+   "name": "blue",
+   "light": "#0078BF",
+   "dark": "#2E9BE8",
+   "usage": "Ink 1. Primary actions, the first series, the headline colour.",
+   "group": "Inks"
+  },
+  {
+   "name": "on-blue",
+   "light": "#FBF6EA",
+   "dark": "#1C2340",
+   "usage": "Text on blue.",
+   "group": "Inks"
+  },
+  {
+   "name": "blue-soft",
+   "light": "#CFE6F5",
+   "dark": "#173555",
+   "usage": "Ground for blue tags and selected rows.",
+   "group": "Inks"
+  },
+  {
+   "name": "pink",
+   "light": "#FF48B0",
+   "dark": "#FF48B0",
+   "usage": "Ink 2. Fluorescent; the second series, the slipped plate behind a headline, badges.",
+   "group": "Inks"
+  },
+  {
+   "name": "on-pink",
+   "light": "#1C2340",
+   "dark": "#1C2340",
+   "usage": "Text on pink.",
+   "group": "Inks"
+  },
+  {
+   "name": "pink-soft",
+   "light": "#FFD3EA",
+   "dark": "#4A1E3A",
+   "usage": "Ground for pink tags and info callouts.",
+   "group": "Inks"
+  },
+  {
+   "name": "yellow",
+   "light": "#FFE800",
+   "dark": "#FFE800",
+   "usage": "Ink 3. Highlighter and ticker ground; never text, never a line.",
+   "group": "Inks"
+  },
+  {
+   "name": "on-yellow",
+   "light": "#1C2340",
+   "dark": "#1C2340",
+   "usage": "Text on yellow.",
+   "group": "Inks"
+  },
+  {
+   "name": "positive",
+   "light": "#00875A",
+   "dark": "#2FD27E",
+   "usage": "Success text and the kept share, always with a word or a pip.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#CDEEDD",
+   "dark": "#0F3A26",
+   "usage": "Ground for success callouts and positive tags.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#8A6D00",
+   "dark": "#FFE800",
+   "usage": "Warnings as text: a dark ochre on paper, the yellow itself at night.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#FFF3A0",
+   "dark": "#3A3400",
+   "usage": "Ground for warning callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#E8322B",
+   "dark": "#FF6B61",
+   "usage": "Errors and the lost share. A printer’s red, not pink.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#FFD6D3",
+   "dark": "#4A1512",
+   "usage": "Ground for error callouts.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "paper",
+  "foreground": "key",
+  "card": "sheet",
+  "card-foreground": "key",
+  "popover": "sheet",
+  "popover-foreground": "key",
+  "primary": "blue",
+  "primary-foreground": "on-blue",
+  "secondary": "yellow",
+  "secondary-foreground": "on-yellow",
+  "muted": "paper-sunk",
+  "muted-foreground": "key-2",
+  "accent": "pink-soft",
+  "accent-foreground": "key",
+  "destructive": "negative",
+  "destructive-foreground": "paper",
+  "border": "line",
+  "input": "line",
+  "ring": "pink",
+  "chart-1": "blue",
+  "chart-2": "pink",
+  "chart-3": "yellow",
+  "chart-4": "key-2",
+  "chart-5": "positive"
+ },
+ "radius_contract": "0px",
+ "extra_vars": {
+  "shadow-hard": {
+   "light": "6px 6px 0 0 #1C2340",
+   "dark": "6px 6px 0 0 #FF48B0"
+  },
+  "shadow-hard-lg": {
+   "light": "9px 9px 0 0 #1C2340",
+   "dark": "9px 9px 0 0 #FF48B0"
+  },
+  "chip-radius": "0",
+  "grain": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E\")"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(64px, 12vw, 160px)",
+   "lh": ".82",
+   "weight": 900,
+   "ls": "-0.045em",
+   "sample": "Second life",
+   "usage": "One per page. The chapter word, the cover word. Soft, wonky, enormous."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(40px, 6.4vw, 84px)",
+   "lh": ".9",
+   "weight": 900,
+   "ls": "-0.03em",
+   "sample": "Three doors.",
+   "usage": "Section openers and plate titles."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "40px",
+   "lh": "40px",
+   "weight": 900,
+   "ls": "-0.02em",
+   "sample": "Batch 07",
+   "usage": "Tag titles, stat blocks, page titles."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "24px",
+   "lh": "28px",
+   "weight": 900,
+   "ls": "-0.01em",
+   "sample": "A crate on a Tuesday",
+   "usage": "Card and step titles."
+  },
+  {
+   "name": "deck",
+   "family": "display",
+   "size": "clamp(20px, 2vw, 26px)",
+   "lh": "1.25",
+   "weight": 500,
+   "fs": "italic",
+   "sample": "In which a hundred things are laid out on one long bench.",
+   "usage": "The italic line under a headline, chapter subtitles, pull quotes."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "20px",
+   "lh": "1.5",
+   "weight": 500,
+   "sample": "Every one will leave by one of three doors.",
+   "usage": "Step cards and lead paragraphs. Fraunces at 500 reads at length."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "17px",
+   "lh": "1.55",
+   "weight": 500,
+   "sample": "Each one gets a paper tag, a number, and a few minutes of attention.",
+   "usage": "Default reading and UI text."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "14px",
+   "lh": "1.45",
+   "weight": 500,
+   "sample": "Figures illustrative · fictional batch",
+   "usage": "Captions, imprints, helper text."
+  },
+  {
+   "name": "label",
+   "family": "mono",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 400,
+   "ls": "0.09em",
+   "tt": "uppercase",
+   "sample": "Chapter I · p. 3",
+   "usage": "Eyebrows, folios, tag facts, running heads. Caps from CSS."
+  },
+  {
+   "name": "numeral",
+   "family": "mono",
+   "size": "40px",
+   "lh": "44px",
+   "weight": 700,
+   "ls": "-0.02em",
+   "sample": "640",
+   "usage": "KPI figures and the numbers inside doors. Tabular.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "batch=07 door=parts n=25",
+   "usage": "Code, IDs, table figures."
+  }
+ ],
+ "idea_headline": "Printed, not rendered.",
+ "idea": "Riso is the print shop: three fluorescent inks laid one pass at a time over a navy key plate, each slipped by a hair, on uncoated paper with a grain you can feel. Headlines overprint themselves. Pages go full-bleed in one ink. Tags hang off things. It makes any subject feel like a picture book someone made by hand, and it is at its best when the story moves in chapters.",
+ "use_for": "Scrolly stories and picture-book explainers, chaptered long reads, posters and zines, launch pages that want warmth with a spine.",
+ "avoid_when": "Dense dashboards (three inks and a key cannot carry twelve series), institutional or legal subjects, anything that must look neutral, or long UI-heavy apps.",
+ "principles_headline": "Three inks. One key. Everything slips a little.",
+ "principles": [
+  [
+   "Three inks, one key.",
+   "Blue, pink and yellow over navy. There is no fourth ink; a new colour is a new plate, and you do not have one."
+  ],
+  [
+   "Overprint, never blend.",
+   "Inks multiply where they cross. Gradients and blur do not exist in a riso; the halftone dot does."
+  ],
+  [
+   "Misregister on purpose.",
+   "A headline is printed three times, each pass off by a hair. The slip is the signature; keep it under .05em."
+  ],
+  [
+   "Pages, not panels.",
+   "Chapters open full-bleed in one ink with the number enormous. Cards are sheets with a hard shadow, slightly turned."
+  ],
+  [
+   "Tags hang off things.",
+   "Facts live on luggage tags and folios: mono caps, a punched hole, a string. The reader picks them up."
+  ]
+ ],
+ "voice": [
+  "Storybook present tense: \"On a Tuesday a crate arrives.\"",
+  "Chapter numbers in roman, folios in mono: \"Chapter II · p. 6\".",
+  "Short sentences, concrete nouns, one italic aside per page.",
+  "Name what is invented: \"fictional batch · figures illustrative\" in the imprint."
+ ],
+ "colour_headline": "Paper, key, and three inks that multiply.",
+ "colour_note": "Paper first. Night is the ink page: the key plate becomes the ground, type goes paper, and the fluorescent inks stay fluorescent. Yellow is never text and never a line; it is a ground and a highlighter. Blue is the working ink: actions, the first series, headline colour. Pink is the slipped plate and the badge. Status colours exist for callouts and tags only and always come with a word.",
+ "chart_series": [
+  "blue",
+  "pink",
+  "yellow",
+  "key-2",
+  "positive"
+ ],
+ "chart_note": "The three inks in print order, then the key at half strength, then green. Bars overprint (multiply) where they stack; lines are the key plate at 2px.",
+ "type_headline": "Fraunces at full soft and wonk; Space Mono for everything printed small.",
+ "type_note": "One serif does the whole page: Fraunces at 900 with SOFT 100 and WONK 1 for display (the wonky a and g are the point), at 500 for reading, at 500 italic for decks. Space Mono carries labels, folios, tag facts and figures. No sans anywhere.",
+ "space_headline": "A 9px dot pitch, a 2px key edge, a 6px slip.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Tag padding-y, pip gaps."
+  ],
+  [
+   "space-2 · 8px",
+   "Gaps inside controls."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "Control padding-x, default stack gap."
+  ],
+  [
+   "space-6 · 24px",
+   "Card and tag padding."
+  ],
+  [
+   "space-8 · 32px",
+   "Gaps between cards so hard shadows never touch."
+  ],
+  [
+   "space-12 · 48px",
+   "Section breaks."
+  ],
+  [
+   "space-20 · 80px",
+   "Chapter page padding on wide screens."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Everything. A riso has no rounded corners except the punched hole in a tag."
+  ],
+  [
+   "edge · 2px key",
+   "Cards, buttons, fields, tables, the ticker band. Hairlines are for table rows only."
+  ],
+  [
+   "dashed · 1.5px",
+   "Contents lists and ledgers use a dashed key rule between items."
+  ],
+  [
+   "turn · ±0.7°",
+   "Cards and tags sit a fraction off square, alternating sign down the page."
+  ]
+ ],
+ "depth": [
+  [
+   "shadow-hard",
+   "6px 6px 0 key on cards and buttons; pink at night."
+  ],
+  [
+   "shadow-hard-lg",
+   "9px 9px 0 key on step cards and tags."
+  ],
+  [
+   "halftone",
+   "A 9px dot screen in one ink, masked to a corner, stands in for any gradient."
+  ],
+  [
+   "grain",
+   "A fractal-noise grain at 40% multiply on covers and chapter pages. Never on UI."
+  ]
+ ],
+ "motion": [
+  [
+   "Hover",
+   "Cards lift 4px and straighten to 0°, 160ms. Buttons move into their shadow on press."
+  ],
+  [
+   "Reveal",
+   "Step cards use the kit reveal-up; chapter words are printed in one pass, never faded."
+  ],
+  [
+   "Plates",
+   "A figure may print plate by plate: three clip-path wipes, 1.2s each, blue then pink then yellow. Once per page."
+  ],
+  [
+   "Ticker",
+   "The yellow ticker uses animate-marquee at 38s. One per page, and it carries facts, not decoration."
+  ],
+  [
+   "Pop",
+   "Stamps and badges arrive with a spring: scale .6 to 1 at cubic-bezier(.2,1.6,.4,1)."
+  ],
+  [
+   "Reduced motion",
+   "Everything printed, nothing moves. Every state is visible without it."
+  ]
+ ],
+ "components_headline": "The kit prints on paper; the key edge and the slip are classes.",
+ "components_note": "Kit components take Riso through the contract: paper and sheet grounds, blue primary, yellow secondary, pink ring, zero radius. The 2px key edge, the hard shadow and the turn are classes on authored elements: ri-card, ri-btn, ri-tag.",
+ "buttons": "<Button>Turn the page</Button><Button variant=\"secondary\">Pick this door</Button><Button variant=\"outline\">Contents</Button><Button variant=\"ghost\">Skip</Button><button className=\"ri-btn ri-btn-blue\">Turn the page</button><button className=\"ri-btn ri-btn-pink\">Stamp it</button><button className=\"ri-btn\">Contents</button>",
+ "buttons_note": "Kit buttons on the left; authored ri-btn on the right with the 2px key edge and the 6px slip. Blue is the primary. Pink is for the one playful action per page.",
+ "tags": "<Badge>Blue</Badge><Badge variant=\"secondary\">Yellow</Badge><Badge variant=\"outline\">Outline</Badge><Badge variant=\"destructive\">Lost</Badge><span className=\"ri-tag\">Chapter I</span><span className=\"ri-tag ri-tag-blue\">Kept</span><span className=\"ri-tag ri-tag-pink\">Parts</span><span className=\"ri-tag ri-tag-yellow\">New</span><span className=\"ri-tag ri-tag-positive\">● Returned</span>",
+ "tags_note": "Tags are mono caps inside a 2px key edge, square. Status tags carry a pip or a word with the colour.",
+ "fields_note": "Fields are sheets with the key edge; the focus ring is pink. Labels are mono caps above the field.",
+ "stats": "<div className=\"ri-door ri-door-blue\"><span className=\"ri-door-n t-display-m\"><Number data=\"$totals\" col=\"kept\" /></span><div><span className=\"t-label\">Kept</span><span className=\"ri-door-s\">back on the street</span></div></div><div className=\"ri-door ri-door-pink\"><span className=\"ri-door-n t-display-m\"><Number data=\"$totals\" col=\"parts\" /></span><div><span className=\"t-label\">Parts</span><span className=\"ri-door-s\">into the drawers</span></div></div><div className=\"ri-door ri-door-yellow\"><span className=\"ri-door-n t-display-m\"><Number data=\"$totals\" col=\"retired\" /></span><div><span className=\"t-label\">Retired</span><span className=\"ri-door-s\">to the recycler</span></div></div>",
+ "stats_note": "A door: the number printed big on one ink block with a halftone shadow, the label beside it. Three doors, three inks. Figures come from data.",
+ "callouts": "<Alert><AlertTitle>Figures illustrative</AlertTitle><AlertDescription>The batch is fictional; the arithmetic is real.</AlertDescription></Alert><div className=\"ri-callout ri-callout-blue\"><span className=\"ri-folio\">Note</span><strong>Blue means the working ink.</strong> A fact about the batch, not an alarm.</div><div className=\"ri-callout ri-callout-positive\"><span className=\"ri-folio\">Done</span><strong>Printed.</strong> All three plates landed.</div><div className=\"ri-callout ri-callout-negative\"><span className=\"ri-folio\">Stop</span><strong>Plate 2 is out of register.</strong> Realign and print the proof again.</div>",
+ "callouts_note": "A callout is a sheet with a dashed key rule and a folio in the corner. Status is the ground tint and the folio word; the text stays key.",
+ "chart_comp_note": "Charts take the inks in print order: blue, pink, yellow. Stacked bars overprint; no gradients; labels in mono.",
+ "table_note": "Tables are key on sheet with hairline rows, mono figures, and the 2px edge on the container.",
+ "card": "<div className=\"ri-card\"><span className=\"ri-folio\">p. 6</span><h3 className=\"t-title\">Dot, who was dropped</h3><p className=\"ri-card-body\">Screen cracked corner to corner, everything else fine. Twenty minutes, one new screen, and <b className=\"ri-hl\">Dot goes back through door one</b>.</p><button className=\"ri-btn ri-btn-blue\">Follow Dot</button></div>",
+ "card_note": "A step card: a sheet with the key edge, a 9px slip, a folio tab and a fraction of a turn. Highlights are a yellow bar behind the words, never a colour change.",
+ "hand": {
+  "mode": "riso",
+  "headline": "Three plates, printed one after another.",
+  "note": "Riso draws any subject as a print: the fills go down first as colour plates (blue, pink), offset by 4px and multiplied where they cross, then the key plate draws every edge in 2px navy. No gradient, no blur, no rounded strokes; dots stand in for tone. The subject changes; the press does not.",
+  "rules": [
+   [
+    "Key plate",
+    "2px navy, round caps. Every edge, drawn last, slightly off the fill."
+   ],
+   [
+    "Colour plates",
+    "Flat blue and pink, multiplied. Yellow only as a ground or a highlight."
+   ],
+   [
+    "Register",
+    "Fills slip 4px right and 3px down from the key. The slip is constant across a page."
+   ],
+   [
+    "Tone",
+    "Halftone dots at a 9px pitch, masked to a corner. No gradients."
+   ],
+   [
+    "Figures",
+    "Space Mono caps at 11px; the display face for the one big number."
+   ],
+   [
+    "Grain",
+    "Fractal-noise grain over covers and plates at 40% multiply."
+   ]
+  ]
+ },
+ "motifs_headline": "Overprint, tags, and the proof.",
+ "motifs_note": "The devices are the print shop’s: a word printed three times, a tag that hangs off a fact, a figure framed as a proof. Each is drawn with the hand variables, so it ports.",
+ "motifs": [
+  {
+   "title": "The overprint word",
+   "usage": "A headline printed three times: yellow, then pink, then blue, each pass off by .03–.045em and multiplied. Use it on one word per page: the chapter word or the number.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Overprint word: three plates of the same word, each slipped by a hair</title><rect className=\"ri-sheet\" x=\"0\" y=\"0\" width=\"480\" height=\"200\"/>\n<g className=\"ri-mult\"><text x=\"30\" y=\"150\" className=\"ri-ovp-t ri-yellow\">Print</text></g><g className=\"ri-mult\"><text x=\"24\" y=\"146\" className=\"ri-ovp-t ri-pink\">Print</text></g><g className=\"ri-mult\"><text x=\"18\" y=\"142\" className=\"ri-ovp-t ri-blue\">Print</text></g>\n<text x=\"24\" y=\"36\" className=\"ri-mono\">DX .045EM · DY .03EM · MULTIPLY</text></svg>"
+  },
+  {
+   "title": "The luggage tag",
+   "usage": "A manila tag with a punched hole and a string. It carries a name and three mono facts; it turns ±2° and casts the hard shadow. One tag per thing introduced.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Luggage tag: a manila card with a punched hole and a string, carrying a name and three mono facts</title><rect className=\"ri-sheet\" x=\"0\" y=\"0\" width=\"480\" height=\"200\"/>\n<g transform=\"rotate(-3 240 100)\"><polygon className=\"ri-navy\" points=\"118,34 418,34 418,174 118,174 88,144 88,64\"/><polygon className=\"ri-manila\" points=\"110,26 410,26 410,166 110,166 80,136 80,56\"/>\n<circle className=\"ri-hole\" cx=\"104\" cy=\"96\" r=\"9\"/><path className=\"ri-string\" d=\"M104 96 C 70 96, 50 60, 22 48\"/>\n<text x=\"136\" y=\"72\" className=\"ri-tag-h\">Batch 07</text><text x=\"136\" y=\"100\" className=\"ri-mono ri-on-manila\">INTAKE · TUE 06 OCT</text><text x=\"136\" y=\"122\" className=\"ri-mono ri-on-manila\">COUNT · 100</text><text x=\"136\" y=\"144\" className=\"ri-mono ri-on-manila\">DOOR · NOT YET</text>\n<rect className=\"ri-navy\" x=\"340\" y=\"138\" width=\"56\" height=\"20\"/><text x=\"368\" y=\"152\" className=\"ri-mono ri-on-navy\" textAnchor=\"middle\">p. 3</text></g></svg>"
+  },
+  {
+   "title": "The proof",
+   "usage": "A figure in a sheet frame, turned a degree, with a Fig. caption below and the ink chips beside it. Any chart or drawing becomes a proof when it needs a frame.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>The proof: a figure in a sheet frame with a Fig. caption and the three ink chips</title><rect className=\"ri-sheet\" x=\"0\" y=\"0\" width=\"480\" height=\"200\"/>\n<g transform=\"rotate(-1 200 100)\"><rect className=\"ri-key\" x=\"46\" y=\"36\" width=\"300\" height=\"140\"/><rect className=\"ri-proof\" x=\"40\" y=\"30\" width=\"300\" height=\"140\"/>\n<g className=\"ri-mult\"><rect className=\"ri-blue\" x=\"70\" y=\"60\" width=\"90\" height=\"80\"/></g><g className=\"ri-mult\"><circle className=\"ri-pink\" cx=\"190\" cy=\"100\" r=\"40\"/></g><g className=\"ri-mult\"><rect className=\"ri-yellow\" x=\"220\" y=\"76\" width=\"90\" height=\"64\"/></g>\n<g className=\"ri-key-line\" transform=\"translate(4 3)\"><rect x=\"70\" y=\"60\" width=\"90\" height=\"80\"/><circle cx=\"190\" cy=\"100\" r=\"40\"/><rect x=\"220\" y=\"76\" width=\"90\" height=\"64\"/></g></g>\n<text x=\"40\" y=\"192\" className=\"ri-mono\">FIG. 2 · THREE PASSES · ILLUSTRATIVE</text>\n<rect className=\"ri-blue\" x=\"370\" y=\"40\" width=\"28\" height=\"28\"/><rect className=\"ri-pink\" x=\"406\" y=\"40\" width=\"28\" height=\"28\"/><rect className=\"ri-yellow\" x=\"442\" y=\"40\" width=\"28\" height=\"28\"/><text x=\"370\" y=\"92\" className=\"ri-mono\">INKS</text></svg>"
+  }
+ ],
+ "sample_headline": "A chapter opener in Riso.",
+ "sample_note": "A scrolly first viewport: the running head, a cover with the overprinted number, an italic deck, the imprint, and the yellow ticker that carries the facts. Then the first step card beside a stage drawn in the hand.",
+ "sample": "<div className=\"ri-sample\">\n  <div className=\"ri-runhead\"><span className=\"t-label\">The Depot · bike-share workshop</span><span className=\"t-label\">Batch 07 · a picture book in three inks</span></div>\n  <div className=\"ri-cover\">\n    <div className=\"ri-cover-words\">\n      <p className=\"ri-kicker t-label\"><i className=\"ri-pip ri-pip-blue\"></i> An illustrated story</p>\n      <h2 className=\"ri-h1\"><span className=\"ri-h1-l1 t-deck\">The second life of</span><span className=\"ri-h1-l2\"><span className=\"ri-ovp\" data-text=\"500 bikes\">500 bikes</span></span></h2>\n      <p className=\"ri-dek t-body-l\">One depot, one winter, five hundred bikes off the street. Three doors, and every bike leaves through one of them.</p>\n      <div className=\"ri-imprint t-body-s\"><span>Words &amp; pictures: the depot</span><span>Fictional batch · figures illustrative</span></div>\n      <span className=\"ri-turn t-label\">Turn the page ↓</span>\n    </div>\n    <div className=\"ri-cover-art\"><svg className=\"ri-cover-svg\" viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Riso cover: three inks over one key plate, misregistered by a hair, with a halftone screen and a registration mark</title>\n<defs><clipPath id=\"riso-dotclip-s\"><rect x=\"250\" y=\"0\" width=\"230\" height=\"150\"/></clipPath></defs>\n<rect className=\"ri-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<g clipPath=\"url(#riso-dotclip-s)\" className=\"ri-dots-pink\"><circle cx=\"258\" cy=\"6\" r=\"2.2\"/><circle cx=\"276\" cy=\"6\" r=\"2.2\"/><circle cx=\"294\" cy=\"6\" r=\"2.2\"/><circle cx=\"312\" cy=\"6\" r=\"2.2\"/><circle cx=\"330\" cy=\"6\" r=\"2.2\"/><circle cx=\"348\" cy=\"6\" r=\"2.2\"/><circle cx=\"366\" cy=\"6\" r=\"2.2\"/><circle cx=\"384\" cy=\"6\" r=\"2.2\"/><circle cx=\"402\" cy=\"6\" r=\"2.2\"/><circle cx=\"420\" cy=\"6\" r=\"2.2\"/><circle cx=\"438\" cy=\"6\" r=\"2.2\"/><circle cx=\"456\" cy=\"6\" r=\"2.2\"/><circle cx=\"474\" cy=\"6\" r=\"2.2\"/><circle cx=\"267\" cy=\"15\" r=\"2.2\"/><circle cx=\"285\" cy=\"15\" r=\"2.2\"/><circle cx=\"303\" cy=\"15\" r=\"2.2\"/><circle cx=\"321\" cy=\"15\" r=\"2.2\"/><circle cx=\"339\" cy=\"15\" r=\"2.2\"/><circle cx=\"357\" cy=\"15\" r=\"2.2\"/><circle cx=\"375\" cy=\"15\" r=\"2.2\"/><circle cx=\"393\" cy=\"15\" r=\"2.2\"/><circle cx=\"411\" cy=\"15\" r=\"2.2\"/><circle cx=\"429\" cy=\"15\" r=\"2.2\"/><circle cx=\"447\" cy=\"15\" r=\"2.2\"/><circle cx=\"465\" cy=\"15\" r=\"2.2\"/><circle cx=\"258\" cy=\"24\" r=\"2.2\"/><circle cx=\"276\" cy=\"24\" r=\"2.2\"/><circle cx=\"294\" cy=\"24\" r=\"2.2\"/><circle cx=\"312\" cy=\"24\" r=\"2.2\"/><circle cx=\"330\" cy=\"24\" r=\"2.2\"/><circle cx=\"348\" cy=\"24\" r=\"2.2\"/><circle cx=\"366\" cy=\"24\" r=\"2.2\"/><circle cx=\"384\" cy=\"24\" r=\"2.2\"/><circle cx=\"402\" cy=\"24\" r=\"2.2\"/><circle cx=\"420\" cy=\"24\" r=\"2.2\"/><circle cx=\"438\" cy=\"24\" r=\"2.2\"/><circle cx=\"456\" cy=\"24\" r=\"2.2\"/><circle cx=\"474\" cy=\"24\" r=\"2.2\"/><circle cx=\"267\" cy=\"33\" r=\"2.2\"/><circle cx=\"285\" cy=\"33\" r=\"2.2\"/><circle cx=\"303\" cy=\"33\" r=\"2.2\"/><circle cx=\"321\" cy=\"33\" r=\"2.2\"/><circle cx=\"339\" cy=\"33\" r=\"2.2\"/><circle cx=\"357\" cy=\"33\" r=\"2.2\"/><circle cx=\"375\" cy=\"33\" r=\"2.2\"/><circle cx=\"393\" cy=\"33\" r=\"2.2\"/><circle cx=\"411\" cy=\"33\" r=\"2.2\"/><circle cx=\"429\" cy=\"33\" r=\"2.2\"/><circle cx=\"447\" cy=\"33\" r=\"2.2\"/><circle cx=\"465\" cy=\"33\" r=\"2.2\"/><circle cx=\"258\" cy=\"42\" r=\"2.2\"/><circle cx=\"276\" cy=\"42\" r=\"2.2\"/><circle cx=\"294\" cy=\"42\" r=\"2.2\"/><circle cx=\"312\" cy=\"42\" r=\"2.2\"/><circle cx=\"330\" cy=\"42\" r=\"2.2\"/><circle cx=\"348\" cy=\"42\" r=\"2.2\"/><circle cx=\"366\" cy=\"42\" r=\"2.2\"/><circle cx=\"384\" cy=\"42\" r=\"2.2\"/><circle cx=\"402\" cy=\"42\" r=\"2.2\"/><circle cx=\"420\" cy=\"42\" r=\"2.2\"/><circle cx=\"438\" cy=\"42\" r=\"2.2\"/><circle cx=\"456\" cy=\"42\" r=\"2.2\"/><circle cx=\"474\" cy=\"42\" r=\"2.2\"/><circle cx=\"267\" cy=\"51\" r=\"2.2\"/><circle cx=\"285\" cy=\"51\" r=\"2.2\"/><circle cx=\"303\" cy=\"51\" r=\"2.2\"/><circle cx=\"321\" cy=\"51\" r=\"2.2\"/><circle cx=\"339\" cy=\"51\" r=\"2.2\"/><circle cx=\"357\" cy=\"51\" r=\"2.2\"/><circle cx=\"375\" cy=\"51\" r=\"2.2\"/><circle cx=\"393\" cy=\"51\" r=\"2.2\"/><circle cx=\"411\" cy=\"51\" r=\"2.2\"/><circle cx=\"429\" cy=\"51\" r=\"2.2\"/><circle cx=\"447\" cy=\"51\" r=\"2.2\"/><circle cx=\"465\" cy=\"51\" r=\"2.2\"/><circle cx=\"258\" cy=\"60\" r=\"2.2\"/><circle cx=\"276\" cy=\"60\" r=\"2.2\"/><circle cx=\"294\" cy=\"60\" r=\"2.2\"/><circle cx=\"312\" cy=\"60\" r=\"2.2\"/><circle cx=\"330\" cy=\"60\" r=\"2.2\"/><circle cx=\"348\" cy=\"60\" r=\"2.2\"/><circle cx=\"366\" cy=\"60\" r=\"2.2\"/><circle cx=\"384\" cy=\"60\" r=\"2.2\"/><circle cx=\"402\" cy=\"60\" r=\"2.2\"/><circle cx=\"420\" cy=\"60\" r=\"2.2\"/><circle cx=\"438\" cy=\"60\" r=\"2.2\"/><circle cx=\"456\" cy=\"60\" r=\"2.2\"/><circle cx=\"474\" cy=\"60\" r=\"2.2\"/><circle cx=\"267\" cy=\"69\" r=\"2.2\"/><circle cx=\"285\" cy=\"69\" r=\"2.2\"/><circle cx=\"303\" cy=\"69\" r=\"2.2\"/><circle cx=\"321\" cy=\"69\" r=\"2.2\"/><circle cx=\"339\" cy=\"69\" r=\"2.2\"/><circle cx=\"357\" cy=\"69\" r=\"2.2\"/><circle cx=\"375\" cy=\"69\" r=\"2.2\"/><circle cx=\"393\" cy=\"69\" r=\"2.2\"/><circle cx=\"411\" cy=\"69\" r=\"2.2\"/><circle cx=\"429\" cy=\"69\" r=\"2.2\"/><circle cx=\"447\" cy=\"69\" r=\"2.2\"/><circle cx=\"465\" cy=\"69\" r=\"2.2\"/><circle cx=\"258\" cy=\"78\" r=\"2.2\"/><circle cx=\"276\" cy=\"78\" r=\"2.2\"/><circle cx=\"294\" cy=\"78\" r=\"2.2\"/><circle cx=\"312\" cy=\"78\" r=\"2.2\"/><circle cx=\"330\" cy=\"78\" r=\"2.2\"/><circle cx=\"348\" cy=\"78\" r=\"2.2\"/><circle cx=\"366\" cy=\"78\" r=\"2.2\"/><circle cx=\"384\" cy=\"78\" r=\"2.2\"/><circle cx=\"402\" cy=\"78\" r=\"2.2\"/><circle cx=\"420\" cy=\"78\" r=\"2.2\"/><circle cx=\"438\" cy=\"78\" r=\"2.2\"/><circle cx=\"456\" cy=\"78\" r=\"2.2\"/><circle cx=\"474\" cy=\"78\" r=\"2.2\"/><circle cx=\"267\" cy=\"87\" r=\"2.2\"/><circle cx=\"285\" cy=\"87\" r=\"2.2\"/><circle cx=\"303\" cy=\"87\" r=\"2.2\"/><circle cx=\"321\" cy=\"87\" r=\"2.2\"/><circle cx=\"339\" cy=\"87\" r=\"2.2\"/><circle cx=\"357\" cy=\"87\" r=\"2.2\"/><circle cx=\"375\" cy=\"87\" r=\"2.2\"/><circle cx=\"393\" cy=\"87\" r=\"2.2\"/><circle cx=\"411\" cy=\"87\" r=\"2.2\"/><circle cx=\"429\" cy=\"87\" r=\"2.2\"/><circle cx=\"447\" cy=\"87\" r=\"2.2\"/><circle cx=\"465\" cy=\"87\" r=\"2.2\"/><circle cx=\"258\" cy=\"96\" r=\"2.2\"/><circle cx=\"276\" cy=\"96\" r=\"2.2\"/><circle cx=\"294\" cy=\"96\" r=\"2.2\"/><circle cx=\"312\" cy=\"96\" r=\"2.2\"/><circle cx=\"330\" cy=\"96\" r=\"2.2\"/><circle cx=\"348\" cy=\"96\" r=\"2.2\"/><circle cx=\"366\" cy=\"96\" r=\"2.2\"/><circle cx=\"384\" cy=\"96\" r=\"2.2\"/><circle cx=\"402\" cy=\"96\" r=\"2.2\"/><circle cx=\"420\" cy=\"96\" r=\"2.2\"/><circle cx=\"438\" cy=\"96\" r=\"2.2\"/><circle cx=\"456\" cy=\"96\" r=\"2.2\"/><circle cx=\"474\" cy=\"96\" r=\"2.2\"/><circle cx=\"267\" cy=\"105\" r=\"2.2\"/><circle cx=\"285\" cy=\"105\" r=\"2.2\"/><circle cx=\"303\" cy=\"105\" r=\"2.2\"/><circle cx=\"321\" cy=\"105\" r=\"2.2\"/><circle cx=\"339\" cy=\"105\" r=\"2.2\"/><circle cx=\"357\" cy=\"105\" r=\"2.2\"/><circle cx=\"375\" cy=\"105\" r=\"2.2\"/><circle cx=\"393\" cy=\"105\" r=\"2.2\"/><circle cx=\"411\" cy=\"105\" r=\"2.2\"/><circle cx=\"429\" cy=\"105\" r=\"2.2\"/><circle cx=\"447\" cy=\"105\" r=\"2.2\"/><circle cx=\"465\" cy=\"105\" r=\"2.2\"/><circle cx=\"258\" cy=\"114\" r=\"2.2\"/><circle cx=\"276\" cy=\"114\" r=\"2.2\"/><circle cx=\"294\" cy=\"114\" r=\"2.2\"/><circle cx=\"312\" cy=\"114\" r=\"2.2\"/><circle cx=\"330\" cy=\"114\" r=\"2.2\"/><circle cx=\"348\" cy=\"114\" r=\"2.2\"/><circle cx=\"366\" cy=\"114\" r=\"2.2\"/><circle cx=\"384\" cy=\"114\" r=\"2.2\"/><circle cx=\"402\" cy=\"114\" r=\"2.2\"/><circle cx=\"420\" cy=\"114\" r=\"2.2\"/><circle cx=\"438\" cy=\"114\" r=\"2.2\"/><circle cx=\"456\" cy=\"114\" r=\"2.2\"/><circle cx=\"474\" cy=\"114\" r=\"2.2\"/><circle cx=\"267\" cy=\"123\" r=\"2.2\"/><circle cx=\"285\" cy=\"123\" r=\"2.2\"/><circle cx=\"303\" cy=\"123\" r=\"2.2\"/><circle cx=\"321\" cy=\"123\" r=\"2.2\"/><circle cx=\"339\" cy=\"123\" r=\"2.2\"/><circle cx=\"357\" cy=\"123\" r=\"2.2\"/><circle cx=\"375\" cy=\"123\" r=\"2.2\"/><circle cx=\"393\" cy=\"123\" r=\"2.2\"/><circle cx=\"411\" cy=\"123\" r=\"2.2\"/><circle cx=\"429\" cy=\"123\" r=\"2.2\"/><circle cx=\"447\" cy=\"123\" r=\"2.2\"/><circle cx=\"465\" cy=\"123\" r=\"2.2\"/><circle cx=\"258\" cy=\"132\" r=\"2.2\"/><circle cx=\"276\" cy=\"132\" r=\"2.2\"/><circle cx=\"294\" cy=\"132\" r=\"2.2\"/><circle cx=\"312\" cy=\"132\" r=\"2.2\"/><circle cx=\"330\" cy=\"132\" r=\"2.2\"/><circle cx=\"348\" cy=\"132\" r=\"2.2\"/><circle cx=\"366\" cy=\"132\" r=\"2.2\"/><circle cx=\"384\" cy=\"132\" r=\"2.2\"/><circle cx=\"402\" cy=\"132\" r=\"2.2\"/><circle cx=\"420\" cy=\"132\" r=\"2.2\"/><circle cx=\"438\" cy=\"132\" r=\"2.2\"/><circle cx=\"456\" cy=\"132\" r=\"2.2\"/><circle cx=\"474\" cy=\"132\" r=\"2.2\"/><circle cx=\"267\" cy=\"141\" r=\"2.2\"/><circle cx=\"285\" cy=\"141\" r=\"2.2\"/><circle cx=\"303\" cy=\"141\" r=\"2.2\"/><circle cx=\"321\" cy=\"141\" r=\"2.2\"/><circle cx=\"339\" cy=\"141\" r=\"2.2\"/><circle cx=\"357\" cy=\"141\" r=\"2.2\"/><circle cx=\"375\" cy=\"141\" r=\"2.2\"/><circle cx=\"393\" cy=\"141\" r=\"2.2\"/><circle cx=\"411\" cy=\"141\" r=\"2.2\"/><circle cx=\"429\" cy=\"141\" r=\"2.2\"/><circle cx=\"447\" cy=\"141\" r=\"2.2\"/><circle cx=\"465\" cy=\"141\" r=\"2.2\"/></g>\n<g className=\"ri-mult\"><rect className=\"ri-blue\" x=\"44\" y=\"52\" width=\"216\" height=\"196\"/></g>\n<g className=\"ri-mult\"><circle className=\"ri-pink\" cx=\"298\" cy=\"166\" r=\"104\"/></g>\n<g className=\"ri-mult\"><polygon className=\"ri-yellow\" points=\"150,252 330,252 240,88\"/></g>\n<g className=\"ri-key-line\" transform=\"translate(5 4)\"><rect x=\"44\" y=\"52\" width=\"216\" height=\"196\"/><circle cx=\"298\" cy=\"166\" r=\"104\"/><polygon points=\"150,252 330,252 240,88\"/></g>\n<g className=\"ri-key-line\"><circle cx=\"430\" cy=\"42\" r=\"14\"/><line x1=\"408\" y1=\"42\" x2=\"452\" y2=\"42\"/><line x1=\"430\" y1=\"20\" x2=\"430\" y2=\"64\"/></g>\n<text x=\"24\" y=\"36\" className=\"ri-mono\">PLATE 1 · KEY</text><text x=\"24\" y=\"282\" className=\"ri-mono\">BLUE · PINK · YELLOW · 3 PASSES</text></svg><div className=\"ri-badge\"><b>III</b>doors</div></div>\n  </div>\n  <div className=\"ri-ticker\"><div className=\"ri-ticker-track animate-marquee\"><span>500 bikes <i>●</i> 3 doors <i>●</i> Bent wheels <i>●</i> Tired brakes <i>●</i> One canal <i>●</i> Snapped chains <i>●</i> 500 bikes <i>●</i> 3 doors <i>●</i> Bent wheels <i>●</i> Tired brakes <i>●</i> One canal <i>●</i> Snapped chains <i>●</i> </span><span>500 bikes <i>●</i> 3 doors <i>●</i> Bent wheels <i>●</i> Tired brakes <i>●</i> One canal <i>●</i> Snapped chains <i>●</i> 500 bikes <i>●</i> 3 doors <i>●</i> Bent wheels <i>●</i> Tired brakes <i>●</i> One canal <i>●</i> Snapped chains <i>●</i> </span></div></div>\n  <div className=\"ri-scene\">\n    <div className=\"ri-steps\">\n      <div className=\"ri-card ri-card-a\"><span className=\"ri-folio\">p. 3</span><p className=\"t-body-l\">On a Monday in November a truck backs into the depot with <b className=\"ri-hl\">five hundred bikes</b>, gathered over a month from the docks.</p></div>\n      <div className=\"ri-card ri-card-b\"><span className=\"ri-folio\">p. 4</span><p className=\"t-body-l\">Each one gets a tag, a number from 001 to 500, and ten minutes of someone's full attention. Nothing is decided yet.</p></div>\n      <div className=\"ri-tagwrap\"><div className=\"ri-tag-card\"><h3 className=\"t-display-m\">Batch 07</h3><dl className=\"ri-dl\"><dt>Intake</dt><dd>Mon 02 Nov</dd><dt>Count</dt><dd><Number data=\"$totals\" col=\"bikes\" /></dd><dt>Kept</dt><dd><Number data=\"$totals\" col=\"kept_pct\" suffix=\"%\" /></dd></dl><span className=\"ri-folio ri-folio-br\">tag 1 of 500</span></div></div>\n    </div>\n    <div className=\"ri-stage\"><div className=\"ri-proof\"><Question data=\"$series\" height=\"300px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":{\"type\":\"bar\"},\"encoding\":{\"x\":{\"field\":\"week\",\"type\":\"ordinal\",\"title\":\"Week\"},\"y\":{\"field\":\"bikes\",\"type\":\"quantitative\",\"title\":\"Bikes\",\"stack\":true},\"color\":{\"field\":\"door\",\"type\":\"nominal\",\"title\":\"Door\"}}}}} /><p className=\"t-label ri-fig\">Fig. 1 · Five hundred bikes by door, week by week · illustrative</p></div></div>\n  </div>\n</div>",
+ "dos": [
+  "Three inks and a key; let them multiply where they cross.",
+  "Print one word per page three times, slipped by a hair.",
+  "Hang facts on tags and folios in mono caps.",
+  "Open chapters full-bleed in one ink with the number enormous."
+ ],
+ "donts": [
+  "No gradients, no blur, no rounded corners.",
+  "No yellow text and no yellow lines.",
+  "No fourth ink; status colours live in callouts and tags only.",
+  "No more than one ticker and one overprint word per page."
+ ],
+ "binding_losses": "The overprint (three plates with a slip), multiply blending, the halftone screen, the manila tag stock, the hard shadow and the turn have no contract slot. They are carried as --ds-* properties and the ri-* classes above; kit components take paper, key, blue and yellow but stay square and flat.",
+ "footer": "Paper first, Ink page second. Fonts: Fraunces 500/900 (SOFT 100, WONK 1) + 500 italic, Space Mono 400/700, Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "week": "W1",
+    "door": "Kept",
+    "bikes": 78
+   },
+   {
+    "week": "W1",
+    "door": "Parts",
+    "bikes": 30
+   },
+   {
+    "week": "W1",
+    "door": "Retired",
+    "bikes": 17
+   },
+   {
+    "week": "W2",
+    "door": "Kept",
+    "bikes": 84
+   },
+   {
+    "week": "W2",
+    "door": "Parts",
+    "bikes": 28
+   },
+   {
+    "week": "W2",
+    "door": "Retired",
+    "bikes": 13
+   },
+   {
+    "week": "W3",
+    "door": "Kept",
+    "bikes": 71
+   },
+   {
+    "week": "W3",
+    "door": "Parts",
+    "bikes": 34
+   },
+   {
+    "week": "W3",
+    "door": "Retired",
+    "bikes": 20
+   },
+   {
+    "week": "W4",
+    "door": "Kept",
+    "bikes": 77
+   },
+   {
+    "week": "W4",
+    "door": "Parts",
+    "bikes": 33
+   },
+   {
+    "week": "W4",
+    "door": "Retired",
+    "bikes": 15
+   }
+  ],
+  "queries": {
+   "series": "select week, door, bikes from rows order by week, door",
+   "table": "select door, sum(bikes) as bikes, round(100.0*sum(bikes)/(select sum(bikes) from rows)) as share from rows group by door order by bikes desc",
+   "totals": "select sum(bikes) as bikes, sum(case when door='Kept' then bikes end) as kept, sum(case when door='Parts' then bikes end) as parts, sum(case when door='Retired' then bikes end) as retired, round(100.0*sum(case when door='Kept' then bikes end)/sum(bikes)) as kept_pct, 4 as weeks from rows"
+  },
+  "segments": [
+   "Week",
+   "Batch",
+   "Season"
+  ],
+  "segment_default": "Week",
+  "select_label": "Door",
+  "input_placeholder": "Find a bike by number",
+  "switch_label": "Show retired",
+  "tabs": [
+   "Chapters",
+   "Tags",
+   "Plates"
+  ],
+  "tab_body": "Chapters: the story in order, one ink per chapter.",
+  "progress_label": "Printed · plate 2 of 3",
+  "progress": 66,
+  "chart_title": "Bikes by door, week by week",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar"
+    },
+    "encoding": {
+     "x": {
+      "field": "week",
+      "type": "ordinal",
+      "title": "Week"
+     },
+     "y": {
+      "field": "bikes",
+      "type": "quantitative",
+      "title": "Bikes"
+     },
+     "color": {
+      "field": "door",
+      "type": "nominal",
+      "title": "Door"
+     },
+     "xOffset": {
+      "field": "door"
+     }
+    }
+   }
+  },
+  "row_key": "door",
+  "table_columns": [
+   {
+    "col": "door",
+    "title": "Door"
+   },
+   {
+    "col": "bikes",
+    "title": "Bikes",
+    "align": "right"
+   },
+   {
+    "col": "share",
+    "title": "Share %",
+    "fmt": ".0f",
+    "align": "right",
+    "bar": true
+   }
+  ],
+  "table_height": "200px"
+ },
+ "btn_primary": "ri-btn ri-btn-blue",
+ "btn_secondary": "ri-btn",
+ "tpl": {
+  "brand": "Riso",
+  "dash_title": "Depot · Batch 07",
+  "kpis": [
+   [
+    "Bikes in",
+    "bikes",
+    "",
+    "",
+    null,
+    "4 weeks · one depot"
+   ],
+   [
+    "Kept",
+    "kept",
+    "",
+    "",
+    null,
+    "back on the street"
+   ],
+   [
+    "Kept share",
+    "kept_pct",
+    "",
+    "%",
+    null,
+    "▲ 3 pts vs batch 06"
+   ]
+  ],
+  "dash_table_title": "By door",
+  "slide_eyebrow": "Batch review",
+  "slide_title": "Three doors, five hundred bikes.",
+  "slide_sub": "Where a winter of broken bikes went, one ink per door.",
+  "slide_foot": "Fictional batch · Nov 2026",
+  "slide_stat_label": "Kept share",
+  "slide_stat_col": "kept_pct",
+  "slide_stat_suffix": "%",
+  "slide_body": "Of every 100 bikes through the depot door, this many rode out again. The rest became parts or scrap.",
+  "split": [
+   "KEPT · 62%",
+   "PARTS + RETIRED · 38%"
+  ],
+  "ed_kicker": "Chapter II · The depot",
+  "ed_headline": "Where five hundred bikes went",
+  "ed_deck": "A winter of broken bikes, one depot, three doors. What came back, what became parts, and what was simply done.",
+  "ed_byline": "Words and pictures: the depot · fictional batch · figures illustrative",
+  "ed_body": "On a Monday in November a truck backs into the depot with five hundred bikes gathered from the docks. Each one gets a tag, a number and ten minutes of attention. By spring three hundred and ten of them are back on the street, a hundred and twenty-five have given their wheels and brakes to others, and sixty-five have gone to the recycler as clean steel.",
+  "ed_pull_col": "kept",
+  "ed_pull_label": "Bikes kept",
+  "steps": [
+   [
+    "Five hundred bikes on the floor.",
+    "Each square is one bike; the ink is the door it will leave by. Nothing is decided yet."
+   ],
+   [
+    "Three doors.",
+    "Blue goes back to the docks, pink to the parts drawers, the pale ones to the recycler."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One batch by door · illustrative",
+  "app_rows": [
+   [
+    "Bike 0412 · bent wheel",
+    "Tagged Mon · bench 2",
+    "Kept",
+    "ok"
+   ],
+   [
+    "Bike 0187 · brakes",
+    "Waiting on pads",
+    "Pending",
+    "warn"
+   ],
+   [
+    "Bike 0099 · canal",
+    "Frame cracked",
+    "Retired",
+    "bad"
+   ],
+   [
+    "Bike 0450 · chain",
+    "Not yet assessed",
+    "Untagged",
+    "idle"
+   ]
+  ],
+  "app_cta": "New tag",
+  "app_cta2": "Print tag",
+  "landing_eyebrow": "The Depot",
+  "landing_headline": "Every bike gets a second life.",
+  "landing_sub": "Drop it at any dock. We tag it, fix it or part it out, and tell you which door it left by.",
+  "cta": "Find a dock",
+  "cta2": "Read the story",
+  "features": [
+   [
+    "Door one · kept",
+    "Most bikes need twenty minutes and one part. They go straight back out."
+   ],
+   [
+    "Door two · parts",
+    "A cracked frame still has good wheels. They go to the drawers."
+   ],
+   [
+    "Door three · retired",
+    "Clean steel to the recycler, weighed and counted."
+   ]
+  ]
+ },
+ "css": "\n.ds-riso { --ds-cover-bg: var(--ds-paper); --ds-hand-ink: var(--ds-key); --ds-hand-fill: var(--ds-blue); --ds-hand-fill2: var(--ds-pink); --ds-hand-muted: var(--ds-paper-sunk); --ds-hand-ground: var(--ds-sheet); --ds-hand-stroke: 2; --ds-hand-cap: round; --ds-hand-bg: var(--ds-paper);\n  --ds-tpl-edge: 2px solid var(--ds-key); --ds-tpl-radius: 0; --ds-tpl-rule: 1.5px dashed var(--ds-key); --ds-tpl-tile-shadow: var(--ds-shadow-hard); --ds-tag-radius: 0;\n  --ds-slide-bg: var(--ds-sheet); --ds-slide-fg: var(--ds-key); --ds-slide-title-bg: var(--ds-blue); --ds-slide-title-fg: var(--ds-on-blue); --ds-slide-split-a: var(--ds-blue); --ds-slide-split-a-fg: var(--ds-on-blue); --ds-slide-split-b: var(--ds-pink); --ds-slide-split-b-fg: var(--ds-on-pink); --ds-hero-bg: var(--ds-paper); }\n.ds-riso .ds-cover, .ds-riso .ri-cover, .ds-riso .ds-hand-art, .ds-riso .ds-motif-art { background-image: var(--ds-grain); background-size: 160px 160px; background-blend-mode: multiply; }\n.ds-riso .ds-section h2, .ds-riso .ds-cover-name { font-variation-settings: \"SOFT\" 100, \"WONK\" 1; }\n.ds-riso .ds-chip { border-width: 2px; border-color: var(--ds-key); font-family: var(--font-mono); font-weight: 400; }\n.ds-riso .ds-cover-tag { font-style: italic; font-weight: 500; }\n.ds-riso .ds-principle-n { font-family: var(--font-display); font-weight: 900; color: var(--ds-blue); }\n.ds-riso .ri-paper { fill: var(--ds-paper); } .ds-riso .ri-sheet { fill: var(--ds-sheet); } .ds-riso .ri-manila { fill: var(--ds-manila); } .ds-riso .ri-proof { fill: var(--ds-sheet); stroke: var(--ds-line); stroke-width: 1.5; }\n.ds-riso .ri-blue { fill: var(--ds-hand-fill, var(--ds-blue)); } .ds-riso .ri-pink { fill: var(--ds-hand-fill2, var(--ds-pink)); } .ds-riso .ri-yellow { fill: var(--ds-yellow); } .ds-riso .ri-key { fill: var(--ds-hand-ink, var(--ds-key)); }\n.ds-riso .ri-mult { mix-blend-mode: multiply; } .dark .ds-riso .ri-mult { mix-blend-mode: normal; opacity: .9; }\n.dark .ds-riso .h-plate { mix-blend-mode: normal; opacity: .9; }\n.ds-riso .ri-key-line { fill: none; stroke: var(--ds-hand-ink, var(--ds-key)); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }\n.ds-riso .ri-dots-pink circle { fill: var(--ds-hand-fill2, var(--ds-pink)); mix-blend-mode: multiply; }\n.ds-riso .ri-mono { font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; fill: var(--ds-hand-ink, var(--ds-key)); } .ds-riso .ri-on-key { fill: var(--ds-sheet); } .ds-riso .ri-on-manila { fill: var(--ds-on-yellow); } .ds-riso .ri-navy { fill: var(--ds-on-yellow); } .ds-riso .ri-on-navy { fill: #F3ECDC; }\n.ds-riso .ri-ovp-t { font-family: var(--font-display); font-size: 120px; font-weight: 900; letter-spacing: -.04em; font-variation-settings: \"SOFT\" 100, \"WONK\" 1; }\n.ds-riso .ri-tag-h { font-family: var(--font-display); font-size: 34px; font-weight: 900; letter-spacing: -.02em; fill: var(--ds-key); font-variation-settings: \"SOFT\" 100, \"WONK\" 1; }\n.ds-riso .ri-hole { fill: var(--ds-paper); stroke: var(--ds-key); stroke-width: 4; } .ds-riso .ri-string { fill: none; stroke: var(--ds-key); stroke-width: 2; stroke-dasharray: 4 4; }\n.ds-riso .ri-tag-h { fill: var(--ds-on-yellow); } .ds-riso .ri-hole { fill: var(--ds-paper); stroke: var(--ds-on-yellow); } .dark .ds-riso .ri-tag-string, .ds-riso .ri-string { stroke: var(--ds-key); }\n.ds-riso .ri-btn { font-family: var(--font-mono); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; line-height: 20px; padding: 10px 16px; border: 2px solid var(--ds-key); background: var(--ds-sheet); color: var(--ds-key); box-shadow: var(--ds-shadow-hard); cursor: pointer; transition: transform 80ms ease-out, box-shadow 80ms ease-out; }\n.ds-riso .ri-btn:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 0 var(--ds-key); } .dark .ds-riso .ri-btn:hover { box-shadow: 8px 8px 0 0 var(--ds-pink); }\n.ds-riso .ri-btn:active { transform: translate(6px, 6px); box-shadow: 0 0 0 0 var(--ds-key); }\n.ds-riso .ri-btn:focus-visible { outline: 3px solid var(--ds-pink); outline-offset: 3px; }\n.ds-riso .ri-btn-blue { background: var(--ds-blue); color: var(--ds-on-blue); } .ds-riso .ri-btn-pink { background: var(--ds-pink); color: var(--ds-on-pink); }\n.ds-riso .ri-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 2px solid var(--ds-key); font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; line-height: 16px; background: var(--ds-sheet); color: var(--ds-key); }\n.ds-riso .ri-tag-blue { background: var(--ds-blue); color: var(--ds-on-blue); } .ds-riso .ri-tag-pink { background: var(--ds-pink); color: var(--ds-on-pink); } .ds-riso .ri-tag-yellow { background: var(--ds-yellow); color: var(--ds-on-yellow); } .ds-riso .ri-tag-positive { background: var(--ds-positive-soft); color: var(--ds-positive); }\n.ds-riso .ri-door { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; min-width: 180px; }\n.ds-riso .ri-door-n { display: inline-block; padding: 6px 12px 2px; min-width: 2.1em; text-align: center; position: relative; }\n.ds-riso .ri-door-blue .ri-door-n { background: var(--ds-blue); color: var(--ds-on-blue); } .ds-riso .ri-door-pink .ri-door-n { background: var(--ds-pink); color: var(--ds-on-pink); } .ds-riso .ri-door-yellow .ri-door-n { background: var(--ds-yellow); color: var(--ds-on-yellow); }\n.ds-riso .ri-door div { display: grid; gap: 2px; } .ds-riso .ri-door-s { font-size: 14px; color: var(--ds-key-2); }\n.ds-riso .ds-stats { gap: 28px; }\n.ds-riso .ri-callout { position: relative; padding: 16px 18px 16px; border: 1.5px dashed var(--ds-key); background: var(--ds-sheet); line-height: 1.5; font-size: 16px; margin-top: 8px; } .ds-riso .ri-callout strong { font-weight: 900; }\n.ds-riso .ri-callout-blue { background: var(--ds-blue-soft); } .ds-riso .ri-callout-positive { background: var(--ds-positive-soft); } .ds-riso .ri-callout-negative { background: var(--ds-negative-soft); }\n.ds-riso .ri-folio { position: absolute; top: -12px; right: 16px; background: var(--ds-key); color: var(--ds-sheet); font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; padding: 3px 9px; line-height: 16px; }\n.ds-riso .ri-folio-br { top: auto; bottom: 10px; right: 14px; }\n.ds-riso .ri-hl { font-weight: 700; background: linear-gradient(transparent 58%, var(--ds-yellow) 58% 92%, transparent 92%); } .dark .ds-riso .ri-hl { background: var(--ds-yellow); color: var(--ds-on-yellow); padding: 0 .12em; }\n.ds-riso .ri-card { position: relative; background: var(--ds-sheet); border: 2px solid var(--ds-key); padding: 26px 26px 22px; max-width: 460px; box-shadow: var(--ds-shadow-hard-lg); transform: rotate(-.6deg); display: grid; gap: 12px; justify-items: start; transition: transform 160ms ease-out; }\n.ds-riso .ri-card:hover { transform: rotate(0deg) translateY(-4px); } .ds-riso .ri-card-b { transform: rotate(.7deg); }\n.ds-riso .ri-card h3 { margin: 0; } .ds-riso .ri-card p { margin: 0; } .ds-riso .ri-card-body { line-height: 1.5; }\n.ds-riso .ri-sample { background: var(--ds-paper); border-top: 2px solid var(--ds-key); border-bottom: 2px solid var(--ds-key); overflow: hidden; }\n.ds-riso .ri-runhead { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 14px 20px; border-bottom: 2px solid var(--ds-key); }\n.ds-riso .ri-cover { display: grid; gap: 24px; padding: 32px 20px 40px; background-image: var(--ds-grain); }\n.ds-riso .ri-cover-words { min-width: 0; }\n.ds-riso .ri-kicker { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 18px; }\n.ds-riso .ri-pip { display: inline-block; width: 12px; height: 12px; border-radius: 50%; } .ds-riso .ri-pip-blue { background: var(--ds-blue); }\n.ds-riso .ri-h1 { margin: 0; } .ds-riso .ri-h1-l1 { display: block; margin-bottom: .1em; }\n.ds-riso .ri-h1-l2 { display: block; font-family: var(--font-display); font-weight: 900; font-size: clamp(64px, 11vw, 150px); line-height: .84; letter-spacing: -.045em; color: var(--ds-blue); font-variation-settings: \"SOFT\" 100, \"WONK\" 1; padding-bottom: .08em; }\n.ds-riso .ri-ovp { position: relative; isolation: isolate; display: inline-block; }\n.ds-riso .ri-ovp::before, .ds-riso .ri-ovp::after { content: attr(data-text); position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; z-index: -1; }\n.ds-riso .ri-ovp::before { color: var(--ds-pink); transform: translate(.045em, .03em); } .ds-riso .ri-ovp::after { color: var(--ds-yellow); transform: translate(-.035em, .05em); }\n.dark .ds-riso .ri-ovp::before, .dark .ds-riso .ri-ovp::after { mix-blend-mode: screen; }\n.ds-riso .ri-dek { margin: 24px 0 0; max-width: 30ch; }\n.ds-riso .ri-imprint { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 24px; color: var(--ds-key-2); }\n.ds-riso .ri-turn { display: inline-block; margin-top: 28px; border-bottom: 2px solid var(--ds-key); padding-bottom: 4px; }\n.ds-riso .ri-cover-art { position: relative; } .ds-riso .ri-cover-svg { display: block; width: 100%; height: auto; }\n.ds-riso .ri-badge { position: absolute; right: 8px; top: 8px; width: 108px; height: 108px; border-radius: 50%; background: var(--ds-pink); color: var(--ds-on-pink); display: grid; place-items: center; text-align: center; transform: rotate(12deg); font-family: var(--font-mono); font-size: 10.5px; line-height: 1.3; text-transform: uppercase; letter-spacing: .06em; padding: 12px; }\n.ds-riso .ri-badge b { display: block; font-family: var(--font-display); font-size: 26px; font-weight: 500; font-style: italic; letter-spacing: 0; text-transform: none; }\n.ds-riso .ri-ticker { overflow: hidden; background: var(--ds-yellow); color: var(--ds-on-yellow); border-top: 2px solid var(--ds-key); border-bottom: 2px solid var(--ds-key); padding: 10px 0; }\n.ds-riso .ri-ticker-track { display: flex; width: max-content; font-family: var(--font-mono); font-size: 13px; letter-spacing: .09em; text-transform: uppercase; }\n.ds-riso .ri-ticker-track span { padding: 0 18px; white-space: nowrap; } .ds-riso .ri-ticker-track i { font-style: normal; color: var(--ds-pink); mix-blend-mode: multiply; margin: 0 10px; }\n.ds-riso .ri-scene { display: grid; gap: 32px; padding: 40px 20px 56px; }\n.ds-riso .ri-steps { display: grid; gap: 36px; align-content: start; justify-items: start; }\n.ds-riso .ri-tagwrap { position: relative; transform: rotate(-2deg); margin-left: 24px; }\n.ds-riso .ri-tag-card { position: relative; background: var(--ds-manila); color: var(--ds-on-yellow); clip-path: polygon(34px 0, 100% 0, 100% 100%, 34px 100%, 0 calc(100% - 34px), 0 34px); padding: 24px 24px 36px 62px; max-width: 420px; }\n.ds-riso .ri-tag-card::before { content: \"\"; position: absolute; left: 18px; top: 50%; width: 20px; height: 20px; margin-top: -10px; border-radius: 50%; background: var(--ds-paper); box-shadow: 0 0 0 5px var(--ds-on-yellow) inset; }\n.ds-riso .ri-tag-card h3 { margin: 0 0 10px; font-variation-settings: \"SOFT\" 100, \"WONK\" 1; }\n.ds-riso .ri-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; } .ds-riso .ri-dl dt { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding-top: 3px; } .ds-riso .ri-dl dd { margin: 0; font-family: var(--font-mono); font-size: 14px; line-height: 1.35; }\n.ds-riso .ri-stage { align-self: start; }\n.ds-riso .ri-proof { background: var(--ds-sheet); border: 1.5px solid var(--ds-line); box-shadow: 14px 16px 0 0 var(--ds-paper-sunk); transform: rotate(-.8deg); padding: 20px; }\n.ds-riso .ri-fig { margin: 12px 0 0; color: var(--ds-key-2); }\n.ds-riso .ds-tpl-tag.is-idle { background: var(--ds-paper-sunk); }\n.ds-riso .ds-tpl-brand, .ds-riso .ds-tpl-slide-h, .ds-riso .ds-tpl-hero-h, .ds-riso .ds-tpl-ed-h, .ds-riso .ds-tpl-dropcap { font-variation-settings: \"SOFT\" 100, \"WONK\" 1; }\n.ds-riso .ds-tpl-slide-big { font-variation-settings: \"SOFT\" 100, \"WONK\" 1; }\n.ds-riso .ds-tpl-step { transform: rotate(-.4deg); box-shadow: var(--ds-shadow-hard); } .ds-riso .ds-tpl-step + .ds-tpl-step { transform: rotate(.5deg); }\n.ds-riso .ds-tpl-kpi { box-shadow: var(--ds-shadow-hard); }\n@container (min-width: 760px) {\n  .ds-riso .ri-cover { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: center; gap: 2vw; padding: 48px 40px 64px; }\n  .ds-riso .ri-runhead { padding: 14px 40px; }\n  .ds-riso .ri-scene { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); padding: 56px 40px 72px; }\n}\n"
+}

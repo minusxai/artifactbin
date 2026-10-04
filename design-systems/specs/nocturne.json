@@ -1,0 +1,763 @@
+{
+ "slug": "nocturne",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Nocturne cover: a field of dark cells on a midnight ground, a few of them lit amber inside a pool of lamplight, a ribbon down the left edge</title>\n<defs><radialGradient id=\"noc-pool\" cx=\"0.62\" cy=\"0.42\" r=\"0.6\"><stop offset=\"0\" className=\"n-pool-in\"/><stop offset=\"1\" className=\"n-pool-out\"/></radialGradient></defs>\n<rect className=\"n-night\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/><g className=\"n-star\"><circle cx=\"235\" cy=\"123\" r=\"1\"/><circle cx=\"264\" cy=\"52\" r=\"0.7\"/><circle cx=\"415\" cy=\"135\" r=\"1\"/><circle cx=\"326\" cy=\"51\" r=\"0.7\"/><circle cx=\"232\" cy=\"81\" r=\"0.7\"/><circle cx=\"50\" cy=\"14\" r=\"1.2\"/><circle cx=\"206\" cy=\"119\" r=\"1.2\"/><circle cx=\"382\" cy=\"44\" r=\"1.2\"/><circle cx=\"11\" cy=\"139\" r=\"0.7\"/><circle cx=\"34\" cy=\"13\" r=\"0.7\"/><circle cx=\"454\" cy=\"65\" r=\"1.2\"/><circle cx=\"19\" cy=\"122\" r=\"1\"/><circle cx=\"229\" cy=\"54\" r=\"1.2\"/><circle cx=\"123\" cy=\"79\" r=\"1\"/><circle cx=\"6\" cy=\"25\" r=\"1\"/><circle cx=\"339\" cy=\"75\" r=\"1\"/><circle cx=\"286\" cy=\"25\" r=\"1.2\"/><circle cx=\"134\" cy=\"84\" r=\"0.7\"/><circle cx=\"266\" cy=\"77\" r=\"0.7\"/><circle cx=\"39\" cy=\"31\" r=\"1\"/><circle cx=\"59\" cy=\"78\" r=\"1\"/><circle cx=\"38\" cy=\"8\" r=\"1.2\"/><circle cx=\"4\" cy=\"58\" r=\"0.7\"/><circle cx=\"470\" cy=\"17\" r=\"1\"/><circle cx=\"196\" cy=\"105\" r=\"1\"/><circle cx=\"41\" cy=\"54\" r=\"1.2\"/><circle cx=\"142\" cy=\"90\" r=\"0.7\"/><circle cx=\"163\" cy=\"89\" r=\"0.7\"/><circle cx=\"213\" cy=\"34\" r=\"0.7\"/><circle cx=\"130\" cy=\"29\" r=\"0.7\"/><circle cx=\"34\" cy=\"123\" r=\"1\"/><circle cx=\"94\" cy=\"52\" r=\"1\"/><circle cx=\"264\" cy=\"52\" r=\"1.2\"/><circle cx=\"397\" cy=\"37\" r=\"1\"/><circle cx=\"333\" cy=\"102\" r=\"0.7\"/><circle cx=\"206\" cy=\"111\" r=\"0.7\"/><circle cx=\"4\" cy=\"73\" r=\"1.2\"/><circle cx=\"159\" cy=\"9\" r=\"0.7\"/><circle cx=\"99\" cy=\"104\" r=\"1.2\"/><circle cx=\"332\" cy=\"29\" r=\"0.7\"/><circle cx=\"78\" cy=\"58\" r=\"1\"/><circle cx=\"136\" cy=\"6\" r=\"1.2\"/><circle cx=\"172\" cy=\"79\" r=\"1\"/><circle cx=\"41\" cy=\"23\" r=\"0.7\"/><circle cx=\"110\" cy=\"66\" r=\"0.7\"/><circle cx=\"311\" cy=\"98\" r=\"1\"/><circle cx=\"322\" cy=\"120\" r=\"0.7\"/><circle cx=\"304\" cy=\"127\" r=\"1.2\"/><circle cx=\"73\" cy=\"102\" r=\"0.7\"/><circle cx=\"325\" cy=\"43\" r=\"1\"/><circle cx=\"469\" cy=\"62\" r=\"1.2\"/><circle cx=\"131\" cy=\"52\" r=\"0.7\"/><circle cx=\"382\" cy=\"54\" r=\"1.2\"/><circle cx=\"202\" cy=\"127\" r=\"1.2\"/><circle cx=\"44\" cy=\"111\" r=\"0.7\"/><circle cx=\"57\" cy=\"31\" r=\"0.7\"/><circle cx=\"266\" cy=\"69\" r=\"0.7\"/><circle cx=\"382\" cy=\"104\" r=\"1\"/><circle cx=\"219\" cy=\"129\" r=\"1\"/><circle cx=\"270\" cy=\"48\" r=\"1.2\"/></g>\n<rect fill=\"url(#noc-pool)\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<rect className=\"n-ribbon\" x=\"24\" y=\"0\" width=\"10\" height=\"150\"/><polygon className=\"n-night\" points=\"24,150 34,150 29,142\"/>\n<rect className=\"n-dark\" x=\"72\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"116\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"160\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"204\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"248\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"292\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"336\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"380\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"424\" y=\"64\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"72\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"116\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"160\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"204\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"248\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"292\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"336\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"380\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"424\" y=\"98\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"72\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"116\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"160\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"204\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"248\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"292\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"336\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"380\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"424\" y=\"132\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"72\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"116\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"160\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"204\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"248\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"292\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"336\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"380\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"424\" y=\"166\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"72\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"116\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-lit\" x=\"160\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"204\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"248\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"292\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"336\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"380\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/><rect className=\"n-dark\" x=\"424\" y=\"200\" width=\"36\" height=\"26\" rx=\"1\"/>\n<text x=\"72\" y=\"44\" className=\"n-svg-caps\">LAMPS ON · AFTER HOURS</text>\n<text x=\"72\" y=\"256\" className=\"n-svg-label\">LIT 13 / 45 · WINDOW TWO</text>\n<text x=\"456\" y=\"256\" className=\"n-svg-label n-lamp-fill\" textAnchor=\"end\">7:45 PM</text></svg>",
+ "name": "Nocturne",
+ "tagline": "Read it slowly, by one lamp.",
+ "mood": "Atmospheric",
+ "jobs": "Long reads, features, evening and culture subjects",
+ "color_mode": "dark",
+ "fonts": [
+  [
+   "Newsreader",
+   "ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500"
+  ],
+  [
+   "Cinzel",
+   "wght@500;700"
+  ],
+  [
+   "JetBrains Mono",
+   "wght@400;500;600;700"
+  ]
+ ],
+ "families": {
+  "display": "\"Newsreader\", Georgia, serif",
+  "sans": "\"Newsreader\", Georgia, serif",
+  "mono": "\"JetBrains Mono\", ui-monospace, Menlo, monospace",
+  "caps": "\"Cinzel\", \"Trajan Pro\", Georgia, serif"
+ },
+ "tokens": [
+  {
+   "name": "night",
+   "light": "#f3e7ca",
+   "dark": "#050818",
+   "usage": "Page ground: midnight by night; by day, lamplit cream.",
+   "group": "Grounds"
+  },
+  {
+   "name": "night-raised",
+   "light": "#faf1dc",
+   "dark": "#111940",
+   "usage": "Panels, cards and the lit stone of a panel.",
+   "group": "Grounds"
+  },
+  {
+   "name": "night-sunk",
+   "light": "#e9dbb9",
+   "dark": "#02040f",
+   "usage": "Wells, code, the unlit cells.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#d3b98b",
+   "dark": "#2a3568",
+   "usage": "Hairline rules and quiet borders.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#1d170f",
+   "dark": "#ece6d6",
+   "usage": "Primary text: cream on night, ink on cream.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-soft",
+   "light": "#4a3d2c",
+   "dark": "#b9c8ee",
+   "usage": "Standfirsts and secondary reading text. Cool blue by night.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#8a7a60",
+   "dark": "#8d98c0",
+   "usage": "Captions, folios, placeholders.",
+   "group": "Ink"
+  },
+  {
+   "name": "lamp",
+   "light": "#9a5a12",
+   "dark": "#ffc76e",
+   "usage": "The brand: lamplight amber. Links, the lit cell, the one figure that glows, the primary action.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-lamp",
+   "light": "#fff6e4",
+   "dark": "#1a1206",
+   "usage": "Text on lamp fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "lamp-hot",
+   "light": "#b8661f",
+   "dark": "#ffe2a8",
+   "usage": "The hot centre of the lamp: the italic phrase in a headline, the filament.",
+   "group": "Brand"
+  },
+  {
+   "name": "lamp-soft",
+   "light": "#f3e5c2",
+   "dark": "#241d30",
+   "usage": "Ground for highlighted rows and the halo behind a lit thing.",
+   "group": "Brand"
+  },
+  {
+   "name": "ember",
+   "light": "#b8551a",
+   "dark": "#ff9440",
+   "usage": "The accent: the lamp itself, the focus ring, the comparison series.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-ember",
+   "light": "#fff6e4",
+   "dark": "#1a0e04",
+   "usage": "Text on ember fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "cool",
+   "light": "#3a5a8a",
+   "dark": "#b9c8ee",
+   "usage": "The cool counterweight: the second drawing fill, the second chart series, the sky wash.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#2b5a45",
+   "dark": "#6fcf97",
+   "usage": "Open, continued, confirmed. Always with a word.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#dcebe1",
+   "dark": "#10291e",
+   "usage": "Ground for positive rows.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#8a5a00",
+   "dark": "#ffd27a",
+   "usage": "Small sample, provisional, late. The lamp, slightly cooler.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#f3e5c2",
+   "dark": "#2e2306",
+   "usage": "Ground for caveats.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#8a2d1c",
+   "dark": "#ff7a5c",
+   "usage": "Closed, declined, failed. Rust.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#f4dcd8",
+   "dark": "#3a1412",
+   "usage": "Ground for negative rows.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "night",
+  "foreground": "ink",
+  "card": "night-raised",
+  "card-foreground": "ink",
+  "popover": "night-raised",
+  "popover-foreground": "ink",
+  "primary": "lamp",
+  "primary-foreground": "on-lamp",
+  "secondary": "lamp-soft",
+  "secondary-foreground": "ink",
+  "muted": "night-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "night-raised",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "night",
+  "border": "line",
+  "input": "line",
+  "ring": "ember",
+  "chart-1": "lamp",
+  "chart-2": "cool",
+  "chart-3": "ember",
+  "chart-4": "positive",
+  "chart-5": "ink-muted"
+ },
+ "radius_contract": "2px",
+ "extra_vars": {
+  "halo": {
+   "light": "0 0 0 1px #d3b98b",
+   "dark": "0 0 28px rgba(255,199,110,.32)"
+  },
+  "glow-text": {
+   "light": "none",
+   "dark": "0 0 30px rgba(255,170,70,.45)"
+  },
+  "chip-radius": "999px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(48px, 7.5vw, 104px)",
+   "lh": ".92",
+   "weight": 300,
+   "ls": "-0.03em",
+   "sample": "Lamps on at six",
+   "usage": "One per page. Newsreader light at display size; the emphasised phrase goes italic in lamp-hot."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(32px, 4.5vw, 56px)",
+   "lh": "1",
+   "weight": 300,
+   "ls": "-0.02em",
+   "sample": "A different room from the daytime one",
+   "usage": "Section openers and chapter heads."
+  },
+  {
+   "name": "display-italic",
+   "family": "display",
+   "size": "clamp(32px, 4.5vw, 56px)",
+   "lh": "1",
+   "weight": 400,
+   "ls": "-0.02em",
+   "fs": "italic",
+   "sample": "after dark",
+   "usage": "The emphasised phrase inside a headline, in lamp-hot with the text glow."
+  },
+  {
+   "name": "caps",
+   "family": "caps",
+   "size": "12px",
+   "lh": "18px",
+   "weight": 500,
+   "ls": "0.3em",
+   "tt": "uppercase",
+   "sample": "Chapter two · the quiet shift",
+   "usage": "Kickers, chapter marks, folios. Cinzel, widely tracked, with a 34px rule before it."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "24px",
+   "lh": "30px",
+   "weight": 500,
+   "sample": "Window four of eight",
+   "usage": "Panel and figure titles."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "21px",
+   "lh": "34px",
+   "weight": 300,
+   "sample": "For eight weeks this spring a small place kept its lamps on later than it ever had.",
+   "usage": "Standfirsts and lead paragraphs. Light weight, long leading."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "18px",
+   "lh": "30px",
+   "weight": 400,
+   "sample": "The evenings had their own weather: fewer pushchairs, more laptops, and someone always asleep in the armchair under the atlases.",
+   "usage": "Reading text, oldstyle numerals. Long reading is the point.",
+   "extra": "font-variant-numeric: oldstyle-nums proportional-nums"
+  },
+  {
+   "name": "note",
+   "family": "sans",
+   "size": "15px",
+   "lh": "22px",
+   "weight": 400,
+   "fs": "italic",
+   "sample": "A note in the margin, set small and italic.",
+   "usage": "Marginalia, figure notes, asides."
+  },
+  {
+   "name": "label",
+   "family": "mono",
+   "size": "11px",
+   "lh": "16px",
+   "weight": 500,
+   "ls": "0.14em",
+   "tt": "uppercase",
+   "sample": "Visits lit 289 / 640",
+   "usage": "HUD counters, captions, table heads. Mono caps, small."
+  },
+  {
+   "name": "numeral",
+   "family": "mono",
+   "size": "40px",
+   "lh": "44px",
+   "weight": 500,
+   "ls": "-0.02em",
+   "sample": "640",
+   "usage": "Figures. Tabular; lamp when it is the one that glows.",
+   "extra": "font-variant-numeric: tabular-nums"
+  }
+ ],
+ "idea_headline": "One lamp, a dark room, and a long read.",
+ "idea": "Nocturne is the page you read at night: a midnight ground, cream type with long leading, and one pool of amber light where the attention goes. Headlines are a light serif with an italic phrase that glows; kickers are carved small caps; figures sit in a mono HUD. It is a mood, not a place: the subject brings the scene, Nocturne brings the lamp.",
+ "use_for": "Long features and essays, culture and evening subjects, reports that want to be read slowly, pilots and their results, any scrolly where things light up as the reader goes.",
+ "avoid_when": "Operational tools, dense tables, anything read in a hurry or in daylight on a phone, and subjects that need a cheerful or clinical register.",
+ "principles_headline": "Light what matters. Leave the rest in the dark.",
+ "principles": [
+  [
+   "One pool of light per view.",
+   "The lamp pool (a radial wash of raised night) marks where to look: the lit panel, the one figure, the current chapter. Two pools cancel."
+  ],
+  [
+   "Amber means on.",
+   "Lamp marks what is lit, open, chosen, current. Everything else is cream on night. Status colours exist, with a word, and never inside a drawing."
+  ],
+  [
+   "Serif voice, carved apparatus.",
+   "Newsreader light carries the headline and the reading; Cinzel in wide tracking carries kickers and folios, like words cut over a door."
+  ],
+  [
+   "Numbers in the HUD.",
+   "Figures are mono caps counters at the edge of the scene: visits lit, clock, window. The prose never has to carry a number it can hand to the HUD."
+  ],
+  [
+   "Night first, day second.",
+   "The native mode is midnight. Day is the same page under a reading lamp: cream ground, dark ink, amber kept but deepened to read."
+  ]
+ ],
+ "voice": [
+  "Measured, present tense, a little literary: \"At six the sign turns and the room changes.\"",
+  "Say the denominator; distinguish visits from people and the sample from the whole.",
+  "Chapter marks speak the scene: \"Window four of eight\", not \"Section 4\".",
+  "Label invented scenes and composite quotes as illustrative."
+ ],
+ "colour_headline": "Midnight, cream, one amber, a cool counterweight.",
+ "colour_note": "Night is a deep blue-black with a raised stone-blue for panels. Text is warm cream so the page feels printed, not screened; secondary text is a cool blue. Lamp amber is the only brand colour; ember is the lamp itself and the focus ring; cool is the second series and the second drawing fill. By day the ground is lamplit cream, the ink dark, and the ambers deepened.",
+ "chart_series": [
+  "lamp",
+  "cool",
+  "ember",
+  "positive",
+  "ink-muted"
+ ],
+ "chart_note": "Amber leads, cool blue is the comparison, ember the third. On night, axes and gridlines are the line token; by day they are ink-muted.",
+ "type_headline": "Newsreader reads, Cinzel carves, JetBrains counts.",
+ "type_note": "Three families. Newsreader at optical display size and weight 300 carries headlines, with the emphasised phrase in italic 400; the same face at 400 carries the reading with oldstyle figures. Cinzel at wide tracking is only for small caps apparatus. JetBrains Mono is the HUD.",
+ "space_headline": "Long leading, wide tracking, one halo.",
+ "space": [
+  [
+   "space-2 · 8px",
+   "Inside controls."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y; a tally mark to its label."
+  ],
+  [
+   "space-4 · 16px",
+   "Control padding-x; default stack gap."
+  ],
+  [
+   "space-6 · 24px",
+   "Panel padding."
+  ],
+  [
+   "space-10 · 40px",
+   "Between paragraphs and figures."
+  ],
+  [
+   "space-16 · 64px",
+   "Between chapters; a chapter opener takes most of a viewport."
+  ],
+  [
+   "measure · 34rem",
+   "Body column. Long reading needs a long line and a long leading."
+  ]
+ ],
+ "edges": [
+  [
+   "radius · 2px",
+   "Fields, buttons, panels: barely rounded, like cut card."
+  ],
+  [
+   "rule · 1px line",
+   "Hairline chapter rules. The folio sits on the rule."
+  ],
+  [
+   "kicker rule · 34px",
+   "A 1px rule in the current colour before every caps kicker."
+  ],
+  [
+   "halo",
+   "0 0 28px amber at 32%, behind the lit panel, the lit cell or the lit figure. Night only; by day it is a 1px line."
+  ]
+ ],
+ "depth": [
+  [
+   "lamp pool",
+   "A radial wash from night-raised to night, centred on the lit thing. The only gradient in the system."
+  ],
+  [
+   "text glow",
+   "The italic phrase in a headline carries a 30px amber glow at 45%. Night only."
+  ],
+  [
+   "shadow",
+   "None. Depth comes from the pool and the halo."
+  ],
+  [
+   "focus",
+   "A 2px ember outline with a 2px night gap."
+  ]
+ ],
+ "motion": [
+  [
+   "Reveal",
+   "Chapters and figures use the kit reveal with a 400ms fade; cells light one by one with 60ms stagger as the reader reaches them."
+  ],
+  [
+   "Hover",
+   "A lit panel brightens its halo (opacity .32 → .5, 300ms). Buttons fill with lamp-soft."
+  ],
+  [
+   "Progress",
+   "The ribbon grows with reading progress; it is the only element that tracks scroll."
+  ],
+  [
+   "Loop",
+   "One ambient element at most: a cue dot that blinks to lamp every 3s. Stars do not twinkle."
+  ],
+  [
+   "Reduced motion",
+   "Everything is shown finished: all cells lit, ribbon full, nothing blinks."
+  ]
+ ],
+ "components_headline": "A HUD, a lit panel, a ledger.",
+ "components_note": "Kit components take Nocturne through the contract: night grounds, cream text, amber primary, 2px radius. Authored classes add the halo, the caps kicker with its rule, the HUD counters and the marginal note.",
+ "btn_primary": "n-btn n-btn-primary",
+ "btn_secondary": "n-btn",
+ "buttons": "<Button>Read on</Button><Button variant=\"secondary\">Save</Button><Button variant=\"outline\">Method</Button><Button variant=\"ghost\">Skip</Button><button className=\"n-btn n-btn-primary\">Read on</button><button className=\"n-btn\">The method</button>",
+ "buttons_note": "Kit buttons left; authored n-btn right: Cinzel caps, a 1px edge in the current ink, the primary in lamp with a halo on hover.",
+ "tags": "<Badge>Lit</Badge><Badge variant=\"secondary\">Thursday</Badge><Badge variant=\"outline\">Illustrative</Badge><Badge variant=\"destructive\">Closed</Badge><span className=\"n-tag n-tag-lit\">● Lit</span><span className=\"n-tag\">○ Unlit</span><span className=\"n-tag n-tag-caution\">Small sample</span><span className=\"n-tag n-tag-positive\">Continues</span>",
+ "tags_note": "Tags are mono caps in a pill. Lit and unlit are a filled or hollow dot; status tags carry a word with the colour.",
+ "fields_note": "Fields are raised night panels with a hairline; focus is an ember outline. Labels are mono caps.",
+ "stats": "<div className=\"n-stat n-stat-lit\"><span className=\"t-label\">Loaves, six nights</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"loaves\" format=\",.0f\" /></span><span className=\"n-note\">the lit figure</span></div><div className=\"n-stat\"><span className=\"t-label\">Baked before six</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"before_six_pct\" suffix=\"%\" /></span><span className=\"n-note\">of all loaves</span></div>",
+ "stats_note": "A Stat is a HUD counter: mono caps label, a numeral, a caption naming the denominator. The lit Stat carries the halo and an amber figure.",
+ "callouts": "<Alert><AlertTitle>Loaves are not orders</AlertTitle><AlertDescription>One order can be twelve loaves; the night count is loaves out of the oven.</AlertDescription></Alert><div className=\"n-callout n-callout-caution\"><strong>Small sample.</strong> Six nights in one week. Read the shares as a hint, not a measure.</div><div className=\"n-callout n-callout-lit\"><strong>Decision.</strong> The four o&#39;clock start continues through winter.</div><aside className=\"n-margin\"><span className=\"n-margin-n\">1</span>A marginal note: set small, italic, hung to the side of the paragraph it explains.</aside>",
+ "callouts_note": "Callouts are notes in the body voice with a 2px left rule. Caveats take caution; a decision takes lamp. The marginal note is the fourth: numbered, italic, hung in the margin.",
+ "chart_comp_note": "A chart is drawn in two warm tones on night: amber for the measure, cool for the comparison, with hairline axes.",
+ "table_note": "The ledger: hairline rows, mono figures, the lit row tinted lamp-soft.",
+ "card": "<div className=\"n-card n-pool\"><p className=\"t-caps n-caps\"><i className=\"n-kicker-rule\"></i>Chapter two</p><h3 className=\"t-title\">The quiet shift</h3><p className=\"n-card-p\">After eight the room changes hands: laptops close, a chess board opens, and the people who stay are the ones with nowhere warmer to be.</p><div className=\"n-cells\"><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i></div><p className=\"t-label n-hud\">Lit 5 / 8 · 8:10 PM</p></div>",
+ "card_note": "A card sits in its own lamp pool: caps kicker with the rule, a serif title, body copy, a row of cells lit in proportion, and a HUD line. Hover brightens the halo.",
+ "hand": {
+  "mode": "glow",
+  "shadow": false,
+  "headline": "Thin cream lines, and the lamp behind them.",
+  "note": "Nocturne draws like a line engraving seen by lamplight: 1.5px cream strokes with round caps, flat amber for what is lit and cool blue for what is not, and behind every ink line a soft amber glow copy so the drawing seems to sit in the pool. By day the glow drops to a faint halo. Draw whatever the subject is; keep the lamp.",
+  "rules": [
+   [
+    "Stroke",
+    "1.5px in the ink colour (cream by night), round caps and joins."
+   ],
+   [
+    "Fill",
+    "Flat amber for the lit part; cool blue for the quiet part; night-sunk for unlit cells."
+   ],
+   [
+    "Glow",
+    "A 9px copy of every stroke in amber at 32% opacity, under the ink. 18% by day."
+   ],
+   [
+    "Ground",
+    "A panel sits in a lamp pool: radial from night-raised to night."
+   ],
+   [
+    "Figures",
+    "Mono caps at 11px in the HUD corner; the display face, light, for the one number."
+   ],
+   [
+    "Motion",
+    "Cells light with 60ms stagger; the pool does not move."
+   ]
+  ]
+ },
+ "motifs_headline": "The pool, the ribbon, the tally.",
+ "motifs_note": "Three devices carry most pages: a lamp pool to hold the lit thing, a ribbon that keeps the reader's place, and a tally for small counts. A field of cells lights in proportion for the big count.",
+ "motifs": [
+  {
+   "title": "The lamp pool",
+   "usage": "A radial wash from raised night to night, centred a little above the figure it holds. One per view. Put the lit figure in amber at its centre and the HUD line at its edge.",
+   "svg": "<svg viewBox=\"0 0 480 180\"><title>Lamp pool</title><defs><radialGradient id=\"noc-m1\" cx=\"0.5\" cy=\"0.4\" r=\"0.55\"><stop offset=\"0\" className=\"n-pool-in\"/><stop offset=\"1\" className=\"n-pool-out\"/></radialGradient></defs><rect className=\"n-night\" x=\"0\" y=\"0\" width=\"480\" height=\"180\"/><rect fill=\"url(#noc-m1)\" x=\"0\" y=\"0\" width=\"480\" height=\"180\"/><text x=\"240\" y=\"98\" className=\"n-svg-big\" textAnchor=\"middle\">1,840</text><text x=\"240\" y=\"124\" className=\"n-svg-caps\" textAnchor=\"middle\">LOAVES · SIX NIGHTS</text><text x=\"24\" y=\"164\" className=\"n-svg-label\">BEFORE SIX · 72%</text><text x=\"456\" y=\"164\" className=\"n-svg-label\" textAnchor=\"end\">4:00 → 7:00 AM</text></svg>"
+  },
+  {
+   "title": "The ribbon and the tally",
+   "usage": "A bookmark ribbon down the margin grows with reading progress; a tally of strokes counts small things (nights, sessions, people) with the fifth stroke crossing.",
+   "svg": "<svg viewBox=\"0 0 480 180\"><title>Ribbon and tally</title><rect className=\"n-night\" x=\"0\" y=\"0\" width=\"480\" height=\"180\"/><rect className=\"n-ribbon\" x=\"40\" y=\"0\" width=\"12\" height=\"118\"/><polygon className=\"n-night\" points=\"40,118 52,118 46,108\"/><g className=\"n-tally\"><line x1=\"120\" y1=\"60\" x2=\"120\" y2=\"104\"/><line x1=\"134\" y1=\"60\" x2=\"134\" y2=\"104\"/><line x1=\"148\" y1=\"60\" x2=\"148\" y2=\"104\"/><line x1=\"162\" y1=\"60\" x2=\"162\" y2=\"104\"/><line x1=\"206\" y1=\"60\" x2=\"206\" y2=\"104\"/><line x1=\"220\" y1=\"60\" x2=\"220\" y2=\"104\"/><line x1=\"234\" y1=\"60\" x2=\"234\" y2=\"104\"/><line x1=\"248\" y1=\"60\" x2=\"248\" y2=\"104\"/><line x1=\"292\" y1=\"60\" x2=\"292\" y2=\"104\"/><line x1=\"306\" y1=\"60\" x2=\"306\" y2=\"104\"/><line x1=\"112\" y1=\"100\" x2=\"186\" y2=\"64\"/><line x1=\"196\" y1=\"100\" x2=\"270\" y2=\"64\"/></g><text x=\"120\" y=\"140\" className=\"n-svg-label\">12 NIGHTS · TALLIED</text><text x=\"40\" y=\"160\" className=\"n-svg-label n-lamp-fill\">RIBBON · 65% READ</text></svg>"
+  },
+  {
+   "title": "The lit field",
+   "usage": "A grid of cells, one per unit, lit amber in proportion as the reader scrolls. Use it for the big count; the HUD under it reads lit over total.",
+   "svg": "<svg viewBox=\"0 0 480 180\"><title>Lit field</title><rect className=\"n-night\" x=\"0\" y=\"0\" width=\"480\" height=\"180\"/><rect className=\"n-lit\" x=\"40\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"66\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"92\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"118\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"144\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"170\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"196\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"222\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"248\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"274\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"300\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"326\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"352\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"378\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"404\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"430\" y=\"28\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"40\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"66\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"92\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"118\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"144\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"170\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"196\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"222\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"248\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"274\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"300\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"326\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-lit\" x=\"352\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"378\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"404\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"430\" y=\"56\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"40\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"66\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"92\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"118\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"144\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"170\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"196\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"222\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"248\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"274\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"300\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"326\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"352\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"378\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"404\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"430\" y=\"84\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"40\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"66\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"92\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"118\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"144\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"170\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"196\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"222\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"248\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"274\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"300\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"326\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"352\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"378\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"404\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><rect className=\"n-dark\" x=\"430\" y=\"112\" width=\"20\" height=\"22\" rx=\"1\"/><text x=\"40\" y=\"160\" className=\"n-svg-label\">LIT 29 / 64 · WINDOW TWO</text><text x=\"456\" y=\"160\" className=\"n-svg-label n-lamp-fill\" textAnchor=\"end\">6:40 PM</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Nocturne.",
+ "sample_note": "A long-read opener about a bakery's night shift: caps kicker, a light serif headline with the glowing italic phrase, a standfirst, three HUD counters, and the lit panel holding the one figure. Below it, the chart and the ledger.",
+ "sample": "<div className=\"n-sample\"><div className=\"n-sample-in\">\n  <div className=\"n-sample-grid\">\n    <div>\n      <p className=\"t-caps n-caps\"><i className=\"n-kicker-rule\"></i>A week of nights</p>\n      <h2 className=\"t-display-xl n-sample-h\">The ovens come on<br />  <em className=\"n-em\">at four</em></h2>\n      <p className=\"t-body-l n-sample-lede\">For six nights a small bakery let a writer sit in the corner with a notebook. This is an account of what the city eats before it wakes, who makes it, and where the numbers stop being able to say.</p>\n      <p className=\"t-label n-folio\">Words from the corner stool · a fictional bakery · figures from one week</p>\n      <div className=\"n-stat-row\"><div className=\"n-stat n-stat-lit\"><span className=\"t-label\">Loaves</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"loaves\" format=\",.0f\" /></span><span className=\"n-note\">six nights</span></div><div className=\"n-stat\"><span className=\"t-label\">Before six</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"before_six_pct\" suffix=\"%\" /></span><span className=\"n-note\">of all loaves</span></div><div className=\"n-stat\"><span className=\"t-label\">Orders filled</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"orders\" /></span><span className=\"n-note\">cafés and shops</span></div></div>\n    </div>\n    <div className=\"n-sample-fig n-pool\"><p className=\"t-caps n-caps\"><i className=\"n-kicker-rule\"></i>Night one of six</p><div className=\"n-big\"><Number data=\"$totals\" col=\"loaves\" format=\",.0f\" /></div><p className=\"n-big-cap\">loaves out of the oven before the first bus. Each cell below is a tray; the amber ones left before six.</p><div className=\"n-cells n-cells-lg\"><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"n-cell-lit\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i></div><p className=\"t-label n-hud\">Trays lit 13 / 18 · clock 5:40 AM</p></div>\n  </div>\n  <div className=\"n-sample-bottom\"><div className=\"n-panel\"><p className=\"t-caps n-caps\"><i className=\"n-kicker-rule\"></i>Loaves by night</p><Question data=\"$series\" height=\"240px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":{\"type\":\"bar\"},\"encoding\":{\"x\":{\"field\":\"night\",\"type\":\"ordinal\",\"title\":\"Night\"},\"y\":{\"field\":\"loaves\",\"type\":\"quantitative\",\"title\":\"Loaves\"},\"color\":{\"field\":\"busiest\",\"type\":\"nominal\",\"legend\":null,\"scale\":{\"range\":[\"var(--chart-2)\",\"var(--chart-1)\"]}}}}}} /></div><div className=\"n-panel\"><p className=\"t-caps n-caps\"><i className=\"n-kicker-rule\"></i>The ledger</p><DataTable data=\"$table\" rowKey=\"night\" height=\"240px\" columns={[{\"col\":\"night\",\"title\":\"Night\"},{\"col\":\"loaves\",\"title\":\"Loaves\",\"align\":\"right\",\"bar\":true},{\"col\":\"orders\",\"title\":\"Orders\",\"align\":\"right\"},{\"col\":\"peak\",\"title\":\"Peak\"}]} /></div></div>\n</div></div>",
+ "dos": [
+  "One lamp pool per view; put the lit figure at its centre.",
+  "Say the denominator next to every percentage.",
+  "Amber only for what is lit, open or chosen.",
+  "Give long reading a long measure and a long leading."
+ ],
+ "donts": [
+  "No photographs as the hero; no stock illustration.",
+  "No twinkling, parallax or ambient motion beyond one blinking cue.",
+  "No second warm colour beyond ember.",
+  "No status colour inside a drawing."
+ ],
+ "binding_losses": "The lamp pool gradient, the text glow, the halo, the Cinzel caps role and the ribbon have no contract slot; they are the --ds-halo and --ds-glow-text properties and the n-* classes. Kit components follow the night grounds and amber primary but not the caps apparatus.",
+ "footer": "Night first, Day second. Fonts: Newsreader 300/400/500 and italics, Cinzel 500/700, JetBrains Mono 400–700, all Google-hosted.",
+ "tpl": {
+  "brand": "Nocturne",
+  "dash_title": "Night shift · Week 40",
+  "kpis": [
+   [
+    "Loaves, six nights",
+    "loaves",
+    "",
+    "",
+    ",.0f",
+    "▲ 6% on last week"
+   ],
+   [
+    "Orders filled",
+    "orders",
+    "",
+    "",
+    null,
+    "cafés, shops, the market"
+   ],
+   [
+    "Baked before six",
+    "before_six_pct",
+    "",
+    "%",
+    null,
+    "of all loaves"
+   ]
+  ],
+  "dash_table_title": "The ledger",
+  "slide_eyebrow": "A week of nights",
+  "slide_title": "The ovens come on at four.",
+  "slide_sub": "Six nights, one bakery, and what the city eats before it wakes.",
+  "slide_foot": "Synthetic figures · Oct 2026",
+  "slide_stat_label": "Before six",
+  "slide_stat_col": "before_six_pct",
+  "slide_stat_suffix": "%",
+  "slide_body": "Of every loaf baked this week, this share left the oven before the first bus. The rest is the day shift's.",
+  "split": [
+   "BEFORE SIX · 72%",
+   "AFTER · 28%"
+  ],
+  "ed_kicker": "Night shift · Feature",
+  "ed_headline": "What the city eats before it wakes",
+  "ed_deck": "Six nights on a corner stool in a bakery that starts at four. The flour, the orders, the quiet hour, and the numbers that can only say so much.",
+  "ed_byline": "From the corner stool · 2 Oct 2026 · 14 min read",
+  "ed_body": "At four the lights come on in a room that smells of yesterday. Two people, one oven, and a list pinned to the wall: twelve cafés, three shops, the Saturday market. By six the list is mostly crossed off and the first bus has gone past twice. Nothing about the hour is romantic to the people in it; it is simply when bread has to happen.",
+  "ed_pull_col": "loaves",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "Loaves, six nights",
+  "steps": [
+   [
+    "Four o'clock.",
+    "The ovens reach temperature. Eighteen trays are laid out; each cell in the figure is one tray, dark until it goes in."
+   ],
+   [
+    "Six o'clock.",
+    "Thirteen trays are out and the cells are lit. The five still dark are the day shift's: brioche, the market order, the loaves that need the slow proof."
+   ]
+  ],
+  "step_caption": "Fig. 1 · Eighteen trays, lit as they leave the oven · synthetic",
+  "app_rows": [
+   [
+    "Sourdough, batch 1",
+    "Proofing · ready 03:40",
+    "On time",
+    "ok"
+   ],
+   [
+    "Rye",
+    "Oven 2 · 04:10",
+    "Running late",
+    "warn"
+   ],
+   [
+    "Brioche",
+    "Oven 1 failed to reach temperature",
+    "Failed",
+    "bad"
+   ],
+   [
+    "Baguettes",
+    "Scheduled 05:00",
+    "Queued",
+    "idle"
+   ]
+  ],
+  "app_cta": "New batch",
+  "app_cta2": "Save",
+  "landing_eyebrow": "Nocturne",
+  "landing_headline": "Read it slowly, by one lamp.",
+  "landing_sub": "Long features and reports set for the evening: a dark page, cream type, and one pool of light where the attention goes.",
+  "cta": "Start reading",
+  "cta2": "The method",
+  "features": [
+   [
+    "One lamp",
+    "Each view lights one thing. The reader always knows where to look."
+   ],
+   [
+    "A long measure",
+    "Newsreader at 18 on 30, oldstyle figures, a 34rem column. Built for an hour, not a glance."
+   ],
+   [
+    "A HUD at the edge",
+    "Figures live in mono counters at the edge of the scene, so the prose stays prose."
+   ]
+  ]
+ },
+ "data": {
+  "rows": [
+   {
+    "night": "Mon",
+    "loaves": 280,
+    "orders": 31,
+    "peak": "5:20",
+    "busiest": "no"
+   },
+   {
+    "night": "Tue",
+    "loaves": 296,
+    "orders": 33,
+    "peak": "5:30",
+    "busiest": "no"
+   },
+   {
+    "night": "Wed",
+    "loaves": 310,
+    "orders": 34,
+    "peak": "5:40",
+    "busiest": "no"
+   },
+   {
+    "night": "Thu",
+    "loaves": 304,
+    "orders": 36,
+    "peak": "5:30",
+    "busiest": "no"
+   },
+   {
+    "night": "Fri",
+    "loaves": 342,
+    "orders": 41,
+    "peak": "5:50",
+    "busiest": "yes"
+   },
+   {
+    "night": "Sat",
+    "loaves": 308,
+    "orders": 29,
+    "peak": "6:10",
+    "busiest": "no"
+   }
+  ],
+  "queries": {
+   "series": "select night, loaves, busiest from rows order by rowid",
+   "table": "select night, loaves, orders, peak from rows order by rowid",
+   "totals": "select sum(loaves) as loaves, sum(orders) as orders, 72 as before_six_pct, 6 as nights from rows"
+  },
+  "segments": [
+   "Nights",
+   "Hours",
+   "Orders"
+  ],
+  "segment_default": "Nights",
+  "select_label": "Chapter",
+  "input_placeholder": "Find a night",
+  "switch_label": "Light the cells as I read",
+  "tabs": [
+   "The nights",
+   "The evidence",
+   "The decision"
+  ],
+  "tab_body": "The nights: six, lit one per chapter.",
+  "progress_label": "Ribbon · 5 of 6 nights read",
+  "progress": 83,
+  "chart_title": "Loaves by night",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": "bar",
+    "encoding": {
+     "x": {
+      "field": "night",
+      "type": "ordinal",
+      "title": "Night"
+     },
+     "y": {
+      "field": "loaves",
+      "type": "quantitative",
+      "title": "Loaves"
+     },
+     "color": {
+      "field": "busiest",
+      "type": "nominal",
+      "legend": null,
+      "scale": {
+       "range": [
+        "var(--chart-2)",
+        "var(--chart-1)"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "row_key": "night",
+  "table_columns": [
+   {
+    "col": "night",
+    "title": "Night"
+   },
+   {
+    "col": "loaves",
+    "title": "Loaves",
+    "align": "right",
+    "bar": true
+   },
+   {
+    "col": "orders",
+    "title": "Orders",
+    "align": "right"
+   },
+   {
+    "col": "peak",
+    "title": "Peak"
+   }
+  ],
+  "table_height": "260px"
+ },
+ "css": "\n.ds-nocturne { --ds-cover-bg: radial-gradient(ellipse 70% 80% at 62% 42%, var(--ds-night-raised), var(--ds-night) 100%);\n  --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-lamp); --ds-hand-fill2: var(--ds-cool); --ds-hand-muted: var(--ds-night-sunk); --ds-hand-ground: var(--ds-night-raised); --ds-hand-stroke: 1.5; --ds-hand-cap: round; --ds-hand-bg: radial-gradient(ellipse 70% 80% at 50% 40%, var(--ds-night-raised), var(--ds-night) 100%);\n  --ds-tpl-edge: 1px solid var(--ds-line); --ds-tpl-radius: 2px; --ds-tpl-rule: 1px solid var(--ds-line); --ds-tag-radius: 999px;\n  --ds-slide-bg: var(--ds-night-raised); --ds-slide-fg: var(--ds-ink); --ds-slide-title-bg: radial-gradient(ellipse 80% 90% at 50% 30%, var(--ds-night-raised), var(--ds-night) 100%); --ds-slide-title-fg: var(--ds-ink);\n  --ds-slide-split-a: var(--ds-lamp); --ds-slide-split-a-fg: var(--ds-on-lamp); --ds-slide-split-b: var(--ds-cool); --ds-slide-split-b-fg: var(--ds-night);\n  --ds-hero-bg: radial-gradient(ellipse 60% 90% at 70% 50%, var(--ds-night-raised), var(--ds-night) 100%); }\n.ds-nocturne .ds-section h2, .ds-nocturne .ds-cover-name { font-family: var(--font-display); font-weight: 300; letter-spacing: -.02em; }\n.ds-nocturne .ds-eyebrow, .ds-nocturne .ds-chip, .ds-nocturne .t-caps { font-family: \"Cinzel\", Georgia, serif; letter-spacing: .26em; text-transform: uppercase; font-size: 11px; font-weight: 500; }\n.ds-nocturne .ds-chip { border-radius: 999px; padding: 5px 12px; }\n.ds-nocturne .ds-cover-tag { color: var(--ds-ink-soft); font-weight: 300; font-size: 22px; }\n.ds-nocturne .ds-tpl-slide-h, .ds-nocturne .ds-tpl-hero-h, .ds-nocturne .ds-tpl-ed-h { font-weight: 300; letter-spacing: -.02em; }\n.ds-nocturne .ds-tpl-slide-big { font-family: var(--font-mono); font-weight: 500; color: var(--ds-lamp); text-shadow: var(--ds-glow-text); }\n.ds-nocturne .ds-tpl-brand { font-family: \"Cinzel\", Georgia, serif; font-weight: 500; letter-spacing: .2em; font-size: 14px; text-transform: uppercase; }\n.ds-nocturne .ds-tpl-pull-n { font-family: var(--font-mono); color: var(--ds-lamp); } .ds-nocturne .ds-tpl-dropcap { font-weight: 300; color: var(--ds-lamp); }\n.ds-nocturne .ds-tpl-kicker { font-family: \"Cinzel\", Georgia, serif; letter-spacing: .26em; font-size: 11px; }\n.ds-nocturne .ds-tpl-tag { font-family: var(--font-mono); letter-spacing: .12em; }\n.ds-nocturne .h-glow .h-ink { opacity: .32; } .light .ds-nocturne .h-glow .h-ink { opacity: .16; }\n.ds-nocturne .h-text { paint-order: stroke; stroke: var(--ds-night); stroke-width: 3px; stroke-linejoin: round; }\n.ds-nocturne .h-num { font-family: var(--font-display); font-weight: 300; font-size: 46px; fill: var(--ds-lamp); letter-spacing: -.02em; }\n.ds-nocturne .n-night { fill: var(--ds-night); } .ds-nocturne .n-star circle { fill: var(--ds-ink); opacity: .55; } .light .ds-nocturne .n-star circle { opacity: 0; }\n.ds-nocturne .n-pool-in { stop-color: var(--ds-night-raised); } .ds-nocturne .n-pool-out { stop-color: var(--ds-night); }\n.ds-nocturne .n-lit { fill: var(--ds-lamp); } .ds-nocturne .n-dark { fill: var(--ds-night-sunk); stroke: var(--ds-line); stroke-width: 1; }\n.ds-nocturne .n-ribbon { fill: var(--ds-ember); } .ds-nocturne .n-tally line { stroke: var(--ds-ink); stroke-width: 2; stroke-linecap: round; }\n.ds-nocturne .n-svg-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; fill: var(--ds-ink-muted); } .ds-nocturne .n-svg-caps { font-family: \"Cinzel\", Georgia, serif; font-size: 11px; letter-spacing: .26em; fill: var(--ds-ink-muted); } .ds-nocturne .n-lamp-fill { fill: var(--ds-lamp); }\n.ds-nocturne .n-svg-big { font-family: var(--font-display); font-weight: 300; font-size: 64px; letter-spacing: -.03em; fill: var(--ds-lamp); }\n.ds-nocturne .n-caps { color: var(--ds-ink-muted); margin: 0 0 12px; display: flex; align-items: center; gap: 12px; } .ds-nocturne .n-kicker-rule { display: inline-block; width: 34px; height: 1px; background: currentColor; }\n.ds-nocturne .n-em { font-style: italic; font-weight: 400; color: var(--ds-lamp-hot); text-shadow: var(--ds-glow-text); }\n.ds-nocturne .n-btn { font-family: \"Cinzel\", Georgia, serif; font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; line-height: 18px; padding: 11px 18px; border: 1px solid var(--ds-ink); border-radius: 2px; background: transparent; color: var(--ds-ink); cursor: pointer; transition: box-shadow 300ms ease, background 200ms ease; }\n.ds-nocturne .n-btn:hover { background: var(--ds-lamp-soft); } .ds-nocturne .n-btn:focus-visible { outline: 2px solid var(--ds-ember); outline-offset: 2px; }\n.ds-nocturne .n-btn-primary { background: var(--ds-lamp); color: var(--ds-on-lamp); border-color: var(--ds-lamp); } .ds-nocturne .n-btn-primary:hover { background: var(--ds-lamp); box-shadow: var(--ds-halo); }\n.ds-nocturne .n-tag { display: inline-flex; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--ds-line); font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ds-ink-muted); }\n.ds-nocturne .n-tag-lit { color: var(--ds-lamp); border-color: var(--ds-lamp); background: var(--ds-lamp-soft); } .ds-nocturne .n-tag-caution { color: var(--ds-caution); border-color: var(--ds-caution); } .ds-nocturne .n-tag-positive { color: var(--ds-positive); border-color: var(--ds-positive); }\n.ds-nocturne .n-stat { display: grid; gap: 6px; padding: 18px 20px; border: 1px solid var(--ds-line); border-radius: 2px; background: var(--ds-night-raised); min-width: 180px; } .ds-nocturne .n-stat-lit { box-shadow: var(--ds-halo); border-color: var(--ds-lamp); } .ds-nocturne .n-stat-lit .t-numeral { color: var(--ds-lamp); }\n.ds-nocturne .n-note { font-size: 13px; color: var(--ds-ink-muted); } .ds-nocturne .ds-stats { gap: 16px; }\n.ds-nocturne .n-callout { padding: 14px 18px; border-left: 2px solid var(--ds-line); font-size: 16px; line-height: 1.55; background: var(--ds-night-raised); } .ds-nocturne .n-callout strong { font-weight: 500; }\n.ds-nocturne .n-callout-caution { border-left-color: var(--ds-caution); background: var(--ds-caution-soft); } .ds-nocturne .n-callout-lit { border-left-color: var(--ds-lamp); background: var(--ds-lamp-soft); }\n.ds-nocturne .n-margin { display: grid; grid-template-columns: 20px 1fr; gap: 8px; margin: 0; padding: 4px 0 0; font-style: italic; font-size: 15px; line-height: 22px; color: var(--ds-ink-soft); max-width: 36ch; } .ds-nocturne .n-margin-n { font-family: var(--font-mono); font-style: normal; font-size: 11px; color: var(--ds-lamp); padding-top: 3px; }\n.ds-nocturne .n-pool { background: radial-gradient(ellipse 80% 90% at 50% 30%, var(--ds-night-raised), var(--ds-night) 100%); }\n.ds-nocturne .n-card { padding: 24px; border: 1px solid var(--ds-line); border-radius: 2px; transition: box-shadow 300ms ease; } .ds-nocturne .n-card:hover { box-shadow: var(--ds-halo); }\n.ds-nocturne .n-card h3 { margin: 4px 0 0; } .ds-nocturne .n-card-p { margin: 10px 0 0; line-height: 1.6; color: var(--ds-ink-soft); max-width: 56ch; }\n.ds-nocturne .n-cells { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; } .ds-nocturne .n-cells i { display: block; width: 28px; height: 20px; border-radius: 1px; background: var(--ds-night-sunk); border: 1px solid var(--ds-line); } .ds-nocturne .n-cells .n-cell-lit { background: var(--ds-lamp); border-color: var(--ds-lamp); }\n.ds-nocturne .n-cells-lg i { width: 36px; height: 26px; } .ds-nocturne .n-hud { display: block; margin: 12px 0 0; color: var(--ds-ink-muted); }\n.ds-nocturne .n-sample { background: var(--ds-night); padding: 48px 20px 64px; border-top: 1px solid var(--ds-line); border-bottom: 1px solid var(--ds-line); } .ds-nocturne .n-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-nocturne .n-sample-grid { display: grid; gap: 32px; align-items: center; } .ds-nocturne .n-sample-h { margin: 0; max-width: 14ch; } .ds-nocturne .n-sample-lede { margin-top: 24px; max-width: 46ch; color: var(--ds-ink-soft); }\n.ds-nocturne .n-folio { display: block; margin-top: 24px; color: var(--ds-ink-muted); } .ds-nocturne .n-stat-row { display: grid; gap: 12px; margin-top: 28px; }\n.ds-nocturne .n-sample-fig { padding: 28px; border: 1px solid var(--ds-line); border-radius: 2px; box-shadow: var(--ds-halo); } .ds-nocturne .n-big { font-family: var(--font-display); font-weight: 300; font-size: clamp(64px, 8vw, 112px); line-height: .9; letter-spacing: -.03em; color: var(--ds-lamp); text-shadow: var(--ds-glow-text); } .ds-nocturne .n-big-cap { margin: 14px 0 0; font-size: 16px; line-height: 1.5; color: var(--ds-ink-soft); max-width: 36ch; }\n.ds-nocturne .n-sample-bottom { display: grid; gap: 24px; margin-top: 40px; } .ds-nocturne .n-panel { padding: 20px; border: 1px solid var(--ds-line); border-radius: 2px; background: var(--ds-night-raised); min-width: 0; }\n@container (min-width: 760px) { .ds-nocturne .n-sample { padding: 64px 40px 80px; } .ds-nocturne .n-sample-grid { grid-template-columns: 1.1fr 1fr; } .ds-nocturne .n-stat-row { grid-template-columns: 1fr 1fr 1fr; } .ds-nocturne .n-sample-bottom { grid-template-columns: 1fr 1fr; } }\n"
+}

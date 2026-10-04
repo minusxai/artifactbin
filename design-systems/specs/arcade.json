@@ -1,0 +1,732 @@
+{
+ "slug": "arcade",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\" shapeRendering=\"crispEdges\"><title>Arcade cover: a HUD bar with score and hearts, a row of coins, a stack of bricks, a star, and an HP bar in blocks on a checkered ground</title>\n<rect className=\"ar-ground\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/><rect className=\"ar-chk\" x=\"0\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"320\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"352\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"384\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"416\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"448\" y=\"256\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"336\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"368\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"400\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"432\" y=\"272\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"464\" y=\"272\" width=\"16\" height=\"16\"/>\n<rect className=\"ar-ink\" x=\"24\" y=\"24\" width=\"432\" height=\"44\"/><text x=\"40\" y=\"52\" className=\"ar-px-t ar-on-ink\">1UP 004120</text><rect className=\"ar-red\" x=\"235\" y=\"36\" width=\"6\" height=\"3\"/><rect className=\"ar-red\" x=\"244\" y=\"36\" width=\"6\" height=\"3\"/><rect className=\"ar-red\" x=\"232\" y=\"39\" width=\"21\" height=\"6\"/><rect className=\"ar-red\" x=\"235\" y=\"45\" width=\"15\" height=\"3\"/><rect className=\"ar-red\" x=\"238\" y=\"48\" width=\"9\" height=\"3\"/><rect className=\"ar-red\" x=\"241\" y=\"51\" width=\"3\" height=\"3\"/><rect className=\"ar-red\" x=\"263\" y=\"36\" width=\"6\" height=\"3\"/><rect className=\"ar-red\" x=\"272\" y=\"36\" width=\"6\" height=\"3\"/><rect className=\"ar-red\" x=\"260\" y=\"39\" width=\"21\" height=\"6\"/><rect className=\"ar-red\" x=\"263\" y=\"45\" width=\"15\" height=\"3\"/><rect className=\"ar-red\" x=\"266\" y=\"48\" width=\"9\" height=\"3\"/><rect className=\"ar-red\" x=\"269\" y=\"51\" width=\"3\" height=\"3\"/><rect className=\"ar-heart-off\" x=\"291\" y=\"36\" width=\"6\" height=\"3\"/><rect className=\"ar-heart-off\" x=\"300\" y=\"36\" width=\"6\" height=\"3\"/><rect className=\"ar-heart-off\" x=\"288\" y=\"39\" width=\"21\" height=\"6\"/><rect className=\"ar-heart-off\" x=\"291\" y=\"45\" width=\"15\" height=\"3\"/><rect className=\"ar-heart-off\" x=\"294\" y=\"48\" width=\"9\" height=\"3\"/><rect className=\"ar-heart-off\" x=\"297\" y=\"51\" width=\"3\" height=\"3\"/><text x=\"440\" y=\"52\" className=\"ar-px-t ar-yellow-t\" textAnchor=\"end\">HI 009999</text>\n<rect className=\"ar-yellow\" x=\"55\" y=\"100\" width=\"30\" height=\"5\"/><rect className=\"ar-yellow\" x=\"50\" y=\"105\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"45\" y=\"110\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"40\" y=\"115\" width=\"60\" height=\"30\"/><rect className=\"ar-yellow\" x=\"45\" y=\"145\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"50\" y=\"150\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"55\" y=\"155\" width=\"30\" height=\"5\"/><rect className=\"ar-ink\" x=\"60\" y=\"115\" width=\"20\" height=\"5\"/><rect className=\"ar-ink\" x=\"65\" y=\"120\" width=\"10\" height=\"20\"/><rect className=\"ar-ink\" x=\"60\" y=\"140\" width=\"20\" height=\"5\"/><rect className=\"ar-yellow\" x=\"127\" y=\"100\" width=\"30\" height=\"5\"/><rect className=\"ar-yellow\" x=\"122\" y=\"105\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"117\" y=\"110\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"112\" y=\"115\" width=\"60\" height=\"30\"/><rect className=\"ar-yellow\" x=\"117\" y=\"145\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"122\" y=\"150\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"127\" y=\"155\" width=\"30\" height=\"5\"/><rect className=\"ar-ink\" x=\"132\" y=\"115\" width=\"20\" height=\"5\"/><rect className=\"ar-ink\" x=\"137\" y=\"120\" width=\"10\" height=\"20\"/><rect className=\"ar-ink\" x=\"132\" y=\"140\" width=\"20\" height=\"5\"/><rect className=\"ar-ink\" x=\"199\" y=\"100\" width=\"30\" height=\"5\"/><rect className=\"ar-ink\" x=\"194\" y=\"105\" width=\"40\" height=\"5\"/><rect className=\"ar-ink\" x=\"189\" y=\"110\" width=\"50\" height=\"5\"/><rect className=\"ar-ink\" x=\"184\" y=\"115\" width=\"60\" height=\"30\"/><rect className=\"ar-ink\" x=\"189\" y=\"145\" width=\"50\" height=\"5\"/><rect className=\"ar-ink\" x=\"194\" y=\"150\" width=\"40\" height=\"5\"/><rect className=\"ar-ink\" x=\"199\" y=\"155\" width=\"30\" height=\"5\"/><rect className=\"ar-ground\" x=\"199\" y=\"105\" width=\"30\" height=\"5\"/><rect className=\"ar-ground\" x=\"194\" y=\"110\" width=\"40\" height=\"5\"/><rect className=\"ar-ground\" x=\"189\" y=\"115\" width=\"50\" height=\"30\"/><rect className=\"ar-ground\" x=\"194\" y=\"145\" width=\"40\" height=\"5\"/><rect className=\"ar-ground\" x=\"199\" y=\"150\" width=\"30\" height=\"5\"/>\n<rect className=\"ar-brick\" x=\"280\" y=\"96\" width=\"40\" height=\"40\"/><rect className=\"ar-brick-hi\" x=\"285\" y=\"101\" width=\"30\" height=\"5\"/><rect className=\"ar-brick-hi\" x=\"285\" y=\"101\" width=\"5\" height=\"25\"/><rect className=\"ar-brick\" x=\"320\" y=\"96\" width=\"40\" height=\"40\"/><rect className=\"ar-brick-hi\" x=\"325\" y=\"101\" width=\"30\" height=\"5\"/><rect className=\"ar-brick-hi\" x=\"325\" y=\"101\" width=\"5\" height=\"25\"/><rect className=\"ar-brick\" x=\"360\" y=\"96\" width=\"40\" height=\"40\"/><rect className=\"ar-brick-hi\" x=\"365\" y=\"101\" width=\"30\" height=\"5\"/><rect className=\"ar-brick-hi\" x=\"365\" y=\"101\" width=\"5\" height=\"25\"/><rect className=\"ar-brick\" x=\"400\" y=\"96\" width=\"40\" height=\"40\"/><rect className=\"ar-brick-hi\" x=\"405\" y=\"101\" width=\"30\" height=\"5\"/><rect className=\"ar-brick-hi\" x=\"405\" y=\"101\" width=\"5\" height=\"25\"/><rect className=\"ar-brick\" x=\"300\" y=\"136\" width=\"40\" height=\"40\"/><rect className=\"ar-brick-hi\" x=\"305\" y=\"141\" width=\"30\" height=\"5\"/><rect className=\"ar-brick-hi\" x=\"305\" y=\"141\" width=\"5\" height=\"25\"/><rect className=\"ar-brick\" x=\"340\" y=\"136\" width=\"40\" height=\"40\"/><rect className=\"ar-brick-hi\" x=\"345\" y=\"141\" width=\"30\" height=\"5\"/><rect className=\"ar-brick-hi\" x=\"345\" y=\"141\" width=\"5\" height=\"25\"/><rect className=\"ar-brick\" x=\"380\" y=\"136\" width=\"40\" height=\"40\"/><rect className=\"ar-brick-hi\" x=\"385\" y=\"141\" width=\"30\" height=\"5\"/><rect className=\"ar-brick-hi\" x=\"385\" y=\"141\" width=\"5\" height=\"25\"/>\n<rect className=\"ar-magenta\" x=\"80\" y=\"176\" width=\"5\" height=\"5\"/><rect className=\"ar-magenta\" x=\"75\" y=\"181\" width=\"15\" height=\"5\"/><rect className=\"ar-magenta\" x=\"60\" y=\"186\" width=\"45\" height=\"5\"/><rect className=\"ar-magenta\" x=\"65\" y=\"191\" width=\"35\" height=\"5\"/><rect className=\"ar-magenta\" x=\"70\" y=\"196\" width=\"25\" height=\"5\"/><rect className=\"ar-magenta\" x=\"70\" y=\"201\" width=\"25\" height=\"5\"/><rect className=\"ar-magenta\" x=\"65\" y=\"206\" width=\"15\" height=\"5\"/><rect className=\"ar-magenta\" x=\"85\" y=\"206\" width=\"15\" height=\"5\"/><rect className=\"ar-cyan\" x=\"156\" y=\"184\" width=\"4\" height=\"4\"/><rect className=\"ar-cyan\" x=\"152\" y=\"188\" width=\"12\" height=\"4\"/><rect className=\"ar-cyan\" x=\"140\" y=\"192\" width=\"36\" height=\"4\"/><rect className=\"ar-cyan\" x=\"144\" y=\"196\" width=\"28\" height=\"4\"/><rect className=\"ar-cyan\" x=\"148\" y=\"200\" width=\"20\" height=\"4\"/><rect className=\"ar-cyan\" x=\"148\" y=\"204\" width=\"20\" height=\"4\"/><rect className=\"ar-cyan\" x=\"144\" y=\"208\" width=\"12\" height=\"4\"/><rect className=\"ar-cyan\" x=\"160\" y=\"208\" width=\"12\" height=\"4\"/>\n<rect className=\"ar-ink\" x=\"24\" y=\"232\" width=\"296\" height=\"32\"/><rect className=\"ar-green\" x=\"32\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"52\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"72\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"92\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"112\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"132\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"152\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"172\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"192\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"212\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"232\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"252\" y=\"240\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"272\" y=\"240\" width=\"16\" height=\"16\"/><text x=\"336\" y=\"256\" className=\"ar-vt\">HP 70%</text>\n<text x=\"440\" y=\"200\" className=\"ar-px-t ar-blink\" textAnchor=\"end\">PRESS START</text></svg>",
+ "name": "Arcade",
+ "tagline": "Insert coin. Press start. Have fun.",
+ "mood": "Fun",
+ "jobs": "Games, launches, leaderboards, playful dashboards, teaching",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Press Start 2P",
+   "wght@400"
+  ],
+  [
+   "Pixelify Sans",
+   "wght@400;500;700"
+  ],
+  [
+   "VT323",
+   "wght@400"
+  ]
+ ],
+ "families": {
+  "display": "\"Press Start 2P\", \"Courier New\", monospace",
+  "sans": "\"Pixelify Sans\", \"Verdana\", sans-serif",
+  "mono": "\"VT323\", \"Courier New\", monospace"
+ },
+ "tokens": [
+  {
+   "name": "ground",
+   "light": "#f7f3e8",
+   "dark": "#0a0a14",
+   "usage": "Page ground: near-white cabinet by day; the CRT black by night (with scanlines).",
+   "group": "Grounds"
+  },
+  {
+   "name": "raised",
+   "light": "#ffffff",
+   "dark": "#141428",
+   "usage": "Panels, cards, the dialogue box.",
+   "group": "Grounds"
+  },
+  {
+   "name": "sunk",
+   "light": "#e9e3d3",
+   "dark": "#050509",
+   "usage": "Wells, the checker squares, empty HP blocks.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#c9c2b0",
+   "dark": "#26263d",
+   "usage": "Hairline rules; the checker contrast.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#0f0f1a",
+   "dark": "#f2f0ff",
+   "usage": "Pixel ink: text, sprites, every 4px frame.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#5b586b",
+   "dark": "#9c98be",
+   "usage": "Secondary text, the dim high score.",
+   "group": "Ink"
+  },
+  {
+   "name": "red",
+   "light": "#ff3b3b",
+   "dark": "#ff5c5c",
+   "usage": "The brand: cabinet red. Primary actions, hearts, the player sprite.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-red",
+   "light": "#ffffff",
+   "dark": "#0a0a14",
+   "usage": "Text on red fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "blue",
+   "light": "#2e6bff",
+   "dark": "#5c8bff",
+   "usage": "Player two: the second drawing fill, the first chart series, links.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-blue",
+   "light": "#ffffff",
+   "dark": "#0a0a14",
+   "usage": "Text on blue fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "blue-soft",
+   "light": "#dce6ff",
+   "dark": "#15224d",
+   "usage": "Ground for the selected row and the quiet drawing fill.",
+   "group": "Brand"
+  },
+  {
+   "name": "yellow",
+   "light": "#ffd60a",
+   "dark": "#ffe34d",
+   "usage": "The coin: points, the highlighted figure, the focus ring, the star.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-yellow",
+   "light": "#0f0f1a",
+   "dark": "#0f0f1a",
+   "usage": "Text on yellow fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "magenta",
+   "light": "#ff4fd8",
+   "dark": "#ff6ee0",
+   "usage": "Bonus items and the fourth chart series. Never a status.",
+   "group": "Brand"
+  },
+  {
+   "name": "cyan",
+   "light": "#35e0ff",
+   "dark": "#5ce8ff",
+   "usage": "Shields, power-ups and the fifth chart series. Never a status.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#13a03f",
+   "dark": "#2bd34a",
+   "usage": "HP full, pass, level up. The green blocks. Always with a glyph or a word.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#d4f5dd",
+   "dark": "#0d3a1c",
+   "usage": "Ground for pass rows and the level-up ribbon.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#c98a00",
+   "dark": "#ffd60a",
+   "usage": "HP half, low coins, a hint. The yellow blocks.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#fff1b8",
+   "dark": "#3a2e05",
+   "usage": "Ground for warnings.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#e02b2b",
+   "dark": "#ff5c5c",
+   "usage": "HP low, fail, game over. The red blocks.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#ffd9d9",
+   "dark": "#3d0f14",
+   "usage": "Ground for fail rows.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "ground",
+  "foreground": "ink",
+  "card": "raised",
+  "card-foreground": "ink",
+  "popover": "raised",
+  "popover-foreground": "ink",
+  "primary": "red",
+  "primary-foreground": "on-red",
+  "secondary": "blue-soft",
+  "secondary-foreground": "ink",
+  "muted": "sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "blue-soft",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "on-red",
+  "border": "ink",
+  "input": "line",
+  "ring": "yellow",
+  "chart-1": "blue",
+  "chart-2": "red",
+  "chart-3": "yellow",
+  "chart-4": "magenta",
+  "chart-5": "cyan"
+ },
+ "radius_contract": "0px",
+ "extra_vars": {
+  "chip-radius": "0px",
+  "px": "4px",
+  "pixel-edge": "0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink)",
+  "pixel-shadow": "0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink), 4px 8px 0 0 var(--ds-ink), 8px 4px 0 0 var(--ds-ink)"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(22px, 3.4vw, 44px)",
+   "lh": "1.4",
+   "weight": 400,
+   "tt": "uppercase",
+   "sample": "Press start",
+   "usage": "One per page, three words at most. Press Start 2P is huge per point; 44px is the ceiling."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(15px, 2vw, 26px)",
+   "lh": "1.5",
+   "weight": 400,
+   "tt": "uppercase",
+   "sample": "High scores",
+   "usage": "Section openers."
+  },
+  {
+   "name": "title",
+   "family": "sans",
+   "size": "26px",
+   "lh": "30px",
+   "weight": 700,
+   "sample": "Level 3 · The Foundry",
+   "usage": "Card, panel and dialogue titles. Pixelify Sans bold."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "18px",
+   "lh": "26px",
+   "weight": 400,
+   "sample": "Collect three coins to open the door. The red blocks are where you lose a life.",
+   "usage": "Reading and UI text. Pixelify Sans at 18px reads cleanly and still looks like a game."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "15px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "Synthetic scores · reset daily",
+   "usage": "Captions, helper text, the small print."
+  },
+  {
+   "name": "label",
+   "family": "display",
+   "size": "10px",
+   "lh": "16px",
+   "weight": 400,
+   "tt": "uppercase",
+   "ls": "0.04em",
+   "sample": "1UP",
+   "usage": "Eyebrows, HUD labels, column heads, tags. Press Start 2P at 10px."
+  },
+  {
+   "name": "numeral",
+   "family": "mono",
+   "size": "56px",
+   "lh": "52px",
+   "weight": 400,
+   "sample": "004120",
+   "usage": "Scores and counts. VT323, zero-padded, tabular, big.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "combo",
+   "family": "sans",
+   "size": "48px",
+   "lh": "48px",
+   "weight": 700,
+   "fs": "italic",
+   "sample": "×3 COMBO!",
+   "usage": "The multiplier and the one celebratory word. Pixelify bold italic in red or yellow."
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "22px",
+   "lh": "26px",
+   "weight": 400,
+   "sample": "PLAYER 1  LVL 03  HP 70%",
+   "usage": "HUD rows, logs, dialogue. VT323 at 22px."
+  }
+ ],
+ "idea_headline": "Everything is a game, so make it feel like one.",
+ "idea": "Arcade is the cabinet with the lights on: a near-white ground with a faint checker, pixel-black ink, and the NES primaries (red, blue, yellow, with magenta and cyan for the power-ups). Status is an HP bar that goes green, yellow, red in blocks. Lives are hearts, points are coins, hints blink, wins get a ribbon. Night is the CRT: black glass, scanlines, the colours lifted to neon.",
+ "use_for": "Game and launch pages, leaderboards and trackers, hackathons, playful dashboards, teaching material for kids and anyone else, anything that gets better with a score.",
+ "avoid_when": "Serious, institutional or long-reading subjects; dense data; anything where a pixel heart would read as a joke at the reader's expense.",
+ "principles_headline": "Snap to the pixel. Keep score. Celebrate.",
+ "principles": [
+  [
+   "Snap to 4px.",
+   "Every sprite, frame and shadow is a multiple of 4px. Nothing is anti-aliased: SVG uses crispEdges, corners are stepped with box-shadow, never rounded."
+  ],
+  [
+   "Status is the HP bar.",
+   "Green blocks for full, yellow for half, red for low, with a glyph or a word. No other colour carries state; magenta and cyan are power-ups."
+  ],
+  [
+   "Points are coins, lives are hearts.",
+   "Small counts with a goal are a row of coins; chances left are hearts. Three coins is a win and gets a ribbon."
+  ],
+  [
+   "Red is the player.",
+   "Cabinet red for the primary action, hearts and the player sprite. Blue is player two: the second fill, the first chart series."
+  ],
+  [
+   "Press Start, then stop.",
+   "Press Start 2P for three-word headlines, the HUD and tags only. Pixelify Sans carries reading; VT323 carries the numbers."
+  ]
+ ],
+ "voice": [
+  "Short imperatives in caps where the HUD speaks: INSERT COIN, PRESS START, LEVEL UP, GAME OVER.",
+  "Scores are zero-padded: 004120. Multipliers get an exclamation mark: ×3 COMBO!",
+  "Reading text is plain, friendly and a little cheeky; the pixel voice is for the HUD, not the paragraph.",
+  "Dialogue boxes speak like an NPC: one sentence, then ▼."
+ ],
+ "colour_headline": "Near-white, pixel ink, the NES primaries, an HP bar.",
+ "colour_note": "Day is the cabinet: a near-white ground with a faint checker, ink pixels, red primary, blue for player two, yellow coins, magenta and cyan power-ups. Night is the CRT: black glass with 4px scanlines and every colour lifted to neon. Green, yellow and red carry status in blocks; nothing else does.",
+ "chart_series": [
+  "blue",
+  "red",
+  "yellow",
+  "magenta",
+  "cyan"
+ ],
+ "chart_note": "Blue leads so bars never impersonate the HP bar; red is the comparison; yellow the highlight for the top score. Magenta and cyan come last.",
+ "type_headline": "Press Start 2P shouts, Pixelify plays, VT323 counts.",
+ "type_note": "Press Start 2P only for headlines of three words, HUD labels and tags, never above 44px. Pixelify Sans at 18px carries all reading and, bold italic, the one celebratory word. VT323 carries scores and dialogue at 22px and up.",
+ "space_headline": "A 4px pixel, 16px checkers, stepped corners.",
+ "space": [
+  [
+   "px · 4px",
+   "The unit. Everything snaps to it."
+  ],
+  [
+   "space-2 · 8px",
+   "Inside tags and HUD cells."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "Control padding-x; the checker size; one HP block."
+  ],
+  [
+   "space-6 · 24px",
+   "Panel padding."
+  ],
+  [
+   "space-8 · 32px",
+   "Between panels, so pixel shadows never touch."
+  ],
+  [
+   "space-12 · 48px",
+   "Section breaks."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Everything. Pixels have no corners."
+  ],
+  [
+   "pixel edge",
+   "A 4px frame drawn with four box-shadows (top, bottom, left, right) so the corners step: the pixel-rounded border. Buttons, tags, the dialogue box."
+  ],
+  [
+   "frame · 4px ink",
+   "Panels and fields take a plain 4px ink border."
+  ],
+  [
+   "pixel shadow",
+   "The pixel edge plus two more shadows at 8px: a hard stepped drop. Buttons and the active panel; press removes it."
+  ]
+ ],
+ "depth": [
+  [
+   "shadow",
+   "The stepped pixel shadow only. No blur, ever."
+  ],
+  [
+   "scanlines",
+   "Night only: a 4px repeating line at 5% over the whole page, like glass."
+  ],
+  [
+   "focus",
+   "A 4px yellow outline, offset 0."
+  ],
+  [
+   "checker",
+   "The ground texture: 16px squares in sunk. Faint by day, nearly invisible by night."
+  ]
+ ],
+ "motion": [
+  [
+   "Blink",
+   "PRESS START and the dialogue ▼ blink at 1Hz with step timing. Reduced motion shows them steady."
+  ],
+  [
+   "Press",
+   "Buttons jump 4px into their shadow on press. No easing: steps(1)."
+  ],
+  [
+   "Score",
+   "Numbers count up in 60ms ticks on first paint (the kit animate-fade-in on the numeral is the fallback)."
+  ],
+  [
+   "Reveal",
+   "Panels use the kit reveal-up; sprites may use animate-float, one per page, as the idle bob."
+  ],
+  [
+   "Level up",
+   "A ribbon slides in from the left in 120ms, steps(4). It stays."
+  ]
+ ],
+ "components_headline": "A HUD, bars in blocks, coins, hearts, a dialogue box.",
+ "components_note": "Kit components take Arcade through the contract: near-white grounds, red primary, ink borders, zero radius, yellow focus. Authored classes add the pixel edge, the stepped shadow, the HP blocks, the coin row, the hearts and the dialogue box.",
+ "btn_primary": "ar-btn ar-btn-primary",
+ "btn_secondary": "ar-btn",
+ "buttons": "<Button>Press start</Button><Button variant=\"secondary\">Continue</Button><Button variant=\"outline\">Options</Button><Button variant=\"ghost\">Quit</Button><button className=\"ar-btn ar-btn-primary\">Press start</button><button className=\"ar-btn\">Options</button><button className=\"ar-btn ar-btn-coin\">Insert coin</button><button className=\"ar-btn ar-btn-blue\">Player 2</button>",
+ "buttons_note": "Kit buttons left; authored ar-btn right: Press Start 2P at 12px, the pixel-rounded edge and the stepped shadow. Red is the primary, yellow is the coin, blue is player two.",
+ "tags": "<Badge>Red</Badge><Badge variant=\"secondary\">Selected</Badge><Badge variant=\"outline\">Level 3</Badge><Badge variant=\"destructive\">Game over</Badge><span className=\"ar-tag\">1UP</span><span className=\"ar-tag ar-tag-coin\">★ 004120</span><span className=\"ar-tag ar-tag-green\">▲ HP full</span><span className=\"ar-tag ar-tag-warn\">! 1 coin</span><span className=\"ar-tag ar-tag-red\">▼ HP low</span><span className=\"ar-tag ar-tag-magenta\">◆ bonus</span><span className=\"ar-tag ar-tag-cyan\">◉ shield</span>",
+ "tags_note": "Tags are power-up pills: Press Start 2P at 10px in a pixel-rounded edge, each with a glyph. Status tags take the HP colours; magenta and cyan are items.",
+ "fields_note": "Fields are white wells with a 4px ink frame; focus is a yellow outline. Labels are HUD caps.",
+ "stats": "<div className=\"ar-stat\"><span className=\"t-label\">Score</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"score\" format=\"06d\" /></span><span className=\"ar-small\">player 1 · synthetic</span></div><div className=\"ar-stat ar-stat-coin\"><span className=\"t-label\">Coins</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"coins\" /> / 3</span><span className=\"ar-small\">collect three to open the door</span></div><div className=\"ar-stat\"><span className=\"t-label\">Combo</span><span className=\"t-combo ar-combo\">×3!</span><span className=\"ar-small\">three in a row</span></div>",
+ "stats_note": "A Stat is a HUD panel: label in Press Start, a VT323 numeral, the small print. The coin Stat is yellow; the combo Stat uses the celebratory role.",
+ "callouts": "<Alert><AlertTitle>Game over</AlertTitle><AlertDescription>HP reached zero on level 3. Press start to continue from the last door.</AlertDescription></Alert><div className=\"ar-dialog\"><span className=\"ar-dialog-who\">SHOPKEEPER</span><p>Three coins for the door, friend. The red blocks are where the trouble is.</p><span className=\"ar-dialog-more ar-blink\">▼</span></div><div className=\"ar-callout ar-callout-green\"><strong>▲ Level up!</strong> All three coins collected; the door is open.</div><div className=\"ar-callout ar-callout-warn\"><strong>! One coin left.</strong> The last coin is behind the moving platform.</div><div className=\"ar-callout ar-callout-red\"><strong>▼ HP low.</strong> 20% left. Find a heart.</div>",
+ "callouts_note": "Four callouts: the RPG dialogue box (a speaker, one sentence, a blinking ▼) for anything the page says to the reader, and three HUD messages in the HP colours with a glyph.",
+ "chart_comp_note": "Charts are pixel bars: blue first, red for the comparison, yellow for the top score. Gridlines are the checker colour; nothing is smoothed.",
+ "table_note": "Tables are the high-score board: VT323 figures, Pixelify names, 2px ink rules, the top row in yellow.",
+ "card": "<div className=\"ar-panel ar-panel-active\"><span className=\"ar-ribbon\">NEW HIGH SCORE</span><div className=\"ar-hud\"><span className=\"t-label\">1UP</span><span className=\"ar-hud-score\">004120</span><span className=\"ar-hearts\"><i></i><i></i><i className=\"ar-heart-off-i\"></i></span><span className=\"t-label\">HI</span><span className=\"ar-hud-score ar-dim\">009999</span></div><h3 className=\"t-title\">Level 3 · The Foundry</h3><p className=\"ar-card-p\">Collect three coins to open the door. The red blocks are where you lose a life.</p><div className=\"ar-hp\"><span className=\"t-label\">HP</span><span className=\"ar-blocks\"><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i></span><span className=\"t-mono ar-hp-n\">70%</span></div><div className=\"ar-row\"><span className=\"ar-coins\"><i className=\"ar-coin-i\"></i><i className=\"ar-coin-i\"></i><i className=\"ar-coin-i ar-coin-off-i\"></i></span><button className=\"ar-btn ar-btn-primary ar-btn-sm\">Continue</button></div></div>",
+ "card_note": "A card is a cabinet panel: a ribbon when something was won, a HUD row with hearts, a Pixelify title, the HP bar in blocks, three coins, a button. The active panel casts the stepped shadow.",
+ "hand": {
+  "mode": "pixel",
+  "shadow": false,
+  "headline": "Eight-pixel cells, four-pixel ink, no curves.",
+  "note": "Arcade draws like a sprite sheet: every shape snaps to an 8px cell, the ink is a 4px square-capped stroke, fills are flat red and blue, and the SVG is rendered with crispEdges so nothing is smoothed. Any subject can be a sprite; keep it under sixteen cells wide so it reads at any size.",
+  "rules": [
+   [
+    "Grid",
+    "8px cells. Coordinates and sizes snap; a shape narrower than one cell does not exist."
+   ],
+   [
+    "Stroke",
+    "4px ink, square caps, square joins, crispEdges."
+   ],
+   [
+    "Fill",
+    "Flat red for the player part, blue for player two, blue-soft for the quiet part, sunk for empty."
+   ],
+   [
+    "Shadow",
+    "None inside a drawing; the panel around it carries the stepped shadow."
+   ],
+   [
+    "Figures",
+    "Press Start 2P at 10px for labels; VT323 for the one number."
+   ],
+   [
+    "Motion",
+    "Sprites move in 4px steps; one may bob with animate-float."
+   ]
+  ]
+ },
+ "motifs_headline": "The HP bar, the coins and hearts, the dialogue box.",
+ "motifs_note": "Arcade draws with 8px cells. A share with a threshold is an HP bar in blocks; a small count with a goal is a row of coins; chances left are hearts; and anything the page says is a dialogue box.",
+ "motifs": [
+  {
+   "title": "The HP bar in blocks",
+   "usage": "Thirteen blocks in a 4px frame; filled blocks are green above half, yellow above a quarter, red below. The percentage sits beside it in VT323. Use it for any share with a threshold.",
+   "svg": "<svg viewBox=\"0 0 480 160\" shapeRendering=\"crispEdges\"><title>HP bars</title><text x=\"24\" y=\"36\" className=\"ar-px-t\">PLAYER 1</text><rect className=\"ar-ink\" x=\"24\" y=\"44\" width=\"296\" height=\"32\"/><rect className=\"ar-green\" x=\"32\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"52\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"72\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"92\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"112\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"132\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"152\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"172\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-green\" x=\"192\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"212\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"232\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"252\" y=\"52\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"272\" y=\"52\" width=\"16\" height=\"16\"/><text x=\"336\" y=\"70\" className=\"ar-vt\">HP 70%</text><text x=\"24\" y=\"106\" className=\"ar-px-t\">PLAYER 2</text><rect className=\"ar-ink\" x=\"24\" y=\"114\" width=\"296\" height=\"32\"/><rect className=\"ar-red\" x=\"32\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-red\" x=\"52\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-red\" x=\"72\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"92\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"112\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"132\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"152\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"172\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"192\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"212\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"232\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"252\" y=\"122\" width=\"16\" height=\"16\"/><rect className=\"ar-sunk\" x=\"272\" y=\"122\" width=\"16\" height=\"16\"/><text x=\"336\" y=\"140\" className=\"ar-vt ar-red-t\">HP 23%</text></svg>"
+  },
+  {
+   "title": "Coins and hearts",
+   "usage": "One pixel coin per unit, yellow when earned and hollow when missing; one heart per chance left. Three coins is the win condition and gets a ribbon.",
+   "svg": "<svg viewBox=\"0 0 480 160\" shapeRendering=\"crispEdges\"><title>Coins and hearts</title><rect className=\"ar-yellow\" x=\"47\" y=\"28\" width=\"30\" height=\"5\"/><rect className=\"ar-yellow\" x=\"42\" y=\"33\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"37\" y=\"38\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"32\" y=\"43\" width=\"60\" height=\"30\"/><rect className=\"ar-yellow\" x=\"37\" y=\"73\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"42\" y=\"78\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"47\" y=\"83\" width=\"30\" height=\"5\"/><rect className=\"ar-ink\" x=\"52\" y=\"43\" width=\"20\" height=\"5\"/><rect className=\"ar-ink\" x=\"57\" y=\"48\" width=\"10\" height=\"20\"/><rect className=\"ar-ink\" x=\"52\" y=\"68\" width=\"20\" height=\"5\"/><rect className=\"ar-yellow\" x=\"127\" y=\"28\" width=\"30\" height=\"5\"/><rect className=\"ar-yellow\" x=\"122\" y=\"33\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"117\" y=\"38\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"112\" y=\"43\" width=\"60\" height=\"30\"/><rect className=\"ar-yellow\" x=\"117\" y=\"73\" width=\"50\" height=\"5\"/><rect className=\"ar-yellow\" x=\"122\" y=\"78\" width=\"40\" height=\"5\"/><rect className=\"ar-yellow\" x=\"127\" y=\"83\" width=\"30\" height=\"5\"/><rect className=\"ar-ink\" x=\"132\" y=\"43\" width=\"20\" height=\"5\"/><rect className=\"ar-ink\" x=\"137\" y=\"48\" width=\"10\" height=\"20\"/><rect className=\"ar-ink\" x=\"132\" y=\"68\" width=\"20\" height=\"5\"/><rect className=\"ar-ink\" x=\"207\" y=\"28\" width=\"30\" height=\"5\"/><rect className=\"ar-ink\" x=\"202\" y=\"33\" width=\"40\" height=\"5\"/><rect className=\"ar-ink\" x=\"197\" y=\"38\" width=\"50\" height=\"5\"/><rect className=\"ar-ink\" x=\"192\" y=\"43\" width=\"60\" height=\"30\"/><rect className=\"ar-ink\" x=\"197\" y=\"73\" width=\"50\" height=\"5\"/><rect className=\"ar-ink\" x=\"202\" y=\"78\" width=\"40\" height=\"5\"/><rect className=\"ar-ink\" x=\"207\" y=\"83\" width=\"30\" height=\"5\"/><rect className=\"ar-ground\" x=\"207\" y=\"33\" width=\"30\" height=\"5\"/><rect className=\"ar-ground\" x=\"202\" y=\"38\" width=\"40\" height=\"5\"/><rect className=\"ar-ground\" x=\"197\" y=\"43\" width=\"50\" height=\"30\"/><rect className=\"ar-ground\" x=\"202\" y=\"73\" width=\"40\" height=\"5\"/><rect className=\"ar-ground\" x=\"207\" y=\"78\" width=\"30\" height=\"5\"/><text x=\"272\" y=\"68\" className=\"ar-vt\">2 / 3 COINS</text><rect className=\"ar-red\" x=\"37\" y=\"104\" width=\"10\" height=\"5\"/><rect className=\"ar-red\" x=\"52\" y=\"104\" width=\"10\" height=\"5\"/><rect className=\"ar-red\" x=\"32\" y=\"109\" width=\"35\" height=\"10\"/><rect className=\"ar-red\" x=\"37\" y=\"119\" width=\"25\" height=\"5\"/><rect className=\"ar-red\" x=\"42\" y=\"124\" width=\"15\" height=\"5\"/><rect className=\"ar-red\" x=\"47\" y=\"129\" width=\"5\" height=\"5\"/><rect className=\"ar-red\" x=\"85\" y=\"104\" width=\"10\" height=\"5\"/><rect className=\"ar-red\" x=\"100\" y=\"104\" width=\"10\" height=\"5\"/><rect className=\"ar-red\" x=\"80\" y=\"109\" width=\"35\" height=\"10\"/><rect className=\"ar-red\" x=\"85\" y=\"119\" width=\"25\" height=\"5\"/><rect className=\"ar-red\" x=\"90\" y=\"124\" width=\"15\" height=\"5\"/><rect className=\"ar-red\" x=\"95\" y=\"129\" width=\"5\" height=\"5\"/><rect className=\"ar-heart-off\" x=\"133\" y=\"104\" width=\"10\" height=\"5\"/><rect className=\"ar-heart-off\" x=\"148\" y=\"104\" width=\"10\" height=\"5\"/><rect className=\"ar-heart-off\" x=\"128\" y=\"109\" width=\"35\" height=\"10\"/><rect className=\"ar-heart-off\" x=\"133\" y=\"119\" width=\"25\" height=\"5\"/><rect className=\"ar-heart-off\" x=\"138\" y=\"124\" width=\"15\" height=\"5\"/><rect className=\"ar-heart-off\" x=\"143\" y=\"129\" width=\"5\" height=\"5\"/><text x=\"192\" y=\"136\" className=\"ar-vt\">2 LIVES</text></svg>"
+  },
+  {
+   "title": "The dialogue box",
+   "usage": "A 4px-framed box with a speaker in Press Start, one sentence in VT323 and a blinking ▼. Anything the page says to the reader (a hint, a caveat, a decision) is said this way.",
+   "svg": "<svg viewBox=\"0 0 480 160\" shapeRendering=\"crispEdges\"><title>Dialogue box</title><rect className=\"ar-ink\" x=\"24\" y=\"24\" width=\"432\" height=\"112\"/><rect className=\"ar-raised\" x=\"32\" y=\"32\" width=\"416\" height=\"96\"/><text x=\"48\" y=\"60\" className=\"ar-px-t ar-red-t\">SHOPKEEPER</text><text x=\"48\" y=\"92\" className=\"ar-vt\">Three coins for the door, friend.</text><text x=\"48\" y=\"116\" className=\"ar-vt\">The red blocks are the trouble.</text><text x=\"424\" y=\"118\" className=\"ar-px-t ar-blink\">▼</text></svg>"
+  }
+ ],
+ "sample_headline": "A first screen in Arcade.",
+ "sample_note": "A leaderboard page: the HUD across the top with hearts, a NEW HIGH SCORE ribbon, the title in Press Start, PRESS START blinking, the HP bar in blocks, the coins, a shopkeeper, and the high-score board.",
+ "sample": "<div className=\"ar-sample\"><div className=\"ar-sample-in\">\n  <div className=\"ar-hud ar-hud-top\"><span className=\"t-label\">1UP</span><span className=\"ar-hud-score\">004120</span><span className=\"ar-hearts\"><i></i><i></i><i className=\"ar-heart-off-i\"></i></span><span className=\"t-label\">COINS</span><span className=\"ar-coins\"><i className=\"ar-coin-i\"></i><i className=\"ar-coin-i\"></i><i className=\"ar-coin-i ar-coin-off-i\"></i></span><span className=\"t-label ar-hud-end\">HI</span><span className=\"ar-hud-score ar-dim\">009999</span></div>\n  <div className=\"ar-sample-grid\">\n    <div>\n      <span className=\"ar-ribbon ar-ribbon-green\">▲ NEW HIGH SCORE</span>\n      <h2 className=\"t-display-xl ar-sample-h\">High scores</h2>\n      <p className=\"t-body ar-sample-lede\">Level 3, The Foundry. Collect three coins to open the door. The red blocks are where you lose a life.</p>\n      <div className=\"ar-hp ar-hp-lg\"><span className=\"t-label\">HP</span><span className=\"ar-blocks\"><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"ar-b-on\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i><i className=\"\"></i></span><span className=\"t-mono ar-hp-n\">70%</span></div>\n      <p className=\"t-combo ar-combo\">×3 COMBO!</p>\n      <div className=\"ar-row ar-cta\"><button className=\"ar-btn ar-btn-primary\">Press start</button><button className=\"ar-btn ar-btn-coin\">Insert coin</button><span className=\"t-label ar-blink ar-press\">▶ PRESS START</span></div>\n    </div>\n    <div className=\"ar-sample-fig\"><svg viewBox=\"0 0 320 240\" shapeRendering=\"crispEdges\"><title>Coins, bricks and a star on a checkered field</title><rect className=\"ar-chk\" x=\"0\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"0\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"16\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"32\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"48\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"64\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"80\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"96\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"112\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"128\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"144\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"160\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"176\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"192\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"16\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"48\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"80\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"112\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"144\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"176\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"208\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"240\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"272\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"304\" y=\"208\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"0\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"32\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"64\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"96\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"128\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"160\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"192\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"224\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"256\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-chk\" x=\"288\" y=\"224\" width=\"16\" height=\"16\"/><rect className=\"ar-brick\" x=\"40\" y=\"48\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"44\" y=\"52\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"44\" y=\"52\" width=\"4\" height=\"20\"/><rect className=\"ar-brick\" x=\"72\" y=\"48\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"76\" y=\"52\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"76\" y=\"52\" width=\"4\" height=\"20\"/><rect className=\"ar-brick\" x=\"104\" y=\"48\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"108\" y=\"52\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"108\" y=\"52\" width=\"4\" height=\"20\"/><rect className=\"ar-brick\" x=\"136\" y=\"48\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"140\" y=\"52\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"140\" y=\"52\" width=\"4\" height=\"20\"/><rect className=\"ar-yellow\" x=\"68\" y=\"112\" width=\"24\" height=\"4\"/><rect className=\"ar-yellow\" x=\"64\" y=\"116\" width=\"32\" height=\"4\"/><rect className=\"ar-yellow\" x=\"60\" y=\"120\" width=\"40\" height=\"4\"/><rect className=\"ar-yellow\" x=\"56\" y=\"124\" width=\"48\" height=\"24\"/><rect className=\"ar-yellow\" x=\"60\" y=\"148\" width=\"40\" height=\"4\"/><rect className=\"ar-yellow\" x=\"64\" y=\"152\" width=\"32\" height=\"4\"/><rect className=\"ar-yellow\" x=\"68\" y=\"156\" width=\"24\" height=\"4\"/><rect className=\"ar-ink\" x=\"72\" y=\"124\" width=\"16\" height=\"4\"/><rect className=\"ar-ink\" x=\"76\" y=\"128\" width=\"8\" height=\"16\"/><rect className=\"ar-ink\" x=\"72\" y=\"144\" width=\"16\" height=\"4\"/><rect className=\"ar-yellow\" x=\"132\" y=\"112\" width=\"24\" height=\"4\"/><rect className=\"ar-yellow\" x=\"128\" y=\"116\" width=\"32\" height=\"4\"/><rect className=\"ar-yellow\" x=\"124\" y=\"120\" width=\"40\" height=\"4\"/><rect className=\"ar-yellow\" x=\"120\" y=\"124\" width=\"48\" height=\"24\"/><rect className=\"ar-yellow\" x=\"124\" y=\"148\" width=\"40\" height=\"4\"/><rect className=\"ar-yellow\" x=\"128\" y=\"152\" width=\"32\" height=\"4\"/><rect className=\"ar-yellow\" x=\"132\" y=\"156\" width=\"24\" height=\"4\"/><rect className=\"ar-ink\" x=\"136\" y=\"124\" width=\"16\" height=\"4\"/><rect className=\"ar-ink\" x=\"140\" y=\"128\" width=\"8\" height=\"16\"/><rect className=\"ar-ink\" x=\"136\" y=\"144\" width=\"16\" height=\"4\"/><rect className=\"ar-ink\" x=\"196\" y=\"112\" width=\"24\" height=\"4\"/><rect className=\"ar-ink\" x=\"192\" y=\"116\" width=\"32\" height=\"4\"/><rect className=\"ar-ink\" x=\"188\" y=\"120\" width=\"40\" height=\"4\"/><rect className=\"ar-ink\" x=\"184\" y=\"124\" width=\"48\" height=\"24\"/><rect className=\"ar-ink\" x=\"188\" y=\"148\" width=\"40\" height=\"4\"/><rect className=\"ar-ink\" x=\"192\" y=\"152\" width=\"32\" height=\"4\"/><rect className=\"ar-ink\" x=\"196\" y=\"156\" width=\"24\" height=\"4\"/><rect className=\"ar-ground\" x=\"196\" y=\"116\" width=\"24\" height=\"4\"/><rect className=\"ar-ground\" x=\"192\" y=\"120\" width=\"32\" height=\"4\"/><rect className=\"ar-ground\" x=\"188\" y=\"124\" width=\"40\" height=\"24\"/><rect className=\"ar-ground\" x=\"192\" y=\"148\" width=\"32\" height=\"4\"/><rect className=\"ar-ground\" x=\"196\" y=\"152\" width=\"24\" height=\"4\"/><rect className=\"ar-magenta\" x=\"252\" y=\"40\" width=\"5\" height=\"5\"/><rect className=\"ar-magenta\" x=\"247\" y=\"45\" width=\"15\" height=\"5\"/><rect className=\"ar-magenta\" x=\"232\" y=\"50\" width=\"45\" height=\"5\"/><rect className=\"ar-magenta\" x=\"237\" y=\"55\" width=\"35\" height=\"5\"/><rect className=\"ar-magenta\" x=\"242\" y=\"60\" width=\"25\" height=\"5\"/><rect className=\"ar-magenta\" x=\"242\" y=\"65\" width=\"25\" height=\"5\"/><rect className=\"ar-magenta\" x=\"237\" y=\"70\" width=\"15\" height=\"5\"/><rect className=\"ar-magenta\" x=\"257\" y=\"70\" width=\"15\" height=\"5\"/><rect className=\"ar-red\" x=\"245\" y=\"160\" width=\"10\" height=\"5\"/><rect className=\"ar-red\" x=\"260\" y=\"160\" width=\"10\" height=\"5\"/><rect className=\"ar-red\" x=\"240\" y=\"165\" width=\"35\" height=\"10\"/><rect className=\"ar-red\" x=\"245\" y=\"175\" width=\"25\" height=\"5\"/><rect className=\"ar-red\" x=\"250\" y=\"180\" width=\"15\" height=\"5\"/><rect className=\"ar-red\" x=\"255\" y=\"185\" width=\"5\" height=\"5\"/><rect className=\"ar-brick\" x=\"40\" y=\"184\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"44\" y=\"188\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"44\" y=\"188\" width=\"4\" height=\"20\"/><rect className=\"ar-brick\" x=\"72\" y=\"184\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"76\" y=\"188\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"76\" y=\"188\" width=\"4\" height=\"20\"/><rect className=\"ar-brick\" x=\"104\" y=\"184\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"108\" y=\"188\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"108\" y=\"188\" width=\"4\" height=\"20\"/><rect className=\"ar-brick\" x=\"136\" y=\"184\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"140\" y=\"188\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"140\" y=\"188\" width=\"4\" height=\"20\"/><rect className=\"ar-brick\" x=\"168\" y=\"184\" width=\"32\" height=\"32\"/><rect className=\"ar-brick-hi\" x=\"172\" y=\"188\" width=\"24\" height=\"4\"/><rect className=\"ar-brick-hi\" x=\"172\" y=\"188\" width=\"4\" height=\"20\"/></svg></div>\n  </div>\n  <div className=\"ar-dialog ar-dialog-wide\"><span className=\"ar-dialog-who\">SHOPKEEPER</span><p>Three coins for the door, friend. Two more and the board is yours.</p><span className=\"ar-dialog-more ar-blink\">▼</span></div>\n  <div className=\"ar-sample-bottom\"><div className=\"ar-panel\"><p className=\"t-label\">Scores by level</p><Question data=\"$series\" height=\"220px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"level\",\"type\":\"ordinal\",\"title\":\"Level\"},\"y\":{\"field\":\"score\",\"type\":\"quantitative\",\"title\":\"Score\"},\"color\":{\"field\":\"player\",\"type\":\"nominal\",\"title\":\"Player\"},\"xOffset\":{\"field\":\"player\"}}}}} /></div><div className=\"ar-panel\"><p className=\"t-label\">High-score board</p><DataTable data=\"$table\" rowKey=\"rank\" height=\"220px\" columns={[{\"col\":\"rank\",\"title\":\"Rank\",\"align\":\"right\"},{\"col\":\"player\",\"title\":\"Player\"},{\"col\":\"score\",\"title\":\"Score\",\"align\":\"right\",\"fmt\":\"06d\"},{\"col\":\"level\",\"title\":\"Level\",\"align\":\"right\"}]} /></div></div>\n  <p className=\"t-body-s ar-foot\">Synthetic scores · reset daily · press start to play</p>\n</div></div>",
+ "dos": [
+  "Snap everything to 4px; crisp edges only.",
+  "Status in HP blocks: green, yellow, red, with a glyph.",
+  "Yellow for the one highlighted figure; a ribbon for the win.",
+  "Press Start 2P for three-word headlines and the HUD; Pixelify for reading."
+ ],
+ "donts": [
+  "No anti-aliased shapes, no rounded corners, no blur.",
+  "No magenta or cyan as status.",
+  "No Press Start 2P paragraphs or anything above 44px.",
+  "No score without a zero-pad."
+ ],
+ "binding_losses": "The pixel edge and stepped shadow, the scanlines, the checker ground, the HP blocks, the coins, hearts and the dialogue box have no contract slot; they are the --ds-pixel-edge and --ds-pixel-shadow properties and the ar-* classes, plus inline SVG with crispEdges. The ink border rides the border token so kit frames are ink.",
+ "footer": "Cabinet first, CRT second. Fonts: Press Start 2P 400, Pixelify Sans 400/500/700, VT323 400, all Google-hosted.",
+ "tpl": {
+  "brand": "ARCADE",
+  "dash_title": "Leaderboard · today",
+  "kpis": [
+   [
+    "Score",
+    "score",
+    "",
+    "",
+    "06d",
+    "player 1 · ▲ 2 places"
+   ],
+   [
+    "Coins",
+    "coins",
+    "",
+    "",
+    null,
+    "of 3 collected"
+   ],
+   [
+    "HP",
+    "hp",
+    "",
+    "%",
+    null,
+    "▲ full above 50"
+   ]
+  ],
+  "dash_table_title": "High-score board",
+  "slide_eyebrow": "Level 3 · The Foundry",
+  "slide_title": "Three coins open the door.",
+  "slide_sub": "A playthrough in six slides: the score, the coins, the blocks, and where the trouble is.",
+  "slide_foot": "Synthetic scores · reset daily",
+  "slide_stat_label": "HP",
+  "slide_stat_col": "hp",
+  "slide_stat_suffix": "%",
+  "slide_body": "Nine of thirteen blocks are green. Below half they turn yellow; below a quarter, red, and that is where you lose a life.",
+  "split": [
+   "GREEN · 70%",
+   "RED ZONE · 30%"
+  ],
+  "ed_kicker": "Playthrough · Level 3",
+  "ed_headline": "How the Foundry door really opens",
+  "ed_deck": "Three coins, one shopkeeper, and the red blocks everyone hits on the first try. A walk through level three, with the scores to prove it.",
+  "ed_byline": "By player 1 · 2 Oct 2026 · 4 min read",
+  "ed_body": "The Foundry starts you with two hearts and no coins. The first coin is free; the second is behind the moving platform; the third is where the shopkeeper stands, and he wants a word before you take it. Most runs end on the red blocks between the second coin and the third, which is the point of the level: the door is easy, the walk to it is not.",
+  "ed_pull_col": "score",
+  "ed_pull_fmt": "06d",
+  "ed_pull_label": "Score, player 1",
+  "steps": [
+   [
+    "Insert coin.",
+    "One hundred players start the level. Each cell is a player; red means still playing, blue means through the door."
+   ],
+   [
+    "The red blocks.",
+    "Sixty are through, twenty-five are stuck on the platform, fifteen have gone back to the shop. The level is doing its job."
+   ]
+  ],
+  "step_caption": "Fig. 1 · 100 players, by outcome · synthetic",
+  "app_rows": [
+   [
+    "AAA · level 5",
+    "009999 · 3 coins",
+    "Cleared",
+    "ok"
+   ],
+   [
+    "KIM · level 4",
+    "008120 · 2 coins",
+    "Low HP",
+    "warn"
+   ],
+   [
+    "VIV · level 3",
+    "004120 · 2 coins",
+    "Game over",
+    "bad"
+   ],
+   [
+    "ZED · level 2",
+    "002210 · 1 coin",
+    "Idle",
+    "idle"
+   ]
+  ],
+  "app_cta": "New game",
+  "app_cta2": "Save",
+  "landing_eyebrow": "Arcade",
+  "landing_headline": "Insert coin. Press start.",
+  "landing_sub": "A page that keeps score: coins for progress, hearts for chances, an HP bar for anything with a threshold, and a ribbon when you win.",
+  "cta": "Press start",
+  "cta2": "How to play",
+  "features": [
+   [
+    "Keep score",
+    "Every count is a number you can beat. Zero-padded, in VT323, with a high score beside it."
+   ],
+   [
+    "Three coins",
+    "Goals are small and visible: a row of coins that fill as you go."
+   ],
+   [
+    "Blocks, not bars",
+    "Status is green, yellow or red blocks with a glyph. You always know where the trouble is."
+   ]
+  ]
+ },
+ "data": {
+  "rows": [
+   {
+    "rank": 1,
+    "player": "AAA",
+    "score": 9999,
+    "level": 5
+   },
+   {
+    "rank": 2,
+    "player": "KIM",
+    "score": 8120,
+    "level": 4
+   },
+   {
+    "rank": 3,
+    "player": "VIV",
+    "score": 4120,
+    "level": 3
+   },
+   {
+    "rank": 4,
+    "player": "ZED",
+    "score": 2210,
+    "level": 2
+   },
+   {
+    "rank": 5,
+    "player": "BOB",
+    "score": 900,
+    "level": 1
+   }
+  ],
+  "queries": {
+   "series": "select level, player, score from rows order by level",
+   "table": "select rank, player, score, level from rows order by rank",
+   "totals": "select 4120 as score, 2 as coins, 70 as hp, 3 as level from rows limit 1"
+  },
+  "segments": [
+   "Today",
+   "Week",
+   "All time"
+  ],
+  "segment_default": "Today",
+  "select_label": "Level",
+  "input_placeholder": "Enter initials",
+  "switch_label": "Show ghosts",
+  "tabs": [
+   "Scores",
+   "Levels",
+   "Options"
+  ],
+  "tab_body": "Scores: five players, five levels.",
+  "progress_label": "Level 3 · 70%",
+  "progress": 70,
+  "chart_title": "Scores by level",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": "bar",
+    "encoding": {
+     "x": {
+      "field": "level",
+      "type": "ordinal",
+      "title": "Level"
+     },
+     "y": {
+      "field": "score",
+      "type": "quantitative",
+      "title": "Score"
+     },
+     "color": {
+      "field": "player",
+      "type": "nominal",
+      "title": "Player"
+     }
+    }
+   }
+  },
+  "row_key": "rank",
+  "table_columns": [
+   {
+    "col": "rank",
+    "title": "Rank",
+    "align": "right"
+   },
+   {
+    "col": "player",
+    "title": "Player"
+   },
+   {
+    "col": "score",
+    "title": "Score",
+    "align": "right",
+    "fmt": "06d"
+   },
+   {
+    "col": "level",
+    "title": "Level",
+    "align": "right"
+   }
+  ],
+  "table_height": "220px"
+ },
+ "css": "\n.ds-arcade { --ds-cover-bg: var(--ds-ground);\n  --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-red); --ds-hand-fill2: var(--ds-blue); --ds-hand-muted: var(--ds-blue-soft); --ds-hand-ground: var(--ds-raised); --ds-hand-stroke: 4; --ds-hand-cap: square; --ds-hand-bg: var(--ds-ground);\n  --ds-tpl-edge: 4px solid var(--ds-ink); --ds-tpl-radius: 0; --ds-tpl-rule: 4px solid var(--ds-ink); --ds-tpl-tile-shadow: 4px 4px 0 0 var(--ds-ink); --ds-tag-radius: 0;\n  --ds-slide-bg: var(--ds-raised); --ds-slide-fg: var(--ds-ink); --ds-slide-title-bg: var(--ds-red); --ds-slide-title-fg: var(--ds-on-red); --ds-slide-split-a: var(--ds-positive); --ds-slide-split-a-fg: var(--ds-on-yellow); --ds-slide-split-b: var(--ds-negative); --ds-slide-split-b-fg: var(--ds-on-red);\n  --ds-hero-bg: var(--ds-raised); }\n.dark .ds-arcade { background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0) 0 3px, rgba(255,255,255,.05) 3px 4px); }\n.ds-arcade .ds-section h2, .ds-arcade .ds-cover-name { font-family: var(--font-display); font-weight: 400; text-transform: uppercase; line-height: 1.3; }\n.ds-arcade .ds-section h2 { font-size: clamp(18px, 2.4vw, 30px); max-width: 26ch; } .ds-arcade .ds-cover-name { font-size: clamp(26px, 4vw, 48px); color: var(--ds-red); text-shadow: 4px 4px 0 var(--ds-ink); }\n.ds-arcade .ds-eyebrow, .ds-arcade .ds-chip, .ds-arcade .t-label { font-family: var(--font-display); font-size: 10px; letter-spacing: .04em; }\n.ds-arcade .ds-chip { border-radius: 0; border-width: 2px; } .ds-arcade .ds-comp, .ds-arcade .ds-motif, .ds-arcade .ds-note, .ds-arcade .ds-voice, .ds-arcade .ds-hand-panel, .ds-arcade .ds-swatch-chip { border: 4px solid var(--ds-ink); border-radius: 0; }\n.ds-arcade .ds-lede, .ds-arcade .ds-two p, .ds-arcade .ds-three p { font-size: 18px; }\n.ds-arcade .ds-hand-art, .ds-arcade .ds-tpl-figure, .ds-arcade .ar-sample { background-image: linear-gradient(45deg, var(--ds-sunk) 25%, transparent 25%, transparent 75%, var(--ds-sunk) 75%), linear-gradient(45deg, var(--ds-sunk) 25%, transparent 25%, transparent 75%, var(--ds-sunk) 75%); background-size: 32px 32px; background-position: 0 0, 16px 16px; }\n.ds-arcade .h-num { font-family: var(--font-mono); font-size: 44px; font-weight: 400; letter-spacing: 0; } .ds-arcade .h-text { font-family: var(--font-display); font-size: 8px; letter-spacing: 0; paint-order: stroke; stroke: var(--ds-raised); stroke-width: 3px; }\n.ds-arcade .ds-tpl-brand { font-family: var(--font-display); font-size: 14px; color: var(--ds-red); } .ds-arcade .ds-tpl-slide-h, .ds-arcade .ds-tpl-hero-h, .ds-arcade .ds-tpl-ed-h { font-family: var(--font-display); text-transform: uppercase; line-height: 1.35; font-weight: 400; }\n.ds-arcade .ds-tpl-slide-h { font-size: 6.5cqw; } .ds-arcade .ds-tpl-hero-h { font-size: clamp(20px, 3vw, 36px); max-width: 16ch; } .ds-arcade .ds-tpl-ed-h { font-size: clamp(16px, 2.2vw, 26px); max-width: 30ch; }\n.ds-arcade .ds-tpl-slide-big { font-family: var(--font-mono); font-weight: 400; letter-spacing: 0; } .ds-arcade .ds-tpl-stage-top, .ds-arcade .ds-tpl-stage-foot { font-family: var(--font-display); font-size: 1.8cqw; }\n.ds-arcade .ds-tpl-pull-n { font-family: var(--font-mono); color: var(--ds-red); } .ds-arcade .ds-tpl-dropcap { font-family: var(--font-display); font-size: 36px; padding-top: 10px; color: var(--ds-red); }\n.ds-arcade .ds-tpl-tag { font-family: var(--font-display); font-size: 9px; border: 0; margin: 4px; box-shadow: var(--ds-pixel-edge); background: var(--ds-raised); }\n.ds-arcade .ds-tpl-tag.is-idle { background: var(--ds-sunk); }\n.ds-arcade .ds-tpl-stage-title .ds-tpl-stage-foot, .ds-arcade .ds-tpl-stage-title .ds-tpl-stage-top { opacity: 1; }\n.ds-arcade .ar-ground { fill: var(--ds-ground); } .ds-arcade .ar-chk { fill: var(--ds-sunk); } .ds-arcade .ar-raised { fill: var(--ds-raised); } .ds-arcade .ar-sunk { fill: var(--ds-sunk); } .ds-arcade .ar-ink { fill: var(--ds-ink); }\n.ds-arcade .ar-red { fill: var(--ds-red); } .ds-arcade .ar-blue { fill: var(--ds-blue); } .ds-arcade .ar-yellow { fill: var(--ds-yellow); } .ds-arcade .ar-green { fill: var(--ds-positive); } .ds-arcade .ar-magenta { fill: var(--ds-magenta); } .ds-arcade .ar-cyan { fill: var(--ds-cyan); }\n.ds-arcade .ar-heart-off { fill: var(--ds-line); } .ds-arcade .ar-brick { fill: var(--ds-red); } .ds-arcade .ar-brick-hi { fill: var(--ds-magenta); }\n.ds-arcade .ar-px-t { font-family: var(--font-display); font-size: 11px; fill: var(--ds-ink); } .ds-arcade .ar-on-ink { fill: var(--ds-ground); } .ds-arcade .ar-yellow-t { fill: var(--ds-yellow); } .ds-arcade .ar-red-t { fill: var(--ds-red); } .ds-arcade .ar-vt { font-family: var(--font-mono); font-size: 26px; fill: var(--ds-ink); }\n@keyframes ar-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }\n.ds-arcade .ar-blink { animation: ar-blink 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .ds-arcade .ar-blink { animation: none; } }\n.ds-arcade .ar-btn { font-family: var(--font-display); font-size: 12px; line-height: 16px; padding: 12px 16px; border: 0; margin: 4px 8px 8px 4px; background: var(--ds-raised); color: var(--ds-ink); box-shadow: var(--ds-pixel-shadow); cursor: pointer; text-transform: uppercase; }\n.ds-arcade .ar-btn:active { transform: translate(4px, 4px); box-shadow: var(--ds-pixel-edge); } .ds-arcade .ar-btn:focus-visible { outline: 4px solid var(--ds-yellow); outline-offset: 4px; }\n.ds-arcade .ar-btn-primary { background: var(--ds-red); color: var(--ds-on-red); } .ds-arcade .ar-btn-coin { background: var(--ds-yellow); color: var(--ds-on-yellow); } .ds-arcade .ar-btn-blue { background: var(--ds-blue); color: var(--ds-on-blue); } .ds-arcade .ar-btn-sm { padding: 8px 12px; font-size: 10px; }\n.ds-arcade .ar-tag { display: inline-flex; gap: 6px; padding: 5px 8px; margin: 4px; border: 0; box-shadow: var(--ds-pixel-edge); font-family: var(--font-display); font-size: 9px; text-transform: uppercase; background: var(--ds-raised); color: var(--ds-ink); }\n.ds-arcade .ar-tag-coin { background: var(--ds-yellow); color: var(--ds-on-yellow); } .ds-arcade .ar-tag-green { background: var(--ds-positive-soft); color: var(--ds-positive); } .ds-arcade .ar-tag-red { background: var(--ds-negative-soft); color: var(--ds-negative); } .ds-arcade .ar-tag-warn { background: var(--ds-caution-soft); color: var(--ds-caution); } .ds-arcade .ar-tag-magenta { color: var(--ds-magenta); } .ds-arcade .ar-tag-cyan { color: var(--ds-cyan); }\n.dark .ds-arcade .ar-tag-cyan, .dark .ds-arcade .ar-tag-magenta { background: var(--ds-sunk); }\n.ds-arcade .ar-stat { display: grid; gap: 4px; padding: 12px 16px; border: 4px solid var(--ds-ink); background: var(--ds-raised); min-width: 180px; } .ds-arcade .ar-stat-coin { background: var(--ds-yellow); } .ds-arcade .ar-small { font-size: 14px; color: var(--ds-ink-muted); } .ds-arcade .ar-stat-coin .ar-small { color: var(--ds-on-yellow); } .ds-arcade .ds-stats { gap: 16px; }\n.ds-arcade .ar-combo { color: var(--ds-red); text-shadow: 3px 3px 0 var(--ds-ink); margin: 0; } .dark .ds-arcade .ar-combo { text-shadow: 3px 3px 0 var(--ds-blue); }\n.ds-arcade .ar-callout { padding: 12px 16px; border: 4px solid var(--ds-ink); font-size: 17px; line-height: 1.4; background: var(--ds-raised); } .ds-arcade .ar-callout strong { font-weight: 700; } .ds-arcade .ar-callout-green { background: var(--ds-positive-soft); } .ds-arcade .ar-callout-warn { background: var(--ds-caution-soft); } .ds-arcade .ar-callout-red { background: var(--ds-negative-soft); }\n.ds-arcade .ar-dialog { position: relative; margin: 4px; padding: 14px 40px 14px 16px; box-shadow: var(--ds-pixel-edge); background: var(--ds-raised); } .ds-arcade .ar-dialog p { margin: 6px 0 0; font-family: var(--font-mono); font-size: 22px; line-height: 26px; } .ds-arcade .ar-dialog-who { font-family: var(--font-display); font-size: 10px; color: var(--ds-red); } .ds-arcade .ar-dialog-more { position: absolute; right: 14px; bottom: 10px; font-family: var(--font-display); font-size: 12px; } .ds-arcade .ar-dialog-wide { margin: 32px 4px 4px; }\n.ds-arcade .ar-panel { border: 4px solid var(--ds-ink); background: var(--ds-raised); padding: 16px; display: grid; gap: 10px; min-width: 0; position: relative; } .ds-arcade .ar-panel-active { box-shadow: 8px 8px 0 0 var(--ds-ink); } .ds-arcade .ar-panel h3 { margin: 0; } .ds-arcade .ar-card-p { margin: 0; line-height: 1.45; color: var(--ds-ink-muted); } .ds-arcade .ar-panel > .t-label { display: block; }\n.ds-arcade .ar-ribbon { display: inline-block; justify-self: start; font-family: var(--font-display); font-size: 10px; line-height: 16px; padding: 6px 12px; background: var(--ds-yellow); color: var(--ds-on-yellow); margin: 4px 4px 8px; box-shadow: var(--ds-pixel-edge); } .ds-arcade .ar-ribbon-green { background: var(--ds-positive); color: var(--ds-on-red); }\n.ds-arcade .ar-hud { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 12px; background: var(--ds-ink); color: var(--ds-ground); } .ds-arcade .ar-hud .t-label { color: var(--ds-yellow); } .ds-arcade .ar-hud-score { font-family: var(--font-mono); font-size: 26px; line-height: 24px; color: var(--ds-ground); } .ds-arcade .ar-dim { opacity: .6; } .ds-arcade .ar-hud-end { margin-left: auto; }\n.dark .ds-arcade .ar-hud { background: var(--ds-sunk); color: var(--ds-ink); box-shadow: inset 0 0 0 2px var(--ds-line); } .dark .ds-arcade .ar-hud-score { color: var(--ds-ink); }\n.ds-arcade .ar-hearts { display: inline-flex; gap: 6px; } .ds-arcade .ar-hearts i { display: inline-block; width: 18px; height: 16px; background: var(--ds-red); clip-path: polygon(14% 0, 43% 0, 43% 14%, 57% 14%, 57% 0, 86% 0, 86% 14%, 100% 14%, 100% 43%, 86% 43%, 86% 57%, 71% 57%, 71% 71%, 57% 71%, 57% 86%, 43% 86%, 43% 71%, 29% 71%, 29% 57%, 14% 57%, 14% 43%, 0 43%, 0 14%, 14% 14%); } .ds-arcade .ar-hearts .ar-heart-off-i { background: var(--ds-ink-muted); opacity: .5; }\n.ds-arcade .ar-hp { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; } .ds-arcade .ar-blocks { display: inline-flex; gap: 4px; padding: 4px; background: var(--ds-ink); } .ds-arcade .ar-blocks i { display: block; width: 14px; height: 14px; background: var(--ds-sunk); } .ds-arcade .ar-blocks .ar-b-on { background: var(--ds-positive); } .ds-arcade .ar-hp-n { color: var(--ds-ink); }\n.ds-arcade .ar-hp-lg { margin-top: 24px; } .ds-arcade .ar-hp-lg .ar-blocks i { width: 20px; height: 20px; }\n.ds-arcade .ar-coins { display: inline-flex; gap: 6px; } .ds-arcade .ar-coin-i { display: inline-block; width: 16px; height: 16px; background: var(--ds-yellow); box-shadow: inset 0 0 0 2px var(--ds-ink); } .ds-arcade .ar-coin-off-i { background: transparent; }\n.ds-arcade .ar-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; } .ds-arcade .ar-cta { justify-content: flex-start; margin-top: 24px; gap: 16px; } .ds-arcade .ar-press { color: var(--ds-red); }\n.ds-arcade .ar-sample { background-color: var(--ds-ground); padding: 0 20px 48px; border-top: 4px solid var(--ds-ink); border-bottom: 4px solid var(--ds-ink); }\n.ds-arcade .ar-sample-in { max-width: 1140px; margin: 0 auto; } .ds-arcade .ar-hud-top { margin: 0 -20px; padding: 12px 20px; }\n.ds-arcade .ar-sample-grid { display: grid; gap: 32px; margin-top: 32px; align-items: center; } .ds-arcade .ar-sample-h { margin: 8px 0 0; color: var(--ds-red); text-shadow: 4px 4px 0 var(--ds-ink); } .ds-arcade .ar-sample-lede { margin-top: 16px; max-width: 46ch; } .ds-arcade .ar-sample .ar-combo { margin-top: 20px; }\n.ds-arcade .ar-sample-fig svg { display: block; width: 100%; max-width: 320px; height: auto; margin: 0 auto; border: 4px solid var(--ds-ink); background: var(--ds-raised); box-shadow: 8px 8px 0 0 var(--ds-ink); }\n.ds-arcade .ar-sample-bottom { display: grid; gap: 24px; margin-top: 32px; } .ds-arcade .ar-foot { margin: 20px 0 0; text-align: center; color: var(--ds-ink-muted); }\n@container (min-width: 760px) { .ds-arcade .ar-sample { padding: 0 40px 64px; } .ds-arcade .ar-hud-top { margin: 0 -40px; padding: 12px 40px; } .ds-arcade .ar-sample-grid { grid-template-columns: 3fr 2fr; } .ds-arcade .ar-sample-bottom { grid-template-columns: 1fr 1fr; } }\n"
+}

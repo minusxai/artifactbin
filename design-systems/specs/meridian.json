@@ -1,0 +1,989 @@
+{
+ "slug": "meridian",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Meridian cover: a product window with a rail, a stat row and a chart, and a command palette floating over it</title>\n<defs><radialGradient id=\"me-glow\" cx=\"35%\" cy=\"0%\" r=\"70%\"><stop offset=\"0\" className=\"me-glow-a\"/><stop offset=\"1\" className=\"me-glow-b\"/></radialGradient></defs>\n<rect className=\"me-ground\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/><rect fill=\"url(#me-glow)\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<rect className=\"me-frame\" x=\"16\" y=\"20\" width=\"448\" height=\"268\" rx=\"10\"/>\n<line className=\"me-hair\" x1=\"16\" y1=\"50\" x2=\"464\" y2=\"50\"/>\n<circle className=\"me-dot\" cx=\"34\" cy=\"35\" r=\"4\"/><circle className=\"me-dot\" cx=\"48\" cy=\"35\" r=\"4\"/><circle className=\"me-dot\" cx=\"62\" cy=\"35\" r=\"4\"/>\n<rect className=\"me-line-h\" x=\"124\" y=\"32\" width=\"40\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"170\" y=\"32\" width=\"6\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"182\" y=\"32\" width=\"52\" height=\"6\" rx=\"3\"/>\n<rect className=\"me-pill-k\" x=\"372\" y=\"27\" width=\"78\" height=\"16\" rx=\"8\"/><text x=\"411\" y=\"38.5\" className=\"me-pill-kt\" textAnchor=\"middle\">⌘K · Search</text>\n<line className=\"me-hair\" x1=\"112\" y1=\"50\" x2=\"112\" y2=\"288\"/>\n<rect className=\"me-avatar-sq\" x=\"28\" y=\"62\" width=\"18\" height=\"18\" rx=\"5\"/><rect className=\"me-line-h\" x=\"52\" y=\"68\" width=\"44\" height=\"6\" rx=\"3\"/>\n<rect className=\"me-active\" x=\"24\" y=\"96\" width=\"80\" height=\"20\" rx=\"5\"/><rect className=\"me-blue\" x=\"32\" y=\"103\" width=\"6\" height=\"6\" rx=\"2\"/><rect className=\"me-line-on\" x=\"44\" y=\"103\" width=\"36\" height=\"6\" rx=\"3\"/>\n<rect className=\"me-line-h\" x=\"32\" y=\"127\" width=\"44\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"32\" y=\"147\" width=\"32\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"32\" y=\"167\" width=\"20\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"32\" y=\"187\" width=\"44\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"32\" y=\"207\" width=\"32\" height=\"6\" rx=\"3\"/>\n<rect className=\"me-card\" x=\"128\" y=\"66\" width=\"98\" height=\"54\" rx=\"7\"/><rect className=\"me-card\" x=\"234\" y=\"66\" width=\"98\" height=\"54\" rx=\"7\"/><rect className=\"me-card\" x=\"340\" y=\"66\" width=\"108\" height=\"54\" rx=\"7\"/>\n<rect className=\"me-line-h\" x=\"138\" y=\"76\" width=\"40\" height=\"5\" rx=\"2.5\"/><text x=\"138\" y=\"106\" className=\"me-num\">640</text>\n<rect className=\"me-line-h\" x=\"244\" y=\"76\" width=\"34\" height=\"5\" rx=\"2.5\"/><text x=\"244\" y=\"106\" className=\"me-num\">48,210</text>\n<rect className=\"me-line-h\" x=\"350\" y=\"76\" width=\"30\" height=\"5\" rx=\"2.5\"/><text x=\"350\" y=\"106\" className=\"me-num\">118%</text><rect className=\"me-pill\" x=\"404\" y=\"92\" width=\"36\" height=\"14\" rx=\"7\"/><text x=\"422\" y=\"102\" className=\"me-pill-t\" textAnchor=\"middle\">↑ 12%</text>\n<rect className=\"me-card\" x=\"128\" y=\"132\" width=\"320\" height=\"130\" rx=\"7\"/>\n<rect className=\"me-line-h\" x=\"140\" y=\"142\" width=\"54\" height=\"5\" rx=\"2.5\"/>\n<line className=\"me-hair-dash\" x1=\"140\" y1=\"206\" x2=\"436\" y2=\"206\"/><line className=\"me-hair-dash\" x1=\"140\" y1=\"176\" x2=\"436\" y2=\"176\"/>\n<rect className=\"me-bar\" x=\"150\" y=\"228\" width=\"9\" height=\"18\" rx=\"2\"/><rect className=\"me-bar\" x=\"167\" y=\"220\" width=\"9\" height=\"26\" rx=\"2\"/><rect className=\"me-bar\" x=\"184\" y=\"224\" width=\"9\" height=\"22\" rx=\"2\"/><rect className=\"me-bar\" x=\"201\" y=\"212\" width=\"9\" height=\"34\" rx=\"2\"/><rect className=\"me-bar\" x=\"218\" y=\"216\" width=\"9\" height=\"30\" rx=\"2\"/><rect className=\"me-bar\" x=\"235\" y=\"202\" width=\"9\" height=\"44\" rx=\"2\"/><rect className=\"me-bar\" x=\"252\" y=\"206\" width=\"9\" height=\"40\" rx=\"2\"/><rect className=\"me-bar\" x=\"269\" y=\"194\" width=\"9\" height=\"52\" rx=\"2\"/><rect className=\"me-bar\" x=\"286\" y=\"198\" width=\"9\" height=\"48\" rx=\"2\"/><rect className=\"me-blue\" x=\"303\" y=\"184\" width=\"9\" height=\"62\" rx=\"2\"/>\n<path className=\"me-blue-stroke\" d=\"M330 226 C 350 214, 362 210, 376 192 S 404 170, 420 162 S 432 154, 436 150\"/><circle className=\"me-blue\" cx=\"436\" cy=\"150\" r=\"3.5\"/>\n<rect className=\"me-shadow\" x=\"94\" y=\"90\" width=\"216\" height=\"104\" rx=\"10\"/>\n<rect className=\"me-palette\" x=\"88\" y=\"84\" width=\"216\" height=\"104\" rx=\"10\"/>\n<rect className=\"me-line-h\" x=\"102\" y=\"96\" width=\"6\" height=\"6\" rx=\"3\"/><rect className=\"me-line-on\" x=\"116\" y=\"96\" width=\"78\" height=\"6\" rx=\"3\"/><line className=\"me-caret\" x1=\"198\" y1=\"92\" x2=\"198\" y2=\"106\"/>\n<line className=\"me-hair\" x1=\"88\" y1=\"116\" x2=\"304\" y2=\"116\"/>\n<rect className=\"me-active\" x=\"94\" y=\"122\" width=\"204\" height=\"22\" rx=\"5\"/><rect className=\"me-blue\" x=\"104\" y=\"130\" width=\"6\" height=\"6\" rx=\"2\"/><rect className=\"me-line-on\" x=\"118\" y=\"130\" width=\"90\" height=\"6\" rx=\"3\"/><rect className=\"me-key\" x=\"262\" y=\"126\" width=\"14\" height=\"14\" rx=\"3\"/><rect className=\"me-key\" x=\"279\" y=\"126\" width=\"14\" height=\"14\" rx=\"3\"/>\n<rect className=\"me-line-h\" x=\"104\" y=\"156\" width=\"6\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"118\" y=\"156\" width=\"70\" height=\"6\" rx=\"3\"/><rect className=\"me-key\" x=\"279\" y=\"152\" width=\"14\" height=\"14\" rx=\"3\"/>\n</svg>",
+ "name": "Meridian",
+ "tagline": "Quiet surfaces. One blue. Nothing to forgive.",
+ "mood": "Sleek",
+ "jobs": "Product dashboards, docs, SaaS marketing",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Geist",
+   "wght@400;500;600;700"
+  ],
+  [
+   "Geist Mono",
+   "wght@400;500;600"
+  ]
+ ],
+ "families": {
+  "display": "\"Geist\", \"Inter\", system-ui, sans-serif",
+  "sans": "\"Geist\", \"Inter\", system-ui, sans-serif",
+  "mono": "\"Geist Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "canvas",
+   "light": "#f4f4f5",
+   "dark": "#0b0c0f",
+   "usage": "Page ground. Visibly a step below the surfaces by day; true near-black by night.",
+   "group": "Grounds"
+  },
+  {
+   "name": "surface",
+   "light": "#ffffff",
+   "dark": "#14161b",
+   "usage": "Cards, fields, menus, the rail. Separated from canvas by a hairline and a 1px top highlight, never a drop shadow.",
+   "group": "Grounds"
+  },
+  {
+   "name": "surface-sunk",
+   "light": "#eeeef0",
+   "dark": "#1c1f26",
+   "usage": "Code wells, table header, inactive tracks, the inside of a keyboard key, the row hover tint.",
+   "group": "Grounds"
+  },
+  {
+   "name": "hairline",
+   "light": "#e4e4e7",
+   "dark": "#262a33",
+   "usage": "Every border. One weight, one colour, everywhere.",
+   "group": "Grounds"
+  },
+  {
+   "name": "hairline-strong",
+   "light": "#c9c9ce",
+   "dark": "#3a3f4b",
+   "usage": "Borders on hover, the active field, the table header rule, the top of a glass card.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#111114",
+   "dark": "#f2f2f4",
+   "usage": "Primary text and icons.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-soft",
+   "light": "#5a5b63",
+   "dark": "#a0a3ad",
+   "usage": "Secondary text, labels, placeholders, captions.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-faint",
+   "light": "#8e8f98",
+   "dark": "#6b6f7a",
+   "usage": "Tertiary text: timestamps, helper text, disabled labels, the drawing line.",
+   "group": "Ink"
+  },
+  {
+   "name": "blue",
+   "light": "#2e5bff",
+   "dark": "#7a9bff",
+   "usage": "The one colour. Primary actions, links, the focus ring, the first series. One fill per view.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-blue",
+   "light": "#ffffff",
+   "dark": "#0b0c0f",
+   "usage": "Text and icons on blue fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "blue-soft",
+   "light": "#e9eeff",
+   "dark": "#182040",
+   "usage": "Tinted ground for the active nav item, selected rows, info callouts.",
+   "group": "Brand"
+  },
+  {
+   "name": "blue-ink",
+   "light": "#2449d0",
+   "dark": "#9db5ff",
+   "usage": "Blue as text: links, the active nav label, the selected tab.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#15803d",
+   "dark": "#4ade80",
+   "usage": "Success text and the up-delta. Always paired with a word or a dot.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#e6f6ec",
+   "dark": "#0f2a1a",
+   "usage": "Ground for success tags.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#a16207",
+   "dark": "#facc15",
+   "usage": "Warnings and pending states.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#fdf4d8",
+   "dark": "#2d2408",
+   "usage": "Ground for warning tags.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#dc2626",
+   "dark": "#f87171",
+   "usage": "Errors, destructive actions, the down-delta.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#fde8e8",
+   "dark": "#2f1313",
+   "usage": "Ground for error tags and callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "violet",
+   "light": "#7c5cff",
+   "dark": "#a78bfa",
+   "usage": "Second chart series only.",
+   "group": "Chart"
+  },
+  {
+   "name": "teal",
+   "light": "#0d9488",
+   "dark": "#2dd4bf",
+   "usage": "Third chart series only.",
+   "group": "Chart"
+  }
+ ],
+ "contract": {
+  "background": "canvas",
+  "foreground": "ink",
+  "card": "surface",
+  "card-foreground": "ink",
+  "popover": "surface",
+  "popover-foreground": "ink",
+  "primary": "blue",
+  "primary-foreground": "on-blue",
+  "secondary": "blue-soft",
+  "secondary-foreground": "blue-ink",
+  "muted": "surface-sunk",
+  "muted-foreground": "ink-soft",
+  "accent": "surface-sunk",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "on-blue",
+  "border": "hairline",
+  "input": "hairline",
+  "ring": "blue",
+  "chart-1": "blue",
+  "chart-2": "violet",
+  "chart-3": "teal",
+  "chart-4": "ink-faint",
+  "chart-5": "caution"
+ },
+ "radius_contract": "8px",
+ "extra_vars": {
+  "shadow-tile": {
+   "light": "inset 0 1px 0 rgba(255,255,255,.7), 0 1px 2px rgba(17,17,20,.04)",
+   "dark": "inset 0 1px 0 rgba(255,255,255,.05), 0 1px 2px rgba(0,0,0,.4)"
+  },
+  "shadow-float": {
+   "light": "0 1px 2px rgba(17,17,20,.06), 0 16px 40px -12px rgba(17,17,20,.22)",
+   "dark": "0 1px 2px rgba(0,0,0,.5), 0 24px 60px -16px rgba(0,0,0,.8)"
+  },
+  "shadow-key": {
+   "light": "inset 0 -2px 0 #e4e4e7, 0 1px 0 #c9c9ce",
+   "dark": "inset 0 -2px 0 #262a33, 0 1px 0 #3a3f4b"
+  },
+  "btn-ring": {
+   "light": "inset 0 0 0 1px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.18)",
+   "dark": "inset 0 0 0 1px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.16)"
+  },
+  "glow": {
+   "light": "radial-gradient(600px 300px at 30% 0%, rgba(46,91,255,.10), transparent 70%)",
+   "dark": "radial-gradient(600px 300px at 30% 0%, rgba(122,155,255,.18), transparent 70%)"
+  },
+  "glass": {
+   "light": "linear-gradient(180deg, #c9c9ce, #e4e4e7)",
+   "dark": "linear-gradient(180deg, #3a3f4b, rgba(58,63,75,0))"
+  },
+  "glow-a": {
+   "light": ".12",
+   "dark": ".22"
+  },
+  "focus-ring": {
+   "light": "0 0 0 2px #f4f4f5, 0 0 0 4px #2e5bff",
+   "dark": "0 0 0 2px #0b0c0f, 0 0 0 4px #7a9bff"
+  },
+  "chip-radius": "999px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(48px, 7vw, 96px)",
+   "lh": ".98",
+   "weight": 600,
+   "ls": "-0.045em",
+   "sample": "Ship on Tuesday.",
+   "usage": "One per page. Hero headlines. Semibold, never bold: the presence comes from size and tracking, not weight."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(32px, 4.2vw, 52px)",
+   "lh": "1.04",
+   "weight": 600,
+   "ls": "-0.04em",
+   "sample": "Everything in one place",
+   "usage": "Section openers."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "28px",
+   "lh": "32px",
+   "weight": 600,
+   "ls": "-0.03em",
+   "sample": "Billing overview",
+   "usage": "Page titles."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "16px",
+   "lh": "22px",
+   "weight": 600,
+   "ls": "-0.015em",
+   "sample": "Active subscriptions",
+   "usage": "Card titles, dialog titles, table group heads."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "18px",
+   "lh": "28px",
+   "weight": 400,
+   "ls": "-0.01em",
+   "sample": "Meridian keeps the surface quiet so the one thing that matters can be loud.",
+   "usage": "Lead paragraphs and marketing copy."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "14px",
+   "lh": "22px",
+   "weight": 400,
+   "sample": "Invoices are issued on the first of the month and settle within three days.",
+   "usage": "Default UI and reading text. 14px: product density, not a blog."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 400,
+   "sample": "Updated 4 minutes ago",
+   "usage": "Captions, helper text, dense cells."
+  },
+  {
+   "name": "label",
+   "family": "sans",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 500,
+   "ls": "0.01em",
+   "sample": "Monthly recurring revenue",
+   "usage": "Field labels, column heads, stat labels. Medium weight, sentence case: Meridian never shouts."
+  },
+  {
+   "name": "eyebrow",
+   "family": "mono",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 500,
+   "ls": "0.02em",
+   "sample": "● Billing · Overview",
+   "usage": "Section eyebrows and breadcrumbs in the mono, with a dot. The only place the mono appears outside code."
+  },
+  {
+   "name": "numeral",
+   "family": "sans",
+   "size": "36px",
+   "lh": "40px",
+   "weight": 600,
+   "ls": "-0.035em",
+   "sample": "$48,210",
+   "usage": "KPI figures in the sans, tabular, with the unit set smaller beside them. Mono is for code, not for money.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "POST /v1/invoices · 201",
+   "usage": "Code, paths, IDs, keyboard keys."
+  }
+ ],
+ "idea_headline": "The product that gets out of the way.",
+ "idea": "Meridian is the look of software confident enough to be quiet: a grey canvas, white surfaces that sit on it under a 1px top highlight, hairlines instead of shadows, 14px sans everywhere, and one blue used exactly once per view. At night the surfaces turn to glass with a gradient edge and a soft blue glow behind the hero. Nothing decorates; depth comes from layering, hierarchy from spacing and tracking, and the only coloured things are the data and the one action.",
+ "use_for": "Product dashboards, settings and billing screens, developer and product docs, SaaS marketing pages, changelogs, anything a professional reads every day and should never notice the chrome of.",
+ "avoid_when": "Editorial or narrative subjects, anything that wants warmth, print or texture, consumer brands with a personality to show, or a page whose job is to be remembered rather than used.",
+ "principles_headline": "Layer, do not decorate.",
+ "principles": [
+  [
+   "Canvas, then surface.",
+   "The page is a grey canvas; everything that holds content is a white surface on it, with a hairline and a 1px top highlight so it sits rather than floats. A shadow means the thing is floating: a palette, a menu, a toast."
+  ],
+  [
+   "One blue, used once.",
+   "Blue is the primary action, the link, the active nav item and the focus ring. In any one view only one element is a blue fill."
+  ],
+  [
+   "Density is respect.",
+   "14px body, 22px leading, 8px steps. A professional reads this all day; give them the information, not the air."
+  ],
+  [
+   "Tracking, not weight.",
+   "Display type is semibold with negative tracking that tightens as it grows. Bold is never used."
+  ],
+  [
+   "Monochrome until the data.",
+   "The chrome has no colour. Charts, status dots and deltas are the only coloured things, so they are the first things seen."
+  ]
+ ],
+ "voice": [
+  "Short, literal, present tense: \"Invoice sent.\" \"3 seats remaining.\"",
+  "Sentence case everywhere, including buttons and column heads.",
+  "Numbers carry the message; the sentence around them is as short as it can be.",
+  "Keyboard shortcuts are shown, not described: ⌘K, not \"press command and K\"."
+ ],
+ "colour_headline": "Two greys, one white, one blue.",
+ "colour_note": "Day is a grey canvas with white surfaces; Night is near-black with surfaces one step lighter and a gradient edge. The hairline is the only structural colour. Blue carries action and focus; three status colours carry state and always come with a dot or a word. Violet and teal exist only for charts.",
+ "chart_series": [
+  "blue",
+  "violet",
+  "teal",
+  "ink-faint",
+  "caution"
+ ],
+ "chart_note": "Blue is the focal series; violet and teal exist only for charts so they never compete with action or status. The fourth series is grey. Gridlines are the hairline; the axis line is removed.",
+ "type_headline": "Geist at 14, tracked tight above 28.",
+ "type_note": "One family for display and UI, semibold above 28px with tracking tightening as size grows; regular 400 for everything readable. Geist Mono carries code, keys, and the dotted eyebrow. Labels are medium weight in sentence case: there is no caps role in Meridian.",
+ "space_headline": "An 8px grid, a 1px line, an 8px corner.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Gaps between an icon and its label; tag padding-y."
+  ],
+  [
+   "space-2 · 8px",
+   "Gaps inside controls; between stacked fields."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-x; table cell padding."
+  ],
+  [
+   "space-4 · 16px",
+   "Card padding on dense screens; gap between cards."
+  ],
+  [
+   "space-6 · 24px",
+   "Card padding on wide screens; section padding inside a page."
+  ],
+  [
+   "space-8 · 32px",
+   "Between groups of cards."
+  ],
+  [
+   "space-12 · 48px",
+   "Section breaks on marketing pages."
+  ],
+  [
+   "space-16 · 64px",
+   "Page gutters on wide screens."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-sm · 6px",
+   "Tags, keyboard keys, inline code chips, small buttons."
+  ],
+  [
+   "radius · 8px",
+   "Buttons, fields, cards, menus. The default."
+  ],
+  [
+   "radius-lg · 12px",
+   "Dialogs, the command palette, the marketing hero card."
+  ],
+  [
+   "hairline · 1px",
+   "Every border. Strengthens to hairline-strong on hover and on the active field."
+  ]
+ ],
+ "depth": [
+  [
+   "tile",
+   "A 1px top highlight and a 2% contact shadow on every surface: cards sit on the canvas. Never a drop shadow on a tile."
+  ],
+  [
+   "float",
+   "The command palette, menus, dialogs and toasts: a 1px contact line plus a 40px drop at 22%. The only real shadow."
+  ],
+  [
+   "glass",
+   "At night a card is a surface with a gradient edge from hairline-strong to nothing, so the top catches light."
+  ],
+  [
+   "glow",
+   "A radial blue glow behind a hero or an empty state, 10% by day and 18% at night. The only gradient besides glass."
+  ],
+  [
+   "key",
+   "Keyboard keys have a 2px inset bottom and a 1px drop, like a real keycap."
+  ],
+  [
+   "focus-ring",
+   "A 2px canvas gap then 2px blue. On every control, never removed."
+  ]
+ ],
+ "motion": [
+  [
+   "Hover",
+   "Borders strengthen and surfaces tint by one step, 120ms ease-out. Nothing moves on hover except a link underline."
+  ],
+  [
+   "Press",
+   "Buttons scale to 0.98 for 80ms. No colour change beyond the hover tint."
+  ],
+  [
+   "Reveal",
+   "The kit reveal-up at 240ms with 60ms stagger for card grids. One pass on page load; nothing re-animates on scroll."
+  ],
+  [
+   "Float",
+   "The palette and menus fade and rise 4px in 160ms; they leave in 100ms."
+  ],
+  [
+   "Loop",
+   "One: the live status dot pulses every 2.4s. A spinner is the only other thing that moves on its own."
+  ],
+  [
+   "Charts",
+   "Lines draw in over 400ms on first paint; bars grow from the baseline. Reduced motion shows the finished chart."
+  ]
+ ],
+ "components_headline": "The kit already looks like this.",
+ "components_note": "Meridian is close to the contract's native shape, so kit components arrive nearly finished: white surfaces, hairlines, 8px corners, a blue primary. The authored classes add the top highlight, the keycap, the status dot, the glass edge and the command palette.",
+ "buttons": "<Button>Create invoice</Button><Button variant=\"secondary\">Duplicate</Button><Button variant=\"outline\">Export</Button><Button variant=\"ghost\">Cancel</Button><button className=\"me-btn me-btn-primary\">Create invoice <kbd className=\"me-kbd me-kbd-on\">⌘N</kbd></button><button className=\"me-btn\">Export CSV</button><button className=\"me-btn me-btn-ghost\">Cancel</button><button className=\"me-btn me-btn-danger\">Delete</button>",
+ "buttons_note": "Kit buttons left; authored me-btn right. The primary is blue with a 1px darker inset ring and a top highlight; the secondary is a white surface with a hairline that strengthens on hover; the ghost has no border until hover. A key chip inside the primary shows its shortcut.",
+ "tags": "<Badge>Active</Badge><Badge variant=\"secondary\">Trial</Badge><Badge variant=\"outline\">Draft</Badge><Badge variant=\"destructive\">Past due</Badge><span className=\"me-tag me-tag-ok\"><i></i>Paid</span><span className=\"me-tag me-tag-warn\"><i></i>Pending</span><span className=\"me-tag me-tag-bad\"><i></i>Failed</span><span className=\"me-tag\"><i></i>Draft</span><span className=\"me-tag me-tag-ok me-tag-live\"><i></i>Live</span>",
+ "tags_note": "Status tags are a 6px dot plus a word in sentence case on a soft ground. The dot is the colour; the word is the meaning. A live dot pulses.",
+ "fields_note": "Fields are white surfaces with a hairline; the label sits above in the label role and helper text below in ink-faint. Focus swaps the hairline for the blue ring.",
+ "stats": "<div className=\"me-stat-card ds-stats-card\"><div className=\"me-stat\"><span className=\"t-label\">Monthly recurring revenue</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"mrr\" prefix=\"$\" format=\",.0f\" /></span><span className=\"me-delta me-up\">↑ 12.4% vs last month</span></div><div className=\"me-stat\"><span className=\"t-label\">Active subscriptions</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"subs\" format=\",.0f\" /></span><span className=\"me-delta\">+84 this month</span></div></div>",
+ "stats_note": "A stat is a label, a sans numeral and a delta. Stats share one card and are separated by hairlines, never boxed individually. The delta is the only coloured text.",
+ "callouts": "<Alert><AlertTitle>Card declined</AlertTitle><AlertDescription>Update the payment method to keep the workspace active.</AlertDescription></Alert><div className=\"me-callout me-callout-info\"><strong>Invoices settle in 3 days.</strong> Payouts arrive the following business day.</div><div className=\"me-callout me-callout-ok\"><strong>Payment received.</strong> Invoice #1042 is paid in full.</div><div className=\"me-callout me-callout-bad\"><strong>Webhook failed.</strong> Endpoint returned 502 three times; retrying in 10 minutes.</div>",
+ "callouts_note": "A callout is a hairline box with a 2px left rule in the status colour. The ground stays white except for errors, which take the soft red.",
+ "chart_comp_note": "Charts take blue first and violet second with no area fills. Gridlines are the hairline; the axis line is removed; labels are ink-soft at 12px.",
+ "table_note": "Tables are the densest thing in Meridian: 12px padding, hairline rows, a sunk header with a hairline-strong rule, tabular figures right-aligned, initials avatars beside names. No zebra stripes; hover tints the row by one step.",
+ "card": "<div className=\"me-glass\"><div className=\"me-glass-in me-card-x\"><div className=\"me-card-head\"><span className=\"t-title\">Usage this cycle</span><span className=\"me-tag me-tag-ok\"><i></i>On track</span></div><div className=\"me-metric-row\"><span>API requests</span><span className=\"me-bar-track\"><span className=\"me-bar-fill\" data-w=\"72\"></span></span><span className=\"me-metric-n\">7.2M / 10M</span></div><div className=\"me-metric-row\"><span>Seats</span><span className=\"me-bar-track\"><span className=\"me-bar-fill\" data-w=\"60\"></span></span><span className=\"me-metric-n\">18 / 30</span></div><div className=\"me-metric-row\"><span>Storage</span><span className=\"me-bar-track\"><span className=\"me-bar-fill me-bar-warn\" data-w=\"91\"></span></span><span className=\"me-metric-n\">91 GB / 100 GB</span></div><div className=\"me-card-foot\"><button className=\"me-btn\">Manage plan</button><span className=\"me-kbd-hint\">Press <kbd className=\"me-kbd\">⌘</kbd><kbd className=\"me-kbd\">K</kbd> to search</span></div></div></div>",
+ "card_note": "A glass card: a white surface inside a 1px gradient edge that brightens at the top. The metric row (label, a 4px track, the figure) shows a quantity inside a card without a chart. The keyboard hint sits in the footer.",
+ "motifs_headline": "Hairlines, keys, a palette, and a 1.5px line.",
+ "motifs_note": "Meridian's devices are the furniture of good software: the command palette, the keycap, the status dot, the glass edge, the shine divider and the metric row. Each is a hairline, a surface and at most one blue.",
+ "motifs": [
+  {
+   "title": "The command palette",
+   "usage": "A floating surface with the only real shadow in the system: a search line, hairline-separated results, the selected row on blue-soft, a key chip per action. Use it as the hero device of any product page.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Command palette</title><rect className=\"me-shadow\" x=\"86\" y=\"30\" width=\"316\" height=\"150\" rx=\"10\"/><rect className=\"me-palette\" x=\"80\" y=\"24\" width=\"316\" height=\"150\" rx=\"10\"/><rect className=\"me-line-h\" x=\"96\" y=\"40\" width=\"8\" height=\"8\" rx=\"4\"/><text x=\"114\" y=\"48\" className=\"me-svg-label\">Create invoice for Acme</text><line className=\"me-caret\" x1=\"268\" y1=\"36\" x2=\"268\" y2=\"52\"/><line className=\"me-hair\" x1=\"80\" y1=\"62\" x2=\"396\" y2=\"62\"/><rect className=\"me-active\" x=\"88\" y=\"70\" width=\"300\" height=\"28\" rx=\"6\"/><rect className=\"me-blue\" x=\"100\" y=\"81\" width=\"6\" height=\"6\" rx=\"2\"/><text x=\"116\" y=\"88\" className=\"me-svg-on\">New invoice</text><rect className=\"me-key\" x=\"340\" y=\"76\" width=\"16\" height=\"16\" rx=\"4\"/><text x=\"348\" y=\"88\" className=\"me-key-t\" textAnchor=\"middle\">⌘</text><rect className=\"me-key\" x=\"360\" y=\"76\" width=\"16\" height=\"16\" rx=\"4\"/><text x=\"368\" y=\"88\" className=\"me-key-t\" textAnchor=\"middle\">N</text><rect className=\"me-line-h\" x=\"100\" y=\"113\" width=\"6\" height=\"6\" rx=\"3\"/><text x=\"116\" y=\"120\" className=\"me-svg-label\">Go to customers</text><rect className=\"me-key\" x=\"360\" y=\"108\" width=\"16\" height=\"16\" rx=\"4\"/><text x=\"368\" y=\"120\" className=\"me-key-t\" textAnchor=\"middle\">G</text><rect className=\"me-line-h\" x=\"100\" y=\"145\" width=\"6\" height=\"6\" rx=\"3\"/><text x=\"116\" y=\"152\" className=\"me-svg-label\">Export this month</text><rect className=\"me-key\" x=\"340\" y=\"140\" width=\"16\" height=\"16\" rx=\"4\"/><text x=\"348\" y=\"152\" className=\"me-key-t\" textAnchor=\"middle\">⌘</text><rect className=\"me-key\" x=\"360\" y=\"140\" width=\"16\" height=\"16\" rx=\"4\"/><text x=\"368\" y=\"152\" className=\"me-key-t\" textAnchor=\"middle\">E</text></svg>"
+  },
+  {
+   "title": "The keyboard key and the code chip",
+   "usage": "A 6px keycap with a 2px inset bottom for shortcuts; a sunk chip with a 6px corner for versions, IDs, endpoints and paths. Mono at 12px; neither ever wraps or shouts.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Keys and chips</title><rect className=\"me-key\" x=\"40\" y=\"44\" width=\"48\" height=\"48\" rx=\"8\"/><text x=\"64\" y=\"75\" className=\"me-key-t me-key-big\" textAnchor=\"middle\">⌘</text><rect className=\"me-key\" x=\"98\" y=\"44\" width=\"48\" height=\"48\" rx=\"8\"/><text x=\"122\" y=\"75\" className=\"me-key-t me-key-big\" textAnchor=\"middle\">K</text><text x=\"164\" y=\"73\" className=\"me-svg-label\">Open command palette</text><rect className=\"me-chip\" x=\"40\" y=\"124\" width=\"92\" height=\"30\" rx=\"6\"/><text x=\"86\" y=\"144\" className=\"me-chip-t\" textAnchor=\"middle\">v2.4.0</text><rect className=\"me-chip\" x=\"144\" y=\"124\" width=\"150\" height=\"30\" rx=\"6\"/><text x=\"219\" y=\"144\" className=\"me-chip-t\" textAnchor=\"middle\">POST /v1/invoices</text><rect className=\"me-chip\" x=\"306\" y=\"124\" width=\"92\" height=\"30\" rx=\"6\"/><text x=\"352\" y=\"144\" className=\"me-chip-t\" textAnchor=\"middle\">inv_1042</text></svg>"
+  },
+  {
+   "title": "The status dot",
+   "usage": "A 6px dot in the status colour beside a word in sentence case. Live pulses; everything else holds still. A dot never appears without its word.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Status dots</title><circle className=\"me-dot-ok\" cx=\"60\" cy=\"100\" r=\"6\"/><circle className=\"me-dot-ok me-dot-ring\" cx=\"60\" cy=\"100\" r=\"12\"/><text x=\"80\" y=\"105\" className=\"me-svg-on\">Live</text><circle className=\"me-dot-ok\" cx=\"170\" cy=\"100\" r=\"6\"/><text x=\"190\" y=\"105\" className=\"me-svg-on\">Paid</text><circle className=\"me-dot-warn\" cx=\"280\" cy=\"100\" r=\"6\"/><text x=\"300\" y=\"105\" className=\"me-svg-on\">Pending</text><circle className=\"me-dot-bad\" cx=\"400\" cy=\"100\" r=\"6\"/><text x=\"420\" y=\"105\" className=\"me-svg-on\">Failed</text></svg>"
+  },
+  {
+   "title": "The glass edge",
+   "usage": "A card is a surface inside a 1px gradient border that fades from hairline-strong at the top to the hairline at the bottom; at night it fades to nothing. The top catches light; the card sits on the canvas without a shadow.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Glass edge</title><defs><linearGradient id=\"me-ge\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" className=\"me-ge-a\"/><stop offset=\"1\" className=\"me-ge-b\"/></linearGradient></defs><rect fill=\"url(#me-ge)\" x=\"60\" y=\"30\" width=\"360\" height=\"140\" rx=\"11\"/><rect className=\"me-surface\" x=\"61\" y=\"31\" width=\"358\" height=\"138\" rx=\"10\"/><rect className=\"me-line-h\" x=\"84\" y=\"54\" width=\"90\" height=\"6\" rx=\"3\"/><text x=\"84\" y=\"104\" className=\"me-num me-num-big\">$48,210</text><rect className=\"me-pill\" x=\"84\" y=\"118\" width=\"60\" height=\"18\" rx=\"9\"/><text x=\"114\" y=\"130.5\" className=\"me-pill-t\" textAnchor=\"middle\">↑ 12.4%</text><rect className=\"me-line-h\" x=\"300\" y=\"54\" width=\"60\" height=\"6\" rx=\"3\"/><rect className=\"me-track\" x=\"300\" y=\"76\" width=\"96\" height=\"6\" rx=\"3\"/><rect className=\"me-blue\" x=\"300\" y=\"76\" width=\"68\" height=\"6\" rx=\"3\"/><rect className=\"me-track\" x=\"300\" y=\"98\" width=\"96\" height=\"6\" rx=\"3\"/><rect className=\"me-blue\" x=\"300\" y=\"98\" width=\"42\" height=\"6\" rx=\"3\"/><rect className=\"me-track\" x=\"300\" y=\"120\" width=\"96\" height=\"6\" rx=\"3\"/><rect className=\"me-warn\" x=\"300\" y=\"120\" width=\"88\" height=\"6\" rx=\"3\"/></svg>"
+  },
+  {
+   "title": "The shine divider",
+   "usage": "A hairline that brightens to blue across its middle fifth. Use it once, between the hero and the first section of a marketing page, or above a footer. Never between cards.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Shine divider</title><defs><linearGradient id=\"me-sh\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" className=\"me-sh-a\"/><stop offset=\".4\" className=\"me-sh-a\"/><stop offset=\".5\" className=\"me-sh-b\"/><stop offset=\".6\" className=\"me-sh-a\"/><stop offset=\"1\" className=\"me-sh-a\"/></linearGradient></defs><rect className=\"me-line-h\" x=\"40\" y=\"60\" width=\"140\" height=\"8\" rx=\"4\"/><rect className=\"me-line-h\" x=\"40\" y=\"78\" width=\"220\" height=\"6\" rx=\"3\"/><rect fill=\"url(#me-sh)\" x=\"40\" y=\"110\" width=\"400\" height=\"1.5\"/><rect className=\"me-line-h\" x=\"40\" y=\"136\" width=\"90\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"180\" y=\"136\" width=\"90\" height=\"6\" rx=\"3\"/><rect className=\"me-line-h\" x=\"320\" y=\"136\" width=\"90\" height=\"6\" rx=\"3\"/></svg>"
+  },
+  {
+   "title": "The metric row",
+   "usage": "Label, a 4px track with a blue fill, the figure. Three to five rows replace a bar chart inside a card; the caution fill marks a quota near its limit.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Metric rows</title><text x=\"40\" y=\"60\" className=\"me-svg-label\">API requests</text><rect className=\"me-track\" x=\"170\" y=\"54\" width=\"200\" height=\"6\" rx=\"3\"/><rect className=\"me-blue\" x=\"170\" y=\"54\" width=\"144\" height=\"6\" rx=\"3\"/><text x=\"440\" y=\"60\" className=\"me-svg-num\" textAnchor=\"end\">7.2M / 10M</text><text x=\"40\" y=\"104\" className=\"me-svg-label\">Seats</text><rect className=\"me-track\" x=\"170\" y=\"98\" width=\"200\" height=\"6\" rx=\"3\"/><rect className=\"me-blue\" x=\"170\" y=\"98\" width=\"120\" height=\"6\" rx=\"3\"/><text x=\"440\" y=\"104\" className=\"me-svg-num\" textAnchor=\"end\">18 / 30</text><text x=\"40\" y=\"148\" className=\"me-svg-label\">Storage</text><rect className=\"me-track\" x=\"170\" y=\"142\" width=\"200\" height=\"6\" rx=\"3\"/><rect className=\"me-warn\" x=\"170\" y=\"142\" width=\"182\" height=\"6\" rx=\"3\"/><text x=\"440\" y=\"148\" className=\"me-svg-num\" textAnchor=\"end\">91 / 100 GB</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Meridian.",
+ "sample_note": "A billing overview in the full app shell: a rail with one active item, a topbar with the breadcrumb and ⌘K, the page title with the one blue button, three stats sharing one card, a revenue line, an invoice table with initials and status dots, and an activity rail. Everything is hairline-separated; nothing floats.",
+ "sample": "<div className=\"me-sample\"><div className=\"me-shell\">\n  <aside className=\"me-rail\">\n    <div className=\"me-ws\"><span className=\"me-ws-sq\">A</span><span className=\"me-ws-name\">Acme Ltd</span><span className=\"me-ws-chev\">⌄</span></div>\n    <nav className=\"me-nav\"><span className=\"me-nav-item\">Overview</span><span className=\"me-nav-item me-nav-on\">Billing</span><span className=\"me-nav-item\">Customers</span><span className=\"me-nav-item\">Usage</span><span className=\"me-nav-item\">Developers</span><span className=\"me-nav-item\">Settings</span></nav>\n    <div className=\"me-rail-foot\"><span className=\"me-avatar me-avatar-ini\">VK</span><span className=\"me-rail-user\">ops@acme.co</span></div>\n  </aside>\n  <div className=\"me-main\">\n    <div className=\"me-topbar\"><span className=\"t-eyebrow me-crumbs\">Acme Ltd <span className=\"me-sep\">/</span> Billing <span className=\"me-sep\">/</span> <span className=\"me-crumb-on\">Overview</span></span><span className=\"me-search\"><span>Search</span><span className=\"me-kbd-hint\"><kbd className=\"me-kbd\">⌘</kbd><kbd className=\"me-kbd\">K</kbd></span></span></div>\n    <div className=\"me-sample-head\"><div><h2 className=\"t-display-m\">Billing overview</h2><p className=\"me-head-sub\">Updated 4 minutes ago · <span className=\"me-live\"><i></i>Live</span></p></div><div className=\"ds-row\"><button className=\"me-btn\">Export</button><button className=\"me-btn me-btn-primary\">Create invoice <kbd className=\"me-kbd me-kbd-on\">⌘N</kbd></button></div></div>\n    <div className=\"me-stat-card\">\n      <div className=\"me-stat\"><span className=\"t-label\">Monthly recurring revenue</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"mrr\" prefix=\"$\" format=\",.0f\" /></span><span className=\"me-delta me-up\">↑ 12.4% vs last month</span></div>\n      <div className=\"me-stat\"><span className=\"t-label\">Active subscriptions</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"subs\" format=\",.0f\" /></span><span className=\"me-delta\">+84 this month</span></div>\n      <div className=\"me-stat\"><span className=\"t-label\">Past due</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"past_due\" prefix=\"$\" format=\",.0f\" /></span><span className=\"me-delta me-down\">↓ 6 invoices</span></div>\n    </div>\n    <div className=\"me-sample-grid\">\n      <div className=\"me-card-x\"><div className=\"me-card-head\"><span className=\"t-title\">Revenue by plan</span><Segmented value=\"$pick\" options={[\"30 days\",\"90 days\",\"12 months\"]} /></div><Question data=\"$series\" height=\"240px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":{\"type\":\"line\",\"strokeWidth\":2,\"point\":{\"size\":30}},\"encoding\":{\"x\":{\"field\":\"month\",\"type\":\"ordinal\",\"title\":null,\"sort\":[\"May\",\"Jun\",\"Jul\",\"Aug\",\"Sep\",\"Oct\"]},\"y\":{\"field\":\"revenue\",\"type\":\"quantitative\",\"title\":null},\"color\":{\"field\":\"plan\",\"type\":\"nominal\",\"title\":\"Plan\"}}}}} /></div>\n      <div className=\"me-card-x me-card-table\"><div className=\"me-card-head\"><span className=\"t-title\">Recent invoices</span><span className=\"t-label me-faint\">24 open</span></div>\n        <table className=\"me-table\"><thead><tr><th>Customer</th><th className=\"me-r\">Amount</th><th>Status</th></tr></thead><tbody>\n          <tr><td><span className=\"me-ini\">AL</span><span className=\"me-cust\">Acme Ltd<small>#1042</small></span></td><td className=\"me-r\">$4,800</td><td><span className=\"me-dot-tag me-dt-ok\"><i></i>Paid</span></td></tr>\n          <tr><td><span className=\"me-ini\">NW</span><span className=\"me-cust\">Northwind<small>#1041</small></span></td><td className=\"me-r\">$2,150</td><td><span className=\"me-dot-tag me-dt-warn\"><i></i>Pending</span></td></tr>\n          <tr><td><span className=\"me-ini\">UC</span><span className=\"me-cust\">Umbrella Co<small>#1040</small></span></td><td className=\"me-r\">$3,600</td><td><span className=\"me-dot-tag me-dt-ok\"><i></i>Paid</span></td></tr>\n          <tr><td><span className=\"me-ini\">GX</span><span className=\"me-cust\">Globex<small>#1038</small></span></td><td className=\"me-r\">$960</td><td><span className=\"me-dot-tag me-dt-bad\"><i></i>Past due</span></td></tr>\n          <tr><td><span className=\"me-ini\">IT</span><span className=\"me-cust\">Initech<small>#1037</small></span></td><td className=\"me-r\">$1,200</td><td><span className=\"me-dot-tag\"><i></i>Draft</span></td></tr>\n        </tbody></table></div>\n    </div>\n  </div>\n  <aside className=\"me-activity\">\n    <p className=\"t-label me-act-h\">Activity</p>\n    <div className=\"me-act\"><i className=\"me-act-dot me-act-ok\"></i><div><span>Invoice #1042 paid</span><span className=\"me-act-t\">4 min ago</span></div></div>\n    <div className=\"me-act\"><i className=\"me-act-dot\"></i><div><span>Northwind updated their card</span><span className=\"me-act-t\">22 min ago</span></div></div>\n    <div className=\"me-act\"><i className=\"me-act-dot me-act-bad\"></i><div><span>Globex #1038 is 6 days late</span><span className=\"me-act-t\">2 h ago</span></div></div>\n    <div className=\"me-act\"><i className=\"me-act-dot\"></i><div><span>Payout of $18,400 sent</span><span className=\"me-act-t\">Yesterday</span></div></div>\n    <div className=\"me-act\"><i className=\"me-act-dot me-act-blue\"></i><div><span>Usage alert: storage at 91%</span><span className=\"me-act-t\">Yesterday</span></div></div>\n  </aside>\n</div></div>",
+ "dos": [
+  "Put every surface on the canvas with a hairline and the 1px top highlight; reserve the shadow for things that float.",
+  "One blue fill per view.",
+  "Sentence case everywhere, including buttons and table heads.",
+  "Keep body at 14px and let spacing make the hierarchy.",
+  "Show shortcuts as keycaps beside the action they trigger."
+ ],
+ "donts": [
+  "No bold display type; semibold with tight tracking is the ceiling.",
+  "No caps labels, no letter-spaced eyebrows; the mono eyebrow with a dot is the only ornament.",
+  "No gradients beyond the glow and the glass edge, no coloured chrome.",
+  "No rounded corners above 12px; Meridian is not friendly, it is calm.",
+  "No drop shadows on tiles."
+ ],
+ "binding_losses": "The top highlight, the glass edge, the glow, the keycap inset and the hairline-strong hover state have no contract slot; they are the --ds-* properties and me-* classes above. Kit components already match the shape of Meridian, so the losses are small.",
+ "footer": "Day first, Night second. Fonts: Geist 400/500/600/700 and Geist Mono 400/500/600, Google-hosted.",
+ "btn_primary": "me-btn me-btn-primary",
+ "btn_secondary": "me-btn",
+ "hand": {
+  "mode": "outline",
+  "shadow": false,
+  "headline": "Thin grey lines, one blue shape, nothing filled.",
+  "note": "Meridian draws the way its docs draw: 1.5px lines in the faint ink with round caps, surfaces left white, exactly one shape in blue and the second role as a blue outline. No shadows, no texture, no hatching; the drawing should look like a figure from a well-made API reference.",
+  "rules": [
+   [
+    "Stroke",
+    "1.5px in ink-faint, round caps and joins. The drawing is quieter than the text around it."
+   ],
+   [
+    "Fill",
+    "None, except the one blue shape per drawing. The secondary role is a blue outline at 40%."
+   ],
+   [
+    "Shadow",
+    "None. A drawing sits on the surface like a diagram."
+   ],
+   [
+    "Texture",
+    "None. Quiet surfaces stay quiet."
+   ],
+   [
+    "Figures",
+    "Mono at 11px for labels, stroked with the surface so they stay legible on a fill; the sans numeral for the one number."
+   ],
+   [
+    "Motion",
+    "Lines draw in over 400ms on first reveal; nothing after that."
+   ]
+  ]
+ },
+ "tpl": {
+  "brand": "Meridian",
+  "dash_title": "Billing · Overview",
+  "kpis": [
+   [
+    "Monthly recurring revenue",
+    "mrr",
+    "$",
+    "",
+    ",.0f",
+    "↑ 12.4% vs last month"
+   ],
+   [
+    "Active subscriptions",
+    "subs",
+    "",
+    "",
+    ",.0f",
+    "+84 this month"
+   ],
+   [
+    "Past due",
+    "past_due",
+    "$",
+    "",
+    ",.0f",
+    "↓ 6 invoices"
+   ]
+  ],
+  "dash_table_title": "Recent invoices",
+  "dash_chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "line",
+     "strokeWidth": 2
+    },
+    "encoding": {
+     "x": {
+      "field": "month",
+      "type": "ordinal",
+      "title": null,
+      "sort": [
+       "May",
+       "Jun",
+       "Jul",
+       "Aug",
+       "Sep",
+       "Oct"
+      ]
+     },
+     "y": {
+      "field": "revenue",
+      "type": "quantitative",
+      "title": null
+     },
+     "color": {
+      "field": "plan",
+      "type": "nominal",
+      "title": "Plan"
+     }
+    }
+   }
+  },
+  "slide_eyebrow": "Quarterly review",
+  "slide_title": "Revenue grew 12% on fewer, larger accounts.",
+  "slide_sub": "Team plans now carry 64% of recurring revenue; the starter tier is shrinking by design.",
+  "slide_foot": "Synthetic data · Q3 2026",
+  "slide_stat_label": "Net revenue retention",
+  "slide_stat_col": "nrr",
+  "slide_stat_suffix": "%",
+  "slide_body": "Existing customers grew their spend faster than churn removed it. Above 100 is expansion; this quarter it is the highest on record.",
+  "split": [
+   "Team · 64%",
+   "Starter · 36%"
+  ],
+  "ed_kicker": "Changelog · October",
+  "ed_headline": "Invoices now settle in three days",
+  "ed_deck": "Payouts used to wait for the end of the week. From this release they clear on the third business day, and the billing page shows the exact date.",
+  "ed_byline": "By the billing team · 2 Oct 2026 · 3 min read",
+  "ed_body": "Settlement used to be the slowest part of getting paid. An invoice marked paid on Monday would not reach a bank account until the following Monday, and nothing on the billing page said so. From today the settlement window is three business days, the payout date is printed on every paid invoice, and a webhook fires the moment the transfer leaves.",
+  "ed_pull_col": "mrr",
+  "ed_pull_prefix": "$",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "Monthly recurring revenue",
+  "steps": [
+   [
+    "One hundred accounts sign up.",
+    "Each square is one workspace. Sixty start on Team, twenty-five on Starter, fifteen on a trial."
+   ],
+   [
+    "Ninety days later.",
+    "The trials have decided: most converted to Team. The grey squares are the ones that left."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One cohort of 100 workspaces, by plan · synthetic",
+  "app_rows": [
+   [
+    "Acme Ltd · #1042",
+    "$4,800 · due 4 Oct",
+    "Paid",
+    "ok"
+   ],
+   [
+    "Northwind · #1041",
+    "$2,150 · due 2 Oct",
+    "Pending",
+    "warn"
+   ],
+   [
+    "Globex · #1038",
+    "$960 · 6 days late",
+    "Past due",
+    "bad"
+   ],
+   [
+    "Initech · #1037",
+    "$1,200 · draft",
+    "Draft",
+    "idle"
+   ]
+  ],
+  "app_cta": "Create invoice",
+  "app_cta2": "Save",
+  "landing_eyebrow": "Billing for software teams",
+  "landing_headline": "Invoices that pay themselves.",
+  "landing_sub": "Usage-based billing, dunning and payouts in one quiet dashboard. Set up in an afternoon; never think about it again.",
+  "cta": "Start for free",
+  "cta2": "Read the docs",
+  "features": [
+   [
+    "Usage in, invoices out",
+    "Meter any event and bill it monthly, with proration handled for you."
+   ],
+   [
+    "Dunning that works",
+    "Retry schedules, card-update emails and a hosted portal, on by default."
+   ],
+   [
+    "Three-day payouts",
+    "Settled funds reach your account on the third business day, every time."
+   ]
+  ],
+  "plan_eyebrow": "Product plan · Review draft",
+  "plan_title": "Usage-based billing: from meter to invoice",
+  "plan_outcome": "A workspace can meter any event, see the running bill on S1 before the month closes, and receive a correct invoice on S2 with no manual adjustment.",
+  "plan_scope": "Meter ingestion, the running-bill screen (S1), the invoice preview (S2) and the parse-error recovery (S2e). Out: proration rules, credits, multi-currency.",
+  "plan_status": "Plan only · 2 of 6 tasks done · parser verified on fixtures, nothing in production",
+  "plan_screens_note": "S1 desktop keeps the rail and the stat row beside the usage chart; S1 mobile stacks the running bill above the metered rows and moves \"Preview invoice\" to a bottom action.",
+  "plan_flow": "flowchart LR\n  A((Meter events)) -->|Ingest| B[S1 Running bill]\n  B -->|Preview invoice| C{Lines reconcile?}\n  C -->|Yes| D[S2 Invoice preview]\n  C -->|No| E[S2e Unmatched meters]\n  E -->|Map and retry| C\n  D -->|Issue| F((Invoice sent))",
+  "plan_flow_title": "Screen transitions · S1 → S2",
+  "plan_decisions": [
+   [
+    "Show the bill before it is a bill.",
+    "S1 is the running total, updated as events land, so the invoice on S2 is never a surprise."
+   ],
+   [
+    "One primary action per screen.",
+    "Preview invoice on S1, Issue on S2. Everything else is a link or a ⌘K command."
+   ],
+   [
+    "Unmatched meters block issue, not ingest.",
+    "Events are always accepted; S2e lists the meters with no price and keeps the mapping the user has done."
+   ]
+  ],
+  "plan_tasks": [
+   [
+    "Wireframes S1, S2, S2e reviewed",
+    "Design",
+    "Done",
+    true
+   ],
+   [
+    "Meter ingestion idempotent on event id",
+    "Platform",
+    "Done",
+    true
+   ],
+   [
+    "S1 running-bill query under 200ms at 1M events",
+    "Platform",
+    "In progress",
+    false
+   ],
+   [
+    "S2e mapping screen",
+    "App",
+    "Pending",
+    false
+   ],
+   [
+    "Mobile bottom action on S1",
+    "App",
+    "Pending",
+    false
+   ],
+   [
+    "Verify a full month on the fixture workspace",
+    "QA",
+    "Pending",
+    false
+   ]
+  ],
+  "plan_acceptance": "Done means: a fixture workspace with one million events shows the right running bill on S1 within 200ms and issues the matching invoice from S2, and an unmatched meter routes through S2e without losing the mapping."
+ },
+ "data": {
+  "rows": [
+   {
+    "month": "May",
+    "plan": "Team",
+    "revenue": 28400,
+    "invoice": "#1042",
+    "customer": "Acme Ltd",
+    "amount": 4800,
+    "status": "Paid"
+   },
+   {
+    "month": "May",
+    "plan": "Starter",
+    "revenue": 16200,
+    "invoice": "#1041",
+    "customer": "Northwind",
+    "amount": 2150,
+    "status": "Pending"
+   },
+   {
+    "month": "Jun",
+    "plan": "Team",
+    "revenue": 30100,
+    "invoice": "#1040",
+    "customer": "Umbrella Co",
+    "amount": 3600,
+    "status": "Paid"
+   },
+   {
+    "month": "Jun",
+    "plan": "Starter",
+    "revenue": 15800,
+    "invoice": "#1039",
+    "customer": "Stark Labs",
+    "amount": 7200,
+    "status": "Paid"
+   },
+   {
+    "month": "Jul",
+    "plan": "Team",
+    "revenue": 33400,
+    "invoice": "#1038",
+    "customer": "Globex",
+    "amount": 960,
+    "status": "Past due"
+   },
+   {
+    "month": "Jul",
+    "plan": "Starter",
+    "revenue": 15100,
+    "invoice": "#1037",
+    "customer": "Initech",
+    "amount": 1200,
+    "status": "Draft"
+   },
+   {
+    "month": "Aug",
+    "plan": "Team",
+    "revenue": 36900,
+    "invoice": "#1036",
+    "customer": "Hooli",
+    "amount": 5400,
+    "status": "Paid"
+   },
+   {
+    "month": "Aug",
+    "plan": "Starter",
+    "revenue": 14600,
+    "invoice": "#1035",
+    "customer": "Vandelay",
+    "amount": 880,
+    "status": "Paid"
+   },
+   {
+    "month": "Sep",
+    "plan": "Team",
+    "revenue": 41200,
+    "invoice": "#1034",
+    "customer": "Wayne Ent",
+    "amount": 9600,
+    "status": "Paid"
+   },
+   {
+    "month": "Sep",
+    "plan": "Starter",
+    "revenue": 14100,
+    "invoice": "#1033",
+    "customer": "Pied Piper",
+    "amount": 1450,
+    "status": "Pending"
+   },
+   {
+    "month": "Oct",
+    "plan": "Team",
+    "revenue": 44800,
+    "invoice": "#1032",
+    "customer": "Aperture",
+    "amount": 2300,
+    "status": "Paid"
+   },
+   {
+    "month": "Oct",
+    "plan": "Starter",
+    "revenue": 13700,
+    "invoice": "#1031",
+    "customer": "Soylent",
+    "amount": 640,
+    "status": "Paid"
+   }
+  ],
+  "queries": {
+   "series": "select month, plan, revenue from rows order by plan, month",
+   "table": "select invoice, customer, amount, status from rows order by invoice desc",
+   "totals": "select 48210 as mrr, 1284 as subs, 11950 as past_due, 118 as nrr from rows limit 1"
+  },
+  "segments": [
+   "30 days",
+   "90 days",
+   "12 months"
+  ],
+  "segment_default": "30 days",
+  "select_label": "Period",
+  "input_placeholder": "Search invoices",
+  "switch_label": "Include drafts",
+  "tabs": [
+   "Overview",
+   "Invoices",
+   "Payouts"
+  ],
+  "tab_body": "Overview: revenue, subscriptions and what is past due.",
+  "progress_label": "Usage · 72% of plan",
+  "progress": 72,
+  "chart_title": "Revenue by plan",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar"
+    },
+    "encoding": {
+     "x": {
+      "field": "month",
+      "type": "ordinal",
+      "title": null,
+      "sort": [
+       "May",
+       "Jun",
+       "Jul",
+       "Aug",
+       "Sep",
+       "Oct"
+      ]
+     },
+     "y": {
+      "field": "revenue",
+      "type": "quantitative",
+      "title": null
+     },
+     "color": {
+      "field": "plan",
+      "type": "nominal",
+      "title": "Plan"
+     },
+     "xOffset": {
+      "field": "plan"
+     }
+    }
+   }
+  },
+  "row_key": "invoice",
+  "table_columns": [
+   {
+    "col": "invoice",
+    "title": "Invoice"
+   },
+   {
+    "col": "customer",
+    "title": "Customer"
+   },
+   {
+    "col": "amount",
+    "title": "Amount",
+    "fmt": ",.0f",
+    "align": "right"
+   },
+   {
+    "col": "status",
+    "title": "Status"
+   }
+  ],
+  "table_height": "240px"
+ },
+ "css": "\n.ds-meridian { --ds-cover-bg: var(--ds-canvas); --ds-hand-ink: var(--ds-ink-faint); --ds-hand-fill: var(--ds-blue); --ds-hand-fill2: var(--ds-blue); --ds-hand-muted: var(--ds-surface-sunk); --ds-hand-ground: var(--ds-surface); --ds-hand-stroke: 1.5; --ds-hand-cap: round; --ds-hand-bg: var(--ds-canvas); --ds-hand-text-stroke: var(--ds-surface);\n  --ds-tpl-edge: 1px solid var(--ds-hairline); --ds-tpl-radius: 8px; --ds-tpl-rule: 1px solid var(--ds-hairline); --ds-tpl-tile-shadow: var(--ds-shadow-tile); --ds-tag-radius: 999px; --ds-slide-bg: var(--ds-surface); --ds-slide-title-bg: var(--ds-ink); --ds-slide-title-fg: var(--ds-canvas); --ds-slide-split-a: var(--ds-blue); --ds-slide-split-b: var(--ds-surface-sunk); --ds-slide-split-b-fg: var(--ds-ink); --ds-slide-h-size: 9cqw;\n  --ds-hero-bg: var(--ds-glow), var(--ds-surface); }\n.ds-meridian .ds-cover { background-image: var(--ds-glow); }\n.ds-meridian .ds-section h2, .ds-meridian .ds-cover-name { font-family: var(--font-display); letter-spacing: -.04em; font-weight: 600; }\n.ds-meridian .ds-chip { font-weight: 500; letter-spacing: 0; text-transform: none; border-color: var(--ds-hairline-strong); opacity: 1; color: var(--ds-ink-soft); background: var(--ds-surface); box-shadow: var(--ds-shadow-tile); }\n.ds-meridian .ds-eyebrow, .ds-meridian .t-label { text-transform: none; letter-spacing: .01em; }\n.ds-meridian .ds-eyebrow { font-family: var(--font-mono); font-size: 12px; } .ds-meridian .ds-section > .ds-eyebrow::before, .ds-meridian .ds-cover .ds-eyebrow::before { content: \"● \"; color: var(--ds-blue); font-size: 9px; vertical-align: 1px; }\n.ds-meridian .ds-principle-n { color: var(--ds-ink-faint); font-weight: 500; }\n.ds-meridian .ds-comp, .ds-meridian .ds-motif, .ds-meridian .ds-note, .ds-meridian .ds-voice, .ds-meridian .ds-hand-panel, .ds-meridian .ds-tpl, .ds-meridian .ds-tpl-kpi, .ds-meridian .ds-tpl-tile, .ds-meridian .ds-tpl-step, .ds-meridian .ds-tpl-wire, .ds-meridian .ds-tpl-flow, .ds-meridian .ds-tpl-stage { border-color: var(--ds-hairline); box-shadow: var(--ds-shadow-tile); }\n.ds-meridian .ds-tpl-kicker, .ds-meridian .ds-tpl-plan-sub { font-family: var(--font-mono); font-size: 12px; } .ds-meridian .ds-tpl-kicker::before, .ds-meridian .ds-tpl-plan-sub::before { content: \"● \"; font-size: 9px; vertical-align: 1px; }\n.ds-meridian .ds-tpl-stage-top, .ds-meridian .ds-tpl-stage-foot { text-transform: none; letter-spacing: .02em; }\n.ds-meridian .ds-tpl-tag { text-transform: none; letter-spacing: 0; font-weight: 500; padding-left: 8px; } .ds-meridian .ds-tpl-tag::before { content: \"\"; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }\n.ds-meridian .ds-tpl-ledger th { text-transform: none; letter-spacing: 0; font-weight: 500; background: var(--ds-surface-sunk); padding-left: 10px; border-bottom: 1px solid var(--ds-hairline-strong); } .ds-meridian .ds-tpl-ledger td { padding-left: 10px; }\n.ds-meridian .ds-tpl-decision { border-left-width: 2px; box-shadow: var(--ds-shadow-tile); border-top: 1px solid var(--ds-hairline); border-right: 1px solid var(--ds-hairline); border-bottom: 1px solid var(--ds-hairline); }\n.ds-meridian .ds-tpl-pull { border-top-width: 1px; border-top-color: var(--ds-hairline-strong); }\n.ds-meridian .ds-tpl-dropcap { color: var(--ds-ink); }\n.ds-meridian .ds-tpl-split-b { border: 1px solid var(--ds-hairline); }\n.ds-meridian .h-num { font-family: var(--font-sans); font-weight: 600; letter-spacing: -.03em; fill: var(--ds-ink); }\n.ds-meridian .h-text { fill: var(--ds-ink-soft); }\n.ds-meridian .h-fill.h-outline-fill { fill: var(--ds-blue-soft); stroke: var(--ds-blue); stroke-width: 1.5; }\n.ds-meridian .h-fill2.h-outline-fill { fill: none; stroke: var(--ds-blue); stroke-width: 1.5; opacity: .45; }\n.ds-meridian .me-ground { fill: var(--ds-canvas); } .ds-meridian .me-glow-a { stop-color: var(--ds-blue); stop-opacity: var(--ds-glow-a); } .ds-meridian .me-glow-b { stop-color: var(--ds-blue); stop-opacity: 0; }\n.ds-meridian .me-frame { fill: var(--ds-surface); stroke: var(--ds-hairline-strong); stroke-width: 1; }\n.ds-meridian .me-card, .ds-meridian .me-surface { fill: var(--ds-surface); stroke: var(--ds-hairline); stroke-width: 1; } .ds-meridian .me-surface { stroke: none; }\n.ds-meridian .me-palette { fill: var(--ds-surface); stroke: var(--ds-hairline-strong); stroke-width: 1; } .ds-meridian .me-shadow { fill: var(--ds-ink); opacity: .08; } .dark .ds-meridian .me-shadow { opacity: .5; }\n.ds-meridian .me-dot { fill: var(--ds-hairline-strong); } .ds-meridian .me-line-h { fill: var(--ds-surface-sunk); } .ds-meridian .me-line-on { fill: var(--ds-hairline-strong); } .ds-meridian .me-hair { stroke: var(--ds-hairline); stroke-width: 1; } .ds-meridian .me-hair-dash { stroke: var(--ds-hairline); stroke-width: 1; stroke-dasharray: 2 4; }\n.ds-meridian .me-active { fill: var(--ds-blue-soft); } .ds-meridian .me-avatar-sq { fill: var(--ds-ink); } .ds-meridian .me-caret { stroke: var(--ds-blue); stroke-width: 1.5; }\n.ds-meridian .me-pill-k { fill: var(--ds-surface-sunk); stroke: var(--ds-hairline); stroke-width: 1; } .ds-meridian .me-pill-kt { font-family: var(--font-mono); font-size: 8px; fill: var(--ds-ink-soft); }\n.ds-meridian .me-blue { fill: var(--ds-hand-fill); } .ds-meridian .me-blue-stroke { fill: none; stroke: var(--ds-hand-fill); stroke-width: 2; stroke-linecap: round; }\n.ds-meridian .me-bar { fill: var(--ds-hairline-strong); } .ds-meridian .me-track { fill: var(--ds-surface-sunk); } .ds-meridian .me-warn { fill: var(--ds-caution); }\n.ds-meridian .me-key { fill: var(--ds-surface); stroke: var(--ds-hairline-strong); stroke-width: 1; } .ds-meridian .me-key-t { font-family: var(--font-mono); font-size: 10px; font-weight: 500; fill: var(--ds-ink); } .ds-meridian .me-key-big { font-size: 22px; }\n.ds-meridian .me-chip { fill: var(--ds-surface-sunk); stroke: var(--ds-hairline); stroke-width: 1; } .ds-meridian .me-chip-t { font-family: var(--font-mono); font-size: 12px; fill: var(--ds-ink); }\n.ds-meridian .me-pill { fill: var(--ds-positive-soft); } .ds-meridian .me-pill-t { font-family: var(--font-sans); font-size: 10px; font-weight: 500; fill: var(--ds-positive); }\n.ds-meridian .me-num { font-family: var(--font-sans); font-size: 16px; font-weight: 600; letter-spacing: -.03em; fill: var(--ds-ink); } .ds-meridian .me-num-big { font-size: 34px; }\n.ds-meridian .me-svg-label { font-family: var(--font-sans); font-size: 13px; fill: var(--ds-ink-soft); } .ds-meridian .me-svg-on { font-family: var(--font-sans); font-size: 13px; font-weight: 500; fill: var(--ds-ink); } .ds-meridian .me-svg-num { font-family: var(--font-sans); font-size: 13px; font-weight: 500; fill: var(--ds-ink); font-variant-numeric: tabular-nums; }\n.ds-meridian .me-dot-ok { fill: var(--ds-positive); } .ds-meridian .me-dot-warn { fill: var(--ds-caution); } .ds-meridian .me-dot-bad { fill: var(--ds-negative); } .ds-meridian .me-dot-ring { opacity: .25; }\n.ds-meridian .me-ge-a { stop-color: var(--ds-hairline-strong); } .ds-meridian .me-ge-b { stop-color: var(--ds-hairline); } .dark .ds-meridian .me-ge-b { stop-color: var(--ds-hairline-strong); stop-opacity: 0; }\n.ds-meridian .me-sh-a { stop-color: var(--ds-hairline); } .ds-meridian .me-sh-b { stop-color: var(--ds-blue); }\n.ds-meridian .me-btn { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-sans); font-size: 14px; font-weight: 500; line-height: 20px; padding: 7px 12px; border: 1px solid var(--ds-hairline-strong); border-radius: 8px; background: var(--ds-surface); color: var(--ds-ink); box-shadow: var(--ds-shadow-tile); cursor: pointer; transition: border-color 120ms ease-out, background 120ms ease-out, transform 80ms ease-out; }\n.ds-meridian .me-btn:hover { border-color: var(--ds-ink-faint); background: var(--ds-surface-sunk); } .ds-meridian .me-btn:active { transform: scale(.98); } .ds-meridian .me-btn:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }\n.ds-meridian .me-btn-primary { background: var(--ds-blue); border-color: var(--ds-blue); color: var(--ds-on-blue); box-shadow: var(--ds-btn-ring); } .ds-meridian .me-btn-primary:hover { background: var(--ds-blue-ink); border-color: var(--ds-blue-ink); }\n.ds-meridian .me-btn-ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--ds-ink-soft); } .ds-meridian .me-btn-ghost:hover { border-color: var(--ds-hairline); background: var(--ds-surface-sunk); color: var(--ds-ink); }\n.ds-meridian .me-btn-danger { color: var(--ds-negative); } .ds-meridian .me-btn-danger:hover { background: var(--ds-negative); border-color: var(--ds-negative); color: var(--ds-on-blue); }\n.ds-meridian .me-tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 18px; background: var(--ds-surface-sunk); color: var(--ds-ink-soft); }\n.ds-meridian .me-tag i { position: relative; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }\n.ds-meridian .me-tag-ok { background: var(--ds-positive-soft); color: var(--ds-positive); } .ds-meridian .me-tag-warn { background: var(--ds-caution-soft); color: var(--ds-caution); } .ds-meridian .me-tag-bad { background: var(--ds-negative-soft); color: var(--ds-negative); }\n.ds-meridian .me-tag-live i::after, .ds-meridian .me-live i::after { content: \"\"; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid currentColor; opacity: 0; animation: me-pulse 2.4s ease-out infinite; }\n@keyframes me-pulse { 0% { transform: scale(.4); opacity: .6; } 70% { transform: scale(1.2); opacity: 0; } 100% { opacity: 0; } }\n@media (prefers-reduced-motion: reduce) { .ds-meridian .me-tag-live i::after, .ds-meridian .me-live i::after { animation: none; } }\n.ds-meridian .me-stat { display: grid; gap: 4px; padding: 16px 20px; min-width: 0; }\n.ds-meridian .me-stat-card { display: grid; margin-top: 24px; border: 1px solid var(--ds-hairline); border-radius: 8px; background: var(--ds-surface); box-shadow: var(--ds-shadow-tile); } .ds-meridian .me-stat-card .me-stat { border-top: 1px solid var(--ds-hairline); } .ds-meridian .me-stat-card .me-stat:first-child { border-top: 0; }\n.ds-meridian .ds-stats-card { margin-top: 0; width: 100%; }\n.ds-meridian .me-delta { font-size: 13px; color: var(--ds-ink-soft); } .ds-meridian .me-up { color: var(--ds-positive); } .ds-meridian .me-down { color: var(--ds-negative); }\n.ds-meridian .me-callout { padding: 12px 14px; border: 1px solid var(--ds-hairline); border-left: 2px solid var(--ds-hairline-strong); border-radius: 8px; font-size: 14px; line-height: 1.5; background: var(--ds-surface); box-shadow: var(--ds-shadow-tile); }\n.ds-meridian .me-callout strong { font-weight: 600; } .ds-meridian .me-callout-info { border-left-color: var(--ds-blue); } .ds-meridian .me-callout-ok { border-left-color: var(--ds-positive); } .ds-meridian .me-callout-bad { border-left-color: var(--ds-negative); background: var(--ds-negative-soft); }\n.ds-meridian .me-glass { padding: 1px; border-radius: 9px; background: var(--ds-glass); }\n.ds-meridian .me-glass-in { border-radius: 8px; background: var(--ds-surface); box-shadow: var(--ds-shadow-tile); }\n.ds-meridian .me-card-x { border: 1px solid var(--ds-hairline); border-radius: 8px; background: var(--ds-surface); padding: 16px 20px; min-width: 0; box-shadow: var(--ds-shadow-tile); transition: border-color 120ms ease-out; } .ds-meridian .me-card-x:hover { border-color: var(--ds-hairline-strong); }\n.ds-meridian .me-glass .me-card-x { border: 0; }\n.ds-meridian .me-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }\n.ds-meridian .me-metric-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--ds-hairline); font-size: 13px; color: var(--ds-ink-soft); }\n.ds-meridian .me-bar-track { display: block; height: 4px; border-radius: 2px; background: var(--ds-surface-sunk); overflow: hidden; } .ds-meridian .me-bar-fill { display: block; height: 100%; background: var(--ds-blue); border-radius: 2px; } .ds-meridian .me-bar-warn { background: var(--ds-caution); }\n.ds-meridian .me-bar-fill[data-w=\"72\"] { width: 72%; } .ds-meridian .me-bar-fill[data-w=\"60\"] { width: 60%; } .ds-meridian .me-bar-fill[data-w=\"91\"] { width: 91%; }\n.ds-meridian .me-metric-n { font-variant-numeric: tabular-nums; color: var(--ds-ink); font-weight: 500; }\n.ds-meridian .me-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ds-hairline); }\n.ds-meridian .me-kbd-hint { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ds-ink-faint); } .ds-meridian .me-kbd-hint kbd { margin-left: 2px; }\n.ds-meridian .me-kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border: 1px solid var(--ds-hairline-strong); border-radius: 6px; background: var(--ds-surface); box-shadow: var(--ds-shadow-key); font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--ds-ink); }\n.ds-meridian .me-kbd-on { height: 18px; min-width: 0; padding: 0 5px; margin-left: 2px; border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.14); box-shadow: inset 0 -1px 0 rgba(0,0,0,.18); color: var(--ds-on-blue); font-size: 10px; }\n.ds-meridian .me-faint { color: var(--ds-ink-faint); }\n.ds-meridian .me-sample { background: var(--ds-canvas); border-top: 1px solid var(--ds-hairline); border-bottom: 1px solid var(--ds-hairline); }\n.ds-meridian .me-shell { display: grid; grid-template-columns: minmax(0, 1fr); max-width: 1320px; margin: 0 auto; min-width: 0; }\n.ds-meridian .me-rail { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--ds-hairline); background: var(--ds-surface); overflow-x: auto; }\n.ds-meridian .me-ws { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; white-space: nowrap; }\n.ds-meridian .me-ws-sq { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--ds-ink); color: var(--ds-canvas); font-size: 11px; font-weight: 600; } .ds-meridian .me-ws-chev { color: var(--ds-ink-faint); }\n.ds-meridian .me-nav { display: flex; gap: 2px; }\n.ds-meridian .me-nav-item { padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--ds-ink-soft); white-space: nowrap; } .ds-meridian .me-nav-on { background: var(--ds-blue-soft); color: var(--ds-blue-ink); font-weight: 500; }\n.ds-meridian .me-rail-foot { display: none; align-items: center; gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--ds-hairline); font-size: 12px; color: var(--ds-ink-soft); }\n.ds-meridian .me-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--ds-blue-soft); border: 1px solid var(--ds-hairline-strong); } .ds-meridian .me-avatar-ini { display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: var(--ds-blue-ink); }\n.ds-meridian .me-main { min-width: 0; padding: 0 20px 48px; }\n.ds-meridian .me-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--ds-hairline); }\n.ds-meridian .me-crumbs { color: var(--ds-ink-soft); } .ds-meridian .me-sep { color: var(--ds-hairline-strong); margin: 0 2px; } .ds-meridian .me-crumb-on { color: var(--ds-ink); }\n.ds-meridian .me-search { display: inline-flex; align-items: center; gap: 14px; padding: 4px 6px 4px 10px; border: 1px solid var(--ds-hairline); border-radius: 8px; background: var(--ds-surface); font-size: 13px; color: var(--ds-ink-faint); box-shadow: var(--ds-shadow-tile); }\n.ds-meridian .me-sample-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-top: 24px; } .ds-meridian .me-sample-head h2 { margin: 0; }\n.ds-meridian .me-head-sub { margin: 6px 0 0; font-size: 13px; color: var(--ds-ink-faint); } .ds-meridian .me-live { display: inline-flex; align-items: center; gap: 6px; color: var(--ds-positive); font-weight: 500; } .ds-meridian .me-live i { position: relative; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }\n.ds-meridian .me-sample-grid { display: grid; gap: 16px; margin-top: 16px; }\n.ds-meridian .me-card-table { padding-bottom: 8px; overflow-x: auto; }\n.ds-meridian .me-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 0; }\n.ds-meridian .me-table th, .ds-meridian .me-table td { border-left: 0; border-right: 0; border-top: 0; background: transparent; text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--ds-hairline); white-space: nowrap; }\n.ds-meridian .me-table th { font-size: 12px; font-weight: 500; color: var(--ds-ink-soft); background: var(--ds-surface-sunk); border-bottom: 1px solid var(--ds-hairline-strong); }\n.ds-meridian .me-table th:first-child, .ds-meridian .me-table td:first-child { padding-left: 8px; } .ds-meridian .me-table tbody tr:hover td { background: var(--ds-surface-sunk); }\n.ds-meridian .me-table .me-r { text-align: right; font-variant-numeric: tabular-nums; } .ds-meridian .me-table .me-mono { font-family: var(--font-mono); font-size: 12px; color: var(--ds-ink-soft); }\n.ds-meridian .me-cust { display: inline-grid; vertical-align: middle; line-height: 1.2; } .ds-meridian .me-cust small { font-family: var(--font-mono); font-size: 11px; color: var(--ds-ink-faint); }\n.ds-meridian .me-ini { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 6px; background: var(--ds-surface-sunk); border: 1px solid var(--ds-hairline); font-size: 10px; font-weight: 600; color: var(--ds-ink-soft); vertical-align: middle; }\n.ds-meridian .me-dot-tag { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--ds-ink-soft); } .ds-meridian .me-dot-tag i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }\n.ds-meridian .me-dt-ok { color: var(--ds-positive); } .ds-meridian .me-dt-warn { color: var(--ds-caution); } .ds-meridian .me-dt-bad { color: var(--ds-negative); }\n.ds-meridian .me-activity { padding: 16px 20px 32px; border-top: 1px solid var(--ds-hairline); background: var(--ds-surface); }\n.ds-meridian .me-act-h { margin: 0 0 8px; color: var(--ds-ink-faint); }\n.ds-meridian .me-act { display: grid; grid-template-columns: 14px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--ds-hairline); font-size: 13px; } .ds-meridian .me-act div { display: grid; gap: 2px; } .ds-meridian .me-act-t { font-size: 12px; color: var(--ds-ink-faint); }\n.ds-meridian .me-act-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--ds-hairline-strong); } .ds-meridian .me-act-ok { background: var(--ds-positive); } .ds-meridian .me-act-bad { background: var(--ds-negative); } .ds-meridian .me-act-blue { background: var(--ds-blue); }\n@container (min-width: 760px) {\n  .ds-meridian .me-shell { grid-template-columns: 200px minmax(0, 1fr); }\n  .ds-meridian .me-rail { flex-direction: column; align-items: stretch; gap: 0; padding: 16px 12px; border-bottom: 0; border-right: 1px solid var(--ds-hairline); overflow: visible; min-height: 100%; }\n  .ds-meridian .me-ws { padding: 4px 8px 16px; } .ds-meridian .me-ws-name { flex: 1; } .ds-meridian .me-nav { flex-direction: column; } .ds-meridian .me-rail-foot { display: flex; }\n  .ds-meridian .me-main { padding: 0 24px 48px; }\n  .ds-meridian .me-stat-card { grid-template-columns: 1fr 1fr 1fr; } .ds-meridian .me-stat-card .me-stat { border-top: 0; border-left: 1px solid var(--ds-hairline); } .ds-meridian .me-stat-card .me-stat:first-child { border-left: 0; }\n  .ds-meridian .me-sample-grid { grid-template-columns: 1fr 1fr; }\n  .ds-meridian .me-activity { grid-column: 1 / -1; border-top: 1px solid var(--ds-hairline); display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; padding: 16px 24px 24px; } .ds-meridian .me-act-h { grid-column: 1 / -1; }\n}\n@container (min-width: 1100px) {\n  .ds-meridian .me-shell { grid-template-columns: 200px minmax(0, 1fr) 240px; }\n  .ds-meridian .me-activity { grid-column: auto; display: block; border-top: 0; border-left: 1px solid var(--ds-hairline); padding: 16px 20px 32px; }\n  .ds-meridian .me-sample-grid { grid-template-columns: 3fr 2fr; }\n}\n"
+}
