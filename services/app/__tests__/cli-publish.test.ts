@@ -5,7 +5,7 @@
  */
 
 import { expect, it, afterEach, beforeEach } from 'vitest';
-import { writeFile, readFile, stat } from 'node:fs/promises';
+import { writeFile, readFile, stat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { useAppHarness, request } from './harness';
 import { artifactTransport, CLI_SERVER, cliWorkspace, routesCalled, addressesCalled, type CliCall } from './cli-harness';
@@ -14,6 +14,7 @@ import { POST as create } from '@/app/api/artifacts/route';
 import { GET as read } from '@/app/api/artifacts/[id]/route';
 import { tracking } from '../../cli/test/tracking';
 import { parseDocument, writeDocument } from '../../cli/src/document';
+import type {LocalHtmlOptions} from '../../cli/src/local-html-options';
 import { publishJsx } from '@/lib/story/document/jsx-tier';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 import { createUser } from '@/lib/accounts';
@@ -147,9 +148,15 @@ describe('cli-export', () => {
   // Unlisted, because `/a/<id>/raw` admits only browser credentials.
   const DECK='---\nvisibility: unlisted\n---\n<Slide><h1>One</h1></Slide><Slide><h1>Two</h1></Slide>';
 
-  it('renders explicit published URLs through viewer routes, maps --page to slide, and refuses draft HTML and historical images',async()=>{
+  it('renders published URLs and historical images through viewer routes, and exports edited local HTML without requests',async()=>{
    const calls:CliCall[]=[];
-   const cli=await cliWorkspace('handler-export',{fetch:transportFor(calls)});const root=cli.root;const run=cli.run;
+   const localHtmlRequests:LocalHtmlOptions[]=[];
+   const localBytes=Buffer.from('<html data-test-renderer="local">Edited</html>');
+   const cli=await cliWorkspace('handler-export',{fetch:transportFor(calls),localHtml:async options=>{
+    localHtmlRequests.push(options);
+    expect(parseDocument(await readFile(join(options.cwd,options.path),'utf8')).body).toMatch(/<h1\b[^>]*>Edited<\/h1>/);
+    return localBytes;
+   }});const root=cli.root;const run=cli.run;
    try{
     const user=await createUser({email:'exporter@minusx.ai'});
     await cli.connect('real-cli-export',user.id);
@@ -170,21 +177,25 @@ describe('cli-export', () => {
 
     // HTML export is the offline file: one self-contained page from the download route.
     calls.length=0;
-    const page=await run(['export',id,'--format','html','--output','deck.html']);
+    const page=await run(['export',`${CLI_SERVER}/a/${id}`,'--format','html','--output','deck.html']);
     expect(page.code,JSON.stringify(page.result)).toBe(0);
     expect(addressesCalled(calls)).toEqual([`GET /a/${id}/download`]);
     const offline=await readFile(join(root,'deck.html'),'utf8');
     expect(offline).toContain('<html');
     expect(offline).toContain('id="afbin-file"');
 
-    // A modified draft is refused locally, offline, and nothing is uploaded to render it.
+    expect(localHtmlRequests).toEqual([]);
+
+    // Test the dispatcher boundary explicitly; real HTML compilation has separate coverage.
     const tracked=parseDocument(await readFile(join(root,'deck.jsx'),'utf8'));
     await writeFile(join(root,'deck.jsx'),writeDocument({...tracked,body:tracked.body.replace('One','Edited')}));
-    const refused=await run(['export','deck.jsx','--format','html','--output','edited.html'],async()=>{throw new Error('a draft was sent to the renderer');});
-    expect(refused.code).not.toBe(0);
-    expect(refused.result.error.code).toBe('renderer_unavailable');
-    expect(refused.result.error.fix).toBe('push the draft, or export csv/json/yaml/original');
-    await expect(stat(join(root,'edited.html'))).rejects.toThrow();
+    calls.length=0;
+    const local=await run(['export','deck.jsx','--format','html'],async()=>{throw new Error('a local HTML export attempted a request');});
+    expect(local.code,JSON.stringify(local.result)).toBe(0);
+    expect(localHtmlRequests).toEqual([{cwd:await realpath(root),home:cli.home,path:'deck.jsx'}]);
+    expect(local.result.operations[0].path).toBe('deck.jsx.html');
+    expect(await readFile(join(root,'deck.jsx.html'))).toEqual(localBytes);
+    expect(calls).toEqual([]);
 
     /*
      * A VERSION RENDERS. The served document can show an older one
