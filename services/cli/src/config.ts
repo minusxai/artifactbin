@@ -162,15 +162,6 @@ export async function saveConnection(
   await atomicWrite(path, Object.entries(values).filter(([,value]) => value !== undefined).map(([key,value]) => `${key}=${value}\n`).join(''));
 }
 
-/** Optional service mirror changes transport only; the executable still pins every package checksum. */
-export function servicePackageUrl(releaseUrl:string,env:NodeJS.ProcessEnv=process.env):string{
- if(!env.CLI__SERVICE_BASE_URL)return releaseUrl;
- const path=new URL(releaseUrl).pathname.split('/').slice(-2).join('/');
- const base=new URL(env.CLI__SERVICE_BASE_URL),origin=normalizeServer(base.origin);
- if(base.username||base.password||base.search||base.hash)throw new Error('Use a service base URL without credentials, query or fragment.');
- return `${origin}${base.pathname.replace(/\/+$/,'')}/${path}`;
-}
-
 /** Automatic checks are opt-out; a version pin disables background changes entirely. */
 export function autoUpdatePolicy(env:NodeJS.ProcessEnv=process.env):{enabled:boolean;pin?:string} {
  const pin=env.CLI__VERSION_PIN;

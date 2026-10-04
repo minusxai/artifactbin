@@ -2,7 +2,7 @@ import {renderSocialPreviewImage} from '../../app/lib/story/assets/social-previe
 import {socialPreviewCrop,socialPreviewImage} from '../../app/lib/story/assets/social-preview';
 import {previewRenderRequest} from './preview-render';
 import {createBrowser} from '@artifactbin/browser/local';
-import {chromiumExecutable} from './standalone-browser';
+import {chromiumExecutable} from './chromium';
 import type {LocalImageOptions} from './local-image-options';
 import {localIdentities} from './identities';
 /** Foreground file-session entry, loaded only after choosing the preview runtime. */

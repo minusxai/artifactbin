@@ -8,7 +8,7 @@ import {LOCAL_HTML_ARG} from './entry-args';
 import {CliError} from './errors';
 import type {LocalHtmlOptions} from './local-html-options';
 export async function renderLocalHtml(options:LocalHtmlOptions):Promise<Buffer>{
- const assets=await hostRuntime(options.home);
+ const assets=await hostRuntime();
  const prefix=[join(dirname(fileURLToPath(import.meta.url)),'afbin.mjs')];
  return new Promise((resolve,reject)=>{
   const child=spawn(process.execPath,[...prefix,LOCAL_HTML_ARG,JSON.stringify(options),assets],{stdio:['ignore','pipe','pipe']});

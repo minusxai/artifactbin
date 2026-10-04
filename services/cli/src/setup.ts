@@ -1,4 +1,4 @@
-import {chromiumExecutable} from './standalone-browser';
+import {chromiumExecutable} from './chromium';
 import './sqlite-wasm';
 import {createSqliteSql} from '@artifactbin/sql/sqlite';
 import {isQueryFailure} from '@artifactbin/contracts';

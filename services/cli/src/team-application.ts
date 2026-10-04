@@ -1,4 +1,3 @@
-import {isSea} from 'node:sea';
 /** OSS team composition reuses the shared login and identity; the app owns authorization. */
 import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
@@ -9,14 +8,14 @@ import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
 import {createAppHost,type AppHost} from '../../app/server/host';
 import {EVENTS_SCHEMA,MAX_QUERY_ROWS,QUERY_TIMEOUT_MS} from '../../app/lib/platform/config';
 import {setServices} from '../../app/lib/platform/services';
-import {chromiumExecutable} from './standalone-browser';
+import {chromiumExecutable} from './chromium';
 
 export async function createTeamApplication(env:NodeJS.ProcessEnv,assets:string):Promise<AppHost>{
  const origin=readEnv(env,'APP__PUBLIC_BASE_URL'),secret=readEnv(env,'AUTH__SECRET');
  if(!origin||!secret)throw new Error('Team hosting requires APP__PUBLIC_BASE_URL and AUTH__SECRET.');
  let host:AppHost,identity:Parameters<typeof createAuthHost>[0];
  let reader:ReturnType<typeof createTokenReader>;
- const browser=createBrowser({executablePath:chromiumExecutable,sessions:{browserExecutable:chromiumExecutable,...(isSea()?{workerArgs:['--internal-browser-worker']}:{}),...sessionProcessPaths(env),baseURL:origin,request:async(request,actor)=>host.request(request,actor)}});
+ const browser=createBrowser({executablePath:chromiumExecutable,sessions:{browserExecutable:chromiumExecutable,...sessionProcessPaths(env),baseURL:origin,request:async(request,actor)=>host.request(request,actor)}});
  const sql=createSql({maxRows:MAX_QUERY_ROWS,timeoutMs:QUERY_TIMEOUT_MS});
  try{
  // Trusted runner callbacks carry signed identity; ordinary login still composes through auth.

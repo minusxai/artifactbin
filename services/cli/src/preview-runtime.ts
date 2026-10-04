@@ -2,14 +2,13 @@
 import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {isSea} from 'node:sea';
 import {hostRuntime} from './host-runtime';
 import {foregroundProcess} from './foreground-process';
 import {PREVIEW_HOST_ARG} from './entry-args';
 import type {PreviewOptions} from './preview-options';
 export async function servePreview(options:PreviewOptions):Promise<number>{
- const assets=await hostRuntime(options.home);
- const prefix=isSea()?[]:[join(dirname(fileURLToPath(import.meta.url)),'afbin.mjs')];
+ const assets=await hostRuntime();
+ const prefix=[join(dirname(fileURLToPath(import.meta.url)),'afbin.mjs')];
  return foregroundProcess(process.execPath,[...prefix,PREVIEW_HOST_ARG,JSON.stringify(options),assets]);
 }
 export async function startPreviewRuntime(options:PreviewOptions,assets:string):Promise<void>{
