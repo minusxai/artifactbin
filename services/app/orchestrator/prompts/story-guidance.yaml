@@ -96,4 +96,30 @@ templates:
       - Flows and states (actions, branches, failures and recovery)
       - Decisions (tradeoffs, open questions and acceptance criteria)
       - Execution ledger (owners, dependencies, status and struck-through completed tasks)
+  app:
+    label: App
+    description: Tool people operate — state, actions and outcomes on one surface; a working prototype or a dataset-backed workflow, not a page to read.
+    personality: >-
+      A sheet on the wall made clickable: the thing people claim, book, sort or approve is the
+      primary surface, the selection stays visible, and every action ends in a record. Empty,
+      unavailable and success states are designed, not accidental. Clear because the next
+      action is obvious; beautiful because nothing competes with it.
+    beats:
+      - Primary surface (what people act on — slots, rows, items, a board)
+      - Selection and review (the chosen thing stays visible; a receipt-style summary)
+      - Actions (confirm, cancel, undo; validation; empty, unavailable, error and success states)
+      - Record (what happened, for whom, when)
+  landing:
+    label: Landing
+    description: One offering and one next action — the atmosphere and the practical facts instantly clear, the schedule or product reachable in one move.
+    personality: >-
+      An invitation, not a brochure: one subject-led image or drawing, the dates, the price and
+      the next action composed into the opening, and the detail arranged so a first-time visitor
+      can choose. Warm or sharp as the subject demands; never a hero over a feature grid for its
+      own sake.
+    beats:
+      - Opening (the offering, its facts and the next action in one composition)
+      - The detail (sessions, features or the programme, distinguished so people can choose)
+      - Practicalities (where, when, how much, what to bring)
+      - Next action again (and what the demo does and does not do)
 themes: {}

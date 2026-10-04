@@ -30,10 +30,11 @@ export const STORY_DESIGN_NAMES: readonly StoryDesignName[] = [...STORY_THEME_NA
 export type { StoryDesignName };
 
 /**
- * The story templates — the document's structural GENRE (beat structure +
- * layout grammar), orthogonal to the design theme.
+ * The story templates — the document's PAGE TYPE (beat structure + layout
+ * grammar, and the runtime behaviour that comes with it: the contents rail for
+ * editorial and plan, present mode for a deck), orthogonal to the design.
  */
-export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard', 'plan'] as const;
+export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard', 'plan', 'app', 'landing'] as const;
 export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
 
 export const StoryContent = Type.Object({
@@ -61,7 +62,8 @@ export const StoryContent = Type.Object({
   template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
     "Story template (format:'jsx' only) — the document's structural genre: 'editorial' (long-read magazine " +
     "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling), 'dashboard' " +
-    '(a Grid of draggable KPI/chart tiles with minimal prose), plan (visual proposals, flows and milestones). ' +
+    '(a Grid of draggable KPI/chart tiles with minimal prose), plan (visual proposals, flows and milestones), ' +
+    "'app' (a tool people operate: state, actions, outcomes), 'landing' (one offering, one next action). " +
     'METADATA ONLY: it records intent and drives ' +
     'the structure YOU write; no automatic CSS or layout is applied.'))),
   colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],

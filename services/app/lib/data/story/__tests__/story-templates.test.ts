@@ -18,7 +18,7 @@ import { STORY_TEMPLATES, STORY_TEMPLATE_NAMES, getStoryTemplate } from '../stor
 describe('STORY_TEMPLATES registry', () => {
   it('has exactly one entry per schema enum name, in enum order', () => {
     expect(STORY_TEMPLATES.map(t => t.name)).toEqual([...STORY_TEMPLATE_NAMES]);
-    expect([...STORY_TEMPLATE_NAMES]).toEqual(['editorial', 'deck', 'scrolly', 'dashboard', 'plan']);
+    expect([...STORY_TEMPLATE_NAMES]).toEqual(['editorial', 'deck', 'scrolly', 'dashboard', 'plan', 'app', 'landing']);
   });
 
   it('every template carries label, description, personality and a beat structure', () => {
@@ -56,8 +56,7 @@ describe('STORY_TEMPLATES registry', () => {
     const start = guidance.indexOf('SLIDE TYPES');
     const slideTypes = guidance.slice(start, guidance.indexOf('\nDo\n', start));
     expect(slideTypes, 'deck SLIDE TYPES block').toMatch(/divider/i);
-    // …and a floor, so "5 slides" cannot argue its way out of the one saturated slide.
-    expect(guidance, 'deck short-deck floor').toMatch(/at least one/i);
+    // No floor any more: since 3 Oct 2026 the divider is one composition's device, not every deck's duty.
   });
 
   it('deck: every slide is a <Slide>, never a raw <section>', () => {
