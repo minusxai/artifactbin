@@ -895,6 +895,9 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           node scripts/test-installed-npm.mjs preview
+      - name: Complete installed npm local and HTML round-trip journey
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs local
 
   # Intel acceptance also splits its existing phases: run 35761410997 spent
   # 447s on combined acceptance (277s proofs, ~170s setup/downloads). Every
