@@ -768,13 +768,13 @@ jobs:
           over=0
           : > over-budget.txt
           {
-            echo "## Job wall clock (budget ${BUDGET_S}s, CLI binaries ${SLOW_BUDGET_S}s)"
+            echo "## Job wall clock (budget ${BUDGET_S}s, CLI release ${SLOW_BUDGET_S}s)"
             echo
             echo '| | job | seconds | result | slowest step |'
             echo '| --- | --- | ---: | --- | --- |'
             while IFS=$'\t' read -r seconds name conclusion slowest; do
               budget="$BUDGET_S"
-              case "$name" in "CLI ("*|"CLI distributions"*) budget="$SLOW_BUDGET_S";; esac
+              case "$name" in "CLI ("*|"CLI npm ("*|"CLI npm pack"|"CLI distributions"*) budget="$SLOW_BUDGET_S";; esac
               mark=''
               if [ "$seconds" -gt "$budget" ]; then
                 mark='OVER'
@@ -837,6 +837,7 @@ jobs:
   # on every full run, for bytes the publisher never uploads unless the version moved. An ordinary
   # CLI change is guarded by the bundle build and the source suite in the node job.
   cli-pack:
+    name: CLI npm pack
     needs: [ plan ]
     if: needs.plan.outputs.cli == 'true'
     runs-on: ubuntu-24.04
@@ -873,9 +874,20 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      # Repository tooling includes runner-only isolated-vm5 (Node22). Consumer
-      # acceptance switches runtime afterwards and installs only the npm tarball.
-      - run: npm ci
+      # Repository tooling uses Node22 and the same normalized whole-install
+      # cache as Intel preview. Consumer acceptance switches runtime afterwards.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
