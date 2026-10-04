@@ -117,7 +117,8 @@ describe('what the brief and the contract teach next', () => {
   const brief = renderTree(skillTree(), 'https://artifactbin.dev').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
 
   it('teaches automatic sign-in, browser approval and the private configuration location, without a setup step', () => {
-    expect(brief).toContain('@artifactbin/cli@latest setup');
+    expect(brief).toContain('@artifactbin/cli@latest <command>');
+    expect(brief).toContain('references/npm-local.md');
     expect(brief).toMatch(/automatic|authenticates itself|signs you in/i);
     expect(brief).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
     expect(brief).toContain('browser approval');

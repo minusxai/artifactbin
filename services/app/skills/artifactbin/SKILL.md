@@ -5,26 +5,22 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable `.jsx` artifacts combining a YAML fence with self-contained HTML and kit JSX, styled with Tailwind `className`; the fence names its design system and page type. Datasets and media are artifacts too.
+artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. The fence names the design system and page type. Datasets and media are artifacts too.
 
-Use the `afbin` CLI through npm for local files and browser approval. Direct HTTP clients use the email-authenticated API.
+Use the npm CLI for local files/browser approval; HTTP clients authenticate by email.
 
-- Prepare Node/npm once: `afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"`. Supported Node is reused; otherwise official LTS is installed for your user.
-- Windows PowerShell: `Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression`; use `npx.cmd` instead of `npx` below. No execution-policy change.
-- Run every command through `npx --yes @artifactbin/cli@latest <command>`. Install skills with `npx --yes @artifactbin/cli@latest setup`. Pin an exact version for reproducibility. Prepare its npm cache while connected, then run `npm exec --offline --yes --package @artifactbin/cli@<version> -- afbin <command>` offline. npm executes with your permissions; it is not a sandbox.
-- Local preview needs no credentials or cloud requests: `npx --yes @artifactbin/cli@latest preview report.jsx`. Source stays `.jsx`; offline downloads and HTML exports are self-contained `.jsx.html` files that open normally in a browser. Browser offline editing supports static markup/text; use local preview for compiler-dependent widgets. Publishing is explicit.
-- CLI browser sign-in allows guests. Direct HTTP API sign-in requires email and cannot continue as a guest.
-- Command examples below use `afbin` as shorthand: always invoke them as `npx --yes @artifactbin/cli@latest <command>` (Windows: `npx.cmd`).
-- Sign-in is automatic via browser approval, even with `--yes`. If remote/headless or browser login fails/times out, ask for email: `afbin auth --email <email>`. Ask for the code: `afbin auth --email <email> --otp <code>`, then retry. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
+- Run via `npx --yes @artifactbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
+- Preview is local; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.
+- Automatic browser approval also applies to `--yes`. If unavailable, ask for email: `afbin auth --email <email>`; then code: `afbin auth --email <email> --otp <code>`. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Few turns: `afbin help <page type>`, ONE design system in the fence, then push a FIRST designed version within six calls of the pull — the fence, the title, real opening copy and one substantive section — and fill the rest in later pushes; a person is waiting on a blank page. A successful push IS the verification that source was accepted. Skip pulling, diffing or grepping it just to confirm publication; filling sections is not re-checking.
 - For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=1 --param status=Done` to update. Use its declared names/arguments; preserve its source.
-- Sessions are for browser/UI testing: newly authored actions, page-local state, row/cell action context. Test each new or changed `<Mutation>` in a live session (`afbin help live-sessions`) on each identity's isolated copy (`afbin help apps`) and on the original `--as guest` (identity writes off). One session at a time. Stop once each works once per identity.
+- Test new or changed `<Mutation>` controls in a live session (`afbin help live-sessions`): each identity's isolated copy (`afbin help apps`), then the original `--as guest` (identity writes off). Sessions also test page-local state and row/cell context. One session at a time; stop after each works.
 - Local files: `afbin add <files> --json` assigns reference IDs; preview/push register named files. Push runs `afbin validate` and publishes unpublished IDs.
 - Every body element has a persistent `id` for its lifetime. Move it with the same id; never reuse an id.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
-- Markup for content, data and layout: the kit covers text, data, charts, tables, controls and motion. The Helmet `<script>` (Solid, any npm library) for behaviour; its exported components mount by name.
+- The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Another artifact is a deliberate fork: copy the file and remove those five fields.
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and the type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
