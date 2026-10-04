@@ -108,3 +108,18 @@ test('incompatible server errors retain the required release and npm instruction
  const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async()=>Response.json({error:'cli_update_required',required_protocol:99,required_version:'2.0.0',hint:'Run npx --yes @artifactbin/cli@2.0.0, then retry.'},{status:426,headers:{'X-Artifactbin-Protocol':'99'}})});
  await assert.rejects(client.request('/artifacts','POST',{markup:'<p />'}),(error:unknown)=>error instanceof CliError&&error.code==='cli_update_required'&&error.fix?.includes('npx')===true&&(error.details as any).required_version==='2.0.0');
 });
+
+test('viewer exports and malformed release metadata cannot trigger API update notices',async()=>{
+ let notices=0;
+ const client=new HttpClient({connection:{server:'https://example.test',token:'test'},onRelease:async()=>{notices++;},fetch:async(input)=>{
+  if(String(input).includes('/a/'))return new Response('viewer',{headers:{'X-Artifactbin-CLI-Version':'2.0.0','X-Artifactbin-Protocol':'3'}});
+  return Response.json({okay:true},{headers:{'X-Artifactbin-CLI-Version':'2.0.0;evil','X-Artifactbin-Protocol':'3'}});
+ }});
+ assert.equal((await client.view('/a/abc123')).bytes.toString(),'viewer');
+ await client.request('/artifacts');assert.equal(notices,0);
+});
+
+test('successful incompatible protocol names the server release without asking to update the server',async()=>{
+ const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async()=>Response.json({okay:true},{headers:{'X-Artifactbin-CLI-Version':'2.0.0','X-Artifactbin-Protocol':'99'}})});
+ await assert.rejects(client.request('/artifacts'),(error:unknown)=>error instanceof CliError&&error.code==='protocol_mismatch'&&error.fix==='Run npx --yes @artifactbin/cli@2.0.0 <command>, then retry.');
+});

@@ -174,7 +174,7 @@ export function servicePackageUrl(releaseUrl:string,env:NodeJS.ProcessEnv=proces
 /** Automatic checks are opt-out; a version pin disables background changes entirely. */
 export function autoUpdatePolicy(env:NodeJS.ProcessEnv=process.env):{enabled:boolean;pin?:string} {
  const pin=env.CLI__VERSION_PIN;
- return {enabled:!['0','false','off'].includes((env.CLI__AUTO_UPDATE??'').toLowerCase())&&!pin,...(pin?{pin:validVersion(pin)?pin:'invalid'}:{})};
+ return {enabled:!['0','false','off'].includes((env.CLI__AUTO_UPDATE??'').toLowerCase())&&!['true','1'].includes((env.npm_config_offline??'').toLowerCase())&&!pin,...(pin?{pin:validVersion(pin)?pin:'invalid'}:{})};
 }
 
 /** Managed remote children inherit scoped proof; never serialize these values into documents or logs. */

@@ -1,3 +1,4 @@
+import cliRelease from '../../public/chat/release.json';
 import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 /**
  * The bearer/cookie route wrapper, and the two in-memory web-ingest allowances
@@ -152,7 +153,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     routeCtx?: { params: Promise<Record<string, string>> },
   ): Promise<Response> => {
     const protocol=request.headers.get('X-Artifactbin-Protocol');
-    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,hint:'Run npx --yes @artifactbin/cli@latest <command>, then retry with the current write contract.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION)}});
+    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliRelease.version,hint:`Run npx --yes @artifactbin/cli@${cliRelease.version} <command>, then retry with the current write contract.`}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),'X-Artifactbin-CLI-Version':cliRelease.version}});
     const auth = request.headers.get('authorization') ?? '';
     const presented = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
     const resolved = presented ? await resolveToken(presented) : null;
@@ -195,6 +196,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const headers=new Headers(response.headers);
     headers.set('X-Artifactbin-Account',expectedAccount||account);
     headers.set('X-Artifactbin-Protocol',String(CLI_PROTOCOL_VERSION));
+    headers.set('X-Artifactbin-CLI-Version',cliRelease.version);
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   };
 }

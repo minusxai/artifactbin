@@ -6,11 +6,12 @@ import {HOME_SCOPE,State,withLock} from './state';
 export const UPDATE_NOTICE_INTERVAL_MS=60*60*1000;
 export interface UpdateNoticeOptions {
  home:string;server:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;stderr:(value:string)=>void;
- localOnly?:boolean;now?:()=>number;currentVersion?:string;
+ localOnly?:boolean;now?:()=>number;currentVersion?:string;release?:{version:string;protocol:number};
 }
 /** Connected boundaries alone opt in. Local commands never discover a server to check releases. */
 export async function checkUpdateNotice(options:UpdateNoticeOptions):Promise<void>{
- if(options.localOnly||!autoUpdatePolicy(options.env).enabled)return;
+ const data=options.release,current=options.currentVersion??CLI_VERSION;
+ if(options.localOnly||!autoUpdatePolicy(options.env).enabled||!data||!validVersion(data.version)||!validVersion(current)||!Number.isSafeInteger(data.protocol)||data.protocol<1||compareVersions(data.version,current)<=0)return;
  try{
   if((await readClientDefaults(options.home,options.env)).updates===false)return;
   const server=normalizeServer(options.server),now=options.now??Date.now;
@@ -23,10 +24,6 @@ export async function checkUpdateNotice(options:UpdateNoticeOptions):Promise<voi
    }finally{state.close();}
   },{waitMs:0,reentrant:false},options.env);
   if(!claimed)return;
-  const response=await(options.fetch??fetch)(`${server}/chat/release.json`,{redirect:'error',signal:AbortSignal.timeout(2000),headers:{Accept:'application/json'}});
-  if(!response.ok)return;
-  const data=await response.json();const current=options.currentVersion??CLI_VERSION;
-  if(!validVersion(data?.version)||!validVersion(current)||!Number.isSafeInteger(data.protocol)||data.protocol<1||compareVersions(data.version,current)<=0)return;
   options.stderr(`A newer afbin version is available (${data.version}). Run npx --yes @artifactbin/cli@${data.version} <command> to use it.\n`);
- }catch{/* Release checks and busy/unavailable local state never change command success. */}
+ }catch{/* Response notices and busy/unavailable local state never change command success. */}
 }
