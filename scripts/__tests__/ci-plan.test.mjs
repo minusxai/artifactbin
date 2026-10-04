@@ -876,7 +876,7 @@ describe('CI job shape', () => {
     expect(proof.run).toContain('scripts/test-installed-npm.mjs preview');
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
     expect(jobs.cli.steps.find(step=>step.name==='Standard-user Windows Node bootstrap under Restricted PS5.1').run).toContain('test-node-bootstrap.ps1');
-    const intel=jobs['cli-preview'].steps.find(step=>step.name==='File preview from the uploaded executable');
+    const intel=jobs['cli-preview'].steps.find(step=>step.name==='File preview from the uploaded npm package');
     expect(intel.run).toContain('dist/afbin.mjs');
     expect(intel.run).toContain('--phase=${{ matrix.phase }}');
     expect(jobs['cli-preview'].strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
