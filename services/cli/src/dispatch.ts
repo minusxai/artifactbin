@@ -1,3 +1,4 @@
+import {localHistory,localHistoryHead} from './local-history';
 import {importLocalHtml} from './local-html-import';
 import {publishLocalWorkspace} from './local-publication';
 import {registerLocalFiles,findLocalWorkspace,moveLocalFile} from './local-workspace';
@@ -196,6 +197,20 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // JSON out of the file with Python before pushing (local deck, 14 Sep).
    const verified=localValidation.valid?await verifiedSummary(workspace,positionals):undefined;
    emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
+  if(command==='log'&&portable&&!urlArgument()){
+   const known=await localIdentities(workspace),results=[];
+   for(const input of positionals){
+    const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:declaredServer});
+    const path=ref.kind==='path'?ref.path:known[ref.id];
+    if(!path)throw new CliError('unresolved_reference',`${input} is not in this local workspace.`,'Use an explicit artifact URL for remote history.');
+    const head=await localHistoryHead(workspace.root,path),entries=await localHistory(workspace.root,path);
+    const offset=flags.cursor===undefined?0:Number(flags.cursor),limit=flags.limit===undefined?100:Number(flags.limit);
+    if(!Number.isSafeInteger(offset)||offset<0)throw new CliError('invalid_cursor','A local history cursor must be a nonnegative integer.');
+    const selected=ref.version===undefined?entries:entries.filter(entry=>entry.version===ref.version);
+    results.push({path,local:true,head,versions:selected.slice(offset,offset+limit),next_cursor:offset+limit<selected.length?String(offset+limit):null});
+   }
+   emit(results.length===1?results[0]:{operations:results});return 0;
+  }
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
    try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style,await addresses());if(result)emit(result);return 0;}

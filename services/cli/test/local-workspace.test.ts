@@ -7,7 +7,7 @@ import {runCli} from '../src/dispatch';
 import {loadWorkspace} from '../src/workspace';
 import {localIdentities} from '../src/identities';
 import {startPreview} from '../src/preview/session';
-import {registerLocalFiles,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles} from '../src/local-workspace';
+import {registerLocalFiles,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles,saveLocalFile} from '../src/local-workspace';
 import {digest} from '../src/files';
 
 test('fresh preview and add use portable identities without discovery or credentials',async()=>{
@@ -89,5 +89,18 @@ test('moving a local document keeps its identity and discussion, and status disc
  assert.equal(await runCli(['add','draft.jsx','--json'],context),0,out.join(''));out.length=0;
  assert.equal(await runCli(['push','draft.jsx','--dry-run','--json'],context),0,out.join(''));
  assert.equal(JSON.parse(out[0]!).local_only,true);assert.equal(JSON.parse(out[0]!).operations[0].status,'would_publish');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+ test('local CLI log and move preserve saved history without server access',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-log-'));
+ try{
+ await writeFile(join(root,'draft.jsx'),'<p id="p">Original</p>');
+ const workspace=await loadWorkspace(root,join(root,'home'));await registerLocalFiles(workspace,['draft.jsx']);
+ const before=await readFile(join(root,'draft.jsx'));await saveLocalFile(root,'draft.jsx',digest(before),Buffer.from(before.toString().replace('Original','Edited')));
+ const output:string[]=[];const context={cwd:root,home:workspace.home,env:{},stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local history must not fetch')};
+ assert.equal(await runCli(['mv','draft.jsx','moved.jsx','--json'],context),0,output.join(''));output.length=0;
+ assert.equal(await runCli(['log','moved.jsx','--json'],context),0,output.join(''));
+ const result=JSON.parse(output[0]!);assert.equal(result.local,true);assert.equal(result.versions[0].version,1);assert.match(result.versions[0].source,/Original/);
  }finally{await rm(root,{recursive:true,force:true});}
 });

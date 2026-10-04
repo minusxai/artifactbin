@@ -4,7 +4,7 @@ import {readFile,lstat,realpath,link,unlink} from 'node:fs/promises';
 import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
-import {recordLocalHistory} from './local-history';
+import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory} from './local-history';
 import {stateFor,readState} from './state-access';
 import {workspaceStateEnv} from './config';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
@@ -122,6 +122,7 @@ export async function saveLocalFile(root:string,path:string,before:string,data:B
 interface LocalMove {from:string;to:string;id:string;hash:string}
 async function recoverLocalMove(root:string):Promise<void>{
  const store=await localWorkspaceState(root),pending=store.get<LocalMove>(LOCAL_WORKSPACE_SCOPE,'identity-move','current')?.value;if(!pending)return;
+ assertLocalHistoryMove(store,pending.from,pending.to);
  const from=await confinedPath(root,pending.from),to=await confinedPath(root,pending.to);
  const source=await readOptional(from),destination=await readOptional(to);
  if(!source&&!destination)throw new CliError('missing_file','Move source and destination are missing.');
@@ -132,6 +133,7 @@ async function recoverLocalMove(root:string):Promise<void>{
   await unlink(from);
  }
  store.transaction(()=>{
+  moveLocalHistory(store,pending.from,pending.to);
   store.delete(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.to,{id:pending.id});
   const tracked=store.get(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);if(tracked){store.delete(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'tracked',pending.to,tracked.value);}
   for(const kind of ['preview-comment','preview-thread'] as const)for(const row of store.list<{file:string}>(LOCAL_WORKSPACE_SCOPE,kind))if(row.value.file===pending.from)store.put(LOCAL_WORKSPACE_SCOPE,kind,row.key,{...row.value,file:pending.to});
