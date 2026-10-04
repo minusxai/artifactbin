@@ -28,6 +28,7 @@ import { resetExportRenderer } from '@/lib/export';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { GET as downloadOffline } from '@/app/a/[id]/download/route';
+import {digest} from '../../cli/src/files';
 
 useAppHarness();
 
@@ -83,15 +84,23 @@ describe('cli-sync-integration', () => {
     await writeFile(join(root,'other.jsx'),await readFile(join(root,'doc.jsx')));
     await cli.invoke(['push','doc.jsx','other.jsx']);
     expect(routesCalled(calls).filter(call=>call==='POST /api/artifacts')).toHaveLength(3);
-    const oldAsset=(await tracking(root,root)).files['sales.csv'].id;
+    const publication=join(root,'.artifactbin','publications',digest(CLI_SERVER).slice(0,24));
+    const mapping=JSON.parse(await readFile(join(publication,'manifest.json'),'utf8')).ids as Record<string,string>;
+    const oldAsset=mapping[dataId]!;expect(oldAsset).not.toBe(dataId);
+    const original=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));
+    const stagedRoot=join(publication,'files'),stagedHome=join(publication,'private');
+    expect((await tracking(stagedHome,stagedRoot)).files['sales.csv'].id).toBe(oldAsset);
     calls.length=0;await writeFile(join(root,'sales.csv'),'region,total\nEast,24\n');await cli.invoke(['push']);
     expect(routesCalled(calls).some(call=>call===`PUT /api/artifacts/${oldAsset}`)).toBe(true);
     expect(routesCalled(calls).filter(call=>call==='POST /api/artifacts')).toHaveLength(0);
-    expect((await tracking(root,root)).files['sales.csv'].id).toBe(oldAsset);
-    expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body).toContain(`src="ref:${oldAsset}"`);
+    expect((await tracking(stagedHome,stagedRoot)).files['sales.csv'].id).toBe(oldAsset);
+    expect(parseDocument(await readFile(join(stagedRoot,'doc.jsx'),'utf8')).body).toContain(`src="ref:${oldAsset}"`);
+    expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8'))).toEqual(original);
     const old=await read(new Request(`http://localhost:3000/api/artifacts/${oldAsset}`,{headers:{Authorization:`Bearer ${token.token}`}}),{params:Promise.resolve({id:oldAsset})});expect((await old.json()).version).toBe(2);
     const titled=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));titled.metadata.title='Sales';await writeFile(join(root,'doc.jsx'),writeDocument(titled));
-    calls.length=0;await cli.invoke(['push','doc.jsx']);expect(routesCalled(calls)).toEqual([`POST /api/artifacts/${titled.metadata.id}/edits`]);
+    const documentId=(await tracking(stagedHome,stagedRoot)).files['doc.jsx'].id;
+    calls.length=0;await cli.invoke(['push','doc.jsx']);expect(routesCalled(calls)).toEqual(['GET /api/artifacts',`POST /api/artifacts/${documentId}/edits`]);
+    expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body).toContain(`ref:${dataId}`);
    }finally{await cli.cleanup();}
   });
 });

@@ -6,7 +6,8 @@ import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import {reserveIds} from '@/lib/artifacts';
 import {writeFile,readFile,rename,copyFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {cliWorkspace,artifactTransport} from './cli-harness';
+import {cliWorkspace,artifactTransport,CLI_SERVER,type CliCall} from './cli-harness';
+import {digest} from '../../cli/src/files';
 import {startPreview} from '../../cli/src/preview/session';
 import {createUser} from '@/lib/accounts';
 import * as identifiers from '@/lib/platform/ids';
@@ -18,6 +19,9 @@ import {stateFor} from '../../cli/src/state-access';
 import {HOME_SCOPE} from '../../cli/src/state';
 import {getDb} from '@/lib/platform';
 useAppHarness();
+async function publication(root:string):Promise<{ids:Record<string,string>}>{
+ return JSON.parse(await readFile(join(root,'.artifactbin','publications',digest(CLI_SERVER).slice(0,24),'manifest.json'),'utf8'));
+}
 it('reserves an invisible batch and publishes the exact identity with durable replay',async()=>{
  const token=await mintToken('mxmx_test_reservations');const actor={tokenId:token.id,userId:null};
  const ids=await reserveIds(actor,'batch_000000000001');expect(ids).toHaveLength(100);expect(new Set(ids).size).toBe(100);
@@ -48,8 +52,8 @@ it('keeps dataset reference ids unchanged and refuses unuploaded data dependenci
  const doc=await post({reserved_id:ids[1],markup});expect(doc.status).toBe(201);expect((await doc.json()).markup).toContain(`ref:${ids[0]}`);
 });
 
-it('real CLI recovers a lost create response without changing the reserved document ID',async()=>{
- let lost=false;const transport=artifactTransport();
+it('real CLI recovers a lost create response preserving local identity and reserved remote identity',async()=>{
+ let lost=false;const calls:CliCall[]=[];const transport=artifactTransport(calls);
  const cli=await cliWorkspace('reserved-cli',{fetch:async(input,init)=>{
   const response=await transport(input,init);
   if(!lost&&init?.method==='POST'&&new URL(String(input)).pathname==='/api/artifacts'){lost=true;throw Error('Lost committed response');}
@@ -59,10 +63,14 @@ it('real CLI recovers a lost create response without changing the reserved docum
   await cli.connect('mxmx_test_reserved_cli');
   await writeFile(join(cli.root,'report.jsx'),'<p>Draft</p>');const id=(await cli.invoke(['add','report.jsx']))['report.jsx'];
   expect((await cli.run(['push','report.jsx'])).code).not.toBe(0);expect(lost).toBe(true);
-  await cli.invoke(['push','report.jsx']);expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toContain(`id: ${id}`);
-  expect((await(await getDb()).query('SELECT id FROM artifacts')).rows).toEqual([{id}]);
+  const remoteId=(await publication(cli.root)).ids[id];expect(remoteId).toBeTruthy();expect(remoteId).not.toBe(id);
+  const original=await readFile(join(cli.root,'report.jsx'),'utf8');
+  const recovered=await cli.invoke(['push','report.jsx']);expect(recovered.operations).toEqual([{path:'report.jsx',status:'skipped',reason:'no_remote_changes'}]);expect((await publication(cli.root)).ids[id]).toBe(remoteId);
+  expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(original);
+  expect((await(await getDb()).query('SELECT id FROM artifacts')).rows).toEqual([{id:remoteId}]);
+  expect(calls.filter(call=>call.method==='POST'&&call.path==='/api/artifacts').map(call=>(call.body as {reserved_id:string}).reserved_id)).toEqual([remoteId,remoteId]);
   await writeFile(join(cli.root,'report.jsx'),(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Draft','Updated'));
-  await cli.invoke(['push','report.jsx']);expect((await(await getDb()).query('SELECT id,version FROM artifacts')).rows).toEqual([{id,version:2}]);
+  await cli.invoke(['push','report.jsx']);expect((await(await getDb()).query('SELECT id,version FROM artifacts')).rows).toEqual([{id:remoteId,version:2}]);expect((await publication(cli.root)).ids[id]).toBe(remoteId);expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toContain(`id: ${id}`);
  }finally{await cli.cleanup();}
 });
 it('previews unpublished document and dataset IDs locally with no server reads',async()=>{
@@ -81,16 +89,20 @@ it('previews unpublished document and dataset IDs locally with no server reads',
  }finally{await session?.close();await cli.cleanup();}
 });
 
-it('HTTP reservations require an account and survive token rotation without crossing accounts',async()=>{
+it('authenticated reservations survive account token rotation and isolate guest token namespaces',async()=>{
  const user=await createUser({email:'mxmx_test_ids@example.test'}),otherUser=await createUser({email:'mxmx_test_other_ids@example.test'});
- const first=await mintToken('first',user.id),rotated=await mintToken('rotated',user.id),other=await mintToken('other',otherUser.id),anonymous=await mintToken('anonymous');
+ const first=await mintToken('first',user.id),rotated=await mintToken('rotated',user.id),other=await mintToken('other',otherUser.id),anonymous=await mintToken('anonymous'),otherGuest=await mintToken('other-guest');
  const call=(token?:string)=>reserve(request('/api/artifacts/reservations',{method:'POST',token,headers:{'Idempotency-Key':'batch_account_000001'}}));
- expect((await call()).status).toBe(401);expect((await call(anonymous.token)).status).toBe(403);
+ expect((await call()).status).toBe(401);
+ const guest=await call(anonymous.token);expect(guest.status).toBe(200);const guestBatch=await guest.json();expect(guestBatch.ids).toHaveLength(100);expect(await(await call(anonymous.token)).json()).toEqual(guestBatch);
+ const secondGuest=await(await call(otherGuest.token)).json();expect(secondGuest.ids.some((id:string)=>guestBatch.ids.includes(id))).toBe(false);
  const response=await call(first.token);expect(response.status).toBe(200);const batch=await response.json();
- expect(batch.ids).toHaveLength(100);expect(await(await call(rotated.token)).json()).toEqual(batch);
+ expect(batch.ids).toHaveLength(100);expect(await(await call(rotated.token)).json()).toEqual(batch);expect(guestBatch.ids.some((id:string)=>batch.ids.includes(id))).toBe(false);
  const foreign=await(await call(other.token)).json();expect(foreign.ids.some((id:string)=>batch.ids.includes(id))).toBe(false);
  const publish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:batch.ids[0],markup:'<p>Same account</p>'}}));
- expect((await publish(other.token)).status).toBe(403);expect((await publish(rotated.token)).status).toBe(201);
+ expect((await publish(other.token)).status).toBe(403);expect((await publish(anonymous.token)).status).toBe(403);expect((await publish(rotated.token)).status).toBe(201);
+ const guestPublish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:guestBatch.ids[0],markup:'<p>Guest namespace</p>',visibility:'unlisted'}}));
+ expect((await guestPublish(otherGuest.token)).status).toBe(403);expect((await guestPublish(anonymous.token)).status).toBe(201);
 });
 it('ordinary creates skip reserved identities and reservation allocation skips existing artifacts',async()=>{
  const token=await mintToken('mxmx_test_id_collision'),actor={tokenId:token.id,userId:null};
@@ -133,18 +145,21 @@ it('CLI add, preview mapping and push preserve a registered dependency graph thr
  const transport=artifactTransport([],async(req,url)=>url.pathname==='/api/artifacts/reservations'?reserve(req):url.pathname==='/api/artifacts'&&req.method==='GET'?list(req):undefined);
  const cli=await cliWorkspace('registered-graph',{fetch:transport});
  try{
-  const user=await createUser({email:'mxmx_test_graph@example.test'});await cli.connect('graph',user.id);
+  const user=await createUser({email:'mxmx_test_graph@example.test'});const token=await cli.connect('graph',user.id);
   await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');await writeFile(join(cli.root,'report.jsx'),'<p>Draft</p>');
   const ids=await cli.invoke(['add','sales.csv','report.jsx']);
   expect(ids['sales.csv']).toMatch(/^[A-Za-z0-9]{6}$/);expect(await cli.invoke(['add','sales.csv','report.jsx'])).toEqual(ids);
   const source=(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('<p>Draft</p>',`<Helmet><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><p>Sales</p>`);
   await writeFile(join(cli.root,'report.jsx'),source);
   await cli.invoke(['push','report.jsx']);
-  expect((await(await getDb()).query('SELECT id FROM artifacts ORDER BY id')).rows.map(row=>row.id)).toEqual(Object.values(ids).sort());
-  expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toContain('ref:'+ids['sales.csv']);
+  const mapping=(await publication(cli.root)).ids;
+  expect((await(await getDb()).query('SELECT id FROM artifacts ORDER BY id')).rows.map(row=>row.id)).toEqual(Object.values(mapping).sort());
+  const remote=await(await read(request('/api/artifacts/'+mapping[ids['report.jsx']],{token:token.token}),{params:Promise.resolve({id:mapping[ids['report.jsx']]})})).json();
+  expect(remote.markup).toContain('ref:'+mapping[ids['sales.csv']]);expect(remote.markup).not.toContain('ref:'+ids['sales.csv']);
+  expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(source);
   await writeFile(join(cli.root,'bare.jsx'),'<p>Registered draft</p>');
   const bare=await cli.invoke(['add','bare.jsx']);
-  const pushed=await cli.invoke(['push']);expect(pushed.operations.some((op:{id?:string})=>op.id===bare['bare.jsx'])).toBe(true);
+  const pushed=await cli.invoke(['push']);const bareRemote=(await publication(cli.root)).ids[bare['bare.jsx']];expect(pushed.operations.some((op:{id?:string})=>op.id===bareRemote)).toBe(true);expect(bareRemote).not.toBe(bare['bare.jsx']);
   await cli.invoke(['mv','sales.csv','renamed.csv']);
   expect((await localIdentities(await loadWorkspace(cli.root,cli.home)))[ids['sales.csv']]).toBe('renamed.csv');
  }finally{await cli.cleanup();}
@@ -172,13 +187,61 @@ it('replays a lost reservation response and refuses offline exhaustion without r
  }finally{await cli.cleanup();}
 });
 
-it('publishes mutually linked draft documents without rewriting or duplicating their IDs',async()=>{
- const cli=await cliWorkspace('navigation-cycle',{fetch:artifactTransport([],async(req,url)=>url.pathname==='/api/artifacts/reservations'?reserve(req):url.pathname==='/api/artifacts'&&req.method==='GET'?list(req):undefined)});
+it('publishes mutually linked local documents with stable mapped IDs through a lost response and ordered SQL dependencies',async()=>{
+ const calls:CliCall[]=[];const transport=artifactTransport(calls);let lost=false;
+ const cli=await cliWorkspace('navigation-cycle',{fetch:async(input,init)=>{
+  if(init?.method==='POST'&&new URL(String(input)).pathname==='/api/artifacts'){
+   const mapped=(await publication(cli.root)).ids;
+   expect(Object.values(mapped)).toHaveLength(3);
+   expect(Object.values(mapped)).toContain(JSON.parse(String(init.body)).reserved_id);
+  }
+  const response=await transport(input,init);
+  if(!lost&&init?.method==='POST'&&new URL(String(input)).pathname==='/api/artifacts'&&String(JSON.parse(String(init.body)).markup).includes('<Import')){lost=true;throw Error('Lost linked document response');}
+  return response;
+ }});
  try{
-  const user=await createUser({email:'mxmx_test_navigation@example.test'});await cli.connect('navigation',user.id);
-  await writeFile(join(cli.root,'a.jsx'),'<p>A</p>');await writeFile(join(cli.root,'b.jsx'),'<p>B</p>');const ids=await cli.invoke(['add','a.jsx','b.jsx']);
+  const user=await createUser({email:'mxmx_test_navigation@example.test'});const token=await cli.connect('navigation',user.id);
+  await writeFile(join(cli.root,'a.jsx'),'<p>A</p>');await writeFile(join(cli.root,'b.jsx'),'<p>B</p>');await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');const ids=await cli.invoke(['add','a.jsx','b.jsx','sales.csv']);
   for(const [file,other] of [['a.jsx','b.jsx'],['b.jsx','a.jsx']])await writeFile(join(cli.root,file!), (await readFile(join(cli.root,file!),'utf8'))+`<a href="/a/${ids[other!]}">Other</a>`);
-  await cli.invoke(['push','a.jsx']);expect((await(await getDb()).query('SELECT id FROM artifacts')).rows).toHaveLength(2);
-  await cli.invoke(['push','a.jsx']);expect((await(await getDb()).query('SELECT id FROM artifacts')).rows).toHaveLength(2);
+  await writeFile(join(cli.root,'b.jsx'),(await readFile(join(cli.root,'b.jsx'),'utf8'))+`<Helmet><Import name="data" src="ref:${ids['sales.csv']}" /><Query name="q">{\`select * from data.rows\`}</Query></Helmet>`);
+  const originals=await Promise.all(['a.jsx','b.jsx','sales.csv'].map(file=>readFile(join(cli.root,file),'utf8')));
+  expect((await cli.run(['push','a.jsx'])).code).not.toBe(0);expect(lost).toBe(true);
+  const mapped=(await publication(cli.root)).ids;
+  await cli.invoke(['push','a.jsx']);
+  expect((await(await getDb()).query('SELECT id,version FROM artifacts ORDER BY id')).rows).toEqual(Object.values(mapped).sort().map(id=>({id,version:1})));
+  for(const [file,other] of [['a.jsx','b.jsx'],['b.jsx','a.jsx']]){
+   const id=mapped[ids[file!]];const head=await(await read(request('/api/artifacts/'+id,{token:token.token}),{params:Promise.resolve({id})})).json();expect(head.markup).toContain(`/a/${mapped[ids[other!]]}`);expect(head.markup).not.toContain(`/a/${ids[other!]}`);
+  }
+  const creates=calls.filter(call=>call.method==='POST'&&call.path==='/api/artifacts').map(call=>(call.body as {reserved_id:string}).reserved_id);
+  expect(creates.indexOf(mapped[ids['sales.csv']])).toBeLessThan(creates.indexOf(mapped[ids['b.jsx']]));expect(creates.filter(id=>id===mapped[ids['b.jsx']])).toHaveLength(2);expect(new Set(creates).size).toBe(3);
+  const count=calls.length;await cli.invoke(['push','a.jsx']);expect(calls.slice(count).map(call=>`${call.method} ${call.path}`)).toEqual(['GET /api/artifacts']);expect((await publication(cli.root)).ids).toEqual(mapped);
+  expect(await Promise.all(['a.jsx','b.jsx','sales.csv'].map(file=>readFile(join(cli.root,file),'utf8')))).toEqual(originals);
+ }finally{await cli.cleanup();}
+});
+it('refuses cyclic dataset dependencies before reserving or publishing and preserves local files',async()=>{
+ const calls:CliCall[]=[];const cli=await cliWorkspace('dataset-cycle',{fetch:artifactTransport(calls)});
+ try{
+  await cli.connect('mxmx_test_dataset_cycle');await writeFile(join(cli.root,'a.csv'),'link\nplaceholder\n');await writeFile(join(cli.root,'b.csv'),'link\nplaceholder\n');const ids=await cli.invoke(['add','a.csv','b.csv']);
+  await writeFile(join(cli.root,'a.csv'),`link\nref:${ids['b.csv']}\n`);await writeFile(join(cli.root,'b.csv'),`link\nref:${ids['a.csv']}\n`);
+  const original=await readFile(join(cli.root,'a.csv'),'utf8');calls.length=0;
+  const result=await cli.run(['push','a.csv']);expect(result.code).not.toBe(0);expect(result.result.error.code).toBe('dependency_cycle');expect(calls.every(call=>call.path==='/api/server'&&call.method==='GET')).toBe(true);expect(await readFile(join(cli.root,'a.csv'),'utf8')).toBe(original);
+ }finally{await cli.cleanup();}
+});
+
+it('CLI browser guest credentials publish local public and unlisted documents without an email account',async()=>{
+ const calls:CliCall[]=[];const cli=await cliWorkspace('guest-publication',{fetch:artifactTransport(calls)});
+ try{
+  const token=await cli.connect('mxmx_test_guest_publication',null);
+  for(const visibility of ['public','unlisted'])await writeFile(join(cli.root,visibility+'.jsx'),`---\nvisibility: ${visibility}\n---\n<p>Guest ${visibility}</p>`);
+  const ids=await cli.invoke(['add','public.jsx','unlisted.jsx']);const originals=await Promise.all(['public.jsx','unlisted.jsx'].map(file=>readFile(join(cli.root,file),'utf8')));
+  const pushed=await cli.invoke(['push','public.jsx','unlisted.jsx']);expect(pushed.local_source_preserved).toBe(true);
+  const mapped=(await publication(cli.root)).ids;
+  expect((await(await getDb()).query('SELECT user_id FROM tokens WHERE id=$1',[token.id])).rows).toEqual([{user_id:null}]);
+  for(const visibility of ['public','unlisted']){
+   const localId=ids[visibility+'.jsx'],id=mapped[localId];expect(id).toBeTruthy();expect(id).not.toBe(localId);
+   const response=await read(request('/api/artifacts/'+id,{token:token.token}),{params:Promise.resolve({id})});expect(response.status).toBe(200);expect((await response.json()).visibility).toBe(visibility);
+  }
+  expect(calls.some(call=>call.path==='/api/artifacts/reservations')).toBe(true);expect(calls.filter(call=>call.path==='/api/artifacts'&&call.method==='POST')).toHaveLength(2);
+  expect(await Promise.all(['public.jsx','unlisted.jsx'].map(file=>readFile(join(cli.root,file),'utf8')))).toEqual(originals);
  }finally{await cli.cleanup();}
 });

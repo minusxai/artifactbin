@@ -10,7 +10,7 @@ import {withPrivateStateHome} from './config';
 import {digest,readOptional,atomicWrite} from './files';
 import {confinedPath} from './journal';
 import {localIdentities,addFiles,moveFile} from './identities';
-import {parseDocument,writeDocument} from './document';
+import {parseDocument,writeDocument,metadataFields} from './document';
 import {parseResourceFile,writeResourceFile,readResourceSource} from './resource-file';
 import {referenceIds} from './preview/graph';
 import {datasetFileRows,datasetFileBytes,isDatasetFile} from './dataset-file';
@@ -25,6 +25,7 @@ import {readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 import {snapshotDocument} from './local';
 import {canonicalizeMarkup} from '../../app/lib/story/document/canonical-source';
 import {parseJsx,serializeJsx,type JsxNode} from '../../app/lib/jsx';
+import {collectRefUses} from '../../app/lib/story/data/refs';
 import {REFERENCE_POSITIONS} from '../../app/lib/story/data/reference-positions';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import type {HttpClient} from './http';
@@ -73,29 +74,45 @@ function rewriteMarkup(source:string,ids:Record<string,string>):string{
 function rowReferences(value:unknown):Set<string>{
  const found=new Set<string>();const visit=(item:unknown)=>{if(typeof item==='string'){const match=/^(?:ref:|\/a\/)([A-Za-z0-9]{6,12})$/.exec(item);if(match)found.add(match[1]!);}else if(Array.isArray(item))item.forEach(visit);else if(item&&typeof item==='object')Object.values(item).forEach(visit);};visit(value);return found;
 }
+/** Navigation selects documents, but only data/resource references constrain write order. */
 async function dependencies(workspace:Workspace,paths:string[],identities:Record<string,string>):Promise<{paths:string[];sources:string[]}>{
- const ordered:string[]=[],sources=new Set<string>(),active=new Set<string>(),done=new Set<string>();
- async function visit(path:string):Promise<void>{
-  path=relative(workspace.root,await confinedPath(workspace.root,path)).split(sep).join('/');if(path.split('/').includes('.artifactbin'))throw new CliError('invalid_path','Workspace state cannot be published as content.');if(done.has(path))return;
-  if(active.has(path))throw new CliError('dependency_cycle',`Cyclic publication reference: ${path}.`);
-  active.add(path);const bytes=await readFile(await confinedPath(workspace.root,path));const extension=extname(path).toLowerCase();
-  let refs=new Set<string>();
-  if(extension==='.jsx'){const body=parseDocument(bytes.toString()).body;const checked=validateMarkupStructure(body);if(checked.errors.length)throw new CliError('validation_failed',`Local validation failed for ${path}.`,'Correct the source before publishing.',{errors:checked.errors});refs=referenceIds(body);}
-  else if(isDatasetFile(path))refs=rowReferences(datasetFileRows(path,bytes));
+ const sources=new Set<string>(),edges=new Map<string,string[]>();
+ function markupReferences(body:string):{all:Set<string>;required:Set<string>}{
+  return{all:referenceIds(body),required:new Set((collectRefUses(body)??[]).filter(ref=>ref.kind!=='asset').map(ref=>ref.id))};
+ }
+ async function discover(path:string):Promise<string>{
+  path=relative(workspace.root,await confinedPath(workspace.root,path)).split(sep).join('/');
+  if(path.split('/').includes('.artifactbin'))throw new CliError('invalid_path','Workspace state cannot be published as content.');
+  if(edges.has(path))return path;
+  const required:string[]=[];edges.set(path,required);
+  const bytes=await readFile(await confinedPath(workspace.root,path)),extension=extname(path).toLowerCase();
+  let all=new Set<string>(),strong=all;
+  if(extension==='.jsx'){
+   const body=parseDocument(bytes.toString()).body,checked=validateMarkupStructure(body);
+   if(checked.errors.length)throw new CliError('validation_failed',`Local validation failed for ${path}.`,'Correct the source before publishing.',{errors:checked.errors});
+   const refs=markupReferences(body);all=refs.all;strong=refs.required;
+  }else if(isDatasetFile(path))all=strong=rowReferences(datasetFileRows(path,bytes));
   else if(['.yaml','.yml'].includes(extension)){
    const resource=parseResourceFile(bytes.toString()),source=await readResourceSource(resource,path,workspace.root);
    if(source){
     if(source.path.split(sep).includes('.artifactbin'))throw new CliError('invalid_path','Workspace state cannot be a publication source.');
-    sources.add(source.path.split(sep).join('/'));
-    const content=Buffer.from(source.bytes,'base64');
-    refs=extname(source.path).toLowerCase()==='.jsx'?referenceIds(parseDocument(content.toString()).body):isDatasetFile(source.path)?rowReferences(datasetFileRows(source.path,content)):new Set<string>();
+    sources.add(source.path.split(sep).join('/'));const content=Buffer.from(source.bytes,'base64');
+    if(extname(source.path).toLowerCase()==='.jsx'){const refs=markupReferences(parseDocument(content.toString()).body);all=refs.all;strong=refs.required;}
+    else if(isDatasetFile(source.path))all=strong=rowReferences(datasetFileRows(source.path,content));
    }
-   if(typeof resource.folder==='string')refs.add(resource.folder);
+   if(typeof resource.folder==='string'){all.add(resource.folder);strong.add(resource.folder);}
   }
-  for(const id of refs)if(identities[id])await visit(identities[id]!);
-  active.delete(path);done.add(path);ordered.push(path);
+  for(const id of all)if(identities[id]){const target=await discover(identities[id]!);if(strong.has(id))required.push(target);}
+  return path;
  }
- for(const path of paths.length?paths:Object.values(identities))await visit(resolve(workspace.cwd,path));return{paths:ordered,sources:[...sources].filter(path=>!done.has(path))};
+ for(const path of paths.length?paths:Object.values(identities))await discover(resolve(workspace.cwd,path));
+ const ordered:string[]=[],active=new Set<string>(),done=new Set<string>();
+ const order=(path:string)=>{
+  if(done.has(path))return;if(active.has(path))throw new CliError('dependency_cycle',`Cyclic publication dependency: ${path}.`);
+  active.add(path);for(const dependency of edges.get(path)??[])order(dependency);active.delete(path);done.add(path);ordered.push(path);
+ };
+ for(const path of edges.keys())order(path);
+ return{paths:ordered,sources:[...sources].filter(path=>!edges.has(path))};
 }
 async function saveManifest(path:string,manifest:Publication):Promise<void>{
  await atomicWrite(path,JSON.stringify(manifest,null,2)+'\n');
@@ -198,6 +215,13 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
    const target=await confinedPath(root,path),remote=await readFile(target);let mapped=mappedBytes(path,bytes,manifest.ids,remote);
    if(previous&&extname(path).toLowerCase()==='.jsx'){
     const base=parseDocument(mappedBytes(path,Buffer.from(previous.bytes,'base64'),previous.ids??manifest.ids,remote).toString());const local=parseDocument(mapped.toString()),confirmed=parseDocument(remote.toString());
+    const accepted=stage.tracking?.files[path]?.snapshot;
+    if(accepted){
+     const normalized=snapshotDocument(accepted).metadata;
+     // Omitted author fields acquired server defaults on the accepted create;
+     // those defaults are the baseline for a later explicit metadata change.
+     for(const key of metadataFields)if(base.metadata[key]===undefined)Object.assign(base.metadata,{[key]:normalized[key]});
+    }
     // Server-assigned node IDs are normalization, not an intervening user edit.
     // Match them before computing changes; keep author originals unchanged.
     base.body=stampNodeIds(base.body,{previousSource:confirmed.body}).source;
