@@ -1,8 +1,10 @@
 /** Solid offline chrome over the same serialized file as the three-browser gate. */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import type { EditorView } from 'prosemirror-view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/dom';
+import { storyBodyFor } from '@/lib/story/document/body';
 import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
 import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
@@ -12,14 +14,14 @@ import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from
 import type { CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
 
 // The real mounter, with the callbacks the offline shell hands it kept for the flow-edit cases.
-const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null }));
+const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null }));
 vi.mock('@/solid/editor/dom-mounter', async (real) => {
   const actual = await real<typeof import('@/solid/editor/dom-mounter')>();
   return {
     ...actual,
     mountCompiledEditRegions: (...args: Parameters<typeof actual.mountCompiledEditRegions>) => {
       mounted.callbacks = args[2];
-      return actual.mountCompiledEditRegions(...args);
+      return actual.mountCompiledEditRegions(args[0], args[1], { ...args[2], onView(view) { if (view?.state.doc.textContent === 'Local report') mounted.view = view; args[2].onView?.(view); } });
     },
   };
 });
@@ -41,7 +43,7 @@ function shell(file: ArtifactFile) {
   document.head.innerHTML = doc.head.innerHTML;
   document.body.innerHTML = doc.body.innerHTML;
 }
-beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; });
+beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; mounted.view = null; });
 
 /** A file whose source, as downloaded, has two identical paragraphs right after the description (body paths 1.5 and 1.7). */
 const TWICE = '<p>Same words.</p>';
@@ -159,6 +161,31 @@ describe('Solid offline file', () => {
     shell(saved); await mountSolidOfflineFile();
     expect(screen.getByRole('heading', { name: 'Added offline' })).toBeTruthy();
     expect(document.querySelector('#new-section')?.textContent).toContain('A new paragraph.');
+    expect(saved.compiled).toEqual(file.compiled);
+  });
+
+  it('saves and reopens a prose edit in a compact top-level local document', async () => {
+    const original = fixture();
+    const source = '<Helmet><Query name="sales">{`select 30 as revenue`}</Query></Helmet><h1 id="title">Local report</h1><img id="picture" src="data:image/png;base64,AAAA" alt="Portable image"/><Number id="sum" data="$sales" col="revenue" agg="sum"/><p id="text">Initial paragraph</p>';
+    const file = { ...original, source, base: { ...original.base, source }, derivedFrom: sourceDigest(source),
+      island: { ...original.island, nodes: storyBodyFor(source)!.body },
+      compiled: { ...original.compiled!, html: '<h1 id="title" data-mx-ast="0">Local report</h1><img id="picture" data-mx-ast="1" alt="Portable image"/><div id="sum" data-mx-ast="2">30</div><p id="text" data-mx-ast="3">Initial paragraph</p>' } };
+    await openAndEdit(file);
+    const view = mounted.view!;
+    view.dispatch(view.state.tr.insertText('Offline saved report', 1, 1 + 'Local report'.length));
+    fireEvent.click(screen.getByRole('button', { name: 'Done editing' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy());
+    expect(screen.getByRole('heading', { name: 'Offline saved report' })).toBeTruthy();
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(written).toHaveLength(1));
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    expect(saved.source).toContain('Offline saved report');
+    disposeSolidOfflineFile(); shell(saved); await mountSolidOfflineFile();
+    expect(screen.getByRole('heading', { name: 'Offline saved report' })).toBeTruthy();
     expect(saved.compiled).toEqual(file.compiled);
   });
 

@@ -177,6 +177,7 @@ function OfflineShell(props: Opened) {
   };
   const edit = async () => {
     if (editing()) {
+      editMount?.flush();
       await live?.flushNow();
       if (live && !live.isIdle()) return;
       editMount?.dispose(); editMount = null;
@@ -201,6 +202,7 @@ function OfflineShell(props: Opened) {
   const save = async () => {
     setSaving(true); setSaveError('');
     try {
+      editMount?.flush();
       await live?.flushNow();
       if (live && !live.isIdle()) { setSaveError('Fix the source before saving. Your unsaved changes are still in the editor.'); return; }
       // The compiled module and its served markup are never touched by an edit (only `source`
