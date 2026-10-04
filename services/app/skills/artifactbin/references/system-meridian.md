@@ -12,13 +12,12 @@ description: >-
 - **Avoid it when:** Editorial or narrative subjects, anything that wants warmth, print or texture, consumer brands with a personality to show, or a page whose job is to be remembered rather than used.
 - **Fit:** Dashboard best · Deck good · Editorial good · Scrolly avoid · Plan best · App best · Landing best.
 - **Fonts:** Geist · Geist Mono, every weight the roles use, served by the runtime. Opens day first.
-- **Published specimen:** `/a/9q4LBf` on the public artifactbin renders everything below in both modes. From: New: the sleek professional one.
 
 ## Bind it
 
 1. Fence: `theme: meridian`, and the page type's `template`. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
 2. Root element: `<div data-design="tw" className="@container bg-background text-foreground">`, then kit components, token classes and the classes below.
-3. Helmet comment, the record later edits read instead of reskinning: `{/* design: system=Meridian (9q4LBf) · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}`.
+3. Helmet comment, the record later edits read instead of reskinning: `{/* design: system=Meridian · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}`.
 4. Override one thing, if the subject needs it, with a Helmet `<style>` that reassigns a single `--ds-*` token under `:root` and again under `.dark`; every component, chart and device follows. Change the token, never the component. Tailwind utilities compile `!important`: layout utilities go on role-bearing elements, type utilities never do.
 
 ```jsx

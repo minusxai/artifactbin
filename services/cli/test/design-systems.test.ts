@@ -57,6 +57,8 @@ test('a system binds by its fence line alone: no CSS to paste, the vocabulary th
   assert.match(text,/Classes the runtime provides: `[a-z]+-[a-z0-9-]+`/,`${name}: the class vocabulary`);
   assert.match(text,/\| `--ds-[a-z0-9-]+` \|/,`${name}: the token table`);
   assert.ok(!text.includes('@font-face'),`${name}: font rules belong to the runtime`);
+  // Help is offline and self-hosted instances exist: a reference never points at a page one host has.
+  assert.ok(!/\/a\/[A-Za-z0-9]{6}\b/.test(text),`${name}: names a hosted page`);
  }
 });
 

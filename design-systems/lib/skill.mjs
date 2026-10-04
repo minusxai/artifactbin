@@ -10,40 +10,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CATALOGUE, REPO, ROSTER, SKELETON_CSS, TEMPLATES, loadSpec, specimen } from './pages.mjs';
+import { PAGE_CHROME, filterBlock, isChrome, selectorOf } from './css-blocks.mjs';
 
 export const REFS = path.join(REPO, 'services', 'app', 'skills', 'artifactbin', 'references');
-const { fit: FIT, heads: TPL_HEADS, sources: SOURCES, pageIds: PAGE_IDS, noFit: NO_FIT, record: RECORD, losses: LOSSES } = CATALOGUE;
+const { fit: FIT, heads: TPL_HEADS, noFit: NO_FIT, record: RECORD, losses: LOSSES } = CATALOGUE;
 const RATING = ['avoid', 'good', 'best'];
 
-// ---------------------------------------------------------------- css helpers
-/** Selectors that style the specimen PAGE, not the system: dropped from the component css. */
-export const PAGE_CHROME = ['.ds-section', '.ds-chip', '.ds-cover', '.ds-wrap', '.ds-toc', '.ds-two', '.ds-three', '.ds-note', '.ds-comp', '.ds-stats',
-  '.ds-swatch', '.ds-type', '.ds-kv', '.ds-principle', '.ds-voice', '.ds-hand', '.ds-motif', '.ds-foot', '.ds-code', '.ds-map',
-  '.ds-rules', '.ds-sample', '.ds-lede', '.ds-eyebrow', '.ds-series', '.ds-borrow', '.ds-devices', '.ds-hex', '.ds-group',
-  '-sample', '.ds-tpls', '.ds-tpl-block', '.ds-tpl-head', '.ds-progress', '.ds-fields', '.ds-callouts', '.ds-swatch-chip'];
-
-export const selectorOf = (line) => line.split('{')[0];
-const isChrome = (line) => PAGE_CHROME.some((c) => selectorOf(line).includes(c));
-
-/** Keep the lines whose selector `keep` accepts; an @container block survives only with kept lines inside it. */
-export function filterBlock(css, keep) {
-  const out = [];
-  let block = [], inside = false;
-  for (const raw of css.split('\n')) {
-    const line = raw.trim();
-    if (!line) continue;
-    if (line.startsWith('@container') && line.endsWith('{')) { inside = true; block = [raw]; continue; }
-    if (inside && line === '}') { if (block.length > 1) out.push(...block, raw); inside = false; continue; }
-    if (line.startsWith('@container') && line.endsWith('}')) {
-      // a one-line block: keep whole when any inner rule is wanted
-      const inner = line.slice(line.indexOf('{') + 1, line.lastIndexOf('}'));
-      if (inner.split(/\}\s*/).some((r) => r.trim() && keep(r + '{'))) out.push(raw);
-      continue;
-    }
-    if (keep(line)) (inside ? block : out).push(raw);
-  }
-  return out.join('\n');
-}
+// ---------------------------------------------------------------- css helpers (./css-blocks.mjs)
+export { PAGE_CHROME, selectorOf, filterBlock };
 
 /** The system's own classes, less the page chrome, the svg vocabulary and the page-type overrides. */
 export const componentCss = (spec) => filterBlock(spec.css ?? '', (l) => !isChrome(l) && !selectorOf(l).includes('-svg-') && !selectorOf(l).includes('.ds-tpl'));
@@ -78,7 +52,7 @@ const WIRE = /<svg viewBox="0 0 480 240">[\s\S]*?<\/svg>/g;
 // ---------------------------------------------------------------- one system
 export function systemMd(slug) {
   const S = loadSpec(slug);
-  const name = S.name, pid = PAGE_IDS[slug];
+  const name = S.name;
   const fontsLine = S.fonts.map(([f]) => f).join(' · ');
   const first = S.color_mode === 'dark' ? 'night' : 'day';
   const comp = componentCss(S);
@@ -102,13 +76,12 @@ description: >-
 - **Avoid it when:** ${S.avoid_when}
 - **Fit:** ${fitLine(fit)}.
 - **Fonts:** ${fontsLine}, every weight the roles use, served by the runtime. Opens ${first} first.
-- **Published specimen:** \`/a/${pid}\` on the public artifactbin renders everything below in both modes. From: ${SOURCES[slug]}.
 
 ## Bind it
 
 1. Fence: \`theme: ${slug}\`, and the page type's \`template\`. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
 2. Root element: \`<div data-design="tw" className="@container bg-background text-foreground">\`, then kit components, token classes and the classes below.
-3. Helmet comment, the record later edits read instead of reskinning: \`${RECORD.replaceAll('<Name>', name).replaceAll('<id>', pid)}\`.
+3. Helmet comment, the record later edits read instead of reskinning: \`${RECORD.replaceAll('<Name>', name)}\`.
 4. Override one thing, if the subject needs it, with a Helmet \`<style>\` that reassigns a single \`--ds-*\` token under \`:root\` and again under \`.dark\`; every component, chart and device follows. Change the token, never the component. Tailwind utilities compile \`!important\`: layout utilities go on role-bearing elements, type utilities never do.
 
 \`\`\`jsx

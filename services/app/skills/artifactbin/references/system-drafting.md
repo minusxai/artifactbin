@@ -12,13 +12,12 @@ description: >-
 - **Avoid it when:** Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status colours, or any page whose reader is not expected to inspect.
 - **Fit:** Dashboard good · Deck good · Editorial good · Scrolly best · Plan best · App avoid · Landing good.
 - **Fonts:** Archivo · Archivo Narrow · IBM Plex Mono, every weight the roles use, served by the runtime. Opens day first.
-- **Published specimen:** `/a/anUtqy` on the public artifactbin renders everything below in both modes. From: Scrolly winner (exploded phone) + plan winner (drafting set).
 
 ## Bind it
 
 1. Fence: `theme: drafting`, and the page type's `template`. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
 2. Root element: `<div data-design="tw" className="@container bg-background text-foreground">`, then kit components, token classes and the classes below.
-3. Helmet comment, the record later edits read instead of reskinning: `{/* design: system=Drafting (anUtqy) · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}`.
+3. Helmet comment, the record later edits read instead of reskinning: `{/* design: system=Drafting · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}`.
 4. Override one thing, if the subject needs it, with a Helmet `<style>` that reassigns a single `--ds-*` token under `:root` and again under `.dark`; every component, chart and device follows. Change the token, never the component. Tailwind utilities compile `!important`: layout utilities go on role-bearing elements, type utilities never do.
 
 ```jsx

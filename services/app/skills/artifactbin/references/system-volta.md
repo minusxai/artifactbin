@@ -12,13 +12,12 @@ description: >-
 - **Avoid it when:** Long reading (the hard edges tire over 800 words), luxury or institutional subjects, and anything that needs more than one loud element per view.
 - **Fit:** Dashboard best · Deck good · Editorial avoid · Scrolly good · Plan good · App best · Landing best.
 - **Fonts:** Bricolage Grotesque · Instrument Sans · JetBrains Mono, every weight the roles use, served by the runtime. Opens day first.
-- **Published specimen:** `/a/f44VNS` on the public artifactbin renders everything below in both modes. From: Volta Design System artifact, ported.
 
 ## Bind it
 
 1. Fence: `theme: volta`, and the page type's `template`. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
 2. Root element: `<div data-design="tw" className="@container bg-background text-foreground">`, then kit components, token classes and the classes below.
-3. Helmet comment, the record later edits read instead of reskinning: `{/* design: system=Volta (f44VNS) · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}`.
+3. Helmet comment, the record later edits read instead of reskinning: `{/* design: system=Volta · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}`.
 4. Override one thing, if the subject needs it, with a Helmet `<style>` that reassigns a single `--ds-*` token under `:root` and again under `.dark`; every component, chart and device follows. Change the token, never the component. Tailwind utilities compile `!important`: layout utilities go on role-bearing elements, type utilities never do.
 
 ```jsx

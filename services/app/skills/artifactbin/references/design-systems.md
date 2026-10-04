@@ -73,7 +73,7 @@ Four constraints on any new system: Google-hosted families only; every weight th
 One JSX comment in the Helmet; a follow-up edit reads it instead of reskinning the page.
 
 ```jsx
-{/* design: system=<Name> (<id>) · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}
+{/* design: system=<Name> · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}
 ```
 
 ## Known losses

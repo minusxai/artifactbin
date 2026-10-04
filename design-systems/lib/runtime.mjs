@@ -15,7 +15,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { REPO, ROSTER, STATUS, SKELETON_CSS, loadSpec, typeCss } from './pages.mjs';
 import { fontFaceCss } from './fonts.mjs';
-import { PAGE_CHROME, filterBlock, selectorOf } from './skill.mjs';
+import { PAGE_CHROME, filterBlock, selectorOf } from './css-blocks.mjs';
 
 export const NAMES = path.join(REPO, 'services', 'app', 'lib', 'validation', 'story-system-names.ts');
 export const DATA = path.join(REPO, 'services', 'app', 'lib', 'data', 'story', 'story-systems.json');
