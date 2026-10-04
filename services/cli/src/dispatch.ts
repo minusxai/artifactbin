@@ -87,7 +87,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
    const paths=await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path));
    await registerLocalFiles(workspace,paths.map(path=>resolve(workspace.root,path)));
-   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json});
+   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,server:typeof flags.server==='string'?flags.server:workspace.tracking?.server??await exportedServer(home,context.env)});
   }
   if(command==='config'&&!flags.help){
    const [action,key,value]=positionals;

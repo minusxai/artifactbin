@@ -2,7 +2,7 @@
 # Compatibility URL: the only supported afbin distribution is now npm.
 # This entry prepares Node, then runs npm; it never downloads an afbin executable.
 set -eu
-  version=0.3.21
+  version=0.4.0
 if [ "$#" -gt 0 ]; then
   printf '%s\n' 'Install Node with /chat/ensure-node.sh, then run npx --yes @artifactbin/cli@latest setup. Legacy installer flags are no longer supported.' >&2
   exit 1
