@@ -50,6 +50,9 @@ const SKILL_READ_FIRST_MAX_BYTES = 2500;
 
 type SkillAudience = 'agent' | 'human';
 
+/** `guide` (the default): prose under the reading caps. `data`: a paste-from reference exempt from them; see SkillFile.kind. */
+export type SkillKind = 'guide' | 'data';
+
 export interface SkillFile {
   /** Tree-relative path: `artifactbin/SKILL.md` or `artifactbin/references/markup-data.md`. */
   path: string;
@@ -64,6 +67,16 @@ export interface SkillFile {
   /** Listing order inside its directory; `SKILL.md` is always first. */
   order: number;
   audience: SkillAudience;
+  /**
+   * What the file is for. A `guide` is prose an agent may keep open, so it pays the reading caps
+   * (bytes, lines, Read first) and sits in the docs listing. `data` is a reference an agent reads ONCE
+   * at a known step and pastes from — a design system's binding block, type roles, components and
+   * specimens run 35–70 KB — so it is exempt from those caps and listed by its own catalogue
+   * (references/design-systems.md) rather than the docs listing. Every other rule (frontmatter, the
+   * first heading, links, mentions, third person) still applies, and the CLI's design-systems test
+   * checks its shape.
+   */
+  kind: SkillKind;
   /** Per-file override of how far the `## Read first` block may run. */
   readFirstMax: number;
   /** The template source below the frontmatter. */
@@ -103,8 +116,9 @@ function parseSkillFile(filePath: string, text: string): SkillFile {
   const description = typeof fm.description === 'string' ? fm.description.trim() : '';
   const order = typeof fm.order === 'number' ? fm.order : Number.MAX_SAFE_INTEGER;
   const audience: SkillAudience = fm.audience === 'human' ? 'human' : 'agent';
+  const kind: SkillKind = fm.kind === 'data' ? 'data' : 'guide';
   const readFirstMax = typeof fm.read_first_max === 'number' ? fm.read_first_max : SKILL_READ_FIRST_MAX_BYTES;
-  return { path: filePath, dir, file, ref, name, description, order, audience, readFirstMax, body: text.slice(m[0].length) };
+  return { path: filePath, dir, file, ref, name, description, order, audience, kind, readFirstMax, body: text.slice(m[0].length) };
 }
 
 export function buildSkillTree(sources: Record<string, string>): SkillTree {
@@ -244,6 +258,8 @@ export function validateSkillTree(tree: SkillTree, rendered: (f: SkillFile) => s
     for (const mention of skillFileMentions(text)) {
       if (!mentionResolves(tree, mention)) problems.push(`${at}: "${mention}" names no file in the tree`);
     }
+    // The reading caps are for guides (see SkillFile.kind); a data reference is read once and pasted from.
+    if (f.kind === 'data') continue;
     const bytes = Buffer.byteLength(text);
     const lines = text.split('\n').length;
     if (bytes > SKILL_FILE_MAX_BYTES) problems.push(`${at}: ${bytes} B rendered, cap ${SKILL_FILE_MAX_BYTES}`);
