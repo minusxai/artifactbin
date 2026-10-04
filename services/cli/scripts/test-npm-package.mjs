@@ -7,6 +7,8 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 const ci=process.argv[2]==='--ci';
+const installOnly=process.argv.includes('--install-only');
+if(installOnly&&!ci)throw new Error('--install-only requires the CI candidate.');
 const repository=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const candidates=ci?(await readdir(join(repository,'npm-candidate'))).filter(file=>file.endsWith('.tgz')):[];
 if(ci&&candidates.length!==1)throw new Error('Expected exactly one universal npm candidate.');
@@ -25,6 +27,7 @@ try{
  assert.ok(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
  await assert.rejects(readdir(join(cli,'dist/runtime/node_modules')));
  await assert.rejects(readdir(env.PLAYWRIGHT_BROWSERS_PATH));
+ if(!installOnly){
  await writeFile(join(root,'rows.csv'),'amount\n10\n20\n');
  const args=['exec','--yes','--package',tarball,'--','afbin','query','rows.csv','--json'];
  const online=JSON.parse(run(args));assert.ok(JSON.stringify(online).includes('10'));
@@ -39,8 +42,9 @@ try{
    let output='';const timer=setTimeout(()=>{terminal.kill();reject(Error('PTY shutdown timed out'));},15000);
    terminal.onData(chunk=>output+=chunk);terminal.onExit(()=>{terminal.kill();clearTimeout(timer);try{assert.match(output,/npm-native-ok/);resolvePromise();}catch(error){reject(error);}});
  });
+ }
  if(proof)await (await import('node:fs/promises')).mkdir(resolve(proof),{recursive:true});
- console.log(JSON.stringify({status:'passed',platform:process.platform,arch:process.arch,node:process.version,tarball,checks:['consumer-lock','no-build-machine-native-files','no-install-chromium','npm-exec','warmed-offline-exec','sharp','prebuilt-pty-no-compiler','node-pty-shutdown']}));
+ console.log(JSON.stringify({status:'passed',platform:process.platform,arch:process.arch,node:process.version,tarball,checks:installOnly?['consumer-lock','no-build-machine-native-files','no-install-chromium']:['consumer-lock','no-build-machine-native-files','no-install-chromium','npm-exec','warmed-offline-exec','sharp','prebuilt-pty-no-compiler','node-pty-shutdown']}));
  if(proof)await writeFile(join(resolve(proof),'installed-path.txt'),join(cli,'dist/afbin.mjs'));
  // CI browser conformance consumes this install, so keep it when requested.
  if(!proof)await rm(root,{recursive:true,force:true});

@@ -163,6 +163,16 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(matrix.needs).toContain('cli-pack');
     expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
     expect(matrix.strategy.matrix.os).toContain('windows-2022');
+    expect(matrix.strategy.matrix.phase).toEqual(['native','experience']);
+    const install = matrix.steps.find(step => step.run === 'npm ci');
+    expect(install.if).toContain("matrix.phase == 'experience'");
+    const native = matrix.steps.find(step => step.name === 'Same-tarball native npm and warmed offline acceptance');
+    expect(native.if).toBe("matrix.phase == 'native'");
+    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase == 'experience'");
+    for (const name of ['Installed public library declarations compile without private workspace aliases','Installed foreground server preserves the remote runner boundary','Actual installed CLI terminal exits naturally','Installed npm preview and export, with process shutdown','Complete installed npm local and HTML round-trip journey']) {
+      expect(matrix.steps.find(step => step.name === name)?.if,name).toBe("matrix.phase == 'experience'");
+    }
+    expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase == 'experience'");
     for(const job of ['cli','cli-preview','reference-compatibility']){
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
       expect(download,job).toBeDefined();

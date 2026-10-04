@@ -181,7 +181,7 @@ describe('a tree is tested once', () => {
 describe('the CLI ships with a version or it does not ship', () => {
   it('refuses CLI source and build scripts that carry no bump', () => {
     expect(cliBumpRequired(['services/cli/src/runner.ts'])).toBe(true);
-    expect(cliBumpRequired(['services/cli/scripts/binary.mjs'])).toBe(true);
+    expect(cliBumpRequired(['services/cli/scripts/build.mjs'])).toBe(true);
     expect(cliBumpRequired(['services/cli/src/runner.ts'], { cliRelease: true })).toBe(false);
     expect(CLI_BUMP_REFUSAL).toContain('npm run release:cli');
   });
@@ -858,13 +858,13 @@ describe('CI job shape', () => {
     expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-npm-release')?.with.path).toBe('npm-candidate');
   });
 
-  it('runs the CLI suite once and the per-platform binary smoke on every row', () => {
+  it('runs the CLI suite once and native npm acceptance on every platform', () => {
     const { cli, node } = ci().jobs;
     expect(cli.strategy.matrix.os).toContain('ubuntu-24.04');
     const suite = node.steps.filter((step) => (step.run ?? '').includes('npm test -w services/cli'));
     expect(suite).toHaveLength(1);
     expect(suite[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
-    // What is genuinely per-platform is the compiled binary; nothing else repeats per row.
+    // Each platform consumes the same packed npm artifact; source tests run once.
     expect(ci().jobs['cli-pack'].steps.some(step=>step.run==='npm run pack:release -w services/cli')).toBe(true);
     expect(cli.steps.some((step) => (step.run ?? '').includes('--import tsx --test'))).toBe(false);
   });
@@ -872,7 +872,7 @@ describe('CI job shape', () => {
   it('keeps preview/export and Node bootstrap proofs mandatory on every supported npm platform', () => {
     const {jobs}=ci();
     const proof=jobs.cli.steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
-    expect(proof.if).toBeUndefined();
+    expect(proof.if).toBe("matrix.phase == 'experience'");
     expect(proof.run).toContain('scripts/test-installed-npm.mjs preview');
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
     expect(jobs.cli.steps.find(step=>step.name==='Standard-user Windows Node bootstrap under Restricted PS5.1').run).toContain('test-node-bootstrap.ps1');
@@ -883,7 +883,7 @@ describe('CI job shape', () => {
     expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex(step=>step.run?.includes('test:npm-package')));
   });
 
-  it('keeps a merged PR\'s binaries downloadable for a week after the merge', () => {
+  it('keeps a merged PR\'s npm artifact downloadable for a week after the merge', () => {
     const uploads = Object.values(ci().jobs).flatMap((job) => job.steps ?? [])
       .filter((step) => step.uses?.startsWith('actions/upload-artifact') && /^afbin-|^tested-/.test(step.with.name ?? ''));
     expect(uploads.length).toBeGreaterThan(0);

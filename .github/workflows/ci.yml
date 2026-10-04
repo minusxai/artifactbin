@@ -224,8 +224,7 @@ jobs:
         if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
         run: |
           (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build/build-islands.mjs --cache)
-          node services/cli/scripts/fetch-runtime.mjs
-          PATH="$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node:$PATH" npm test -w services/cli
+          npm test -w services/cli
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
@@ -729,7 +728,7 @@ jobs:
       # this into a red merge button teaching everyone to re-run.
       #
       # Two budgets. 240s is the ordinary one, measured from what this branch achieves. The multi-platform
-      # CLI build is the exception: it compiles a standalone executable and drives real browsers against
+      # CLI build is the exception: it installs the npm package on native platforms and drives real browsers against
       # it, it runs only for a release, and it is the whole reason the rest of the run had to get out of
       # its way. Its allowance is named here rather than hidden in a slower default for everything.
       #
@@ -861,7 +860,7 @@ jobs:
   cli:
     needs: [ plan, cli-pack ]
     if: needs.plan.outputs.cli == 'true'
-    name: CLI npm (${{ matrix.os }} Node ${{ matrix.node }})
+    name: CLI npm (${{ matrix.os }} Node ${{ matrix.node }} ${{ matrix.phase }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -869,15 +868,18 @@ jobs:
       matrix:
         os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
         node: [22.22.3, 24.21.0]
+        phase: [native, experience]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      # Repository tooling uses Node22 and the same normalized whole-install
-      # cache as Intel preview. Consumer acceptance switches runtime afterwards.
-      - run: node scripts/ci/ci.mjs lock-fingerprint
+      # Native install/bootstrap proof needs only Node and the tarball. Browser
+      # experience tooling uses the shared checkout cache in its separate phase.
+      - if: matrix.phase == 'experience'
+        run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: matrix.phase == 'experience'
         id: install
         with:
           path: |
@@ -886,7 +888,7 @@ jobs:
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
-      - if: steps.install.outputs.cache-hit != 'true'
+      - if: matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -896,31 +898,48 @@ jobs:
           name: afbin-npm-release
           path: npm-candidate
       - name: Official Node bootstrap from absent Node on Unix
-        if: runner.os != 'Windows' && matrix.node == '22.22.3'
+        if: matrix.phase == 'native' && runner.os != 'Windows' && matrix.node == '22.22.3'
         run: node services/cli/scripts/test-node-bootstrap.mjs
       - name: Standard-user Windows Node bootstrap under Restricted PS5.1
-        if: runner.os == 'Windows' && matrix.node == '22.22.3'
+        if: matrix.phase == 'native' && runner.os == 'Windows' && matrix.node == '22.22.3'
         shell: powershell
         run: ./services/cli/scripts/test-node-bootstrap.ps1 -Tarball (Get-ChildItem npm-candidate/*.tgz | Select-Object -First 1).FullName
       - name: Same-tarball native npm and warmed offline acceptance
+        if: matrix.phase == 'native'
         run: npm run test:npm-package -w services/cli -- --ci
+      - name: Install the same candidate for experience checks
+        if: matrix.phase == 'experience'
+        run: npm run test:npm-package -w services/cli -- --ci --install-only
       - name: Installed public library declarations compile without private workspace aliases
+        if: matrix.phase == 'experience'
         working-directory: services/cli
         run: node scripts/test-installed-npm.mjs types
       - name: Installed foreground server preserves the remote runner boundary
+        if: matrix.phase == 'experience'
         working-directory: services/cli
         run: node scripts/test-installed-npm.mjs runner
       - name: Actual installed CLI terminal exits naturally
+        if: matrix.phase == 'experience'
         working-directory: services/cli
         run: node scripts/test-installed-npm.mjs terminal
       - name: Installed npm preview and export, with process shutdown
+        if: matrix.phase == 'experience'
         working-directory: services/cli
         run: |
           npx playwright install --with-deps chromium
           node scripts/test-installed-npm.mjs preview
       - name: Complete installed npm local and HTML round-trip journey
+        if: matrix.phase == 'experience'
         working-directory: services/cli
         run: node scripts/test-installed-npm.mjs local
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure() && matrix.phase == 'experience'
+        with:
+          name: npm-local-journey-${{ matrix.os }}-${{ matrix.node }}
+          path: services/cli/test-results/local-journey
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Intel acceptance also splits its existing phases: run 35761410997 spent
   # 447s on combined acceptance (277s proofs, ~170s setup/downloads). Every
