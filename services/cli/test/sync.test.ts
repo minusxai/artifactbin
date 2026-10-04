@@ -182,10 +182,16 @@ test('composed push reports a published dependency when the document is refused'
  const root=await mkdtemp(join(tmpdir(),'afbin-partial-'));
  try{
   await saveTestConnection({server:'https://example.com',token:'mx_test'},root);await writeFile(join(root,'notes.txt'),'notes');await writeFile(join(root,'doc.jsx'),'<a href="/a/abc123">Read</a>');
-  const register=await runCli(['add','notes.txt','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json({ids:['abc123',...Array.from({length:99},(_,i)=>'id'+String(i).padStart(4,'0'))]},{headers:{'X-Artifactbin-Account':'usr_one'}})});assert.equal(register,0);
+  const registered:string[]=[];
+  const register=await runCli(['add','notes.txt','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>registered.push(s),stderr:()=>{},fetch:async()=>assert.fail('local registration must not connect')});assert.equal(register,0);
+  const localIds=JSON.parse(registered[0]) as Record<string,string>;
+  await writeFile(join(root,'doc.jsx'),(await readFile(join(root,'doc.jsx'),'utf8')).replace('/a/abc123',`/a/${localIds['notes.txt']}`));
   const output:string[]=[];
   const code=await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(input,init)=>{
-   const body=JSON.parse(String(init?.body));if(String(input).endsWith('/preflight'))return Response.json({valid:true});
+   const headers={'X-Artifactbin-Account':'usr_one'};
+   if(init?.method==='GET')return Response.json({artifacts:[]},{headers});
+   if(String(input).endsWith('/reservations'))return Response.json({ids:['abc123',...Array.from({length:99},(_,i)=>'id'+String(i).padStart(4,'0'))]},{headers});
+   const body=JSON.parse(String(init?.body));if(String(input).endsWith('/preflight'))return Response.json({valid:true},{headers});
    if(body.file)return Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'file'},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
    return Response.json({error:'quota_exceeded'},{status:403,headers:{'X-Artifactbin-Account':'usr_one'}});
   }});

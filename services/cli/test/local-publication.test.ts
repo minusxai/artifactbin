@@ -108,10 +108,10 @@ test('server-normalized source remains publishable after local edits without wri
 
 test('resource YAML publishes its source as content, with dependency references mapped and no extra source artifact',async()=>{
  const f=await fixture();try{
-  const yaml='type: dataset\nsource: rows.json\nid: loc004\n';await writeFile(join(f.workspace.root,'data.yaml'),yaml);await registerLocalFiles(f.workspace,['data.yaml']);
+  const yaml='type: dataset\nsource: rows.json\nid: loc004\ntitle: "Literal ref:loc002"\ndescription: "Literal /a/loc002"\n';await writeFile(join(f.workspace.root,'data.yaml'),yaml);await registerLocalFiles(f.workspace,['data.yaml']);
   await publishLocalWorkspace(f.workspace,['data.yaml'],f.client,{});
   assert.equal(f.heads.size,2);assert.equal(await readFile(join(f.workspace.root,'data.yaml'),'utf8'),yaml);assert.match(await readFile(join(f.workspace.root,'rows.json'),'utf8'),/loc002/);
-  const dataset=f.calls.find(call=>call.body.dataset);assert.ok(dataset);assert.match(JSON.stringify(dataset.body.dataset),/ref:r\d{5}/);assert.doesNotMatch(JSON.stringify(dataset.body.dataset),/loc00/);
+  const dataset=f.calls.find(call=>call.body.dataset);assert.ok(dataset);assert.equal(dataset.body.title,'Literal ref:loc002');assert.equal(dataset.body.description,'Literal /a/loc002');assert.match(JSON.stringify(dataset.body.dataset),/ref:r\d{5}/);assert.doesNotMatch(JSON.stringify(dataset.body.dataset),/loc00/);
  }finally{await f.cleanup();}
 });
 
@@ -150,4 +150,14 @@ test('untrusted import origin, changed remote baseline and viewer permission can
    await assert.rejects(publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{}));assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.heads.size,1);
   }finally{await f.cleanup();}
  }
+});
+
+test('publication rewrites semantic resource addresses while preserving literal prose and descriptive JSON',async()=>{
+ const f=await fixture();try{
+  const source="---\nid: loc001\ntitle: \"Literal ref:loc003\"\n---\n<Helmet><Import name=\"rows\" src=\"ref:loc003\" /><Query name=\"q\" source=\"ref:loc003\">{`select 'ref:loc003' as description`}</Query></Helmet><div id=\"root\"><p id=\"literal\">Literal ref:loc003 and /a/loc002 stay here.</p><a id=\"link\" href=\"/a/loc002\">Child</a><img id=\"image\" src=\"ref:loc003\" /></div>";
+  await writeFile(join(f.workspace.root,'doc.jsx'),source);await writeFile(join(f.workspace.root,'rows.json'),'[{"link":"ref:loc002","description":"Literal ref:loc002 stays here","nested":{"note":"See /a/loc002 in the instructions"}}]');
+  await publishLocalWorkspace(f.workspace,['doc.jsx'],f.client,{});
+  const doc=[...f.heads.values()].find(head=>head.markup?.includes('Literal'));assert.ok(doc);assert.match(doc.markup,/Literal ref:loc003 and \/a\/loc002 stay here/);assert.match(doc.markup,/select 'ref:loc003' as description/);assert.match(doc.markup,/href="\/a\/r\d{5}"/);assert.match(doc.markup,/src="ref:r\d{5}"/);assert.match(doc.markup,/source="ref:r\d{5}"/);
+  const rows=f.calls.find(call=>call.body.dataset)!.body.dataset;assert.match(rows[0].link,/^ref:r\d{5}$/);assert.equal(rows[0].description,'Literal ref:loc002 stays here');assert.equal(rows[0].nested.note,'See /a/loc002 in the instructions');assert.equal(await readFile(join(f.workspace.root,'doc.jsx'),'utf8'),source);
+ }finally{await f.cleanup();}
 });

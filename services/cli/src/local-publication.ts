@@ -24,6 +24,8 @@ import {readPendingRequest} from './pending-request';
 import {readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 import {snapshotDocument} from './local';
 import {canonicalizeMarkup} from '../../app/lib/story/document/canonical-source';
+import {parseJsx,serializeJsx,type JsxNode} from '../../app/lib/jsx';
+import {REFERENCE_POSITIONS} from '../../app/lib/story/data/reference-positions';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import type {HttpClient} from './http';
 import {publishLocalComments} from './local-comment-publication';
@@ -33,13 +35,43 @@ interface Input {localId?:string;bytes:string;hash:string;ids?:Record<string,str
 interface ImportedBaseline {artifactId:string;origin:string;base:{version:number;editId:string;source:string};source:string}
 interface Publication {format:1;server:string;account:string;root:string;inputs:Record<string,Input>;ids:Record<string,string>}
 const fence=['id','edit_id','head_version','state','version'] as const;
-/** Exact resource addresses only; arbitrary IDs and prose are not rewritten. */
-function rewrite(value:string,ids:Record<string,string>):string{
- return value.replace(/\bref:([A-Za-z0-9]{6,12})(?![A-Za-z0-9])/g,(whole,id:string)=>ids[id]?`ref:${ids[id]}`:whole)
-  .replace(/(?<![A-Za-z0-9:/.-])\/a\/([A-Za-z0-9]{6,12})(?![A-Za-z0-9])/g,(whole,id:string)=>ids[id]?`/a/${ids[id]}`:whole);
+/** Only entire resource-address values carry an identity; prose never does. */
+function rewriteAddress(value:string,ids:Record<string,string>):string{
+ const match=/^(ref:|\/a\/)([A-Za-z0-9]{6,12})$/.exec(value);
+ return match&&ids[match[2]!]?match[1]+ids[match[2]!]:value;
+}
+function rewriteRows(value:unknown,ids:Record<string,string>):unknown{
+ if(typeof value==='string')return rewriteAddress(value,ids);
+ if(Array.isArray(value))return value.map(item=>rewriteRows(item,ids));
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,rewriteRows(item,ids)]));
+ return value;
+}
+/** The same semantic slots publication validates, plus local document links. */
+function rewriteMarkup(source:string,ids:Record<string,string>):string{
+ const parsed=parseJsx(source);if(!parsed.ok)throw new CliError('invalid_markup','Cannot rewrite references in invalid JSX.');let changed=false;
+ const walk=(nodes:JsxNode[])=>{for(const node of nodes)if(node.type==='element'){
+  const tag=node.isComponent?node.tag:node.tag.toLowerCase();
+  const semantic=new Set(REFERENCE_POSITIONS.filter(position=>position.component===node.isComponent&&position.tag===tag).map(position=>position.attribute));
+  if(node.tag!=='Iframe'&&tag!=='iframe')semantic.add('href');
+  if(node.isComponent&&['Query','Notify','Value'].includes(node.tag))semantic.add('source');
+  if(node.isComponent&&node.tag==='Import')semantic.add('src');
+  if(!node.isComponent&&tag==='meta'&&node.attributes.some(attr=>attr.name==='name'&&attr.value.static&&['artifactbin:og-image','artifactbin:pwa-icon'].includes(String(attr.value.json))))semantic.add('content');
+  for(const attr of node.attributes){
+   if(!attr.value.static)continue;const original=attr.value.json;let next:unknown=original;
+   if(typeof original==='string'&&semantic.has(attr.name.toLowerCase())){
+    const list=REFERENCE_POSITIONS.some(position=>position.component===node.isComponent&&position.tag===tag&&position.attribute===attr.name.toLowerCase()&&position.list);
+    if(list)next=original.replace(/(^|[\s,])((?:ref:|\/a\/)[A-Za-z0-9]{6,12})(?=[\s,]|$)/g,(_whole,prefix:string,pointer:string)=>prefix+rewriteAddress(pointer,ids));
+    else next=rewriteAddress(original,ids);
+   }else if(attr.name==='viz'&&original&&typeof original==='object'&&!Array.isArray(original)){
+    const viz=original as Record<string,unknown>;if(typeof viz.recipe==='string')next={...viz,recipe:rewriteAddress(viz.recipe,ids)};
+   }else if(node.isComponent&&node.tag==='Table'&&attr.name==='rows')next=rewriteRows(original,ids);
+   if(JSON.stringify(next)!==JSON.stringify(original)){attr.value.json=next as typeof original;changed=true;}
+  }
+  walk(node.children);
+ }};walk(parsed.nodes);return changed?serializeJsx(parsed.nodes):source;
 }
 function rowReferences(value:unknown):Set<string>{
- const found=new Set<string>();const visit=(item:unknown)=>{if(typeof item==='string'){for(const match of item.matchAll(/(?:\bref:|\/a\/)([A-Za-z0-9]{6,12})(?![A-Za-z0-9])/g))found.add(match[1]!);}else if(Array.isArray(item))item.forEach(visit);else if(item&&typeof item==='object')Object.values(item).forEach(visit);};visit(value);return found;
+ const found=new Set<string>();const visit=(item:unknown)=>{if(typeof item==='string'){const match=/^(?:ref:|\/a\/)([A-Za-z0-9]{6,12})$/.exec(item);if(match)found.add(match[1]!);}else if(Array.isArray(item))item.forEach(visit);else if(item&&typeof item==='object')Object.values(item).forEach(visit);};visit(value);return found;
 }
 async function dependencies(workspace:Workspace,paths:string[],identities:Record<string,string>):Promise<{paths:string[];sources:string[]}>{
  const ordered:string[]=[],sources=new Set<string>(),active=new Set<string>(),done=new Set<string>();
@@ -58,7 +90,7 @@ async function dependencies(workspace:Workspace,paths:string[],identities:Record
     const content=Buffer.from(source.bytes,'base64');
     refs=extname(source.path).toLowerCase()==='.jsx'?referenceIds(parseDocument(content.toString()).body):isDatasetFile(source.path)?rowReferences(datasetFileRows(source.path,content)):new Set<string>();
    }
-   for(const id of rowReferences(resource))refs.add(id);
+   if(typeof resource.folder==='string')refs.add(resource.folder);
   }
   for(const id of refs)if(identities[id])await visit(identities[id]!);
   active.delete(path);done.add(path);ordered.push(path);
@@ -73,15 +105,16 @@ function mappedBytes(path:string,bytes:Buffer,ids:Record<string,string>,remote?:
  if(extension==='.jsx'){
   const local=parseDocument(bytes.toString());const metadata={...local.metadata};for(const key of fence)delete metadata[key];
   if(remote){const previous=parseDocument(remote.toString());for(const key of fence)if(previous.metadata[key]!==undefined)Object.assign(metadata,{[key]:previous.metadata[key]});}
-  return Buffer.from(writeDocument({...local,metadata,body:rewrite(local.body,ids)}));
+  return Buffer.from(writeDocument({...local,metadata,body:rewriteMarkup(local.body,ids)}));
  }
  if(['.yaml','.yml'].includes(extension)){
   const resource=parseResourceFile(bytes.toString());for(const key of fence)delete resource[key];
   if(remote){const previous=parseResourceFile(remote.toString());for(const key of fence)if(previous[key]!==undefined)Object.assign(resource,{[key]:previous[key]});}
-  return Buffer.from(writeResourceFile(JSON.parse(rewrite(JSON.stringify(resource),ids))));
+  if(typeof resource.folder==='string'&&ids[resource.folder])resource.folder=ids[resource.folder]!;
+  return Buffer.from(writeResourceFile(resource));
  }
  if(isDatasetFile(path)){
-  const rows=datasetFileRows(path,bytes);return datasetFileBytes(path,JSON.parse(rewrite(JSON.stringify(rows),ids)));
+  const rows=datasetFileRows(path,bytes);return datasetFileBytes(path,rewriteRows(rows,ids) as typeof rows);
  }
  return bytes;
 }
@@ -158,7 +191,7 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
   await saveManifest(manifestPath,manifest);stage=await loadWorkspace(root,home);
   for(const path of graph.sources){
    const target=await confinedPath(root,path),bytes=await readFile(await confinedPath(workspace.root,path));
-   await atomicWrite(target,isDatasetFile(path)?mappedBytes(path,bytes,manifest.ids):extname(path).toLowerCase()==='.jsx'?Buffer.from(rewrite(bytes.toString(),manifest.ids)):bytes);
+   await atomicWrite(target,isDatasetFile(path)?mappedBytes(path,bytes,manifest.ids):extname(path).toLowerCase()==='.jsx'?Buffer.from(rewriteMarkup(bytes.toString(),manifest.ids)):bytes);
   }
   for(const path of ordered){
    const bytes=await readFile(await confinedPath(workspace.root,path)),hash=digest(bytes),previous=manifest.inputs[path];if(previous?.hash===hash&&JSON.stringify(previous.ids??{})===JSON.stringify(manifest.ids))continue;
