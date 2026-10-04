@@ -2,6 +2,7 @@
  * remain the same DOM nodes and keep their runtime; saved files retain the original
  * code/HTML pair. This never compiles or executes author source. */
 import { parseJsx, serializeJsx, type JsxNode, type JsxElement } from '@/lib/jsx';
+import { storyBodyFor } from '@/lib/story/document/body';
 import { rawBuildProps } from '@/lib/story-ui/interpreter-primitives';
 
 const identity = (node: JsxElement) => node.attributes.find((a) => a.name === 'id')?.value;
@@ -51,8 +52,11 @@ export function sameSourceContent(a: string, b: string): boolean {
 }
 
 export function projectDocument(root: HTMLElement, nodes: JsxNode[], priorSource: string): void {
-  const prior = parseJsx(priorSource);
-  if (!prior.ok || JSON.stringify(shape(prior.nodes)) === JSON.stringify(shape(nodes))) return;
+  // Compiled data-mx-ast paths address the canonical reader body, never the
+  // source's Helmet. Indexing the full source shifts every widget and would
+  // replace healthy hydrated controls with unavailable fallbacks.
+  const prior = storyBodyFor(priorSource);
+  if (!prior || JSON.stringify(shape(prior.body)) === JSON.stringify(shape(nodes))) return;
   const byId = new Map<string, { node: JsxElement; path: string }>();
   const bySource = new Map<string, { node: JsxElement; path: string }>();
   const index = (items: JsxNode[], parent = '') => items.forEach((node, i) => {
@@ -61,7 +65,7 @@ export function projectDocument(root: HTMLElement, nodes: JsxNode[], priorSource
     const id = key(node); if (id) byId.set(id, { node, path });
     bySource.set(signature(node), { node, path }); index(node.children, path);
   });
-  index(prior.nodes);
+  index(prior.body);
   const existing = new Map([...root.querySelectorAll<HTMLElement>('[data-mx-ast]')].map((el) => [el.getAttribute('data-mx-ast')!, el]));
   const build = (items: JsxNode[], parent = '', svg = false): DocumentFragment => {
     const fragment = document.createDocumentFragment();

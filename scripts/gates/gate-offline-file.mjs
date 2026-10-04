@@ -126,7 +126,7 @@ console.log(`extras: ${(manifest.extras.raw / 1024).toFixed(0)} KB raw at ${extr
 
 // One downloaded file carries this document's compiled module and engines.
 const coreHtml = exported.replace(FILE_JSON, (_all, open, _json, close) => `${open}${JSON.stringify(file).replace(/</g, '\\u003c')}${close}`);
-const corePath = path.join(work, 'Regional sales (solid).html');
+const corePath = path.join(work, 'Regional sales (solid).jsx.html');
 writeFileSync(corePath, coreHtml);
 const coreUrl = pathToFileURL(corePath).href;
 console.log(`solid file: ${(Buffer.byteLength(coreHtml) / 1024).toFixed(0)} KB`);

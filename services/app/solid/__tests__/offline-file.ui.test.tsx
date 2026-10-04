@@ -126,6 +126,19 @@ describe('Solid offline file', () => {
     expect(screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(true);
   });
 
+  it('retains compiled widget DOM and behavior when the source includes Helmet and added structure', async () => {
+    const file = fixture();
+    file.compiled!.html = file.compiled!.html.replace('<p data-mx-ast="1.3">', '<div data-mx-ast="1.5"><button id="VVgD" data-mx-ast="1.5.1" aria-label="Region">Region</button></div><p data-mx-ast="1.3">');
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Regional sales</h1><section id="added"><h2>Added heading</h2></section>') });
+    const control = screen.getByRole('button', { name: 'Region' });
+    let clicked = 0; control.addEventListener('click', () => { clicked += 1; });
+    await mountSolidOfflineFile();
+    expect(screen.getByRole('heading', { name: 'Added heading' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Region' })).toBe(control);
+    fireEvent.click(control); expect(clicked).toBe(1);
+    expect(document.querySelector('[data-mx-inline-story]')!.textContent).toContain('2026-07 rows');
+  });
+
   it('renders added structure after accepting source, saving and reopening', async () => {
     const file = fixture();
     await openAndEdit(file);
