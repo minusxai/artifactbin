@@ -19,7 +19,7 @@ import {withLocalLock,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,
 
 const MAX_BYTES=25*1024*1024;
 const ID=/^[A-Za-z0-9]{6,12}$/;
-const safePath=(path:string)=>!!path&&!isAbsolute(path)&&!/[\\:\x00-\x1f]/.test(path)&&path.split('/').every(part=>!!part&&part!=='.'&&part!=='..'&&part!=='.artifactbin');
+const safePath=(path:string)=>!!path&&!isAbsolute(path)&&!/[\\:\x00-\x1f]/.test(path)&&path.split('/').every(part=>!!part&&!part.startsWith('.')&&part!=='node_modules');
 const damaged=(message:string)=>new CliError('invalid_html',message);
 
 export function readArtifactFileHtml(html:string):ArtifactFile{
@@ -55,14 +55,14 @@ function validThreads(file:ArtifactFile):void{
 
 /** Remote downloads already carry approved rows and inlined bytes; recover them without contacting their origin. */
 function downloadedAssets(file:ArtifactFile,identity:string):NonNullable<ArtifactFile['localWorkspace']>['assets']{
- const result:NonNullable<ArtifactFile['localWorkspace']>['assets']={};
+ const result:NonNullable<ArtifactFile['localWorkspace']>['assets']=Object.create(null) as NonNullable<ArtifactFile['localWorkspace']>['assets'];
  for(const imported of file.island.dataflow?.flow.imports??[]){
   const tables=file.snapshot.held?.[imported.name],table=tables?.rows;
   if(!table||Object.keys(tables!).some(name=>name!=='rows'))throw damaged(`Dataset ${imported.ref} has no complete local rows in this download.`);
   result[imported.ref]={path:`imported-${identity}/${imported.ref}.json`,contentType:'application/json',base64:Buffer.from(JSON.stringify(table.rows)).toString('base64')};
  }
  for(const ref of collectRefUses(file.source)??[]){
-  if(result[ref.id]||ref.kind!=='image'&&ref.kind!=='file')continue;
+  if(result[ref.id]||!['image','file','pdf','asset'].includes(ref.kind))continue;
   const data=file.island.refData[ref.id],url=data&&'url' in data?data.url:null;
   const match=typeof url==='string'?/^data:([-\w.+]+\/[-\w.+]+)(;base64)?,([\s\S]*)$/.exec(url):null;
   if(!match)throw damaged(`Asset ${ref.id} has no embedded bytes in this download.`);
@@ -107,11 +107,11 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
   const assets=Object.entries(provenance?.assets??downloadedAssets(file,identity));
   const destinations=new Set<string>([path]);let bytes=Buffer.byteLength(html);
   for(const [id,asset] of assets){
-   if(!ID.test(id)||!asset||!safePath(asset.path)||!/^[-\w.+]+\/[-\w.+]+$/.test(asset.contentType)||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(asset.base64))throw damaged('Invalid imported asset metadata or path.');
+   if(!ID.test(id)||!asset||!safePath(asset.path)||/(^|\/)(package(?:-lock)?\.json|npm-shrinkwrap\.json)$/i.test(asset.path)||!/^[-\w.+]+\/[-\w.+]+$/.test(asset.contentType)||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(asset.base64))throw damaged('Invalid imported asset metadata or path.');
    await noSymlink(workspace.root,asset.path);
    const destination=await confinedPath(workspace.root,asset.path);
    if(destinations.has(asset.path))throw damaged('Duplicate imported asset path.');destinations.add(asset.path);
-   const content=Buffer.from(asset.base64,'base64');bytes+=content.length;if(bytes>MAX_BYTES)throw damaged('The import exceeds its 25 MB size limit.');
+   const content=Buffer.from(asset.base64,'base64');if(content.toString('base64')!==asset.base64)throw damaged('An imported asset has invalid base64 bytes.');bytes+=content.length;if(bytes>MAX_BYTES)throw damaged('The import exceeds its 25 MB size limit.');
    const old=await readOptional(destination);
    const known=state.get<{id:string}>(scope,'draft-identity',asset.path)?.value.id;
    if(workspace.tracking?.files[asset.path])throw damaged('Imported assets cannot overwrite remotely tracked files.');

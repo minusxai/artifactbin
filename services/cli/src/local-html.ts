@@ -1,6 +1,6 @@
 /** Package-owned offline export over the same local compiler, SQL and reader as preview. */
 import {readFile,stat} from 'node:fs/promises';
-import {join,resolve,relative,isAbsolute,dirname,sep} from 'node:path';
+import {join,resolve,relative,isAbsolute,dirname,sep,basename} from 'node:path';
 import type {LocalHtmlOptions} from './local-html-options';
 import {loadWorkspace} from './workspace';
 import {localIdentities} from './identities';
@@ -21,7 +21,7 @@ import {validateMarkupStructure} from '../../app/lib/story/document/local-valida
 import {compileLocal,runLocal} from './local-dataflow';
 import {prepareStoryRuntime} from '../../app/lib/story/prepared/prepare-runtime.server';
 import {compileStoryCss} from '../../app/lib/data/story/story-css.server';
-import {STORY_THEME_NAMES,type StoryThemeName} from '../../app/lib/validation/atlas-schemas';
+import {resolveStoredStoryDesign} from '../../app/lib/data/story/story-themes';
 import type {RefDataMap} from '../../app/lib/story/data/ref-data';
 import {compileDocument,renderStoryHtml,compilerBuild} from './preview/compiled';
 import {offlineFileParts} from '../../app/lib/offline/bundle.server';
@@ -37,6 +37,7 @@ type Assets=NonNullable<ArtifactFile['localWorkspace']>['assets'];
 export async function prepareLocalHtml(options:LocalHtmlOptions){
  const workspace=await loadWorkspace(options.cwd,options.home);
  const path=relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,options.path))).split(sep).join('/');
+ if((await stat(await confinedPath(workspace.root,path))).size>MAX_BYTES)throw new CliError('export_too_large','The local document exceeds 25 MB.');
  await registerLocalFiles(workspace,[relative(workspace.cwd,join(workspace.root,path))]);
  return withLocalLock(workspace.root,async()=>{
   const localFiles=await localIdentities(workspace),source=await readFile(await confinedPath(workspace.root,path),'utf8'),document=parseDocument(source);
@@ -45,7 +46,7 @@ export async function prepareLocalHtml(options:LocalHtmlOptions){
   if(!parsed.ok||checked.errors.length)throw new CliError('invalid_document','The local document is invalid: '+checked.errors.map(error=>error.message).join('; '));
   const identity=Object.entries(localFiles).find(([,mapped])=>mapped===path)?.[0];
   if(!identity)throw new CliError('missing_identity','Register this document before exporting it.');
-  const assets:Assets={},uris=new Map<string,string>();let total=Buffer.byteLength(source);
+  const assets:Assets=Object.create(null) as Assets,uris=new Map<string,string>();let total=Buffer.byteLength(source);
   const add=async(id:string,mapped:string)=>{
    if(assets[id])return;
    const input=await localInputPath(workspace.root,mapped);
@@ -79,14 +80,14 @@ export async function prepareLocalHtml(options:LocalHtmlOptions){
   const held:Record<string,ImportTables[string]>={};for(const imported of flow.imports){const found=await table(imported.ref);if(found)held[imported.name]={rows:found};}
   const store=await localWorkspaceState(workspace.root),annotations=previewAnnotations(store,LOCAL_WORKSPACE_SCOPE,path,document.body);
   const threads=[...annotations.list('open'),...annotations.list('resolved')];
-  const refData:RefDataMap={};for(const ref of collectRefUses(document.body)??[])if(ref.kind==='image'||ref.kind==='file')refData[ref.id]={kind:ref.kind,url:uris.get('ref:'+ref.id)!};
+  const refData:RefDataMap={};for(const ref of collectRefUses(document.body)??[]){const asset=assets[ref.id];if(ref.kind==='pdf'&&asset)refData[ref.id]={kind:'pdf',url:uris.get('ref:'+ref.id)!,name:basename(asset.path),bytes:Buffer.from(asset.base64,'base64').length};else if(ref.kind==='image'||ref.kind==='file'||ref.kind==='asset')refData[ref.id]={kind:ref.kind==='image'?'image':'file',url:uris.get('ref:'+ref.id)!};}
   // Explicit relative images travel under generated portable reference IDs; arbitrary absolute/network assets are refused.
   const nodes=async(list:JsxNode[])=>{for(const node of list)if(node.type==='element'){
    for(const attr of node.attributes)if(['src','poster'].includes(attr.name)&&attr.value.static&&typeof attr.value.json==='string'){
     const value=attr.value.json;if(value.startsWith('ref:')||value.startsWith('data:'))continue;
     if(/^(https?:|\/\/|blob:)/i.test(value)||isAbsolute(value))throw new CliError('missing_local_input',`Offline export cannot include remote asset ${value}. Download and reference a local copy.`);
     const local=relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.root,dirname(path),value))).split(sep).join('/');
-    const id=digest(local).slice(0,6);await add(id,local);uris.set(value,uris.get('ref:'+id)!);
+    const id=Object.entries(localFiles).find(([,mapped])=>mapped===local)?.[0]??digest(local).slice(0,6);if(localFiles[id]&&localFiles[id]!==local)throw new CliError('duplicate_identity','A local asset identity conflicts with another file.');await add(id,local);uris.set(value,uris.get('ref:'+id)!);
    }
    await nodes(node.children);
   }};await nodes(parsed.nodes);
@@ -98,7 +99,8 @@ export async function prepareLocalHtml(options:LocalHtmlOptions){
 export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string):Promise<Buffer>{
  const input=await prepareLocalHtml(options),{document,flow,refData}=input;
  process.chdir(resolve(assetsRoot));
- const prepared=await prepareStoryRuntime({source:document.body,compiledCss:await compileStoryCss(document.body,{force:true}),theme:STORY_THEME_NAMES.includes(document.metadata.theme as StoryThemeName)?document.metadata.theme as StoryThemeName:null,template:document.metadata.template??null,colorMode:document.metadata.colorMode??null,refData,title:document.metadata.title??input.path,chrome:true,dataflow:{flow,hold:Object.keys(input.held)}});
+ const design=resolveStoredStoryDesign(document.metadata.theme,document.metadata.colorMode);
+ const prepared=await prepareStoryRuntime({source:document.body,compiledCss:await compileStoryCss(document.body,{force:true}),theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode,refData,title:document.metadata.title??input.path,chrome:true,dataflow:{flow,hold:Object.keys(input.held)}});
  const island:StoryIslandData={...prepared.data,nodes:splitHelmet((parseJsx(document.body) as {ok:true;nodes:JsxNode[]}).nodes).body,refData,dataflow:{flow,hold:Object.keys(input.held)}};
  delete island.queryUrl;delete island.mutateUrl;delete island.assetsUrl;delete island.sqliteWasm;
  let compiled=await compileDocument({data:island,flow,authorScript:prepared.authorScript,capture:false});
@@ -123,7 +125,7 @@ export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string
  };
  const inlined=<T,>(value:T):T=>JSON.parse(inline(JSON.stringify(value))) as T;
  const now=new Date().toISOString();
- const file:ArtifactFile={format:1,origin:'http://localhost',artifactId:input.identity,liveUrl:'',downloadedBy:'Local workspace',downloadedAt:now,base:{version:0,editId:'',source:document.body},source:document.body,metadata:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:document.metadata.theme??null,template:document.metadata.template??null,colorMode:document.metadata.colorMode??null},css:{base:await css(prepared.baseCss),compiled:prepared.compiledCss?await css(prepared.compiledCss):null,author:prepared.authorCss?await css(prepared.authorCss):null},island:inlined(island),compiled:inlined(compiled),snapshot:{at:now,state:inlined(input.state),held:inlined(input.held),variants:[],frozen:[]},threads:inlined(input.threads),journal:[],localIds:input.threads.flatMap(thread=>[thread.id,...thread.thread.map(reply=>reply.id)]),bundle:'solid',derivedFrom:sourceDigest(document.body),compiledFlowDigest:sourceDigest(JSON.stringify(island.dataflow?.flow??null)),localWorkspace:{documentId:input.identity,baseDigest:sourceDigest(document.body),threadsDigest:digest(JSON.stringify(input.threads)),assets:input.assets}};
+ const file:ArtifactFile={format:1,origin:'http://localhost',artifactId:input.identity,liveUrl:'',downloadedBy:'Local workspace',downloadedAt:now,base:{version:0,editId:'',source:document.body},source:document.body,metadata:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode},css:{base:await css(prepared.baseCss),compiled:prepared.compiledCss?await css(prepared.compiledCss):null,author:prepared.authorCss?await css(prepared.authorCss):null},island:inlined(island),compiled:inlined(compiled),snapshot:{at:now,state:inlined(input.state),held:inlined(input.held),variants:[],frozen:[]},threads:inlined(input.threads),journal:[],localIds:input.threads.flatMap(thread=>[thread.id,...thread.thread.map(reply=>reply.id)]),bundle:'solid',derivedFrom:sourceDigest(document.body),compiledFlowDigest:sourceDigest(JSON.stringify(island.dataflow?.flow??null)),localWorkspace:{documentId:input.identity,baseDigest:sourceDigest(document.body),threadsDigest:digest(JSON.stringify(input.threads)),assets:input.assets}};
  const html=Buffer.from(renderArtifactFileHtml(await offlineFileParts(file)));
  if(html.length>MAX_BYTES)throw new CliError('export_too_large','The self-contained HTML file exceeds 25 MB.');
  return html;
