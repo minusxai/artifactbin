@@ -15,7 +15,7 @@ import {assembleReaderPage} from '../../../app/lib/compiled-page/assembler';
 import {createModuleStore, createSpeculationRulesStore} from '../../../app/lib/compiled-page/modules.server';
 import {loadSsrModule} from '../../../app/lib/compiled-page/bundle.server';
 import {bindModuleCode} from '../../../app/lib/compiled-page/runtime-binding';
-import {ISLANDS_PATH, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
+import {ISLANDS_PATH,SPECULATION_RULES_HEADER, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
 import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
 import {documentStyleSheets} from '../../../app/lib/story/styles';
 import type {StoryIslandData, ServedResults} from '../../../app/lib/story-runtime/contract';
@@ -115,6 +115,30 @@ export interface AssembleDocumentInput {
 }
 
 /**
+ * Local previews do not inherit the HTTP reader's CDN, remote media or Helmet allowances.
+ * The compiled reader and editor load from this session; author modules and engine workers
+ * need blob URLs, SQLite needs WebAssembly, and document CSS is intentionally inline.
+ * This controls browser resource requests, not a general sandbox for authored HTML/code.
+ */
+export function localPreviewCsp():string {
+ return [
+  "default-src 'none'",
+  "script-src 'self' blob: 'wasm-unsafe-eval'",
+  "connect-src 'self' blob: data:",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data: blob:",
+  "img-src 'self' data: blob:",
+  "media-src 'self' data: blob:",
+  "frame-src 'self' data: blob:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'self'",
+ ].join('; ');
+}
+
+/**
  * The compiled document, wrapped as a full page the way `/a/:id/raw` serves one: our own doors, no reader
  * chrome, no SPA — this IS the page. Its stylesheets are the standalone document's, byte for byte
  * (lib/story/styles/document-styles): they name the design on the document element, where a design
@@ -125,7 +149,7 @@ export interface AssembleDocumentInput {
 export function assembleDocument(input: AssembleDocumentInput): {html: string; headers: Readonly<Record<string, string>>} {
  const build = compilerBuild();
  const file = encodeURIComponent(input.file);
- return assembleReaderPage({
+ const assembled=assembleReaderPage({
   compiled: input.compiled,
   documentChrome: !input.capture,
   story: input.story ?? input.compiled.html,
@@ -152,4 +176,9 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
   build,
   head: null,
  });
+ // Local links may redirect to published pages. Do not let hover/intent prerender them
+ // implicitly; clicking a link remains an explicit navigation by the reader.
+ const headers:Record<string,string>={...assembled.headers,'Content-Security-Policy':localPreviewCsp(),'X-DNS-Prefetch-Control':'off'};
+ delete headers[SPECULATION_RULES_HEADER];
+ return {...assembled,headers};
 }

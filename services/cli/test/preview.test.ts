@@ -243,26 +243,20 @@ test('preview serves the compiled reader: no React, a live Select re-runs its qu
  }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
 });
 
-test('a page with an internal link serves a fetchable Speculation-Rules file, not just the header',async()=>{
- // A real browser follows the `Speculation-Rules` header and fetches its URL; nothing mocks that
- // fetch. This is the local counterpart of prepared-page.server.ts's `compiledFor`, which writes the
- // rule file to the same store the route reads back from — reproduces a bug only a real Chromium
- // load caught (the CLI compiled the page but never wrote the file the header named).
+test('local document links never advertise automatic speculation, while explicit navigation remains available',async()=>{
  const appDir=join(import.meta.dirname,'../../app');
  const cwd=process.cwd();process.chdir(appDir);
  const root=await mkdtemp(join(tmpdir(),'preview-speculation-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{
   await writeFile(join(root,'appendix.jsx'),'<p>Appendix</p>');
-  await writeFile(join(root,'report.jsx'),'<a href="/a/app001">Appendix</a><p id="prose">Some prose</p>');
-  session=await startPreview({root,files:['report.jsx'],localFiles:{app001:'appendix.jsx'},home:join(root,'home'),assets:root,publicAssets:join(appDir,'public')});
+  await writeFile(join(root,'report.jsx'),'<a href="/a/app001">Appendix</a><a href="/a/remote1">Published document</a><p id="prose">Some prose</p>');
+  session=await startPreview({root,files:['report.jsx'],localFiles:{app001:'appendix.jsx'},origin:'https://example.invalid',home:join(root,'home'),assets:root,publicAssets:join(appDir,'public')});
   const page=await fetch(session.url+'/workspace/report.jsx');
   assert.equal(page.status,200);
-  const rulesUrl=page.headers.get('speculation-rules');
-  assert.ok(rulesUrl,'assembleDocument must name a Speculation-Rules header for a page with an internal link');
-  const rules=await fetch(session.url+rulesUrl!.replace(/^"|"$/g,''));
-  assert.equal(rules.status,200);
-  assert.equal(rules.headers.get('content-type'),'application/speculationrules+json');
-  assert.match(await rules.text(),/"\/a\/app001"/);
+  assert.equal(page.headers.get('speculation-rules'),null,'local previews may not implicitly fetch links that redirect to a remote host');
+  const html=await page.text();assert.equal(html.includes('type="speculationrules"'),false);assert.equal(html.includes('href="/a/app001"'),true);
+  const local=await fetch(session.url+'/a/app001',{redirect:'manual'});assert.equal(local.status,302);assert.equal(local.headers.get('location'),'/workspace/appendix.jsx');
+  const remote=await fetch(session.url+'/a/remote1',{redirect:'manual'});assert.equal(remote.status,302);assert.equal(remote.headers.get('location'),'https://example.invalid/a/remote1');
  }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
 });
 
