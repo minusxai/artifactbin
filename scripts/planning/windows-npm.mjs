@@ -31,6 +31,15 @@ async function ps(script, cwd = workspace) {
 const command = (file, args) => `& ${quote(file)} ${args.map(quote).join(' ')}; if ($LASTEXITCODE -ne 0) { throw "Command failed: $LASTEXITCODE" }`;
 try {
   assert.equal((await ps('([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)')).stdout.trim(), 'False');
+  // Start-Process -Credential changes the identity but inherits the parent profile environment.
+  // Read this identity's real loaded profile, rather than silently installing into runneradmin.
+  const userProfile = (await ps("$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\'+$sid); [Environment]::ExpandEnvironmentVariables($key.GetValue('ProfileImagePath'))")).stdout.trim();
+  assert.match(userProfile, /mxmx_test_npm/i);
+  env.USERPROFILE = userProfile;
+  env.HOME = userProfile;
+  env.LOCALAPPDATA = join(userProfile, 'AppData/Local');
+  env.APPDATA = join(userProfile, 'AppData/Roaming');
+  env.CODEX_HOME = join(userProfile, '.codex');
   await ps('Set-ExecutionPolicy -Scope CurrentUser Restricted -Force');
   record('Separate standard user; Windows PowerShell 5.1 Restricted policy');
   stage = 'candidate packaging';
