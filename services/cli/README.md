@@ -183,6 +183,9 @@ The flags prompt accepts quoted arguments (for example `--model "my model"`) wit
 
 `afbin remote --history history.md claude` runs in the background by default, including from another agent without a local TTY. Use `--foreground` for an attached terminal. Names default to the executable name; use `--name claude2` for another instance. New names contain lowercase letters, digits, underscores and hyphens, starting with a letter (maximum 32 characters). Stop with `afbin remote --stop <id>`.
 
+Managed harnesses receive automatic permission defaults unless explicitly overridden;
+see [permission defaults](../../docs/remote-review.md#permission-defaults) for the flags and how to retain approvals.
+
 Put afbin options **before** the command; everything after the command goes to the harness unchanged. Your working directory, environment, installed skills, and local input/output remain available. The CLI starts the executable directly, without constructing a shell command string. You can explicitly run a shell too: `afbin remote bash`.
 
 Open the printed session link, or `/chat` on the selected server, and sign into the same artifactbin account. Select a session, swipe up/down to scroll terminal history (or use Scroll up, Scroll down, and Latest output), and use the terminal directly, the message box, or the Enter/Escape/arrow buttons. **Switch to mobile** and **Switch to desktop** resize the shared terminal. The selected size stays in effect even when the local terminal sends input or automatic replies. **Stop agent** ends a managed background worker and its child process group. With `--foreground`, **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to that command as usual.
@@ -223,9 +226,19 @@ Bare commands offer a picker of installed agent executables. The harness itself 
 
 ## Artifact comments
 
-Type `@` in an artifact comment or reply and select one of your online sessions. The comment stores a readable link to that exact session. After saving the comment, the server queues a single-line JSON notification containing the artifact, annotation and comment IDs, author, and body, followed by Enter. It does not wait for the harness to become idle. The harness handles the input according to its current screen, just as if you typed locally.
+Type `@` in an artifact comment or reply and select one of your online sessions.
+Mentions identify that exact session and can only address your own account's agents.
+Managed sessions hold queued comments until the harness acknowledges readiness and
+allow one active request at a time. Delivery is acknowledged by the worker;
+working, blocked and completed states come from correlated agent replies.
 
-The agent can use its artifactbin CLI and installed local skill to read the artifact and respond. The relay does not parse replies or post comments itself. Agent-authored replies do not generate more notifications. V0 only allows you to invoke **your own account's sessions**. Offline, disconnected, or full sessions receive no notification; the comment is still saved. There is no historical comment replay. Mention links identify a session, so restarting a command creates a new mention target.
+The agent reads the artifact and thread through its CLI, acknowledges the request,
+verifies its work and posts a correlated final reply. Agent replies do not trigger
+more requests. Pending work and refusal receipts are durable; a relay restart marks
+in-flight work uncertain rather than replaying it. A new tagged comment can
+supersede blocked or uncertain work. Foreground sessions retain direct terminal
+input behavior. See [remote review](../../docs/remote-review.md) for the complete
+readiness, request and stop protocol.
 
 ## Embedded use
 
