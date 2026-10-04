@@ -35,7 +35,7 @@ try{
   const port=reserve.address().port;await new Promise(done=>reserve.close(done));
   const origin='http://127.0.0.1:'+port,file=join(directory,'server.env'),outbox=join(directory,'outbox.jsonl');
   await writeFile(file,`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=${origin}\nAPP__PAGES_HOST=lvh.me\nAUTH__SECRET=${randomBytes(32).toString('hex')}\nEMAIL__DEV_OUTBOX_PATH=${outbox}\n`+(configured?`RUNNER__SERVICE_URL=http://127.0.0.1:${remote.address().port}\nCONTRACT__ACTOR_SECRET=${secret}\n`:''));
-  log='';child=spawn(process.execPath,[entry,'serve','--config',file,'--dir',directory],{cwd:directory,env:{...process.env,ARTIFACTBIN_HOME:join(directory,'client'),CLI__AUTO_UPDATE:'0'},stdio:['ignore','pipe','pipe','ipc']});
+  log='';child=spawn(process.execPath,[entry,'serve','--config',file,'--dir',directory],{cwd:directory,env:{...process.env,HOME:directory,USERPROFILE:directory,XDG_CONFIG_HOME:join(directory,'config'),ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:join(directory,'client'),CLI__AUTO_UPDATE:'0'},stdio:['ignore','pipe','pipe','ipc']});
   for(const stream of [child.stdout,child.stderr])stream.on('data',chunk=>log=(log+chunk).slice(-12000));
   const deadline=Date.now()+90000;
   while(!log.includes('Team server listening')){if(child.exitCode!==null||Date.now()>deadline)throw Error('Serve failed readiness: '+log);await sleep(50);}
