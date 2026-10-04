@@ -108,6 +108,15 @@ export class State {
     return State.open(home, env);
   }
 
+  /** Move a portable staging scope without replacing any existing workspace. */
+  rebaseScope(from: string, to: string): void {
+    if (from === to) return;
+    this.transaction(() => {
+      if (this.db.prepare('SELECT 1 FROM records WHERE scope = ? LIMIT 1').get(to)) throw new Error('Destination state scope already exists');
+      this.db.prepare("UPDATE records SET scope = ?, key = CASE WHEN kind = 'workspace' AND key = ? THEN ? ELSE key END WHERE scope = ?").run(to, from, to, from);
+    });
+  }
+
   close(): void { this.db.close(); }
 
   /** Run `fn` atomically. Nested calls join the outer transaction. */

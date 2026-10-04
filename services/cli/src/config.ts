@@ -1,3 +1,4 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {validVersion} from './version-order';
 import { readFile } from "node:fs/promises";
 import { atomicWrite, digest, privateDirectory } from "./files";
@@ -18,9 +19,16 @@ export interface Connection {
   clientId?: string;
   expiresAt?: number;
 }
+const privateStateHomes = new AsyncLocalStorage<ReadonlyMap<string,string>>();
+/** A nested, task-local private store. Never changes process environment or credentials for other homes. */
+export function withPrivateStateHome<T>(home:string,directory:string,run:()=>T):T {
+  const homes=new Map(privateStateHomes.getStore());homes.set(home,directory);
+  return privateStateHomes.run(homes,run);
+}
+
 /** The CLI's private state directory: `~/.artifactbin`, or `ARTIFACTBIN_HOME` when set. Skills never live here. */
 export function configDir(home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
-  return env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin");
+  return privateStateHomes.getStore()?.get(home) ?? (env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin"));
 }
 /** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
 function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
