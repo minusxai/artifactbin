@@ -88,3 +88,25 @@ it.each([true, false])('uses stop only for online managed agents (online=%s)', a
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/remote/sessions/managed', expect.objectContaining({ method: online ? 'POST' : 'DELETE' })));
   if (!online) await waitFor(() => expect(screen.queryByRole('button', { name: 'Open Review' })).toBeNull());
 });
+
+
+it('keeps offline and ended sessions behind history without hiding a directly opened session', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const base = { harness: 'pi', machine: 'Hosted', cols: 80, rows: 24, controller: 'local', exitCode: null };
+  const sessions = [
+    { ...base, id: 'hosted', name: 'artifactbin', online: true },
+    { ...base, id: 'offline', name: 'Offline agent', online: false },
+    { ...base, id: 'ended', name: 'Old review', online: false, exitCode: 0 },
+  ];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url === '/api/remote/sessions' ? { sessions } : { session: sessions.find(s => url.includes(s.id)) ?? sessions[0], seq: 0, frames: [] } })));
+  open('hosted');
+  expect(await screen.findByRole('button', { name: 'Open artifactbin' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Open Old review' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Open Offline agent' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Show previous sessions (2)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open Old review' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Open Old review' })).toHaveAttribute('aria-pressed', 'true'));
+  fireEvent.click(screen.getByRole('button', { name: 'Hide previous sessions (2)' }));
+  expect(screen.getByRole('button', { name: 'Open Old review' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByRole('button', { name: 'Open Offline agent' })).toBeNull();
+});

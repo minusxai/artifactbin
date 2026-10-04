@@ -206,8 +206,12 @@ export function ChatPage(): JSX.Element {
   const [params, setParams] = useSearchParams();
   const id = () => typeof params.session === 'string' ? params.session : null;
   const [setupExpanded, setSetupExpanded] = createSignal(false);
+  const [historyExpanded, setHistoryExpanded] = createSignal(false);
   const page = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions', { loader: (signal) => request('', undefined, 'GET', signal) });
   const sessions = () => page.data()?.sessions ?? [];
+  const isActive = (session: RemoteSessionInfo) => session.online && session.exitCode == null;
+  const previousCount = () => sessions().filter((session) => !isActive(session)).length;
+  const visibleSessions = () => sessions().filter((session) => isActive(session) || historyExpanded() || session.id === id());
   const error = () => page.error() ? connectionMessage(page.error()) : '';
   let stopped = false, timer: ReturnType<typeof setTimeout>;
   let failures = 0;
@@ -223,7 +227,8 @@ export function ChatPage(): JSX.Element {
     <h1 class="mb-1 text-xl font-semibold">Remote sessions</h1><p class="mb-6 text-sm text-muted">Your agents, on your machine or hosted for you.</p>
     <Show when={error()}><p role="alert" class="mb-4 text-sm">{error()} <Show when={error().startsWith('Sign in')}><a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id() ? `?session=${id()}` : ''}`)}`} class="underline">Sign in</a></Show></p></Show>
     <div class="flex flex-col gap-6 md:flex-row"><aside class="shrink-0 md:w-80">
-      <For each={sessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : 'Offline'}</span></button>}</For>
+      <For each={visibleSessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : 'Offline'}</span></button>}</For>
+      <Show when={previousCount() > 0}><button type="button" aria-expanded={historyExpanded()} class="mb-4 w-full rounded border border-edge px-3 py-2 text-left text-sm text-muted" onClick={() => setHistoryExpanded((value) => !value)}>{historyExpanded() ? 'Hide' : 'Show'} previous sessions ({previousCount()})</button></Show>
       <Show when={id()}><button type="button" aria-expanded={setupExpanded()} aria-controls="cli-setup" class="mt-2 flex w-full items-center justify-between rounded border border-edge px-3 py-2 text-sm md:hidden" onClick={() => setSetupExpanded((value) => !value)}>CLI setup <span aria-hidden="true">{setupExpanded() ? '−' : '+'}</span></button></Show>
       <div id="cli-setup" class={id() && !setupExpanded() ? 'hidden md:block' : ''}><InstallInstructions /></div>
     </aside><Show when={id()} keyed fallback={<div class="rounded border border-edge p-8 text-muted">Select a session, or start one from your CLI.</div>}>{(sessionId) => <SessionTerminal id={sessionId} onClose={close} />}</Show></div>
