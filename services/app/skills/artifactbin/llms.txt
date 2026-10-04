@@ -1,4 +1,4 @@
-artifactbin: agents publish and edit stateful, interactive artifacts with the afbin CLI.
+artifactbin: agents publish and edit stateful, interactive artifacts with the npm CLI or direct HTTP API.
 
 # artifactbin
 
@@ -6,7 +6,7 @@ Artifacts are interactive documents, apps, dashboards, decks, plans and datasets
 
 Prepare Node: afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
 Windows: Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression
-Setup: npx --yes @artifactbin/cli@latest setup --server '[[ base ]]' (Windows: npx.cmd). Run preparation and setup in the same terminal. Supported Node/npm is reused; otherwise official Node LTS is installed for your user.
+Setup: npx --yes @artifactbin/cli@latest setup --server '[[ base ]]' (Windows: npx.cmd --yes @artifactbin/cli@latest setup --server '[[ base ]]'). Run preparation and setup in the same terminal. Supported Node/npm is reused; otherwise official Node LTS is installed for your user.
 Then: npx --yes @artifactbin/cli@latest pull <artifact url> --output report.jsx; edit the file; npx --yes @artifactbin/cli@latest push report.jsx (push runs afbin validate itself)
 Reference: npx --yes @artifactbin/cli@latest help, help <topic>, and the installed skill. Restart your agent after setup to load it.
 Local: npx --yes @artifactbin/cli@latest preview report.jsx needs no cloud or credentials. HTML exports/downloads use .jsx.html. Pin the npm version and prepare its cache before disconnecting; npm is not a sandbox.
@@ -14,3 +14,15 @@ Local: npx --yes @artifactbin/cli@latest preview report.jsx needs no cloud or cr
 Sign-in is automatic for server commands through browser approval, including guests. In automation add --yes --json: open the returned approval URL, then the command continues. Direct HTTP clients require email authentication; guest browser approval is CLI-only.
 
 Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; use either or its bare id. Add @<version> for history.
+
+## Direct HTTP API
+
+An HTTP client does not need Node or the CLI. Direct integrations authenticate by email; guest browser approval is CLI-only. All JSON requests use Content-Type: application/json. Use this server's Origin for session-authenticated requests.
+
+1. POST [[ base ]]/api/auth/email-otp/send-verification-otp with {"email":"you@example.com","type":"sign-in"} and Origin: [[ base ]]. Ask the user for the emailed code.
+2. POST [[ base ]]/api/auth/sign-in/email-otp with {"email":"you@example.com","otp":"<user's code>"} and the same Origin. Keep the returned session cookies in a private cookie jar.
+3. POST [[ base ]]/api/authentication/token with those cookies and Origin: [[ base ]]. Only verified email account sessions qualify. Read access_token from the JSON response; use Authorization: Bearer <access_token> on this server's /api requests. Keep secrets out of URLs, documents and logs. The bearer expires and has no refresh token; authenticate by email again when needed.
+
+GET [[ base ]]/api/artifacts lists accessible artifacts. GET [[ base ]]/api/artifacts/<id> reads source and current version/state. POST [[ base ]]/api/artifacts creates an artifact, for example {"csv":"name,value\nExample,2","title":"Example"}. PUT [[ base ]]/api/artifacts/<id> updates a dataset with csv plus the observed expectedVersion and expectedState. Preserve these concurrency checks; a 409 requires reconciliation. Markup updates require a prepared document_update graph, rather than raw markup replacement; the CLI prepares this contract. GET/POST [[ base ]]/api/artifacts/<id>/annotations reads/creates comments with document permissions.
+
+Local and offline edits do not call these HTTP endpoints. Edit downloaded .jsx.html files locally or use CLI preview/import/export; push is explicit remote publication. Local commands use a prepared npm cache when disconnected. CLI reference: npx --yes @artifactbin/cli@latest help http-api (Windows: npx.cmd --yes @artifactbin/cli@latest help http-api).

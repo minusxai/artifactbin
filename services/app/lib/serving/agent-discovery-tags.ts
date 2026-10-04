@@ -6,9 +6,9 @@ import { escapeHtml } from '@artifactbin/utils/escape';
  * the same `<head>` pointer every served page carries. lib/agent-discovery
  * re-exports these beside the parts that read llms.txt from disk.
  */
-/** `url` is the help link (the one-pager); `instruction` is the afbin meta content, on the caller's base. */
+/** `url` is the help link (the one-pager); `instruction` is the CLI/HTTP discovery meta content, on the caller's base. */
 export interface AgentDiscovery {url:string;instruction:string}
-export const AGENT_HELP_TITLE='Agents: read this to create, edit, or operate artifacts on the CLI using afbin';
+export const AGENT_HELP_TITLE='Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API';
 const origin=(base:string)=>base.replace(/\/$/,'');
 /** Shell quoting is platform-specific; keep even a supplied origin one argument. */
 const quoted=(value:string,windows=false):string=>`'${windows?value.replaceAll("'","''"):value.replaceAll("'",`'"'"'`)}'`;
@@ -19,7 +19,7 @@ export const afbinInstallCommand=(base:string):string=>`afbin_node_setup="$(mkte
 export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/ensure-node.ps1`,true)} | Invoke-Expression\nnpx.cmd --yes @artifactbin/cli@latest setup${setupServer(base,true)}`;
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
- return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @artifactbin/cli@latest. Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1`};
+ return {url:`${o}/llms.txt`,instruction:`CLI: npx --yes @artifactbin/cli@latest (Windows: npx.cmd --yes @artifactbin/cli@latest). Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1. Direct HTTP API: email OTP, then POST /api/authentication/token; see /llms.txt. Local/offline editing needs no remote API.`};
 }
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="${escapeHtml(help.instruction)}">`;

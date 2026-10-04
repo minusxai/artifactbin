@@ -1,13 +1,13 @@
 ---
 name: artifactbin
 description: >-
-  Required for every artifactbin task: any artifactbin.dev or self-hosted artifactbin link, any afbin command, and any request to publish, edit, comment on, query or export an artifact, document, dashboard, deck or dataset. Read this skill before acting; never fetch or call the site directly.
+  Required for every artifactbin task: any artifactbin.dev or self-hosted artifactbin link, any afbin command, and any request to publish, edit, comment on, query or export an artifact, document, dashboard, deck or dataset. Read this skill before acting; use the documented npm CLI or authenticated HTTP API contracts.
 ---
 ## Read first
 
 artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. The fence names the design system and page type. Datasets/media are artifacts too.
 
-npm CLI: local files/browser approval. HTTP: email authentication.
+npm CLI: local files/browser approval. Direct HTTP API: email authentication without Node or CLI installation; read [HTTP API](references/http-api.md) for the actual authentication and operation contracts.
 
 - Run via `npx --yes @artifactbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
 - Preview is local; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.

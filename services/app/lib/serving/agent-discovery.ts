@@ -1,8 +1,8 @@
 /**
- * Document discovery points an agent at the afbin CLI; authoring guidance itself stays local.
+ * Document discovery exposes the npm CLI and direct HTTP API; local edits need no remote API.
  *
  * Every page carries two head tags: a `<link rel="help">` to `/llms.txt` (titled by
- * `AGENT_HELP_TITLE`) and a `<meta name="afbin">` naming the CLI and its one-line install —
+ * `AGENT_HELP_TITLE`) and a `<meta name="afbin">` naming npm CLI installation and email-authenticated HTTP —
  * and repeats them as a comment that is the LAST thing before `</body>`, because a shell tool
  * that keeps the tail of a long page drops the whole head (inline CSS and bootstrap JSON come
  * first). A shared `/a/<id>` is the document page itself (served in place, no redirect), so a

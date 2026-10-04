@@ -11,7 +11,7 @@ description: Install Node and run afbin through npm, including prepared offline 
 - CLI browser sign-in allows guests. Direct HTTP API sign-in requires email and cannot continue as a guest.
 - Command examples below use `afbin` as shorthand: always invoke them as `npx --yes @artifactbin/cli@latest <command>` (Windows: `npx.cmd`).
 
-The CLI uses browser approval or email sign-in for remote work. Direct HTTP clients require email authentication. Local preview remains local until explicit publication.
+The CLI uses browser approval or email sign-in for remote work. Direct HTTP clients require email authentication; see [HTTP API](http-api.md) for the email OTP and bearer flow without CLI installation. Local preview remains local until explicit publication.
 
 ## One local editing journey
 

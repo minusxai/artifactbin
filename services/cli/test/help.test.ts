@@ -365,6 +365,16 @@ describe('the bundled teaching and the manual', () => {
     assert.equal(await runCli(['help','npm-local'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:true,color:false,stdout:(x:string)=>topic.push(x),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')}),0);
     assert.ok(topic.join('').includes(`${self}/chat/ensure-node.sh`));
     assert.doesNotMatch(topic.join(''),/__AFBIN_SERVER__/);
+    const http:string[]=[];
+    assert.equal(await runCli(['help','http-api'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:false,color:false,stdout:(x:string)=>http.push(x),stderr:()=>{},fetch:async()=>assert.fail('HTTP reference help must stay offline')}),0);
+    const guide=http.join('');
+    assert.ok(guide.includes('Origin: '+self));
+    assert.ok(guide.includes('/api/auth/email-otp/send-verification-otp'));
+    assert.ok(guide.includes('/api/auth/sign-in/email-otp'));
+    assert.ok(guide.includes('/api/authentication/token'));
+    assert.ok(guide.includes('Authorization: Bearer <access_token>'));
+    assert.doesNotMatch(guide,/__AFBIN_SERVER__|\[\[ base \]\]/);
+
    }finally{await rm(screenRoot,{recursive:true,force:true});}
   });
 
