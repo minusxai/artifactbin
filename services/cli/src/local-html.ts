@@ -117,13 +117,24 @@ export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string
   }
   throw new CliError('missing_local_input',`Offline export cannot embed ${pointer}. Use a registered local reference.`);
  };
- const inline=(text:string)=>{for(const [pointer,uri] of input.uris)text=text.split(pointer).join(uri);return text;};
+ const inline=(text:string)=>input.uris.get(text)??text.replace(/\b(src|href|poster)=(["'])([^"']*)\2/g,(original,name:string,quote:string,pointer:string)=>input.uris.has(pointer)?`${name}=${quote}${input.uris.get(pointer)}${quote}`:original);
  const css=async(text:string)=>{
   const sheet=withoutUnusedFaces(text,document.body+JSON.stringify(input.state)+JSON.stringify(input.threads));
   const replacements=new Map<string,string>();for(const match of sheet.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/g))replacements.set(match[0],`url("${await resource(match[2]!)}")`);
   let result=sheet;for(const [original,replacement] of replacements)result=result.split(original).join(replacement);return result;
  };
- const inlined=<T,>(value:T):T=>JSON.parse(inline(JSON.stringify(value))) as T;
+ const inlined=<T,>(value:T):T=>{
+  const visit=(part:unknown):unknown=>{
+   if(typeof part==='string')return inline(part);
+   if(Array.isArray(part))return part.map(visit);
+   if(part&&typeof part==='object'){
+    const record=part as Record<string,unknown>;
+    if(record.type==='text'&&typeof record.start==='number'&&typeof record.end==='number')return record;
+    return Object.fromEntries(Object.entries(record).map(([key,item])=>[key,visit(item)]));
+   }
+   return part;
+  };return visit(value) as T;
+ };
  const now=new Date().toISOString();
  const file:ArtifactFile={format:1,origin:'http://localhost',artifactId:input.identity,liveUrl:'',downloadedBy:'Local workspace',downloadedAt:now,base:{version:0,editId:'',source:document.body},source:document.body,metadata:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode},css:{base:await css(prepared.baseCss),compiled:prepared.compiledCss?await css(prepared.compiledCss):null,author:prepared.authorCss?await css(prepared.authorCss):null},island:inlined(island),compiled:inlined(compiled),snapshot:{at:now,state:inlined(input.state),held:inlined(input.held),variants:[],frozen:[]},threads:inlined(input.threads),journal:[],localIds:input.threads.flatMap(thread=>[thread.id,...thread.thread.map(reply=>reply.id)]),bundle:'solid',derivedFrom:sourceDigest(document.body),compiledFlowDigest:sourceDigest(JSON.stringify(island.dataflow?.flow??null)),localWorkspace:{documentId:input.identity,baseDigest:sourceDigest(document.body),threadsDigest:digest(JSON.stringify(input.threads)),metadataBaseline:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode},assets:input.assets}};
  const html=Buffer.from(renderArtifactFileHtml(await offlineFileParts(file)));

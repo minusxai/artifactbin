@@ -42,3 +42,7 @@ test('imports a remote-style downloaded file with held SQL rows and embedded ima
   const read=await prepareLocalHtml({cwd:target,home:join(root,'fresh-home'),path:'report.jsx'});assert.deepEqual(read.state.tables.total!.rows,[{total:30}]);assert.equal(Buffer.from(read.assets[image]!.base64,'base64').toString(),'image bytes');
  }finally{process.chdir(cwd);}
 }));
+test('embedding image references does not replace literal reference examples in authored text',()=>fixture(async(root,home)=>{
+ await writeFile(join(root,'picture.png'),Buffer.from('image bytes'));const workspace=await loadWorkspace(root,home),assigned=await registerLocalFiles(workspace,['picture.png']),id=assigned['picture.png']!;await writeFile(join(root,'report.jsx'),`<p id="words">Literal ref:${id} is an example</p><img src="ref:${id}" />`);
+ const cwd=process.cwd();try{const file=readArtifactFileHtml((await exportLocalHtml({cwd:root,home,path:'report.jsx'},resolve('../app'))).toString());assert.match(JSON.stringify(file.island.nodes),new RegExp('Literal ref:'+id+' is an example'));assert.match(JSON.stringify(file.island.refData),/data:image\/png;base64,/);}finally{process.chdir(cwd);}
+}));
