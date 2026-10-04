@@ -28,6 +28,12 @@ export interface StoryBaseCssRecipe {
   faces?: never[];
   /** The Helmet's font slot overrides. */
   fonts: DocumentFonts;
+  /**
+   * A design system's faces and classes (lib/data/story/story-systems storySystemSheetCss), when the
+   * document names one. The TEXT, not the name: the browser rebuilds this sheet from the recipe and
+   * must not carry the registry to do it.
+   */
+  systemCss?: string;
 }
 
 const STORY_ROOT_RULE = ':root { --mx-vh: 100vh; color: var(--foreground, CanvasText); background-color: var(--background, Canvas); } body { margin: 0; }';
@@ -42,6 +48,6 @@ export function storyBaseCss(recipe: StoryBaseCssRecipe): string {
   return [
     STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
     recipe.chrome ? DOCUMENT_NAV_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
-    getStoryFontCss(recipe.theme ?? undefined), documentFontCss(recipe.fonts),
+    getStoryFontCss(recipe.theme ?? undefined), documentFontCss(recipe.fonts), recipe.systemCss ?? '',
   ].join('\n');
 }

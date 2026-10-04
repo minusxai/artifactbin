@@ -3,7 +3,7 @@ import {respondToEdit,artifactToWire,parseShareEntries,parseExpectedVersion,pars
 import { applyEditFor, getArtifactFor, getOwnedArtifactFor, isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
 import { writerFor, type TokenActor } from './access';
 import {resolveParent,isParentRefusal} from '../workspace/folders';
-import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
+import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {json} from '../http/http';
 import {validateDatasetPolicyForRow} from '../datasets/policy/validation';
 export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
@@ -25,7 +25,7 @@ export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Rec
  for(const key of ['title','description','theme','template','colorMode'] as const){
   const value=body[key];if(value===undefined)continue;
   if(value!==null&&typeof value!=='string')return json({error:'invalid_metadata',field:key},400);
-  if(key==='theme'&&value!==null&&!STORY_THEME_NAMES.includes(value as never))return json({error:'unknown_theme',allowed:STORY_THEME_NAMES},400);
+  if(key==='theme'&&value!==null&&!STORY_DESIGN_NAMES.includes(value as never))return json({error:'unknown_theme',allowed:STORY_DESIGN_NAMES},400);
   if(key==='template'&&value!==null&&!STORY_TEMPLATE_NAMES.includes(value as never))return json({error:'unknown_template',allowed:STORY_TEMPLATE_NAMES},400);
   if(key==='colorMode'&&value!==null&&value!=='light'&&value!=='dark')return json({error:'unknown_color_mode'},400);
   Object.assign(patch,{[key]:value});

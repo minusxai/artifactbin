@@ -12,7 +12,7 @@ import type {DocumentGraph} from '@artifactbin/contracts';
 import { wakeups } from './wakeup';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 
 /**
  * A DATA wakeup: a dataset this document reads was written, so the queries
@@ -82,7 +82,7 @@ export interface ArtifactLiveEvent {
    * `template` never reaches the render — it travels so that entering edit mode
    * after a live change seeds the editor with the genre actually stored.
    */
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
   colorMode: 'light' | 'dark' | null;
   template: string | null;
   /**

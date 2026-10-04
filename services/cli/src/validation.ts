@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import {repairJsxSource} from '../../app/lib/jsx';
 import {formatMarkupSource} from '../../app/lib/story/document/format-source';
-import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
+import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
 import {inspectWorkspace,type Workspace} from './workspace';
 import {assetInput} from './upload-input';
 import {atomicWrite,digest,readOptional} from './files';
@@ -19,7 +19,7 @@ export async function validateFiles(workspace:Workspace,paths?:string[],fix=fals
    if(!file.bytes)throw new CliError('missing_file',`Missing file: ${file.path}.`,'Restore the file or use afbin delete to delete its remote artifact explicitly.');
    if(file.document){
     const {metadata,body}=file.document;
-    if(metadata.theme&&!STORY_THEME_NAMES.includes(metadata.theme as never))throw new CliError('unknown_theme',`Unknown theme ${metadata.theme}.`,`Choose ${STORY_THEME_NAMES.join(', ')}.`);
+    if(metadata.theme&&!STORY_DESIGN_NAMES.includes(metadata.theme as never))throw new CliError('unknown_theme',`Unknown theme ${metadata.theme}.`,`Choose ${STORY_DESIGN_NAMES.join(', ')}.`);
     if(metadata.template&&!STORY_TEMPLATE_NAMES.includes(metadata.template as never))throw new CliError('unknown_template',`Unknown template ${metadata.template}.`,`Choose ${STORY_TEMPLATE_NAMES.join(', ')}.`);
     const source=file.bytes.toString();const fence=source.slice(0,source.length-body.length);
     const fenceLines=(fence.match(/\n/g)??[]).length;

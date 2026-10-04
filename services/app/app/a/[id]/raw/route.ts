@@ -40,7 +40,7 @@ import { pagesRequestOf } from '@/lib/serving/pages-origin';
 import { readUrlValues } from '@/lib/story/data';
 import { displayTitle } from '@/lib/story/document';
 import { CARD_RENDER_GENERATION } from '@/lib/serving';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
 import { canonicalDocumentUrl, domainPostUrl, servesDocument } from '@/lib/serving';
@@ -292,7 +292,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        */
       if (!key && !fragment && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
 
-      const meta = row.meta as { theme?: StoryThemeName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
+      const meta = row.meta as { theme?: StoryDesignName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
       // Stored rows may still carry a retired theme name (aliased forward) and
       // a sheet compiled under an older registry (recompiled) — both resolve
       // at the door so the served document always speaks the live vocabulary.

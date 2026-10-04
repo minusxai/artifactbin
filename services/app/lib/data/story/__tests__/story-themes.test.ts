@@ -190,7 +190,9 @@ describe('mode resolution (dual-palette themes)', () => {
     expect(storyThemeDefaultMode('terminal')).toBe('dark');
     expect(storyThemeDefaultMode('modernist')).toBe('light');
     expect(storyThemeDefaultMode(null)).toBeUndefined();
-    expect(storyThemeDefaultMode('nocturne')).toBeUndefined();
+    expect(storyThemeDefaultMode('bogus')).toBeUndefined();
+    // nocturne is a design system now (story-systems), night first.
+    expect(storyThemeDefaultMode('nocturne')).toBe('dark');
   });
 
   it('resolveStoryMode: author colorMode wins, theme default is the fallback, light the floor', () => {
@@ -205,7 +207,7 @@ describe('mode resolution (dual-palette themes)', () => {
 
 describe('retired themes alias forward', () => {
   it('the alias table names a live successor and a hint for each retired theme', () => {
-    expect(Object.keys(RETIRED_STORY_THEMES).sort()).toEqual(['broadsheet', 'classical', 'nocturne']);
+    expect(Object.keys(RETIRED_STORY_THEMES).sort()).toEqual(['classical']);
     for (const [name, r] of Object.entries(RETIRED_STORY_THEMES)) {
       expect(STORY_THEME_NAMES, `${name} successor live`).toContain(r.successor);
       expect(r.hint).toContain(r.successor);
@@ -214,9 +216,9 @@ describe('retired themes alias forward', () => {
 
   it('resolveStoredStoryDesign: retired names resolve, colorMode carries, nocturne implies dark only when unset', () => {
     expect(resolveStoredStoryDesign('classical', null)).toEqual({ theme: 'manuscript', colorMode: null });
-    expect(resolveStoredStoryDesign('broadsheet', 'dark')).toEqual({ theme: 'manuscript', colorMode: 'dark' });
-    expect(resolveStoredStoryDesign('nocturne', null)).toEqual({ theme: 'modernist', colorMode: 'dark' });
-    expect(resolveStoredStoryDesign('nocturne', 'light')).toEqual({ theme: 'modernist', colorMode: 'light' });
+    // broadsheet and nocturne came back as design systems: a stored row reaches the system, not an alias.
+    expect(resolveStoredStoryDesign('broadsheet', 'dark')).toEqual({ theme: 'broadsheet', colorMode: 'dark' });
+    expect(resolveStoredStoryDesign('nocturne', null)).toEqual({ theme: 'nocturne', colorMode: null });
     expect(resolveStoredStoryDesign('terminal', null)).toEqual({ theme: 'terminal', colorMode: null });
     expect(resolveStoredStoryDesign(null, 'dark')).toEqual({ theme: null, colorMode: 'dark' });
     // An unknown junk name is left null rather than invented.

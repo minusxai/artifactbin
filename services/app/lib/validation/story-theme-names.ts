@@ -9,3 +9,7 @@
  */
 export const STORY_THEME_NAMES = ['modernist', 'organic', 'industry', 'terminal', 'manuscript', 'pop'] as const;
 export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
+
+import type { StorySystemName } from './story-system-names';
+/** What a fence `theme` may name: one of the six themes, or one of the design systems (./story-system-names). */
+export type StoryDesignName = StoryThemeName | StorySystemName;

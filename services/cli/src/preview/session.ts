@@ -14,7 +14,7 @@ import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepare
 import {prepareStoryRuntime} from '../../../app/lib/story/prepared/prepare-runtime.server';
 import {compileStoryCss} from '../../../app/lib/data/story/story-css.server';
 import {validateMarkupStructure} from '../../../app/lib/story/document/local-validation';
-import {STORY_THEME_NAMES,type StoryThemeName} from '../../../app/lib/validation/atlas-schemas';
+import {STORY_DESIGN_NAMES,type StoryDesignName} from '../../../app/lib/validation/atlas-schemas';
 import {collectRefUses} from '../../../app/lib/story/data/refs';
 import {State,withLock} from '../state';
 import {configDir} from '../config';
@@ -76,7 +76,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const flow=await compiledFor(file,revision,declared);
   const assetsUrl='/image?file='+encodeURIComponent(file);
   const cached=preparedCache.get(file);
-  const prepared=options.assets?(cached?.revision===revision?cached.value:await prepareStoryRuntime({source:doc.body,compiledCss:await compileStoryCss(doc.body,{force:true}),theme:STORY_THEME_NAMES.includes(doc.metadata.theme as StoryThemeName)?doc.metadata.theme as StoryThemeName:null,template:doc.metadata.template??null,colorMode:doc.metadata.colorMode??null,refData,assetsUrl,title:doc.metadata.title??file,chrome:!options.capture,dataflow:{flow}})):undefined;
+  const prepared=options.assets?(cached?.revision===revision?cached.value:await prepareStoryRuntime({source:doc.body,compiledCss:await compileStoryCss(doc.body,{force:true}),theme:STORY_DESIGN_NAMES.includes(doc.metadata.theme as StoryDesignName)?doc.metadata.theme as StoryDesignName:null,template:doc.metadata.template??null,colorMode:doc.metadata.colorMode??null,refData,assetsUrl,title:doc.metadata.title??file,chrome:!options.capture,dataflow:{flow}})):undefined;
   if(prepared)preparedCache.set(file,{revision,value:prepared});
   return {prepared,source,body:doc.body,metadata:doc.metadata,revision:digest(source),declared,flow,data:{...prepared?.data,nodes:splitHelmet(authored.nodes).body,refData,assetsUrl,colorMode:prepared?.data.colorMode??'light' as const,chrome:!options.capture,dataflow:{flow}}};
  };

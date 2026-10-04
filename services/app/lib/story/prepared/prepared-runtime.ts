@@ -1,5 +1,5 @@
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import type { StoryBaseCssRecipe } from '../styles/story-base-css';
 import type { StyleOverride } from '../styles/style-overrides';
 
@@ -14,7 +14,7 @@ export interface PreparedStoryRuntime {
   compiledCss: string | null;
   authorCss: string | null;
   authorScript: string | null;
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
   title: string;
   /** Cached critical font URLs for discovery in the initial server head. */
   fontPreloads?: string[];
@@ -43,7 +43,7 @@ export interface ServedStoryRuntime {
   /** How to rebuild the raw base sheet, for the lazy path that re-isolates after a live or editor update. */
   base: StoryBaseCssRecipe;
   authorScript: string | null;
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
   title: string;
   fontPreloads?: string[];
 }

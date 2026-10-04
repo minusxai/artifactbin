@@ -9,8 +9,7 @@ import { canEdit } from '@/lib/artifacts';
 import { compileDraft, draftCompileGate } from '@/lib/story/prepared/draft-compile.server';
 import { requestOrSessionActor, roleFor } from '@/lib/accounts';
 import { refusesCrossSite } from '@/lib/accounts';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
-import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
+import { STORY_DESIGN_NAMES, type StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { collectExternalAssetUrls } from '@/lib/story/assets';
 import { lookupWebAssets } from '@/lib/serving';
 import { createHash } from 'node:crypto';
@@ -52,7 +51,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
   if (!canEdit(await roleFor(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
-  const meta = (artifact.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
+  const meta = (artifact.meta ?? {}) as { theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const source = artifact.source ?? '';
   // As the POST below compiles a draft of this source: the same sheet, assets and design.
@@ -88,9 +87,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   }
   // No head check: the preview writes nothing, and the editor's draft is ahead of the head it last saw
   // for as long as a save is in flight. Refusing the old `editId` blanked the preview on every such race.
-  const meta = (artifact.meta ?? {}) as { theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
-  const theme = body.theme === null || (typeof body.theme === 'string' && STORY_THEME_NAMES.includes(body.theme as StoryThemeName))
-    ? body.theme as StoryThemeName | null : meta.theme;
+  const meta = (artifact.meta ?? {}) as { theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
+  const theme = body.theme === null || (typeof body.theme === 'string' && STORY_DESIGN_NAMES.includes(body.theme as StoryDesignName))
+    ? body.theme as StoryDesignName | null : meta.theme;
   const colorMode = body.colorMode === 'light' || body.colorMode === 'dark' ? body.colorMode : meta.colorMode;
   const design = resolveStoredStoryDesign(theme, colorMode);
   // The source can introduce an uploaded image before the next save has written

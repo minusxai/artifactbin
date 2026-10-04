@@ -8,19 +8,20 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { glyphsForNodes } from '../assets/icon-glyphs';
 import { documentFonts } from '../styles/document-fonts';
 import { storyBaseCss, type StoryBaseCssRecipe } from '../styles/story-base-css';
+import { storySystemSheetCss } from '@/lib/data/story/story-systems';
 import { firstScreenFonts } from '../styles/first-screen-fonts';
 import type { StoryIslandData, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import { mermaidImagesFor, type MermaidImageLookup } from '@/lib/mermaid-images/store';
 import type { WebAssetBox } from '../assets/asset-url';
 import type { RefDataMap } from '../data/ref-data';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 
 /** Inputs still used by the app's editor preparation and the offline file. */
 export interface PrepareStoryInput {
   source: string;
   compiledCss: string | null;
-  theme: StoryThemeName | null;
+  theme: StoryDesignName | null;
   template?: string | null;
   colorMode: 'light' | 'dark' | null;
   title: string | null;
@@ -98,7 +99,8 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
     ...(Object.keys(glyphs).length ? { glyphs } : {}),
     ...readerIslandData({ ...input, mermaidImages }),
   };
-  const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, fonts: docFonts };
+  const systemCss = storySystemSheetCss(input.theme);
+  const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, fonts: docFonts, ...(systemCss ? { systemCss } : {}) };
   const baseCss = storyBaseCss(baseRecipe);
   const runtime: PreparedStoryRuntime = {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,

@@ -18,7 +18,7 @@ import { datasetsForDocument, declarationsForRow } from '@/lib/artifacts/dataflo
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/accounts/users';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { loadDatasetRows } from '../datasets/dataset-store';
 import type { ArtifactLiveEvent } from '../realtime/live';
 import { storyUpdateParts } from '../document/update-parts';
@@ -54,7 +54,7 @@ async function build(stored: ArtifactRow): Promise<LiveFrame> {
   // The frame is the document as it is served: in the current data syntax (lib/migrate/sqlite/stored).
   const row = stored.format === 'markup' ? await inCurrentSyntax(stored) : stored;
   const meta = row.meta as {
-    compiledCss?: string | null; theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null;
+    compiledCss?: string | null; theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null;
     template?: string | null; cssCompileVersion?: string | null;
   };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);

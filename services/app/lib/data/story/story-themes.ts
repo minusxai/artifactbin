@@ -19,9 +19,11 @@
  * declared `defaultMode` is the fallback, and the READER may flip it at view time (the served
  * document's mode toggle) — see {@link resolveStoryMode}.
  *
- * RETIRED themes (classical, broadsheet, nocturne) live only in
- * {@link RETIRED_STORY_THEMES}: stored rows alias forward through
- * {@link resolveStoredStoryDesign}; publish rejects the names with a hint.
+ * RETIRED themes (classical) live only in {@link RETIRED_STORY_THEMES}: stored
+ * rows alias forward through {@link resolveStoredStoryDesign}; publish rejects
+ * the names with a hint. `broadsheet` and `nocturne` were retired themes too;
+ * since 3 October 2026 they are DESIGN SYSTEMS (./story-systems), so a stored
+ * row carrying either name renders in that system rather than in the alias.
  *
  * FONTS — families vs packaged assets: a theme family must be one the font catalog serves
  * (lib/data/story/story-fonts.ts, generated at install time from the @fontsource packages by
@@ -30,10 +32,11 @@
  * package + one FONT_FILES entry in copy-assets; families outside the catalog fall back to
  * the closest packaged one (documented per theme below).
  */
-import type { StoryThemeName } from '@/lib/validation/story-theme-names';
+import type { StoryThemeName, StoryDesignName } from '@/lib/validation/story-theme-names';
 import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
+import { STORY_SYSTEMS, getStorySystem } from './story-systems';
 
-export type { StoryThemeName };
+export type { StoryThemeName, StoryDesignName };
 export { STORY_THEME_NAMES };
 
 interface StoryThemeFonts {
@@ -522,8 +525,6 @@ export function getStoryTheme(name: string | null | undefined): StoryTheme | und
  */
 export const RETIRED_STORY_THEMES: Record<string, { successor: StoryThemeName; impliedColorMode?: 'dark'; hint: string }> = {
   classical: { successor: 'manuscript', hint: "theme 'classical' is retired — use 'manuscript' (the serif editorial theme)" },
-  broadsheet: { successor: 'manuscript', hint: "theme 'broadsheet' is retired — use 'manuscript' (the serif editorial theme)" },
-  nocturne: { successor: 'modernist', impliedColorMode: 'dark', hint: "theme 'nocturne' is retired — use 'modernist' with colorMode 'dark' (its dark mode is the same red on ink-black)" },
 };
 
 /**
@@ -537,12 +538,12 @@ export const RETIRED_STORY_THEMES: Record<string, { successor: StoryThemeName; i
 export function resolveStoredStoryDesign(
   theme: string | null | undefined,
   colorMode: 'light' | 'dark' | null | undefined,
-): { theme: StoryThemeName | null; colorMode: 'light' | 'dark' | null } {
+): { theme: StoryDesignName | null; colorMode: 'light' | 'dark' | null } {
   const mode = colorMode ?? null;
   if (theme == null) return { theme: null, colorMode: mode };
   const retired = RETIRED_STORY_THEMES[theme];
   if (retired) return { theme: retired.successor, colorMode: mode ?? retired.impliedColorMode ?? null };
-  const live = getStoryTheme(theme);
+  const live = getStoryTheme(theme) ?? getStorySystem(theme);
   return live ? { theme: live.name, colorMode: mode } : { theme: null, colorMode: mode };
 }
 
@@ -570,7 +571,7 @@ export function resolveStoryMode(
  * then the container's default).
  */
 export function storyThemeDefaultMode(name: string | null | undefined): 'dark' | 'light' | undefined {
-  return getStoryTheme(name)?.defaultMode;
+  return (getStoryTheme(name) ?? getStorySystem(name))?.defaultMode;
 }
 
 const fontStack = (family: string): string =>
@@ -598,10 +599,14 @@ export function storyThemeCss(only?: string | null): string {
   // stable author contract for overrides: an authored style block appears
   // after this sheet, and its `:root { --primary: … }` ties specificity with
   // these defaults and wins by source order.
-  const rootSel = `:root:where(:is(${STORY_THEMES.map((t) => `[data-theme="${t.name}"]`).join(', ')}))`;
+  // A design system is a theme to this emitter: the same root paint, the same scoped variable
+  // blocks, pruned and versioned the same way. Its faces and classes ride the base sheet instead
+  // (./story-systems).
+  const designNames = [...STORY_THEMES.map((t) => t.name), ...STORY_SYSTEMS.map((s) => s.name)];
+  const rootSel = `:root:where(:is(${designNames.map((name) => `[data-theme="${name}"]`).join(', ')}))`;
   // Keep heading/code defaults deliberately low-specificity so an ordinary
   // authored class can replace font-family without `!important`.
-  const descendantScope = `:where(:root:is(${STORY_THEMES.map((t) => `[data-theme="${t.name}"]`).join(', ')}))`;
+  const descendantScope = `:where(:root:is(${designNames.map((name) => `[data-theme="${name}"]`).join(', ')}))`;
   const blocks: string[] = [
     // Paint the document root: overriding --background on :root repaints the
     // actual page ground, not just an authored child.
@@ -632,6 +637,11 @@ export function storyThemeCss(only?: string | null): string {
     if (t.css) {
       blocks.push(t.css.replaceAll('&', structuralSel));
     }
+  }
+  for (const s of STORY_SYSTEMS) {
+    if (only !== undefined && s.name !== only) continue;
+    blocks.push(`:root:where([data-theme="${s.name}"]) {\n${varsBlock(s.cssVars)}\n}`);
+    blocks.push(`:root:where([data-theme="${s.name}"].dark) {\n${varsBlock(s.darkCssVars)}\n}`);
   }
   return blocks.join('\n');
 }
