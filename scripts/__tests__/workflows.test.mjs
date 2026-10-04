@@ -143,9 +143,9 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
 });
 
 describe('source host compatibility matrix', () => {
-  it('runs source, installed package and standalone CLI against the ID-first host', () => {
+  it('runs source bundle and installed npm package against the ID-first host', () => {
     const steps = ci.jobs['reference-compatibility'].steps;
-    const candidate = steps.find(step => step.name === 'ID-first conformance for bundle, installed package and executable');
+    const candidate = steps.find(step => step.name === 'ID-first conformance for source bundle and installed npm package');
     expect(candidate?.['working-directory']).toBe('candidate');
     expect(candidate?.run).toContain('afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('services/cli/dist/afbin.mjs');

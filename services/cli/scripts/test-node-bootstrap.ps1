@@ -40,6 +40,8 @@ $broken=Join-Path '__ROOT__' 'broken-bin';[IO.Directory]::CreateDirectory($broke
 [IO.File]::WriteAllText((Join-Path $broken 'npx.cmd'),"@exit /b 7`r`n")
 $env:PATH="$broken;$env:PATH"
 Invoke-Expression $helper
+Write-Output ('Repaired npm command: '+(Resolve-AfbinApplication 'npm.cmd'))
+Write-Output ('PowerShell npm command: '+(Get-Command npm.cmd -CommandType Application).Source)
 $null=& npm.cmd --version;if($LASTEXITCODE -ne 0){throw 'Broken npm repair failed'}
 $null=& npx.cmd --version;if($LASTEXITCODE -ne 0){throw 'Broken npx repair failed'}
 $private=Join-Path $env:LOCALAPPDATA 'artifactbin\node-v24.21.0-win-x64'

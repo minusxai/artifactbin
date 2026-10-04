@@ -1,14 +1,25 @@
 # Run inline with Invoke-Expression. Supports standard-user PowerShell 5.1 Restricted policy.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# Read the current PATH files in order so repeated repair checks do not depend
+# on command discovery state from an earlier broken npm.cmd.
+function Resolve-AfbinApplication([string]$Name) {
+  foreach ($entry in ($env:PATH -split ';')) {
+    $directory = [Environment]::ExpandEnvironmentVariables($entry.Trim().Trim('"'))
+    if (!$directory) { continue }
+    $candidate = Join-Path $directory $Name
+    if ([IO.File]::Exists($candidate)) { return $candidate }
+  }
+  throw "Missing $Name on PATH."
+}
 function Test-AfbinNode {
   try {
-    $node = Get-Command node.exe -CommandType Application -ErrorAction Stop
-    & $node.Source -e 'const [a,b]=process.versions.node.split(String.fromCharCode(46)).map(Number);process.exit(a>22||a===22&&b>=13?0:1)' 2>$null
+    $node = Resolve-AfbinApplication 'node.exe'
+    & $node -e 'const [a,b]=process.versions.node.split(String.fromCharCode(46)).map(Number);process.exit(a>22||a===22&&b>=13?0:1)' 2>$null
     if ($LASTEXITCODE -ne 0) { return $false }
     foreach ($name in @('npm.cmd','npx.cmd')) {
-      $command = Get-Command $name -CommandType Application -ErrorAction Stop
-      $null = & $command.Source --version 2>$null
+      $command = Resolve-AfbinApplication $name
+      $null = & $command --version 2>$null
       if ($LASTEXITCODE -ne 0) { return $false }
     }
     return $true
