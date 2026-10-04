@@ -16,6 +16,9 @@ const powershell = join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0
 const npm = join(dirname(process.execPath), 'npm.cmd');
 const quote = value => "'" + value.replaceAll("'", "''") + "'";
 const env = { ...process.env, ARTIFACTBIN_HOME: join(root, 'state'), CLI__AUTO_UPDATE: 'off', CLI__SERVICE_BASE_URL: 'http://127.0.0.1:1', npm_config_cache: join(root, 'cold cache'), PLAYWRIGHT_BROWSERS_PATH: join(root, 'cold browsers') };
+await mkdir(join(root, 'temp'));
+env.TEMP = join(root, 'temp');
+env.TMP = env.TEMP;
 // The workflow launches through PowerShell 7. Its inherited module path is invalid for 5.1.
 env.PSModulePath = join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/Modules');
 delete env.NODE_PATH;
@@ -26,6 +29,7 @@ const evidence = [];
 let stage = 'privilege';
 const record = message => { evidence.push(message); console.log('ok ' + message); };
 async function ps(script, cwd = workspace) {
+  console.log(new Date().toISOString() + ' running ' + stage);
   return exec(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from("$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; " + script, 'utf16le').toString('base64')], { cwd, env, timeout: 240000, maxBuffer: 8 * 1024 * 1024 });
 }
 const command = (file, args) => `& ${quote(file)} ${args.map(quote).join(' ')}; if ($LASTEXITCODE -ne 0) { throw "Command failed: $LASTEXITCODE" }`;
