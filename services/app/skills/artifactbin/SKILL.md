@@ -7,9 +7,14 @@ description: >-
 
 artifactbin publishes editable `.jsx` artifacts combining a YAML fence with self-contained HTML and kit JSX, styled with Tailwind `className`; the fence names its design system and page type. Datasets and media are artifacts too.
 
-Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
+Use the `afbin` CLI through npm for local files and browser approval. Direct HTTP clients use the email-authenticated API.
 
-- Missing binary: `curl -fsSL [[ base ]]/chat/install.sh | sh`; it verifies the checksum.
+- Prepare Node/npm once: `afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"`. Supported Node is reused; otherwise official LTS is installed for your user.
+- Windows PowerShell: `Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression`; use `npx.cmd` instead of `npx` below. No execution-policy change.
+- Run every command through `npx --yes @artifactbin/cli@latest <command>`. Install skills with `npx --yes @artifactbin/cli@latest setup`. Pin an exact version for reproducibility. Prepare its npm cache while connected, then run `npm exec --offline --yes --package @artifactbin/cli@<version> -- afbin <command>` offline. npm executes with your permissions; it is not a sandbox.
+- Local preview needs no credentials or cloud requests: `npx --yes @artifactbin/cli@latest preview report.jsx`. Source stays `.jsx`; offline downloads and HTML exports are self-contained `.jsx.html` files that open normally in a browser. Browser offline editing supports static markup/text; use local preview for compiler-dependent widgets. Publishing is explicit.
+- CLI browser sign-in allows guests. Direct HTTP API sign-in requires email and cannot continue as a guest.
+- Command examples below use `afbin` as shorthand: always invoke them as `npx --yes @artifactbin/cli@latest <command>` (Windows: `npx.cmd`).
 - Sign-in is automatic via browser approval, even with `--yes`. If remote/headless or browser login fails/times out, ask for email: `afbin auth --email <email>`. Ask for the code: `afbin auth --email <email> --otp <code>`, then retry. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.

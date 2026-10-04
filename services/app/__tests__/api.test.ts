@@ -203,9 +203,9 @@ describe('CLI discovery',()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
   expect(text.split('\n')[0]).toMatch(/^artifactbin: .*afbin CLI\.$/);
-  expect(text).toContain('curl -fsSL http://localhost:3000/chat/install.sh | sh');expect(text).toContain('http://localhost:3000/a/<id>');
-  expect(text).not.toContain('afbin setup');
-  expect(text).toContain('afbin help');expect(text).toContain('/chat/install.sh | sh');expect(text).not.toMatch(/releases\/download|npm install/);
+  expect(text).toContain('npx --yes @artifactbin/cli@latest');expect(text).toContain('http://localhost:3000/a/<id>');
+  expect(text).toContain('@artifactbin/cli@latest setup');
+  expect(text).toContain('@artifactbin/cli@latest help');expect(text).toContain('/chat/ensure-node.sh');expect(text).not.toMatch(/releases\/download|npm install/);
   // MCP and /docs/ on this text are retired-surfaces.test.ts's row for the one-pager.
   expect(Buffer.byteLength(text)).toBeLessThan(2048);
  });

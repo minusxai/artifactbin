@@ -1,3 +1,4 @@
+import { afbinInstallCommand } from '@/lib/serving/agent-discovery-tags';
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
@@ -114,8 +115,8 @@ it('keeps offline and ended sessions behind history without hiding a directly op
 it('keeps install and remote startup commands on the app origin', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })));
   open('');
-  expect(screen.getByText(`curl -fsSL ${window.location.origin}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`, { normalizer: text => text })).toBeInTheDocument();
-  expect(screen.getByText(`afbin remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
+  expect(screen.getByText(afbinInstallCommand(window.location.origin), { normalizer: text => text })).toBeInTheDocument();
+  expect(screen.getByText(`npx --yes @artifactbin/cli@latest remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
   fireEvent.change(screen.getByRole('combobox', { name: 'Choose your agent' }), { target: { value: 'codex' } });
-  expect(screen.getByText(`afbin remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
+  expect(screen.getByText(`npx --yes @artifactbin/cli@latest remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
 });

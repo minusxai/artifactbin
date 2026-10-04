@@ -62,7 +62,7 @@ function closestTopics(topic:string):string[]{
 }
 /** The top-level skill doc, without its YAML frontmatter: the brief printed by bare `afbin help`. */
 export function briefDocument(origin:string=DEFAULT_SERVER):string{return withTeachingOrigin(localSkillFiles['SKILL.md'],origin).replace(/^---\n[\s\S]*?\n---\n/,'');}
-const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help and validation need no network; standalone background updates are independent (CLI__AUTO_UPDATE=0 disables them). Local SQL runs in the CLI itself (SQLite, built in); nothing to download.\n\n`
+const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help and validation need no network; local-only commands make no update requests; remote commands may show update notices, never self-update. Local SQL runs in the CLI itself (SQLite, built in); nothing to download.\n\n`
  +commands.map(command=>`## ${command.name}\n\n\`\`\`text\n${commandHelp(command.name)}\`\`\`\n`).join('\n');
 /** One bundled documentation set: help, the manual and the installed skills render the same registry. */
 /**

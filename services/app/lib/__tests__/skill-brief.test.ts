@@ -52,7 +52,7 @@ describe('llms.txt and the discovery head', () => {
     expect(text.split('\n')[0]).toBe(agentBlurb());
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.instruction).toBe(`afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)`);
+    expect(help.instruction).toBe(`afbin: npx --yes @artifactbin/cli@latest. Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1`);
     expect(help.instruction.length).toBeLessThanOrEqual(150);
     expect(help.instruction).toContain('afbin');
     // The blurb is still line 1 of the one-pager, still used elsewhere; the meta no longer repeats it.
@@ -61,7 +61,7 @@ describe('llms.txt and the discovery head', () => {
 
   it('the one-pager says what artifactbin is, how to install, both URL forms, and where the reference is — no setup, no token', () => {
     const text = llmsText(BASE);
-    for (const line of [`curl -fsSL ${BASE}/chat/install.sh | sh`, 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin pull', 'afbin validate', 'afbin push', 'skill']) {
+    for (const line of [`npx --yes @artifactbin/cli@latest`, '@artifactbin/cli@latest help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, '@artifactbin/cli@latest pull', 'afbin validate', '@artifactbin/cli@latest push', 'skill']) {
       expect(text, line).toContain(line);
     }
     expect(text).not.toContain('[[');
@@ -79,9 +79,9 @@ describe('llms.txt and the discovery head', () => {
   it('its command line ends at push, because push validates — no separate validate step', () => {
     const then = llmsText(BASE).split('\n').find((line) => line.startsWith('Then:'))!;
     expect(then).toBeDefined();
-    expect(then).toContain('afbin pull <artifact url> --output report.jsx');
+    expect(then).toContain('@artifactbin/cli@latest pull <artifact url> --output report.jsx');
     expect(then).toContain('edit the file');
-    expect(then).toContain('afbin push report.jsx');
+    expect(then).toContain('@artifactbin/cli@latest push report.jsx');
     // A validate standing as its own step in the sequence — `afbin validate report.jsx;` — is the offence.
     expect(then).not.toMatch(/afbin validate [^;()]*;/);
     expect(then).toMatch(/push runs .*afbin validate/i);
@@ -90,6 +90,6 @@ describe('llms.txt and the discovery head', () => {
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
     expect(AGENT_HELP_TITLE).toBe('Agents: read this to create, edit, or operate artifacts on the CLI using afbin');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
-    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)">`);
+    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @artifactbin/cli@latest. Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1">`);
   });
 });

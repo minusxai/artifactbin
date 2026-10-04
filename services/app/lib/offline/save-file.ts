@@ -27,11 +27,12 @@ export function suggestedFileName(title: string, location: Pick<Location, 'proto
   if (location?.protocol === 'file:') {
     try {
       const name = decodeURIComponent(location.pathname.split('/').pop() ?? '');
-      if (/\.html?$/i.test(name)) return name;
+      if (/\.jsx\.html$/i.test(name)) return name;
+      if (/\.html?$/i.test(name)) return `${name.replace(/\.html?$/i, '')}.jsx.html`;
     } catch { /* an undecodable path: fall back to the title */ }
   }
   const safe = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-  return `${safe || 'artifactbin document'}.html`;
+  return `${safe || 'artifactbin document'}.jsx.html`;
 }
 
 function download(html: string, name: string, doc: Document): void {

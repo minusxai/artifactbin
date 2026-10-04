@@ -253,7 +253,7 @@ describe('Solid offline file', () => {
     expect(readDraft(file)).toBeNull();
     writeDraft({ ...file, localIds: ['x'] }, new Date('2026-09-26T12:00:05.000Z'));
     expect(readDraft(file)?.file.localIds).toEqual(['x']);
-    expect(suggestedFileName('Sales', { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).html');
+    expect(suggestedFileName('Sales', { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).jsx.html');
   });
 
   it('saves the compiled story exactly as downloaded, never spliced with edited text', async () => {

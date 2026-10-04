@@ -31,7 +31,7 @@ import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
-const INSTALLER = `curl -fsSL ${BASE}/chat/install.sh | sh`;
+const INSTALLER = `npx --yes @artifactbin/cli@latest`;
 
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['token', 'paste', 'claim', 'tokens/new', 'mint', 'MCP', '/raw', '/docs/'];
@@ -117,7 +117,7 @@ describe('what the brief and the contract teach next', () => {
   const brief = renderTree(skillTree(), 'https://artifactbin.dev').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
 
   it('teaches automatic sign-in, browser approval and the private configuration location, without a setup step', () => {
-    expect(brief).not.toContain('afbin setup');
+    expect(brief).toContain('@artifactbin/cli@latest setup');
     expect(brief).toMatch(/automatic|authenticates itself|signs you in/i);
     expect(brief).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
     expect(brief).toContain('browser approval');
@@ -136,7 +136,7 @@ describe('what the brief and the contract teach next', () => {
 
   it('spells local help, origin-scoped browser setup and the current private config directory', () => {
     const contract = agentContract('https://example.test');
-    expect(contract).toContain('afbin auth --server https://example.test');
+    expect(contract).toContain('@artifactbin/cli@latest auth --server https://example.test');
     expect(contract).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
     expect(contract).toContain('--yes --json');
     expect(contract).toContain('browser approval');

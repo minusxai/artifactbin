@@ -13,6 +13,7 @@ export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 
  */
 const VERSION_LINE = {
   'services/app/public/chat/install.ps1': /^\s*\[string\]\$Version = '\d+\.\d+\.\d+',$/,
+  'services/cli/npm-shrinkwrap.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'services/cli/package.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'package-lock.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'services/app/public/chat/release.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
@@ -83,7 +84,7 @@ export const CI_MODULES = {
 };
 
 /**
- * THE STANDALONE BINARIES ARE BUILT ONLY FOR A RELEASE. The five-target build, the Intel render
+ * THE UNIVERSAL NPM PACKAGE IS BUILT AND PROVEN ON SUPPORTED PLATFORMS FOR A RELEASE. The five-target build, the Intel render
  * proofs and the distributions conformance job were the whole tail of every full run (the Intel
  * build alone is 4.5 minutes, the proofs behind it another 3.5), and they proved bytes nobody was
  * about to ship: the publisher (`release-cli.yml`) only uploads when the CLI version changed. So

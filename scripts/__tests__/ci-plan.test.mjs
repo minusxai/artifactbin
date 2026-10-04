@@ -719,15 +719,12 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(prepare).toBeGreaterThan(-1);
     expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
   });
-  it('reuses verified reader assets before packaging each CLI distribution', () => {
-    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    const steps = jobs.cli.steps;
-    const cache = steps.findIndex(step => step.id === 'cli-reader-assets');
-    expect(cache).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
-    expect(cache).toBeLessThan(steps.findIndex(step => step.name === 'Build compact standalone CLI'));
-    expect(steps[cache].with.path).toContain('node_modules/.cache/build-islands.json');
-    expect(steps[cache].with.key).toContain('${{ runner.arch }}');
-    expect(steps.some(step => (step.run ?? '').includes('test:binary'))).toBe(true);
+  it('packs once and installs the uploaded universal npm artifact for native acceptance', () => {
+    const {jobs}=yaml.parse(readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8'));
+    expect(jobs['cli-pack'].steps.some(step=>step.run?.includes('pack:release'))).toBe(true);
+    expect(jobs.cli.needs).toContain('cli-pack');
+    expect(jobs.cli.steps.some(step=>step.run?.includes('test:npm-package'))).toBe(true);
+    expect(jobs.cli.steps.some(step=>step.run?.includes('build:binary'))).toBe(false);
   });
   it('spreads the API test files over four shards without dropping a shard', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -853,12 +850,12 @@ describe('CI job shape', () => {
     // The bundle, types and host runtime that `npm pack` and the bundle conformance read.
     const build = job.steps.findIndex(step => step.run === 'npm run build -w services/cli');
     const download = job.steps.findIndex(step => step.uses?.startsWith('actions/download-artifact'));
-    expect(job.steps[download]?.with).toMatchObject({ name: 'afbin-ubuntu-24.04', path: 'candidate/services/cli/dist' });
+    expect(job.steps[download]?.with).toMatchObject({ name: 'afbin-npm-release', path: 'npm-candidate' });
     expect(download).toBeGreaterThan(build);
     expect(build).toBeGreaterThan(-1);
-    expect(commands).toContain('chmod +x candidate/services/cli/dist/afbin-linux-x64');
+    expect(commands.some(command=>command.includes('npm install --prefix'))).toBe(true);
     expect(ci().jobs.cli.strategy.matrix.os).toContain('ubuntu-24.04');
-    expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-${{ matrix.os }}')?.with.path).toContain('services/cli/dist/afbin-*');
+    expect(ci().jobs.cli.steps.find(step => step.with?.name === 'afbin-npm-release')?.with.path).toBe('npm-candidate');
   });
 
   it('runs the CLI suite once and the per-platform binary smoke on every row', () => {
@@ -868,32 +865,22 @@ describe('CI job shape', () => {
     expect(suite).toHaveLength(1);
     expect(suite[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
     // What is genuinely per-platform is the compiled binary; nothing else repeats per row.
-    for (const command of ['npm run build:binary -w services/cli']) {
-      expect(cli.steps.find((step) => step.run === command).if).toBeUndefined();
-    }
+    expect(ci().jobs['cli-pack'].steps.some(step=>step.run==='npm run pack:release -w services/cli')).toBe(true);
     expect(cli.steps.some((step) => (step.run ?? '').includes('--import tsx --test'))).toBe(false);
   });
 
-  it('keeps preview and export proofs mandatory on every executable platform', () => {
-    const { jobs } = ci();
-    // Intel splits the existing phases while consuming the same packaging artifact;
-    // every other platform retains its combined proof and verified runtime cache.
-    const proof = jobs.cli.steps.find((step) => step.name === 'File preview from the actual executable');
-    expect(proof.if).toBe("matrix.os != 'macos-15-intel' && runner.os != 'Windows'");
+  it('keeps preview/export and Node bootstrap proofs mandatory on every supported npm platform', () => {
+    const {jobs}=ci();
+    const proof=jobs.cli.steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
+    expect(proof.if).toBeUndefined();
+    expect(proof.run).toContain('scripts/test-installed-npm.mjs preview');
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
-    const windows=jobs.cli.steps.find(step=>step.name==='Windows installed release acceptance');
-    expect(windows.if).toBe("runner.os == 'Windows'");
-    expect(windows.run).toBe('./services/cli/scripts/test-windows.ps1');
-    const intel = jobs['cli-preview'].steps.find((step) => step.name === 'File preview from the uploaded executable');
-    expect(CI_JOBS).toContain('cli-preview');
-    for (const step of [proof, intel]) {
-      expect(step['working-directory']).toBe('services/cli');
-      expect(step.run).toContain('node --import tsx scripts/test-preview.ts');
-    }
-    expect(proof.run).not.toContain('--phase');
-    expect(intel.run).toContain('dist/afbin-darwin-x64 --phase=${{ matrix.phase }}');
+    expect(jobs.cli.steps.find(step=>step.name==='Standard-user Windows Node bootstrap under Restricted PS5.1').run).toContain('test-node-bootstrap.ps1');
+    const intel=jobs['cli-preview'].steps.find(step=>step.name==='File preview from the uploaded executable');
+    expect(intel.run).toContain('dist/afbin.mjs');
+    expect(intel.run).toContain('--phase=${{ matrix.phase }}');
     expect(jobs['cli-preview'].strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
-    expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex((step) => step.run === 'npm run test:binary -w services/cli'));
+    expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex(step=>step.run?.includes('test:npm-package')));
   });
 
   it('keeps a merged PR\'s binaries downloadable for a week after the merge', () => {

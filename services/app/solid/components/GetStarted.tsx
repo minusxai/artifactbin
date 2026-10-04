@@ -5,6 +5,7 @@ import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, PiIcon } from './brand-icons';
 import { CopyBlock } from './CopyBlock';
 import { AgentLink } from './AgentLink';
 import { LINK } from './ui';
+import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 
 const AGENTS = [
   { key: 'claude-code', label: 'Claude Code', icon: ClaudeCodeIcon, size: 13 },
@@ -20,14 +21,15 @@ export default function GetStarted(props: { heading?: boolean; frame?: boolean }
   const [windows, setWindows] = createSignal(false);
   onMount(() => { setOrigin(window.location.origin); setWindows(/^Win/i.test(window.navigator.platform)); });
   const installOrigin = () => origin() || DEFAULT_SERVER;
-  const unix = <CopyBlock class="mt-2" text={`curl -fsSL ${installOrigin()}/chat/install.sh | sh`} label="Copy the CLI install command" />;
-  const windowsInstructions = <><p class="mt-2 text-xs text-muted">Windows x64 · PowerShell</p><CopyBlock class="mt-2" text={`Invoke-WebRequest -UseBasicParsing ${installOrigin()}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} label="Copy the Windows CLI install command" /><p class="mt-2 text-xs text-muted">Open a new terminal after installation.</p></>;
+  const unix = <CopyBlock class="mt-2" text={afbinInstallCommand(installOrigin())} label="Copy the CLI install command" />;
+  const windowsInstructions = <><p class="mt-2 text-xs text-muted">Windows · PowerShell</p><CopyBlock class="mt-2" text={afbinWindowsInstallCommand(installOrigin())} label="Copy the Windows CLI install command" /></>;
   return <section aria-label="Get started"><div class={props.frame === false ? undefined : 'rounded-[6px] border border-edge bg-surface px-4 py-4 sm:px-5'}>
     <Show when={props.heading !== false}><div class="mb-4 flex items-baseline justify-between gap-3"><h2 class="font-mono text-[11px] tracking-[0.14em] text-muted uppercase">get started</h2><a href="/docs-human" class={`font-mono text-[11px] ${LINK}`}>how it works →</a></div></Show>
-    <Step n={1} title={<>Install the <code class={CODE}>afbin</code> CLI<span class="font-sans font-normal text-muted">, if you haven’t</span></>}>
+    <Step n={1} title={<>Prepare Node and run <code class={CODE}>afbin</code></>}>
       <Show when={windows()} fallback={<>{unix}<details class="mt-3"><summary class="cursor-pointer text-xs text-muted hover:text-fg">See Windows instructions</summary>{windowsInstructions}</details></>}>
         {windowsInstructions}<p class="mt-3 text-xs text-muted">macOS / Linux</p>{unix}
       </Show>
+      <p class="mt-2 text-xs text-muted">Run both commands in the same terminal. The first reuses supported Node/npm or installs official Node LTS for your user. The second runs afbin through npm and installs agent skills.</p>
       <div class="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5"><span class="mr-0.5 font-sans text-[13px] text-muted">also installs skills for</span><For each={AGENTS}>{agent => <span class="inline-flex items-center gap-1.5 rounded-[4px] border border-edge bg-raised px-2 py-1 font-mono text-[11px] leading-none text-fg"><agent.icon size={agent.size} />{agent.label}</span>}</For></div>
     </Step>
     <div class="mt-5"><Step n={2} title="Copy the instructions" aside={<p class="ml-auto text-right font-sans text-[13px] leading-relaxed text-muted">Paste into your agent and watch it cook.</p>}><div class="mt-2"><AgentLink frame={false} docsLink={false} /></div></Step></div>

@@ -12,6 +12,7 @@ it('patch bump keeps package, lockfile, installer and release pointer synchroniz
     mkdirSync(join(dir, 'services/cli'), { recursive: true });
     mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
     writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
     writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
     writeFileSync(join(dir, 'services/app/public/chat/install.sh'), '  version=0.1.9\n--version 0.1.9\n');
     writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), "  [string]$Version = '0.1.9',\n");
@@ -19,6 +20,7 @@ it('patch bump keeps package, lockfile, installer and release pointer synchroniz
     const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs')], { cwd: dir });
     expect(run.status, run.stderr.toString()).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.10');
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'))).packages[''].version).toBe('0.1.10');
     expect(JSON.parse(readFileSync(join(dir, 'package-lock.json'))).packages['services/cli'].version).toBe('0.1.10');
     expect(readFileSync(join(dir, 'services/app/public/chat/install.sh'), 'utf8')).toContain('version=0.1.10');
     expect(JSON.parse(readFileSync(join(dir, 'services/app/public/chat/release.json'))).version).toBe('0.1.10');
@@ -33,6 +35,7 @@ for (const [level, next] of [['minor', '0.2.0'], ['major', '1.0.0'], ['patch', '
       mkdirSync(join(dir, 'services/cli'), { recursive: true });
       mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
       writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
       writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
       writeFileSync(join(dir, 'services/app/public/chat/install.sh'), '  version=0.1.9\n--version 0.1.9\n');
     writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), "  [string]$Version = '0.1.9',\n");
@@ -53,6 +56,7 @@ it('an unknown bump level is refused before any file changes', () => {
   try {
     mkdirSync(join(dir, 'services/cli'), { recursive: true });
     writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
     const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs'), 'huge'], { cwd: dir });
     expect(run.status).not.toBe(0);
     expect(run.stderr.toString()).toContain('patch, minor or major');
@@ -66,6 +70,7 @@ it('a drifted release pointer stops the bump instead of publishing a mismatched 
     mkdirSync(join(dir, 'services/cli'), { recursive: true });
     mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
     writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
     writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
     writeFileSync(join(dir, 'services/app/public/chat/install.sh'), '  version=0.1.9\n');
     writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), "  [string]$Version = '0.1.9',\n");
