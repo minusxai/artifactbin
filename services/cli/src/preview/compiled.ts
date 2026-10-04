@@ -17,6 +17,7 @@ import {loadSsrModule} from '../../../app/lib/compiled-page/bundle.server';
 import {bindModuleCode} from '../../../app/lib/compiled-page/runtime-binding';
 import {ISLANDS_PATH, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
 import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
+import {documentStyleSheets} from '../../../app/lib/story/styles';
 import type {StoryIslandData, ServedResults} from '../../../app/lib/story-runtime/contract';
 import type {Scalar} from '../../../contracts/src/index';
 
@@ -113,7 +114,14 @@ export interface AssembleDocumentInput {
  values?: Record<string, Scalar>;
 }
 
-/** The compiled document, wrapped as a full page: our own doors, no reader chrome, no SPA — this IS the page. */
+/**
+ * The compiled document, wrapped as a full page the way `/a/:id/raw` serves one: our own doors, no reader
+ * chrome, no SPA — this IS the page. Its stylesheets are the standalone document's, byte for byte
+ * (lib/story/styles/document-styles): they name the design on the document element, where a design
+ * system's `:root:where([data-theme])` rules look, and carry its fonts, its faces and classes and the
+ * author's own CSS. The reader app's single isolated sheet (`css`) would draw a local file in the
+ * neutral contract instead, so an export of a tracked file looked nothing like the published page.
+ */
 export function assembleDocument(input: AssembleDocumentInput): {html: string; headers: Readonly<Record<string, string>>} {
  const build = compilerBuild();
  const file = encodeURIComponent(input.file);
@@ -123,7 +131,11 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
   story: input.story ?? input.compiled.html,
   outline: input.compiled.outline,
   capture: input.capture,
-  css: input.prepared.compiledCss ?? '',
+  css: '',
+  sheets: documentStyleSheets({
+   compiledCss: input.prepared.compiledCss, chrome: !input.capture, bare: false, theme: input.prepared.theme,
+   docFonts: input.prepared.fonts, authorCss: input.prepared.authorCss,
+  }),
   fontPreloads: input.prepared.fontPreloads ?? [],
   title: input.prepared.title,
   theme: input.prepared.theme,

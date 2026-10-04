@@ -86,7 +86,27 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
  let draftSequence=0;
  let lastDraftSource:string|null=null;
  let quietDraftTimer:number|null=null;
- let pendingDraft:{document:Document;root:HTMLElement;sheet:HTMLStyleElement|null;nodes:JsxNode[];source:string;stableIds:Set<string>;stablePaths:Set<string>;sequence:number}|null=null;
+ let pendingDraft:{document:Document;root:HTMLElement;sheets:HTMLStyleElement[];nodes:JsxNode[];source:string;stableIds:Set<string>;stablePaths:Set<string>;sequence:number}|null=null;
+ /** A document sheet's identifying attribute: every `<style data-mx-*>` the standalone document carries (lib/story/styles/document-styles). */
+ const sheetAttr=(style:HTMLStyleElement)=>style.getAttributeNames().find(name=>name.startsWith('data-mx-'))??null;
+ const documentSheets=(doc:Document)=>Array.from(doc.head.querySelectorAll<HTMLStyleElement>('style')).filter(style=>sheetAttr(style)!==null);
+ /**
+  * The live page takes the draft's sheets by attribute, in the draft's order: a changed one swaps its text
+  * (compiled utilities, author CSS), an unchanged one (the fonts, the design system) is left alone, one the
+  * draft adds (its first Helmet style) is inserted where the document carries it, one it drops is emptied.
+  */
+ const swapSheets=(live:Document,drafts:HTMLStyleElement[])=>{
+  const current=new Map(documentSheets(live).map(style=>[sheetAttr(style)!,style] as const));
+  let anchor:HTMLStyleElement|null=null;
+  for(const draft of drafts){
+   const attr=sheetAttr(draft)!,text=draft.textContent??'';
+   let style=current.get(attr)??null;current.delete(attr);
+   if(!style){style=live.importNode(draft,true);if(anchor)anchor.after(style);else live.head.appendChild(style);}
+   else if(style.textContent!==text)style.textContent=text;
+   anchor=style;
+  }
+  for(const style of current.values())style.textContent='';
+ };
  const stableIdsFor=(next:JsxNode[],previous:JsxNode[]):Set<string>=>{
   const before=componentIds(previous),after=componentIds(next);
   return new Set([...after].filter(([id,value])=>before.get(id)===value).map(([id])=>id));
@@ -106,8 +126,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
   if(disposed||!editRequested||pending.sequence!==draftSequence||pendingDraft!==pending)return;
   pendingDraft=null;
   if(quietDraftTimer!==null){win.clearTimeout(quietDraftTimer);quietDraftTimer=null;}
-  const sheet=win.document.querySelector<HTMLStyleElement>('style[data-mx-story-css]');
-  if(pending.sheet&&sheet)sheet.textContent=pending.sheet.textContent;
+  swapSheets(win.document,pending.sheets);
   edit?.unmountCompiledDom();
   disposeChangedDraftIslands(root,pending.stableIds,pending.stablePaths);
   morphDraftDom(root,pending.root,pending.stableIds,pending.stablePaths);
@@ -188,7 +207,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
      const {storyUpdateParts}=await import('../../../app/lib/story/document/update-parts');
      const before=baseline?storyUpdateParts(baseline)?.nodes??nodes:nodes;
      const after=storyUpdateParts(source)?.nodes??command.nodes;
-     pendingDraft={document:next,root:nextRoot,sheet:next.querySelector<HTMLStyleElement>('style[data-mx-story-css]'),nodes:command.nodes,source,
+     pendingDraft={document:next,root:nextRoot,sheets:documentSheets(next),nodes:command.nodes,source,
       stableIds:stableIdsFor(after,before),stablePaths:stablePathsFor(after,before),sequence};
      await applyDraft();
      if(pendingDraft?.sequence===sequence&&quietDraftTimer===null)quietDraftTimer=win.setTimeout(()=>{quietDraftTimer=null;void applyDraft(true);},500);

@@ -105,7 +105,7 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
   const runtime: PreparedStoryRuntime = {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
     authorScript: await authorModuleCode(helmet),
-    theme: input.theme, title,
+    theme: input.theme, fonts: docFonts, title,
     // The faces this document's first screen paints (lib/story/styles/first-screen-fonts), one per file.
     fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts }).map(face => face.url),
   };

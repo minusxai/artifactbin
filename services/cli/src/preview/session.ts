@@ -232,9 +232,12 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     values=ran.values;story=await renderStoryHtml(compiled,{values:ran.values,results:{tables:ran.tables,errors:ran.errors}});
    }
    const assembled=assembleDocument({compiled,prepared:current.prepared,colorMode:current.data.colorMode,file,capture:!!options.capture,story,values});
-   let html=assembled.html.replace('<head>',`<head><base href="${base}">`)
-    .replace('</body>',`<link rel="stylesheet" href="/bundle/chrome.css"><script type="module" src="/bundle/client.js"></script></body>`);
+   let html=assembled.html.replace('<head>',`<head><base href="${base}">`);
+   // A capture is the document alone, as /a/:id/raw serves it. The editor's chrome sheet is the app's own
+   // globals, whose `body` rules (a mono family, 14px) would restyle every element the design's root family
+   // reaches, and its client mounts nothing under `?capture=1` anyway (preview/client.tsx).
    if(options.capture)html=html.replace('<body','<body data-afbin-export-ready=""');
+   else html=html.replace('</body>',`<link rel="stylesheet" href="/bundle/chrome.css"><script type="module" src="/bundle/client.js"></script></body>`);
    res.setHeader('Content-Type','text/html');
    for(const [name,value] of Object.entries(assembled.headers))res.setHeader(name,value);
    return res.end(html);

@@ -282,6 +282,28 @@ test('a capture bakes its rows server-side and marks itself export-ready with no
  }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
 });
 
+test('a local page carries the standalone document\'s sheets and names its design system on the document element',async()=>{
+ const appDir=join(import.meta.dirname,'../../app');
+ const cwd=process.cwd();process.chdir(appDir);
+ const root=await mkdtemp(join(tmpdir(),'preview-capture-design-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'---\ntheme: volta\n---\n<Helmet><style>{`.lede { letter-spacing: .1em }`}</style></Helmet><p className="lede t-body">Hi</p>');
+  session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),assets:root,publicAssets:join(appDir,'public'),capture:true});
+  const page=await fetch(session.url+'/workspace/report.jsx?capture=1');
+  assert.equal(page.status,200);
+  const html=await page.text();
+  // A design system's rules hang off the document element (`:root:where([data-theme])`): the local page names it
+  // there and carries the system's sheet and the author's own CSS, exactly as /a/<id>/raw serves the published page.
+  assert.match(html,/<html[^>]*\sdata-theme="volta"/);
+  assert.match(html,/<style data-mx-system>[\s\S]*?\[data-theme="volta"\]/);
+  assert.match(html,/<style data-mx-author>[^<]*letter-spacing: \.1em/);
+  assert.doesNotMatch(html,/data-mx-story-css/);
+  // The editor's chrome sheet is the app's globals: its body rules would restyle the document, so a capture carries neither it nor the client.
+  assert.doesNotMatch(html,/\/bundle\/chrome\.css|\/bundle\/client\.js/);
+  assert.equal(session.failure(),undefined);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
+});
+
 test('a capture serves a row-sourced image at the compiled kit\'s own /a/<id>/raw URL, with no /query first',async()=>{
  const appDir=join(import.meta.dirname,'../../app');
  const cwd=process.cwd();process.chdir(appDir);

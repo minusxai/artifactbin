@@ -73,14 +73,13 @@ Four constraints on any new system: Google-hosted families only; every weight th
 One JSX comment in the Helmet; a follow-up edit reads it instead of reskinning the page.
 
 ```jsx
-{/* design: system=<Name> (<id>) · base=<theme> · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}
+{/* design: system=<Name> (<id>) · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}
 ```
 
 ## Known losses
 
-- **Export.** afbin export draws neither authored Helmet CSS nor the theme sheet: a PNG of a bound page is the neutral contract in a monospace fallback. Inspect in the live reader or a live session.
-- **Font meta weights.** The font-* meta fetches three weights only; keep the binding block's @font-face rules.
+- **Font meta weights.** The font-* meta fetches three weights only, where a system's own faces load their full set; spend it on a family no system carries.
 - **Utilities win.** Tailwind utilities compile !important: a size or family utility replaces a type role on the same element. Layout utilities only on role-bearing elements.
 - **Kit reads the contract only.** Kit components and charts follow the contract keys; a system idea with no slot (a hard edge, a highlighter) reaches only the authored classes.
-- **Unthemed ground.** No theme means no root paint and no heading or code family rules; the binding block carries those three itself (probed 3 Oct 2026: Volta renders the same with and without modernist).
+- **Unthemed ground.** The fence `theme` is the only door: a fence without one paints no ground, loads no faces and defines no type roles or classes, so a page that copies a system's class names without naming it gets the neutral contract (probed 3 Oct 2026).
 - **Charts in a dark panel.** A Vega chart in a locally darkened panel takes the panel's chart tokens for its series but keeps the document's axis ink (probed 3 Oct 2026): keep charts on the page ground.

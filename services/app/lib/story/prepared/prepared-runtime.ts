@@ -1,6 +1,7 @@
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import type { StoryBaseCssRecipe } from '../styles/story-base-css';
+import type { DocumentFonts } from '../styles/document-fonts';
 import type { StyleOverride } from '../styles/style-overrides';
 
 /**
@@ -15,6 +16,12 @@ export interface PreparedStoryRuntime {
   authorCss: string | null;
   authorScript: string | null;
   theme: StoryDesignName | null;
+  /**
+   * The Helmet's font slots: with `theme`, `compiledCss` and `authorCss`, everything the standalone
+   * document's sheets are built from (lib/story/styles/document-styles), so a renderer holding only
+   * this object (the CLI's local capture) serves the same sheets /a/<id>/raw does.
+   */
+  fonts: DocumentFonts;
   title: string;
   /** Cached critical font URLs for discovery in the initial server head. */
   fontPreloads?: string[];
