@@ -107,8 +107,9 @@ try {
   await writeFile(join(candidate, 'package.json'), JSON.stringify(manifest, null, 2));
   const entry = join(candidate, 'dist/afbin.mjs');
   const original = await readFile(entry, 'utf8');
-  assert.ok(original.includes('version:"0.3.19"'), 'Probe must find embedded CLI version');
-  await writeFile(entry, original.replace('version:"0.3.19"', `version:"${updatedVersion}"`));
+  const versionPattern = /(\bversion\s*:\s*)(["'])0\.3\.19\2/;
+  assert.ok(versionPattern.test(original), 'Probe must find embedded CLI version');
+  await writeFile(entry, original.replace(versionPattern, (_match, prefix, quoteMark) => `${prefix}${quoteMark}${updatedVersion}${quoteMark}`));
   await ps(command(npm, ['install', '--package-lock-only', '--ignore-scripts']), candidate);
   const updated = JSON.parse((await ps(command(npm, ['pack', '--json']), candidate)).stdout);
   await ps(command(npm, ['install', '--global', '--prefix', prefix, join(candidate, updated[0].filename)]));
