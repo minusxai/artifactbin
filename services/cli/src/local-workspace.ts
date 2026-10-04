@@ -1,6 +1,6 @@
 /** Portable authoring state. Identity and discussion belong to the folder; credentials remain at home. */
 import {randomBytes,randomUUID} from 'node:crypto';
-import {readFile,lstat,realpath} from 'node:fs/promises';
+import {readFile,lstat,realpath,link,unlink} from 'node:fs/promises';
 import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
@@ -53,6 +53,7 @@ export async function stageLocalFiles(root:string,changes:FileChange[],also?:(st
  return stageFiles(root,root,changes,also,{store:await localWorkspaceState(root),scope:LOCAL_WORKSPACE_SCOPE});
 }
 export async function recoverLocalFiles(root:string):Promise<'clean'|'recovered'>{
+ await recoverLocalMove(root);
  return recoverFiles(root,root,{store:await localWorkspaceState(root),scope:LOCAL_WORKSPACE_SCOPE});
 }
 export async function localReferenceMap(root:string):Promise<Record<string,string>>{
@@ -114,5 +115,39 @@ export async function saveLocalFile(root:string,path:string,before:string,data:B
   if(digest(current)!==before)throw new CliError('stale_save','File changed; draft retained.');
   await stageLocalFiles(root,[{path,before,data}],state=>state.put(LOCAL_WORKSPACE_SCOPE,'archive',`history/${path}/${randomUUID()}`,{path,before,at:new Date().toISOString()},{data:current}));
   await recoverLocalFiles(root);
+ });
+}
+
+interface LocalMove {from:string;to:string;id:string;hash:string}
+async function recoverLocalMove(root:string):Promise<void>{
+ const store=await localWorkspaceState(root),pending=store.get<LocalMove>(LOCAL_WORKSPACE_SCOPE,'identity-move','current')?.value;if(!pending)return;
+ const from=await confinedPath(root,pending.from),to=await confinedPath(root,pending.to);
+ const source=await readOptional(from),destination=await readOptional(to);
+ if(!source&&!destination)throw new CliError('missing_file','Move source and destination are missing.');
+ if(source&&digest(source)!==pending.hash||destination&&digest(destination)!==pending.hash)throw new CliError('move_conflict','File changed during move; both paths were retained.');
+ if(source){
+  if(destination){const [a,b]=await Promise.all([lstat(from),lstat(to)]);if(a.ino!==b.ino||a.dev!==b.dev)throw new CliError('move_conflict','Move destination already exists.');}
+  else await link(from,to);
+  await unlink(from);
+ }
+ store.transaction(()=>{
+  store.delete(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'draft-identity',pending.to,{id:pending.id});
+  const tracked=store.get(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);if(tracked){store.delete(LOCAL_WORKSPACE_SCOPE,'tracked',pending.from);store.put(LOCAL_WORKSPACE_SCOPE,'tracked',pending.to,tracked.value);}
+  for(const kind of ['preview-comment','preview-thread'] as const)for(const row of store.list<{file:string}>(LOCAL_WORKSPACE_SCOPE,kind))if(row.value.file===pending.from)store.put(LOCAL_WORKSPACE_SCOPE,kind,row.key,{...row.value,file:pending.to});
+  store.delete(LOCAL_WORKSPACE_SCOPE,'identity-move','current');
+ });
+}
+export async function moveLocalFile(workspace:Workspace,from:string,to:string):Promise<void>{
+ await withLocalLock(workspace.root,async()=>{
+  const root=workspace.root;await recoverLocalFiles(root);const store=await localWorkspaceState(root);
+  from=relative(root,await confinedPath(root,resolve(workspace.cwd,from))).split(sep).join('/');
+  to=relative(root,await confinedPath(root,resolve(workspace.cwd,to))).split(sep).join('/');
+  if(from===to)return;
+  if(to.split('/').includes('.artifactbin'))throw new CliError('invalid_path','Cannot move document content into workspace state.');
+  const id=store.get<{id:string}>(LOCAL_WORKSPACE_SCOPE,'draft-identity',from)?.value.id;
+  if(!id)throw new CliError('unregistered_file','Register the source before moving it.');
+  if(await readOptional(await confinedPath(root,to)))throw new CliError('file_exists','Move destination already exists.');
+  const bytes=await readFile(await confinedPath(root,from));
+  store.put(LOCAL_WORKSPACE_SCOPE,'identity-move','current',{from,to,id,hash:digest(bytes)} satisfies LocalMove);await recoverLocalMove(root);
  });
 }

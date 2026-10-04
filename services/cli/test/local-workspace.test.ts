@@ -58,3 +58,25 @@ test('portable journal recovers after transfer and refuses external edits withou
   assert.equal((await localWorkspaceState(root)).list(LOCAL_WORKSPACE_SCOPE,'staged-file').length,1);
  }finally{await rm(parent,{recursive:true,force:true});}
 });
+
+test('publication staging never inherits the enclosing author workspace',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-staging-'));
+ try{
+  await localWorkspaceState(root);const stage=join(root,'.artifactbin','publications','server','files');await mkdir(stage,{recursive:true});
+  assert.equal((await loadWorkspace(stage,join(root,'fresh-home'))).root,await realpath(stage));
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('moving a local document keeps its identity and discussion, and status discovers local files',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-move-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<p id="text">Draft</p>');const workspace=await loadWorkspace(root,join(root,'home'));
+  const ids=await registerLocalFiles(workspace,['report.jsx']);const store=await localWorkspaceState(root);
+  store.put(LOCAL_WORKSPACE_SCOPE,'preview-comment','note',{id:'note',file:'report.jsx',node:'text',name:'Sam',text:'Keep'});
+  const output:string[]=[];const ctx={cwd:root,home:workspace.home,env:{},stdout:(v:string)=>output.push(v),stderr:()=>{},fetch:async()=>assert.fail('local move and status must not fetch')};
+  assert.equal(await runCli(['mv','report.jsx','renamed.jsx','--json'],ctx),0,output.join(''));
+  assert.equal((await localIdentities(await loadWorkspace(root,workspace.home)))[ids['report.jsx']!],'renamed.jsx');
+  assert.equal(store.get<{file:string}>(LOCAL_WORKSPACE_SCOPE,'preview-comment','note')?.value.file,'renamed.jsx');
+  output.length=0;assert.equal(await runCli(['status','--json'],ctx),0);assert.match(output.join(''),/renamed.jsx/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

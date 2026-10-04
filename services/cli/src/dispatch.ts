@@ -1,4 +1,4 @@
-import {registerLocalFiles} from './local-workspace';
+import {registerLocalFiles,findLocalWorkspace,moveLocalFile} from './local-workspace';
 import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
@@ -8,7 +8,7 @@ import {serveTeam} from './host-runtime';
 import type {ServeOptions} from './serve-config';
 import { browserSessionCommand } from './browser-sessions';
 import {testUserCommand,viewerChoice} from './testuser';
-import {scheduleBackgroundUpdate} from './background-update';
+import {checkUpdateNotice} from './update-notice';
 import {compareVersions,validVersion} from './version-order';
 import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
 import {forkResources} from './fork';
@@ -104,7 +104,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // wrong_server on the first fixed build because only the connection loader read it.
   const exportedOrigin=await exportedServer(home,context.env);
   const declaredServer=typeof flags.server==='string'?flags.server:exportedOrigin??DEFAULT_SERVER;
-  if(command!=='update'&&command!=='setup')await scheduleBackgroundUpdate({home,server:declaredServer,env:context.env});
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout(`${String(flags.service)} is ready for offline use.\n`);return 0;}
@@ -137,7 +136,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   let workspace=await loadWorkspace(context.cwd,home);
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
-  if(command==='mv'){await moveFile(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
+  if(command==='mv'){await (await findLocalWorkspace(workspace.root)?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
   const chosenHost=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
@@ -241,6 +240,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    * destination, and never a place a credential is sent.
    */
   const resolved=await identity();
+  await checkUpdateNotice({home,server:resolved.canonical,env:context.env,fetch:context.fetch,stderr});
   const server=serverOrigin()===undefined?undefined:resolved.canonical;
   const serverAliases=serverAddresses(resolved);
 

@@ -115,7 +115,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     const body=stampNodeIds(source,{previousSource:current.body}).source;
     const bytes=Buffer.from(writeDocument({metadata:metadata??current.metadata,body}));
     await read(file,bytes.toString()); // Validate the proposed tree and dependency scope before writing.
-    await saveLocalFile(root,file,current.revision,bytes);
+    await saveLocalFile(root,file,current.revision,bytes).catch(error=>{if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;});
     return read(file);
  };
  const editor=createPreviewEditor({read,write:save});
