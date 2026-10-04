@@ -13,7 +13,7 @@ test('teaching bootstraps without its output and repairs stale output determinis
  const fixture=mkdtempSync(join(tmpdir(),'afbin-teaching-'));
  try{
   for(const relative of ['package.json','tsconfig.json','scripts/register-yaml.cjs',
-   'services/app/lib','services/app/skills','services/app/orchestrator/prompts','services/runner/src','services/contracts/src','services/utils/src',
+   'services/app/lib','services/app/skills','services/app/orchestrator/prompts','services/app/public/chat/release.json','services/runner/src','services/contracts/src','services/utils/src',
    'services/cli/src','services/cli/scripts','services/cli/package.json']){
    const target=join(fixture,relative);mkdirSync(dirname(target),{recursive:true});
    cpSync(join(repo,relative),target,{recursive:true,filter:source=>
@@ -25,6 +25,8 @@ test('teaching bootstraps without its output and repairs stale output determinis
    [join(fixture,'services/cli/scripts/generate-teaching.mjs'),...args],
    {cwd:fixture,encoding:'utf8',env:{...process.env,APP_PACKAGE_ROOT:join(fixture,'services/app')}});
   assert.equal(existsSync(target),false);
+  assert.equal(existsSync(join(fixture,'services/app/dist')),false,'source teaching must not require a built app');
+  assert.equal(existsSync(join(fixture,'services/cli/dist')),false,'source teaching must not require a built CLI');
   const first=generate();assert.equal(first.status,0,first.stderr);
   const content=readFileSync(target,'utf8');
   const bundle=JSON.parse(content);
