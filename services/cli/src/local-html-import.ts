@@ -4,6 +4,7 @@ import {readFile,stat,realpath,lstat} from 'node:fs/promises';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {isAbsolute,relative,resolve,join,sep} from 'node:path';
 import {parseArtifactFile,sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
+import {resolveStoredStoryDesign} from '../../app/lib/data/story/story-themes';
 import {collectRefUses} from '../../app/lib/story/data/refs';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import {parseJsx} from '../../app/lib/jsx';
@@ -129,7 +130,18 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
   if(existing.length&&!same&&!unchangedIncoming&&!unchangedLocal)return preserveConflict('Import conflict: local comments and offline comments both changed.');
   const replaceThreads=!unchangedIncoming||existing.length===0;
   const anchors=nodeIndex(file.source);
-  const metadata={...(current?.metadata??{}),title:file.metadata.title,...Object.fromEntries(Object.entries(file.metadata).filter(([key])=>key!=='title')),id:identity};
+  const fields=['title','description','theme','template','colorMode'] as const;
+  const merged={...file.metadata};
+  if(current){
+   const baseline=provenance?.metadataBaseline,design=resolveStoredStoryDesign(current.metadata.theme,current.metadata.colorMode);
+   const local={...current.metadata,theme:design.theme,colorMode:design.colorMode};
+   for(const key of fields){
+    const incoming=file.metadata[key],before=baseline?.[key],value=local[key]??(key==='title'?before??incoming:null);
+    if(baseline&&value!==before&&incoming!==before&&value!==incoming||!baseline&&local[key]!==undefined&&value!==incoming)return preserveConflict(`Import conflict: document metadata ${key} changed in both copies.`);
+    if(baseline&&incoming===before)(merged as Record<string,unknown>)[key]=value;
+   }
+  }
+  const metadata={...(current?.metadata??{}),...Object.fromEntries(fields.map(key=>[key,merged[key]])),id:identity};
   changes.unshift({path,before:original?digest(original):null,data:Buffer.from(writeDocument({metadata,body:file.source}))});
   await stageLocalFiles(workspace.root,changes,store=>{
    store.put(scope,'draft-identity',path,{id:identity});

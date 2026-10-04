@@ -85,6 +85,8 @@ export interface ArtifactFileWorkspace {
   /** Baseline fingerprint checked by the local importer before replacing source. */
   baseDigest: string;
   threadsDigest?: string;
+  /** Design/title baseline for field-wise reconciliation; changed independently from source. */
+  metadataBaseline?: ArtifactFile['metadata'];
   /** Portable local assets; importers revalidate paths and content before writing. */
   assets: Record<string, { path: string; contentType: string; base64: string }>;
 }
@@ -199,6 +201,11 @@ const isEdit = (v: unknown) => isObject(v) && isString(v.at) && isString(v.by) &
 function isWorkspace(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isObject(value) || !isString(value.documentId) || !/^[A-Za-z0-9_-]{1,128}$/.test(value.documentId)
+    || (value.metadataBaseline !== undefined && (!isObject(value.metadataBaseline)
+      || Object.keys(value.metadataBaseline).length !== 5
+      || !isString(value.metadataBaseline.title) || !isStringOrNull(value.metadataBaseline.description)
+      || !isStringOrNull(value.metadataBaseline.theme) || !isStringOrNull(value.metadataBaseline.template)
+      || ![null, 'light', 'dark'].includes(value.metadataBaseline.colorMode as never)))
     || (value.threadsDigest !== undefined && (!isString(value.threadsDigest) || !value.threadsDigest.length || value.threadsDigest.length > 128))
     || !isString(value.baseDigest) || !value.baseDigest.length || value.baseDigest.length > 128 || !isObject(value.assets)) return false;
   let total = 0;
