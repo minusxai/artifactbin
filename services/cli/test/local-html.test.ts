@@ -56,3 +56,15 @@ test('exported compiler paths and editor nodes use the same canonical HTML nesti
   assert.match(file.compiled!.html,/data-mx-ast="/);
  }finally{process.chdir(cwd);}
 }));
+
+test('SSR-baked SQL export retains the literal carriers its offline browser module reads',()=>fixture(async(root,home)=>{
+ await writeFile(join(root,'rows.csv'),'amount\n10\n20\n');
+ const workspace=await loadWorkspace(root,home),ids=await registerLocalFiles(workspace,['rows.csv']);
+ await writeFile(join(root,'report.jsx'),`<Helmet><Import name="orders" src="ref:${ids['rows.csv']}"/><Query name="total">{\`select sum(amount) as total from orders.rows\`}</Query></Helmet><h1 id="title">Report</h1><Number data="$total" col="total" agg="sum"/>`);
+ const cwd=process.cwd();try{
+  const html=(await exportLocalHtml({cwd:root,home,path:'report.jsx'},resolve('../app'))).toString(),file=readArtifactFileHtml(html);
+  assert.match(file.compiled!.html,/aria-label="Live number">30</);
+  assert.match(file.compiled!.html,/<script type="application\/json" data-mx-island-literals=/);
+  assert.match(html,/<script type="application\/json" data-mx-island-literals=/);
+ }finally{process.chdir(cwd);}
+}));

@@ -23,6 +23,7 @@ import {prepareStoryRuntime} from '../../app/lib/story/prepared/prepare-runtime.
 import {compileStoryCss} from '../../app/lib/data/story/story-css.server';
 import {resolveStoredStoryDesign} from '../../app/lib/data/story/story-themes';
 import type {RefDataMap} from '../../app/lib/story/data/ref-data';
+import {withStoredCarriers} from '../../app/lib/compiled-page/carriers';
 import {compileDocument,renderStoryHtml,compilerBuild} from './preview/compiled';
 import {offlineFileParts} from '../../app/lib/offline/bundle.server';
 import {renderArtifactFileHtml} from '../../app/lib/offline/file-html';
@@ -105,7 +106,7 @@ export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string
  delete island.queryUrl;delete island.mutateUrl;delete island.assetsUrl;delete island.sqliteWasm;
  let compiled=await compileDocument({data:island,flow,authorScript:prepared.authorScript,capture:false});
  const {ssr:_ssr,graph:_graph,...sharedBuild}=compilerBuild();compiled={...compiled,sharedBuild};
- if(compiled.ssr)compiled={...compiled,html:await renderStoryHtml(compiled,{values:input.state.values,results:input.state})};
+ if(compiled.ssr)compiled={...compiled,html:withStoredCarriers(await renderStoryHtml(compiled,{values:input.state.values,results:input.state}),compiled.html)};
  let embeddedBytes=0;
  const resource=async(pointer:string):Promise<string>=>{
   if(pointer.startsWith('data:')||pointer.startsWith('#'))return pointer;

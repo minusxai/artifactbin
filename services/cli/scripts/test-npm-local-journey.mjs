@@ -104,7 +104,7 @@ try{
  assert.equal(file.artifactId,ids['report.jsx']);assert.equal(file.threads[0].id,thread.id);assert.deepEqual(Object.keys(file.localWorkspace.assets).sort(),[ids['sales.csv'],ids['pixel.png']].sort());
  const offline=await browser.newContext({acceptDownloads:true});await offline.addInitScript(()=>{delete window.showSaveFilePicker;});
  let offlineRequests=0;await offline.route(/^https?:/,route=>{offlineRequests++;return route.abort();});
- const offlinePage=trackPage(await offline.newPage(),'offline');await offlinePage.goto(pathToFileURL(exported).href);await offlinePage.getByRole('heading',{name:'Local report',exact:true}).waitFor({timeout:30000});
+ const offlinePage=trackPage(await offline.newPage(),'offline');await offlinePage.goto(pathToFileURL(exported).href);await offlinePage.getByRole('heading',{name:'Local report',exact:true}).waitFor({timeout:30000});await offlinePage.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
  await offlinePage.getByRole('img',{name:'Portable image'}).evaluate(element=>element.decode());
  await offlinePage.getByRole('button',{name:'Edit',exact:true}).click();
  const name=offlinePage.getByRole('dialog',{name:'What should we call you?'});if(await name.count()){await name.getByRole('textbox',{name:'Your name'}).fill('Offline tester');await name.getByRole('button',{name:'Save',exact:true}).click();await name.waitFor({state:'hidden'});}
@@ -115,7 +115,8 @@ try{
  const downloaded=await Promise.all([offlinePage.waitForEvent('download'),offlinePage.getByRole('button',{name:'Save',exact:true}).click()]);
  const savedHtml=join(recovery,'report.jsx.html');await downloaded[0].saveAs(savedHtml);
  const incoming=payload(await readFile(savedHtml,'utf8'));assert.match(incoming.source,/Offline saved report/);assert.equal(incoming.threads[0].id,thread.id);
- const reopened=trackPage(await offline.newPage(),'reopened');await reopened.goto(pathToFileURL(savedHtml).href);await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
+ const reopened=trackPage(await offline.newPage(),'reopened');await reopened.goto(pathToFileURL(savedHtml).href);await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();await reopened.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
+ assert.deepEqual(browserEvents.filter(event=>event.type==='pageerror'),[],'Offline reader boot and reopen must complete without browser exceptions');
  assert.equal(offlineRequests,0);await offline.close();
  const imported=await jsonCommand(recovery,profiles[2],['import','report.jsx.html','--output','recovered.jsx','--json']);assert.equal(imported.path,'recovered.jsx');
  const restoredIds=await jsonCommand(recovery,profiles[2],['add','recovered.jsx','sales.csv','pixel.png','--json']);assert.equal(restoredIds['recovered.jsx'],ids['report.jsx']);assert.equal(restoredIds['sales.csv'],ids['sales.csv']);assert.equal(restoredIds['pixel.png'],ids['pixel.png']);assert.deepEqual(await readFile(join(recovery,'pixel.png')),image);
