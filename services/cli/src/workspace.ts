@@ -1,4 +1,4 @@
-import {findLocalWorkspace,readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
+import {findLocalWorkspace,readLocalWorkspaceState,localReferenceMap,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 /**
  * A workspace is a directory the CLI has registered in its own store. No file is
  * ever written into it to mark it: discovery walks up from the working directory
@@ -9,7 +9,7 @@ import {findLocalWorkspace,readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '
  * the server snapshot by `baselineOf`.
  */
 import {realpath} from 'node:fs/promises';
-import {dirname,extname,relative,resolve} from 'node:path';
+import {dirname,extname,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN,type ArtifactResourceFile} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {normalizeServer} from './config';
@@ -94,7 +94,7 @@ export async function baselineOf(_workspace:Workspace,path:string,tracked:Tracke
 }
 
 export async function inspectWorkspace(workspace:Workspace,paths?:string[]):Promise<LocalFile[]>{
- const selected=paths?.length?await Promise.all(paths.map(async path=>relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,path))))):[...Object.keys(workspace.tracking?.files??{}),...((await readState(workspace.home))?.list(workspace.root,'draft-identity').map(row=>row.key)??[])];
+ const selected=paths?.length?await Promise.all(paths.map(async path=>relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,path))).split(sep).join('/'))):[...Object.keys(workspace.tracking?.files??{}),...Object.values(await localReferenceMap(workspace.root)),...((await readState(workspace.home))?.list(workspace.root,'draft-identity').map(row=>row.key)??[])];
  const seen=new Map<string,string>();
  const results:LocalFile[]=[];
  for(const path of [...new Set(selected)]){

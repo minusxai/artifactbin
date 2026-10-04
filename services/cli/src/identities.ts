@@ -2,7 +2,7 @@ import {localReferenceMap} from './local-workspace';
 /** Shared registration and resolution. One account pool; workspace paths own identities independently of published baselines. */
 import {randomUUID} from 'node:crypto';
 import {readFile,link,unlink,lstat} from 'node:fs/promises';
-import {resolve,relative,extname} from 'node:path';
+import {resolve,relative,extname,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import type {Workspace} from './workspace';
 import {loadWorkspace} from './workspace';
@@ -32,7 +32,7 @@ export async function addFiles(workspace:Workspace,paths:string[],client:HttpCli
   for(const [path,tracked] of Object.entries(workspace.tracking?.files??{}))mappings.set(path,tracked.id);
   const assigned:Record<string,string>={},changes:FileChange[]=[],removed:string[]=[];
   for(const input of [...new Set(paths)]){
-   const full=await confinedPath(root,resolve(workspace.cwd,input)),path=relative(root,full);
+   const full=await confinedPath(root,resolve(workspace.cwd,input)),path=relative(root,full).split(sep).join('/');
    const bytes=await readFile(full),document=extname(path).toLowerCase()==='.jsx'?parseDocument(bytes.toString()):undefined;
    const resource=['.yaml','.yml'].includes(extname(path).toLowerCase())?parseResourceFile(bytes.toString()):undefined;
    if(!document&&!resource)assetInput(path,bytes);
@@ -105,7 +105,7 @@ export async function moveFile(workspace:Workspace,from:string,to:string):Promis
  await withLock(workspace.home,workspace.root,async()=>{
   await recoverMove(workspace);
   const state=await stateFor(workspace.home),root=workspace.root;
-  from=relative(root,await confinedPath(root,resolve(workspace.cwd,from)));to=relative(root,await confinedPath(root,resolve(workspace.cwd,to)));
+  from=relative(root,await confinedPath(root,resolve(workspace.cwd,from))).split(sep).join('/');to=relative(root,await confinedPath(root,resolve(workspace.cwd,to))).split(sep).join('/');
   const identity=state.get<{id:string}>(root,'draft-identity',from)?.value??state.get<{id:string}>(root,'tracked',from)?.value;if(!identity)throw Error('Source is not registered');
   if(from===to)return;
   if(await readOptional(await confinedPath(root,to)))throw Error('Move destination already exists');

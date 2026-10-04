@@ -1,7 +1,7 @@
 /** Portable authoring state. Identity and discussion belong to the folder; credentials remain at home. */
 import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile,lstat,realpath} from 'node:fs/promises';
-import {dirname,extname,join,relative,resolve,sep} from 'node:path';
+import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
 import {stateFor,readState} from './state-access';
@@ -27,6 +27,7 @@ async function marker(root:string):Promise<WorkspaceMarker|null>{
 }
 export async function findLocalWorkspace(cwd:string):Promise<string|null>{
  for(let root=await realpath(cwd);;root=dirname(root)){
+  if(basename(root)==='.artifactbin')return null;
   if(await marker(root))return root;
   if(dirname(root)===root)return null;
  }
