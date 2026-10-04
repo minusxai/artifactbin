@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 const ci=process.argv[2]==='--ci';
@@ -21,8 +21,10 @@ const env={...process.env,HOME:join(root,'home'),USERPROFILE:join(root,'home'),A
 const run=args=>execFileSync(process.execPath,[npm,...args],{cwd:root,env,encoding:'utf8',timeout:300000});
 try{
  await writeFile(join(root,'package.json'),'{}\n');
- const installed=run(['install','--foreground-scripts','--no-audit','--no-fund',tarball]);
- assert.doesNotMatch(installed,/Rebuilding because|gyp info|gyp ERR/,'Supported native consumers must use prebuilt dependencies, without a compiler fallback');
+ const installed=spawnSync(process.execPath,[npm,'install','--foreground-scripts','--no-audit','--no-fund',tarball],{cwd:root,env,encoding:'utf8',timeout:300000});
+ const installOutput=(installed.stdout??'')+(installed.stderr??'');
+ assert.equal(installed.status,0,installOutput);
+ assert.doesNotMatch(installOutput,/Rebuilding because|gyp info|gyp ERR/,'Supported native consumers must use prebuilt dependencies, without a compiler fallback');
  const cli=join(root,'node_modules/@artifactbin/cli');
  assert.ok(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
  await assert.rejects(readdir(join(cli,'dist/runtime/node_modules')));

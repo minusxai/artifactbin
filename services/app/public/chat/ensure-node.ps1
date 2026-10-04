@@ -1,4 +1,7 @@
 # Run inline with Invoke-Expression. Supports standard-user PowerShell 5.1 Restricted policy.
+$afbinPreviousErrorActionPreference = $ErrorActionPreference
+$afbinPreviousProgressPreference = $ProgressPreference
+try {
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 # Read the current PATH files in order so repeated repair checks do not depend
@@ -59,3 +62,8 @@ if (!(Test-AfbinNode)) {
 $userPath = [Environment]::GetEnvironmentVariable('PATH','User')
 if (!(@($userPath -split ';') -contains $destination)) { [Environment]::SetEnvironmentVariable('PATH', "$destination;$userPath", 'User') }
 Write-Host 'Node and npm/npx are ready. Next: npx.cmd --yes @artifactbin/cli@latest setup'
+
+} finally {
+  $ErrorActionPreference = $afbinPreviousErrorActionPreference
+  $ProgressPreference = $afbinPreviousProgressPreference
+}

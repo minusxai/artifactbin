@@ -16,6 +16,27 @@ Start-Service seclogon
 & icacls.exe $root /grant "${identity}:(OI)(CI)F" | Out-Null
 $child = @'
 $ErrorActionPreference='Stop'
+$phase='initialize'
+trap {
+  $failure=[ordered]@{phase=$phase;message=$_.Exception.Message;detail=($_ | Out-String);stack=$_.ScriptStackTrace;lastExitCode=$LASTEXITCODE}
+  [IO.File]::WriteAllText('__ROOT__\failed.json',($failure | ConvertTo-Json -Depth 4))
+  exit 1
+}
+function Invoke-Candidate([string]$Command,[string[]]$Arguments) {
+  Write-Host ('Native phase: '+$phase)
+  $previous=$ErrorActionPreference
+  try {
+    # PS5.1 emits native stderr as ErrorRecord objects; exit code owns success.
+    $ErrorActionPreference='Continue'
+    $output=& $Command @Arguments 2>&1
+    $code=$LASTEXITCODE
+  } finally { $ErrorActionPreference=$previous }
+  foreach($record in $output){if($record -is [Management.Automation.ErrorRecord]){Write-Host ('Native stderr: '+$record)}}
+  $text=($output | Where-Object {$_ -isnot [Management.Automation.ErrorRecord]} | Out-String)
+  Write-Host $text
+  if($code -ne 0){throw "$phase failed with exit $code : $text"}
+  return $text
+}
 [Environment]::SetEnvironmentVariable('PSModulePath',"$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules",'Process')
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $principal=New-Object Security.Principal.WindowsPrincipal($identity)
@@ -26,7 +47,10 @@ Set-ExecutionPolicy -Scope CurrentUser Restricted -Force
 $env:PATH="$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
 if(Get-Command node.exe -ErrorAction SilentlyContinue){throw 'Expected Node-free PATH'}
 $helper=[IO.File]::ReadAllText('__ROOT__\ensure-node.ps1')
+$ErrorActionPreference='Continue';$ProgressPreference='Continue'
 Invoke-Expression $helper
+if($ErrorActionPreference -ne 'Continue' -or $ProgressPreference -ne 'Continue'){throw 'Bootstrap changed caller preferences'}
+$ErrorActionPreference='Stop'
 if($LASTEXITCODE -ne 0){throw 'Bootstrap failed'}
 Invoke-Expression $helper
 if((Get-ExecutionPolicy -Scope CurrentUser) -ne 'Restricted' -or (Get-ExecutionPolicy) -ne 'Restricted'){throw 'Execution policy changed'}
@@ -49,14 +73,24 @@ $userPath=[Environment]::GetEnvironmentVariable('PATH','User')
 if(@($userPath -split ';' | Where-Object {$_ -eq $private}).Count -ne 1){throw 'Duplicate or missing durable PATH'}
 $env:PATH=[Environment]::GetEnvironmentVariable('PATH','Machine')+';'+$userPath
 $null=& npx.cmd --version;if($LASTEXITCODE -ne 0){throw 'Future PATH failed'}
+# Verify PS5.1 native stderr is diagnostic output, while nonzero exits fail.
+$phase='native stderr contract'
+$warning=Join-Path '__ROOT__' 'warning.cmd'
+[IO.File]::WriteAllText($warning,"@echo native-warning 1>&2`r`n@echo native-stdout-ok`r`n@exit /b 0`r`n")
+if((Invoke-Candidate $warning @()) -notmatch 'native-stdout-ok'){throw 'Native stderr lost stdout'}
+$rejected=$false
+try{Invoke-Candidate (Join-Path $broken 'npm.cmd') @('--version')}catch{$rejected=$_.Exception.Message.Contains('exit 7')}
+if(!$rejected){throw 'Native command failure was ignored'}
 # The exact release tarball runs through npx.cmd under the same non-admin policy.
 $env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
-$result=& npx.cmd --yes --package '__ROOT__\candidate.tgz' afbin query $rows --json
-if($LASTEXITCODE -ne 0 -or !(($result | Out-String).Contains('10'))){throw 'Standard-user npx candidate query failed'}
-$result=& npm.cmd exec --offline --yes --package '__ROOT__\candidate.tgz' -- afbin query $rows --json
-if($LASTEXITCODE -ne 0 -or !(($result | Out-String).Contains('20'))){throw 'Standard-user warmed offline query failed'}
-[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","same-tarball-standard-user-npx","warmed-offline-query"]}')
+$phase='standard-user online npx query'
+$result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\candidate.tgz','afbin','query',$rows,'--json')
+if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
+$phase='standard-user warmed offline npm query'
+$result=Invoke-Candidate 'npm.cmd' @('exec','--offline','--yes','--package','__ROOT__\candidate.tgz','--','afbin','query',$rows,'--json')
+if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('20'))){throw 'Standard-user warmed offline query failed'}
+[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","same-tarball-standard-user-npx","warmed-offline-query"]}')
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
 # CreateProcessWithLogonW limits command lines to1024characters; keep script as
@@ -68,6 +102,8 @@ try {
   $process=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-EncodedCommand',$encoded) -WorkingDirectory $root -Credential $credential -LoadUserProfile -PassThru -RedirectStandardOutput (Join-Path $root 'stdout') -RedirectStandardError (Join-Path $root 'stderr')
   if(!$process.WaitForExit(600000)){throw 'Bootstrap timed out'}
   Get-Content (Join-Path $root 'stdout')
+  Write-Output ('Standard-user child exit: '+$process.ExitCode)
+  if(Test-Path (Join-Path $root 'failed.json')){Get-Content (Join-Path $root 'failed.json')}
   if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $root 'passed.json'))){Get-Content (Join-Path $root 'stderr');throw 'Standard-user Node bootstrap failed'}
   Get-Content (Join-Path $root 'passed.json')
 } finally {

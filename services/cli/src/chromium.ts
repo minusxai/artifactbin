@@ -17,7 +17,8 @@ export function chromiumExecutable():Promise<string>{
  return ready??=loadChromium().catch(error=>{ready=undefined;throw error;});
 }
 async function loadChromium():Promise<string>{
- // Engine-selection boundary: load the consumer's installed npm package when a browser is requested.
+ // Engine-selection boundary: the npm alias uses Playwright Core without its optional native watcher.
+ // Retain the playwright module name for shared host code; load it only when a browser is requested.
  const require=createRequire(import.meta.url);
  const executable=(require('playwright') as typeof import('playwright')).chromium.executablePath();
  return prepareChromium({executable,install:()=>promisify(execFile)(process.execPath,[join(dirname(require.resolve('playwright/package.json')),'cli.js'),'install','chromium'])});
