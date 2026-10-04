@@ -1,21 +1,6 @@
-/**
- * ONE STARTER, EVERY SURFACE.
- *
- * artifactbin is CLI-only: the afbin CLI's browser approval is the only way any client obtains a
- * credential, so every surface that hands a document — or a refusal — to an agent must say the same
- * three things and no fourth. This file is the guard over ALL of them at once, because the way this
- * rule rots is one surface at a time.
- *
- *   (a) it names `afbin`
- *   (b) it carries the installer, `curl -fsSL <base>/chat/install.sh | sh`, so an agent without the
- *       binary is never stuck
- *   (c) it says nothing about a token, a paste, a claim, a mint, MCP, `/raw` or `/docs/` — the
- *       retired vocabulary, every word of which sends an agent looking for a door that is gone
- *
- * THE ONE EXCEPTION is exact and asserted as such: the skill may tell an agent `never mint or print
- * tokens`, which is a prohibition rather than an offer. It is removed once, by character, before (c)
- * is applied — so the words stay banned everywhere else, including a second copy of that sentence.
- */
+/** Every discovery surface names npm afbin; CLI starters retain their auth loop,
+ * while direct HTTP discovery teaches verified email issuance and graph claims.
+ * Retired endpoints/brands remain forbidden on every surface. */
 import { describe, expect, it } from 'vitest';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
@@ -34,7 +19,9 @@ const BASE = 'http://localhost:3000';
 const INSTALLER = `npx --yes @artifactbin/cli@latest`;
 
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
-const RETIRED = ['token', 'paste', 'claim', 'tokens/new', 'mint', 'MCP', '/raw', '/docs/'];
+const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
+const CLI_ONLY_RETIRED = ['token','mint','claim'];
+const httpDiscovery=(name:string)=>name==='skills/artifactbin/llms.txt'||name==='lib/agent-discovery meta';
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
@@ -84,9 +71,19 @@ describe('every agent-facing starter says the same thing', () => {
     const offences: string[] = [];
     for (const [name, text] of await surfaces()) {
       const scanned = withoutTheException(text).toLowerCase();
-      for (const word of RETIRED) if (scanned.includes(word.toLowerCase())) offences.push(`${name}: "${word}"`);
+      for (const word of [...RETIRED,...(httpDiscovery(name)?[]:CLI_ONLY_RETIRED)]) if (scanned.includes(word.toLowerCase())) offences.push(`${name}: "${word}"`);
     }
     expect(offences).toEqual([]);
+  });
+
+  it('direct HTTP discovery requires email and teaches the real scoped bearer and graph contract',()=>{
+    const guide=llmsText(BASE);
+    expect(guide).toContain('Direct HTTP clients require email authentication');
+    expect(guide).toContain('guest browser approval is CLI-only');
+    expect(guide).toContain('/api/authentication/token');
+    expect(guide).toContain('Only verified email account sessions qualify');
+    expect(guide).toContain('Authorization: Bearer <access_token>');
+    expect(guide).toContain('patch.claims');
   });
 
   it('the ONE exception is the skill\'s prohibition, spelled exactly and only once', () => {

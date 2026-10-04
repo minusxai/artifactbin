@@ -5,9 +5,9 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. The fence names the design system and page type. Datasets/media are artifacts too.
+artifactbin publishes editable `.jsx`: a YAML fence, HTML and kit JSX styled with Tailwind `className`. Datasets/media are artifacts too.
 
-npm CLI: local files/browser approval. Direct HTTP API: email authentication without Node or CLI installation; read [HTTP API](references/http-api.md) for the actual authentication and operation contracts.
+npm CLI: local files/browser approval. Direct HTTP: email auth without CLI installation; [HTTP API](references/http-api.md).
 
 - Run via `npx --yes @artifactbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
 - Preview is local; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.
@@ -22,7 +22,7 @@ npm CLI: local files/browser approval. Direct HTTP API: email authentication wit
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork deliberately: copy the file and remove those five fields.
-- Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and the type.
+- Publishing does not verify appearance. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, the design system supplies palette and type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 
 `afbin -h` and `afbin help <topic>` work offline; `afbin help` prints this file’s location.

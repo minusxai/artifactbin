@@ -49,19 +49,23 @@ describe('the brief', () => {
 });
 
 describe('llms.txt and the discovery head', () => {
-  it('the first line is the blurb, and the meta tag names afbin plus the install one-liner, under 150 characters', () => {
+  it('the first line is the blurb, and the meta tag names npm afbin, Windows and email HTTP help, under 150 characters', () => {
     const text = llmsText(BASE);
     expect(text.split('\n')[0]).toBe(agentBlurb());
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.instruction).toBe(`afbin: npx --yes @artifactbin/cli@latest. Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1`);
+    expect(help.instruction).toBe(`afbin: npx --yes @artifactbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`);
     expect(help.instruction.length).toBeLessThanOrEqual(150);
     expect(help.instruction).toContain('afbin');
+    expect(help.instruction).toContain('Windows: npx.cmd');
+    expect(help.instruction).toContain('HTTP: email auth');
+    expect(help.instruction).toContain('/llms.txt');
+    expect(help.instruction).toContain('Local/offline editing needs no remote API.');
     // The blurb is still line 1 of the one-pager, still used elsewhere; the meta no longer repeats it.
     expect(help.instruction).not.toContain(agentBlurb());
   });
 
-  it('the one-pager says what artifactbin is, how to install, both URL forms, and where the reference is — no setup, no token', () => {
+  it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
     for (const line of [`npx --yes @artifactbin/cli@latest`, '@artifactbin/cli@latest help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, '@artifactbin/cli@latest pull', 'afbin validate', '@artifactbin/cli@latest push', 'skill']) {
       expect(text, line).toContain(line);
@@ -90,9 +94,9 @@ describe('llms.txt and the discovery head', () => {
   });
 
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
-    expect(AGENT_HELP_TITLE).toBe('Agents: read this to create, edit, or operate artifacts on the CLI using afbin');
+    expect(AGENT_HELP_TITLE).toBe('Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
-    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @artifactbin/cli@latest. Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1">`);
+    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @artifactbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
   });
 });
 

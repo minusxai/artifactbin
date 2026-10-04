@@ -35,7 +35,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
     expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
-    expect(html).toContain(`<meta name="afbin" content="CLI: npx --yes @artifactbin/cli@latest (Windows: npx.cmd --yes @artifactbin/cli@latest). Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1. Direct HTTP API: email OTP, then POST /api/authentication/token; see /llms.txt. Local/offline editing needs no remote API.">`);
+    expect(html).toContain(`<meta name="afbin" content="afbin: npx --yes @artifactbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
   });
   it('the plain app shell carries the same head pointer, and /llms.txt is the one-pager on the request base', async () => {
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
@@ -98,7 +98,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
     const html = await res.text();
     expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
-    expect(html).toContain(`<meta name="afbin" content="CLI: npx --yes @artifactbin/cli@latest (Windows: npx.cmd --yes @artifactbin/cli@latest). Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1. Direct HTTP API: email OTP, then POST /api/authentication/token; see /llms.txt. Local/offline editing needs no remote API.">`);
+    expect(html).toContain(`<meta name="afbin" content="afbin: npx --yes @artifactbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
     expect(html).toContain('hop');
     expect(html).toMatch(new RegExp(`<link rel="canonical" href="[^"]*${canonical}">`));
     expect(html).toContain(`"address":"${canonical}"`);
@@ -108,7 +108,7 @@ describe('GET /a/:id (the document itself)', () => {
     const t = await mintToken('t', owner.id);
     const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>tail</div>', meta: {}, title: 'Tail', description: null, visibility: 'public' });
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
-    const tail = `<!-- Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API: ${BASE}/llms.txt. CLI: npx --yes @artifactbin/cli@latest (Windows: npx.cmd --yes @artifactbin/cli@latest). Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1. Direct HTTP API: email OTP, then POST /api/authentication/token; see /llms.txt. Local/offline editing needs no remote API. --></body>`;
+    const tail = `<!-- Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API: ${BASE}/llms.txt. afbin: npx --yes @artifactbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API. --></body>`;
     for (const path of [`/@${owner.username}/${row.id}-tail`, '/login', `/a/${row.id}/raw`]) {
       const res = await app.request(`${BASE}${path}`, { headers: { accept: 'text/html' } });
       expect(res.status, path).toBe(200);
@@ -127,6 +127,6 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
     expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
-    expect(html).toContain(`<meta name="afbin" content="CLI: npx --yes @artifactbin/cli@latest (Windows: npx.cmd --yes @artifactbin/cli@latest). Node: /chat/ensure-node.sh; Windows: /chat/ensure-node.ps1. Direct HTTP API: email OTP, then POST /api/authentication/token; see /llms.txt. Local/offline editing needs no remote API.">`);
+    expect(html).toContain(`<meta name="afbin" content="afbin: npx --yes @artifactbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
   });
 });

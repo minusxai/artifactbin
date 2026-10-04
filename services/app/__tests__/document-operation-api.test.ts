@@ -80,7 +80,7 @@ it('refuses retired text-write bodies instead of silently using a read/retry fal
 });
 
 it('the published direct HTTP example edits JSX with an email bearer, reserved identity and graph conflicts',async()=>{
- const guide=await readFile(join(process.cwd(),'skills/artifactbin/references/http-api.md'),'utf8');
+ const guide=await readFile(join(process.cwd(),'skills/artifactbin/references/http-authoring.md'),'utf8');
  const code=/```js\n(\/\/ BEGIN HTTP TEXT EDIT[\s\S]*?\/\/ END HTTP TEXT EDIT)\n```/.exec(guide)?.[1];
  expect(code,'HTTP authoring guide needs an executable JSON graph example').toBeTruthy();
  const build=runInNewContext(code+'\nbuildPlainTextUpdate',{TextEncoder}) as (snapshot:Record<string,unknown>,nodeId:string,before:string,after:string)=>DocumentUpdate;

@@ -74,11 +74,14 @@ describe('the document page and its page data', () => {
     expect(head.status).toBe(200);
     expect(await head.text()).toBe('');
     const miss = await app.request('/nope/nothing', { headers: { accept: 'text/html', 'accept-encoding': 'br' } });
-    // This test's shell is ~150 bytes: framing would outweigh the saving.
+    // Discovery tags belong in this shell; prove the actual complete response remains tiny.
     expect(miss.status).toBe(404);
     expect(miss.headers.get('content-encoding')).toBeNull();
     expect(miss.headers.get('vary')).toMatch(/accept-encoding/i);
-    expect(await miss.text()).toContain('SPA');
+    const tiny=await miss.text();
+    expect(Buffer.byteLength(tiny)).toBeLessThan(1024);
+    expect(tiny).toContain('SPA');
+    expect(tiny).toContain('HTTP: email auth');
   });
   it('the content-addressed island reader is its build-time brotli sibling through the app', async () => {
     const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { manifest: Record<string,string> };
