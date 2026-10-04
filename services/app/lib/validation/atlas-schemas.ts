@@ -6,7 +6,8 @@
  */
 import { Type, type Static, type TSchema } from 'typebox';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
-import { STORY_THEME_NAMES, type StoryThemeName } from './story-theme-names';
+import { STORY_THEME_NAMES, type StoryThemeName, type StoryDesignName } from './story-theme-names';
+import { STORY_SYSTEM_NAMES, type StorySystemName } from './story-system-names';
 
 /** Shared helper: a string enum with an optional description. */
 const StringEnum = <const T extends readonly string[]>(values: T, description?: string) =>
@@ -23,6 +24,10 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
  * typebox; it is re-exported here for every schema-side caller.
  */
 export { STORY_THEME_NAMES, type StoryThemeName };
+export { STORY_SYSTEM_NAMES, type StorySystemName };
+/** Everything a fence `theme` may name: the six themes, then the design systems (lib/data/story/story-systems). */
+export const STORY_DESIGN_NAMES: readonly StoryDesignName[] = [...STORY_THEME_NAMES, ...STORY_SYSTEM_NAMES];
+export type { StoryDesignName };
 
 /**
  * The story templates — the document's structural GENRE (beat structure +
@@ -48,7 +53,7 @@ export const StoryContent = Type.Object({
     '<Grid><GridItem x={0} y={0} w={8} h={5}>…</GridItem>…</Grid>: 12 columns × 86px rows.'),
   format: Type.Optional(Type.Union([Type.Literal('jsx'), Type.Null()], { description:
     "'jsx' = the story field holds shadcn JSX source rendered by the story interpreter" })),
-  theme: Type.Optional(Nullable(StringEnum(STORY_THEME_NAMES,
+  theme: Type.Optional(Nullable(StringEnum(STORY_DESIGN_NAMES,
     "Design theme for the story (format:'jsx' only) — picks the named design PERSONALITY (fonts, corner " +
     'radius, chart palette, a light AND a dark token set) the story renders with. One of the six built-in ' +
     'themes; omit/null for the neutral default. Components and utility classes are identical across themes ' +

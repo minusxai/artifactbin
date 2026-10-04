@@ -8,6 +8,7 @@
  */
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_BASE_SHEETS } from '../styles/story-base-css';
+import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-systems';
 
 /** djb2 — stability matters, cryptographic strength does not (as storyCssCompileVersion). */
 const djb2 = (text: string): string => {
@@ -22,6 +23,7 @@ export const stylesheetVersion = (compileVersion: string, sheets: readonly strin
 let current: string | null = null;
 /** This deployment's stored stylesheet version. */
 export function preparedCssVersion(): string {
-  current ??= stylesheetVersion(storyCssCompileVersion(), STORY_BASE_SHEETS);
+  // A design system's faces and classes ride the base sheet of the documents that name it (story-base-css recipe.systemCss).
+  current ??= stylesheetVersion(storyCssCompileVersion(), [...STORY_BASE_SHEETS, STORY_SYSTEMS_SHEET]);
   return current;
 }

@@ -67,7 +67,8 @@ const SCANS: Scan[] = [
     label: 'no retired theme name is used as a value outside the alias table',
     dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, 'scripts'],
     extensions: /\.(tsx?|mjs)$/,
-    pattern: /['"](classical|broadsheet|nocturne)['"]/,
+    // broadsheet and nocturne returned as design systems (lib/data/story/story-systems) on 3 Oct 2026.
+    pattern: /['"](classical)['"]/,
     allow: [`${APP}/lib/data/story/story-themes.ts`],
     proof: { atLeast: 50, contains: `${APP}/lib/data/story/story-themes.ts` },
   },

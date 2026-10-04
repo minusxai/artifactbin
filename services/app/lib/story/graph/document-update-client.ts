@@ -1,5 +1,5 @@
 import {isPersonMentionHref} from '../../annotations/person-mentions';
-import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../validation/atlas-schemas';
+import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../../validation/atlas-schemas';
 import {parseJsx} from '../../jsx/parse';
 import {canonicalText} from '../annotations/annotation-range';
 import type {JsxNode} from '../../jsx/types';
@@ -38,7 +38,7 @@ export function prepareClientDocument(base:ClientDocumentSnapshot,change:ClientD
  const scope=graphValidationScope(base.document,candidate);
  if(scope.errors.length)throw new Error(scope.errors.join('\n'));
  const metadata=change.metadata??{};
- if(metadata.theme!=null&&!STORY_THEME_NAMES.includes(metadata.theme as never))throw new Error('Unknown theme');
+ if(metadata.theme!=null&&!STORY_DESIGN_NAMES.includes(metadata.theme as never))throw new Error('Unknown theme');
  if(metadata.template!=null&&!STORY_TEMPLATE_NAMES.includes(metadata.template as never))throw new Error('Unknown template');
  if(metadata.colorMode!=null&&!['light','dark'].includes(metadata.colorMode))throw new Error('Unknown color mode');
  const annotations=change.annotationOps??[];

@@ -38,7 +38,7 @@ import { avatarUrl } from '@/lib/accounts/avatars';
 import { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, roleFor, sessionActor } from '@/lib/accounts/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import { canAnnotate, canEdit } from '@/lib/artifacts/share-roles';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { preparedPageFor, servedPage } from '@/lib/story/prepared/prepared-page.server';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { firstHeadingTitle } from '@/lib/story/document';
@@ -225,7 +225,7 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
 
 
   const meta = (row.meta ?? {}) as {
-    theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
+    theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
     columns?: Array<{ name: string; type?: string }>; template?: string | null; refs?: Array<{ id: string; kind: string }>;
     cssCompileVersion?: string | null;
   };

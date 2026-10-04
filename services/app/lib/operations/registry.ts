@@ -177,7 +177,7 @@ const INVALID_REFS: OperationError = { status: 400, code: 'invalid_refs', fix: '
 const CONTENT_ERRORS: OperationError[] = [
   INVALID_JSX,
   INVALID_REFS,
-  { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the six live theme names' },
+  { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the live theme and design-system names' },
   { status: 400, code: 'retired_theme', fix: 'the hint names the successor theme — use it' },
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
   { status: 400, code: 'invalid_pdf', fix: 'pdf must be a base64 data:application/pdf URL whose BYTES are a PDF — to publish one already on the web send pdfUrl' },
