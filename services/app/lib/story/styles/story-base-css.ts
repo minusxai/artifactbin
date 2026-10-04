@@ -29,7 +29,7 @@ export interface StoryBaseCssRecipe {
   /** The Helmet's font slot overrides. */
   fonts: DocumentFonts;
   /**
-   * A design system's faces and classes (lib/data/story/story-systems storySystemSheetCss), when the
+   * A design system's faces and classes (lib/data/story/story-system-sheets storySystemSheetCss), when the
    * document names one. The TEXT, not the name: the browser rebuilds this sheet from the recipe and
    * must not carry the registry to do it.
    */

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
 import { faces } from '../../design-systems/lib/fonts.mjs';
-import { DATA, NAMES, renderRuntime } from '../../design-systems/lib/runtime.mjs';
+import { DATA, NAMES, SHEETS, renderRuntime } from '../../design-systems/lib/runtime.mjs';
 import { REFS, catalogueMd, systemMd } from '../../design-systems/lib/skill.mjs';
 
 /**
@@ -36,10 +36,11 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
-  it('the runtime registry and the names leaf', () => {
-    const { names, data } = renderRuntime();
+  it('the runtime registry, its sheets and the names leaf', () => {
+    const { names, data, sheets } = renderRuntime();
     expect(read(NAMES)).toBe(names);
     expect(read(DATA)).toBe(data);
+    expect(read(SHEETS)).toBe(sheets);
   });
   it('the catalogue and every system reference', () => {
     expect(read(path.join(REFS, 'design-systems.md'))).toBe(catalogueMd());

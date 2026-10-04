@@ -99,9 +99,9 @@ ${css.join('\n')}
 <div className="ix-wrap">
 <header className="ix-head">
   <h1 className="ix-h1">Thirteen systems</h1>
-  <p className="ix-lede">Thirteen design systems for artifactbin. Each page is also its own specimen: tokens for both modes, type roles, the hand it draws with, seven specimens (one per page type: dashboard, deck, editorial, scrolly, plan, app, landing), a first viewport in use, and the Helmet binding to copy. Six come from the blind-round winners you picked; the rest are kept, reworked or new.</p>
+  <p className="ix-lede">Thirteen design systems for artifactbin. Each page is also its own specimen: tokens for both modes, type roles, the hand it draws with, seven specimens (one per page type: dashboard, deck, editorial, scrolly, plan, app, landing), a first viewport in use, and the one fence line that binds it. Six come from the blind-round winners you picked; the rest are kept, reworked or new.</p>
   <div className="ix-policies">
-    <div><p className="ix-pol-k">Three layers, each works alone</p><p>The binding block is the floor: paste it and kit pages already look right. The hand is the middle: one drawing mode and a few named devices. The page-type specimens are recipes to copy.</p></div>
+    <div><p className="ix-pol-k">Three layers, each works alone</p><p>The runtime is the floor: name the system in the fence <code>theme</code> and kit pages already look right, with nothing pasted. The hand is the middle: one drawing mode and a few named devices. The page-type specimens are recipes to copy.</p></div>
     <div><p className="ix-pol-k">Template owns the grid, system owns the look</p><p>Dashboard grids, slide stages and scrolly step columns stay in the template references. Each system page shows how it wears all seven.</p></div>
     <div><p className="ix-pol-k">Borrow devices, never palettes</p><p>Devices are written against the hand variables, so a stripe screen or a stamp drops into another system and takes its ink. One system per artifact owns colour and type; the object you draw comes from the subject.</p></div>
   </div>
@@ -111,9 +111,9 @@ ${css.join('\n')}
   <h2 className="ix-h2">How a page comes together</h2>
   <p className="ix-lede">The template is the shape of the content; the system is the hand that draws it; the subject supplies the object and the data. Three choices, made in that order, each from its own reference. The system page is not a substitute for the template reference and does not try to be: the specimen shows the look at one viewport and the hooks to use, while the template reference carries the beats, the behaviours (sticky figures, the contents rail, striking done tasks, the Mermaid flow) and its own don&#39;ts. When they disagree, the template wins on structure and the system wins on look.</p>
   <ol className="ix-steps">
-    <li><b>Shape first.</b> Pick the page type from the content&#39;s shape: dashboard, deck, editorial, scrolly, plan, app or landing. Five have a template reference; app and landing publish without a template field. Read the page type&#39;s reference for its beats before anything else.</li>
+    <li><b>Shape first.</b> Pick the page type from the content&#39;s shape: dashboard, deck, editorial, scrolly, plan, app or landing. All seven are <code>template</code> values, each with a page-type reference. Read the page type&#39;s reference for its beats before anything else.</li>
     <li><b>Then the hand.</b> Pick the system from the subject&#39;s world and the fit table below. A system marked avoid for a template can still be used; it will cost custom CSS the specimen does not give you.</li>
-    <li><b>Bind.</b> Paste the system&#39;s 10 · Binding block and its @font-face rules into the Helmet style, set the fence theme to the system&#39;s base, and leave a Helmet comment naming the system.</li>
+    <li><b>Bind.</b> Set the fence <code>theme</code> to the system&#39;s name. The server serves its tokens for both modes, its faces at every weight, its type roles, its components and its hand; nothing is pasted. Leave a Helmet comment recording the system and the thesis.</li>
     <li><b>Dress the template.</b> Open the system&#39;s 07 specimen for that template and take its classes and hook variables; keep the template&#39;s structure. The specimen is the look, not the layout.</li>
     <li><b>Draw from the subject.</b> Choose one object from the artifact&#39;s own world, draw it in the hand (06), and put the data inside one device. The system never supplies the object.</li>
     <li><b>Override by token, borrow by device.</b> Reassign a single --ds-* token to change the whole page; never restyle components one by one. Devices port between systems; palettes and type pairings do not.</li>
@@ -139,7 +139,7 @@ ${css.join('\n')}
 <div className="ix-grid">
 ${cards.join('\n')}
 </div>
-<footer className="ix-foot">Every system binds through the same contract: its own --ds-* tokens, the artifactbin keys pointed at them, @font-face rules for every weight it uses, and a Helmet comment recording the choice. Sources are in design-systems/ in the artifactbin checkout: node scripts/design-systems.mjs pages regenerates the pages and this index, and the same specs feed the runtime registry and the agent-facing references. Each page's hand section draws the same three subjects (an object, a place, a quantity) so the technique is what you copy, not the picture.</footer>
+<footer className="ix-foot">Every system binds through the same contract: its own --ds-* tokens, the artifactbin keys pointed at them and faces for every weight it uses, all served by the runtime from the fence theme, plus a Helmet comment recording the choice. Sources are in design-systems/ in the artifactbin checkout: node scripts/design-systems.mjs pages regenerates the pages and this index, and the same specs feed the runtime registry and the agent-facing references. Each page's hand section draws the same three subjects (an object, a place, a quantity) so the technique is what you copy, not the picture.</footer>
 </div>
 </div>
 `;

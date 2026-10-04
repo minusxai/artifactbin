@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable `.jsx` artifacts combining a YAML fence with self-contained HTML and kit JSX, styled with Tailwind `className`; the fence names a design system and a page type. Datasets and media are artifacts too.
+artifactbin publishes editable `.jsx` artifacts combining a YAML fence with self-contained HTML and kit JSX, styled with Tailwind `className`; the fence names its design system and page type. Datasets and media are artifacts too.
 
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
@@ -13,10 +13,10 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - Sign-in is automatic via browser approval, even with `--yes`. If remote/headless or browser login fails/times out, ask for email: `afbin auth --email <email>`. Ask for the code: `afbin auth --email <email> --otp <code>`, then retry. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
-- Few turns: `afbin help <page type>`, name ONE design system in the fence `theme`, then push a FIRST designed version within six calls of the pull — the fence, the title, real opening copy and one substantive section — and fill the rest in later pushes; a person is waiting on a blank page. A successful push IS the verification that source was accepted. Skip pulling, diffing or grepping it just to confirm publication; filling sections is not re-checking.
+- Few turns: `afbin help <page type>`, ONE design system in the fence, then push a FIRST designed version within six calls of the pull — the fence, the title, real opening copy and one substantive section — and fill the rest in later pushes; a person is waiting on a blank page. A successful push IS the verification that source was accepted. Skip pulling, diffing or grepping it just to confirm publication; filling sections is not re-checking.
 - For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=1 --param status=Done` to update. Use its declared names/arguments; preserve its source.
-- Test every newly authored or changed `<Mutation>` in a live session (`afbin help live-sessions`) on each identity’s isolated copy (`afbin help apps`), and on the original `--as guest`, where identity writes stay disabled. One session at a time. Stop once each works once per identity.
-- Local files: `afbin add <files> --json` assigns reference IDs; preview/push auto-register named files. Push runs `afbin validate` and publishes unpublished IDs.
+- Sessions are for browser/UI testing: newly authored actions, page-local state, row/cell action context. Test each new or changed `<Mutation>` in a live session (`afbin help live-sessions`) on each identity's isolated copy (`afbin help apps`) and on the original `--as guest` (identity writes off). One session at a time. Stop once each works once per identity.
+- Local files: `afbin add <files> --json` assigns reference IDs; preview/push register named files. Push runs `afbin validate` and publishes unpublished IDs.
 - Every body element has a persistent `id` for its lifetime. Move it with the same id; never reuse an id.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - Markup for content, data and layout: the kit covers text, data, charts, tables, controls and motion. The Helmet `<script>` (Solid, any npm library) for behaviour; its exported components mount by name.
@@ -28,7 +28,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 ## Example
 
-Before writing, read `afbin help <page type>` for design, markup and the page type; skipping the frame leaves content flush to the viewport edge.
+Before writing, read `afbin help <page type>` for design and markup; skipping the frame leaves content flush to the viewport edge.
 
 ```jsx
 [[ example ]]
@@ -38,8 +38,8 @@ Before writing, read `afbin help <page type>` for design, markup and the page ty
 
 - [design](references/design.md) — visual design.
 - [markup](references/markup.md) — allowlist and layout; then [data](references/markup-data.md) and its [worked example](references/markup-data-example.md).
-- [page types](references/templates.md) — `afbin help templates` lists the seven; then `references/templates-<name>.md` for the one picked.
-- [design systems](references/design-systems.md) — `afbin help design-systems`; name one in the fence `theme`, then read its `system-<slug>.md`; [worked briefs](references/worked-briefs.md) show the thesis.
+- [page types](references/templates.md) — `afbin help templates` lists the seven, then `references/templates-<name>.md` for the one picked.
+- [design systems](references/design-systems.md) — `afbin help design-systems`; pick one, then its `system-<slug>.md`; [worked briefs](references/worked-briefs.md) show the thesis.
 - [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
 - [errors](references/errors.md) — refusal codes and fixes.
 - [comments](references/publishing-annotations.md) — `afbin comment`; `afbin help remote-review`.

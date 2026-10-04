@@ -7,7 +7,7 @@
  *   it 6/6 runs framed the deck on the first write; without it 1/6, and every
  *   harness shipped text flush to the viewport edge with `<Helmet>` inside
  *   `<SlideDeck>` (the door hoists it: `canonical_stable` false).
- * - Every theme page names the TOKEN CLASS its "accent" means. pi spent 11
+ * - Every theme page (today the legacy themes note) names the TOKEN CLASS its "accent" means. pi spent 11
  *   turns grepping four pages for `--accent` because the industry page said
  *   "safety orange" five times and never a class.
  * - "Every `/api` call, `GET` included, sends the bearer" — two harnesses read
@@ -18,7 +18,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, renderDoc } from '../skills';
 
-const buildThemeDoc = (base: string, name: string) => renderDoc(`artifactbin/references/themes-${name}.md`, base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { STORY_THEMES } from '../data/story/story-themes';
 import { STORY_TEMPLATES } from '../data/story/story-templates';
@@ -53,16 +52,15 @@ describe('the deck FRAME: the brief routes to it, the template file carries it',
   });
 });
 
-describe('every theme page names the token class its accent means', () => {
-  for (const theme of STORY_THEMES) {
-    it(`${theme.name}`, () => {
-      const page = buildThemeDoc(BASE, theme.name)!;
-      expect(page).toMatch(/Tokens:/);
-      expect(page).toMatch(/text-primary/);
-      expect(page).toMatch(/bg-primary/);
-      expect(buildThemeDoc(BASE, theme.name)).not.toBeNull();
-    });
-  }
+describe('the legacy themes note names the six and the token class their accent means', () => {
+  // The six theme guides retired with the design systems (3 Oct 2026); one note carries what an agent
+  // editing an older artifact still needs: the names, and that "accent" is the primary token.
+  const note = renderDoc('artifactbin/references/themes.md', BASE)!;
+  for (const theme of STORY_THEMES) it(`${theme.name}`, () => expect(note).toContain(`\`${theme.name}\``));
+  it('accent is the primary token, authored as bg-primary', () => {
+    expect(note).toMatch(/accent[^\n]*`primary`/);
+    expect(note).toContain('bg-primary');
+  });
 });
 
 // That the brief teaches automatic sign-in — no `afbin setup`, browser approval,

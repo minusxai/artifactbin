@@ -134,7 +134,7 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
   css: '',
   sheets: documentStyleSheets({
    compiledCss: input.prepared.compiledCss, chrome: !input.capture, bare: false, theme: input.prepared.theme,
-   docFonts: input.prepared.fonts, authorCss: input.prepared.authorCss,
+   docFonts: input.prepared.base.fonts, systemCss: input.prepared.base.systemCss ?? '', authorCss: input.prepared.authorCss,
   }),
   fontPreloads: input.prepared.fontPreloads ?? [],
   title: input.prepared.title,

@@ -72,8 +72,9 @@ two things the system never supplies:
 
 - **The object.** One thing from the subject's own world, drawn in the
   system's hand (its `h-*` classes) and carried through the chapter labels,
-  the figure numbering and one small drawing. One object, total
-  commitment, no second conceit; a quiet thesis is valid.
+  the figure numbering and one small drawing: the page's motif. One
+  object, total commitment, no second conceit; a quiet thesis in a deadpan
+  register is as valid as a loud one.
 - **The device.** Which of the system's devices carries the data: the split
   bar, the stamp, the ledger. The data lives inside it.
 

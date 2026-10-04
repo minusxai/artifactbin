@@ -38,6 +38,8 @@ const TEMPLATES = [
   { name: 'scrolly', blurb: 'Scrollytelling. A data story with a conceit, ticker bands and chapter breaks.' },
   { name: 'dashboard', blurb: 'An operating view. KPI and chart tiles on a 12-column canvas you can drag and resize in the editor, written back to the source.' },
   { name: 'plan', blurb: 'A visual working plan. Screen wireframes and user flows, or process diagrams, alongside decisions and milestones tracked through completion.' },
+  { name: 'app', blurb: 'A small working tool. Inputs, actions and a live result, operated by several people rather than read.' },
+  { name: 'landing', blurb: 'A page that makes one case. A hero, the proof, one call to action.' },
 ];
 
 export default function DocsHuman() {

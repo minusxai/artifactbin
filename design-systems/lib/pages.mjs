@@ -389,13 +389,13 @@ ${Object.entries(data.queries).map(([q, sql]) => `<Query name="${q}">{\`${sql}\`
 <section className="ds-section">
   <p className="t-label ds-eyebrow">10 · Binding</p>
   <h2 className="t-display-l">How an artifact wears ${esc(S.name)}</h2>
-  <p className="ds-lede">The system&#39;s own names live as <code>--ds-*</code> custom properties; the artifactbin contract keys point at them, so every kit component, Tailwind token class and chart follows. Copy the block below into a Helmet style, keep the @font-face rules from this page&#39;s source, and record the binding in a Helmet comment.</p>
+  <p className="ds-lede">The system&#39;s own names live as <code>--ds-*</code> custom properties; the artifactbin contract keys point at them, so every kit component, Tailwind token class and chart follows. An artifact wears ${esc(S.name)} by naming it in its fence, <code>theme: ${esc(S.slug)}</code>: the runtime serves the block below, the faces at every weight, the type roles, the components and the hand, so nothing is pasted. The block is shown for the names an override reassigns. Record the system and the thesis in a Helmet comment.</p>
   <div className="ds-two">
     <table className="ds-map"><thead><tr><th>Contract key</th><th>${esc(S.name)} token</th></tr></thead><tbody>${mapping}</tbody></table>
     <div><p className="t-label ds-eyebrow">No slot in the contract — carried as extra properties</p><p>${esc(S.binding_losses)}</p></div>
   </div>
   <pre className="ds-code"><code>{\`${bindingCss}\`}</code></pre>
-  <div className="ds-two"><div><p className="t-label ds-eyebrow">Override one thing</p><p>Add a second <code>:root</code> block after this one and reassign a single <code>--ds-*</code> token, radius or family; every component, chart and device follows. Change the token, not the component.</p></div><div><p className="t-label ds-eyebrow">What is yours to choose</p><p>The subject&#39;s object (what the hand draws), which one device carries the data, the template, and the copy. What stays fixed: the palette, the type pairing, the hand mode, and one loud element per view.</p></div></div>
+  <div className="ds-two"><div><p className="t-label ds-eyebrow">Override one thing</p><p>Add a <code>:root</code> block to the Helmet style and reassign a single <code>--ds-*</code> token, radius or family; every component, chart and device follows. Change the token, not the component.</p></div><div><p className="t-label ds-eyebrow">What is yours to choose</p><p>The subject&#39;s object (what the hand draws), which one device carries the data, the template, and the copy. What stays fixed: the palette, the type pairing, the hand mode, and one loud element per view.</p></div></div>
 </section>
 <footer className="ds-foot"><span className="t-label">${esc(S.name)} · design system · artifactbin</span><span>${esc(S.footer)}</span></footer>
 </div>

@@ -13,7 +13,6 @@ import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } 
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
-import { storySystemSheetCss } from '@/lib/data/story/story-systems';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
 /** The page-level rule every served document starts with. `--mx-vh` feeds the recipes that size against the viewport (slides). */
@@ -34,6 +33,12 @@ export interface DocumentStylesInput {
   theme: string | null | undefined;
   /** The Helmet's font slot overrides. */
   docFonts: DocumentFonts;
+  /**
+   * The design system's faces and classes when the document names one (the base-sheet recipe's
+   * `systemCss`, from lib/data/story/story-system-sheets), else empty. The TEXT, as the recipe
+   * carries it: this module is reached from the browser and must not import the sheets.
+   */
+  systemCss: string;
   /** The author's own `<style>`. */
   authorCss: string | null;
 }
@@ -63,7 +68,7 @@ export function documentStyleSheets(input: DocumentStylesInput): DocumentSheet[]
     // because the Google `@import` it opens with must be the first rule of a stylesheet (./document-fonts).
     fontVars ? { attr: 'data-mx-font-vars', css: fontVars } : null,
     // A design system's faces and classes, after the fonts and before the author's own CSS, which may override any of them.
-    ...(storySystemSheetCss(input.theme) ? [{ attr: 'data-mx-system', css: storySystemSheetCss(input.theme) }] : []),
+    input.systemCss ? { attr: 'data-mx-system', css: input.systemCss } : null,
     input.authorCss ? { attr: 'data-mx-author', css: input.authorCss } : null,
   ];
   return sheets.filter((sheet): sheet is DocumentSheet => sheet !== null);

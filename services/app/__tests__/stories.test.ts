@@ -43,9 +43,8 @@ describe('document creation guards', () => {
   it('rejects a retired theme BY NAME, hinting the successor', async () => {
     const t = await mintToken('t');
     const cases: Array<[string, string]> = [
+      // broadsheet and nocturne, once retired aliases, are design systems since 3 Oct 2026: accepted names.
       ['classical', 'manuscript'],
-      ['broadsheet', 'manuscript'],
-      ['nocturne', 'modernist'],
     ];
     for (const [theme, successor] of cases) {
       const res = await createArtifactRoute(

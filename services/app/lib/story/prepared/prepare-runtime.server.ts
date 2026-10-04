@@ -8,7 +8,7 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { glyphsForNodes } from '../assets/icon-glyphs';
 import { documentFonts } from '../styles/document-fonts';
 import { storyBaseCss, type StoryBaseCssRecipe } from '../styles/story-base-css';
-import { storySystemSheetCss } from '@/lib/data/story/story-systems';
+import { storySystemSheetCss } from '@/lib/data/story/story-system-sheets';
 import { firstScreenFonts } from '../styles/first-screen-fonts';
 import type { StoryIslandData, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import { mermaidImagesFor, type MermaidImageLookup } from '@/lib/mermaid-images/store';
@@ -105,7 +105,7 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
   const runtime: PreparedStoryRuntime = {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
     authorScript: await authorModuleCode(helmet),
-    theme: input.theme, fonts: docFonts, title,
+    theme: input.theme, base: baseRecipe, title,
     // The faces this document's first screen paints (lib/story/styles/first-screen-fonts), one per file.
     fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts }).map(face => face.url),
   };

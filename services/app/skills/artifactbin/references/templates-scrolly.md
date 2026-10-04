@@ -30,8 +30,8 @@ to it.
   complete ledger; the units and the denominators stay explicit the whole
   way, and the final breakdown is the reveal. For "where did it all go".
 - **Broadcast.** The story wears a costume (a console, a field report, a race
-  call) and every element plays along: ticker bands, chapter breaks, a twist
-  that breaks the pattern. The theatrical one; pick the register the subject
+  call) and every element plays along: ticker bands (`animate-marquee`, the
+  content repeated once), chapter breaks, a twist that breaks the pattern. The theatrical one; pick the register the subject
   can carry, deadpan included.
 
 ## What the runtime needs

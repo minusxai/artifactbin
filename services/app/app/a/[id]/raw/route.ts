@@ -381,7 +381,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // page's story carries its one isolated sheet instead (the assembler's `css`).
           sheets: appStory ? null : documentStyleSheets({
             compiledCss, chrome, bare: !!domain, theme: design.theme,
-            docFonts: prepared.page.base.fonts, authorCss: prepared.page.authorCss,
+            docFonts: prepared.page.base.fonts, systemCss: prepared.page.base.systemCss ?? '', authorCss: prepared.page.authorCss,
           }),
         });
         if (answer.mode === 'compiled') {

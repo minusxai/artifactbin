@@ -8,7 +8,7 @@
  */
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_BASE_SHEETS } from '../styles/story-base-css';
-import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-systems';
+import { STORY_SYSTEMS_SHEET } from '@/lib/data/story/story-system-sheets';
 
 /** djb2 — stability matters, cryptographic strength does not (as storyCssCompileVersion). */
 const djb2 = (text: string): string => {
