@@ -1,9 +1,9 @@
 import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,isLocalDevelopmentHost,normalizeOrigin} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
-import {CliError} from './commands';
+import {CliError} from './commands.js';
 import {CLI_VERSION} from './version';
 import {validVersion} from './version-order';
-import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,type Connection} from './config';
+import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,type Connection} from './config.js';
 interface HttpOptions {onRelease?:(release:{version:string;protocol:number})=>Promise<void>;connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
 /**
  * THE SECOND READ-ONLY PREFLIGHT. A dry run may send nothing that writes, which is why the

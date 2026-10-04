@@ -36,7 +36,7 @@ lines.once('line',line=>{
  setTimeout(()=>{process.exitCode=7;},100);
 });\n`);
  worker=spawn(process.execPath,[...process.execArgv,entry,'--internal-remote-worker'],{
-  cwd:directory,env:{...process.env,ARTIFACTBIN_HOME:join(directory,'private-state'),CLI__AUTO_UPDATE:'off'},
+  cwd:directory,env:{...process.env,HOME:directory,USERPROFILE:directory,ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:join(directory,'private-state'),CLI__AUTO_UPDATE:'off'},
   stdio:['ignore','pipe','pipe','ipc'],
  });
  let stdout='',stderr='';worker.stdout.on('data',data=>{stdout+=data;});worker.stderr.on('data',data=>{stderr+=data;});

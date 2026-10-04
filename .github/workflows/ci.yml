@@ -892,6 +892,12 @@ jobs:
         run: ./services/cli/scripts/test-node-bootstrap.ps1 -Tarball (Get-ChildItem npm-candidate/*.tgz | Select-Object -First 1).FullName
       - name: Same-tarball native npm and warmed offline acceptance
         run: npm run test:npm-package -w services/cli -- --ci
+      - name: Installed public library declarations compile without private workspace aliases
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs types
+      - name: Installed foreground server preserves the remote runner boundary
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs runner
       - name: Actual installed CLI terminal exits naturally
         working-directory: services/cli
         run: node scripts/test-installed-npm.mjs terminal
@@ -906,7 +912,7 @@ jobs:
 
   # Intel acceptance also splits its existing phases: run 35761410997 spent
   # 447s on combined acceptance (277s proofs, ~170s setup/downloads). Every
-  # phase consumes the same tested binary and retains the 420s job budget.
+  # phase consumes the same tested npm tarball.
   # Any failed phase blocks the tested-tree receipt and release through the
   # test roll-up, including nightly/bump-only runs.
   cli-preview:
@@ -948,19 +954,15 @@ jobs:
         with:
           name: afbin-npm-release
           path: npm-candidate
-      # Artifact transport does not preserve executable permissions. Runtime/SQL/
-      # Chromium archives are consumed by the binary's normal verified downloader.
-      - name: File preview from the uploaded executable
+      # Install the identical universal npm artifact; Playwright prepares Chromium lazily.
+      - name: File preview from the uploaded npm package
         working-directory: services/cli
         run: |
           npm install --prefix "$RUNNER_TEMP/npm-preview" "$GITHUB_WORKSPACE"/npm-candidate/*.tgz
           npx playwright install chromium
           node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/npm-preview/node_modules/@artifactbin/cli/dist/afbin.mjs" --phase=${{ matrix.phase }}
 
-  # THE LINUX BINARY THE `cli` MATRIX ALREADY BUILT AND SMOKED is the one tested here: rebuilding it
-  # cost this job the whole SEA compile (prebuilt Node, Chromium archive, injection) for the same
-  # bytes. The bundle, types and host runtime that `npm pack` and the bundle conformance read are still
-  # built here (`npm run build -w services/cli`); only the executable comes from `afbin-ubuntu-24.04`.
+  # Reference conformance checks the source bundle and the exact tested installed npm package.
   reference-compatibility:
     needs: [ plan, cli ]
     if: needs.plan.outputs.reference-compatibility == 'true'
@@ -1014,7 +1016,7 @@ jobs:
       - name: Build OSS host
         working-directory: candidate
         run: npm run build
-      - name: ID-first conformance for bundle, installed package and executable
+      - name: ID-first conformance for source bundle and installed npm package
         working-directory: candidate
         run: |
           # Each runner owns a PID-scoped data directory, outbox and OS-allocated port.

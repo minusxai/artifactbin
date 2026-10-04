@@ -5,7 +5,7 @@ import serialize from "@xterm/addon-serialize";
 import { hostname } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { pty } from "./pty";
-import { httpStatus, type HttpClient } from "./http";
+import { httpStatus, type HttpClient } from "./http.js";
 import type {
   RemoteExchange,
   RemoteExchangeResult,

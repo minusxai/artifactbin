@@ -1,7 +1,7 @@
 import {collectionFilters} from './collection-filters';
 import {enumArgument} from './arguments';
-import {CliError} from './errors';
-export {CliError} from './errors';
+import {CliError} from './errors.js';
+export {CliError} from './errors.js';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {

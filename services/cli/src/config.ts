@@ -5,10 +5,10 @@ import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
-import { DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
+import { DEFAULT_SERVER as CONTRACT_DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
 
 /** Where afbin talks when nothing selects a server (spelled once, in contracts). */
-export { DEFAULT_SERVER };
+export const DEFAULT_SERVER = CONTRACT_DEFAULT_SERVER;
 /** Client-only defaults. Reading or changing these never starts a server. */
 export interface ClientDefaults { host?: string; output?: "text" | "json"; updates?: boolean }
 

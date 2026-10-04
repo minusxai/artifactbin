@@ -4,24 +4,18 @@ import {stopTeamHost} from './team-host-process.mjs';
 import {createServer} from 'node:http';
 import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir,homedir} from 'node:os';
-import {join,resolve,basename} from 'node:path';
+import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes} from 'node:crypto';
 import {setTimeout as sleep} from 'node:timers/promises';
-const executable=resolve(process.argv[2]??`dist/afbin-${process.platform}-${process.arch}`),assets=resolve('dist');
+const executable=resolve(process.argv[2]??'dist/afbin.mjs');
 const root=await mkdtemp(join(tmpdir(),'afbin-team-product-')),operator=join(root,'team'),home=join(root,'client');
 await mkdir(operator);await mkdir(home);
 const reserve=createServer();await new Promise(resolve=>reserve.listen(0,'127.0.0.1',resolve));const port=reserve.address().port;await new Promise(resolve=>reserve.close(resolve));
 const origin='http://app.lvh.me:'+port,outbox=join(operator,'mail.jsonl');
-const mirror=createServer(async(req,res)=>{
- const file=basename(new URL(req.url,'http://127.0.0.1').pathname);
- if(!/^afbin-(sql|chromium|runtime)-[a-z0-9-]+\.gz$/.test(file)){res.writeHead(404);res.end();return;}
- try{res.end(await readFile(join(assets,file)));}catch{res.writeHead(404);res.end();}
-});
-await new Promise(resolve=>mirror.listen(0,'127.0.0.1',resolve));
-const env={...process.env,HOME:home,ARTIFACTBIN_HOME:join(operator,'data/runtime'),CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:'http://127.0.0.1:'+mirror.address().port,EMAIL__DEV_OUTBOX_PATH:outbox};
+const env={...process.env,HOME:home,USERPROFILE:home,ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:join(operator,'data/runtime'),CLI__AUTO_UPDATE:'0',EMAIL__DEV_OUTBOX_PATH:outbox};
 delete env.ARTIFACTBIN_TOKEN;delete env.ARTIFACTBIN_URL;
-const command=executable.endsWith('.mjs')?process.execPath:executable,prefix=executable.endsWith('.mjs')?[executable]:[];
+const command=process.execPath,prefix=[executable];
 async function completed(program,args,options={}){
  const child=spawn(program,args,{env,cwd:root,stdio:'inherit',...options});
  const timeout=setTimeout(()=>child.kill('SIGKILL'),180000);
@@ -29,7 +23,7 @@ async function completed(program,args,options={}){
 }
 let server,log='';
 try{
- // Operator preinstallation uses the same verified cache as foreground runtime; no client login/config.
+ // SQL is carried by npm; Chromium preparation uses Playwright, with no client login/config.
  for(const name of ['sql','chromium'])await completed(command,[...prefix,'setup','--service',name,'--json']);
  const file=join(operator,'server.env');
  await writeFile(file,`APP__HOST=127.0.0.1\nAPP__PORT=${port}\nAPP__PUBLIC_BASE_URL=${origin}\nAUTH__SECRET=${randomBytes(32).toString('hex')}\nEMAIL__DEV_OUTBOX_PATH=${outbox}\n`,{mode:0o600});
@@ -45,6 +39,6 @@ try{
  await completed(process.execPath,[gate,origin],{env:{...env,PLAYWRIGHT_BROWSERS_PATH:process.env.PLAYWRIGHT_BROWSERS_PATH??join(homedir(),'.cache/ms-playwright'),CONFORMANCE__CLI:executable}});
 }catch(error){console.error(log);throw error;}finally{
  await stopTeamHost(server);
- mirror.closeAllConnections();await new Promise(resolve=>mirror.close(resolve));await rm(root,{recursive:true,force:true});
+await rm(root,{recursive:true,force:true});
 }
 console.log('Packaged OSS team host passed the existing remote-host conformance suite and cleanup.');
