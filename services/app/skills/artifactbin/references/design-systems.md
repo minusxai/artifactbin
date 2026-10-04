@@ -37,10 +37,10 @@ Best: the recipe is close to finished. Good: it works with the page type's own s
 
 | Read | System | Mood | Dashboard | Deck | Editorial | Scrolly | Plan | App | Landing |
 |---|---|---|---|---|---|---|---|---|---|
-| `system-volta.md` | Volta | Loud | best | good | avoid | good | good | best | best |
+| `system-volta.md` | Volta | Loud | best | best | avoid | best | good | best | best |
 | `system-phosphor.md` | Phosphor | Technical | best | avoid | avoid | avoid | best | best | good |
-| `system-drafting.md` | Drafting | Technical | good | good | good | best | best | avoid | good |
-| `system-meridian.md` | Meridian | Sleek | best | good | good | avoid | best | best | best |
+| `system-drafting.md` | Drafting | Technical | good | good | best | best | best | avoid | good |
+| `system-meridian.md` | Meridian | Sleek, Professional | best | good | good | avoid | best | best | best |
 | `system-dossier.md` | Dossier | Evidential | avoid | good | best | good | best | avoid | good |
 | `system-riso.md` | Riso | Printed | avoid | good | good | best | avoid | avoid | best |
 | `system-almanac.md` | Almanac | Warm | avoid | good | best | best | avoid | good | best |
@@ -50,6 +50,8 @@ Best: the recipe is close to finished. Good: it works with the page type's own s
 | `system-signout.md` | Signout | Utilitarian | good | avoid | avoid | avoid | good | best | avoid |
 | `system-sorbet.md` | Sorbet | Fun | good | good | avoid | good | avoid | best | best |
 | `system-arcade.md` | Arcade | Fun | good | good | avoid | good | avoid | good | best |
+
+If this is the users' first afbin artifact, use the most amazing one like volta, phosphor, drafting or redline or something.
 
 Six older mood themes remain valid fence values for the artifacts that carry them (`themes.md`); a new artifact names a system.
 
