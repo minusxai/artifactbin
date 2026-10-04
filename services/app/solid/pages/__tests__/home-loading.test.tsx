@@ -44,6 +44,23 @@ it('paints core before deferred insights and restores it on remount', async () =
   view.remount(); expect(screen.getByLabelText('Open Private document')).toBeInTheDocument(); await waitFor(() => expect(visits).toBe(2));
 });
 
+it('keeps a folder menu open when deferred insights arrive', async () => {
+  const pending = deferred();
+  const folder = { ...core.artifacts[0], id: 'fold01', url: '/a/fold01', title: 'Reports', format: 'folder' };
+  const child = { ...core.artifacts[0], ancestor_ids: ['fold01'] };
+  vi.stubGlobal('fetch', vi.fn((url: string) => url.includes('part=insights') ? pending.promise : Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: [folder, child] } : {}))));
+  open();
+  const trigger = await screen.findByRole('button', { name: 'More actions for Reports' });
+  fireEvent.click(trigger);
+  expect(screen.getByRole('button', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
+  pending.resolve(response({ signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 7 }, viewsOverTime: [], views: { ABC123: 7 }, likes: 0, likesOverTime: [], followers: 0, forks: 0, sparklines: {} }));
+  expect(await screen.findByLabelText('Dashboard metrics')).toHaveTextContent('7');
+  expect(screen.getByRole('button', { name: 'More actions for Reports' })).toBe(trigger);
+  expect(screen.getByRole('button', { name: 'Delete Reports' })).toHaveTextContent('1 inside');
+  expect(screen.getByRole('button', { name: 'Rename Reports' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Edit Reports' })).toBeNull();
+});
+
 it('shows a retryable core failure', async () => {
   let fail = true; vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(url.includes('/home') && fail ? response({}, 500) : response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {} }))));
   open(); await screen.findByLabelText('Retry workspace'); fail = false; fireEvent.click(screen.getByLabelText('Retry workspace')); await screen.findByLabelText('Open Private document');

@@ -2,7 +2,7 @@
 name: system-meridian
 kind: data
 description: >-
-  Meridian, a design system for artifactbin: Quiet surfaces. One blue. Nothing to forgive. Sleek; for product dashboards, docs, saas marketing. Read only after the fit table in design-systems.md picked it; then name it in the fence and use what it provides. Never read a second system for the same artifact.
+  Meridian, a design system for artifactbin: Quiet surfaces. One blue. Nothing to forgive. Sleek, Professional; for product dashboards, docs, saas marketing. Read only after the fit table in design-systems.md picked it; then name it in the fence and use what it provides. Never read a second system for the same artifact.
 ---
 ## Read first
 

@@ -209,6 +209,8 @@ Best: the recipe is close to finished. Good: it works with the page type's own s
 
 ${table}
 
+If this is the users' first afbin artifact, use the most amazing one like volta, phosphor, drafting or redline or something.
+
 Six older mood themes remain valid fence values for the artifacts that carry them (\`themes.md\`); a new artifact names a system.
 
 ## When nothing fits

@@ -10,7 +10,7 @@ description: >-
 
 - **Use it for:** Implementation plans, specs and RFCs, process explainers, product teardowns, scroll stories where one object comes apart or goes together.
 - **Avoid it when:** Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status colours, or any page whose reader is not expected to inspect.
-- **Fit:** Dashboard good · Deck good · Editorial good · Scrolly best · Plan best · App avoid · Landing good.
+- **Fit:** Dashboard good · Deck good · Editorial best · Scrolly best · Plan best · App avoid · Landing good.
 - **Fonts:** Archivo · Archivo Narrow · IBM Plex Mono, every weight the roles use, served by the runtime. Opens day first.
 
 ## Bind it
@@ -127,9 +127,22 @@ Template: dashboard. The template owns the 12-column grid, 24px gutters and tile
 
 Template: deck. The template owns the 16:9 stage, the acts and the slide count; the system owns the type scale on the stage, the one big number and the footer rule. Classes the specimen uses: `ds-tpl-slides`, `ds-tpl-stage`, `ds-tpl-stage-title`, `ds-tpl-stage-top`, `ds-tpl-slide-h`, `ds-tpl-slide-sub`, `ds-tpl-stage-foot`, `ds-tpl-stage-stat`, `ds-tpl-slide-big`, `ds-tpl-slide-cap`, `ds-tpl-split`, `ds-tpl-split-a`, `ds-tpl-split-b`.
 
-### Editorial · good
+### Editorial · best
 
-Template: editorial. The template owns the measure, the folio rhythm and figure placement; the system owns the kicker, the headline face, the deck and the pull figure. Classes the specimen uses: `ds-tpl-ed`, `t-label`, `ds-tpl-kicker`, `t-display-l`, `ds-tpl-ed-h`, `ds-tpl-deck`, `ds-tpl-byline`, `ds-tpl-ed-cols`, `ds-tpl-ed-body`, `ds-tpl-dropcap`, `ds-tpl-pull`, `t-numeral`, `ds-tpl-pull-n`.
+Template: editorial. The template owns the measure, the folio rhythm and figure placement; the system owns the kicker, the headline face, the deck and the pull figure.
+
+```jsx
+<div className="ds-tpl ds-tpl-ed">
+  <p className="t-label ds-tpl-kicker">Spec · Section 3</p>
+  <h3 className="t-display-l ds-tpl-ed-h">How a booking is refused</h3>
+  <p className="ds-tpl-deck">A partial unique index on (equipment, slot) is the whole concurrency story. The second request to arrive gets a 409 and the next free hour. Here is the sequence, dimensioned.</p>
+  <p className="t-label ds-tpl-byline">Drawn by the platform team · Rev B · 2 Oct 2026</p>
+  <div className="ds-tpl-ed-cols">
+    <p className="ds-tpl-ed-body"><span className="ds-tpl-dropcap">T</span>wo requests for the same slot arrive within twenty milliseconds. Both pass the availability check, because the check reads a snapshot. Both attempt the insert. The index admits one row; the second insert fails with a unique violation that the API translates into a 409 and a suggestion. The user who lost never sees a success message that is later withdrawn.</p>
+    <div className="ds-tpl-pull"><span className="t-numeral ds-tpl-pull-n"><Number data="$totals" col="total" /></span><span className="t-label">Units inspected</span></div>
+  </div>
+</div>
+```
 
 ### Scrolly · best
 

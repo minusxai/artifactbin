@@ -10,7 +10,7 @@ description: >-
 
 - **Use it for:** Analytics products, operational dashboards, pricing and launch pages, anything where one number or one action must dominate a busy screen.
 - **Avoid it when:** Long reading (the hard edges tire over 800 words), luxury or institutional subjects, and anything that needs more than one loud element per view.
-- **Fit:** Dashboard best · Deck good · Editorial avoid · Scrolly good · Plan good · App best · Landing best.
+- **Fit:** Dashboard best · Deck best · Editorial avoid · Scrolly best · Plan good · App best · Landing best.
 - **Fonts:** Bricolage Grotesque · Instrument Sans · JetBrains Mono, every weight the roles use, served by the runtime. Opens day first.
 
 ## Bind it
@@ -139,17 +139,42 @@ Template: dashboard. The template owns the 12-column grid, 24px gutters and tile
 </div>
 ```
 
-### Deck · good
+### Deck · best
 
-Template: deck. The template owns the 16:9 stage, the acts and the slide count; the system owns the type scale on the stage, the one big number and the footer rule. Classes the specimen uses: `ds-tpl-slides`, `ds-tpl-stage`, `ds-tpl-stage-title`, `ds-tpl-stage-top`, `ds-tpl-slide-h`, `ds-tpl-slide-sub`, `ds-tpl-stage-foot`, `ds-tpl-stage-stat`, `ds-tpl-slide-big`, `ds-tpl-slide-cap`, `ds-tpl-split`, `ds-tpl-split-a`, `ds-tpl-split-b`.
+Template: deck. The template owns the 16:9 stage, the acts and the slide count; the system owns the type scale on the stage, the one big number and the footer rule.
+
+```jsx
+<div className="ds-tpl ds-tpl-slides">
+  <div className="ds-tpl-stage ds-tpl-stage-title">
+    <div className="ds-tpl-stage-top"><span>Volta</span><span>Pricing review</span></div>
+    <h3 className="ds-tpl-slide-h">Annual plans drove 70% of growth.</h3>
+    <p className="ds-tpl-slide-sub">Monthly plans add more customers and lose most of them inside a quarter.</p>
+    <div className="ds-tpl-stage-foot"><span>01 / 06</span><span>Synthetic data · Oct 2026</span></div>
+  </div>
+  <div className="ds-tpl-stage ds-tpl-stage-stat">
+    <div className="ds-tpl-stage-top"><span>Volta</span><span>02 · Kept at 90 days</span></div>
+    <div className="ds-tpl-slide-big"><Number data="$totals" col="kept_pct" suffix="%" /></div>
+    <p className="ds-tpl-slide-cap">Of every 100 new customers, this many are still paying at day 90. Annual cohorts keep 96 of 100.</p>
+    <div className="ds-tpl-split"><span className="ds-tpl-split-a">ANNUAL · 70%</span><span className="ds-tpl-split-b">MONTHLY · 30%</span></div>
+    <div className="ds-tpl-stage-foot"><span>02 / 06</span><span>Synthetic data · Oct 2026</span></div>
+  </div>
+</div>
+```
 
 ### Editorial · avoid
 
 Template: editorial. The template owns the measure, the folio rhythm and figure placement; the system owns the kicker, the headline face, the deck and the pull figure. Expect custom CSS: Long reading (the hard edges tire over 800 words), luxury or institutional subjects, and anything that needs more than one loud element per view.
 
-### Scrolly · good
+### Scrolly · best
 
-Template: scrolly. The template owns the conceit, the step column and the sticky figure (sticky is set by the live reader); the system owns the step card and the figure, drawn in its hand. Classes the specimen uses: `ds-tpl-scrolly`, `ds-tpl-steps`, `ds-tpl-step`, `t-label`, `t-title`, `ds-tpl-figure`, `ds-tpl-figure-art`, `h-fill`, `h-fill2`, `h-muted`, `h-ink`, `h-num`, `h-text`, `ds-tpl-figure-cap`.
+Template: scrolly. The template owns the conceit, the step column and the sticky figure (sticky is set by the live reader); the system owns the step card and the figure, drawn in its hand.
+
+```jsx
+<div className="ds-tpl ds-tpl-scrolly">
+  <div className="ds-tpl-steps"><div className="ds-tpl-step"><span className="t-label">01</span><h4 className="t-title">One hundred customers walk in.</h4><p>Sixty pick monthly, forty pick annual. Each square is one customer; the colour is the plan.</p></div><div className="ds-tpl-step"><span className="t-label">02</span><h4 className="t-title">Ninety days later.</h4><p>The monthly squares thin out: 37 of the 60 remain. The annual block is nearly whole.</p></div></div>
+  <div className="ds-tpl-figure"><div className="ds-tpl-figure-art">{/* draw this screen in the hand */}</div><p className="t-label ds-tpl-figure-cap">Fig. 1 · One batch of 100, by outcome · synthetic</p></div>
+</div>
+```
 
 ### Plan · good
 

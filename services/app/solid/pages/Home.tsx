@@ -41,7 +41,7 @@ export function HomePage(): JSX.Element {
         <Show when={failed()}><div role="alert">Could not refresh your workspace. <button type="button" aria-label="Retry workspace" onClick={load}>Try again</button></div></Show>
         <Show when={empty()}><div class="mb-4 flex justify-end"><a href="/datasets/new" aria-label="Create dataset" class="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent"><DatabasePlus size={13} />Create dataset</a></div><p class="mt-8"><a href="/trash" aria-label="Trash" class="font-mono text-[10px] text-faint">trash</a></p></Show>
         <Show when={!empty()}><WorkspaceLayout workspace={workspace()} insights={detail()} insightsError={Boolean(insights.error())} onCreated={load}>
-          <Show when={workspace().artifacts.length}><Shelf rows={workspace().artifacts.map(row => ({ ...row, views: detail()?.views?.[row.id], sparkline: detail()?.sparklines[row.id] ?? undefined }))} actions="full" assets={false} scopeParentId={null} onQuery={setSharedQuery} /></Show>
+          <Show when={workspace().artifacts.length}><Shelf rows={workspace().artifacts} actions="full" assets={false} scopeParentId={null} onQuery={setSharedQuery} /></Show>
           <SharedWithYou items={workspace().shared} query={sharedQuery()} />
         </WorkspaceLayout></Show>
       </main>}
