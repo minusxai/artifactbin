@@ -145,7 +145,12 @@ type CreateAnnotationRefusal =
   /** The document moved under the click — retry with fresh coords (the page is live). */
   | { refused: 'stale'; head: { editId: string; version: number } };
 
+export class AnnotationRevisionError extends Error {
+  constructor(readonly revision:number){super('The annotation changed before this action.');}
+}
+
 export interface AnnotationAction {
+  expectedRevision?: number;
   reply?: string;
   resolve?: boolean;
   reopen?: boolean;
@@ -514,6 +519,7 @@ export async function actOnAnnotationFor(
     );
     const root = found.rows[0];
     if (!root) return null;
+    if(action.expectedRevision!==undefined&&root.revision!==action.expectedRevision)throw new AnnotationRevisionError(root.revision);
 
     const remote=review?await remoteAgents.receipt(tx,actor.userId,artifactId,annotationId,review,!!action.resolve):undefined;
     const replyId='ann_'+generateInternalId();

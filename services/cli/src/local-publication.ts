@@ -26,6 +26,7 @@ import {snapshotDocument} from './local';
 import {canonicalizeMarkup} from '../../app/lib/story/document/canonical-source';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import type {HttpClient} from './http';
+import {publishLocalComments} from './local-comment-publication';
 export interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;local_source_preserved?:boolean}
 interface Options {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface Input {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
@@ -178,6 +179,7 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
   // bytes, then stage newer local changes against the confirmed remote head.
   await saveManifest(manifestPath,manifest);
   const result=await push(await loadWorkspace(root,home),ordered.map(path=>join(root,path)),client,options);
-  return{...result,publication_copy:relative(workspace.root,publication),local_source_preserved:true};
+  try{const comments=await publishLocalComments(workspace,await loadWorkspace(root,home),ordered,client,options);return{...result,operations:[...result.operations,...comments],publication_copy:relative(workspace.root,publication),local_source_preserved:true};}
+  catch(error){if(error instanceof CliError)throw new CliError(error.code,error.message,error.fix,{...(error.details&&typeof error.details==='object'?error.details:{}),completed_operations:[...result.operations,...((error.details as {completed_operations?:Array<Record<string,unknown>>}|undefined)?.completed_operations??[])],publication_copy:relative(workspace.root,publication),local_source_preserved:true},error.exitCode);throw error;}
  }));
 }
