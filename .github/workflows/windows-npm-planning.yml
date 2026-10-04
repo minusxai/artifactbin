@@ -1,0 +1,29 @@
+name: Windows npm planning acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-npm-planning.yml'
+      - 'scripts/planning/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-npm:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+      - run: npm ci
+      - run: npm run setup -- --yes
+      - run: npm run build -w services/cli
+      - name: Standard-user npm acceptance
+        shell: pwsh
+        run: ./scripts/planning/windows-npm.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: windows-npm-planning-evidence
+          path: .agent/windows-npm-evidence/
