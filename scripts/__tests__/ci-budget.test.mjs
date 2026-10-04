@@ -13,14 +13,17 @@ it('keeps npm release jobs in the existing CLI budget and ordinary jobs in their
  }
  expect(jobs['cli-pack'].name).toBe('CLI npm pack');
 });
-it('reuses checkout tooling only for experience checks before consumer runtime selection',()=>{
- const jobs=workflow().jobs,native=jobs.cli.steps,preview=jobs['cli-preview'].steps;
- const cache=native.find(step=>step.id==='install'),reference=preview.find(step=>step.id==='install');
- expect(cache).toBeDefined();expect(cache.with).toEqual(reference.with);
- const fingerprint=native.findIndex(step=>step.run==='node scripts/ci/ci.mjs lock-fingerprint'),cached=native.indexOf(cache),install=native.findIndex(step=>step.run==='npm ci');
- expect(fingerprint).toBeLessThan(cached);expect(cached).toBeLessThan(install);
+it('installs isolated acceptance tooling only for experience checks before consumer runtime selection',()=>{
+ const jobs=workflow().jobs,native=jobs.cli.steps;
+ const cache=native.find(step=>step.id==='install');
+ expect(cache.with.path.trim()).toBe('scripts/ci/npm-acceptance/node_modules');
+ expect(cache.with.key).toContain('npm-acceptance-v1-');
+ expect(cache.with.key).toContain('scripts/ci/npm-acceptance/package-lock.json');
+ const cached=native.indexOf(cache),install=native.findIndex(step=>step.run==='npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
+ expect(cached).toBeLessThan(install);
+ expect(native.some(step=>step.run==='npm ci')).toBe(false);
  expect(jobs.cli.strategy.matrix.phase).toEqual(['native','experience']);
- expect(native[fingerprint].if).toBe("matrix.phase == 'experience'");
+ expect(native.find(step=>step.run==='node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase == 'experience'");
  expect(cache.if).toBe("matrix.phase == 'experience'");
  expect(native[install].if).toBe("matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'");
  expect(native.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");

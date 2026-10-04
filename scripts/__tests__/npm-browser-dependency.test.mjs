@@ -1,23 +1,10 @@
 import {it,expect} from 'vitest';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
-import {join,dirname,delimiter} from 'node:path';
-import {existsSync,realpathSync} from 'node:fs';
+import {join,dirname} from 'node:path';
+import {npmDriver} from '../ci/npm-driver.mjs';
 import {tmpdir} from 'node:os';
 import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
-
-function npmDriver(){
- const candidates=[join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),join(dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js')];
- for(const directory of (process.env.PATH??'').split(delimiter)){
-  if(!directory)continue;
-  const command=join(directory,process.platform==='win32'?'npm.cmd':'npm');
-  if(!existsSync(command))continue;
-  candidates.push(process.platform==='win32'?join(dirname(realpathSync(command)),'node_modules/npm/bin/npm-cli.js'):realpathSync(command));
- }
- const driver=candidates.find(candidate=>existsSync(candidate));
- if(!driver)throw new Error('Cannot locate npm CLI from the active Node installation or PATH.');
- return driver;
-}
 
 it('the npm browser engine retains Chromium API and lazy install without a native watcher',async()=>{
  const manifest=JSON.parse(await readFile(new URL('../../services/cli/package.json',import.meta.url),'utf8'));

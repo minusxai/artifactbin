@@ -874,22 +874,19 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      # Native install/bootstrap proof needs only Node and the tarball. Browser
-      # experience tooling uses the shared checkout cache in its separate phase.
-      - if: matrix.phase == 'experience'
-        run: node scripts/ci/ci.mjs lock-fingerprint
+      # Acceptance tooling has its own pinned lock: no app build or local execution engines.
+      # Each phase's clock includes restoring or installing all its prerequisites.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: matrix.phase == 'experience'
         id: install
         with:
           path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+            scripts/ci/npm-acceptance/node_modules
+          key: npm-acceptance-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('scripts/ci/npm-acceptance/package-lock.json', 'services/contracts/package.json', 'services/utils/package.json') }}
       - if: matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'
-        run: npm ci
+        run: npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund
+      - if: matrix.phase == 'experience'
+        run: node scripts/ci/link-npm-acceptance.mjs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
@@ -926,7 +923,7 @@ jobs:
         if: matrix.phase == 'experience'
         working-directory: services/cli
         run: |
-          npx playwright install --with-deps chromium
+          node ../../node_modules/playwright/cli.js install --with-deps chromium
           node scripts/test-installed-npm.mjs preview
       - name: Complete installed npm local and HTML round-trip journey
         if: matrix.phase == 'experience'
