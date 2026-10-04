@@ -31,11 +31,15 @@ export async function startPreviewHost(options:PreviewOptions,assets:string):Pro
  const port=new URL(session.url).port;
  const urls=[session.url,...(options.share?Object.values(networkInterfaces()).flatMap(list=>(list??[]).filter(address=>!address.internal&&address.family==='IPv4').map(address=>`http://${address.address}:${port}`)):[])];
  process.stdout.write(options.json?JSON.stringify({url:session.url,urls,files})+'\n':`Preview: ${urls.join('\n         ')}\nPress Ctrl-C to stop.\n`);
- await new Promise<void>(resolve=>{
-  const stop=()=>{process.off('SIGINT',stop);process.off('SIGTERM',stop);resolve();};
-  process.on('SIGINT',stop);process.on('SIGTERM',stop);
- });
- await session.close();
+ let stop!:()=>void;
+ try{
+  await new Promise<void>(resolve=>{
+   stop=()=>resolve();
+   process.on('SIGINT',stop);process.on('SIGTERM',stop);
+  });
+  await session.close();
+ }finally{process.off('SIGINT',stop);process.off('SIGTERM',stop);}
+
 }
 
 /** Same local resolution and document runtime as preview, with no editor or write endpoints. */

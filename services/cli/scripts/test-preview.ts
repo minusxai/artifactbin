@@ -28,17 +28,17 @@ const privateHome=join(root,'engine-cache');
 const addArgs=['add','sales.csv','appendix.jsx','pixel.png','report.jsx','covers.csv','red-cover.png','blue-cover.png','--json'];
 const ids=await new Promise<Record<string,string>>((resolve,reject)=>{
  const child=spawn(packaged?binary:process.execPath,packaged?addArgs:[binary,...addArgs],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,ARTIFACTBIN_URL:'http://127.0.0.1:1',CLI__AUTO_UPDATE:'0'},stdio:['ignore','pipe','pipe']});
- let out='',err='';child.stdout.on('data',chunk=>out+=chunk);child.stderr.on('data',chunk=>err+=chunk);child.on('error',reject);child.on('exit',code=>code===0?resolve(JSON.parse(out)):reject(Error(out+err)));
+ let out='',err='';child.stdout!.on('data',chunk=>out+=chunk);child.stderr!.on('data',chunk=>err+=chunk);child.on('error',reject);child.on('exit',code=>code===0?resolve(JSON.parse(out)):reject(Error(out+err)));
 });
 const registered=(await readFile(join(root,'report.jsx'),'utf8'));
 await writeFile(join(root,'covers.csv'),'id,title,cover_ref\n'+['red','blue'].map(color=>`${color},${color},ref:${ids[color+'-cover.png']}`).join('\n')+'\n');
 await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
 async function launch(port=0){
  const args=['preview',ids['report.jsx']!,'published.jsx','--port',String(port),'--json'];
- const child=spawn(packaged?binary:process.execPath,packaged?args:[binary,...args],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:join(root,'engine-cache'),ARTIFACTBIN_URL:'http://127.0.0.1:1',CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe']});
- let output='';child.stderr.on('data',chunk=>process.stderr.write(chunk));
- const url=await new Promise<string>((resolve,reject)=>{child.stdout.on('data',chunk=>{output+=chunk;for(const line of output.split('\n')){try{const value=JSON.parse(line);if(value.url)resolve(value.url);}catch{}}});child.on('exit',code=>reject(Error(`Host exited ${code}: ${output}`)));});
- return {url,close:()=>new Promise<void>((resolve,reject)=>{if(child.exitCode!==null){resolve();return;}child.once('exit',code=>code===0?resolve():reject(Error(`Host exit ${code}`)));child.kill('SIGTERM');})};
+ const child=spawn(packaged?binary:process.execPath,packaged?args:[binary,...args],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:join(root,'engine-cache'),ARTIFACTBIN_URL:'http://127.0.0.1:1',CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe','ipc']});
+ let output='';child.stderr!.on('data',chunk=>process.stderr.write(chunk));
+ const url=await new Promise<string>((resolve,reject)=>{child.stdout!.on('data',chunk=>{output+=chunk;for(const line of output.split('\n')){try{const value=JSON.parse(line);if(value.url)resolve(value.url);}catch{}}});child.on('exit',code=>reject(Error(`Host exited ${code}: ${output}`)));});
+ return {url,close:()=>new Promise<void>((resolve,reject)=>{if(child.exitCode!==null){child.exitCode===0?resolve():reject(Error(`Host exit ${child.exitCode}`));return;}const timer=setTimeout(()=>{child.kill();reject(Error('Preview did not shut down through IPC'));},15000);child.once('exit',code=>{clearTimeout(timer);code===0?resolve():reject(Error(`Host exit ${code}`));});child.send({type:'afbin.shutdown'},error=>{if(error){clearTimeout(timer);reject(error);}});})};
 }
 const phase=process.argv.find(value=>value.startsWith('--phase='))?.slice(8)??'all';
 if(!['all','preview','export-basic','export-variants'].includes(phase))throw new Error('Unknown preview proof phase');
@@ -125,7 +125,7 @@ try{
    const child=spawn(packaged?binary:process.execPath,packaged?argv:[binary,...argv],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,ARTIFACTBIN_URL:'http://127.0.0.1:1',CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe']});
    const cancellation=interrupt?setTimeout(()=>child.kill('SIGTERM'),500):undefined;
    let stdout='',stderr='';const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error(`Local export did not finish: ${args.join(' ')}\n${stdout.slice(-2000)}\n${stderr.slice(-2000)}`));},120000);
-   child.stdout.on('data',chunk=>stdout+=chunk);child.stderr.on('data',chunk=>stderr+=chunk);child.once('error',error=>{clearTimeout(timer);clearTimeout(cancellation);reject(error);});child.once('exit',code=>{clearTimeout(timer);clearTimeout(cancellation);resolve({code,stdout,stderr});});
+   child.stdout!.on('data',chunk=>stdout+=chunk);child.stderr!.on('data',chunk=>stderr+=chunk);child.once('error',error=>{clearTimeout(timer);clearTimeout(cancellation);reject(error);});child.once('exit',code=>{clearTimeout(timer);clearTimeout(cancellation);resolve({code,stdout,stderr});});
   });
   assert.equal(out.code===0,ok,out.stdout+out.stderr);return out;
  }

@@ -1,5 +1,8 @@
+import {installForegroundShutdown,installForegroundSupervisorShutdown} from './foreground-process';
 import {BACKGROUND_UPDATE_ARG,TEAM_HOST_ARG,PREVIEW_HOST_ARG,LOCAL_IMAGE_ARG,LOCAL_HTML_ARG,REMOTE_WORKER_ARG} from './entry-args';
 import {reportStartupFailure} from './operator-error';
+if(process.argv[2]===PREVIEW_HOST_ARG||process.argv[2]===TEAM_HOST_ARG)installForegroundShutdown();
+else if(process.argv[2]==='preview'||process.argv[2]==='serve')installForegroundSupervisorShutdown();
 // Intentional process-composition boundary: importing CLI/application modules before selecting the
 // host process can capture the client's environment before the host installs its server configuration.
 if(process.argv[2]===REMOTE_WORKER_ARG)void import('./remote-worker').then(({remoteWorkerMain})=>remoteWorkerMain()).catch(error=>{console.error(error instanceof Error?error.message:'Remote worker failed');process.exit(1);});

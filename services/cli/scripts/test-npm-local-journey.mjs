@@ -28,7 +28,7 @@ async function command(cwd,home,args,timeout=180000){
 }
 const jsonCommand=async(...args)=>JSON.parse(await command(...args));
 async function preview(cwd,home,path='report.jsx'){
- const child=spawn(process.execPath,[entry,'preview',path,'--port','0','--json'],{cwd,env:environment(home),stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,[entry,'preview',path,'--port','0','--json'],{cwd,env:environment(home),stdio:['ignore','pipe','pipe','ipc']});
  let stdout='',stderr='';child.stderr.on('data',chunk=>stderr+=chunk);
  const ready=new Promise((done,reject)=>{
   const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error(`Preview did not start\n${stdout}\n${stderr}`));},90000);
@@ -37,9 +37,9 @@ async function preview(cwd,home,path='report.jsx'){
  });
  const url=await ready,origin=new URL(url).origin;
  return {url,origin,close:()=>new Promise((done,reject)=>{
-  if(child.exitCode!==null){done();return;}
+  if(child.exitCode!==null){child.exitCode===0?done():reject(Error(`Preview had already exited ${child.exitCode}\n${stderr}`));return;}
   const timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error(`Preview did not exit naturally\n${stderr}`));},15000);
-  child.once('exit',code=>{clearTimeout(timer);code===0?done():reject(Error(`Preview shutdown exited ${code}\n${stderr}`));});child.kill('SIGTERM');
+  child.once('exit',code=>{clearTimeout(timer);code===0?done():reject(Error(`Preview shutdown exited ${code}\n${stderr}`));});child.send({type:'afbin.shutdown'},error=>{if(error){clearTimeout(timer);reject(error);}});
  })};
 }
 async function get(origin,path){const response=await fetch(origin+path);assert.equal(response.status,200,`${path}: ${await response.clone().text()}`);return response.json();}
