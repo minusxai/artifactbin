@@ -1,0 +1,705 @@
+{
+ "slug": "broadsheet",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Broadsheet cover: a front page with a blackletter masthead between rules, a dateline strip, a headline with one red word, columns, an engraved plate and a folio</title>\n<rect className=\"bs-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<text x=\"240\" y=\"58\" className=\"bs-masthead bs-masthead-lg\" textAnchor=\"middle\">Broadsheet</text>\n<line className=\"bs-rule\" x1=\"24\" y1=\"70\" x2=\"456\" y2=\"70\"/><line className=\"bs-rule-thin\" x1=\"24\" y1=\"74\" x2=\"456\" y2=\"74\"/>\n<text x=\"24\" y=\"88\" className=\"bs-small\">VOL. I · NO. 1</text><text x=\"240\" y=\"88\" className=\"bs-small\" textAnchor=\"middle\">SET IT LIKE IT HAPPENED</text><text x=\"456\" y=\"88\" className=\"bs-small\" textAnchor=\"end\">ONE RED PER PAGE</text>\n<line className=\"bs-rule-thin\" x1=\"24\" y1=\"96\" x2=\"456\" y2=\"96\"/>\n<text x=\"24\" y=\"130\" className=\"bs-head\">The Record,</text><text x=\"24\" y=\"162\" className=\"bs-head\"><tspan className=\"bs-red-fill\">Printed</tspan> Daily</text>\n<text x=\"24\" y=\"186\" className=\"bs-deck\">Ink, rules, columns, a plate</text><text x=\"24\" y=\"202\" className=\"bs-deck\">with its figure, the small print.</text>\n<text x=\"24\" y=\"232\" className=\"bs-dropcap-svg\">T</text>\n<g className=\"bs-col\"><line x1=\"52\" y1=\"222\" x2=\"200\" y2=\"222\"/><line x1=\"52\" y1=\"230\" x2=\"200\" y2=\"230\"/><line x1=\"52\" y1=\"238\" x2=\"200\" y2=\"238\"/><line x1=\"24\" y1=\"254\" x2=\"200\" y2=\"254\"/><line x1=\"24\" y1=\"262\" x2=\"200\" y2=\"262\"/><line x1=\"24\" y1=\"270\" x2=\"200\" y2=\"270\"/></g>\n<line className=\"bs-rule-thin\" x1=\"212\" y1=\"110\" x2=\"212\" y2=\"276\"/>\n<g className=\"bs-col\"><line x1=\"224\" y1=\"214\" x2=\"300\" y2=\"214\"/><line x1=\"224\" y1=\"222\" x2=\"300\" y2=\"222\"/><line x1=\"224\" y1=\"230\" x2=\"300\" y2=\"230\"/><line x1=\"224\" y1=\"238\" x2=\"300\" y2=\"238\"/><line x1=\"224\" y1=\"246\" x2=\"300\" y2=\"246\"/><line x1=\"224\" y1=\"254\" x2=\"300\" y2=\"254\"/><line x1=\"224\" y1=\"262\" x2=\"300\" y2=\"262\"/><line x1=\"224\" y1=\"270\" x2=\"300\" y2=\"270\"/></g>\n<text x=\"224\" y=\"130\" className=\"bs-small\">INSIDE</text><text x=\"224\" y=\"150\" className=\"bs-deck-sm\">The record, p. 2</text><text x=\"224\" y=\"166\" className=\"bs-deck-sm\">The plate, p. 3</text><text x=\"224\" y=\"182\" className=\"bs-deck-sm\">Box score, p. 4</text><line className=\"bs-rule-thin\" x1=\"224\" y1=\"196\" x2=\"300\" y2=\"196\"/>\n<line className=\"bs-rule-thin\" x1=\"312\" y1=\"110\" x2=\"312\" y2=\"276\"/>\n<rect className=\"bs-plate\" x=\"324\" y=\"110\" width=\"132\" height=\"124\"/>\n<g className=\"bs-engrave\"><line x1=\"336\" y1=\"176\" x2=\"444\" y2=\"176\"/><line x1=\"336\" y1=\"180\" x2=\"444\" y2=\"180\"/><line x1=\"336\" y1=\"184\" x2=\"444\" y2=\"184\"/><line x1=\"336\" y1=\"188\" x2=\"444\" y2=\"188\"/><line x1=\"336\" y1=\"192\" x2=\"444\" y2=\"192\"/><line x1=\"336\" y1=\"196\" x2=\"444\" y2=\"196\"/><line x1=\"336\" y1=\"200\" x2=\"444\" y2=\"200\"/><line x1=\"336\" y1=\"204\" x2=\"444\" y2=\"204\"/><line x1=\"336\" y1=\"208\" x2=\"444\" y2=\"208\"/><line x1=\"336\" y1=\"212\" x2=\"444\" y2=\"212\"/><line x1=\"336\" y1=\"216\" x2=\"444\" y2=\"216\"/><line x1=\"336\" y1=\"220\" x2=\"444\" y2=\"220\"/><circle cx=\"390\" cy=\"150\" r=\"22\"/><line x1=\"420.0\" y1=\"150.0\" x2=\"430.0\" y2=\"150.0\"/><line x1=\"416.0\" y1=\"165.0\" x2=\"424.6\" y2=\"170.0\"/><line x1=\"405.0\" y1=\"176.0\" x2=\"410.0\" y2=\"184.6\"/><line x1=\"390.0\" y1=\"180.0\" x2=\"390.0\" y2=\"190.0\"/><line x1=\"375.0\" y1=\"176.0\" x2=\"370.0\" y2=\"184.6\"/><line x1=\"364.0\" y1=\"165.0\" x2=\"355.4\" y2=\"170.0\"/><line x1=\"360.0\" y1=\"150.0\" x2=\"350.0\" y2=\"150.0\"/><line x1=\"364.0\" y1=\"135.0\" x2=\"355.4\" y2=\"130.0\"/><line x1=\"375.0\" y1=\"124.0\" x2=\"370.0\" y2=\"115.4\"/><line x1=\"390.0\" y1=\"120.0\" x2=\"390.0\" y2=\"110.0\"/><line x1=\"405.0\" y1=\"124.0\" x2=\"410.0\" y2=\"115.4\"/><line x1=\"416.0\" y1=\"135.0\" x2=\"424.6\" y2=\"130.0\"/></g>\n<text x=\"390\" y=\"250\" className=\"bs-small\" textAnchor=\"middle\">FIG. 1 · THE PLATE</text><text x=\"390\" y=\"264\" className=\"bs-small bs-muted-fill\" textAnchor=\"middle\">ENGRAVED, CAPTIONED, FRAMED</text>\n<line className=\"bs-rule-thin\" x1=\"324\" y1=\"276\" x2=\"456\" y2=\"276\"/><text x=\"456\" y=\"286\" className=\"bs-small bs-muted-fill\" textAnchor=\"end\">PAGE 1</text></svg>",
+ "name": "Broadsheet",
+ "tagline": "Set it like it happened.",
+ "mood": "Editorial",
+ "jobs": "Features, reports, newsletters, long reads",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "UnifrakturCook",
+   "wght@700"
+  ],
+  [
+   "Old Standard TT",
+   "ital,wght@0,400;0,700;1,400"
+  ],
+  [
+   "Libre Franklin",
+   "wght@400;500;600"
+  ],
+  [
+   "Courier Prime",
+   "ital,wght@0,400;0,700;1,400"
+  ]
+ ],
+ "families": {
+  "display": "\"Old Standard TT\", \"Times New Roman\", serif",
+  "sans": "\"Old Standard TT\", \"Times New Roman\", serif",
+  "mono": "\"Courier Prime\", \"Courier New\", monospace",
+  "masthead": "\"UnifrakturCook\", \"Old English Text MT\", serif",
+  "franklin": "\"Libre Franklin\", system-ui, sans-serif"
+ },
+ "tokens": [
+  {
+   "name": "newsprint",
+   "light": "#f6efe0",
+   "dark": "#141210",
+   "usage": "Page ground: newsprint by day; the late edition by night.",
+   "group": "Grounds"
+  },
+  {
+   "name": "newsprint-raised",
+   "light": "#fbf6ea",
+   "dark": "#1d1a16",
+   "usage": "Boxes, plates, fields.",
+   "group": "Grounds"
+  },
+  {
+   "name": "newsprint-sunk",
+   "light": "#ebe2cd",
+   "dark": "#0e0c0a",
+   "usage": "Tint boxes, the classifieds, code.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#cfc3a6",
+   "dark": "#3a342b",
+   "usage": "Column rules and hairlines.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#1f1b16",
+   "dark": "#efe6d2",
+   "usage": "Printer’s ink: text, rules, the masthead.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#5c5345",
+   "dark": "#ada28b",
+   "usage": "Secondary text, datelines, the small print.",
+   "group": "Ink"
+  },
+  {
+   "name": "red",
+   "light": "#b8371f",
+   "dark": "#ff6a4d",
+   "usage": "One ranunculus red: the second word in a headline, the pull figure, the link. Never a fill larger than a word.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-red",
+   "light": "#f6efe0",
+   "dark": "#141210",
+   "usage": "Text on red fills (rare).",
+   "group": "Brand"
+  },
+  {
+   "name": "red-soft",
+   "light": "#f3dcd5",
+   "dark": "#3a1812",
+   "usage": "Ground for the one tinted box per page.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#2f6b3a",
+   "dark": "#8ed29a",
+   "usage": "Continued, approved. In the ledger only.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#dcebd8",
+   "dark": "#15301b",
+   "usage": "Ground for positive rows.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#8a5a00",
+   "dark": "#f2c14e",
+   "usage": "Provisional, small sample.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#f3e5c0",
+   "dark": "#332508",
+   "usage": "Ground for caveats.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#b8371f",
+   "dark": "#ff6a4d",
+   "usage": "Declined, failed. Shares the red.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#f3dcd5",
+   "dark": "#3a1812",
+   "usage": "Ground for negative rows.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "newsprint",
+  "foreground": "ink",
+  "card": "newsprint-raised",
+  "card-foreground": "ink",
+  "popover": "newsprint-raised",
+  "popover-foreground": "ink",
+  "primary": "red",
+  "primary-foreground": "on-red",
+  "secondary": "red-soft",
+  "secondary-foreground": "ink",
+  "muted": "newsprint-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "newsprint-sunk",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "newsprint",
+  "border": "line",
+  "input": "line",
+  "ring": "red",
+  "chart-1": "ink",
+  "chart-2": "red",
+  "chart-3": "ink-muted",
+  "chart-4": "line",
+  "chart-5": "positive"
+ },
+ "radius_contract": "0px",
+ "extra_vars": {
+  "chip-radius": "0px"
+ },
+ "type_roles": [
+  {
+   "name": "masthead",
+   "family": "masthead",
+   "size": "clamp(40px, 7vw, 84px)",
+   "lh": "1",
+   "weight": 700,
+   "sample": "Broadsheet",
+   "usage": "The masthead, once, centred, between a double rule. Blackletter is for the name only."
+  },
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(44px, 6.5vw, 80px)",
+   "lh": "1",
+   "weight": 700,
+   "ls": "-0.015em",
+   "sample": "The Market Before Sunrise",
+   "usage": "The headline. Old Standard bold; the second line may carry the one red word."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(30px, 4vw, 48px)",
+   "lh": "1.08",
+   "weight": 700,
+   "ls": "-0.01em",
+   "sample": "The pilot’s record",
+   "usage": "Section heads and crossheads."
+  },
+  {
+   "name": "deck",
+   "family": "display",
+   "size": "clamp(19px, 2.2vw, 24px)",
+   "lh": "1.35",
+   "weight": 400,
+   "fs": "italic",
+   "sample": "Six Sundays of 5 a.m. flowers left the committee with 510 sales, 42 opinions and a $1,800 bill.",
+   "usage": "The deck under the headline. Italic Old Standard."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "17px",
+   "lh": "27px",
+   "weight": 400,
+   "sample": "Before the first tram, before the bakeries lift their shutters, there is a particular smell at the Saltmarsh Flower Market: cold water, cut stems, diesel from the delivery vans.",
+   "usage": "Body text, in columns where the width allows. A drop cap opens the piece."
+  },
+  {
+   "name": "small",
+   "family": "franklin",
+   "size": "11px",
+   "lh": "15px",
+   "weight": 600,
+   "ls": "0.1em",
+   "tt": "uppercase",
+   "sample": "Fig. 1 · Ranunculus · illustrative",
+   "usage": "Datelines, figure labels, folios, the small print. Franklin caps."
+  },
+  {
+   "name": "numeral",
+   "family": "display",
+   "size": "clamp(44px, 6vw, 72px)",
+   "lh": ".95",
+   "weight": 700,
+   "sample": "510",
+   "usage": "Pull figures, set large in the margin with a Franklin caption.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "wire",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "SALTMARSH, SUNDAY — The pilot opened at 5 a.m.",
+   "usage": "Wire copy, tables of figures, datelines in the old style. Courier Prime."
+  }
+ ],
+ "idea_headline": "A front page, not a web page.",
+ "idea": "Broadsheet sets a feature the way a newspaper would: a blackletter masthead between rules, a bold serif headline with one red word, an italic deck, body in columns with a drop cap, engraved plates for pictures, and figures pulled into the margin. The reader gets a document that feels reported.",
+ "use_for": "Features and long reads, pilot reports, newsletters and digests, anything that benefits from the authority of print and the rhythm of columns.",
+ "avoid_when": "Interactive tools, dashboards, anything scanned rather than read, or subjects that need colour to carry meaning.",
+ "principles_headline": "Ink, rules, columns, one red.",
+ "principles": [
+  [
+   "The masthead is the only ornament.",
+   "Blackletter appears once, centred, between a double rule. Everywhere else, Old Standard and Franklin do the work."
+  ],
+  [
+   "Columns set the rhythm.",
+   "Body text runs in two or three columns above 760px, with hairline rules between. Pull figures and plates break the columns; nothing else does."
+  ],
+  [
+   "One red word.",
+   "The red is a single word in the headline, a pull figure, or a link. It is never a block, never a background larger than a tint box."
+  ],
+  [
+   "Plates, not photos.",
+   "Pictures are engravings: hatched line drawings in ink, framed, captioned with a Fig. number. Mark invented scenes as illustrative."
+  ],
+  [
+   "Say the denominator.",
+   "Every percentage names its base in the same sentence: 26 of 42 respondents. Transactions are not shoppers; the small print says so."
+  ]
+ ],
+ "voice": [
+  "Reported, past tense, specific: \"The pilot opened at 5 a.m. for six Sundays.\"",
+  "Datelines in wire style: \"SALTMARSH, SUNDAY —\".",
+  "Crossheads are claims, set in bold serif.",
+  "Invented voices are labelled illustrative in the small print, never presented as interviews."
+ ],
+ "colour_headline": "Newsprint, ink, one ranunculus red.",
+ "colour_note": "Day is newsprint: warm off-white, black ink, hairline rules, one red. Night is the night edition: a near-black warm ground, cream ink, the red lifted. Status colours live in ledgers only; on the page, red is the only colour.",
+ "chart_series": [
+  "ink",
+  "red",
+  "ink-muted",
+  "line",
+  "positive"
+ ],
+ "chart_note": "Charts are printed in ink with the exception in red. Hatching or a lighter ink separates series; never a third hue. Direct labels in Franklin caps; no legend boxes.",
+ "type_headline": "UnifrakturCook once; Old Standard, Franklin and Courier for the rest.",
+ "type_note": "Four families. The blackletter masthead appears once. Old Standard TT carries headlines, decks and body. Libre Franklin in caps carries the apparatus. Courier Prime carries wire copy and tables of figures.",
+ "space_headline": "Column rules, double rules, a drop cap.",
+ "space": [
+  [
+   "column · 22em",
+   "Body column width; two or three columns above 760px with 24px gutters."
+  ],
+  [
+   "space-2 · 8px",
+   "Between a rule and the text under it."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "Control padding-x; box padding."
+  ],
+  [
+   "space-6 · 24px",
+   "Column gutters; plate padding."
+  ],
+  [
+   "space-10 · 40px",
+   "Between sections, with a rule."
+  ],
+  [
+   "space-16 · 64px",
+   "Page margins on wide screens."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Everything. Newsprint is cut, not rounded."
+  ],
+  [
+   "double rule",
+   "A 2px ink rule over a 1px rule: under the masthead, above the folio."
+  ],
+  [
+   "hairline · 1px line",
+   "Between columns and table rows."
+  ],
+  [
+   "plate frame · 1px ink",
+   "Around every engraving, with the caption outside."
+  ]
+ ],
+ "depth": [
+  [
+   "shadow",
+   "None. Ink on paper."
+  ],
+  [
+   "focus",
+   "A 2px red outline, offset 2px."
+  ],
+  [
+   "drop cap",
+   "The first letter of the piece, three lines deep, in Old Standard bold."
+  ],
+  [
+   "motion",
+   "None by default. Reveal is a page turn: content is simply there. Plates may draw in (stroke) on first view; reduced motion shows them complete."
+  ]
+ ],
+ "components_headline": "Boxes, plates, pull figures, the ledger.",
+ "components_note": "Kit components take Broadsheet through the contract: newsprint grounds, red primary, zero radius, hairline borders. Authored classes add the rules, the plate frame, the pull figure and the drop cap.",
+ "buttons": "<Button>Read the full report</Button><Button variant=\"secondary\">Subscribe</Button><Button variant=\"outline\">Method</Button><Button variant=\"ghost\">Skip</Button><button className=\"bs-btn bs-btn-primary\">Read the full report</button><button className=\"bs-btn\">The method</button>",
+ "buttons_note": "Kit buttons left; authored bs-btn right: Franklin caps in a 1px ink frame; the primary fills red, used once per page at most.",
+ "tags": "<Badge>Red</Badge><Badge variant=\"secondary\">Tinted</Badge><Badge variant=\"outline\">Illustrative</Badge><Badge variant=\"destructive\">Declined</Badge><span className=\"bs-tag\">Autumn edition</span><span className=\"bs-tag bs-tag-red\">Pilot report</span><span className=\"bs-tag bs-tag-caution\">Small sample</span>",
+ "tags_note": "Tags are Franklin caps in a hairline frame, like a section flag. Caveats take caution.",
+ "fields_note": "Fields are newsprint wells with a 1px ink rule below, like a coupon. Focus is a red outline.",
+ "stats": "<div className=\"bs-pull\"><span className=\"t-numeral\">510</span><span className=\"t-small\">purchase transactions · six Sundays</span></div><div className=\"bs-pull\"><span className=\"t-numeral bs-red\">26<span className=\"bs-of\"> of 42</span></span><span className=\"t-small\">respondents preferred the earlier opening</span></div>",
+ "stats_note": "A Stat is a pull figure: a large serif number with its caption in Franklin caps, set in the margin or between columns. The one red figure names its denominator.",
+ "callouts": "<Alert><AlertTitle>Transactions are not shoppers</AlertTitle><AlertDescription>510 purchases were recorded; one person may account for several.</AlertDescription></Alert><div className=\"bs-box\"><strong>Editor’s note.</strong> Scenes marked illustrative are composed from the committee’s notes, not from interviews.</div><div className=\"bs-box bs-box-caution\"><strong>Small sample.</strong> 42 responses from several hundred visitors. Read 26 of 42 as a lean, not a verdict.</div><div className=\"bs-box bs-box-red\"><strong>Decision.</strong> The committee continues the 5 a.m. opening through November and reviews in December.</div>",
+ "callouts_note": "Callouts are boxed notes with a bold lead word, in the body face. Caveats take caution; the decision takes the red rule.",
+ "chart_comp_note": "Charts are ink with one red exception, labelled directly. Title the figure with a Fig. number in Franklin caps.",
+ "table_note": "Tables are the record: Courier figures, hairline rows, Franklin caps headers. Status is a word in the last column.",
+ "card": "<div className=\"bs-plate-box\"><div className=\"bs-plate-art\"><svg viewBox=\"0 0 320 200\"><title>An engraved bouquet in a bucket</title><g className=\"bs-engrave\"><rect x=\"120\" y=\"120\" width=\"80\" height=\"60\"/><line x1=\"128\" y1=\"120\" x2=\"128\" y2=\"180\"/><line x1=\"136\" y1=\"120\" x2=\"136\" y2=\"180\"/><line x1=\"144\" y1=\"120\" x2=\"144\" y2=\"180\"/><line x1=\"152\" y1=\"120\" x2=\"152\" y2=\"180\"/><line x1=\"160\" y1=\"120\" x2=\"160\" y2=\"180\"/><line x1=\"168\" y1=\"120\" x2=\"168\" y2=\"180\"/><line x1=\"176\" y1=\"120\" x2=\"176\" y2=\"180\"/><line x1=\"184\" y1=\"120\" x2=\"184\" y2=\"180\"/><line x1=\"192\" y1=\"120\" x2=\"192\" y2=\"180\"/><path d=\"M160 120 c0 -30 -6 -60 4 -90\"/><path d=\"M164 60 c-16 -14 -34 -6 -38 10 c12 10 28 6 38 -10 z\"/><path d=\"M164 60 c16 -14 34 -6 38 10 c-12 10 -28 6 -38 -10 z\"/><path d=\"M164 60 c-6 -22 4 -40 20 -44 c4 18 -4 36 -20 44 z\"/><path d=\"M140 100 c-14 -2 -24 10 -22 20 c12 2 22 -8 22 -20 z\"/><path d=\"M184 90 c14 -2 24 10 22 20 c-12 2 -22 -8 -22 -20 z\"/><circle cx=\"164\" cy=\"60\" r=\"5\"/></g></svg></div><p className=\"t-small bs-caption\"><b>Fig. 2</b> · Buckets filled by torchlight. A grower who used to set up at seven is already stacking stems. Illustrative.</p></div>",
+ "card_note": "A card is a plate: an engraving in a 1px frame with a Fig. caption below in Franklin caps. The engraving is hatched ink, never a photograph.",
+ "motifs_headline": "Mastheads, plates, pull figures, box scores, jump lines.",
+ "motifs_note": "Broadsheet draws with the furniture of a front page. The data lives in pull figures, in box scores and in engraved plates whose details are the counts: one specimen per unit of the sample.",
+ "motifs": [
+  {
+   "title": "The masthead",
+   "usage": "Blackletter name centred between a 2px-over-1px double rule, with the edition, the subject and the price in Franklin caps on the rule below. Once per page.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Masthead</title><text x=\"240\" y=\"70\" className=\"bs-masthead\" textAnchor=\"middle\">Broadsheet</text><line className=\"bs-rule\" x1=\"24\" y1=\"84\" x2=\"456\" y2=\"84\"/><line className=\"bs-rule-thin\" x1=\"24\" y1=\"88\" x2=\"456\" y2=\"88\"/><text x=\"24\" y=\"106\" className=\"bs-small\">VOL. I · NO. 1</text><text x=\"240\" y=\"106\" className=\"bs-small\" textAnchor=\"middle\">THE EDITION, THE SUBJECT, THE PRICE</text><text x=\"456\" y=\"106\" className=\"bs-small\" textAnchor=\"end\">PRICE: FREE</text><line className=\"bs-rule-thin\" x1=\"24\" y1=\"114\" x2=\"456\" y2=\"114\"/></svg>"
+  },
+  {
+   "title": "The specimen count",
+   "usage": "One engraved specimen per unit of the sample, the agreeing ones in red: 26 of 42 without a legend. Swap the specimen for the subject (stems, coins, keys); keep the count honest.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Herbarium of 42 specimens</title><g transform=\"translate(28 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(60 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(92 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(124 36)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(156 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(188 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(220 36)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(252 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(284 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(316 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(348 36)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(380 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(412 36)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(444 36)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(28 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(60 78)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(92 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(124 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(156 78)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(188 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(220 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(252 78)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(284 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(316 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(348 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(380 78)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(412 78)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(444 78)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(28 120)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(60 120)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(92 120)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(124 120)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(156 120)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(188 120)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(220 120)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(252 120)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(284 120)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(316 120)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(348 120)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(380 120)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(412 120)\"><path className=\"bs-spec-red\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><g transform=\"translate(444 120)\"><path className=\"bs-spec\" d=\"M8 28 v-14 m0 0 c-6 -4 -8 -10 -4 -14 c4 2 6 6 4 14 m0 0 c6 -4 8 -10 4 -14 c-4 2 -6 6 -4 14\"/></g><text x=\"24\" y=\"156\" className=\"bs-small\">42 RESPONSES · 26 PREFERRED THE EARLIER OPENING · IN RED</text></svg>"
+  },
+  {
+   "title": "The pull figure",
+   "usage": "A large serif number set between columns with a Franklin caption; the one red figure carries its denominator in the same breath.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Pull figure</title><g className=\"bs-col\"><line x1=\"24\" y1=\"30\" x2=\"150\" y2=\"30\"/><line x1=\"24\" y1=\"40\" x2=\"150\" y2=\"40\"/><line x1=\"24\" y1=\"50\" x2=\"150\" y2=\"50\"/><line x1=\"24\" y1=\"60\" x2=\"150\" y2=\"60\"/><line x1=\"24\" y1=\"70\" x2=\"150\" y2=\"70\"/><line x1=\"24\" y1=\"80\" x2=\"150\" y2=\"80\"/><line x1=\"24\" y1=\"90\" x2=\"150\" y2=\"90\"/><line x1=\"24\" y1=\"100\" x2=\"150\" y2=\"100\"/><line x1=\"24\" y1=\"110\" x2=\"150\" y2=\"110\"/><line x1=\"24\" y1=\"120\" x2=\"150\" y2=\"120\"/><line x1=\"24\" y1=\"130\" x2=\"150\" y2=\"130\"/><line x1=\"330\" y1=\"30\" x2=\"456\" y2=\"30\"/><line x1=\"330\" y1=\"40\" x2=\"456\" y2=\"40\"/><line x1=\"330\" y1=\"50\" x2=\"456\" y2=\"50\"/><line x1=\"330\" y1=\"60\" x2=\"456\" y2=\"60\"/><line x1=\"330\" y1=\"70\" x2=\"456\" y2=\"70\"/><line x1=\"330\" y1=\"80\" x2=\"456\" y2=\"80\"/><line x1=\"330\" y1=\"90\" x2=\"456\" y2=\"90\"/><line x1=\"330\" y1=\"100\" x2=\"456\" y2=\"100\"/><line x1=\"330\" y1=\"110\" x2=\"456\" y2=\"110\"/><line x1=\"330\" y1=\"120\" x2=\"456\" y2=\"120\"/><line x1=\"330\" y1=\"130\" x2=\"456\" y2=\"130\"/></g><line className=\"bs-rule-thin\" x1=\"162\" y1=\"24\" x2=\"162\" y2=\"140\"/><line className=\"bs-rule-thin\" x1=\"318\" y1=\"24\" x2=\"318\" y2=\"140\"/><text x=\"240\" y=\"92\" className=\"bs-pull-f bs-red-fill\" textAnchor=\"middle\">$1,800</text><text x=\"240\" y=\"116\" className=\"bs-small\" textAnchor=\"middle\">ADDITIONAL STAFFING</text><text x=\"240\" y=\"130\" className=\"bs-small bs-muted-fill\" textAnchor=\"middle\">FOR THE SIX-SUNDAY PILOT</text></svg>"
+  },
+  {
+   "title": "The box score",
+   "usage": "A tally set like a sports box: Franklin caps head, Courier figures, hairline rows, a double rule above. For any small table of record: votes, takings, the pilot by week.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Box score</title><line className=\"bs-rule\" x1=\"40\" y1=\"30\" x2=\"440\" y2=\"30\"/><line className=\"bs-rule-thin\" x1=\"40\" y1=\"34\" x2=\"440\" y2=\"34\"/><text x=\"40\" y=\"52\" className=\"bs-small\">SUNDAY</text><text x=\"300\" y=\"52\" className=\"bs-small\" textAnchor=\"end\">SALES</text><text x=\"440\" y=\"52\" className=\"bs-small\" textAnchor=\"end\">WEATHER</text><line className=\"bs-rule-thin\" x1=\"40\" y1=\"58\" x2=\"440\" y2=\"58\"/><text x=\"40\" y=\"76\" className=\"bs-wire-t\">Sep 6</text><text x=\"300\" y=\"76\" className=\"bs-wire-t\" textAnchor=\"end\">72</text><text x=\"440\" y=\"76\" className=\"bs-wire-t\" textAnchor=\"end\">Clear</text><line className=\"bs-col-rule\" x1=\"40\" y1=\"82\" x2=\"440\" y2=\"82\"/><text x=\"40\" y=\"96\" className=\"bs-wire-t\">Sep 13</text><text x=\"300\" y=\"96\" className=\"bs-wire-t\" textAnchor=\"end\">81</text><text x=\"440\" y=\"96\" className=\"bs-wire-t\" textAnchor=\"end\">Fog</text><line className=\"bs-col-rule\" x1=\"40\" y1=\"102\" x2=\"440\" y2=\"102\"/><text x=\"40\" y=\"116\" className=\"bs-wire-t\">Sep 20</text><text x=\"300\" y=\"116\" className=\"bs-wire-t\" textAnchor=\"end\">95</text><text x=\"440\" y=\"116\" className=\"bs-wire-t\" textAnchor=\"end\">Clear</text><line className=\"bs-col-rule\" x1=\"40\" y1=\"122\" x2=\"440\" y2=\"122\"/><text x=\"40\" y=\"136\" className=\"bs-wire-t\">Sep 27</text><text x=\"300\" y=\"136\" className=\"bs-wire-t\" textAnchor=\"end\">104</text><text x=\"440\" y=\"136\" className=\"bs-wire-t\" textAnchor=\"end\">Clear</text><line className=\"bs-col-rule\" x1=\"40\" y1=\"142\" x2=\"440\" y2=\"142\"/><text x=\"300\" y=\"156\" className=\"bs-wire-t bs-red-fill\" textAnchor=\"end\">104</text><text x=\"40\" y=\"156\" className=\"bs-small\">BEST SUNDAY, IN RED</text></svg>"
+  },
+  {
+   "title": "The jump line and the folio",
+   "usage": "\"Continued on page 4\" in Franklin caps closes a column that breaks; the folio (name · page) sits above the bottom double rule. They tell the reader the page has an edge.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Jump line and folio</title><g className=\"bs-col\"><line x1=\"40\" y1=\"28\" x2=\"220\" y2=\"28\"/><line x1=\"40\" y1=\"36\" x2=\"220\" y2=\"36\"/><line x1=\"40\" y1=\"44\" x2=\"220\" y2=\"44\"/><line x1=\"40\" y1=\"52\" x2=\"220\" y2=\"52\"/><line x1=\"40\" y1=\"60\" x2=\"220\" y2=\"60\"/><line x1=\"40\" y1=\"68\" x2=\"220\" y2=\"68\"/><line x1=\"40\" y1=\"76\" x2=\"220\" y2=\"76\"/></g><text x=\"220\" y=\"104\" className=\"bs-small\" textAnchor=\"end\">CONTINUED ON PAGE 4 →</text><line className=\"bs-rule-thin\" x1=\"236\" y1=\"20\" x2=\"236\" y2=\"110\"/><g className=\"bs-col\"><line x1=\"252\" y1=\"28\" x2=\"440\" y2=\"28\"/><line x1=\"252\" y1=\"36\" x2=\"440\" y2=\"36\"/><line x1=\"252\" y1=\"44\" x2=\"440\" y2=\"44\"/><line x1=\"252\" y1=\"52\" x2=\"440\" y2=\"52\"/><line x1=\"252\" y1=\"60\" x2=\"440\" y2=\"60\"/><line x1=\"252\" y1=\"68\" x2=\"440\" y2=\"68\"/><line x1=\"252\" y1=\"76\" x2=\"440\" y2=\"76\"/><line x1=\"252\" y1=\"84\" x2=\"440\" y2=\"84\"/><line x1=\"252\" y1=\"92\" x2=\"440\" y2=\"92\"/><line x1=\"252\" y1=\"100\" x2=\"440\" y2=\"100\"/></g><line className=\"bs-rule\" x1=\"40\" y1=\"128\" x2=\"440\" y2=\"128\"/><line className=\"bs-rule-thin\" x1=\"40\" y1=\"132\" x2=\"440\" y2=\"132\"/><text x=\"40\" y=\"150\" className=\"bs-small\">BROADSHEET · PAGE 1</text><text x=\"440\" y=\"150\" className=\"bs-small bs-muted-fill\" textAnchor=\"end\">SCENES MARKED ILLUSTRATIVE ARE COMPOSED</text></svg>"
+  }
+ ],
+ "sample_headline": "A front page in Broadsheet.",
+ "sample_note": "A front page opener: masthead and rules, the headline with its red word, the italic deck, a drop cap and columns, the plate, and the record in the margin.",
+ "sample": "<div className=\"bs-sample\"><div className=\"bs-sample-in\">\n  <p className=\"t-masthead bs-mast\">The Saltmarsh Sheet</p>\n  <div className=\"bs-double\"></div>\n  <div className=\"bs-dateline\"><span className=\"t-small\">Autumn edition</span><span className=\"t-small\">Saltmarsh Flower Market · a fictional market</span><span className=\"t-small\">Price: free at the gate</span></div>\n  <div className=\"bs-sample-grid\">\n    <div className=\"bs-main\">\n      <p className=\"t-small bs-flag\">The early-opening pilot</p>\n      <h2 className=\"t-display-xl bs-sample-h\">The Market Before <span className=\"bs-red\">Sunrise</span></h2>\n      <p className=\"t-deck bs-deck-p\">Six Sundays of 5 a.m. flowers left the committee with 510 sales, 42 opinions and a $1,800 bill. Is that enough to keep the lights on early?</p>\n      <div className=\"bs-columns\"><p className=\"bs-body\"><span className=\"bs-dropcap\">B</span>efore the first tram, before the bakeries lift their shutters, there is a particular smell at the Saltmarsh Flower Market: cold water, cut stems, diesel from the delivery vans. For six Sunday mornings this autumn, residents could walk into it. The market&#39;s pilot opened the stalls at 5 a.m. and closed them at 9, and the committee must now decide whether that window stays.</p><p className=\"bs-body\">The committee did not set out to prove a point. It set out to learn whether anybody wanted flowers at that hour, and it paid for the lesson: $1,800 in additional staffing across the six weeks. The record below is what came back.</p></div>\n    </div>\n    <aside className=\"bs-aside\">\n      <div className=\"bs-plate-box\"><div className=\"bs-plate-art\"><svg viewBox=\"0 0 320 220\"><title>Engraved clock face showing 5 to 9</title><circle className=\"bs-engrave-c\" cx=\"160\" cy=\"110\" r=\"88\"/><path className=\"bs-red-wedge\" d=\"M160 110 L160 22 A88 88 0 0 1 248 110 Z\"/><line className=\"bs-tick\" x1=\"240.0\" y1=\"110.0\" x2=\"248.0\" y2=\"110.0\"/><line className=\"bs-tick\" x1=\"229.3\" y1=\"150.0\" x2=\"236.2\" y2=\"154.0\"/><line className=\"bs-tick\" x1=\"200.0\" y1=\"179.3\" x2=\"204.0\" y2=\"186.2\"/><line className=\"bs-tick\" x1=\"160.0\" y1=\"190.0\" x2=\"160.0\" y2=\"198.0\"/><line className=\"bs-tick\" x1=\"120.0\" y1=\"179.3\" x2=\"116.0\" y2=\"186.2\"/><line className=\"bs-tick\" x1=\"90.7\" y1=\"150.0\" x2=\"83.8\" y2=\"154.0\"/><line className=\"bs-tick\" x1=\"80.0\" y1=\"110.0\" x2=\"72.0\" y2=\"110.0\"/><line className=\"bs-tick\" x1=\"90.7\" y1=\"70.0\" x2=\"83.8\" y2=\"66.0\"/><line className=\"bs-tick\" x1=\"120.0\" y1=\"40.7\" x2=\"116.0\" y2=\"33.8\"/><line className=\"bs-tick\" x1=\"160.0\" y1=\"30.0\" x2=\"160.0\" y2=\"22.0\"/><line className=\"bs-tick\" x1=\"200.0\" y1=\"40.7\" x2=\"204.0\" y2=\"33.8\"/><line className=\"bs-tick\" x1=\"229.3\" y1=\"70.0\" x2=\"236.2\" y2=\"66.0\"/><text x=\"160\" y=\"46\" className=\"bs-roman\" textAnchor=\"middle\">XII</text><text x=\"236\" y=\"116\" className=\"bs-roman\" textAnchor=\"middle\">III</text><text x=\"160\" y=\"186\" className=\"bs-roman\" textAnchor=\"middle\">VI</text><text x=\"86\" y=\"116\" className=\"bs-roman\" textAnchor=\"middle\">IX</text><line className=\"bs-hand\" x1=\"160\" y1=\"110\" x2=\"160\" y2=\"40\"/><line className=\"bs-hand\" x1=\"160\" y1=\"110\" x2=\"222\" y2=\"78\"/></svg></div><p className=\"t-small bs-caption\"><b>Fig. 1</b> · The window. 5 to 9 a.m. × six Sundays = 24 hours of early trading.</p></div>\n      <div className=\"bs-record\"><p className=\"t-small bs-record-h\">The pilot&#39;s record</p><div className=\"bs-rec-row\"><span>Sundays in the pilot</span><span className=\"bs-rec-v\"><Number data=\"$totals\" col=\"sundays\" /></span></div><div className=\"bs-rec-row\"><span>Opening hours</span><span className=\"bs-rec-v\">5–9 a.m.</span></div><div className=\"bs-rec-row\"><span>Purchase transactions</span><span className=\"bs-rec-v\"><Number data=\"$totals\" col=\"transactions\" /></span></div><div className=\"bs-rec-row\"><span>Survey responses</span><span className=\"bs-rec-v\"><Number data=\"$totals\" col=\"responses\" /></span></div><div className=\"bs-rec-row\"><span>Preferred the earlier opening</span><span className=\"bs-rec-v bs-red\"><Number data=\"$totals\" col=\"preferred\" /> of 42</span></div><div className=\"bs-rec-row\"><span>Additional staffing</span><span className=\"bs-rec-v\">$<Number data=\"$totals\" col=\"cost\" format=\",.0f\" /></span></div></div>\n    </aside>\n  </div>\n  <div className=\"bs-sample-bottom\"><div className=\"bs-fig\"><p className=\"t-small bs-flag\">Fig. 3 · Transactions by Sunday</p><Question data=\"$series\" height=\"220px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"sunday\",\"type\":\"ordinal\",\"title\":\"Sunday\"},\"y\":{\"field\":\"transactions\",\"type\":\"quantitative\",\"title\":\"Transactions\"},\"color\":{\"field\":\"busiest\",\"type\":\"nominal\",\"legend\":null,\"scale\":{\"range\":[\"var(--chart-1)\",\"var(--chart-2)\"]}}}}}} /></div><div className=\"bs-fig\"><p className=\"t-small bs-flag\">The record, by Sunday</p><DataTable data=\"$table\" rowKey=\"sunday\" height=\"220px\" columns={[{\"col\":\"sunday\",\"title\":\"Sunday\"},{\"col\":\"transactions\",\"title\":\"Transactions\",\"align\":\"right\"},{\"col\":\"weather\",\"title\":\"Weather\"}]} /></div></div>\n  <div className=\"bs-double\"></div><div className=\"bs-folio\"><span className=\"t-small\">The Saltmarsh Sheet · page 1</span><span className=\"t-small\">Scenes marked illustrative are composed, not reported</span></div>\n</div></div>",
+ "dos": [
+  "Set the masthead once, in blackletter, between a double rule.",
+  "Run body in columns with hairline rules; open with a drop cap.",
+  "One red word per page; pull figures name their denominator.",
+  "Use engraved plates with Fig. captions; label invented scenes illustrative."
+ ],
+ "donts": [
+  "No photographs; no colour fills larger than a tint box.",
+  "No rounded corners, shadows or gradients.",
+  "No blackletter anywhere but the masthead.",
+  "No percentage without its base in the same sentence."
+ ],
+ "binding_losses": "The masthead face, the Franklin small-caps role, the column rules, the plate frame and the drop cap have no contract slot; they are bs-* classes. The contract names three families; Broadsheet uses four, so UnifrakturCook and Libre Franklin are set by class.",
+ "footer": "Newsprint first, late edition second. Fonts: UnifrakturCook 700, Old Standard TT 400/700 and italic, Libre Franklin 400/500/600, Courier Prime 400/700, all Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "sunday": "Sep 6",
+    "transactions": 72,
+    "weather": "Clear",
+    "busiest": "no"
+   },
+   {
+    "sunday": "Sep 13",
+    "transactions": 81,
+    "weather": "Fog",
+    "busiest": "no"
+   },
+   {
+    "sunday": "Sep 20",
+    "transactions": 95,
+    "weather": "Clear",
+    "busiest": "no"
+   },
+   {
+    "sunday": "Sep 27",
+    "transactions": 104,
+    "weather": "Clear",
+    "busiest": "yes"
+   },
+   {
+    "sunday": "Oct 4",
+    "transactions": 88,
+    "weather": "Rain",
+    "busiest": "no"
+   },
+   {
+    "sunday": "Oct 11",
+    "transactions": 70,
+    "weather": "Wind",
+    "busiest": "no"
+   }
+  ],
+  "queries": {
+   "series": "select sunday, transactions, busiest from rows order by rowid",
+   "table": "select sunday, transactions, weather from rows order by rowid",
+   "totals": "select 6 as sundays, sum(transactions) as transactions, 42 as responses, 26 as preferred, 1800 as cost from rows"
+  },
+  "segments": [
+   "Front page",
+   "Record",
+   "Decision"
+  ],
+  "segment_default": "Front page",
+  "select_label": "Edition",
+  "input_placeholder": "Search the archive",
+  "switch_label": "Show illustrative scenes",
+  "tabs": [
+   "The scene",
+   "The record",
+   "The decision"
+  ],
+  "tab_body": "The scene: cold water, cut stems, diesel.",
+  "progress_label": "Pilot · 6 of 6 Sundays",
+  "progress": 100,
+  "chart_title": "Fig. 3 · Transactions by Sunday",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": "bar",
+    "encoding": {
+     "x": {
+      "field": "sunday",
+      "type": "ordinal",
+      "title": "Sunday"
+     },
+     "y": {
+      "field": "transactions",
+      "type": "quantitative",
+      "title": "Transactions"
+     },
+     "color": {
+      "field": "busiest",
+      "type": "nominal",
+      "legend": null,
+      "scale": {
+       "range": [
+        "var(--chart-1)",
+        "var(--chart-2)"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "row_key": "sunday",
+  "table_columns": [
+   {
+    "col": "sunday",
+    "title": "Sunday"
+   },
+   {
+    "col": "transactions",
+    "title": "Transactions",
+    "align": "right",
+    "bar": true
+   },
+   {
+    "col": "weather",
+    "title": "Weather"
+   }
+  ],
+  "table_height": "220px"
+ },
+ "css": "\n.ds-broadsheet { --ds-cover-bg: var(--ds-newsprint); }\n.ds-broadsheet .ds-section h2, .ds-broadsheet .ds-cover-name { font-family: var(--font-display); font-weight: 700; }\n.ds-broadsheet .ds-cover-name { font-family: \"UnifrakturCook\", serif; font-weight: 700; letter-spacing: 0; }\n.ds-broadsheet .ds-eyebrow, .ds-broadsheet .ds-chip, .ds-broadsheet .t-small { font-family: \"Libre Franklin\", system-ui, sans-serif; }\n.ds-broadsheet .ds-chip { border-radius: 0; }\n.ds-broadsheet .ds-lede, .ds-broadsheet .ds-two p, .ds-broadsheet .ds-three p, .ds-broadsheet .ds-principle p, .ds-broadsheet .ds-comp-note, .ds-broadsheet .ds-motif p, .ds-broadsheet .ds-swatch-usage, .ds-broadsheet .ds-voice, .ds-broadsheet .ds-rules, .ds-broadsheet .ds-kv, .ds-broadsheet .ds-type-meta, .ds-broadsheet .ds-note p, .ds-broadsheet .ds-foot, .ds-broadsheet .ds-map { font-family: \"Libre Franklin\", system-ui, sans-serif; }\n.ds-broadsheet .bs-paper { fill: var(--ds-newsprint); } .ds-broadsheet .bs-plate { fill: var(--ds-newsprint-raised); stroke: var(--ds-ink); stroke-width: 1; }\n.ds-broadsheet .bs-masthead { font-family: \"UnifrakturCook\", serif; font-weight: 700; font-size: 34px; fill: var(--ds-ink); } .ds-broadsheet .bs-head { font-family: var(--font-display); font-weight: 700; font-size: 30px; fill: var(--ds-ink); } .ds-broadsheet .bs-deck { font-family: var(--font-display); font-style: italic; font-size: 12px; fill: var(--ds-ink-muted); }\n.ds-broadsheet .bs-rule { stroke: var(--ds-ink); stroke-width: 2; } .ds-broadsheet .bs-rule-thin { stroke: var(--ds-ink); stroke-width: .8; } .ds-broadsheet .bs-col line { stroke: var(--ds-line); stroke-width: 2.5; }\n.ds-broadsheet .bs-small { font-family: \"Libre Franklin\", sans-serif; font-weight: 600; font-size: 8px; letter-spacing: .1em; fill: var(--ds-ink); } .ds-broadsheet .bs-muted-fill { fill: var(--ds-ink-muted); } .ds-broadsheet .bs-red-fill { fill: var(--ds-red); }\n.ds-broadsheet .bs-engrave path, .ds-broadsheet .bs-engrave circle, .ds-broadsheet .bs-engrave rect, .ds-broadsheet .bs-engrave line { fill: none; stroke: var(--ds-ink); stroke-width: 1.2; } .ds-broadsheet .bs-engrave-c { fill: var(--ds-newsprint-raised); stroke: var(--ds-ink); stroke-width: 1.2; } .ds-broadsheet .bs-tick { stroke: var(--ds-ink); stroke-width: 1.2; } .ds-broadsheet .bs-hand { stroke: var(--ds-ink); stroke-width: 2; stroke-linecap: round; } .ds-broadsheet .bs-roman { font-family: var(--font-display); font-size: 12px; fill: var(--ds-ink); } .ds-broadsheet .bs-red-wedge { fill: var(--ds-red-soft); }\n.ds-broadsheet .bs-spec { fill: none; stroke: var(--ds-ink); stroke-width: 1.2; } .ds-broadsheet .bs-spec-red { fill: none; stroke: var(--ds-red); stroke-width: 1.6; } .ds-broadsheet .bs-pull-f { font-family: var(--font-display); font-weight: 700; font-size: 44px; }\n.ds-broadsheet .bs-red { color: var(--ds-red); } .ds-broadsheet .bs-of { font-size: .5em; color: var(--ds-ink-muted); font-weight: 400; }\n.ds-broadsheet .bs-btn { font-family: \"Libre Franklin\", sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; line-height: 16px; padding: 10px 16px; border: 1px solid var(--ds-ink); background: transparent; color: var(--ds-ink); cursor: pointer; }\n.ds-broadsheet .bs-btn:hover { background: var(--ds-newsprint-sunk); } .ds-broadsheet .bs-btn:focus-visible { outline: 2px solid var(--ds-red); outline-offset: 2px; }\n.ds-broadsheet .bs-btn-primary { background: var(--ds-red); color: var(--ds-on-red); border-color: var(--ds-red); } .ds-broadsheet .bs-btn-primary:hover { background: var(--ds-red); }\n.ds-broadsheet .bs-tag { display: inline-flex; padding: 3px 8px; border: 1px solid var(--ds-ink); font-family: \"Libre Franklin\", sans-serif; font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; } .ds-broadsheet .bs-tag-red { color: var(--ds-red); border-color: var(--ds-red); } .ds-broadsheet .bs-tag-caution { color: var(--ds-caution); border-color: var(--ds-caution); }\n.ds-broadsheet .bs-pull { display: grid; gap: 4px; padding: 12px 0; border-top: 2px solid var(--ds-ink); border-bottom: 1px solid var(--ds-ink); min-width: 200px; } .ds-broadsheet .bs-pull .t-small { color: var(--ds-ink-muted); max-width: 22ch; } .ds-broadsheet .ds-stats { gap: 24px; }\n.ds-broadsheet .bs-box { padding: 12px 16px; border: 1px solid var(--ds-ink); font-size: 16px; line-height: 1.5; background: var(--ds-newsprint-raised); } .ds-broadsheet .bs-box strong { font-weight: 700; } .ds-broadsheet .bs-box-caution { border-left: 4px solid var(--ds-caution); background: var(--ds-caution-soft); } .ds-broadsheet .bs-box-red { border-left: 4px solid var(--ds-red); }\n.ds-broadsheet .bs-plate-box { display: grid; gap: 8px; } .ds-broadsheet .bs-plate-art { border: 1px solid var(--ds-ink); background: var(--ds-newsprint-raised); padding: 12px; } .ds-broadsheet .bs-plate-art svg { display: block; width: 100%; height: auto; } .ds-broadsheet .bs-caption { color: var(--ds-ink-muted); letter-spacing: .04em; text-transform: none; font-size: 12px; line-height: 1.45; } .ds-broadsheet .bs-caption b { color: var(--ds-ink); letter-spacing: .1em; text-transform: uppercase; }\n.ds-broadsheet .bs-sample { background: var(--ds-newsprint); padding: 32px 20px 48px; } .ds-broadsheet .bs-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-broadsheet .bs-mast { text-align: center; margin: 0; } .ds-broadsheet .bs-double { border-top: 2px solid var(--ds-ink); border-bottom: 1px solid var(--ds-ink); height: 3px; margin: 8px 0 0; }\n.ds-broadsheet .bs-dateline { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--ds-ink); }\n.ds-broadsheet .bs-sample-grid { display: grid; gap: 32px; margin-top: 28px; } .ds-broadsheet .bs-flag { color: var(--ds-red); margin: 0 0 10px; } .ds-broadsheet .bs-sample-h { margin: 0; max-width: 14ch; } .ds-broadsheet .bs-deck-p { margin: 18px 0 0; max-width: 48ch; color: var(--ds-ink-muted); }\n.ds-broadsheet .bs-columns { margin-top: 24px; column-gap: 24px; column-rule: 1px solid var(--ds-line); } .ds-broadsheet .bs-body { margin: 0 0 14px; font-size: 16px; line-height: 1.6; text-align: justify; hyphens: auto; } .ds-broadsheet .bs-dropcap { float: left; font-family: var(--font-display); font-weight: 700; font-size: 58px; line-height: .8; padding: 6px 8px 0 0; }\n.ds-broadsheet .bs-aside { display: grid; gap: 20px; align-content: start; border-left: 1px solid var(--ds-line); padding-left: 24px; }\n.ds-broadsheet .bs-record { border-top: 2px solid var(--ds-ink); } .ds-broadsheet .bs-record-h { margin: 8px 0 4px; } .ds-broadsheet .bs-rec-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--ds-line); font-size: 15px; } .ds-broadsheet .bs-rec-v { font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; }\n.ds-broadsheet .bs-sample-bottom { display: grid; gap: 24px; margin-top: 32px; } .ds-broadsheet .bs-fig { border-top: 1px solid var(--ds-ink); padding-top: 10px; min-width: 0; }\n.ds-broadsheet .bs-folio { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 8px; color: var(--ds-ink-muted); } .ds-broadsheet .bs-sample-bottom + .bs-double { margin-top: 32px; }\n@container (min-width: 760px) { .ds-broadsheet .bs-sample { padding: 48px 40px 64px; } .ds-broadsheet .bs-sample-grid { grid-template-columns: 3fr 2fr; } .ds-broadsheet .bs-columns { column-count: 2; } .ds-broadsheet .bs-sample-bottom { grid-template-columns: 1fr 1fr; } }\n\n.ds-broadsheet { --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-red); --ds-hand-fill2: var(--ds-ink); --ds-hand-muted: var(--ds-newsprint-sunk); --ds-hand-ground: var(--ds-newsprint-raised); --ds-hand-stroke: 1.5; --ds-hand-cap: square; --ds-hand-tex: 1; --ds-hand-bg: var(--ds-newsprint);\n  --ds-tpl-edge: 1px solid var(--ds-ink); --ds-tpl-radius: 0; --ds-tpl-rule: 1px solid var(--ds-ink); --ds-tpl-tile-shadow: none; --ds-slide-bg: var(--ds-newsprint-raised); --ds-slide-fg: var(--ds-ink); --ds-slide-title-bg: var(--ds-ink); --ds-slide-title-fg: var(--ds-newsprint); --ds-slide-split-a: var(--ds-red); --ds-slide-split-a-fg: var(--ds-on-red); --ds-slide-split-b: var(--ds-newsprint-sunk); --ds-slide-split-b-fg: var(--ds-ink); --ds-hero-bg: var(--ds-newsprint); --ds-tag-radius: 0; }\n.ds-broadsheet .bs-masthead-lg { font-size: 46px; } .ds-broadsheet .bs-deck-sm { font-family: var(--font-display); font-size: 11px; fill: var(--ds-ink); } .ds-broadsheet .bs-dropcap-svg { font-family: var(--font-display); font-weight: 700; font-size: 34px; fill: var(--ds-ink); }\n.ds-broadsheet .bs-wire-t { font-family: var(--font-mono); font-size: 11px; fill: var(--ds-ink); } .ds-broadsheet .bs-col-rule { stroke: var(--ds-line); stroke-width: 1; }\n.ds-broadsheet .h-text { font-family: \"Libre Franklin\", sans-serif; font-weight: 600; font-size: 9px; letter-spacing: .1em; } .ds-broadsheet .h-num { font-family: var(--font-display); font-weight: 700; } .ds-broadsheet .h-tex-fill2 line { opacity: .7; }\n.ds-broadsheet .ds-tpl-tag { border: 1px solid var(--ds-ink); font-family: \"Libre Franklin\", sans-serif; font-size: 10px; letter-spacing: .12em; background: transparent; } .ds-broadsheet .ds-tpl-tag.is-idle { color: var(--ds-ink-muted); border-color: var(--ds-line); }\n.ds-broadsheet .ds-tpl-stage-top, .ds-broadsheet .ds-tpl-stage-foot, .ds-broadsheet .ds-tpl-split span { font-family: \"Libre Franklin\", sans-serif; font-weight: 600; }\n.ds-broadsheet .ds-tpl-brand { font-family: \"UnifrakturCook\", serif; font-size: 26px; } .ds-broadsheet .ds-tpl-crumb, .ds-broadsheet .ds-tpl-kicker, .ds-broadsheet .ds-tpl-byline, .ds-broadsheet .ds-tpl-figure-cap, .ds-broadsheet .ds-tpl-step .t-label, .ds-broadsheet .ds-tpl-pull .t-label, .ds-broadsheet .ds-tpl-kpi .t-label, .ds-broadsheet .ds-tpl-tile .t-label { font-family: \"Libre Franklin\", sans-serif; }\n.ds-broadsheet .ds-tpl-ed-body { text-align: justify; hyphens: auto; } .ds-broadsheet .ds-tpl-pull { border-top: 2px solid var(--ds-ink); } .ds-broadsheet .ds-tpl-pull-n { color: var(--ds-red); }\n.ds-broadsheet .ds-tpl-row-meta, .ds-broadsheet .ds-tpl-delta, .ds-broadsheet .ds-tpl-feat p, .ds-broadsheet .ds-tpl-step p, .ds-broadsheet .ds-tpl-hero-sub { font-family: \"Libre Franklin\", system-ui, sans-serif; }\n.ds-broadsheet .ds-tpl-slide-h { font-weight: 700; letter-spacing: -.01em; }\n",
+ "btn_primary": "bs-btn bs-btn-primary",
+ "btn_secondary": "bs-btn",
+ "hand": {
+  "mode": "engrave",
+  "shadow": false,
+  "headline": "An engraver’s line: hairlines, a line-screen for every tone.",
+  "note": "Broadsheet draws like a plate: 1.5px ink lines with square ends, and no flat tone anywhere. A filled region is a horizontal line-screen at a 4px pitch, in red for the one thing that matters and in ink for the rest; the quiet parts stay newsprint. Frame it, caption it with a Fig. number, mark it illustrative if it is.",
+  "rules": [
+   [
+    "Stroke",
+    "1.5px ink, square caps. Hairlines, never heavy."
+   ],
+   [
+    "Fill",
+    "None. Tone is a horizontal line-screen, 4px pitch: red for the subject, ink for the rest."
+   ],
+   [
+    "Shadow",
+    "None. Ink on paper."
+   ],
+   [
+    "Texture",
+    "The line-screen is the texture; the plate frame is the only ornament."
+   ],
+   [
+    "Figures",
+    "Old Standard bold for the one number; Franklin caps for the caption."
+   ],
+   [
+    "Motion",
+    "A plate may draw itself in on first view. Nothing else moves."
+   ]
+  ]
+ },
+ "motion": [
+  [
+   "Hover",
+   "Links take the red; nothing moves."
+  ],
+  [
+   "Press",
+   "Buttons darken to newsprint-sunk. No transform."
+  ],
+  [
+   "Focus",
+   "A 2px red outline, offset 2px."
+  ],
+  [
+   "Reveal",
+   "None for text: the page is simply there. A plate may stroke-draw once on first view (reveal, 600ms); reduced motion shows it complete."
+  ],
+  [
+   "Loop",
+   "Never."
+  ],
+  [
+   "Charts",
+   "Drawn complete. No growth animation."
+  ]
+ ],
+ "tpl": {
+  "brand": "Broadsheet",
+  "dash_title": "The record · This week",
+  "kpis": [
+   [
+    "Transactions",
+    "transactions",
+    "",
+    "",
+    ",.0f",
+    "six Sundays"
+   ],
+   [
+    "Responses",
+    "responses",
+    "",
+    "",
+    null,
+    "of several hundred visitors"
+   ],
+   [
+    "Preferred the earlier opening",
+    "preferred",
+    "",
+    "",
+    null,
+    "of 42 respondents"
+   ]
+  ],
+  "dash_table_title": "The record, by Sunday",
+  "slide_eyebrow": "To the committee",
+  "slide_title": "Keep the lights on early.",
+  "slide_sub": "Six Sundays, 510 transactions and a $1,800 bill. The case for November.",
+  "slide_foot": "Synthetic record · Oct 2026",
+  "slide_stat_label": "Transactions",
+  "slide_stat_col": "transactions",
+  "slide_stat_fmt": ",.0f",
+  "slide_body": "Purchase transactions across six early Sundays. One person may account for several; transactions are not shoppers.",
+  "split": [
+   "26 PREFERRED EARLIER",
+   "16 DID NOT"
+  ],
+  "ed_kicker": "The early-opening pilot",
+  "ed_headline": "The market before sunrise",
+  "ed_deck": "Six Sundays of 5 a.m. flowers left the committee with 510 sales, 42 opinions and a $1,800 bill. Is that enough to keep the lights on early?",
+  "ed_byline": "Saltmarsh, Sunday · from the committee’s notes",
+  "ed_body": "Before the first tram, before the bakeries lift their shutters, there is a particular smell at the market: cold water, cut stems, diesel from the delivery vans. For six Sunday mornings this autumn residents could walk into it. The pilot opened the stalls at five and closed them at nine, and the committee must now decide whether that window stays.",
+  "ed_pull_col": "cost",
+  "ed_pull_prefix": "$",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "Additional staffing",
+  "steps": [
+   [
+    "A hundred buyers at the gate.",
+    "Each unit is one transaction; the red ones came before seven, when the pilot mattered most."
+   ],
+   [
+    "Most of them came early.",
+    "Sixty before seven, twenty-five before eight, fifteen after. The early hour carried the pilot."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One hundred transactions, by hour · synthetic",
+  "app_rows": [
+   [
+    "Sep 27 · Clear",
+    "104 transactions · best Sunday",
+    "Printed",
+    "ok"
+   ],
+   [
+    "Oct 4 · Rain",
+    "88 transactions",
+    "Provisional",
+    "warn"
+   ],
+   [
+    "Oct 11 · Wind",
+    "70 transactions · two stalls absent",
+    "Declined",
+    "bad"
+   ],
+   [
+    "Oct 18",
+    "Not yet held",
+    "Scheduled",
+    "idle"
+   ]
+  ],
+  "app_cta": "File the record",
+  "app_cta2": "Save draft",
+  "landing_eyebrow": "Broadsheet · reports of record",
+  "landing_headline": "Set it like it happened.",
+  "landing_sub": "Features, pilot reports and newsletters set the way a front page is set: ink, rules, columns, one red word and the small print.",
+  "cta": "Read the report",
+  "cta2": "The method",
+  "features": [
+   [
+    "Columns and rules",
+    "Body runs in columns with hairlines between; plates and pull figures break them."
+   ],
+   [
+    "One red word",
+    "The red is a word, a figure or a link. Never a block."
+   ],
+   [
+    "Say the denominator",
+    "Every percentage names its base in the same sentence."
+   ]
+  ]
+ }
+}

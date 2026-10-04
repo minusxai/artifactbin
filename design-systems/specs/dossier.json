@@ -1,0 +1,773 @@
+{
+ "slug": "dossier",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Dossier cover: a paper sheet with a three-pixel rule, a numbered section head, a violet hatch block, a lime highlighter stroke, a stamp and a redaction</title>\n<defs><clipPath id=\"do-cov-h\"><rect x=\"288\" y=\"64\" width=\"168\" height=\"128\"/></clipPath></defs>\n<rect className=\"do-paper\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<text x=\"24\" y=\"30\" className=\"do-svg-mono\">CASE FILE · 0611 · REV. 02</text><text x=\"456\" y=\"30\" className=\"do-svg-mono\" textAnchor=\"end\">EYES ONLY · DRAFT</text>\n<rect className=\"do-ink\" x=\"24\" y=\"40\" width=\"432\" height=\"3\"/>\n<rect className=\"do-ink\" x=\"24\" y=\"64\" width=\"44\" height=\"44\"/><text x=\"46\" y=\"96\" className=\"do-svg-numblock\" textAnchor=\"middle\">01</text>\n<text x=\"80\" y=\"98\" className=\"do-svg-head\">WHAT WE</text><text x=\"24\" y=\"150\" className=\"do-svg-head\">KNOW</text>\n<rect className=\"do-lime\" x=\"24\" y=\"153\" width=\"118\" height=\"12\" transform=\"skewX(-8)\"/>\n<g clipPath=\"url(#do-cov-h)\" className=\"do-hatch\"><line x1=\"154\" y1=\"192\" x2=\"282\" y2=\"64\"/><line x1=\"160\" y1=\"192\" x2=\"288\" y2=\"64\"/><line x1=\"166\" y1=\"192\" x2=\"294\" y2=\"64\"/><line x1=\"172\" y1=\"192\" x2=\"300\" y2=\"64\"/><line x1=\"178\" y1=\"192\" x2=\"306\" y2=\"64\"/><line x1=\"184\" y1=\"192\" x2=\"312\" y2=\"64\"/><line x1=\"190\" y1=\"192\" x2=\"318\" y2=\"64\"/><line x1=\"196\" y1=\"192\" x2=\"324\" y2=\"64\"/><line x1=\"202\" y1=\"192\" x2=\"330\" y2=\"64\"/><line x1=\"208\" y1=\"192\" x2=\"336\" y2=\"64\"/><line x1=\"214\" y1=\"192\" x2=\"342\" y2=\"64\"/><line x1=\"220\" y1=\"192\" x2=\"348\" y2=\"64\"/><line x1=\"226\" y1=\"192\" x2=\"354\" y2=\"64\"/><line x1=\"232\" y1=\"192\" x2=\"360\" y2=\"64\"/><line x1=\"238\" y1=\"192\" x2=\"366\" y2=\"64\"/><line x1=\"244\" y1=\"192\" x2=\"372\" y2=\"64\"/><line x1=\"250\" y1=\"192\" x2=\"378\" y2=\"64\"/><line x1=\"256\" y1=\"192\" x2=\"384\" y2=\"64\"/><line x1=\"262\" y1=\"192\" x2=\"390\" y2=\"64\"/><line x1=\"268\" y1=\"192\" x2=\"396\" y2=\"64\"/><line x1=\"274\" y1=\"192\" x2=\"402\" y2=\"64\"/><line x1=\"280\" y1=\"192\" x2=\"408\" y2=\"64\"/><line x1=\"286\" y1=\"192\" x2=\"414\" y2=\"64\"/><line x1=\"292\" y1=\"192\" x2=\"420\" y2=\"64\"/><line x1=\"298\" y1=\"192\" x2=\"426\" y2=\"64\"/><line x1=\"304\" y1=\"192\" x2=\"432\" y2=\"64\"/><line x1=\"310\" y1=\"192\" x2=\"438\" y2=\"64\"/><line x1=\"316\" y1=\"192\" x2=\"444\" y2=\"64\"/><line x1=\"322\" y1=\"192\" x2=\"450\" y2=\"64\"/><line x1=\"328\" y1=\"192\" x2=\"456\" y2=\"64\"/><line x1=\"334\" y1=\"192\" x2=\"462\" y2=\"64\"/><line x1=\"340\" y1=\"192\" x2=\"468\" y2=\"64\"/><line x1=\"346\" y1=\"192\" x2=\"474\" y2=\"64\"/><line x1=\"352\" y1=\"192\" x2=\"480\" y2=\"64\"/><line x1=\"358\" y1=\"192\" x2=\"486\" y2=\"64\"/><line x1=\"364\" y1=\"192\" x2=\"492\" y2=\"64\"/><line x1=\"370\" y1=\"192\" x2=\"498\" y2=\"64\"/><line x1=\"376\" y1=\"192\" x2=\"504\" y2=\"64\"/><line x1=\"382\" y1=\"192\" x2=\"510\" y2=\"64\"/><line x1=\"388\" y1=\"192\" x2=\"516\" y2=\"64\"/><line x1=\"394\" y1=\"192\" x2=\"522\" y2=\"64\"/><line x1=\"400\" y1=\"192\" x2=\"528\" y2=\"64\"/><line x1=\"406\" y1=\"192\" x2=\"534\" y2=\"64\"/><line x1=\"412\" y1=\"192\" x2=\"540\" y2=\"64\"/><line x1=\"418\" y1=\"192\" x2=\"546\" y2=\"64\"/><line x1=\"424\" y1=\"192\" x2=\"552\" y2=\"64\"/><line x1=\"430\" y1=\"192\" x2=\"558\" y2=\"64\"/><line x1=\"436\" y1=\"192\" x2=\"564\" y2=\"64\"/><line x1=\"442\" y1=\"192\" x2=\"570\" y2=\"64\"/><line x1=\"448\" y1=\"192\" x2=\"576\" y2=\"64\"/><line x1=\"454\" y1=\"192\" x2=\"582\" y2=\"64\"/><line x1=\"460\" y1=\"192\" x2=\"588\" y2=\"64\"/><line x1=\"466\" y1=\"192\" x2=\"594\" y2=\"64\"/><line x1=\"472\" y1=\"192\" x2=\"600\" y2=\"64\"/><line x1=\"478\" y1=\"192\" x2=\"606\" y2=\"64\"/><line x1=\"484\" y1=\"192\" x2=\"612\" y2=\"64\"/><line x1=\"490\" y1=\"192\" x2=\"618\" y2=\"64\"/><line x1=\"496\" y1=\"192\" x2=\"624\" y2=\"64\"/><line x1=\"502\" y1=\"192\" x2=\"630\" y2=\"64\"/><line x1=\"508\" y1=\"192\" x2=\"636\" y2=\"64\"/><line x1=\"514\" y1=\"192\" x2=\"642\" y2=\"64\"/><line x1=\"520\" y1=\"192\" x2=\"648\" y2=\"64\"/><line x1=\"526\" y1=\"192\" x2=\"654\" y2=\"64\"/><line x1=\"532\" y1=\"192\" x2=\"660\" y2=\"64\"/><line x1=\"538\" y1=\"192\" x2=\"666\" y2=\"64\"/><line x1=\"544\" y1=\"192\" x2=\"672\" y2=\"64\"/><line x1=\"550\" y1=\"192\" x2=\"678\" y2=\"64\"/><line x1=\"556\" y1=\"192\" x2=\"684\" y2=\"64\"/><line x1=\"562\" y1=\"192\" x2=\"690\" y2=\"64\"/><line x1=\"568\" y1=\"192\" x2=\"696\" y2=\"64\"/><line x1=\"574\" y1=\"192\" x2=\"702\" y2=\"64\"/><line x1=\"580\" y1=\"192\" x2=\"708\" y2=\"64\"/></g><rect className=\"do-violet-rim\" x=\"288\" y=\"64\" width=\"168\" height=\"128\"/>\n<text x=\"300\" y=\"84\" className=\"do-svg-mono do-on-hatch\">FIG. 1 · EVIDENCE</text>\n<rect className=\"do-ink\" x=\"24\" y=\"190\" width=\"96\" height=\"12\"/><rect className=\"do-ink\" x=\"128\" y=\"190\" width=\"40\" height=\"12\"/><text x=\"176\" y=\"200\" className=\"do-svg-mono\">REDACTED</text>\n<g transform=\"rotate(-6 384 224)\"><rect className=\"do-stamp-rim\" x=\"320\" y=\"206\" width=\"128\" height=\"36\"/><text x=\"384\" y=\"230\" className=\"do-svg-stamp\" textAnchor=\"middle\">VERIFIED</text></g>\n<rect className=\"do-night\" x=\"0\" y=\"256\" width=\"480\" height=\"32\"/><text x=\"24\" y=\"276\" className=\"do-svg-mono do-on-night\">INK PROVES · 3 OF 4 CLAIMS VERIFIED</text><text x=\"456\" y=\"276\" className=\"do-svg-mono do-on-night\" textAnchor=\"end\">P. 1</text>\n</svg>",
+ "name": "Dossier",
+ "tagline": "Say what you know, and how you know it.",
+ "mood": "Evidential",
+ "jobs": "Plans, reports, post-mortems, long features",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Archivo",
+   "ital,wdth,wght@0,62..125,400;0,62..125,500;0,62..125,700;0,62..125,900;1,62..125,400"
+  ],
+  [
+   "Newsreader",
+   "ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500"
+  ],
+  [
+   "IBM Plex Mono",
+   "ital,wght@0,400;0,500;0,700;1,400"
+  ]
+ ],
+ "families": {
+  "display": "\"Archivo\", \"Arial Narrow\", system-ui, sans-serif",
+  "sans": "\"Newsreader\", Georgia, serif",
+  "ui": "\"Archivo\", system-ui, sans-serif",
+  "mono": "\"IBM Plex Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "paper",
+   "light": "#F3EEE1",
+   "dark": "#0D0B19",
+   "usage": "Page ground. Paper narrates: the reading surface.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-raised",
+   "light": "#FBF8F0",
+   "dark": "#16141F",
+   "usage": "Cards, fields, the case-file card.",
+   "group": "Grounds"
+  },
+  {
+   "name": "paper-sunk",
+   "light": "#E9E2D0",
+   "dark": "#07060C",
+   "usage": "Wells, code, inactive tracks, table stripes.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#D6CEBB",
+   "dark": "#2B2838",
+   "usage": "Hairlines inside a section. The 3px rule between sections is ink, not line.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#12101C",
+   "dark": "#ECE6D6",
+   "usage": "Text, rules, redaction bars, the inverted number block.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-soft",
+   "light": "#4A4658",
+   "dark": "#A9A3B8",
+   "usage": "Secondary text, mono eyebrows, captions.",
+   "group": "Ink"
+  },
+  {
+   "name": "night",
+   "light": "#0D0B19",
+   "dark": "#F3EEE1",
+   "usage": "The evidence ground: a full-bleed ink section inside a paper page (and paper inside the ink page in Night).",
+   "group": "Ink"
+  },
+  {
+   "name": "on-night",
+   "light": "#ECE6D6",
+   "dark": "#12101C",
+   "usage": "Text on night.",
+   "group": "Ink"
+  },
+  {
+   "name": "night-muted",
+   "light": "#A9A3B8",
+   "dark": "#4A4658",
+   "usage": "Secondary text on night.",
+   "group": "Ink"
+  },
+  {
+   "name": "violet",
+   "light": "#3A1CF0",
+   "dark": "#8F7BFF",
+   "usage": "The brand. Primary actions, the first chart series, the second line of a headline, stamps.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-violet",
+   "light": "#FFFFFF",
+   "dark": "#0D0B19",
+   "usage": "Text on violet fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "violet-soft",
+   "light": "#DCD6FB",
+   "dark": "#231B55",
+   "usage": "Ground for selected rows and info callouts; text on it is ink.",
+   "group": "Brand"
+  },
+  {
+   "name": "lime",
+   "light": "#D6FF3C",
+   "dark": "#D6FF3C",
+   "usage": "The highlighter. One stroke under one word per page, the kicker tag, the active segment. Never text.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-lime",
+   "light": "#12101C",
+   "dark": "#12101C",
+   "usage": "Text on lime.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#1E7B4F",
+   "dark": "#5FCF93",
+   "usage": "Verified. Always with the word.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#D8EEE0",
+   "dark": "#0F3022",
+   "usage": "Ground for verified rows and success callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#B7791F",
+   "dark": "#F0B64A",
+   "usage": "Assumed, pending, intel. Always with the word.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#FBEBC9",
+   "dark": "#3A2A08",
+   "usage": "Ground for assumption callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#C62828",
+   "dark": "#FF7A6E",
+   "usage": "Failed, refuted, blocked.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#FAD9D5",
+   "dark": "#431512",
+   "usage": "Ground for failure callouts.",
+   "group": "Status"
+  }
+ ],
+ "contract": {
+  "background": "paper",
+  "foreground": "ink",
+  "card": "paper-raised",
+  "card-foreground": "ink",
+  "popover": "paper-raised",
+  "popover-foreground": "ink",
+  "primary": "violet",
+  "primary-foreground": "on-violet",
+  "secondary": "violet-soft",
+  "secondary-foreground": "ink",
+  "muted": "paper-sunk",
+  "muted-foreground": "ink-soft",
+  "accent": "lime",
+  "accent-foreground": "on-lime",
+  "destructive": "negative",
+  "destructive-foreground": "paper",
+  "border": "line",
+  "input": "line",
+  "ring": "violet",
+  "chart-1": "violet",
+  "chart-2": "ink",
+  "chart-3": "caution",
+  "chart-4": "positive",
+  "chart-5": "ink-soft"
+ },
+ "radius_contract": "2px",
+ "extra_vars": {
+  "shadow-file": {
+   "light": "10px 10px 0 0 #3A1CF0",
+   "dark": "10px 10px 0 0 #8F7BFF"
+  },
+  "chip-radius": "2px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(64px, 12vw, 160px)",
+   "lh": ".8",
+   "weight": 900,
+   "ls": "-0.01em",
+   "tt": "uppercase",
+   "extra": "font-stretch: 62%",
+   "sample": "The case",
+   "usage": "One per page. The cover word, set condensed and enormous; the second line may be violet."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(40px, 6.5vw, 88px)",
+   "lh": ".84",
+   "weight": 900,
+   "ls": "-0.01em",
+   "tt": "uppercase",
+   "extra": "font-stretch: 62%",
+   "sample": "What we know",
+   "usage": "Section heads, paired with the inverted number block."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "36px",
+   "lh": "36px",
+   "weight": 800,
+   "ls": "-0.005em",
+   "tt": "uppercase",
+   "extra": "font-stretch: 75%",
+   "sample": "Section three",
+   "usage": "Page titles, slide titles."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "20px",
+   "lh": "24px",
+   "weight": 800,
+   "ls": "0.005em",
+   "tt": "uppercase",
+   "extra": "font-stretch: 80%",
+   "sample": "Evidence class",
+   "usage": "Card titles, row heads, the stamp word."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "21px",
+   "lh": "1.4",
+   "weight": 400,
+   "sample": "For eight weeks the branch kept its lamps on; here is what the count proves and what it cannot.",
+   "usage": "Ledes and decks, in Newsreader."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "18px",
+   "lh": "1.56",
+   "weight": 400,
+   "sample": "The pilot asked a plain question: if the doors stayed open later, would anyone come? They came.",
+   "usage": "Reading text. Newsreader at 18 with a 62ch measure."
+  },
+  {
+   "name": "body-ui",
+   "family": "ui",
+   "size": "15px",
+   "lh": "22px",
+   "weight": 400,
+   "sample": "Book one slot. Refuse the second.",
+   "usage": "Interface text: forms, tables, lists, callouts. Archivo at normal width."
+  },
+  {
+   "name": "body-s",
+   "family": "ui",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 400,
+   "sample": "Rev. 02 · 2 Oct 2026",
+   "usage": "Captions, helper text, dense cells."
+  },
+  {
+   "name": "label",
+   "family": "mono",
+   "size": "11px",
+   "lh": "16px",
+   "weight": 700,
+   "ls": "0.14em",
+   "tt": "uppercase",
+   "sample": "Intel · assumed",
+   "usage": "Eyebrows, tags, column heads, footers. Mono caps through CSS."
+  },
+  {
+   "name": "numeral",
+   "family": "display",
+   "size": "48px",
+   "lh": "48px",
+   "weight": 800,
+   "ls": "-0.01em",
+   "extra": "font-stretch: 75%; font-variant-numeric: tabular-nums",
+   "sample": "640",
+   "usage": "Facts-rail figures and KPIs. Condensed, tabular."
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "UNIQUE (equipment_id, slot_start)",
+   "usage": "Code, SQL, identifiers, ledger figures."
+  }
+ ],
+ "idea_headline": "Paper narrates. Ink proves.",
+ "idea": "Dossier is a report of record: a paper page that reads like a feature, cut by full-bleed ink sections that hold the evidence. Every claim wears its class (intel, plan, verified), outcomes land as stamps, what is not yet known is a redaction bar, and one lime stroke marks the word the whole document turns on. It is built for documents that will be argued with.",
+ "use_for": "Implementation plans, incident reviews and post-mortems, board reports, pilot evaluations, long features that make a case and show their working.",
+ "avoid_when": "Playful or warm subjects, product marketing, anything that must feel light; dashboards scanned in seconds (the condensed caps are for reading, not glancing).",
+ "principles_headline": "Five rules for a document that will be argued with.",
+ "principles": [
+  [
+   "Paper narrates, ink proves.",
+   "Reading sections sit on paper in Newsreader. Evidence sits on night: figures, ledgers, code, frames. The reader always knows which they are in."
+  ],
+  [
+   "Every claim wears its class.",
+   "Intel is dashed, plan is filled, verified is double-ruled. A sentence without a tag is a sentence without standing."
+  ],
+  [
+   "The rule is three pixels.",
+   "Sections divide with a 3px ink rule; everything inside divides with a hairline. Nothing else separates."
+  ],
+  [
+   "One stroke of lime.",
+   "The highlighter goes under one word per page, the word the argument turns on. A second stroke cancels the first."
+  ],
+  [
+   "Stamp the outcome.",
+   "Decisions, verdicts and verifications land as a rotated stamp. The stamp is the receipt; the prose explains it."
+  ]
+ ],
+ "voice": [
+  "Declarative, past tense for evidence, future tense for plan: \"Eight evenings were counted. The ninth will be.\"",
+  "Name the base of every percentage: \"36 of 640 visitors returned a card.\"",
+  "Mark assumptions as assumptions, in the open: \"Assumed until a Recon task confirms it.\"",
+  "No adjectives of confidence. The class tag does that work."
+ ],
+ "colour_headline": "Paper, ink, one violet, one lime.",
+ "colour_note": "Day first: paper ground, ink type, violet for the brand and the evidence series, lime as the highlighter. Night inverts the page: the ink page becomes the ground and paper panels become the inset. Status colours always carry a word; the class tags carry no colour at all.",
+ "chart_series": [
+  "violet",
+  "ink",
+  "caution",
+  "positive",
+  "ink-soft"
+ ],
+ "chart_note": "Violet is the measured series, ink the baseline, caution the assumed line, positive the verified one. On night the series lift but keep order. Grid in line, axes in ink, direct labels where they fit.",
+ "type_headline": "Archivo shouts in caps, Newsreader reads, Plex Mono files.",
+ "type_note": "Archivo is a variable face: display roles run at 62% width and 900 weight with .8 leading; interface text runs at normal width. Newsreader carries every paragraph meant to be read. IBM Plex Mono carries eyebrows, tags, figures in ledgers, and the stamp.",
+ "space_headline": "A 4px base, hairlines inside, three pixels between.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Tag padding, gap between a tag and its word."
+  ],
+  [
+   "space-2 · 8px",
+   "Inside controls; ledger cell padding."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-x."
+  ],
+  [
+   "space-4 · 16px",
+   "Default stack gap; card padding on small screens."
+  ],
+  [
+   "space-6 · 24px",
+   "Card padding; gap between facts-rail rows."
+  ],
+  [
+   "space-10 · 40px",
+   "Gap after a section head."
+  ],
+  [
+   "space-14 · 56px",
+   "Section padding on small screens."
+  ],
+  [
+   "space-28 · 112px",
+   "Section padding on wide screens; the ink sections breathe."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Sections, cards, callouts, ledgers, stamps. Square."
+  ],
+  [
+   "radius-sm · 2px",
+   "Fields, buttons, tags: barely rounded, so corners stay sharp at small sizes."
+  ],
+  [
+   "rule · 3px",
+   "Ink, between sections and under the masthead."
+  ],
+  [
+   "hairline · 1px",
+   "Line, inside sections: ledger rows, facts rail, card divisions."
+  ],
+  [
+   "edge · 1.5px",
+   "Tags and outline buttons use a 1.5px currentColor border; verified tags use a 3px double."
+  ]
+ ],
+ "depth": [
+  [
+   "flat",
+   "Nothing floats. Cards are flat on paper with a hairline."
+  ],
+  [
+   "shadow-file",
+   "10px 10px 0 violet: the one offset shadow, reserved for the case-file card and the date slip."
+  ],
+  [
+   "redaction",
+   "A currentColor bar at .95em replaces what is not yet known. It is a shape, not a blur."
+  ]
+ ],
+ "motion": [
+  [
+   "Hover",
+   "Buttons and rows invert: paper to ink or lime, 120ms linear. No lift."
+  ],
+  [
+   "Press",
+   "Nothing moves; the fill darkens one step."
+  ],
+  [
+   "Focus",
+   "3px violet outline, 2px offset. On night, lime."
+  ],
+  [
+   "Reveal",
+   "Stamps land: scale from 1.15 to 1 with a 160ms ease-out when revealed (kit reveal-scale). Nothing else animates in."
+  ],
+  [
+   "Loop",
+   "None. A dossier does not blink."
+  ],
+  [
+   "Charts",
+   "Bars draw from the baseline over 240ms; lines do not animate."
+  ]
+ ],
+ "components_headline": "The kit wears paper and violet; the classes carry the case.",
+ "components_note": "Kit components take Dossier through the contract: paper grounds, violet primary, lime accent, 2px radius. The tags, stamps, redaction, section head and case-file card are authored classes (do-*) written against the hand variables, so they port.",
+ "buttons": "<Button>Approve plan</Button><Button variant=\"secondary\">Mark verified</Button><Button variant=\"outline\">Export file</Button><Button variant=\"ghost\">Cancel</Button><button className=\"do-btn do-btn-primary\">Approve plan</button><button className=\"do-btn do-btn-lime\">Highlight</button><button className=\"do-btn\">Export file</button>",
+ "buttons_note": "Kit buttons on the left; authored do-btn on the right: mono caps, 1.5px edge, inverted on hover. One violet action per view; lime is for marking, never for committing.",
+ "tags": "<Badge>Violet</Badge><Badge variant=\"secondary\">Selected</Badge><Badge variant=\"outline\">Draft</Badge><Badge variant=\"destructive\">Refuted</Badge><span className=\"do-tag do-tag-intel\">Intel</span><span className=\"do-tag do-tag-plan\">Plan</span><span className=\"do-tag do-tag-verified\">Verified</span><span className=\"do-tag do-tag-status is-ok\">Verified · 3</span><span className=\"do-tag do-tag-status is-warn\">Assumed</span><span className=\"do-tag do-tag-status is-bad\">Refuted</span>",
+ "tags_note": "The three evidence classes are drawn, not coloured: dashed for intel, filled for plan, double-ruled for verified. Status tags add a soft ground and always a word.",
+ "fields_note": "Fields sit on paper-raised with a 1.5px ink edge and a 3px violet focus outline. Labels are mono caps above the field. The segmented control fills its active segment with lime.",
+ "stats": "<div className=\"do-fact\"><span className=\"t-numeral\">14</span><span className=\"t-label\">minutes down</span></div><div className=\"do-fact do-fact-accent\"><span className=\"t-numeral\"><Number data=\"$totals\" col=\"failed\" format=\",.0f\" /></span><span className=\"t-label\">requests failed</span></div><div className=\"do-fact\"><span className=\"t-numeral\"><Number data=\"$totals\" col=\"failed_pct\" suffix=\"%\" /></span><span className=\"t-label\">of the window</span></div>",
+ "stats_note": "Facts are a rail: a condensed numeral and a mono caption on a hairline row under a 3px rule. One fact per rail is violet. Figures come from data.",
+ "callouts": "<Alert><AlertTitle>Assumed until confirmed</AlertTitle><AlertDescription>The index exists in staging; production is unverified.</AlertDescription></Alert><div className=\"do-callout do-callout-intel\"><span className=\"do-tag do-tag-intel\">Intel</span><p>Edge logs show 610 failures in the first three minutes. Source: the on-call export.</p></div><div className=\"do-callout do-callout-ok\"><span className=\"do-tag do-tag-status is-ok\">Verified</span><p>The partial index is live in production as of 11:42. Checked by two people.</p></div><div className=\"do-callout do-callout-bad\"><span className=\"do-tag do-tag-status is-bad\">Refuted</span><p>The cache was not the cause. Hit rate held at 97% through the window.</p></div>",
+ "callouts_note": "A callout opens with its class tag, then one sentence of fact and one of source. Grounds are the soft status tokens; the text stays ink.",
+ "chart_comp_note": "Charts take violet first, ink second. On night they sit in a paper-less panel: axes in on-night, grid in night-muted at 30%.",
+ "table_note": "Ledgers are mono figures on hairline rows, caps heads under a 3px rule, no zebra. A class tag may sit in the first column.",
+ "card": "<div className=\"do-file\"><span className=\"do-file-tab\">Case file</span><dl className=\"do-file-dl\"><dt>Target</dt><dd>Fourteen-minute outage, 30 Sep</dd><dt>Cause</dt><dd>Missing partial index on bookings</dd><dt>Status</dt><dd><span className=\"do-tag do-tag-verified\">Verified</span> 3 of 4 claims</dd><dt>Owner</dt><dd>Platform on-call</dd></dl><span className=\"do-stamp\">Reviewed</span></div>",
+ "card_note": "The case-file card: paper-raised, a folder tab, a definition list on hairlines, the violet offset shadow, and a stamp in the corner. One per document.",
+ "motifs_headline": "Hatch, rule, stamp, redact.",
+ "motifs_note": "Dossier draws with a 2px square-capped ink line and 45° hatch where another system would use a flat fill, so figures look traced from evidence rather than painted. Its own devices below.",
+ "motifs": [
+  {
+   "title": "The numbered section head",
+   "usage": "An inverted mono number block beside a condensed 900 heading, over a 3px rule. Every section opens this way; the number is the only ornament.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Numbered section head</title><rect className=\"h-ink do-fillink\" x=\"24\" y=\"48\" width=\"56\" height=\"56\"/><text x=\"52\" y=\"88\" className=\"do-svg-numblock\" textAnchor=\"middle\">03</text><text x=\"96\" y=\"100\" className=\"do-svg-head-l\">THE VAULT</text><rect className=\"do-fillink\" x=\"24\" y=\"124\" width=\"432\" height=\"3\"/><text x=\"24\" y=\"156\" className=\"do-svg-mono do-svg-soft\">SCHEMA · LOCKS · THE ONE INDEX THAT DECIDES</text></svg>"
+  },
+  {
+   "title": "Evidence tags and the redaction",
+   "usage": "Intel is dashed, plan is filled, verified is double. What is not yet known is a bar in ink, not a question mark; the bar is replaced when the fact arrives.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Evidence tags and a redaction bar</title><rect className=\"do-svg-tag do-svg-tag-intel\" x=\"24\" y=\"40\" width=\"88\" height=\"28\"/><text x=\"68\" y=\"59\" className=\"do-svg-tagtext\" textAnchor=\"middle\">INTEL</text><rect className=\"do-fillink\" x=\"128\" y=\"40\" width=\"88\" height=\"28\"/><text x=\"172\" y=\"59\" className=\"do-svg-tagtext do-on-ink\" textAnchor=\"middle\">PLAN</text><rect className=\"do-svg-tag\" x=\"232\" y=\"40\" width=\"112\" height=\"28\"/><rect className=\"do-svg-tag\" x=\"236\" y=\"44\" width=\"104\" height=\"20\"/><text x=\"288\" y=\"59\" className=\"do-svg-tagtext\" textAnchor=\"middle\">VERIFIED</text><text x=\"24\" y=\"124\" className=\"do-svg-body\">The index was added at</text><rect className=\"do-fillink\" x=\"236\" y=\"110\" width=\"72\" height=\"16\"/><text x=\"316\" y=\"124\" className=\"do-svg-body\">and verified by</text><rect className=\"do-fillink\" x=\"24\" y=\"142\" width=\"120\" height=\"16\"/><text x=\"152\" y=\"156\" className=\"do-svg-body\">at 11:42.</text></svg>"
+  },
+  {
+   "title": "The stamp and the highlighter",
+   "usage": "A verdict lands as a rotated mono stamp with a 3px edge and a thin offset outline. The one lime stroke goes under the word the page turns on, skewed like a marker.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>A stamp and a highlighter stroke</title><text x=\"24\" y=\"110\" className=\"do-svg-head-l\">KEEP THE</text><rect className=\"h-fill2 do-lime\" x=\"246\" y=\"96\" width=\"150\" height=\"16\" transform=\"skewX(-8)\"/><text x=\"248\" y=\"110\" className=\"do-svg-head-l\">LIGHTS ON</text><g transform=\"rotate(-6 384 56)\"><rect className=\"do-stamp-rim\" x=\"316\" y=\"36\" width=\"136\" height=\"40\"/><rect className=\"do-stamp-rim-thin\" x=\"311\" y=\"31\" width=\"146\" height=\"50\"/><text x=\"384\" y=\"62\" className=\"do-svg-stamp\" textAnchor=\"middle\">APPROVED</text></g><text x=\"24\" y=\"156\" className=\"do-svg-mono do-svg-soft\">ONE STROKE PER PAGE · ONE STAMP PER DECISION</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Dossier.",
+ "sample_note": "An incident review opening: masthead, the cover word with its violet second line and one lime stroke, the facts rail, the case-file card, then the first ink section holding the timeline as evidence.",
+ "sample": "<div className=\"do-sample\">\n  <div className=\"do-mast\"><span><b>Platform</b> · Incident reviews</span><span className=\"do-mast-mid\">Rev. 02 · 2 Oct 2026</span><span>Case file 0611</span></div>\n  <div className=\"do-sample-in\">\n    <p className=\"do-kicker\"><span className=\"do-tag do-tag-lime\">Incident review</span><span>Fourteen minutes · 30 Sep</span></p>\n    <h2 className=\"t-display-xl do-h1\"><span className=\"do-l1\">Fourteen minutes,</span><span className=\"do-l2\">one missing <em className=\"do-hl\">index</em></span></h2>\n    <div className=\"do-hero-grid\">\n      <p className=\"t-body-l do-dek\">At 11:00 two bookings landed in the same slot and the API began refusing writes. This is the account of what failed, what the logs can prove, and the one change that closes it.</p>\n      <ul className=\"do-facts\"><li><span className=\"do-facts-n\"><Number data=\"$totals\" col=\"minutes\" /></span><span className=\"t-label\">minutes down</span></li><li><span className=\"do-facts-n\"><Number data=\"$totals\" col=\"failed\" format=\",.0f\" /></span><span className=\"t-label\">requests failed</span></li><li><span className=\"do-facts-n do-facts-violet\"><Number data=\"$totals\" col=\"failed_pct\" suffix=\"%\" /></span><span className=\"t-label\">of the window</span></li><li><span className=\"do-facts-n\"><Number data=\"$totals\" col=\"actions\" /></span><span className=\"t-label\">actions, 3 verified</span></li></ul>\n      <div className=\"do-file\"><span className=\"do-file-tab\">Case file</span><dl className=\"do-file-dl\"><dt>Target</dt><dd>Double-booked slots</dd><dt>Cause</dt><dd>No unique index on (item, start)</dd><dt>Fix</dt><dd>Partial unique index + 409</dd><dt>Status</dt><dd><span className=\"do-tag do-tag-verified\">Verified</span></dd></dl><span className=\"do-stamp\">Reviewed</span></div>\n    </div>\n  </div>\n  <div className=\"do-night-sec\"><div className=\"do-sample-in\">\n    <div className=\"do-shead\"><span className=\"do-shead-n\">01</span><h3 className=\"t-display-l\">The timeline</h3><p className=\"t-label do-shead-k\"><span>Detect · diagnose · mitigate · verify</span><span>Source: edge logs, on-call export</span></p></div>\n    <div className=\"do-night-grid\">\n      <div className=\"do-panel\"><p className=\"t-label\">Requests failed by phase</p><Question data=\"$series\" height=\"260px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":{\"type\":\"bar\"},\"encoding\":{\"x\":{\"field\":\"phase\",\"type\":\"ordinal\",\"sort\":null,\"title\":\"Phase\"},\"y\":{\"field\":\"failed\",\"type\":\"quantitative\",\"title\":\"Failed requests\"},\"color\":{\"field\":\"class\",\"type\":\"nominal\",\"title\":\"Class\"}}}}} /></div>\n      <div className=\"do-panel\"><p className=\"t-label\">Ledger</p><DataTable data=\"$table\" rowKey=\"phase\" height=\"260px\" columns={[{\"col\":\"step\",\"title\":\"#\"},{\"col\":\"phase\",\"title\":\"Phase\"},{\"col\":\"minutes\",\"title\":\"Min\",\"align\":\"right\"},{\"col\":\"failed\",\"title\":\"Failed\",\"align\":\"right\",\"fmt\":\",.0f\"},{\"col\":\"class\",\"title\":\"Class\"}]} /></div>\n    </div>\n  </div></div>\n</div>",
+ "dos": [
+  "Open every section with the numbered head and a 3px rule.",
+  "Tag every claim: intel, plan or verified.",
+  "Put evidence on night and narrative on paper.",
+  "One lime stroke per page, under the word that matters.",
+  "Land outcomes as stamps."
+ ],
+ "donts": [
+  "No colour on class tags; the border style is the meaning.",
+  "No rounded cards, no shadows except shadow-file.",
+  "No second accent: violet is the brand, lime is the marker, nothing else.",
+  "No percentages without their base.",
+  "No blur: what is unknown is redacted, not faded."
+ ],
+ "binding_losses": "The night section (ink inside paper), the class-tag border grammar, the lime highlighter, the redaction bar and the violet file shadow have no contract slot. They are carried as --ds-* properties and the do-* classes; kit components follow paper, ink and violet but not the three-pixel rule.",
+ "footer": "Day first, Night second. Fonts: Archivo 400–900 (variable width), Newsreader 300–500 + italics, IBM Plex Mono 400/500/700, all Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "step": 1,
+    "phase": "Detect",
+    "minutes": 3,
+    "requests": 5400,
+    "failed": 610,
+    "class": "Verified"
+   },
+   {
+    "step": 2,
+    "phase": "Diagnose",
+    "minutes": 6,
+    "requests": 11200,
+    "failed": 1480,
+    "class": "Verified"
+   },
+   {
+    "step": 3,
+    "phase": "Mitigate",
+    "minutes": 4,
+    "requests": 7600,
+    "failed": 420,
+    "class": "Verified"
+   },
+   {
+    "step": 4,
+    "phase": "Verify",
+    "minutes": 1,
+    "requests": 2200,
+    "failed": 12,
+    "class": "Intel"
+   }
+  ],
+  "queries": {
+   "series": "select phase, failed, class, step from rows order by step",
+   "table": "select step, phase, minutes, requests, failed, class from rows order by step",
+   "totals": "select sum(minutes) as minutes, sum(requests) as requests, sum(failed) as failed, round(100.0*sum(failed)/sum(requests),1) as failed_pct, 4 as actions, 3 as verified from rows"
+  },
+  "segments": [
+   "Timeline",
+   "Evidence",
+   "Actions"
+  ],
+  "segment_default": "Timeline",
+  "select_label": "Section",
+  "input_placeholder": "Search the file",
+  "switch_label": "Show redactions",
+  "tabs": [
+   "Narrative",
+   "Evidence",
+   "Actions"
+  ],
+  "tab_body": "Narrative: what happened, in order, on paper.",
+  "progress_label": "Claims verified · 75%",
+  "progress": 75,
+  "chart_title": "Requests failed by phase",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar"
+    },
+    "encoding": {
+     "x": {
+      "field": "phase",
+      "type": "ordinal",
+      "sort": null,
+      "title": "Phase"
+     },
+     "y": {
+      "field": "failed",
+      "type": "quantitative",
+      "title": "Failed requests"
+     },
+     "color": {
+      "field": "class",
+      "type": "nominal",
+      "title": "Class"
+     }
+    }
+   }
+  },
+  "row_key": "phase",
+  "table_columns": [
+   {
+    "col": "step",
+    "title": "#"
+   },
+   {
+    "col": "phase",
+    "title": "Phase"
+   },
+   {
+    "col": "minutes",
+    "title": "Min",
+    "align": "right"
+   },
+   {
+    "col": "failed",
+    "title": "Failed",
+    "align": "right",
+    "fmt": ",.0f"
+   },
+   {
+    "col": "class",
+    "title": "Class"
+   }
+  ],
+  "table_height": "220px"
+ },
+ "btn_primary": "do-btn do-btn-primary",
+ "btn_secondary": "do-btn",
+ "hand": {
+  "mode": "hatch",
+  "shadow": false,
+  "headline": "A traced line and a hatched fill.",
+  "note": "Dossier draws the way evidence is drawn: a 2px square-capped ink line around everything, 45° hatch in violet where a fill would go, flat sunk paper for the quiet parts, and mono caps for every label. Nothing is painted; everything looks traced from a source. The subject is the artifact's; the hand is this.",
+  "rules": [
+   [
+    "Stroke",
+    "2px ink, square caps and joins, on every shape."
+   ],
+   [
+    "Fill",
+    "Never flat for the subject: 45° hatch in violet at a 6px pitch. Ink hatch for the second series."
+   ],
+   [
+    "Quiet parts",
+    "Flat sunk paper, no hatch, so the hatched parts read as the data."
+   ],
+   [
+    "Figures",
+    "Mono caps at 11px; the display face, condensed, for the one number."
+   ],
+   [
+    "Ground",
+    "Paper-raised behind every drawing; on night, the drawing inverts with the page."
+   ],
+   [
+    "Motion",
+    "None in the drawing. A stamp beside it may land."
+   ]
+  ]
+ },
+ "tpl": {
+  "brand": "Dossier",
+  "dash_title": "Incident 0611 · Review",
+  "kpis": [
+   [
+    "Minutes down",
+    "minutes",
+    "",
+    "",
+    null,
+    "Detect 3 · Diagnose 6 · Mitigate 4 · Verify 1"
+   ],
+   [
+    "Requests failed",
+    "failed",
+    "",
+    "",
+    ",.0f",
+    "of 26,400 in the window"
+   ],
+   [
+    "Failure rate",
+    "failed_pct",
+    "",
+    "%",
+    null,
+    "Verified · edge logs"
+   ]
+  ],
+  "dash_table_title": "Ledger",
+  "slide_eyebrow": "Incident review",
+  "slide_title": "Fourteen minutes, one missing index.",
+  "slide_sub": "What failed, what the logs prove, and the one change that closes it.",
+  "slide_foot": "Case file 0611 · synthetic",
+  "slide_stat_label": "Requests failed",
+  "slide_stat_col": "failed",
+  "slide_stat_fmt": ",.0f",
+  "slide_body": "Across the fourteen-minute window. Nine in ten of them in the six diagnose minutes, before the index was named.",
+  "split": [
+   "DIAGNOSE · 6 MIN",
+   "MITIGATE · 4 MIN"
+  ],
+  "ed_kicker": "Incident review · Case file 0611",
+  "ed_headline": "The index that was never written",
+  "ed_deck": "Two people pressed Book in the same twenty milliseconds. The database said yes to both. Here is what the logs can prove about the fourteen minutes that followed.",
+  "ed_byline": "Platform on-call · Rev. 02 · 2 Oct 2026 · verified 3 of 4",
+  "ed_body": "At eleven o'clock the booking API began returning two confirmations for one slot. The on-call engineer saw the first alert at 11:03, which the edge logs verify. For the next six minutes the team looked at the cache, which held a 97% hit rate throughout and was not the cause. The partial unique index that should have refused the second write had been written in a migration plan and never in a migration.",
+  "ed_pull_col": "failed",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "requests failed · verified",
+  "steps": [
+   [
+    "One hundred requests in the window.",
+    "Each square is one request. Violet hatch is a failure; sunk paper is a success. The pattern is the finding."
+   ],
+   [
+    "Sixty of them failed in six minutes.",
+    "The diagnose phase is where the window was lost. The mitigate phase, four minutes, failed only fifteen."
+   ]
+  ],
+  "step_caption": "Fig. 1 · One hundred requests, by outcome · synthetic",
+  "app_rows": [
+   [
+    "Add partial unique index",
+    "Migration 0412 · production",
+    "Verified",
+    "ok"
+   ],
+   [
+    "Return 409 on conflict",
+    "API · bookings service",
+    "Verified",
+    "ok"
+   ],
+   [
+    "Alert on duplicate confirmations",
+    "Monitoring · threshold pending",
+    "Assumed",
+    "warn"
+   ],
+   [
+    "Backfill the cache theory",
+    "Closed · not the cause",
+    "Refuted",
+    "bad"
+   ]
+  ],
+  "app_cta": "New action",
+  "app_cta2": "Save file",
+  "landing_eyebrow": "Dossier · reports of record",
+  "landing_headline": "Say what you know. Show how.",
+  "landing_sub": "Plans, reviews and reports where every claim carries its evidence class, every outcome lands as a stamp, and the one word that matters is marked.",
+  "cta": "Open a file",
+  "cta2": "Read a sample",
+  "features": [
+   [
+    "Three classes",
+    "Intel, plan, verified. Dashed, filled, double. No colour needed."
+   ],
+   [
+    "Paper and ink",
+    "Narrative reads on paper; evidence sits on night. The reader always knows which."
+   ],
+   [
+    "Stamped outcomes",
+    "Decisions land as stamps, with a date. The prose explains; the stamp is the receipt."
+   ]
+  ]
+ },
+ "css": "\n.ds-dossier { --ds-cover-bg: var(--ds-paper); --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-violet); --ds-hand-fill2: var(--ds-ink); --ds-hand-muted: var(--ds-paper-sunk); --ds-hand-ground: var(--ds-paper-raised); --ds-hand-stroke: 2; --ds-hand-cap: square; --ds-hand-tex: 2; --ds-hand-bg: var(--ds-paper);\n  --ds-tpl-edge: 1.5px solid var(--ds-ink); --ds-tpl-radius: 0; --ds-tpl-rule: 3px solid var(--ds-ink); --ds-tag-radius: 2px; --ds-slide-bg: var(--ds-paper-raised); --ds-slide-title-bg: var(--ds-night); --ds-slide-title-fg: var(--ds-on-night); --ds-slide-split-a: var(--ds-violet); --ds-slide-split-a-fg: var(--ds-on-violet); --ds-slide-split-b: var(--ds-ink); --ds-slide-split-b-fg: var(--ds-paper); }\n.ds-dossier .ds-section h2 { font-family: var(--font-display); }\n.ds-dossier .ds-chip { border-width: 1.5px; border-color: var(--ds-ink); font-family: var(--font-mono); font-weight: 700; }\n.ds-dossier .ds-section { border-top-width: 3px; border-top-color: var(--ds-ink); }\n.ds-dossier .ds-principle-n { font-family: var(--font-mono); font-size: 18px; font-weight: 700; background: var(--ds-ink); color: var(--ds-paper); width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; }\n.ds-dossier .ds-tpl-brand, .ds-dossier .ds-tpl-slide-h, .ds-dossier .ds-tpl-hero-h, .ds-dossier .ds-tpl-ed-h, .ds-dossier .ds-tpl-dropcap { text-transform: uppercase; font-stretch: 62%; font-weight: 900; }\n.ds-dossier .ds-tpl-slide-big, .ds-dossier .ds-tpl-pull-n, .ds-dossier .h-num { font-stretch: 75%; font-weight: 800; }\n.ds-dossier .ds-tpl-step h4, .ds-dossier .ds-tpl-feat h4, .ds-dossier .ds-tpl-head h3 { text-transform: uppercase; font-stretch: 80%; }\n.ds-dossier .ds-tpl-tag { font-family: var(--font-mono); border: 1.5px solid currentColor; }\n.ds-dossier .ds-tpl-tag.is-idle { border-style: dashed; background: transparent; }\n.ds-dossier .ds-tpl-stage-top, .ds-dossier .ds-tpl-stage-foot { font-weight: 700; }\n.ds-dossier .ds-tpl-ed-body { font-family: var(--font-body); }\n.ds-dossier .ds-tpl-row-name { font-family: var(--font-display); font-stretch: 80%; text-transform: uppercase; }\n.ds-dossier .ds-comp, .ds-dossier .ds-note, .ds-dossier .ds-voice, .ds-dossier .ds-motif, .ds-dossier .ds-hand-panel { border-color: var(--ds-ink); border-width: 1.5px; }\n/* svg vocabulary */\n.ds-dossier .do-paper { fill: var(--ds-paper); } .ds-dossier .do-ink, .ds-dossier .do-fillink { fill: var(--ds-hand-ink); } .ds-dossier .do-night { fill: var(--ds-night); } .ds-dossier .do-lime { fill: var(--ds-lime); }\n.ds-dossier .do-hatch line { stroke: var(--ds-hand-fill); stroke-width: 2; } .ds-dossier .do-violet-rim { fill: none; stroke: var(--ds-hand-ink); stroke-width: 2; }\n.ds-dossier .do-stamp-rim { fill: none; stroke: var(--ds-hand-fill); stroke-width: 3; } .ds-dossier .do-stamp-rim-thin { fill: none; stroke: var(--ds-hand-fill); stroke-width: 1.5; }\n.ds-dossier .do-svg-mono { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .14em; fill: var(--ds-hand-ink); } .ds-dossier .do-svg-soft { fill: var(--ds-ink-soft); } .ds-dossier .do-on-night { fill: var(--ds-on-night); } .ds-dossier .do-on-hatch { fill: var(--ds-hand-ink); }\n.ds-dossier .do-svg-numblock { font-family: var(--font-mono); font-size: 22px; font-weight: 700; fill: var(--ds-paper); } .ds-dossier .do-on-ink { fill: var(--ds-paper); }\n.ds-dossier .do-svg-head { font-family: var(--font-display); font-weight: 900; font-stretch: 62%; font-size: 56px; letter-spacing: -.01em; fill: var(--ds-hand-ink); }\n.ds-dossier .do-svg-head-l { font-family: var(--font-display); font-weight: 900; font-stretch: 62%; font-size: 48px; letter-spacing: -.01em; fill: var(--ds-hand-ink); }\n.ds-dossier .do-svg-stamp { font-family: var(--font-mono); font-size: 16px; font-weight: 700; letter-spacing: .16em; fill: var(--ds-hand-fill); }\n.ds-dossier .do-svg-tag { fill: none; stroke: var(--ds-hand-ink); stroke-width: 1.5; } .ds-dossier .do-svg-tag-intel { stroke-dasharray: 4 3; }\n.ds-dossier .do-svg-tagtext { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .14em; fill: var(--ds-hand-ink); }\n.ds-dossier .do-svg-body { font-family: var(--font-body); font-size: 17px; fill: var(--ds-hand-ink); }\n/* authored components */\n.ds-dossier .do-btn { font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; line-height: 16px; padding: 11px 16px; border: 1.5px solid var(--ds-ink); border-radius: 2px; background: transparent; color: var(--ds-ink); cursor: pointer; transition: background 120ms linear, color 120ms linear; }\n.ds-dossier .do-btn:hover { background: var(--ds-ink); color: var(--ds-paper); }\n.ds-dossier .do-btn:focus-visible { outline: 3px solid var(--ds-violet); outline-offset: 2px; }\n.ds-dossier .do-btn-primary { background: var(--ds-violet); border-color: var(--ds-violet); color: var(--ds-on-violet); } .ds-dossier .do-btn-primary:hover { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-paper); }\n.ds-dossier .do-btn-lime { background: var(--ds-lime); border-color: var(--ds-ink); color: var(--ds-on-lime); }\n.ds-dossier .do-tag { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; line-height: 1.2; padding: 3px 7px; border: 1.5px solid currentColor; border-radius: 2px; white-space: nowrap; color: var(--ds-ink); }\n.ds-dossier .do-tag-intel { border-style: dashed; } .ds-dossier .do-tag-plan { background: var(--ds-ink); color: var(--ds-paper); } .ds-dossier .do-tag-verified { border-width: 3px; border-style: double; }\n.ds-dossier .do-tag-lime { background: var(--ds-lime); color: var(--ds-on-lime); border-color: var(--ds-ink); }\n.ds-dossier .do-tag-status.is-ok { background: var(--ds-positive-soft); color: var(--ds-positive); } .ds-dossier .do-tag-status.is-warn { background: var(--ds-caution-soft); color: var(--ds-caution); } .ds-dossier .do-tag-status.is-bad { background: var(--ds-negative-soft); color: var(--ds-negative); }\n.ds-dossier .do-hl { font-style: normal; position: relative; display: inline-block; isolation: isolate; }\n.ds-dossier .do-hl::after { content: \"\"; position: absolute; left: -.04em; right: -.04em; bottom: .04em; height: .22em; background: var(--ds-lime); z-index: -1; transform: skewX(-8deg); }\n.ds-dossier .do-redact { display: inline-block; background: currentColor; height: .95em; vertical-align: -.12em; border-radius: 1px; }\n.ds-dossier .do-stamp { display: inline-block; font-family: var(--font-mono); font-weight: 700; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--ds-violet); border: 3px solid currentColor; border-radius: 3px; padding: 6px 10px; line-height: 1.15; transform: rotate(-6deg); outline: 1.5px solid currentColor; outline-offset: 3px; }\n.ds-dossier .do-fact { display: grid; gap: 4px; padding: 14px 16px 14px 0; border-top: 3px solid var(--ds-ink); min-width: 150px; } .ds-dossier .do-fact-accent .t-numeral { color: var(--ds-violet); }\n.ds-dossier .do-callout { display: grid; gap: 8px; justify-items: start; padding: 14px 16px; border: 1.5px solid var(--ds-ink); font-family: var(--font-body); font-size: 17px; line-height: 1.45; } .ds-dossier .do-callout p { margin: 0; }\n.ds-dossier .do-callout-intel { background: var(--ds-caution-soft); } .ds-dossier .do-callout-ok { background: var(--ds-positive-soft); } .ds-dossier .do-callout-bad { background: var(--ds-negative-soft); }\n.ds-dossier .do-file { position: relative; background: var(--ds-paper-raised); color: var(--ds-ink); padding: 22px 22px 20px; border: 1.5px solid var(--ds-ink); box-shadow: var(--ds-shadow-file); margin: 26px 0 30px; max-width: 420px; }\n.ds-dossier .do-file-tab { position: absolute; top: -26px; left: -1.5px; background: var(--ds-ink); color: var(--ds-paper); font-family: var(--font-mono); font-weight: 700; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; padding: 6px 14px 5px; clip-path: polygon(0 0, 86% 0, 100% 100%, 0 100%); }\n.ds-dossier .do-file-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0 14px; }\n.ds-dossier .do-file-dl dt, .ds-dossier .do-file-dl dd { margin: 0; padding: 8px 0; border-bottom: 1px solid var(--ds-line); font-size: 14px; }\n.ds-dossier .do-file-dl dt { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ds-ink-soft); padding-top: 10px; }\n.ds-dossier .do-file-dl dd { font-weight: 600; font-family: var(--font-display); font-stretch: 90%; }\n.ds-dossier .do-file .do-stamp { position: absolute; right: 14px; bottom: -22px; background: var(--ds-paper-raised); }\n/* sample */\n.ds-dossier .do-sample { background: var(--ds-paper); color: var(--ds-ink); }\n.ds-dossier .do-sample-in { max-width: 1180px; margin: 0 auto; padding: 0 20px; }\n.ds-dossier .do-mast { display: flex; justify-content: space-between; gap: 16px; padding: 14px 20px 10px; border-bottom: 3px solid var(--ds-ink); font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; } .ds-dossier .do-mast b { font-weight: 700; } .ds-dossier .do-mast-mid { display: none; }\n.ds-dossier .do-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 32px 0 0; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }\n.ds-dossier .do-h1 { margin: 12px 0 0; } .ds-dossier .do-l1, .ds-dossier .do-l2 { display: block; } .ds-dossier .do-l2 { color: var(--ds-violet); }\n.ds-dossier .do-hero-grid { display: grid; gap: 28px; margin-top: 32px; padding-bottom: 56px; align-items: start; }\n.ds-dossier .do-dek { margin: 0; }\n.ds-dossier .do-facts { list-style: none; margin: 0; padding: 0; border-top: 3px solid var(--ds-ink); }\n.ds-dossier .do-facts li { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: baseline; border-bottom: 1px solid var(--ds-ink); padding: 8px 0; }\n.ds-dossier .do-facts-n { font-family: var(--font-display); font-weight: 800; font-stretch: 75%; font-size: 40px; line-height: .95; letter-spacing: -.01em; font-variant-numeric: tabular-nums; } .ds-dossier .do-facts-violet { color: var(--ds-violet); }\n.ds-dossier .do-facts .t-label { color: var(--ds-ink-soft); text-align: right; }\n.ds-dossier .do-night-sec { background: var(--ds-night); color: var(--ds-on-night); padding: 56px 0 64px; }\n.ds-dossier .do-shead { display: grid; grid-template-columns: auto 1fr; gap: 0 20px; align-items: end; border-bottom: 3px solid currentColor; padding-bottom: 14px; }\n.ds-dossier .do-shead-n { font-family: var(--font-mono); font-weight: 700; font-size: 14px; letter-spacing: .12em; padding: 6px 8px; background: var(--ds-lime); color: var(--ds-on-lime); align-self: start; margin-top: .4em; }\n.ds-dossier .do-shead h3 { margin: 0; } .ds-dossier .do-shead-k { grid-column: 1 / -1; margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ds-night-muted); }\n.ds-dossier .do-night-grid { display: grid; gap: 24px; margin-top: 32px; }\n.ds-dossier .do-panel { background: var(--ds-paper-raised); color: var(--ds-ink); border: 2px solid var(--ds-on-night); padding: 18px; min-width: 0; } .ds-dossier .do-panel .t-label { display: block; margin-bottom: 12px; color: var(--ds-ink-soft); }\n@container (min-width: 760px) { .ds-dossier .do-mast { padding: 14px 40px 10px; } .ds-dossier .do-mast-mid { display: block; } .ds-dossier .do-sample-in { padding: 0 40px; } .ds-dossier .do-hero-grid { grid-template-columns: 5fr 4fr 3fr; gap: 32px; } .ds-dossier .do-file { margin-top: 26px; } .ds-dossier .do-night-grid { grid-template-columns: 3fr 2fr; } .ds-dossier .do-night-sec { padding: 80px 0 96px; } }\n"
+}

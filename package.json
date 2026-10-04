@@ -32,6 +32,7 @@
     "generate:routes": "npm run generate:routes -w services/app",
     "render:schema": "node scripts/render-schema.mjs",
     "generate:env-snapshot": "node scripts/generate-env-snapshot.mjs",
+    "generate:design-systems": "node scripts/design-systems.mjs",
     "postinstall": "node services/cli/scripts/generate-teaching.mjs"
   },
   "dependencies": {

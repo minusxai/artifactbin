@@ -1,0 +1,765 @@
+{
+ "slug": "phosphor",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Phosphor cover: a dot matrix, a green slab, an outlined slab, an amber block and three text bars</title>\n<rect className=\"p-tint\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/><g className=\"p-dot\" opacity=\".55\"><rect x=\"208\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"168\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"184\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"200\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"216\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"232\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"248\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"264\" width=\"2\" height=\"2\"/><rect x=\"208\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"224\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"240\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"256\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"272\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"288\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"304\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"320\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"336\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"352\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"368\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"384\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"400\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"416\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"432\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"448\" y=\"280\" width=\"2\" height=\"2\"/><rect x=\"464\" y=\"280\" width=\"2\" height=\"2\"/></g>\n<rect className=\"p-green\" x=\"40\" y=\"48\" width=\"112\" height=\"208\"/><rect className=\"p-rim\" x=\"176.5\" y=\"48.5\" width=\"112\" height=\"208\"/>\n<rect className=\"p-amber\" x=\"312\" y=\"200\" width=\"56\" height=\"56\"/><rect className=\"p-green\" x=\"312\" y=\"48\" width=\"144\" height=\"16\"/><rect className=\"p-green\" x=\"312\" y=\"80\" width=\"96\" height=\"16\"/><rect className=\"p-green\" x=\"312\" y=\"112\" width=\"128\" height=\"16\"/>\n<rect className=\"p-cursor\" x=\"312\" y=\"144\" width=\"12\" height=\"20\"/></svg>",
+ "name": "Phosphor",
+ "tagline": "Green text. Black glass. No lies.",
+ "mood": "Technical",
+ "jobs": "Dev tools, CI, logs, status pages",
+ "color_mode": "dark",
+ "fonts": [
+  [
+   "IBM Plex Mono",
+   "ital,wght@0,400;0,500;0,700;1,400"
+  ]
+ ],
+ "families": {
+  "display": "\"IBM Plex Mono\", ui-monospace, Menlo, monospace",
+  "sans": "\"IBM Plex Mono\", ui-monospace, Menlo, monospace",
+  "mono": "\"IBM Plex Mono\", ui-monospace, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "glass",
+   "light": "#f2f5ec",
+   "dark": "#060a06",
+   "usage": "Page ground. Black glass in Night; a printout in Paper.",
+   "group": "Grounds"
+  },
+  {
+   "name": "glass-raised",
+   "light": "#fbfcf7",
+   "dark": "#0c130c",
+   "usage": "Panels, fields, menus.",
+   "group": "Grounds"
+  },
+  {
+   "name": "glass-sunk",
+   "light": "#e3e9d9",
+   "dark": "#030503",
+   "usage": "Log wells, code, inactive tracks.",
+   "group": "Grounds"
+  },
+  {
+   "name": "line",
+   "light": "#c9d3bf",
+   "dark": "#1b2a1b",
+   "usage": "Hairline rules between log lines and table rows.",
+   "group": "Grounds"
+  },
+  {
+   "name": "edge",
+   "light": "#0f7a3a",
+   "dark": "#3dff7a",
+   "usage": "The 1px outline on controls and panels. In Night it is the phosphor itself.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink",
+   "light": "#0f1f12",
+   "dark": "#d7ffe0",
+   "usage": "Primary text. Pale green-white in Night so the glow has somewhere to go.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-muted",
+   "light": "#4c6b52",
+   "dark": "#7fb48f",
+   "usage": "Secondary text, timestamps, dimmed log lines.",
+   "group": "Ink"
+  },
+  {
+   "name": "green",
+   "light": "#0f7a3a",
+   "dark": "#3dff7a",
+   "usage": "The brand and the pass state. Primary actions, the prompt, the cursor.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-green",
+   "light": "#f2f5ec",
+   "dark": "#04140a",
+   "usage": "Text on green fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "green-ink",
+   "light": "#0b6a31",
+   "dark": "#5fff93",
+   "usage": "Green as text: links, the active line.",
+   "group": "Brand"
+  },
+  {
+   "name": "green-soft",
+   "light": "#d9f0dc",
+   "dark": "#0f2a18",
+   "usage": "Ground for pass rows and selected lines.",
+   "group": "Brand"
+  },
+  {
+   "name": "amber",
+   "light": "#9a6a00",
+   "dark": "#ffb000",
+   "usage": "The attention colour: focus ring, warnings, the one thing running now.",
+   "group": "Brand"
+  },
+  {
+   "name": "on-amber",
+   "light": "#1a1000",
+   "dark": "#1a1000",
+   "usage": "Text on amber fills.",
+   "group": "Brand"
+  },
+  {
+   "name": "amber-soft",
+   "light": "#f6e9c4",
+   "dark": "#2a1e00",
+   "usage": "Ground for warning rows.",
+   "group": "Brand"
+  },
+  {
+   "name": "positive",
+   "light": "#0f7a3a",
+   "dark": "#3dff7a",
+   "usage": "Pass. Shares green: in Phosphor, green means it worked.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#9a6a00",
+   "dark": "#ffb000",
+   "usage": "Flaky, pending, retrying.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#b3261e",
+   "dark": "#ff5c5c",
+   "usage": "Fail. The only red on the screen.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#f6d9d6",
+   "dark": "#2d0e0e",
+   "usage": "Ground for failed rows and error callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "cyan",
+   "light": "#0b6e7a",
+   "dark": "#5ee1f0",
+   "usage": "Second chart series and the diff-added colour. Never for state.",
+   "group": "Chart"
+  },
+  {
+   "name": "violet",
+   "light": "#5b3fb0",
+   "dark": "#b79cff",
+   "usage": "Third chart series.",
+   "group": "Chart"
+  }
+ ],
+ "contract": {
+  "background": "glass",
+  "foreground": "ink",
+  "card": "glass-raised",
+  "card-foreground": "ink",
+  "popover": "glass-raised",
+  "popover-foreground": "ink",
+  "primary": "green",
+  "primary-foreground": "on-green",
+  "secondary": "green-soft",
+  "secondary-foreground": "green-ink",
+  "muted": "glass-sunk",
+  "muted-foreground": "ink-muted",
+  "accent": "glass-sunk",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "glass",
+  "border": "line",
+  "input": "line",
+  "ring": "amber",
+  "chart-1": "green",
+  "chart-2": "cyan",
+  "chart-3": "amber",
+  "chart-4": "violet",
+  "chart-5": "ink-muted"
+ },
+ "radius_contract": "0px",
+ "extra_vars": {
+  "glow": {
+   "light": "none",
+   "dark": "0 0 12px rgba(61,255,122,.45)"
+  },
+  "glow-amber": {
+   "light": "none",
+   "dark": "0 0 12px rgba(255,176,0,.5)"
+  },
+  "chip-radius": "0px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(44px, 7vw, 88px)",
+   "lh": ".95",
+   "weight": 700,
+   "ls": "-0.02em",
+   "sample": "build #4812 passed",
+   "usage": "One per page. Covers and the headline state of a system."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(30px, 4vw, 48px)",
+   "lh": "1",
+   "weight": 700,
+   "ls": "-0.02em",
+   "sample": "3 of 12 jobs failed",
+   "usage": "Section openers and page titles."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "20px",
+   "lh": "26px",
+   "weight": 700,
+   "ls": "-0.01em",
+   "sample": "deploy-prod · 42s",
+   "usage": "Panel titles, job names."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "15px",
+   "lh": "24px",
+   "weight": 400,
+   "sample": "Tests ran on 4 workers in 3m 12s. The flaky suite retried once.",
+   "usage": "Default reading text. Everything is mono; the rhythm comes from leading."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "12:04:18.221 · worker-3",
+   "usage": "Timestamps, captions, helper text."
+  },
+  {
+   "name": "label",
+   "family": "sans",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 500,
+   "ls": "0.1em",
+   "tt": "uppercase",
+   "sample": "Status",
+   "usage": "Eyebrows and column heads. Caps through CSS."
+  },
+  {
+   "name": "numeral",
+   "family": "mono",
+   "size": "40px",
+   "lh": "44px",
+   "weight": 500,
+   "ls": "-0.02em",
+   "sample": "99.97%",
+   "usage": "KPI figures. Tabular.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "log",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "$ npm test -- --files services/app",
+   "usage": "Log lines and commands. Prefixed by a prompt glyph, never a box."
+  }
+ ],
+ "idea_headline": "A terminal that tells the truth.",
+ "idea": "Phosphor is the green screen with the lies removed: one monospace face at every size, light that glows instead of shadows that fall, a prompt instead of a hero. It belongs to tools whose readers already trust the terminal and want the web page to behave like it.",
+ "use_for": "CI dashboards, log viewers, status pages, developer docs, release notes, anything a person reads while something is running.",
+ "avoid_when": "Marketing, long prose, consumer subjects, or any page where more than two colours need to mean something at once.",
+ "principles_headline": "One face, two colours, three states.",
+ "principles": [
+  [
+   "One typeface, every size.",
+   "IBM Plex Mono from the 88px headline to the 13px log line. Hierarchy comes from size, weight 500 or 700, and leading, never a second family."
+  ],
+  [
+   "Green is pass, amber is now, red is fail.",
+   "Three states, three colours, nothing else carries meaning. A fourth status colour is a bug."
+  ],
+  [
+   "Glow, do not drop.",
+   "Depth is light: a 12px green glow on the thing that is live. Nothing casts a shadow because nothing is above the glass."
+  ],
+  [
+   "The prompt is the hero.",
+   "A page opens on a command and its result, not on a slogan. The reader is a person at a terminal."
+  ],
+  [
+   "Square, 1px, honest.",
+   "Zero radius, 1px edges, no fills on buttons but the primary. The grid shows through: dots at 16px are the page texture."
+  ]
+ ],
+ "voice": [
+  "Lowercase commands, sentence-case prose. Never shout in caps outside a label.",
+  "Say what ran: \"Tests ran on 4 workers in 3m 12s\", not \"All good!\"",
+  "Errors show the failing line and the fix. No apologies.",
+  "Timestamps everywhere; a figure without a time is a rumour."
+ ],
+ "colour_headline": "Phosphor green on black glass; ink on a printout by day.",
+ "colour_note": "Night is the native mode: the glass is nearly black, green is both brand and pass, and amber marks the one thing happening now. Paper is a printout of the same screen, with the greens darkened to read. Chart series stay away from the three state colours where they can.",
+ "chart_series": [
+  "green",
+  "cyan",
+  "amber",
+  "violet",
+  "ink-muted"
+ ],
+ "chart_note": "Green leads because it is the brand; cyan and violet exist only for charts so series never impersonate a state. Amber is third and should appear only when a series is literally the running one.",
+ "type_headline": "Plex Mono at every size.",
+ "type_note": "One family, four weights. The headline is bold mono with tight tracking; the body is regular mono at a generous 24px leading so paragraphs read as prose, not code. Log lines are the smallest role and get a prompt glyph.",
+ "space_headline": "A 16px dot grid and a 4px baseline.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Gaps inside controls."
+  ],
+  [
+   "space-2 · 8px",
+   "Between a glyph and its label; log line padding."
+  ],
+  [
+   "space-3 · 12px",
+   "Control padding-y."
+  ],
+  [
+   "space-4 · 16px",
+   "The dot-grid pitch; control padding-x; panel gap."
+  ],
+  [
+   "space-6 · 24px",
+   "Panel padding."
+  ],
+  [
+   "space-8 · 32px",
+   "Between panel groups."
+  ],
+  [
+   "space-12 · 48px",
+   "Section breaks."
+  ],
+  [
+   "space-16 · 64px",
+   "Page gutters on wide screens."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-0",
+   "Everything. Phosphor has no rounded corners, including the switch, which is a square slider."
+  ],
+  [
+   "edge · 1px",
+   "Every panel and control has a 1px edge in the edge colour. No 2px, no double rules."
+  ],
+  [
+   "rule · 1px line",
+   "Between log lines and table rows. Never a box around a single line."
+  ]
+ ],
+ "depth": [
+  [
+   "glow",
+   "0 0 12px green at 45%. The live job, the focused field, the primary button on hover."
+  ],
+  [
+   "glow-amber",
+   "The same glow in amber for the thing running now."
+  ],
+  [
+   "focus",
+   "A 1px amber outline with the amber glow. Visible on every control."
+  ],
+  [
+   "motion",
+   "The cursor blinks at 1s. Log lines append without animation. Progress bars move linearly; nothing eases."
+  ]
+ ],
+ "components_headline": "Panels, prompts and a very square switch.",
+ "components_note": "Kit components take Phosphor through the contract and come out square, green and 1px-edged. Authored classes add the prompt glyph, the glow and the state rows.",
+ "buttons": "<Button>Run pipeline</Button><Button variant=\"secondary\">Retry</Button><Button variant=\"outline\">View logs</Button><Button variant=\"ghost\">Cancel</Button><button className=\"p-btn p-btn-primary\">$ run</button><button className=\"p-btn\">view logs</button><button className=\"p-btn p-btn-amber\">running…</button>",
+ "buttons_note": "Kit buttons on the left. Authored p-btn on the right: 1px edge, mono lowercase, the primary glows green on hover, the amber variant is reserved for the running job.",
+ "tags": "<Badge>pass</Badge><Badge variant=\"secondary\">cached</Badge><Badge variant=\"outline\">skipped</Badge><Badge variant=\"destructive\">fail</Badge><span className=\"p-tag p-pass\">● pass</span><span className=\"p-tag p-run\">● running</span><span className=\"p-tag p-fail\">● fail</span><span className=\"p-tag\">○ queued</span>",
+ "tags_note": "State tags are a filled or hollow dot plus the word. Three states only; queued is hollow.",
+ "fields_note": "Fields are glass-sunk wells with a 1px edge; focus is amber. The switch is a square track with a square thumb.",
+ "stats": "<div className=\"p-stat\"><span className=\"t-label\">Pass rate · 7d</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"pass_rate\" suffix=\"%\" format=\".1f\" /></span><span className=\"p-delta p-up\">▲ 0.4 pts</span></div><div className=\"p-stat p-stat-live\"><span className=\"t-label\">Running now</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"running\" /></span><span className=\"p-delta\">jobs · amber glow</span></div>",
+ "stats_note": "A Stat is a label, a mono numeral, a delta. The live Stat glows amber; everything else is flat glass.",
+ "callouts": "<Alert><AlertTitle>No table called orderz</AlertTitle><AlertDescription>Did you mean orders?</AlertDescription></Alert><div className=\"p-callout p-callout-pass\"><strong>✓ 212 tests passed</strong> in 3m 12s on 4 workers.</div><div className=\"p-callout p-callout-warn\"><strong>! flaky:</strong> auth/session.test.ts retried once and passed.</div><div className=\"p-callout p-callout-fail\"><strong>✗ 3 failed</strong> · reader/hydration.test.ts:88 expected 2, got 3.</div>",
+ "callouts_note": "Callouts are log lines with a glyph: ✓ ! ✗. The ground tints toward the state; the text stays ink.",
+ "chart_comp_note": "Charts are green first, cyan second. Gridlines are the line token; no area fills in Night because glow and fill fight.",
+ "table_note": "Tables are the log: 1px rules, mono figures, state dots in the first column. The header is the label role.",
+ "card": "<div className=\"p-panel p-panel-live\"><div className=\"p-panel-head\"><span className=\"t-label\">deploy-prod · #4812</span><span className=\"p-tag p-run\">● running</span></div><pre className=\"p-log\"><code>$ npm run build\n✓ islands built (14.2s)\n✓ 12 gate shards queued\n› gate-hydration · worker-3 · 00:42</code></pre><button className=\"p-btn\">view full log</button></div>",
+ "card_note": "A panel is a titled well. The live panel glows; a finished panel is flat. Logs inside are the log role with a prompt glyph per command.",
+ "motifs_headline": "Dots, prompts, and a bar of light.",
+ "motifs_note": "Phosphor draws with the dot grid, the prompt glyph and horizontal bars of green light. The data lives in the bars: a pipeline is a row of segments, a pass rate is a bar that fills.",
+ "motifs": [
+  {
+   "title": "The pipeline strip",
+   "usage": "Each stage is a segment: filled green for pass, amber for running (glowing), hollow for queued, red for fail. Durations sit under each segment in the log role.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Pipeline strip</title><g className=\"p-dot\" opacity=\".4\"><rect x=\"8\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"8\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"24\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"40\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"56\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"72\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"88\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"104\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"120\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"136\" width=\"2\" height=\"2\"/><rect x=\"8\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"24\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"40\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"56\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"72\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"88\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"104\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"120\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"136\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"152\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"168\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"184\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"200\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"216\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"232\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"248\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"264\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"280\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"296\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"312\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"328\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"344\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"360\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"376\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"392\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"408\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"424\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"440\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"456\" y=\"152\" width=\"2\" height=\"2\"/><rect x=\"472\" y=\"152\" width=\"2\" height=\"2\"/></g><rect className=\"p-green\" x=\"24\" y=\"56\" width=\"96\" height=\"24\"/><rect className=\"p-green\" x=\"128\" y=\"56\" width=\"96\" height=\"24\"/><rect className=\"p-amber p-glow-a\" x=\"232\" y=\"56\" width=\"96\" height=\"24\"/><rect className=\"p-rim\" x=\"336.5\" y=\"56.5\" width=\"96\" height=\"24\"/><text x=\"24\" y=\"104\" className=\"p-svg-log\">install 14s</text><text x=\"128\" y=\"104\" className=\"p-svg-log\">test 3m12s</text><text x=\"232\" y=\"104\" className=\"p-svg-log p-amber-fill\">gates 00:42</text><text x=\"336\" y=\"104\" className=\"p-svg-log p-muted-fill\">deploy —</text></svg>"
+  },
+  {
+   "title": "The prompt line",
+   "usage": "Commands open with a green prompt glyph and a blinking block cursor. Use it for the page opener: the command that produced what the reader is looking at.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Prompt line</title><rect className=\"p-sunk\" x=\"0\" y=\"0\" width=\"480\" height=\"160\"/><text x=\"24\" y=\"70\" className=\"p-svg-prompt\">$</text><text x=\"48\" y=\"70\" className=\"p-svg-cmd\">afbin push report.jsx --yes</text><rect className=\"p-cursor p-blink\" x=\"372\" y=\"54\" width=\"10\" height=\"20\"/><text x=\"24\" y=\"104\" className=\"p-svg-log p-muted-fill\">published · v12 · 1.2s</text></svg>"
+  },
+  {
+   "title": "The fill bar",
+   "usage": "A pass rate or a budget as a bar of light inside a 1px track. Label the value at the end of the fill, in the numeral role, never above it.",
+   "svg": "<svg viewBox=\"0 0 480 160\"><title>Fill bar</title><rect className=\"p-rim\" x=\"24.5\" y=\"60.5\" width=\"431\" height=\"40\"/><rect className=\"p-green p-glow\" x=\"25\" y=\"61\" width=\"402\" height=\"39\"/><text x=\"415\" y=\"86\" className=\"p-svg-cmd p-on-green\" textAnchor=\"end\">99.7%</text><text x=\"24\" y=\"44\" className=\"p-svg-log\">PASS RATE · 7 DAYS</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Phosphor.",
+ "sample_note": "A CI run page: the command, the state in one line, the pipeline strip, then the log. Amber marks the stage running now; nothing else moves.",
+ "sample": "<div className=\"p-sample\"><div className=\"p-sample-in\">\n  <div className=\"p-sample-top\"><span className=\"t-label\">artifactbin · ci · main</span><span className=\"t-label p-muted\">synthetic run · 2 oct 2026 12:04 utc</span></div>\n  <p className=\"p-prompt-line\"><span className=\"p-prompt\">$</span> gh run watch 4812</p>\n  <h2 className=\"t-display-xl p-sample-h\">run #4812 · <span className=\"p-amber-ink\">gates running</span></h2>\n  <p className=\"t-body p-sample-lede\">install and tests passed on 4 workers. 12 gate shards are queued on 3 containers; hydration is on worker-3.</p>\n  <div className=\"p-sample-stats\">\n    <div className=\"p-stat\"><span className=\"t-label\">Tests</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"tests\" /></span><span className=\"p-delta p-up\">✓ all passed</span></div>\n    <div className=\"p-stat p-stat-live\"><span className=\"t-label\">Gates running</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"running\" /></span><span className=\"p-delta\">of 12 shards</span></div>\n    <div className=\"p-stat\"><span className=\"t-label\">Pass rate · 7d</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"pass_rate\" suffix=\"%\" format=\".1f\" /></span><span className=\"p-delta\">▲ 0.4 pts</span></div>\n  </div>\n  <div className=\"p-sample-grid\">\n    <div className=\"p-panel\"><p className=\"t-label\">Stage durations · last 6 runs</p><Question data=\"$series\" height=\"260px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"run\",\"type\":\"ordinal\",\"title\":\"Run\"},\"y\":{\"field\":\"seconds\",\"type\":\"quantitative\",\"title\":\"Seconds\"},\"color\":{\"field\":\"stage\",\"type\":\"nominal\",\"title\":\"Stage\"}}}}} /></div>\n    <div className=\"p-panel p-panel-live\"><div className=\"p-panel-head\"><span className=\"t-label\">gate-hydration · worker-3</span><span className=\"p-tag p-run\">● running</span></div><pre className=\"p-log\"><code>12:04:18.221 › chromium 128 · 1440×900\n12:04:19.004 ✓ reader handover · 412ms\n12:04:19.880 ✓ islands hydrate · 9/9\n12:04:21.117 › capture mobile 390×844\n12:04:22.300 ▮</code></pre></div>\n  </div>\n  <div className=\"p-panel\"><p className=\"t-label\">Jobs</p><DataTable data=\"$table\" rowKey=\"job\" height=\"220px\" columns={[{\"col\":\"state\",\"title\":\"State\"},{\"col\":\"job\",\"title\":\"Job\"},{\"col\":\"worker\",\"title\":\"Worker\"},{\"col\":\"seconds\",\"title\":\"Seconds\",\"align\":\"right\",\"bar\":true}]} /></div>\n</div></div>",
+ "dos": [
+  "One typeface. Size, weight and leading make the hierarchy.",
+  "Green for pass, amber for now, red for fail. Nothing else carries state.",
+  "Open on the command and its result.",
+  "Glow the one live thing; leave everything else flat."
+ ],
+ "donts": [
+  "No rounded corners, no drop shadows, no gradients.",
+  "No second status colour; blue and violet exist only in charts.",
+  "No caps outside the label role.",
+  "No figure without a timestamp."
+ ],
+ "binding_losses": "The glow, the prompt glyph, the dot grid and the three-state tag rows have no contract slot; they are the --ds-glow properties and p-* classes above. The kit switch stays rounded, which is the one place Phosphor loses its square.",
+ "footer": "Night first, Paper second. One family: IBM Plex Mono 400/500/700 and italic 400, Google-hosted.",
+ "data": {
+  "rows": [
+   {
+    "run": "#4807",
+    "stage": "install",
+    "seconds": 14,
+    "job": "install",
+    "state": "● pass",
+    "worker": "w1"
+   },
+   {
+    "run": "#4807",
+    "stage": "test",
+    "seconds": 190,
+    "job": "test-api",
+    "state": "● pass",
+    "worker": "w2"
+   },
+   {
+    "run": "#4807",
+    "stage": "gates",
+    "seconds": 88,
+    "job": "gate-hydration",
+    "state": "● running",
+    "worker": "w3"
+   },
+   {
+    "run": "#4808",
+    "stage": "install",
+    "seconds": 13,
+    "job": "test-ui",
+    "state": "● pass",
+    "worker": "w4"
+   },
+   {
+    "run": "#4808",
+    "stage": "test",
+    "seconds": 201,
+    "job": "gate-reader",
+    "state": "○ queued",
+    "worker": "w1"
+   },
+   {
+    "run": "#4808",
+    "stage": "gates",
+    "seconds": 92,
+    "job": "build",
+    "state": "● pass",
+    "worker": "w2"
+   },
+   {
+    "run": "#4809",
+    "stage": "install",
+    "seconds": 15,
+    "job": "gate-export",
+    "state": "● fail",
+    "worker": "w3"
+   },
+   {
+    "run": "#4809",
+    "stage": "test",
+    "seconds": 188,
+    "job": "deploy",
+    "state": "○ queued",
+    "worker": "w4"
+   },
+   {
+    "run": "#4809",
+    "stage": "gates",
+    "seconds": 85,
+    "job": "lint",
+    "state": "● pass",
+    "worker": "w1"
+   }
+  ],
+  "queries": {
+   "series": "select run, stage, seconds from rows order by run, stage",
+   "table": "select job, state, worker, seconds from rows order by seconds desc",
+   "totals": "select 212 as tests, 3 as running, 99.7 as pass_rate from rows limit 1"
+  },
+  "segments": [
+   "Runs",
+   "Jobs",
+   "Logs"
+  ],
+  "segment_default": "Runs",
+  "select_label": "Branch",
+  "input_placeholder": "grep the log",
+  "switch_label": "Follow output",
+  "tabs": [
+   "Summary",
+   "Jobs",
+   "Artifacts"
+  ],
+  "tab_body": "Summary: the state in one line, then the strip.",
+  "progress_label": "gates · 9 of 12",
+  "progress": 75,
+  "chart_title": "Stage durations · last 3 runs",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": "bar",
+    "encoding": {
+     "x": {
+      "field": "run",
+      "type": "ordinal",
+      "title": "Run"
+     },
+     "y": {
+      "field": "seconds",
+      "type": "quantitative",
+      "title": "Seconds"
+     },
+     "color": {
+      "field": "stage",
+      "type": "nominal",
+      "title": "Stage"
+     },
+     "xOffset": {
+      "field": "stage"
+     }
+    }
+   }
+  },
+  "row_key": "job",
+  "table_columns": [
+   {
+    "col": "state",
+    "title": "State"
+   },
+   {
+    "col": "job",
+    "title": "Job"
+   },
+   {
+    "col": "worker",
+    "title": "Worker"
+   },
+   {
+    "col": "seconds",
+    "title": "Seconds",
+    "align": "right",
+    "bar": true
+   }
+  ],
+  "table_height": "240px"
+ },
+ "css": "\n.ds-phosphor { --ds-cover-bg: var(--ds-glass); }\n.ds-phosphor .ds-section h2, .ds-phosphor .ds-cover-name { font-family: var(--font-display); }\n.ds-phosphor .ds-chip { border-radius: 0; }\n.ds-phosphor .p-tint { fill: var(--ds-green-soft); } .ds-phosphor .p-dot rect { fill: var(--ds-green); } .ds-phosphor .p-green { fill: var(--ds-green); } .ds-phosphor .p-amber { fill: var(--ds-amber); } .ds-phosphor .p-sunk { fill: var(--ds-glass-sunk); }\n.ds-phosphor .p-rim { fill: none; stroke: var(--ds-edge); stroke-width: 1; } .ds-phosphor .p-cursor { fill: var(--ds-green); }\n.ds-phosphor .p-glow { filter: drop-shadow(0 0 6px rgba(61,255,122,.6)); } .ds-phosphor .p-glow-a { filter: drop-shadow(0 0 6px rgba(255,176,0,.7)); }\n.light .ds-phosphor .p-glow, .light .ds-phosphor .p-glow-a { filter: none; }\n.ds-phosphor .p-svg-log { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; fill: var(--ds-ink); } .ds-phosphor .p-svg-prompt { font-family: var(--font-mono); font-size: 22px; font-weight: 700; fill: var(--ds-green); } .ds-phosphor .p-svg-cmd { font-family: var(--font-mono); font-size: 22px; fill: var(--ds-ink); }\n.ds-phosphor .p-amber-fill { fill: var(--ds-amber); } .ds-phosphor .p-muted-fill { fill: var(--ds-ink-muted); } .ds-phosphor .p-on-green { fill: var(--ds-on-green); font-weight: 700; }\n@keyframes p-blink { 50% { opacity: 0; } } .ds-phosphor .p-blink { animation: p-blink 1s steps(1) infinite; } @media (prefers-reduced-motion: reduce) { .ds-phosphor .p-blink { animation: none; } }\n.ds-phosphor .p-muted { color: var(--ds-ink-muted); } .ds-phosphor .p-amber-ink { color: var(--ds-amber); }\n.ds-phosphor .p-btn { font-family: var(--font-mono); font-size: 14px; line-height: 20px; padding: 9px 14px; border: 1px solid var(--ds-edge); background: transparent; color: var(--ds-ink); cursor: pointer; transition: box-shadow 120ms linear, background 120ms linear; }\n.ds-phosphor .p-btn:hover { box-shadow: var(--ds-glow); background: var(--ds-green-soft); } .ds-phosphor .p-btn:focus-visible { outline: 1px solid var(--ds-amber); outline-offset: 2px; box-shadow: var(--ds-glow-amber); }\n.ds-phosphor .p-btn-primary { background: var(--ds-green); color: var(--ds-on-green); font-weight: 700; } .ds-phosphor .p-btn-amber { border-color: var(--ds-amber); color: var(--ds-amber); box-shadow: var(--ds-glow-amber); }\n.ds-phosphor .p-tag { display: inline-flex; gap: 6px; align-items: center; padding: 2px 8px; border: 1px solid var(--ds-line); font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; color: var(--ds-ink-muted); }\n.ds-phosphor .p-pass { color: var(--ds-green-ink); border-color: var(--ds-green); } .ds-phosphor .p-run { color: var(--ds-amber); border-color: var(--ds-amber); box-shadow: var(--ds-glow-amber); } .ds-phosphor .p-fail { color: var(--ds-negative); border-color: var(--ds-negative); }\n.ds-phosphor .p-stat { display: grid; gap: 6px; padding: 18px 20px; border: 1px solid var(--ds-edge); background: var(--ds-glass-raised); min-width: 200px; }\n.ds-phosphor .p-stat-live { border-color: var(--ds-amber); box-shadow: var(--ds-glow-amber); } .ds-phosphor .p-stat-live .t-numeral { color: var(--ds-amber); }\n.ds-phosphor .p-delta { font-size: 13px; color: var(--ds-ink-muted); } .ds-phosphor .p-up { color: var(--ds-green-ink); }\n.ds-phosphor .p-callout { padding: 12px 14px; border-left: 2px solid var(--ds-line); font-family: var(--font-mono); font-size: 14px; line-height: 1.5; background: var(--ds-glass-sunk); }\n.ds-phosphor .p-callout-pass { border-color: var(--ds-green); background: var(--ds-green-soft); } .ds-phosphor .p-callout-warn { border-color: var(--ds-amber); background: var(--ds-amber-soft); } .ds-phosphor .p-callout-fail { border-color: var(--ds-negative); background: var(--ds-negative-soft); }\n.ds-phosphor .p-panel { border: 1px solid var(--ds-edge); background: var(--ds-glass-raised); padding: 18px 20px; min-width: 0; } .ds-phosphor .p-panel > .t-label { display: block; margin-bottom: 12px; color: var(--ds-ink-muted); }\n.ds-phosphor .p-panel-live { border-color: var(--ds-amber); box-shadow: var(--ds-glow-amber); }\n.ds-phosphor .p-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }\n.ds-phosphor .p-log { margin: 0 0 12px; padding: 12px; background: var(--ds-glass-sunk); border: 1px solid var(--ds-line); font-family: var(--font-mono); font-size: 13px; line-height: 20px; overflow-x: auto; color: var(--ds-ink); }\n.ds-phosphor .p-sample { background: var(--ds-glass); padding: 40px 20px 64px; border-top: 1px solid var(--ds-edge); border-bottom: 1px solid var(--ds-edge); }\n.ds-phosphor .p-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-phosphor .p-sample-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--ds-line); }\n.ds-phosphor .p-prompt-line { margin: 28px 0 0; font-family: var(--font-mono); font-size: 18px; color: var(--ds-ink-muted); } .ds-phosphor .p-prompt { color: var(--ds-green); font-weight: 700; margin-right: 8px; }\n.ds-phosphor .p-sample-h { margin-top: 12px; max-width: 20ch; } .ds-phosphor .p-sample-lede { margin-top: 16px; max-width: 60ch; color: var(--ds-ink-muted); }\n.ds-phosphor .p-sample-stats { display: grid; gap: 16px; margin-top: 32px; } .ds-phosphor .p-sample-grid { display: grid; gap: 16px; margin-top: 16px; } .ds-phosphor .p-sample-grid + .p-panel { margin-top: 16px; }\n@container (min-width: 760px) { .ds-phosphor .p-sample { padding: 56px 40px 80px; } .ds-phosphor .p-sample-stats { grid-template-columns: 1fr 1fr 1fr; } .ds-phosphor .p-sample-grid { grid-template-columns: 1fr 1fr; } }\n\n.ds-phosphor { --ds-hand-ink: var(--ds-green); --ds-hand-fill: var(--ds-green); --ds-hand-fill2: var(--ds-amber); --ds-hand-muted: var(--ds-glass-sunk); --ds-hand-ground: var(--ds-glass-raised); --ds-hand-stroke: 1.5; --ds-hand-cap: square; --ds-hand-bg: var(--ds-glass);\n  --ds-tpl-edge: 1px solid var(--ds-edge); --ds-tpl-radius: 0; --ds-tpl-rule: 1px solid var(--ds-line); --ds-tag-radius: 0; --ds-slide-bg: var(--ds-glass-raised); --ds-slide-title-bg: var(--ds-glass-sunk); --ds-slide-title-fg: var(--ds-green-ink); --ds-slide-split-a: var(--ds-green); --ds-slide-split-a-fg: var(--ds-on-green); --ds-slide-split-b: var(--ds-amber); --ds-slide-split-b-fg: var(--ds-on-amber); --ds-hero-bg: var(--ds-glass-sunk); }\n.ds-phosphor .h-fill { opacity: .25; } .ds-phosphor .h-fill2 { opacity: .9; } .ds-phosphor .h-glow .h-ink { stroke: var(--ds-green); }\n.light .ds-phosphor .h-glow { display: none; } .light .ds-phosphor .h-fill { opacity: .18; }\n.ds-phosphor .h-num { font-family: var(--font-mono); font-weight: 500; fill: var(--ds-green-ink); } .ds-phosphor .h-text { fill: var(--ds-ink-muted); }\n.ds-phosphor .ds-hand-art, .ds-phosphor .ds-tpl-figure { background-image: radial-gradient(var(--ds-line) 1px, transparent 1px); background-size: 16px 16px; }\n.ds-phosphor .ds-tpl-tag { font-family: var(--font-mono); text-transform: none; letter-spacing: .06em; border: 1px solid var(--ds-line); background: transparent; }\n.ds-phosphor .ds-tpl-tag.is-ok { border-color: var(--ds-green); background: transparent; } .ds-phosphor .ds-tpl-tag.is-warn { border-color: var(--ds-amber); background: transparent; box-shadow: var(--ds-glow-amber); } .ds-phosphor .ds-tpl-tag.is-bad { border-color: var(--ds-negative); background: transparent; }\n.ds-phosphor .ds-tpl-stage-title .ds-tpl-slide-h { color: var(--ds-green-ink); } .ds-phosphor .ds-tpl-stage-title .ds-tpl-stage-foot { border-top-color: var(--ds-line); }\n.ds-phosphor .ds-tpl-dropcap { color: var(--ds-green-ink); } .ds-phosphor .ds-tpl-pull { border-top-color: var(--ds-green); }\n.ds-phosphor .ds-tpl-kpi, .ds-phosphor .ds-tpl-tile, .ds-phosphor .ds-tpl-step { background: var(--ds-glass-raised); }\n\n.ds-phosphor .h-fill2 { opacity: .45; } .ds-phosphor .h-text { fill: var(--ds-ink); }\n\n.ds-phosphor .ds-tpl-tile { overflow-x: auto; }\n",
+ "status_alias": {
+  "positive-soft": "green-soft",
+  "caution-soft": "amber-soft"
+ },
+ "btn_primary": "p-btn p-btn-primary",
+ "btn_secondary": "p-btn",
+ "hand": {
+  "mode": "glow",
+  "shadow": false,
+  "headline": "One-pixel green lines that glow.",
+  "note": "Phosphor draws like a vector display: 1.5px lines in phosphor green with a soft glow behind them, no fills except the dim glass of a panel and the one amber block. Lines are the drawing; light is the depth. In Paper mode the glow is off and the lines read as a printout.",
+  "rules": [
+   [
+    "Stroke",
+    "1.5px green, square caps. Every edge is a lit line; nothing is a solid shape."
+   ],
+   [
+    "Fill",
+    "Dim glass for grounds; green for the one lit region; amber for the one thing running."
+   ],
+   [
+    "Glow",
+    "A wide 9px copy of every line at 30% behind it. Off in Paper."
+   ],
+   [
+    "Texture",
+    "The 16px dot grid behind drawings, at 40%."
+   ],
+   [
+    "Figures",
+    "Mono caps at 11px; the mono numeral for the one number."
+   ],
+   [
+    "Motion",
+    "Lines may blink once at 1s when they first appear; nothing else moves."
+   ]
+  ]
+ },
+ "motion": [
+  [
+   "Hover",
+   "Green glow appears on the hovered control, 120ms linear. Nothing moves."
+  ],
+  [
+   "Press",
+   "The fill inverts for the duration of the press. No scale, no shadow."
+  ],
+  [
+   "Focus",
+   "A 1px amber outline with the amber glow. On every control."
+  ],
+  [
+   "Reveal",
+   "Log lines append; nothing fades. Panels appear complete."
+  ],
+  [
+   "Loop",
+   "The cursor blinks at 1s, steps(1). One cursor per page."
+  ],
+  [
+   "Charts",
+   "Bars appear complete; a running series ends in an amber block that blinks with the cursor."
+  ]
+ ],
+ "tpl": {
+  "brand": "phosphor ci",
+  "dash_title": "main · last 24h",
+  "kpis": [
+   [
+    "Tests passed",
+    "tests",
+    "",
+    "",
+    "",
+    "✓ all green"
+   ],
+   [
+    "Gates running",
+    "running",
+    "",
+    "",
+    "",
+    "of 12 shards · amber"
+   ],
+   [
+    "Pass rate · 7d",
+    "pass_rate",
+    "",
+    "%",
+    ".1f",
+    "▲ 0.4 pts"
+   ]
+  ],
+  "dash_table_title": "jobs",
+  "slide_eyebrow": "release review",
+  "slide_title": "gates went green on every run this week.",
+  "slide_sub": "twelve shards, three containers, zero flakes since the hydration fix landed.",
+  "slide_foot": "synthetic run · oct 2026",
+  "slide_stat_label": "pass rate · 7d",
+  "slide_stat_col": "pass_rate",
+  "slide_stat_suffix": "%",
+  "slide_stat_fmt": ".1f",
+  "slide_body": "of every thousand jobs this week, 997 passed first time. the three that did not were all one flaky suite, now quarantined.",
+  "split": [
+   "PASS · 997",
+   "RETRY · 3"
+  ],
+  "ed_kicker": "postmortem · incident 0412",
+  "ed_headline": "the build that passed and should not have",
+  "ed_deck": "a cached layer hid a failing migration for six hours. what the logs showed, what they did not, and the two checks that now run before every deploy.",
+  "ed_byline": "by the platform team · 2 oct 2026 · 5 min read",
+  "ed_body": "at 11:52 the deploy job reported green. the migration step had not run: a cached layer from the previous build satisfied the step and the runner never noticed the schema had changed underneath it. the first alert came from a customer, not a monitor. the fix is two lines, and the check that would have caught it is now a gate.",
+  "ed_pull_col": "tests",
+  "ed_pull_label": "tests on the fixed build",
+  "steps": [
+   [
+    "one hundred jobs enter the queue.",
+    "each square is a job. sixty run on the fast pool, twenty-five on the gate containers, fifteen are cached and skip."
+   ],
+   [
+    "four minutes later.",
+    "the fast pool is done. the gate containers are the long tail; the cached squares never ran at all."
+   ]
+  ],
+  "step_caption": "fig. 1 · one hundred jobs, by pool · synthetic",
+  "app_rows": [
+   [
+    "gate-hydration",
+    "worker-3 · 00:42",
+    "running",
+    "warn"
+   ],
+   [
+    "test-api",
+    "worker-2 · 3m 10s",
+    "pass",
+    "ok"
+   ],
+   [
+    "gate-export",
+    "worker-3 · failed at step 3",
+    "fail",
+    "bad"
+   ],
+   [
+    "deploy",
+    "queued behind gates",
+    "queued",
+    "idle"
+   ]
+  ],
+  "app_cta": "$ run",
+  "app_cta2": "save",
+  "landing_eyebrow": "phosphor · ci for people who read logs",
+  "landing_headline": "green means it ran.",
+  "landing_sub": "a ci that shows the command, the output and the time, and never a mascot. three states, one typeface, no lies.",
+  "cta": "$ install",
+  "cta2": "read the docs",
+  "features": [
+   [
+    "the log is the page",
+    "every run opens on its command and its output. no summary card stands between you and the line that failed."
+   ],
+   [
+    "three states",
+    "pass, running, fail. amber marks the one thing happening now; nothing else is coloured."
+   ],
+   [
+    "timestamps everywhere",
+    "every figure has a time. a number without a time is a rumour."
+   ]
+  ]
+ }
+}
