@@ -12,7 +12,7 @@ import path from 'node:path';
 import { CATALOGUE, REPO, ROSTER, SKELETON_CSS, TEMPLATES, loadSpec, specimen } from './pages.mjs';
 
 export const REFS = path.join(REPO, 'services', 'app', 'skills', 'artifactbin', 'references');
-const { fit: FIT, heads: TPL_HEADS, sources: SOURCES, pageIds: PAGE_IDS, runtimeThemes, noFit: NO_FIT, record: RECORD, losses: LOSSES } = CATALOGUE;
+const { fit: FIT, heads: TPL_HEADS, sources: SOURCES, pageIds: PAGE_IDS, noFit: NO_FIT, record: RECORD, losses: LOSSES } = CATALOGUE;
 const RATING = ['avoid', 'good', 'best'];
 
 // ---------------------------------------------------------------- css helpers
@@ -106,7 +106,7 @@ description: >-
 
 ## Bind it
 
-1. Fence: \`theme: ${slug}\`, and the page type's \`template\` (none for app and landing). That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
+1. Fence: \`theme: ${slug}\`, and the page type's \`template\`. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
 2. Root element: \`<div data-design="tw" className="@container bg-background text-foreground">\`, then kit components, token classes and the classes below.
 3. Helmet comment, the record later edits read instead of reskinning: \`${RECORD.replaceAll('<Name>', name).replaceAll('<id>', pid)}\`.
 4. Override one thing, if the subject needs it, with a Helmet \`<style>\` that reassigns a single \`--ds-*\` token under \`:root\` and again under \`.dark\`; every component, chart and device follows. Change the token, never the component. Tailwind utilities compile \`!important\`: layout utilities go on role-bearing elements, type utilities never do.
@@ -195,13 +195,12 @@ export function catalogueMd() {
     const S = loadSpec(slug);
     rows.push([`\`system-${slug}.md\``, cell(S.name), cell(S.mood), ...FIT[slug].map((v) => RATING[v])]);
   }
-  for (const { name, blurb, fit } of runtimeThemes) rows.push([`\`themes-${name}.md\``, name, cell(blurb), ...fit.map((v) => RATING[v])]);
   const table = mdTable(['Read', 'System', 'Mood', ...TPL_HEADS], rows);
   const losses = LOSSES.map(({ title, text }) => `- **${title}.** ${text}`).join('\n');
   return `---
 name: design-systems
 description: >-
-  The catalogue of nineteen design systems (thirteen authored, six runtime themes), the fit table that picks one per artifact, the binding steps, the no-fit path, the record every bound artifact carries, and the known losses. Read at the hand step of the workflow, after the page type is chosen; then read one system file and nothing else in the catalogue.
+  The catalogue of the thirteen design systems, the fit table that picks one per artifact, the binding steps, the no-fit path, the record every bound artifact carries, and the known losses. Read at the hand step of the workflow, after the page type is chosen; then read one system file and nothing else in the catalogue.
 ---
 ## Read first
 
@@ -209,11 +208,11 @@ Every artifact wears one design system. The page type is the shape of the conten
 
 A system has three layers, each works alone: the **tokens and faces** (name the system and kit components, token classes and charts already look right), the **hand** (one drawing mode and a few devices written against hand variables, so a borrowed device takes this ink) and the **page-type recipes** (the look on each of the seven page types). The runtime serves all three; the agent writes no CSS to get them.
 
-Pick ONE system from the table by the subject's world and the page type, read its file, and name it in the fence. Never read a second system for the same artifact; one system owns colour and type. The six themes bind the same way with a smaller vocabulary.
+Pick ONE system from the table by the subject's world and the page type, read its file, and name it in the fence. Never read a second system for the same artifact; one system owns colour and type.
 
 ## How a page comes together
 
-1. **Shape.** The page type from the content's shape: dashboard, deck, editorial, scrolly, plan, app or landing. Five have a template reference (\`templates-dashboard.md\` and siblings); app and landing publish without a template field. Read it for the beats first.
+1. **Shape.** The page type from the content's shape: dashboard, deck, editorial, scrolly, plan, app or landing, each with a reference (\`templates-dashboard.md\` and siblings) and named in the fence \`template\`. Read it for the compositions first.
 2. **Hand.** One system from the table. A system marked avoid can still be used; it costs custom CSS the recipe does not give you.
 3. **Thesis.** One sentence from the subject's own material: the organizing idea, the object the hand draws, and which device carries the data.
 4. **Bind.** Fence \`theme: <slug>\`, and the record as a Helmet comment. Nothing to paste: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit.
@@ -237,7 +236,7 @@ Best: the recipe is close to finished. Good: it works with the page type's own s
 
 ${table}
 
-A system and a theme are the same thing to the fence and the runtime; a system carries a vocabulary of classes, a theme only tokens.
+Six older mood themes remain valid fence values for the artifacts that carry them (\`themes.md\`); a new artifact names a system.
 
 ## When nothing fits
 

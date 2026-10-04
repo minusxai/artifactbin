@@ -214,8 +214,8 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     expect(tree.dirs.map((d) => d.name)).toEqual(['artifactbin']);
     expect(tree.files.filter((f) => !f.ref)).toHaveLength(1);
   });
-  it('carries one reference per theme and per template, named after the registry', () => {
-    for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)?.name).toBe(`themes-${t.name}`);
+  it('carries one reference per template, named after the registry, and none per theme since themes left teaching', () => {
+    for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)).toBeUndefined();
     for (const t of STORY_TEMPLATES) expect(tree.get(`artifactbin/references/templates-${t.name}.md`)?.name).toBe(`templates-${t.name}`);
   });
   it('uses the CLI-owned root within its budget',()=>{
@@ -258,8 +258,8 @@ describe('each topic is taught by exactly its owner', () => {
       expect(owners(fp)).toEqual(owner);
     });
   }
-  it('a theme one-liner lives on the themes index and its own page, nowhere else', () => {
-    for (const t of STORY_THEMES) expect(owners(t.description).sort(), t.name).toEqual([`${R}/themes-${t.name}.md`, `${R}/themes.md`]);
+  it('a theme one-liner is taught nowhere: the six are legacy values a note names, not a choice', () => {
+    for (const t of STORY_THEMES) expect(owners(t.description), t.name).toEqual([]);
   });
   it('a template one-liner lives on the templates index and its own page, nowhere else', () => {
     for (const t of STORY_TEMPLATES) expect(owners(t.description).sort(), t.name).toEqual([`${R}/templates-${t.name}.md`, `${R}/templates.md`]);

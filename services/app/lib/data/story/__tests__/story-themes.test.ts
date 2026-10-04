@@ -54,18 +54,15 @@ describe('STORY_THEMES registry', () => {
 
   // A theme's authoring guidance is its docs file — `skills/artifactbin/references/themes-<name>.md`,
   // the one copy agents read — never a field on the StoryTheme entry.
-  it("every theme has authoring guidance; retired themes have none", () => {
+  it('no theme has authoring guidance any more: the legacy note names the six, and a retired theme has nothing', () => {
+    const legacy = renderDoc('artifactbin/references/themes.md', 'https://example.test');
     for (const name of STORY_THEME_NAMES) {
-      const guidance = renderDoc(`artifactbin/references/themes-${name}.md`, 'https://example.test');
-      expect(guidance, `${name} guidance`).toBeDefined();
-      expect(guidance.length, `${name} guidance`).toBeGreaterThan(200);
-      expect(guidance, `${name} Don't section`).toContain("Don't");
-      expect(guidance, `${name} style block`).not.toMatch(/<style\b/i);
-      expect(guidance, `${name} inline style`).not.toMatch(/\sstyle\s*=/i);
-      expect(guidance, `${name} legacy class attr`).not.toMatch(/\bclass="/i);
+      expect(skillTree().get(`artifactbin/references/themes-${name}.md`), `${name} guide retired from teaching`).toBeUndefined();
+      expect(legacy, `${name} named as a legacy value`).toContain(`\`${name}\``);
     }
     for (const name of Object.keys(RETIRED_STORY_THEMES)) {
       expect(skillTree().get(`artifactbin/references/themes-${name}.md`), `${name} guidance retired`).toBeUndefined();
+      expect(legacy).not.toContain(`\`${name}\``);
     }
   });
 

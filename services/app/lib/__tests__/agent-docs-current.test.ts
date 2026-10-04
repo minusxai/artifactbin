@@ -27,7 +27,6 @@ const buildMarkupDoc = files('artifactbin/references/markup.md', 'artifactbin/re
 const buildDesignDoc = files('artifactbin/references/design.md');
 const buildThemesDoc = files('artifactbin/references/themes.md');
 const buildTemplatesDoc = files('artifactbin/references/templates.md');
-const buildThemeDoc = (name: string, base: string) => renderDoc(`artifactbin/references/themes-${name}.md`, base);
 const buildTemplateDoc = (name: string, base: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@/lib/serving';
 import { parseJsx } from '../jsx';
@@ -39,7 +38,6 @@ const SURFACES: Array<[string, string]> = [
   ['references/markup*.md', buildMarkupDoc(BASE)],
   ['references/design.md', buildDesignDoc(BASE)],
   ['references/themes.md', buildThemesDoc(BASE)],
-  ['references/themes-modernist.md', buildThemeDoc('modernist', BASE)],
   ['references/templates.md', buildTemplatesDoc(BASE)],
   ['references/templates-editorial.md', buildTemplateDoc('editorial', BASE)],
   ['shared markup field', MARKUP_FIELD_GUIDANCE],

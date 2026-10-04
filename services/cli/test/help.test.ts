@@ -369,13 +369,14 @@ describe('the bundled teaching and the manual', () => {
   });
 
 
-  test('help themes and help templates print the overview that describes each choice, so the agent picks one instead of opening several guides',()=>{
+  test('help themes is the legacy note and help templates prints the overview that describes each page type, so the agent picks one instead of opening several guides',()=>{
    const themes=helpDocument('themes');
-   assert.match(themes,/Pick ONE by the subject's mood/);
-   for(const name of ['modernist','organic','industry','terminal','manuscript','pop'])assert.match(themes,new RegExp('`'+name+'` — .+ → '),name);
-   assert.match(themes,/Available themes: .*modernist/);
+   assert.match(themes,/legacy/i);
+   for(const name of ['modernist','organic','industry','terminal','manuscript','pop'])assert.ok(themes.includes('`'+name+'`'),name);
+   assert.doesNotMatch(themes,/Pick ONE by the subject's mood/);
    const templates=helpDocument('templates');
    assert.match(templates,/Pick ONE by the content's shape/);
+   for(const name of ['app','landing'])assert.match(templates,new RegExp('`'+name+'` — .+ → '),name);
    // The bundle does not end with the starter — `afbin pull` and `afbin help <topic>` give it, and
    // `plan` has none at all — so the overview must not promise one.
    assert.match(templates,/Run afbin help <template> for everything that kind of document needs, in one call/);
@@ -426,17 +427,17 @@ test('afbin help --for <template> prints every reference a document of that kind
   assert.ok(text.includes('publish a first version early, then extend it in edits'),'the intro teaches progressive publishing');
   assert.ok(!text.includes('write the whole document'),'the whole-document-then-publish instruction is gone');
   assert.ok(!text.includes('improve the published version'),'improving a finished document is not the flow any more');
-  const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets'];  let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
+  const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## design-systems','## publishing-datasets'];  let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
   // Every reference is still there — condensed, never dropped. One load-bearing rule from each of the
   // three biggest parts stands in for its file, since the bundled copy is no longer the file verbatim.
   for(const rule of ['<SlideDeck>','font-display','Helmet','<Import name="sales" src="ref:abc123" />','sales.rows'])assert.ok(text.includes(rule),rule);
-  assert.ok(text.includes('Available themes:'),'the themes overview names the choices');
+  assert.ok(text.includes('afbin help design-systems'),'the bundle points at the catalogue');
   assert.ok(!text.includes('templates-editorial'),'only the chosen template');
   // THE SHELL'S INLINE LIMIT. At 40 KB Claude Code spilled every bundle to a file and read it back in
   // three or four `sed` windows — the one-call reference became five calls. Claude
   // Code keeps tool output inline up to ~30,000 characters; 28,000 BYTES holds under that with a 2 KB
   // margin, and bytes are the conservative measure (UTF-8 punctuation costs more bytes than characters).
-  for(const template of ['deck','dashboard','editorial','plan','scrolly']){
+  for(const template of ['deck','dashboard','editorial','plan','scrolly','app','landing']){
    const bundle=helpBundle(template);
    assert.ok(Buffer.byteLength(bundle)<28000,`the ${template} bundle is ${Buffer.byteLength(bundle)} bytes; a spilled bundle costs three reads`);
   }

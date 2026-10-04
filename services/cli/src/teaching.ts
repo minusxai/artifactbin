@@ -1,7 +1,7 @@
 import {lstat} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import teaching from './generated/teaching.json';
-import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
+import {STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
 import {commands,commandHelp,CliError} from './commands';
 import {manPage} from './man';
 import {atomicWrite,isMissing} from './files';
@@ -33,7 +33,9 @@ const referenceTopics=Object.fromEntries(Object.entries(localSkillFiles).filter(
 const condensedTopics:Record<string,string>=Object.fromEntries(Object.entries(teaching.condensed as Record<string,string>).map(([path,text])=>[topicName(path),text]));
 /** One reference at bundle length, falling back to the only length it has. */
 const bundled=(topic:string):string=>condensedTopics[topic]??referenceTopics[topic]!;
-const themesOverview=(text:string)=>`${text}\n\nAvailable themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice.`;
+/** The bundle's one line about the look: the catalogue and the one system file are read separately, never bundled (28 KB cap). */
+const SYSTEMS_POINTER='Name ONE design system in the fence `theme`; nothing to paste, the runtime serves its tokens, faces, type roles, components and hand. `afbin help design-systems` lists the thirteen with their fit per page type; `afbin help system-<slug>` is the one you picked, read once. Record system and thesis in a Helmet comment.';
+const article=(template:string)=>/^[aeiou]/.test(template)?'an':'a';
 export const helpTopics:Record<string,string>={
  ...referenceTopics,
  /** The brief's complete commented document, as a file to copy and adapt. */
@@ -46,7 +48,6 @@ export const helpTopics:Record<string,string>={
  // (three reads and three turns each) while one
  // that read references/themes.md, which carries a one-line description per theme and says to pick
  // ONE, opened one. The reference is the better answer to the same question; same for templates.
- themes:themesOverview(referenceTopics['themes']!),
  templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> for everything that kind of document needs, in one call.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
@@ -83,11 +84,11 @@ export function helpBundle(template:string,origin:string=DEFAULT_SERVER):string{
  if(!STORY_TEMPLATE_NAMES.includes(template as never))throw new CliError('invalid_choice',`Invalid template: ${template}.`,`Choose ${STORY_TEMPLATE_NAMES.join(', ')}.`);
  const parts:Array<[string,string]>=[
   ['design',bundled('design')],['markup',bundled('markup')],['markup-data',bundled('markup-data')],['markup-data-authoring',bundled('markup-data-authoring')],
-  [`templates-${template}`,bundled(`templates-${template}`)],['themes',themesOverview(bundled('themes'))],
+  [`templates-${template}`,bundled(`templates-${template}`)],['design-systems',SYSTEMS_POINTER],
   ['publishing-datasets',bundled('publishing-datasets')],
  ];
  const body=parts.map(([name,text])=>`\n# ${name}\n\n${text.trim()}\n`).join('');
- return withTeachingOrigin(`Everything a ${template} needs, in reading order. Read it once; publish a first version early, then extend it in edits. On a refusal, run afbin help errors; for sync and recovery, afbin help publishing.\n${body}`,origin);
+ return withTeachingOrigin(`Everything ${article(template)} ${template} needs, in reading order. Read it once; publish a first version early, then extend it in edits. On a refusal, run afbin help errors; for sync and recovery, afbin help publishing.\n${body}`,origin);
 }
 export function helpDocument(topic?:string,format='text',origin:string=DEFAULT_SERVER):string{
  return withTeachingOrigin(helpBody(topic,format,origin),origin);

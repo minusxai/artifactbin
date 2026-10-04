@@ -1,37 +1,40 @@
 ---
 name: templates
 description: >-
-  Genre comparison when the brief leaves the choice unclear; then read only the chosen genre.
+  The seven page types and when each fits; then read only the chosen one.
 ---
 ## Read first
 
-Pick ONE by the content's shape, then read its file for the beats and layout
-grammar — details about a genre you didn't pick are noise:
+Pick ONE by the content's shape, then read its file for the compositions it
+offers and what the runtime needs from it; details about a page type you
+didn't pick are noise:
 
 [% for t in templates %]
 - `[[ t.name ]]` — [[ t.description ]] → [`templates-[[ t.name ]].md`](templates-[[ t.name ]].md)
 [% endfor %]
 
-Choosing: when the ask clearly names a genre (slides → `deck`, operating
-view → `dashboard`, UI/implementation/rollout plan → `plan`,
-board report / long-read → `editorial`), pick it. When
-it is NOT obvious from the user's instructions, **default to `scrolly`** —
-its conceit-led, designed treatment (at whatever register the subject can
-carry, deadpan included) is the strongest default for an unspecified ask.
-If you are genuinely torn between readings, clarify with the user and offer
-the candidate genres as options rather than guessing.
+Choosing: when the ask names a page type (slides → `deck`, an operating view
+→ `dashboard`, an implementation or rollout plan → `plan`, a board report or
+long read → `editorial`, a tool people operate → `app`, an offering to choose
+→ `landing`, a story told by scrolling → `scrolly`), pick it. When it is NOT
+obvious, the reader's job decides: what must they understand or do first, and
+how much do they read before they act? There is no default page type. If you
+are genuinely torn between readings, clarify with the user and offer the
+candidate page types as options rather than guessing.
 
-## What a template is
+## What a page type is
 
-A `template` is the document's structural GENRE — its beat structure and
-layout grammar — orthogonal to the design `theme`, which is purely a token
-set ([themes.md](themes.md)). Set it as the top-level
-`template` field of the publish call. It is a REFERENCE, not a contract: each
-file documents a genre's beats as a proven starting point, and a structure
-derived from the subject itself beats any of them. Deviate deliberately, or
-omit the `template` field and go bespoke — that is a first-class choice, not
-a fallback. The component vocabulary every genre is built from:
-[markup.md](markup.md).
+A `template` is the document's PAGE TYPE: its structural genre, and the
+runtime behaviour that comes with it, which is the contents rail beside an
+`editorial` or `plan` page with three or more `h2` sections and present mode
+for a `deck`'s `<Slide>` nodes. Set it as the top-level `template` field.
+`app` and `landing` carry no runtime behaviour; the field still records the
+type. A page type's guide is a REFERENCE, not a contract: it offers two or
+three compositions, and the thesis ([design.md](design.md)) picks one; a
+structure derived from the subject itself beats any of them. The design
+system ([design-systems.md](design-systems.md)) owns the look of whatever
+structure you choose and carries a specimen for the page types it fits. The
+component vocabulary every page type is built from: [markup.md](markup.md).
 
 ## Editable columns
 
