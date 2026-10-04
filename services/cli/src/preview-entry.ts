@@ -11,35 +11,19 @@ import {networkInterfaces} from 'node:os';
 import {startPreview} from './preview/session';
 import {previewFiles,type PreviewOptions} from './preview-options';
 import {loadWorkspace} from './workspace';
-import {loadConnection,exportedServer,DEFAULT_SERVER} from './config';
-import {HttpClient} from './http';
-import {inferColumns} from '@artifactbin/utils/shape';
+import {DEFAULT_SERVER} from './config';
 import {CliError} from './errors';
 
 async function openPreview(options:PreviewOptions,assets:string,capture=false){
  const workspace=await loadWorkspace(options.cwd,options.home);
  const localFiles=await localIdentities(workspace);
  const files=await previewFiles(workspace.root,workspace.cwd,options.paths.map(path=>localFiles[path]?resolve(workspace.root,localFiles[path]):path));
- const origin=options.server??workspace.tracking?.server??await exportedServer(options.home)??DEFAULT_SERVER;
- if(workspace.tracking&&origin!==workspace.tracking.server)throw new CliError('wrong_server','Preview must use the workspace’s bound host.');
- let client:HttpClient|undefined;
- const remote=async()=>{
-  if(client)return client;
-  const connection=await loadConnection(origin,options.home);
-  if(!connection)throw new CliError('auth_required',`Sign in to ${origin} with afbin auth before reading its references.`);
-  return client=new HttpClient({connection,home:options.home,account:workspace.tracking?.account,readOnly:true});
- };
+ const origin=options.server??workspace.tracking?.server??DEFAULT_SERVER;
  // Runtime CSS/font preparation reads packaged assets relative to the runtime root.
  process.chdir(resolve(assets));
  const session=await startPreview({root:workspace.root,home:options.home,files,localFiles,assets:join(assets,'preview'),publicAssets:join(assets,'public'),port:options.port,share:options.share,origin,capture,
-  asset:async id=>(await remote()).content(`/artifacts/${id}/content`),
-  dataset:async id=>{
-   const content=await(await remote()).content(`/artifacts/${id}/content`);
-   if(!content.contentType.includes('application/json'))throw new CliError('unsupported_preview_input','This remote dataset does not provide stored rows for local preview.');
-   const rows=JSON.parse(content.bytes.toString());
-   if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_dataset','The remote dataset did not return row objects.');
-   return {rows,columns:inferColumns(rows)};
-  }});
+  asset:async id=>{throw new CliError('unresolved_reference',`Reference ${id} is not available in this workspace. Add or import its local copy before previewing.`);},
+  dataset:async id=>{throw new CliError('unresolved_reference',`Dataset ${id} is not available in this workspace. Add or import its local copy before previewing.`);}});
  return {session,files};
 }
 export async function startPreviewHost(options:PreviewOptions,assets:string):Promise<void>{

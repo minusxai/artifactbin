@@ -1,3 +1,4 @@
+import {registerLocalFiles} from './local-workspace';
 import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
@@ -80,16 +81,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
    const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
    const paths=await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path));
-   // Preview registers local files against a server, so it crosses the same boundary the rest of the
-   // CLI does: one identity, then the canonical origin for the binding, the credential and approval.
-   const selected=typeof flags.server==='string'?flags.server:workspace.tracking?.server??defaults.host??DEFAULT_SERVER;
-   const previewIdentity=await serverIdentity(selected,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
-   const server=previewIdentity.canonical;const previewAliases=serverAddresses(previewIdentity);
-   if(workspace.tracking&&!sameServer(previewIdentity,workspace.tracking.server))
-    throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; preview selected ${selected}.`,`Run preview from another directory, or pass --server ${workspace.tracking.server}.`);
-   const connection=await loadConnectionFor(previewIdentity,home,context.env)??(workspace.tracking?{server,token:''}:await browserAuthenticate(server,{...context.auth,home,env:context.env,interactive,aliases:previewAliases,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')}));
-   await addFiles(workspace,paths.map(path=>resolve(workspace.root,path)),new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:previewAliases}));
-   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,server});
+   await registerLocalFiles(workspace,paths.map(path=>resolve(workspace.root,path)));
+   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json});
   }
   if(command==='config'&&!flags.help){
    const [action,key,value]=positionals;
@@ -143,6 +136,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
+  if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await moveFile(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
@@ -282,7 +276,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // login JavaScript. Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
-  if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
   if(command==='runs'){
    const action=positionals[0];let id=positionals[1];
    if(action==='start'){

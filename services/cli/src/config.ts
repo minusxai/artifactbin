@@ -185,3 +185,8 @@ export function remotePermissionEnv(command:string,env:NodeJS.ProcessEnv=process
 export function remoteWorkerEnv(directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
  return {...env,PATH:directory+separator+(env.PATH??''),ARTIFACTBIN_URL:connection.server,ARTIFACTBIN_TOKEN:connection.token,ARTIFACTBIN__REMOTE_REFRESH_TOKEN:connection.refreshToken,ARTIFACTBIN__REMOTE_CLIENT_ID:connection.clientId};
 }
+
+/** Portable workspace state never follows the machine-wide ARTIFACTBIN_HOME override. */
+export function workspaceStateEnv(root: string): NodeJS.ProcessEnv {
+ return {ARTIFACTBIN_HOME: join(root, ".artifactbin")};
+}

@@ -42,7 +42,7 @@ export async function confinedPath(root: string, path: string): Promise<string> 
  * transaction, so a crash between the record and the disk write is replayable
  * and a crash after it leaves nothing behind.
  */
-export async function stageFiles(home: string, root: string, changes: FileChange[], also?: (state: State) => void): Promise<void> {
+export async function stageFiles(home: string, root: string, changes: FileChange[], also?: (state: State) => void, options: {store?: State; scope?: string} = {}): Promise<void> {
   const destinations = new Set<string>();
   const staged: Array<{path: string; value: StagedFile; data: Buffer}> = [];
   for (const change of changes) {
@@ -51,10 +51,11 @@ export async function stageFiles(home: string, root: string, changes: FileChange
     destinations.add(destination);
     staged.push({path: change.path, value: {before: change.before, sha256: digest(change.data), mode: change.mode ?? 0o600}, data: change.data});
   }
-  const state = await stateFor(home);
+  const state = options.store ?? await stateFor(home);
+  const scope = options.scope ?? root;
   state.transaction(() => {
-    if (state.list(root, 'staged-file').length) throw new Error('A pending file operation must be recovered first');
-    for (const file of staged) state.put(root, 'staged-file', file.path, file.value, {data: file.data});
+    if (state.list(scope, 'staged-file').length) throw new Error('A pending file operation must be recovered first');
+    for (const file of staged) state.put(scope, 'staged-file', file.path, file.value, {data: file.data});
     also?.(state);
   });
 }
@@ -71,9 +72,10 @@ function decode(key: string, value: StagedFile, data: Buffer | null): {path: str
 }
 
 /** Replay is idempotent. A user edit stops recovery and remains untouched. */
-export async function recoverFiles(home: string, root: string, options: {onProgress?: (count: number) => void} = {}): Promise<'clean' | 'recovered'> {
-  const state = await stateFor(home);
-  const records = state.list<StagedFile>(root, 'staged-file');
+export async function recoverFiles(home: string, root: string, options: {onProgress?: (count: number) => void; store?: State; scope?: string} = {}): Promise<'clean' | 'recovered'> {
+  const state = options.store ?? await stateFor(home);
+  const scope = options.scope ?? root;
+  const records = state.list<StagedFile>(scope, 'staged-file');
   if (!records.length) return 'clean';
   const files = records.map(record => decode(record.key, record.value, record.data));
   const check = async (file: {path: string; value: StagedFile}) => {
@@ -99,6 +101,6 @@ export async function recoverFiles(home: string, root: string, options: {onProgr
     }
     options.onProgress?.(index + 1);
   }
-  state.transaction(() => { for (const file of files) state.delete(root, 'staged-file', file.path); });
+  state.transaction(() => { for (const file of files) state.delete(scope, 'staged-file', file.path); });
   return 'recovered';
 }
