@@ -86,7 +86,7 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
 }
 /**
  * What an operator has to pass on once the server is up: the origin teammates point a client at, the
- * installer that presets it for them, and where a login code actually arrives. A loopback public URL
+ * npm setup that installs the host-specific skill, and where a login code actually arrives. A loopback public URL
  * always uses the local outbox — `mailerForRuntime` chooses on the origin alone, never on a mail key —
  * so saying "check your email" there would send the operator looking for mail that was never sent.
  * A published origin WITHOUT a mailer is the same trap with a different cause: startup allows it when
@@ -94,8 +94,9 @@ export async function teamSettings(configFile:string,inherited:NodeJS.ProcessEnv
  */
 export function serverInstructions(settings:TeamSettings):string[]{
  return [
-  `Teammates point their client at this server:  afbin config set host ${settings.origin}`,
-  `They can install afbin from it (host preset):  curl -fsSL ${settings.origin}/chat/install.sh | sh`,
+  `Prepare Node/npm if needed: ${settings.origin}/chat/ensure-node.sh (macOS/Linux), ${settings.origin}/chat/ensure-node.ps1 (Windows PowerShell).`,
+  `Install agent skills for this host: npx --yes @artifactbin/cli@latest setup --server ${settings.origin}`,
+  `Teammates point their client at this server:  npx --yes @artifactbin/cli@latest config set host ${settings.origin}`,
   usesDevOutbox(settings.origin)
    ?`Login codes are NOT emailed from a loopback URL: each one prints here as "[dev-mail] otp email=… code=…" and is appended to ${settings.env.EMAIL__DEV_OUTBOX_PATH}.`
    :loginDelivery(settings.env),

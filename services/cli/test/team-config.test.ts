@@ -167,14 +167,15 @@ test('startup instructions name the host teammates set, the installer, and where
   await writeFile(file,'APP__HOST=127.0.0.1\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=http://app.lvh.me:7445\n'+secret);
   const single=await teamSettings(file),local=serverInstructions(single);
   assert.ok(local.every(line=>!line.includes('\n')),'one line each');
-  assert.ok(local.some(line=>line.includes('afbin config set host http://app.lvh.me:7445')),local.join('\n'));
-  assert.ok(local.some(line=>line.includes('curl -fsSL http://app.lvh.me:7445/chat/install.sh | sh')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('npx --yes @artifactbin/cli@latest config set host http://app.lvh.me:7445')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('http://app.lvh.me:7445/chat/ensure-node.sh')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('npx --yes @artifactbin/cli@latest setup --server http://app.lvh.me:7445')),local.join('\n'));
   assert.ok(local.some(line=>line.includes('[dev-mail] otp')&&line.includes(single.env.EMAIL__DEV_OUTBOX_PATH!)),local.join('\n'));
   const network='APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://artifacts.example.test\n';
   await writeFile(file,network+'EMAIL__RESEND_API_KEY=re_test_key\nEMAIL__FROM=Team <team@example.test>\n'+secret);
   const published=serverInstructions(await teamSettings(file));
-  assert.ok(published.some(line=>line.includes('afbin config set host https://artifacts.example.test')),published.join('\n'));
-  assert.ok(published.some(line=>line.includes('curl -fsSL https://artifacts.example.test/chat/install.sh | sh')),published.join('\n'));
+  assert.ok(published.some(line=>line.includes('npx --yes @artifactbin/cli@latest config set host https://artifacts.example.test')),published.join('\n'));
+  assert.ok(published.some(line=>line.includes('https://artifacts.example.test/chat/ensure-node.sh')),published.join('\n'));
   assert.ok(!published.some(line=>line.includes('[dev-mail]')),published.join('\n'));
   assert.ok(published.some(line=>/mail provider/.test(line)),published.join('\n'));
   /**
