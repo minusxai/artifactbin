@@ -2,6 +2,8 @@
 
 Publish and edit artifacts through local files, with offline help and validation. Mirror a local terminal with `afbin remote`.
 
+Command examples use `afbin` as shorthand for `npx --yes @artifactbin/cli@latest` (`npx.cmd` on Windows); use that npm invocation unless you installed a development link.
+
 ## Preview and host
 
 ```sh
@@ -13,8 +15,7 @@ afbin config set host http://app.lvh.me:7445
 
 Preview writes browser saves to selected local files without publishing. Shared previews allow
 anyone who can reach them to edit/comment; stop the foreground process to end the session.
-Add assigns stable IDs; preview and push use those IDs without rewriting artifact references.
-Preview still works after publication using the workspace host/account.
+Add assigns stable workspace-local IDs. Preview retains those IDs without sign-in or cloud access, including after publication. Push preserves the local files and creates a separate publication copy whose references use remote IDs.
 
 `serve` owns persistent authenticated hosting. `--dir` holds settings, objects and the default
 PGLite database; optional `--db-url postgres://…` or `pglite://…` overrides only that database.
@@ -68,21 +69,13 @@ afbin diff report.jsx
 afbin push report.jsx
 ```
 
-Push also creates a new artifact from a new JSX file. `status`, `diff`, validation, help and unchanged
-pushes make no HTTP request. Use `--remote` to refresh a comparison. `push --dry-run` preflights without
-saving files or publishing. `afbin -h`, command `-h`, `afbin help <topic>` and the installed man page
+Push publishes a local workspace through its separate publication copy. Local `status`, `diff`, validation and help need no HTTP; `--remote` refreshes a comparison. Portable-workspace `push --dry-run` validates its local dependency graph without HTTP or publication; it does not preflight remote permissions. Normal push may read remote state even when the source is unchanged. `afbin -h`, command `-h`, `afbin help <topic>` and the installed man page
 teach the same flags and rules. At a terminal, `afbin help` and `afbin <command> -h` print colour
 screens sized to the window; automation, pipes, `--json` and `--output` get the agent brief and plain
 text, also available as `afbin help brief` and `afbin help commands`. `NO_COLOR` and `FORCE_COLOR`
 apply to every command.
 
-Nothing is written into your working directory. All local state — which files are tracked, the server
-state last accepted, account resources, Markdown conversions and interrupted operations — lives in one
-private SQLite database at `~/.artifactbin/state.sqlite` (`ARTIFACTBIN_HOME` moves it), and a tracked
-file is recorded by the SHA-256 of its bytes rather than by a copy of them. There is nothing to commit
-and nothing to add to `.gitignore`. A forced overwrite keeps the replaced bytes under
-`~/.artifactbin/backups/local` and prints that absolute path. Images, PDFs and files are identified by
-content hash, so publishing bytes you already own reuses that artifact instead of uploading them again.
+Local workspaces keep identity, comments, history and recovery state in their `.artifactbin` directory; copy that directory with the project to continue on another machine. Publication copies and their remote-ID mappings also live there. Credentials and client settings remain under `~/.artifactbin` (`ARTIFACTBIN_HOME` moves it), separately from local workspace state. Forced remote overwrites retain replaced bytes under `~/.artifactbin/backups/local` and report that path.
 
 A command reference is `<url|id|path>[@version]`; existing filenames win. Published references in
 markup use `ref:<id>`: `<Import name="d" src="ref:<id>" />` reads a dataset or folder as `d.<table>`, and a

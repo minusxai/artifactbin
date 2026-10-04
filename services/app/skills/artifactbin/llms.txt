@@ -2,19 +2,15 @@ artifactbin: agents publish and edit stateful, interactive artifacts with the af
 
 # artifactbin
 
-This server hosts artifacts: documents, apps, dashboards, decks, plans and datasets that agents write and people read, edit, annotate and share at a URL. An artifact is an interactive, stateful document. Underneath, an artifact is a JSX file: SQL (SQLite) over its datasets for the data, JSX for the view, typed values and actions between them, and YAML frontmatter for metadata.
-
-Agents work on artifacts only through the afbin CLI. The CLI installs a local skill into your harness that teaches the file format, every command and every refusal code. It allows a powerful way to edit, publish, and operate artifacts completely through the command line.
+Artifacts are interactive documents, apps, dashboards, decks, plans and datasets. Agents write a JSX file: YAML metadata, SQL over datasets, JSX views, typed values and actions. People read, edit, annotate and share its URL. The npm CLI installs a local skill teaching the format, commands and refusal codes.
 
 Prepare Node: afbin_node_setup="$(mktemp)" && curl -fsSL [[ base ]]/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
 Windows: Invoke-RestMethod [[ base ]]/chat/ensure-node.ps1 | Invoke-Expression
-Setup: npx --yes @artifactbin/cli@latest setup (Windows: npx.cmd). Supported Node is reused, otherwise official LTS is installed for your user. Run both lines in the same terminal.
+Setup: npx --yes @artifactbin/cli@latest setup --server '[[ base ]]' (Windows: npx.cmd). Run preparation and setup in the same terminal. Supported Node/npm is reused; otherwise official Node LTS is installed for your user.
 Then: npx --yes @artifactbin/cli@latest pull <artifact url> --output report.jsx; edit the file; npx --yes @artifactbin/cli@latest push report.jsx (push runs afbin validate itself)
-Reference: npx --yes @artifactbin/cli@latest help, help <topic>, and the installed skill. Restart Claude Code or Codex after setup so they load it.
-Local: npx --yes @artifactbin/cli@latest preview report.jsx needs no cloud or credentials. Offline downloads and HTML exports use .jsx.html. Pin the npm version and prepare its cache before disconnecting; npm is not a sandbox.
+Reference: npx --yes @artifactbin/cli@latest help, help <topic>, and the installed skill. Restart your agent after setup to load it.
+Local: npx --yes @artifactbin/cli@latest preview report.jsx needs no cloud or credentials. HTML exports/downloads use .jsx.html. Pin the npm version and prepare its cache before disconnecting; npm is not a sandbox.
 
-Sign-in is automatic: the first time a command needs the server, afbin signs you in through a quick browser approval and saves the result privately — nothing to set up. In automation add --yes --json and afbin prints the approval URL to open, then continues once approved.
+Sign-in is automatic for server commands through browser approval, including guests. In automation add --yes --json: open the returned approval URL, then the command continues. Direct HTTP clients require email authentication; guest browser approval is CLI-only.
 
-Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; afbin accepts either, or the bare id. Add @<version> for history.
-
-CLI browser approval allows guests. Direct HTTP API clients must authenticate by email; they cannot continue as a guest.
+Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; use either or its bare id. Add @<version> for history.

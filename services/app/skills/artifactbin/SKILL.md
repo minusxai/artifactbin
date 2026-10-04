@@ -5,9 +5,9 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. The fence names the design system and page type. Datasets and media are artifacts too.
+artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. The fence names the design system and page type. Datasets/media are artifacts too.
 
-Use the npm CLI for local files/browser approval; HTTP clients authenticate by email.
+npm CLI: local files/browser approval. HTTP: email authentication.
 
 - Run via `npx --yes @artifactbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
 - Preview is local; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.
@@ -16,12 +16,12 @@ Use the npm CLI for local files/browser approval; HTTP clients authenticate by e
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Few turns: `afbin help <page type>`, ONE design system in the fence, then push a FIRST designed version within six calls of the pull — the fence, the title, real opening copy and one substantive section — and fill the rest in later pushes; a person is waiting on a blank page. A successful push IS the verification that source was accepted. Skip pulling, diffing or grepping it just to confirm publication; filling sections is not re-checking.
 - For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=1 --param status=Done` to update. Use its declared names/arguments; preserve its source.
-- Test new or changed `<Mutation>` controls in a live session (`afbin help live-sessions`): each identity's isolated copy (`afbin help apps`), then the original `--as guest` (identity writes off). Sessions also test page-local state and row/cell context. One session at a time; stop after each works.
+- Sessions are browser/UI QA for newly authored or changed `<Mutation>`, page-local state and row/cell action context. Use a live session (`afbin help live-sessions`) on each identity's isolated copy (`afbin help apps`), then the original `--as guest` (identity writes off). One session at a time. Stop once each works once per identity.
 - Local files: `afbin add <files> --json` assigns reference IDs; preview/push register named files. Push runs `afbin validate` and publishes unpublished IDs.
 - Every body element has a persistent `id` for its lifetime. Move it with the same id; never reuse an id.
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
-- Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Another artifact is a deliberate fork: copy the file and remove those five fields.
+- Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork deliberately: copy the file and remove those five fields.
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and the type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 

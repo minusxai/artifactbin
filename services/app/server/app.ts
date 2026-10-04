@@ -17,12 +17,11 @@ import { loginRedirectTarget } from '@/lib/http';
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
 import {agentDiscovery,agentDiscoveryHead,withAgentDiscoveryTail} from '@/lib/serving';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
-import { serveStatic } from '@hono/node-server/serve-static';
 import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
@@ -246,24 +245,8 @@ export interface AppServerOptions {
   /** Dev only: the Vite socket port resolved by the server composition. */
   devHmrPort?: number;
   publicDir?: string;
-  /** Where `npm run build:binary -w services/cli` leaves a CLI build (services/cli/dist). When its version is the
-   * one the served installer pins, this server serves that build and the installer installs it from here. */
-  cliReleaseDir?: string;
   /** Every document on its own origin (APP__PAGES_HOST): this deployment's pages site unless a test passes its own. */
   pagesSite?: PagesSite;
-}
-
-const GITHUB_RELEASES = 'https://github.com/minusxai/artifactbin/releases/download/afbin-v$version';
-/** The version of the CLI build in a local release directory, read from the manifest its build writes. */
-function localCliRelease(dir: string): string | null {
-  try {
-    for (const file of readdirSync(dir)) {
-      if (!/^afbin-[a-z0-9]+-[a-z0-9]+(?:\.exe)?\.manifest\.json$/.test(file)) continue;
-      const version: unknown = JSON.parse(readFileSync(path.join(dir, file), 'utf8')).version;
-      if (typeof version === 'string') return version;
-    }
-  } catch { /* no local build */ }
-  return null;
 }
 
 /** Which document, if any, a path names — `/a/<id>` or a pretty URL. */
@@ -379,7 +362,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
-  const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
   /**
    * The app page. When the address names something the page will immediately
    * ask for — a document, a profile — the server answers that question HERE
@@ -627,35 +609,21 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('cache-control', 'public, max-age=300');
     c.header('x-content-type-options', 'nosniff');
   });
-  // A CLI built on this machine is served by this server, so a local install never leaves it: the installer
-  // then names this origin instead of GitHub. Production has no local build and serves the file unchanged.
+  // Compatibility URLs prepare Node and invoke npm; every deployment selects its own origin.
   for (const installer of ['/install.sh', '/chat/install.sh']) app.get(installer, (c) => {
     const script = readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
-    const pinned = script.match(/^ {2}version=(\S+)$/m)?.[1];
-    const local = pinned !== undefined && localCliRelease(cliReleaseDir) === pinned;
-    // The script is told where it came from, so a CLI installed from a self-hosted origin talks to that
-    // origin by default instead of the public server (`afbin setup --server`, then `.env`).
-    const origin = baseUrl(c.req.raw);
-    const addressed = script.replace(/^ {2}origin=''$/m, () => `  origin='${origin}'`);
-    return c.text(local ? addressed.replace(GITHUB_RELEASES, () => `${origin}/chat/releases/afbin-v$version`) : addressed);
+    const origin = baseUrl(c.req.raw).replace(/'/g, `'"'"'`);
+    return c.text(script.replace(/^ {2}origin=''$/m, () => `  origin='${origin}'`));
   });
   app.get('/chat/install.ps1', c => {
     const script=readFileSync(path.join(publicDir,'chat','install.ps1'),'utf8');
-    const pinned=script.match(/\$Version = '(\d+\.\d+\.\d+)'/)?.[1];
-    const origin=baseUrl(c.req.raw),literal=(value:string)=>value.replace(/'/g,"''");
-    let body=script.replace(/^\$Origin = '[^']*'$/m,()=>`$Origin = '${literal(origin)}'`);
-    if(pinned&&localCliRelease(cliReleaseDir)===pinned)body=body.replace(/^\$ReleaseRoot = '[^']*'$/m,()=>`$ReleaseRoot = '${literal(origin)}/chat/releases'`);
+    const origin=baseUrl(c.req.raw).replace(/'/g,"''");
+    const body=script.replace(/^\$Origin = '[^']*'$/m,()=>`$Origin = '${origin}'`);
     c.header('content-type','text/plain; charset=utf-8');c.header('cache-control','public, max-age=300');c.header('x-content-type-options','nosniff');
     return c.body(body);
   });
-  app.use('/chat/releases/*', async (c, next) => {
-    const [release = '', file = '', ...rest] = c.req.path.split('/').slice(3);
-    const version = release.startsWith('afbin-v') ? release.slice('afbin-v'.length) : '';
-    if (rest.length || !/^\d+\.\d+\.\d+$/.test(version) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(file) || localCliRelease(cliReleaseDir) !== version) return c.notFound();
-    await next();
-    c.header('cache-control', 'no-store');
-  });
-  if(existsSync(cliReleaseDir)) app.use('/chat/releases/*', serveStatic({ root: path.relative(process.cwd(), cliReleaseDir) || '.', rewriteRequestPath: (p) => p.replace(/^\/chat\/releases\/[^/]+\//, '/'), onFound: () => {}, onNotFound: () => {} }));
+  // Retired executable assets must not fall through to static storage.
+  app.use('/chat/releases/*', async c => c.notFound());
   // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 

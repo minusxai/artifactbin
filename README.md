@@ -4,37 +4,53 @@ Interactive documents for people and agents. Create local files, preview and edi
 
 ## Install and use
 
+macOS / Linux (bash or zsh):
+
 ```sh
-curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
-afbin auth
-afbin add report.jsx sales.csv --json
-afbin preview report.jsx
-afbin push report.jsx
+afbin_node_setup="$(mktemp)" && curl -fsSL https://app.artifactbin.dev/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
+npx --yes @artifactbin/cli@latest setup
 ```
 
-`app.artifactbin.dev` is the default host. `add` assigns stable, server/account-scoped IDs without uploading. Reference datasets and media with `ref:ID`; use `/a/ID` for navigation links. Local paths inside artifact references are rejected. Preview reads registered local files and saves browser edits back to them; push publishes registered unpublished dependencies first. It does not rewrite paths or silently publish changes to an already-published dependency.
+Windows PowerShell:
 
-The installer supports macOS and Linux, ARM64 and x64, without Node or sudo. The CLI carries its SQL engine (SQLite) and downloads its host runtime and Chromium when needed, caching them. `afbin help` works offline. `afbin update` updates the verified executable and agent skills.
+```powershell
+Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1 | Invoke-Expression
+npx.cmd --yes @artifactbin/cli@latest setup
+```
+
+Run both commands in the same terminal. The helper reuses supported Node/npm or installs official Node LTS for your user. npm is the sole CLI distribution. Windows uses `npx.cmd` for the commands below.
+
+```sh
+npx --yes @artifactbin/cli@latest add report.jsx sales.csv --json
+npx --yes @artifactbin/cli@latest preview report.jsx
+npx --yes @artifactbin/cli@latest push report.jsx
+```
+
+Add assigns stable workspace-local IDs without uploading or signing in. Use `ref:ID` for datasets/media and `/a/ID` for navigation; artifact references reject local paths. Preview edits selected local source files without cloud access or credentials. Carry the project's `.artifactbin` directory with its files to preserve local identity, comments, history and recovery.
+
+Push explicitly publishes a separate copy with remote IDs, preserving the originals and their local references. Its mapping lets later pushes update that publication. Local preview continues independently after publication. The default remote host is `app.artifactbin.dev`; CLI browser approval permits guests, while direct HTTP authentication requires email.
+
+The package includes SQLite. Chromium is downloaded lazily when rendering requires it. Prepare an exact npm version and browser assets before disconnecting; warmed npm execution supports `--offline`, while a cold cache needs internet. Connected commands may show update notices, but never replace software automatically. Restart with a newer npm version to update.
 
 ## Run your own server
 
 ```sh
-afbin serve --dir ./artifactbin-data --port 7445
+npx --yes @artifactbin/cli@latest serve --dir ./artifactbin-data --port 7445
 # In another terminal:
-afbin config set host http://app.lvh.me:7445
-afbin auth
-afbin add report.jsx --json
-afbin preview report.jsx
-afbin push report.jsx
+npx --yes @artifactbin/cli@latest config set host http://app.lvh.me:7445
+npx --yes @artifactbin/cli@latest auth
+npx --yes @artifactbin/cli@latest add report.jsx --json
+npx --yes @artifactbin/cli@latest preview report.jsx
+npx --yes @artifactbin/cli@latest push report.jsx
 ```
 
 Use the origin the server prints (`http://app.lvh.me:7445` by default). Approval and login must happen at that exact origin; `localhost` and `127.0.0.1` are different origins and fail with `approval_origin_mismatch`. `lvh.me` and its subdomains resolve to loopback; app and document origins need the same site for private document cookies.
 
-`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, the installer to run, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; SQLite still handles document queries.
+`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, Node helper links and npm setup for this host, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; SQLite still handles document queries.
 
-Use `--server URL` for one command without changing defaults. `afbin config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. IDs belong to the host/account that reserved them.
+Use `--server URL` for one command without changing defaults. `npx --yes @artifactbin/cli@latest config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. Published IDs belong to their host/account; local IDs belong to the portable workspace.
 
-For trusted local collaboration, `afbin preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Hosting details](docs/extraction/team.md), and [team on a network](docs/extraction/team.md#team-on-a-network) for what a shared host needs: an HTTPS public URL, a login method and the URL teammates type.
+For trusted local collaboration, `npx --yes @artifactbin/cli@latest preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Hosting details](docs/extraction/team.md), and [team on a network](docs/extraction/team.md#team-on-a-network) for what a shared host needs: an HTTPS public URL, a login method and the URL teammates type.
 
 ## Develop
 
