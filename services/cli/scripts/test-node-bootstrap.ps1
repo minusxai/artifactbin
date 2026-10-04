@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $identity = 'mxmx_node_' + [Guid]::NewGuid().ToString('N').Substring(0,6)
 $password = [Guid]::NewGuid().ToString('N')+'aA!9'
 $secure = ConvertTo-SecureString $password -AsPlainText -Force
-$credential = New-Object Management.Automation.PSCredential($identity,$secure)
+$credential = New-Object Management.Automation.PSCredential("$env:COMPUTERNAME\$identity",$secure)
 $root = Join-Path $env:PUBLIC ('afbin-node-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $root | Out-Null
 Copy-Item services/app/public/chat/ensure-node.ps1 (Join-Path $root 'ensure-node.ps1')
@@ -12,6 +12,7 @@ if (!$Tarball) { throw 'Pass the exact npm candidate tarball.' }
 Copy-Item $Tarball (Join-Path $root 'candidate.tgz')
 New-LocalUser -Name $identity -Password $secure -PasswordNeverExpires | Out-Null
 Add-LocalGroupMember -Group Users -Member $identity
+Start-Service seclogon
 & icacls.exe $root /grant "${identity}:(OI)(CI)F" | Out-Null
 $child = @'
 $ErrorActionPreference='Stop'
@@ -56,9 +57,13 @@ if($LASTEXITCODE -ne 0 -or !(($result | Out-String).Contains('20'))){throw 'Stan
 [IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","same-tarball-standard-user-npx","warmed-offline-query"]}')
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
-$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
+# CreateProcessWithLogonW limits command lines to1024characters; keep script as
+# data on disk and invoke only a short inline expression under Restricted policy.
+[IO.File]::WriteAllText((Join-Path $root 'child.ps1'),$child)
+$entry="Invoke-Expression ([IO.File]::ReadAllText('"+$root.Replace("'","''")+"\child.ps1'))"
+$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($entry))
 try {
-  $process=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-EncodedCommand',$encoded) -Credential $credential -LoadUserProfile -PassThru -RedirectStandardOutput (Join-Path $root 'stdout') -RedirectStandardError (Join-Path $root 'stderr')
+  $process=Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-EncodedCommand',$encoded) -WorkingDirectory $root -Credential $credential -LoadUserProfile -PassThru -RedirectStandardOutput (Join-Path $root 'stdout') -RedirectStandardError (Join-Path $root 'stderr')
   if(!$process.WaitForExit(600000)){throw 'Bootstrap timed out'}
   Get-Content (Join-Path $root 'stdout')
   if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $root 'passed.json'))){Get-Content (Join-Path $root 'stderr');throw 'Standard-user Node bootstrap failed'}

@@ -34,6 +34,8 @@ jobs:
           version_at() { gh api "repos/$GITHUB_REPOSITORY/contents/services/cli/package.json?ref=$1" --jq .content | base64 --decode | jq -r .version; }
           version=$(version_at "$SOURCE_SHA")
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          pointer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/release.json?ref=$SOURCE_SHA" --jq .content | base64 --decode)
+          test "$(jq -r .version <<< "$pointer")" = "$version"
           head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
           if [ "$(version_at "$head")" != "$version" ]; then exit 0; fi
           if gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name tested-run --dir tested-run 2> receipt-error.txt; then
@@ -48,8 +50,9 @@ jobs:
           tar -xOf "$file" package/package.json > manifest.json
           test "$(jq -r .name manifest.json)" = '@artifactbin/cli'
           test "$(jq -r .version manifest.json)" = "$version"
-          tar -tzf "$file" | grep -Fxq package/npm-shrinkwrap.json
-          if tar -tzf "$file" | grep -q '^package/dist/runtime/node_modules/'; then echo 'Build-machine dependencies in universal package' >&2; exit 1; fi
+          tar -tzf "$file" > package-files.txt
+          grep -Fxq package/npm-shrinkwrap.json package-files.txt
+          if grep -q '^package/dist/runtime/node_modules/' package-files.txt; then echo 'Build-machine dependencies in universal package' >&2; exit 1; fi
           echo "file=$file" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Publish tested tarball through npm trusted publishing
@@ -76,6 +79,12 @@ jobs:
         run: |
           set -euo pipefail
           tag="afbin-v$PACKAGE_VERSION"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2> release-error.txt; then exit 0; fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
+            if [ "$(cat draft.txt)" = true ]; then
+              gh release upload "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --clobber
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+            fi
+            exit 0
+          fi
           grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
           gh release create "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "$tag" --notes '' --latest=false

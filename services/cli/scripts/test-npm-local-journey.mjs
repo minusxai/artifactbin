@@ -7,6 +7,7 @@ import {pathToFileURL} from 'node:url';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {chromium} from 'playwright';
+import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
 const entry=resolve(process.argv[2]);
 const scratch=await realpath(await mkdtemp(join(tmpdir(),'afbin npm local é ')));
 const workspace=join(scratch,'workspace'),copy=join(scratch,'transferred'),recovery=join(scratch,'recovered');
@@ -45,7 +46,7 @@ async function preview(cwd,home,path='report.jsx'){
 async function get(origin,path){const response=await fetch(origin+path);assert.equal(response.status,200,`${path}: ${await response.clone().text()}`);return response.json();}
 async function post(origin,path,data){const response=await fetch(origin+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});assert.equal(response.status,200,`${path}: ${await response.clone().text()}`);return response.json();}
 const body=source=>source.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,'');
-function payload(html){const matches=[...html.matchAll(/<script\b[^>]*\bid=["']afbin-file["'][^>]*>([\s\S]*?)<\/script>/g)];assert.equal(matches.length,1);return JSON.parse(matches[0][1]);}
+
 let active,browser;
 try{
  await writeFile(join(workspace,'sales.csv'),'amount\n10\n20\n');
