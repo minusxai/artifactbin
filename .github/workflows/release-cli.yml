@@ -1,5 +1,11 @@
 name: Release tested afbin npm package
 on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful main push CI run whose tested package should be published
+        required: true
+        type: string
   workflow_run:
     workflows: [ci]
     types: [completed]
@@ -13,17 +19,19 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN: ${{ github.event.workflow_run.id }}
+      EVENT_NAME: ${{ github.event_name }}
+      REQUESTED_RUN: ${{ inputs.source_run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -34,6 +42,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            [[ "$REQUESTED_RUN" =~ ^[0-9]+$ ]]
+            admission=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REQUESTED_RUN")
+            test "$(jq -r .conclusion <<< "$admission")" = success
+            test "$(jq -r .event <<< "$admission")" = push
+            test "$(jq -r .head_branch <<< "$admission")" = main
+            test "$(jq -r .path <<< "$admission")" = .github/workflows/ci.yml
+            test "$(jq -r .head_repository.full_name <<< "$admission")" = "$GITHUB_REPOSITORY"
+            SOURCE_SHA=$(jq -r .head_sha <<< "$admission")
+            SOURCE_RUN="$REQUESTED_RUN"
+          fi
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ && "$SOURCE_RUN" =~ ^[0-9]+$ ]]
           version_at() { gh api "repos/$GITHUB_REPOSITORY/contents/services/cli/package.json?ref=$1" --jq .content | base64 --decode | jq -r .version; }
           version=$(version_at "$SOURCE_SHA")
@@ -49,7 +68,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' > artifacts.txt
           if ! grep -Fxq afbin-npm-release artifacts.txt; then echo 'No new npm artifact; nothing to publish.'; exit 0; fi
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name afbin-npm-release --dir package
-          file="package/afbin-cli-$version.tgz"
+          file="./package/afbin-cli-$version.tgz"
           test -f "$file" && test ! -L "$file"
           tar -xOf "$file" package/package.json > manifest.json
           test "$(jq -r .name manifest.json)" = '@afbin/cli'
@@ -69,6 +88,7 @@ jobs:
             echo "build_run=$SOURCE_RUN"
             echo "file=$file"
             echo "version=$version"
+            echo "source_sha=$SOURCE_SHA"
           } >> "$GITHUB_OUTPUT"
       - name: Publish tested tarball through npm trusted publishing
         id: publish
@@ -104,6 +124,7 @@ jobs:
         env:
           PACKAGE_FILE: ${{ steps.package.outputs.file }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+          RELEASE_SOURCE_SHA: ${{ steps.package.outputs.source_sha }}
         run: |
           set -euo pipefail
           tag="afbin-v$PACKAGE_VERSION"
@@ -115,4 +136,4 @@ jobs:
             exit 0
           fi
           grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
-          gh release create "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "$tag" --notes '' --latest=false
+          gh release create "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SOURCE_SHA" --title "$tag" --notes '' --latest=false

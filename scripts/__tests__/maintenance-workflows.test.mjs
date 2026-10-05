@@ -42,7 +42,7 @@ if(args[0]==='api'){
  const route=args.find(a=>a.startsWith('repos/')).replace(/^repos\/[^/]+\/[^/]+\//,'');
  if(route==='git/ref/heads/main')answer({object:{sha:state.head}});
  if(route.startsWith('contents/')){const commit=state.commits[route.split('ref=')[1]];if(!commit)fail('HTTP 404');const value={version:route.includes('release.json')?(commit.pointer??commit.version):commit.version};answer({content:Buffer.from(JSON.stringify(value)).toString('base64')});}
- const build=/^actions\/runs\/(\d+)$/.exec(route);if(build)answer({head_sha:state.buildSources?.[build[1]]??'b'.repeat(40)});
+ const build=/^actions\/runs\/(\d+)$/.exec(route);if(build)answer({head_sha:state.buildSources?.[build[1]]??'b'.repeat(40),conclusion:'success',event:'push',head_branch:'main',path:'.github/workflows/ci.yml',head_repository:{full_name:'minusxai/artifactbin'},...state.runMetadata?.[build[1]]});
  const run=/actions\/runs\/(\d+)\/artifacts/.exec(route);if(run)answer({artifacts:Object.keys(state.runs[run[1]]??{}).map(name=>({name,expired:false}))});
 }
 if(args[0]==='run'&&args[1]==='download'){const files=state.runs[args[2]]?.[flag('--name')];if(!files)fail('No artifact');fs.mkdirSync(flag('--dir'),{recursive:true});for(const [name,data]of Object.entries(files))fs.writeFileSync(path.join(flag('--dir'),name),Buffer.from(data,'base64'));process.exit(0);}
@@ -58,7 +58,7 @@ if(args[0]==='view'){if(state.registryError){console.error('E500 registry unavai
 if(args[0]==='publish'){if(args.some(arg=>/^--provenance(?:=|$)/.test(arg)))throw Error('Conflicting provenance flags');for(const flag of ['--access','--provenance-file','--ignore-scripts'])if(!args.includes(flag))throw Error('Unsafe publish arguments');const bytes=fs.readFileSync(args[1]);state.calls.push('npm '+crypto.createHash('sha512').update(bytes).digest('base64'));fs.writeFileSync(file,JSON.stringify(state));process.exit(0);}
 throw Error('Unexpected npm '+args.join(' '));
 `;
-function release(repo,source){
+function release(repo,source,event='workflow_run',requestedRun='42'){
  const fixture=mkdtempSync(join(tmpdir(),'npm-release-flow-'));
  try{
   const state=join(fixture,'state.json');writeFileSync(state,JSON.stringify({releases:{},runs:{},published:{},calls:[],...repo}));mkdirSync(join(fixture,'bin'));for(const [name,code]of [['gh',GH],['npm',NPM]]){const file=join(fixture,'bin',name);writeFileSync(file,code);chmodSync(file,0o755);}
@@ -70,7 +70,7 @@ function release(repo,source){
   writeFileSync(join(fakeNpm,'node_modules/sigstore/index.js'),`exports.verify=async(bundle,options)=>{if(options.certificateIssuer!=='https://token.actions.githubusercontent.com'||options.certificateIdentityURI!=='https://github.com/minusxai/artifactbin/.github/workflows/ci.yml@refs/pull/12/merge')throw Error('Wrong certificate identity policy');};`);
   writeFileSync(join(fixture,'scripts/ci/npm-driver.mjs'),`export function npmDriver(){return new URL('../../fixture-npm/bin/npm-cli.js',import.meta.url).pathname;}`);
   const job=workflow('release-cli.yml').jobs.release,outputs={};
-  const context={'github.token':'fixture-not-secret','github.event.workflow_run.head_sha':source,'github.event.workflow_run.id':'42'};
+  const context={'github.token':'fixture-not-secret','github.event.workflow_run.head_sha':source,'github.event.workflow_run.id':'42','github.event_name':event,'inputs.source_run':requestedRun};
   const expand=text=>String(text).replace(/\$\{\{\s*(.+?)\s*\}\}/g,(_,key)=>{const step=/^steps\.([\w-]+)\.outputs\.([\w-]+)$/.exec(key);return step?outputs[step[1]]?.[step[2]]??'':context[key];});
   const envFor=values=>Object.fromEntries(Object.entries(values??{}).map(([key,value])=>[key,expand(value)]));
   let failure=null;const messages=[];
@@ -88,6 +88,15 @@ function release(repo,source){
 const base=()=>({head:sha('c'),commits:{[sha('b')]:{version:'0.4.0'},[sha('c')]:{version:'0.4.0'}},runs:{42:artifact('0.4.0')}});
 it('publishes exactly the artifact from the reused tested run after a rebase merge',()=>{
  const bytes=packageBytes('0.4.0');const repo={...base(),buildSources:{7:sha('d')},runs:{42:receipt(7),7:artifact('0.4.0',bytes,'7',sha('a'),sha('d'))}};const result=release(repo,sha('b'));expect(result.failure).toBeNull();expect(result.calls).toEqual(['npm '+integrity(bytes).slice(7),`release afbin-v0.4.0 ${sha('b')}`]);
+});
+it('allows a maintainer retry only for successful owned main push CI',()=>{
+ const result=release(base(),sha('c'),'workflow_dispatch');expect(result.failure).toBeNull();
+ expect(result.calls.at(-1)).toBe(`release afbin-v0.4.0 ${sha('b')}`);
+ for(const metadata of [{conclusion:'failure'},{event:'pull_request'},{head_branch:'feature'},{path:'.github/workflows/other.yml'},{head_repository:{full_name:'fork/artifactbin'}}]){
+  const rejected=release({...base(),runMetadata:{42:metadata}},sha('c'),'workflow_dispatch');
+  expect(rejected.failure).not.toBeNull();expect(rejected.calls).toEqual([]);
+ }
+ const invalid=release(base(),sha('c'),'workflow_dispatch','42/other');expect(invalid.failure).not.toBeNull();expect(invalid.calls).toEqual([]);
 });
 it('does nothing when no npm artifact was built or a newer release superseded it',()=>{
  for(const repo of [{...base(),runs:{}},{...base(),runs:{42:receipt(9),9:{}}},{...base(),commits:{[sha('b')]:{version:'0.4.0'},[sha('c')]:{version:'0.4.1'}}}]){const result=release(repo,sha('b'));expect(result.failure).toBeNull();expect(result.calls).toEqual([]);}
