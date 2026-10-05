@@ -1,3 +1,8 @@
+import {PREVIEW_CONNECT_PATH,PREVIEW_CONNECT_INSPECT_PATH,PREVIEW_CONNECT_IMPORT_PATH,PREVIEW_CONNECT_MAX_BYTES} from '../../../contracts/src/preview-connect';
+import {previewPublicOrigin} from '../preview-options';
+import {inspectPreviewOffer,importPreviewOffer,previewConnectPage} from './connect-import';
+import {loadWorkspace} from '../workspace';
+import {localIdentities} from '../identities';
 import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile} from '../local-workspace';
 import {workspaceStateEnv} from '../config';
 import {localHistory,localHistoryHead} from '../local-history';
@@ -40,9 +45,11 @@ import {compileLocal,declaredRefs,runLocal} from '../local-dataflow';
 import {ISLANDS_PATH,assembleDocument,compileDocument,documentModuleSha,readDocumentModule,readSpeculationRules,renderStoryHtml,speculationRulesSha} from './compiled';
 
 class Refusal extends Error {constructor(readonly status:number,message:string){super(message);}}
-export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<LocalDataset>}){
+export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;publicUrl?:string;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<LocalDataset>}){
  let failure:string|undefined;
  const root=await realpath(options.root),{home}=options;
+ const publicOrigin=previewPublicOrigin(options.publicUrl);
+ options.localFiles={...options.localFiles};
  await localWorkspaceState(root);await recoverLocalFiles(root);
  const allowed=new Set(options.files),resources=new Set<string>();
  for(const file of options.files)for(const path of await previewGraph(root,file,options.localFiles)){if(path.toLowerCase().endsWith('.jsx'))allowed.add(path);else resources.add(path);}
@@ -124,16 +131,50 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  }});
  const comments=await State.open(root,workspaceStateEnv(root));
  await migrateLocalDiscussion(root,home,comments);
+ const admitImport=async(path:string)=>{
+  const identities={...options.localFiles,...await localIdentities(await loadWorkspace(root,home))};
+  const graph=await previewGraph(root,path,identities),refs=new Set<string>();
+  // Prepare the new graph first. Unrelated previously selected files may have been deleted externally.
+  for(const selected of graph)if(selected.toLowerCase().endsWith('.jsx')){
+   const body=parseDocument(await readFile(await confinedPath(root,join(root,selected)),'utf8')).body;
+   for(const ref of collectRefUses(body)??[])refs.add(ref.id);
+  }
+  Object.assign(options.localFiles!,identities);
+  for(const selected of graph){if(selected.toLowerCase().endsWith('.jsx'))allowed.add(selected);else resources.add(selected);}
+  for(const id of refs)remoteIds.add(id);
+  preparedCache.delete(path);compiledCache.delete(path);
+ };
  let url='';
  const server=createServer((req,res)=>{void (async()=>{
   const target=new URL(req.url??'/',url);
   const requestHost=req.headers.host??'';
   const admitted=options.share?new Set([new URL(url).host,...Object.values(networkInterfaces()).flatMap(list=>(list??[]).map(address=>`${address.address.includes(':')?'['+address.address+']':address.address}:${new URL(url).port}`))]):new Set([new URL(url).host]);
+  admitted.add(`localhost:${new URL(url).port}`);
+  const localHost=admitted.has(requestHost);
+  if(publicOrigin)admitted.add(new URL(publicOrigin).host);
   if(!admitted.has(requestHost))throw new Refusal(403,'Unknown host');
-  if(req.headers.origin&&req.headers.origin!==`http://${requestHost}`)throw new Refusal(403,'Unrelated origin');
+  const sameOrigin=localHost&&req.headers.origin===`http://${requestHost}`||!!publicOrigin&&req.headers.origin===publicOrigin;
+  if(req.headers.origin&&!sameOrigin)throw new Refusal(403,'Unrelated origin');
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Cache-Control','no-store');
   const json=(value:unknown)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
+  if(req.method==='GET'&&(target.pathname===PREVIEW_CONNECT_PATH||target.pathname==='/'&&!options.files.length)){
+   if(options.capture)throw new Refusal(403,'Image export is read-only');
+   res.setHeader('Content-Type','text/html');
+   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+   return res.end(previewConnectPage());
+  }
+  if(req.method==='POST'&&(target.pathname===PREVIEW_CONNECT_INSPECT_PATH||target.pathname===PREVIEW_CONNECT_IMPORT_PATH)){
+   if(options.capture)throw new Refusal(403,'Image export is read-only');
+   if(!req.headers.origin||!sameOrigin)throw new Refusal(403,'A same-origin browser confirmation is required');
+   if(!req.headers['content-type']?.startsWith('application/json'))throw new Refusal(400,'Expected a JSON import offer');
+   // JSON escaping expands HTML; transport is bounded independently from the decoded 25 MB file limit.
+   const chunks:Buffer[]=[];let length=0;
+   for await(const chunk of req){const bytes=Buffer.from(chunk);length+=bytes.length;if(length>2*PREVIEW_CONNECT_MAX_BYTES)throw new Refusal(413,'Body too large');chunks.push(bytes);}
+   let input:unknown;try{input=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new Refusal(400,'Invalid import offer');}
+   if(target.pathname===PREVIEW_CONNECT_INSPECT_PATH){const {html:_html,...inspected}=inspectPreviewOffer(input);return json(inspected);}
+   return json(await serial(async()=>{const imported=await importPreviewOffer(root,home,input);await admitImport(imported.path);return {...imported,file:imported.path,path:'/workspace/'+imported.path.split('/').map(encodeURIComponent).join('/')};}));
+  }
   const workspaceFile=target.pathname.startsWith('/workspace/')?decodeURIComponent(target.pathname.slice('/workspace/'.length)):null;
   const file=workspaceFile??target.searchParams.get('file')??options.files[0]!;
   if(req.method==='GET'&&target.pathname==='/'){res.writeHead(302,{Location:'/workspace/'+file.split('/').map(encodeURIComponent).join('/')+(options.capture?'?capture=1':'')});return res.end();}
@@ -266,7 +307,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    res.setHeader('Content-Type',extension==='css'?'text/css':'text/javascript');return res.end(await readFile(path));
   }
   throw new Refusal(404,'Not found');
- })().catch(error=>{if(options.capture&&req.url!=='/favicon.ico')failure=String(error.message);res.statusCode=error instanceof Refusal||error instanceof BackendRequestError?error.status:500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message)}));});});
+ })().catch(error=>{if(options.capture&&req.url!=='/favicon.ico')failure=String(error.message);res.statusCode=error instanceof Refusal||error instanceof BackendRequestError?error.status:error instanceof CliError?(error.code==='import_conflict'?409:400):500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message),...(error instanceof CliError&&error.fix?{fix:error.fix}:{})}));});});
  try{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(options.port??0,options.share?'0.0.0.0':'127.0.0.1',resolve);});}catch(error){comments.close();throw error;}
  const address=server.address();if(!address||typeof address==='string')throw Error('No port');url=`http://127.0.0.1:${address.port}`;
  return {url,document:read,failure:()=>failure,close:async()=>{await queue;server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));comments.close();}};

@@ -40,7 +40,7 @@ export async function buildPreview(outdir=join(cli,'dist/runtime/preview')){
  const scanner=new Scanner({sources:compiler.sources});
  await writeFile(join(outdir,'chrome.css'),optimize(compiler.build(scanner.scan()),{minify:true}).code);
  await build({
-  entryPoints:[join(cli,'src/preview/client.tsx')],bundle:true,minify:true,format:'esm',splitting:true,outdir,
+  entryPoints:[join(cli,'src/preview/client.tsx'),join(cli,'src/preview/connect.tsx')],bundle:true,minify:true,format:'esm',splitting:true,outdir,
   platform:'browser',target:'es2022',alias:{'@':app},define:{'process.env.NODE_ENV':'"production"'},
   loader:{'.woff2':'dataurl','.css':'empty'},plugins:[solidPreviewPlugin()],
  });

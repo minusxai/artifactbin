@@ -17,11 +17,11 @@ import {CliError} from './errors';
 async function openPreview(options:PreviewOptions,assets:string,capture=false){
  const workspace=await loadWorkspace(options.cwd,options.home);
  const localFiles=await localIdentities(workspace);
- const files=await previewFiles(workspace.root,workspace.cwd,options.paths.map(path=>localFiles[path]?resolve(workspace.root,localFiles[path]):path));
+ const files=options.paths.length?await previewFiles(workspace.root,workspace.cwd,options.paths.map(path=>localFiles[path]?resolve(workspace.root,localFiles[path]):path)):[];
  const origin=options.server??workspace.tracking?.server??DEFAULT_SERVER;
  // Runtime CSS/font preparation reads packaged assets relative to the runtime root.
  process.chdir(resolve(assets));
- const session=await startPreview({root:workspace.root,home:options.home,files,localFiles,assets:join(assets,'preview'),publicAssets:join(assets,'public'),port:options.port,share:options.share,origin,capture,
+ const session=await startPreview({root:workspace.root,home:options.home,files,localFiles,assets:join(assets,'preview'),publicAssets:join(assets,'public'),port:options.port,share:options.share,publicUrl:options.publicUrl,origin,capture,
   asset:async id=>{throw new CliError('unresolved_reference',`Reference ${id} is not available in this workspace. Add or import its local copy before previewing.`);},
   dataset:async id=>{throw new CliError('unresolved_reference',`Dataset ${id} is not available in this workspace. Add or import its local copy before previewing.`);}});
  return {session,files};
@@ -29,8 +29,8 @@ async function openPreview(options:PreviewOptions,assets:string,capture=false){
 export async function startPreviewHost(options:PreviewOptions,assets:string):Promise<void>{
  const {session,files}=await openPreview(options,assets);
  const port=new URL(session.url).port;
- const urls=[session.url,...(options.share?Object.values(networkInterfaces()).flatMap(list=>(list??[]).filter(address=>!address.internal&&address.family==='IPv4').map(address=>`http://${address.address}:${port}`)):[])];
- process.stdout.write(options.json?JSON.stringify({url:session.url,urls,files})+'\n':`Preview: ${urls.join('\n         ')}\nPress Ctrl-C to stop.\n`);
+ const urls=[...(options.publicUrl?[options.publicUrl]:[]),session.url,...(options.share?Object.values(networkInterfaces()).flatMap(list=>(list??[]).filter(address=>!address.internal&&address.family==='IPv4').map(address=>`http://${address.address}:${port}`)):[])];
+ process.stdout.write(options.json?JSON.stringify({url:options.publicUrl??session.url,urls,files})+'\n':`Preview: ${urls.join('\n         ')}\nPress Ctrl-C to stop.\n`);
  let stop!:()=>void;
  try{
   await new Promise<void>(resolve=>{
