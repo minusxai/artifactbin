@@ -2,7 +2,8 @@
 // Copies the story fonts into /public out of node_modules — /a/* pages have a
 // CSP that only allows our own origin, so these CANNOT come from a CDN. Runs
 // on postinstall; public/fonts is gitignored.
-import { createHash } from 'node:crypto';
+import { packageFaces, fontAsset } from './fontsource-assets.mjs';
+import { designSystemFonts } from './design-system-fonts.mjs';
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 
 // THE APP'S CWD IS ITS PACKAGE DIR. Every path below is cwd-relative,
@@ -97,28 +98,12 @@ const APP_FONT_CSS = [
   { pkg: '@fontsource/ibm-plex-sans', css: '500.css' },
 ];
 
-/** The descriptors of each @font-face a package stylesheet declares, with its woff2 file. */
-function packageFaces(pkg, css) {
-  const text = readFileSync(path.join(packageDir(pkg), css), 'utf8');
-  return (text.match(/@font-face\s*\{[^}]*\}/g) ?? []).map((block) => {
-    const get = (name) => block.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]?.trim();
-    const src = block.match(/url\(\.\/files\/([\w.-]+\.woff2)\)\s*format\('([\w-]+)'\)/);
-    if (!src) throw new Error(`no woff2 source in ${pkg}/${css}: ${block}`);
-    return {
-      family: get('font-family').replace(/^'|'$/g, ''), style: get('font-style'), weight: get('font-weight'),
-      display: get('font-display'), unicodeRange: get('unicode-range'), file: src[1], format: src[2],
-    };
-  });
-}
-
 rmSync('public/fonts', { recursive: true, force: true });
 mkdirSync('public/fonts', { recursive: true });
 /** Copy one package file to its content-addressed name; the same bytes always land at the same URL. */
 const copied = new Map();
 function copyFont(pkg, file) {
-  const bytes = readFileSync(path.join(packageDir(pkg), 'files', file));
-  const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 8);
-  const name = `${file.replace(/\.woff2$/, '')}.${hash}.woff2`;
+  const { bytes, name } = fontAsset(pkg, file);
   if (!copied.has(name)) writeFileSync(`public/fonts/${name}`, bytes);
   copied.set(name, true);
   return `/fonts/${name}`;
@@ -135,6 +120,7 @@ for (const { family, pkg, file, weight, style, preload } of FONT_FILES) {
   });
 }
 const app = APP_FONT_CSS.flatMap(({ pkg, css }) => packageFaces(pkg, css).map(({ file, ...face }) => ({ ...face, url: copyFont(pkg, file) })));
+designSystemFonts(copyFont);
 const manifest = { families, app };
 // In the Docker builder this runs from npm ci BEFORE `COPY lib ./lib` — the
 // tree the manifest lives in does not exist yet (writeFileSync creates no

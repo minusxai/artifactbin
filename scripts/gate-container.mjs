@@ -128,7 +128,8 @@ async function host({ cpus, memory, servers, gates }) {
     ensureImage(tag, version);
     volume = depsVolume({
       lock: normalisedLock(lockText),
-      copyAssets: readFileSync(path.join(ROOT, 'services/app/scripts/copy-assets.mjs'), 'utf8'),
+      copyAssets: ['copy-assets.mjs', 'design-system-fonts.mjs', 'fontsource-assets.mjs']
+        .map(file => readFileSync(path.join(ROOT, 'services/app/scripts', file), 'utf8')).join('\n'),
       preparePty: readFileSync(path.join(ROOT, 'services/cli/scripts/prepare-pty.mjs'), 'utf8'),
       image: tag,
     });

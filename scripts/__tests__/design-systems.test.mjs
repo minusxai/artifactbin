@@ -77,11 +77,22 @@ describe('the committed outputs are what the generator emits now', () => {
       expect(specimen.css).toContain(`[data-design-specimen="${slug}"]`);
     }
   });
-  it('ships only deduplicated font rules for the live picker, not document component styles', () => {
+  it('ships local deduplicated font rules for every live picker family', () => {
     const { pickerFonts, entries } = renderRuntime();
+    const urls = [...pickerFonts.matchAll(/url\(["']?([^)'" ]+)/g)].map(match => match[1]);
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      expect(url).toMatch(/^\/fonts\/[\w.-]+\.[a-f0-9]{8}\.woff2$/);
+      expect(readFileSync(path.join(REPO, 'services/app/public', url)).subarray(0, 4).toString()).toBe('wOF2');
+    }
+    const rules = pickerFonts.trim().split('\n');
+    expect(new Set(rules).size).toBe(rules.length);
+    for (const entry of entries) {
+      for (const [, family] of entry.fontFaces.matchAll(/font-family: "([^"]+)"/g)) {
+        expect(pickerFonts).toContain(`font-family:'${family}'`);
+      }
+    }
     expect(read(PICKER_FONTS)).toBe(pickerFonts);
-    const rules = entries.flatMap(entry => entry.fontFaces.split('\n'));
-    expect(pickerFonts).toBe([...new Set(rules)].join('\n') + '\n');
     expect(pickerFonts).not.toContain('data-theme');
   });
   it('the runtime registry, its sheets and the names leaf', () => {

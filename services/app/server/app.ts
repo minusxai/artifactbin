@@ -185,8 +185,8 @@ function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; con
     // Listing thumbnails redirect from /a/:id/export to the configured asset
     // origin. Admit that destination for images; local posters remain same-origin.
     `img-src 'self' data: blob:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`,
-    // The design-system picker uses the same fixed font faces as the documents. Its CSS is local.
-    "font-src 'self' data: https://fonts.gstatic.com",
+    // Shell and design-system preview fonts share the local content-addressed assets.
+    "font-src 'self' data:",
     // `media-src` has no default of its own either, so without this line every
     // <video> and <audio> on an app page is refused by `default-src 'none'`.
     // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the

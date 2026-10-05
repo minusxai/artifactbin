@@ -15,6 +15,9 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { REPO, ROSTER, STATUS, SKELETON_CSS, loadSpec, typeCss } from './pages.mjs';
 import { fontFaceCss } from './fonts.mjs';
+import { designSystemFonts } from '../../services/app/scripts/design-system-fonts.mjs';
+import { fontAsset } from '../../services/app/scripts/fontsource-assets.mjs';
+import { appFontFaceCss } from '../../services/app/lib/serving/app-font-face-css.mjs';
 import { renderPicker } from './picker.mjs';
 import { PAGE_CHROME, filterBlock, selectorOf } from './css-blocks.mjs';
 
@@ -92,7 +95,7 @@ export function renderRuntime() {
 export const STORY_SYSTEM_NAMES = [${ROSTER.map((s) => `'${s}'`).join(', ')}] as const;
 export type StorySystemName = (typeof STORY_SYSTEM_NAMES)[number];
 `;
-  const pickerFonts = [...new Set(full.flatMap(entry => entry.fontFaces.split('\n')))].join('\n') + '\n';
+  const pickerFonts = appFontFaceCss(designSystemFonts((pkg, file) => fontAsset(pkg, file).url)) + '\n';
   return { names, data: JSON.stringify(entries, null, 1) + '\n', sheets: JSON.stringify(sheets, null, 1) + '\n', pickerFonts, entries: full };
 }
 
