@@ -279,6 +279,19 @@ describe('cli-preconditions', () => {
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':'3'},json:{markup:'<p>Supported contract</p>'}}));
    expect(response.status).toBe(201);expect(response.headers.get('X-Artifactbin-Protocol')).toBe('3');expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
   });
+  it('uses the public proxy origin for older CLI Node setup links without publishing',async()=>{
+   const token=await mintToken('proxied-older-cli');
+   const before=await(await list(request('/api/artifacts',{token:token.token}))).json();
+   const original=request('/api/artifacts',{method:'POST',token:token.token,headers:{'User-Agent':'afbin/0.3.21','X-Artifactbin-Protocol':'3','X-Forwarded-Proto':'https','X-Forwarded-Host':'app.artifactbin.dev'},json:{markup:'<p>Must not publish</p>'}});
+   const response=await create(new Request('http://artifactbin-app:3000/api/artifacts',original));
+   expect(response.status).toBe(426);
+   const notice=await response.json();
+   expect(notice.error).toBe('cli_npm_required');
+   expect(notice.hint).toContain('https://app.artifactbin.dev/chat/ensure-node.sh');
+   expect(notice.hint).toContain('https://app.artifactbin.dev/chat/ensure-node.ps1');
+   expect(notice.hint).not.toContain('artifactbin-app');
+   expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
+  });
   it('asks recognized older afbin users to launch through npm before any handler runs',async()=>{
    const token=await mintToken('older-cli');
    const before=await(await list(request('/api/artifacts',{token:token.token}))).json();
