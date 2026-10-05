@@ -38,7 +38,7 @@ async function api(path: string, body?: unknown): Promise<unknown> {
 
 const TOP_OFFSET = 40;
 
-function Toolbar(props: {initial: PreviewDocument}) {
+export function Toolbar(props: {initial: PreviewDocument}) {
  const [status, setStatus] = createSignal('Ready');
  const [editing, setEditing] = createSignal(false);
  const [source, setSourceView] = createSignal(false);
@@ -98,7 +98,7 @@ function Toolbar(props: {initial: PreviewDocument}) {
   if (parsed.ok) runtimeRef.current?.update({type: STORY_DOCUMENT_MESSAGE, nodes: splitHelmet(parsed.nodes).body, source: next});
  };
  const edit = createInPlaceEdit({
-  get editing() {return editing();},
+  get editing() {return editing() && !source();},
   get sessionNonce() {return nonce();},
   runtimeRef, sourceRef,
   onError: message => setStatus(message),
@@ -107,7 +107,8 @@ function Toolbar(props: {initial: PreviewDocument}) {
 
  const finish = async () => {
   try {
-   await edit.commitPending(true);
+   // Raw source already lives in sourceRef; the hidden in-place editor owns no pending typing.
+   if (!source()) await edit.commitPending(true);
    await api('/save', {file, revision, body: sourceRef.current});
    dirty.current = false;
    // A fresh compiled render, not a morph: leaving edit mode tears down the prose/grid mount
@@ -120,7 +121,15 @@ function Toolbar(props: {initial: PreviewDocument}) {
  };
 
  const [sourceDraft, setSourceDraft] = createSignal('');
- const openSource = () => {setSourceDraft(sourceRef.current); setSourceView(true); setEditing(true);};
+ const openSource = async () => {
+  try {
+   // Collect the last in-place keystrokes before disabling that controller and capturing the code buffer.
+   if (editing() && !source()) await edit.commitPending(true);
+   setSourceDraft(sourceRef.current); setSourceView(true); setEditing(true);
+  } catch (error) {
+   setStatus(error instanceof Error ? error.message : String(error));
+  }
+ };
 
  const barStyle = {position: 'fixed', top: '0', left: '0', right: '0', 'z-index': 2147483647, display: 'flex', 'align-items': 'center', gap: '12px', padding: '8px 16px', background: '#0f172a', color: '#e2e8f0', font: '13px system-ui, sans-serif'} as const;
  return <>
@@ -129,7 +138,7 @@ function Toolbar(props: {initial: PreviewDocument}) {
    <span role="status" aria-live="polite" style={{flex: '1', opacity: 0.8}}>{status()}</span>
    {source()
     ? <button type="button" onClick={() => setSourceView(false)}>Edit in place</button>
-    : <button type="button" onClick={openSource}>Edit the source</button>}
+    : <button type="button" onClick={() => void openSource()}>Edit the source</button>}
    {editing()
     ? <button type="button" onClick={() => void finish()}>Done editing</button>
     : <button type="button" onClick={() => setEditing(true)}>Edit document</button>}
