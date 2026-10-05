@@ -152,6 +152,7 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
  const assembled=assembleReaderPage({
   compiled: input.compiled,
   documentChrome: !input.capture,
+  navigationTarget: null,
   story: input.story ?? input.compiled.html,
   outline: input.compiled.outline,
   capture: input.capture,

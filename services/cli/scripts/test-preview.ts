@@ -136,7 +136,8 @@ try{
  await a.getByRole('tab',{name:'Edit the source',exact:true}).click();
  await a.locator('.cm-editor').waitFor();
  const codeSaved=a.waitForResponse(response=>response.url().endsWith('/save'));
- await a.getByRole('textbox',{name:'Markup source',exact:true}).fill('<p id="text">Local v3 edit</p>');
+ const sourceInput=a.getByRole('textbox',{name:'Markup source',exact:true});
+ await a.bringToFront();await sourceInput.click();await sourceInput.press('ControlOrMeta+a');await a.keyboard.insertText('<p id="text">Local v3 edit</p>');
  await a.locator('#text').filter({hasText:'Local v3 edit'}).waitFor();
  await a.getByRole('button',{name:'Done editing',exact:true}).click();
  assert.equal((await codeSaved).status(),200);

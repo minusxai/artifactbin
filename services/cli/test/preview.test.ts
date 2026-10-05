@@ -243,6 +243,10 @@ test('preview serves the compiled reader: no React, a live Select re-runs its qu
   const page=await fetch(session.url+'/workspace/report.jsx');
   assert.equal(page.status,200);
   const html=await page.text();
+  assert.doesNotMatch(html,/<base\b/);
+  const canonical=await fetch(session.url+'/?file=report.jsx',{redirect:'manual'});
+  assert.equal(canonical.status,302);
+  assert.equal(canonical.headers.get('location'),'/workspace/report.jsx');
   assert.doesNotMatch(html,/react-dom|"react"|from"react"/i);
   assert.match(html,/data-mx-ast/);
   assert.match(html,/Some prose/);

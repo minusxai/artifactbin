@@ -828,7 +828,7 @@ async function connecting(engineName, browser) {
         await expect(page.getByRole('link', { name: 'Open server editor', exact: true })).toBeVisible();
       });
       await step('comments travel and server source edits persist in the workspace copy', async () => {
-        let sourceBeforeFill, sourceAfterFill;
+        let sourceBeforeInput, sourceAfterInput;
         try {
         const response = await fetch(`${server.url}/editor`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ file: 'connected.jsx', operation: 'annotations.list', status: 'open' }) });
         check(response.ok, `${engineName}: imported comments can be read through the existing backend`);
@@ -838,14 +838,19 @@ async function connecting(engineName, browser) {
         await popup.getByRole('tab', { name: 'Edit the source', exact: true }).click();
         await popup.locator('.cm-editor').waitFor();
         const source = popup.getByRole('textbox', { name: 'Markup source' });
-        const beforeSource = sourceBeforeFill = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
+        const beforeSource = sourceBeforeInput = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
         if (!beforeSource.includes('Connected prose')) throw new Error(`Source editor does not contain the imported heading: ${JSON.stringify(beforeSource)}`);
-        await source.fill(beforeSource.replace('Connected prose', 'Saved on the server'));
-        sourceAfterFill = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
+        // Match a user pasting into the focused editor; WebKit fill() left CM DOM unchanged.
+        await popup.bringToFront();
+        await source.click();
+        await source.press('ControlOrMeta+a');
+        await popup.keyboard.insertText(beforeSource.replace('Connected prose', 'Saved on the server'));
+        sourceAfterInput = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
         // Native contenteditable changes reach CodeMirror's model through its DOM observer.
         // Observe the real source adapter and projection before asking Done to persist that model.
         await expect(popup.getByRole('status').filter({ hasText: /^Unsaved$/ })).toBeVisible();
         await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible();
+        check(empty(await violations(popup)), `${engineName}: preview editor retains strict CSP without violations`);
         await popup.getByRole('button', { name: 'Done editing', exact: true }).click();
         await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 20_000 });
         await expect.poll(() => readFileSync(path.join(directory, 'connected.jsx'), 'utf8')).toContain('Saved on the server');
@@ -870,21 +875,7 @@ async function connecting(engineName, browser) {
           }).catch(reason => ({ snapshotError: String(reason) }));
           const documentResponse = await fetch(`${server.url}/document?file=connected.jsx`);
           const saved = documentResponse.ok ? await documentResponse.json() : { status: documentResponse.status };
-          check.note(`${engineName} Preview diagnostic: ${JSON.stringify({ sourceBeforeFill, sourceAfterFill, snapshot, server: { body: saved.body, revision: saved.revision, title: saved.metadata?.title }, errors, browserEvents })}`);
-          // A failed DOM-only fill stays failed. Probe one real native key to distinguish
-          // an automation input path from a source-adapter/model-loss defect.
-          if (engineName === 'webkit' && sourceAfterFill !== undefined) {
-            let keyboardProbe;
-            try {
-              const source = popup.getByRole('textbox', { name: 'Markup source' });
-              await source.press('End', { timeout: 5000 });
-              await source.press('Space', { timeout: 5000 });
-              await expect(popup.getByRole('status').filter({ hasText: /^Unsaved$/ })).toBeVisible({ timeout: 5000 });
-              await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 5000 });
-              keyboardProbe = { unsaved: true, projected: true, source: await source.evaluate(node => 'value' in node ? node.value : node.textContent) };
-            } catch (reason) { keyboardProbe = { error: reason.message, statuses: await popup.getByRole('status').allTextContents().catch(() => []) }; }
-            check.note(`${engineName} Native input diagnostic: ${JSON.stringify(keyboardProbe)}`);
-          }
+          check.note(`${engineName} Preview diagnostic: ${JSON.stringify({ sourceBeforeInput, sourceAfterInput, snapshot, server: { body: saved.body, revision: saved.revision, title: saved.metadata?.title }, errors, browserEvents })}`);
           throw error;
         }
       });

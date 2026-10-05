@@ -78,8 +78,8 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     // The agent pointer ahead of every preload and style, as server/app's withAgentDiscovery places it:
     // a shell tool that keeps only a page's first few kilobytes still sees it.
     + (help ? agentDiscoveryHead(help) : '')
-    // The page is the framed or standalone copy: its links leave the frame.
-    + '<base target="_top">'
+    // Framed copies send links out of their frame; direct previews keep their own context.
+    + (input.navigationTarget === null ? '' : '<base target="_top">')
     + `<title>${escapeHtml(input.title)}</title>`
     + headMetadata(input.head)
     + fontPreloadTags(unique(input.fontPreloads), false)

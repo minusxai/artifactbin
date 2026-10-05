@@ -140,7 +140,8 @@ try{
  await popup.getByRole('tab',{name:'Edit the source',exact:true}).click();
         await popup.locator('.cm-editor').waitFor();
  const connectedSource=popup.getByRole('textbox',{name:'Markup source'});
- await connectedSource.fill((await connectedSource.evaluate(node=>'value' in node?node.value:node.textContent)).replace('Offline saved report','Connected saved report'));
+ const connectedReplacement=(await connectedSource.evaluate(node=>'value' in node?node.value:node.textContent)).replace('Offline saved report','Connected saved report');
+ await popup.bringToFront();await connectedSource.click();await connectedSource.press('ControlOrMeta+a');await popup.keyboard.insertText(connectedReplacement);
  await popup.getByRole('status').filter({hasText:/^Unsaved$/}).waitFor();
  await popup.getByRole('heading',{name:'Connected saved report',exact:true}).waitFor();
  await popup.getByRole('button',{name:'Done editing',exact:true}).click();
