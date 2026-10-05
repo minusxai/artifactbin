@@ -305,9 +305,12 @@ async function doorLeg() {
       const granted = await (await fetch(`${BASE}/oauth/device/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_code: pairing.device_code }) })).json();
       const accountToken = granted.access_token;
       must(typeof accountToken === 'string' && accountToken.length > 0, 'the terminal receives its credential');
-      await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ title: 'Connected artifact', markup: '<h1>connected</h1>' }) });
-      await page.goto(`${BASE}/`, { waitUntil: 'load' }); await page.waitForTimeout(1000);
-      check((await page.getByText('Connected artifact').count()) > 0, 'what the connection publishes appears on the dashboard');
+      const published = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ title: 'Connected artifact', markup: '<h1>connected</h1>' }) });
+      must(published.status === 201, `the connection publishes its artifact (${published.status})`);
+      await page.goto(`${BASE}/`, { waitUntil: 'load' });
+      // The Solid dashboard loads its account listing after navigation; load + a fixed delay
+      // did not imply that listing had arrived under concurrent CI load.
+      must(await page.getByText('Connected artifact', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false), 'what the connection publishes appears on the dashboard');
       await page.goto(`${BASE}/account`, { waitUntil: 'load' });
       const revoke = page.locator('[aria-label^="Revoke token"]').first();
       // Account hydration fetches connections after navigation. An 800ms sleep plus
