@@ -77,7 +77,9 @@ describe('hosted portable file handoff',()=>{
  it('rejects overlapping edits and forged baselines without writing the original',async()=>{
   const {file,row,document,scope,send}=await setup();file.source=file.source.replace('One','Offline');
   await applyEditFor(scope,row.id,{baseEditId:row.edit_id,documentUpdate:prepareClientDocumentUpdate({document,version:row.version,meta:row.meta},{source:row.source!.replace('One','Online')})});
-  const head=(await getArtifactById(row.id))!;expect((await send()).status).toBe(409);expect((await getArtifactById(row.id))!.version).toBe(head.version);
+  const head=(await getArtifactById(row.id))!,conflict=await send();expect(conflict.status).toBe(409);
+  expect(await conflict.json()).toMatchObject({code:'doc_changed',error:'Your offline changes overlap with newer server edits.',hint:'Your changes were not applied. Keep this file and reconcile the edited blocks, or create an independent copy.'});
+  expect((await getArtifactById(row.id))!.version).toBe(head.version);
   file.base.source='forged';expect((await send()).status).toBe(409);expect((await getArtifactById(row.id))!.source).toBe(head.source);
  });
  it('rechecks account edit access and same-origin mutations, and offers copies explicitly',async()=>{

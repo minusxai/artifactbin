@@ -14,6 +14,7 @@ it('keeps an old-runtime offer through inline authentication and partial-error r
  window.dispatchEvent(new MessageEvent('message',{source:window,origin:'null',data:offer}));expect(adapter.inspect).not.toHaveBeenCalled();
  window.dispatchEvent(new MessageEvent('message',{source:opener as unknown as Window,origin:'null',data:{...offer,requestId:'wrong'}}));expect(adapter.inspect).not.toHaveBeenCalled();
  window.dispatchEvent(new MessageEvent('message',{source:opener as unknown as Window,origin:'null',data:offer}));
+ expect(await screen.findByText('Report.jsx.html')).toBeVisible();
  fireEvent.click(await screen.findByRole('button',{name:'Complete email login'}));
  const apply=await screen.findByRole('button',{name:'Apply to original'});expect(adapter.apply).not.toHaveBeenCalled();
  fireEvent.click(apply);expect(await screen.findByRole('alert')).toHaveTextContent('comments pending');
