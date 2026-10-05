@@ -170,7 +170,7 @@ try {
     });
     try {
       await page.goto(`${APP}/a/${id}`, {waitUntil:'load'});
-      const seen = await until(() => refs.length, n => n > 0, 10000);
+      const seen = await until(async () => refs.length, n => n > 0, 10000);
       check(seen > 0 && refs.every(ref => ref === `${pagesOrigin(id)}/`), `reader sends document origin only (${JSON.stringify(refs)})`);
       const frame = documentLocator(page);
       check(await frame.locator('#youtube').getAttribute('referrerpolicy') === 'strict-origin-when-cross-origin', 'reader retains YouTube referrer policy');
