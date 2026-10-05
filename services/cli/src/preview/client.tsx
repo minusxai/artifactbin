@@ -70,6 +70,7 @@ export function Toolbar(props: {initial: PreviewDocument}) {
   onCleanup(() => portal.remove());
   const controller = createPreviewEditController({
    win: window, root, file, initialNodes: props.initial.data.nodes, sourceRef, portal,
+   isSourceEditing: source,
    onStatus: message => setStatus(message),
   });
   runtimeRef.current = controller;
