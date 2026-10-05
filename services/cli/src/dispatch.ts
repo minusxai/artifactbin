@@ -9,7 +9,7 @@ import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
 import {servePreview} from './preview-runtime';
-import {previewFiles,type PreviewOptions} from './preview-options';
+import {previewPublicOrigin,previewFiles,type PreviewOptions} from './preview-options';
 import {serveTeam} from './host-runtime';
 import type {ServeOptions} from './serve-config';
 import { browserSessionCommand } from './browser-sessions';
@@ -85,10 +85,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(json)flags.json=true;
   if(command==='preview'&&!flags.help){
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
+   const publicUrl=previewPublicOrigin(typeof flags['public-url']==='string'?flags['public-url']:undefined);
    const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
-   const paths=await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path));
+   const paths=positionals.length?await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path)):[];
    await registerLocalFiles(workspace,paths.map(path=>resolve(workspace.root,path)));
-   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,server:typeof flags.server==='string'?flags.server:workspace.tracking?.server??await exportedServer(home,context.env)});
+   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,...(publicUrl?{publicUrl}:{}),server:typeof flags.server==='string'?flags.server:workspace.tracking?.server??await exportedServer(home,context.env)});
   }
   if(command==='config'&&!flags.help){
    const [action,key,value]=positionals;

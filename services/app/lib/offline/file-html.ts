@@ -78,7 +78,8 @@ export function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveU
     + 'Leave "#afbin-code" untouched. '
     + 'Static markup/text edits rebuild on open; compiler-dependent widgets require local CLI preview. Invalid markup shows validation errors. '
     + 'To return to JSX, run "npx @afbin/cli@latest import file.jsx.html"; publication is explicit. '
-    + 'Comments are in "threads".';
+    + 'Comments are in "threads". Save or Cmd/Ctrl+S writes the current edits and comments to a .jsx.html file; the tab stays on the original file. '
+    + 'For the full local editor, start "npx @afbin/cli@latest preview" (Windows PowerShell: "npx.cmd @afbin/cli@latest preview"), click "Connect to server", enter the printed server address, and confirm "Import and open" in its tab. A compatible HTTPS preview server also works. This creates a workspace copy, not a publication.';
 }
 
 export interface ArtifactFileParts {

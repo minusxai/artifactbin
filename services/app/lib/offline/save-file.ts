@@ -19,7 +19,7 @@ import { renderArtifactFileHtml } from './file-html';
 export type SaveOutcome = 'written' | 'downloaded' | 'cancelled';
 
 interface WritableFile { write(data: Blob | string): Promise<void>; close(): Promise<void> }
-export interface SaveHandle { createWritable(): Promise<WritableFile> }
+export interface SaveHandle { name?: string; createWritable(): Promise<WritableFile> }
 type SavePicker = (options: { suggestedName: string; types: Array<{ description: string; accept: Record<string, string[]> }> }) => Promise<SaveHandle>;
 
 /** The file name to suggest: the one this copy was opened from, else the document's title. */

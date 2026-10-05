@@ -41,8 +41,8 @@
  *
  *   usage: node scripts/gates/gate-offline-file.mjs [base]
  */
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
@@ -236,8 +236,8 @@ async function answerName(page, name) {
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toHaveCount(0);
 }
-async function saveByDownload(page, to) {
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Save', exact: true }).click()]);
+async function saveByDownload(page, to, shortcut = false) {
+  const [download] = await Promise.all([page.waitForEvent('download'), shortcut ? page.keyboard.press('Control+s') : page.getByRole('button', { name: 'Save', exact: true }).click()]);
   await download.saveAs(to);
   const scheme = download.url().split(':')[0];
   // The saved copy is the same shell with the same code: it parses, and it is a complete file.
@@ -402,8 +402,8 @@ async function editing(engineName, browser) {
 
     const saved = path.join(work, `saved-${engineName}.html`);
     const first = await step('Save downloads the file, then nothing is unsaved', async () => {
+      const result = await saveByDownload(page, saved, true);
       await page.getByRole('button', { name: 'Done editing' }).click();
-      const result = await saveByDownload(page, saved);
       await expect(saveButton(page)).toBeDisabled();
       await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toHaveCount(0);
       return result;
@@ -518,7 +518,7 @@ async function editing(engineName, browser) {
         await selectHeading(pickerPage, 'Regional'.length);
         await pickerPage.keyboard.type('Picked');
         await expect(saveButton(pickerPage)).toBeEnabled({ timeout: 10_000 });
-        await saveButton(pickerPage).click();
+        await pickerPage.keyboard.press('Control+s');
         await expect(saveButton(pickerPage)).toBeDisabled({ timeout: 10_000 });
       });
       const { html, suggested } = await pickerPage.evaluate(() => ({ html: window.__written, suggested: window.__pickerName }));
@@ -680,6 +680,131 @@ async function engineChoice(engineName, browser) {
   }
 }
 
+/** A real packaged CLI, deliberately started without selecting any workspace file. */
+async function emptyPreview(directory) {
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path.join(directory, 'unselected.jsx'), '<p>Do not expose this file</p>');
+  const child = spawn(process.execPath, [path.join(ROOT, 'services/cli/dist/afbin.mjs'), 'preview', '--port', '0', '--json'], {
+    cwd: directory, env: { ...process.env, HOME: directory, ARTIFACTBIN_HOME: path.join(directory, '.client'), ARTIFACTBIN_TOKEN: '', ARTIFACTBIN_REFRESH_TOKEN: '', ARTIFACTBIN_SKILLS: 'off' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '', errors = '';
+  child.stderr.on('data', (chunk) => { errors += chunk; });
+  const closed = new Promise((resolve) => child.once('exit', resolve));
+  const close = async () => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    child.kill('SIGTERM');
+    const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+    try { await closed; } finally { clearTimeout(force); }
+  };
+  try {
+    const url = await new Promise((resolve, reject) => {
+      const deadline = setTimeout(() => reject(Error(`Empty preview did not start: ${errors.slice(-1000)}`)), 30_000);
+      const fail = (error) => { clearTimeout(deadline); reject(error); };
+      child.once('error', fail);
+      child.once('exit', (code) => fail(Error(`Empty preview exited ${code}: ${errors.slice(-1000)}`)));
+      child.stdout.on('data', (chunk) => {
+        output += chunk;
+        for (const line of output.split('\n')) {
+          try {
+            const value = JSON.parse(line);
+            if (typeof value.url === 'string' && Array.isArray(value.files) && value.files.length === 0) {
+              clearTimeout(deadline); resolve(value.url); return;
+            }
+          } catch { /* wait for a complete JSON line */ }
+        }
+      });
+    });
+    return { url, close };
+  } catch (error) { await close(); throw error; }
+}
+
+// Gate caches intentionally omit the CLI's hosted-app runtime. This gate also exercises preview,
+// so prepare its narrower runtime once, before the three browser lanes start concurrently.
+if (!existsSync(path.join(ROOT, 'services/cli/dist/runtime/bootstrap.cjs'))) {
+  execFileSync(process.execPath, ['scripts/build/build-preview-gate-inputs.mjs'], { cwd: ROOT, stdio: 'inherit' });
+}
+
+/** Explicit file:// handoff into the existing editor, without granting the file network access. */
+async function connecting(engineName, browser) {
+  const { step, run } = lane(check, `${engineName} (portable file → empty preview)`);
+  const directory = path.join(work, `connect-${engineName}`);
+  const server = await emptyPreview(directory);
+  const context = await newContext(browser);
+  const page = await context.newPage();
+  const errors = [];
+  context.on('page', (opened) => opened.on('pageerror', (error) => errors.push(String(error))));
+  page.on('pageerror', (error) => errors.push(String(error)));
+  const prose = engineFiles.find((entry) => entry.label === 'prose');
+  const originalPath = fileURLToPath(prose.url);
+  const originalHtml = readFileSync(originalPath, 'utf8');
+  try {
+    await run(async () => {
+      await page.goto(prose.url);
+      await expect(page.getByRole('heading', { name: 'Offline prose' })).toBeVisible({ timeout: 20_000 });
+      await step('edit and comment stay unsaved in the original file', async () => {
+        await page.getByRole('button', { name: 'Edit', exact: true }).click();
+        await answerName(page, 'Local reviewer');
+        await page.getByRole('heading', { name: 'Offline prose' }).evaluate((heading) => {
+          (heading.closest('.ProseMirror') ?? heading).focus({ preventScroll: true });
+          const text = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
+          const selection = window.getSelection();
+          selection.removeAllRanges(); selection.setBaseAndExtent(text, 0, text, text.textContent.length);
+        });
+        await page.keyboard.insertText('Connected prose');
+        await page.getByRole('button', { name: 'Done editing' }).click();
+        await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible().catch(async (error) => {
+          throw new Error(`editor feedback: ${JSON.stringify(await page.evaluate(() => ({feedback: [...document.querySelectorAll('[role="status"], [role="alert"]')].map(node => node.textContent), buttons: [...document.querySelectorAll('button')].map(node => node.textContent)})))}; ${error.message}`);
+        });
+        await expect(page.getByRole('heading', { name: 'Connected prose' })).toBeVisible();
+        await page.getByRole('heading', { name: 'Connected prose' }).evaluate((heading) => {
+          const range = document.createRange(); range.selectNodeContents(heading);
+          const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+          document.dispatchEvent(new Event('selectionchange'));
+        });
+        await page.getByRole('button', { name: 'Comment on selected text' }).click();
+        await page.getByRole('textbox', { name: 'Annotation comment' }).fill('This comment must travel to the local editor.');
+        await page.getByRole('button', { name: 'Save annotation' }).click();
+        await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+      });
+      let popup;
+      await step('connect offers the copy, then explicit import opens the existing editor', async () => {
+        await page.getByRole('button', { name: 'Connect to server', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Connect to server', exact: true });
+        await dialog.getByRole('textbox', { name: 'Server address' }).fill(server.url);
+        [popup] = await Promise.all([page.waitForEvent('popup'), dialog.getByRole('button', { name: 'Connect', exact: true }).click()]);
+        await expect(popup.getByRole('button', { name: 'Import and open', exact: true })).toBeEnabled({ timeout: 20_000 });
+        await expect(popup.getByRole('heading', { name: 'Import an HTML file', exact: true })).toHaveCount(1);
+        // The handoff is an offer. There is no filesystem write until this confirmation.
+        check(!readFileSync(path.join(directory, 'unselected.jsx'), 'utf8').includes('Connected'), `${engineName}: unselected source unchanged`);
+        await popup.getByRole('textbox', { name: 'Workspace file', exact: true }).fill('connected.jsx');
+        await popup.getByRole('button', { name: 'Import and open', exact: true }).click();
+        await expect(popup.getByRole('heading', { name: 'Connected prose' })).toBeVisible({ timeout: 20_000 });
+        await expect(popup.getByRole('button', { name: 'Edit document', exact: true })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Open server editor', exact: true })).toBeVisible();
+      });
+      await step('comments travel and server source edits persist in the workspace copy', async () => {
+        const response = await fetch(`${server.url}/editor`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ file: 'connected.jsx', operation: 'annotations.list', status: 'open' }) });
+        check(response.ok, `${engineName}: imported comments can be read through the existing backend`);
+        const threads = await response.json();
+        check(threads.some((thread) => thread.thread?.some((comment) => comment.body === 'This comment must travel to the local editor.')), `${engineName}: unsaved comment retained`);
+        await popup.getByRole('button', { name: 'Edit the source', exact: true }).click();
+        const source = popup.getByRole('textbox', { name: 'Markup source' });
+        await source.fill((await source.inputValue()).replace('Connected prose', 'Saved on the server'));
+        await popup.getByRole('button', { name: 'Done editing', exact: true }).click();
+        await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 20_000 });
+        await expect.poll(() => readFileSync(path.join(directory, 'connected.jsx'), 'utf8')).toContain('Saved on the server');
+        check(true, `${engineName}: full server editor writes imported JSX`);
+        await expect(page.getByRole('heading', { name: 'Connected prose' })).toBeVisible();
+        await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+        check(readFileSync(originalPath, 'utf8') === originalHtml, `${engineName}: original HTML remains unchanged`);
+        check(empty(await violations(page)), `${engineName}: connection needs no CSP relaxation`);
+        check(empty(errors), `${engineName}: no connection/editor page errors ${show(errors)}`);
+      });
+    });
+  } finally { await context.close(); await server.close(); }
+}
+
 // ── the screenshot comment, on the gate's server ─────────────────────────────
 
 const input = await sharp({ create: { width: 200, height: 100, channels: 3, background: { r: 220, g: 30, b: 30 } } }).png().toBuffer();
@@ -797,6 +922,7 @@ await Promise.all(ENGINES.map(async ([engineName, engine]) => {
     await codeViewOnline(engineName, browser);
     await editedByAnAgent(engineName, browser);
     await engineChoice(engineName, browser);
+    await connecting(engineName, browser);
   } finally {
     await browser.close();
   }

@@ -14,14 +14,15 @@ import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from
 import type { CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
 
 // The real mounter, with the callbacks the offline shell hands it kept for the flow-edit cases.
-const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null }));
+const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null, onFlush: null as (() => void) | null }));
 vi.mock('@/solid/editor/dom-mounter', async (real) => {
   const actual = await real<typeof import('@/solid/editor/dom-mounter')>();
   return {
     ...actual,
     mountCompiledEditRegions: (...args: Parameters<typeof actual.mountCompiledEditRegions>) => {
       mounted.callbacks = args[2];
-      return actual.mountCompiledEditRegions(args[0], args[1], { ...args[2], onView(view) { if (view?.state.doc.textContent === 'Local report') mounted.view = view; args[2].onView?.(view); } });
+      const mount = actual.mountCompiledEditRegions(args[0], args[1], { ...args[2], onView(view) { if (view?.state.doc.textContent === 'Local report') mounted.view = view; args[2].onView?.(view); } });
+      return { ...mount, flush() { mounted.onFlush?.(); mount.flush(); } };
     },
   };
 });
@@ -38,12 +39,17 @@ const fixture = (): ArtifactFile => {
     islands: [], kit: { islands: [], skeleton: [] },
   } as unknown as ArtifactFile['compiled'] };
 };
+const withComment = (file: ArtifactFile): ArtifactFile => ({ ...file, threads: [{
+  id: 'ann_server', status: 'open', anchor: null, orphaned: true, anchor_version: 1, snippet: 'Regional sales', quote: null, range: null, quote_found: null,
+  thread: [{ id: 'ann_server', body: 'Original comment', author: { kind: 'human', label: 'Ravi', transport: 'browser', user_id: 'u1', image: null }, created_at: '2026-09-25T00:00:00.000Z' }],
+  created_at: '2026-09-25T00:00:00.000Z', resolved_at: null,
+}] });
 function shell(file: ArtifactFile) {
   const doc = new DOMParser().parseFromString(renderArtifactFileHtml({ file, code: 'QUJD' }), 'text/html');
   document.head.innerHTML = doc.head.innerHTML;
   document.body.innerHTML = doc.body.innerHTML;
 }
-beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; mounted.view = null; });
+beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; mounted.view = null; mounted.onFlush = null; });
 
 /** A file whose source, as downloaded, has two identical paragraphs right after the description (body paths 1.5 and 1.7). */
 const TWICE = '<p>Same words.</p>';
@@ -66,6 +72,189 @@ const shownSource = (): string => {
 afterEach(() => { disposeSolidOfflineFile(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Solid offline file', () => {
+  it.each(['ctrlKey', 'metaKey'] as const)('uses %s+S to save the edited portable file and explains its selected target', async (modifier) => {
+    const file = fixture();
+    const written: string[] = [];
+    const picker = vi.fn(async () => ({ name: 'chosen.jsx.html', createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    vi.stubGlobal('showSaveFilePicker', picker);
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Saved with the shortcut</h1>') });
+    await mountSolidOfflineFile();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
+    const event = new KeyboardEvent('keydown', { key: 's', [modifier]: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(written).toHaveLength(1));
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    expect(saved.source).toContain('Saved with the shortcut');
+    expect(saved.threads).toEqual(file.threads);
+    await waitFor(() => expect(document.body.textContent).toContain('chosen.jsx.html'));
+    expect(document.body.textContent).toMatch(/tab.*(?:stays|still)|(?:reopen|open).*saved file/i);
+    expect(document.body.textContent).not.toContain('Unsaved changes');
+  });
+
+  it('flushes pending in-place typing before deciding there is nothing to save', async () => {
+    const file = withTwice(fixture());
+    const callbacks = await openAndEdit(file);
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(true);
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ name: 'pending.jsx.html', createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    mounted.onFlush = () => { mounted.onFlush = null; callbacks.onFlow('1.7', TWICE, '<p>Saved queued typing.</p>'); };
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(written).toHaveLength(1));
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    expect(saved.source).toContain('Saved queued typing.');
+    await waitFor(() => expect(document.body.textContent).not.toContain('Unsaved changes'));
+  });
+
+  it('saves from a focused editor even when its keydown handler stops propagation', async () => {
+    const file = fixture();
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => ({ name: 'from-editor.jsx.html', createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) })));
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const editor = screen.getByRole('textbox', { name: 'Markup source' });
+    fireEvent.input(editor, { target: { value: file.source.replace('Regional sales</h1>', 'Saved from editor</h1>') } });
+    editor.addEventListener('keydown', (event) => event.stopPropagation());
+    editor.focus();
+    const shortcut = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    editor.dispatchEvent(shortcut);
+    expect(shortcut.defaultPrevented).toBe(true);
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(written[0]).toContain('Saved from editor');
+  });
+
+  it('keeps edits unsaved when the shortcut save picker is cancelled', async () => {
+    const picker = vi.fn(async () => { throw new DOMException('Cancelled', 'AbortError'); });
+    vi.stubGlobal('showSaveFilePicker', picker);
+    const file = fixture();
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Retained after cancellation</h1>') });
+    await mountSolidOfflineFile();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(picker).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
+    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(screen.getByRole('heading', { name: 'Retained after cancellation' })).toBeTruthy();
+  });
+
+  it('keeps the file dirty after a failed write and suppresses the browser save even with no changes', async () => {
+    const file = fixture();
+    shell(file); await mountSolidOfflineFile();
+    const noChange = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(noChange);
+    expect(noChange.defaultPrevented).toBe(true);
+    disposeSolidOfflineFile();
+    const picker = vi.fn(async () => ({ name: 'failed.jsx.html', createWritable: async () => ({ write: async () => { throw new Error('Disk full'); }, close: async () => {} }) }));
+    vi.stubGlobal('showSaveFilePicker', picker);
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Keep after failed write</h1>') });
+    await mountSolidOfflineFile();
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Disk full'));
+    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(screen.getByRole('heading', { name: 'Keep after failed write' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('sizes the document offset to wrapped chrome and restores the body style on disposal', async () => {
+    const previous = document.body.style.paddingTop;
+    document.body.style.paddingTop = '11px';
+    let resize!: ResizeObserverCallback;
+    const disconnect = vi.fn();
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() {} disconnect = disconnect;
+    });
+    shell(fixture()); await mountSolidOfflineFile();
+    const chrome = document.getElementById('afbin-chrome')!;
+    vi.spyOn(chrome, 'getBoundingClientRect').mockReturnValue({ height: 96.3 } as DOMRect);
+    resize([], {} as ResizeObserver);
+    expect(document.body.style.paddingTop).toBe('97px');
+    const browserSaveAs = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(browserSaveAs);
+    expect(browserSaveAs.defaultPrevented).toBe(false);
+    disposeSolidOfflineFile();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(document.body.style.paddingTop).toBe('11px');
+    document.body.style.paddingTop = previous;
+  });
+
+  it('reuses the selected save target and preserves edits made while a write is pending', async () => {
+    const file = withComment(fixture());
+    let finish!: () => void;
+    let delayWrite = true;
+    const written: string[] = [];
+    const picker = vi.fn(async () => ({ name: 'kept.jsx.html', createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); if (delayWrite) await new Promise<void>((resolve) => { finish = resolve; }); }, close: async () => {},
+    }) }));
+    vi.stubGlobal('showSaveFilePicker', picker);
+    await openAndEdit({ ...file, source: file.source.replace('Regional sales</h1>', 'Local report</h1>') });
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(written).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: /Comments/ }));
+    fireEvent.input(screen.getByRole('textbox', { name: 'Reply to annotation' }), { target: { value: 'Comment while saving' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(document.body.textContent).toContain('Comment while saving'));
+    fireEvent.keyDown(document, { key: 's', metaKey: true });
+    expect(written).toHaveLength(1);
+    finish();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false));
+    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(readDraft(file)?.file.threads.some((thread) => thread.thread.some((reply) => reply.body === 'Comment while saving'))).toBe(true);
+    delayWrite = false;
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(written).toHaveLength(2));
+    await waitFor(() => expect(document.body.textContent).not.toContain('Unsaved changes'));
+    expect(picker).toHaveBeenCalledTimes(1);
+    expect(written[1]).toContain('Comment while saving');
+  });
+
+  it('hands edited source and comments to the selected server without marking the original saved', async () => {
+    const file = withComment(fixture());
+    const popup = { closed: false, postMessage: vi.fn(), close: vi.fn() };
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Connect this edit</h1>') });
+    await mountSolidOfflineFile();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to server' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    const requestId = new URL(String(open.mock.calls[0]![0])).searchParams.get('request')!;
+    window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:7474', source: popup as unknown as Window, data: { channel: 'afbin-preview-connect-v1', requestId, type: 'ready' } }));
+    await waitFor(() => expect(popup.postMessage).toHaveBeenCalledTimes(1));
+    const offer = popup.postMessage.mock.calls[0]![0] as { html: string };
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(offer.html)![1]!));
+    expect(saved.source).toContain('Connect this edit');
+    expect(saved.threads).toEqual(file.threads);
+    window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:7474', source: popup as unknown as Window, data: { channel: 'afbin-preview-connect-v1', requestId, type: 'opened', path: '/workspace/report.jsx' } }));
+    expect(screen.getByRole('link', { name: 'Open server editor' }).getAttribute('href')).toBe('http://localhost:7474/workspace/report.jsx');
+    expect(document.body.textContent).toContain('Your original HTML file is unchanged');
+    expect(document.body.textContent).toContain('Unsaved changes');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(popup.close).not.toHaveBeenCalled();
+  });
+
+  it('refuses to connect an invalid pending source and preserves the editor draft', async () => {
+    const file = fixture();
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    fireEvent.input(screen.getByRole('textbox', { name: 'Markup source' }), { target: { value: '<main><h1>Broken' } });
+    const popup = { closed: false, postMessage: vi.fn(), close: vi.fn() };
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to server' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    const requestId = new URL(String(open.mock.calls[0]![0])).searchParams.get('request')!;
+    window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:7474', source: popup as unknown as Window, data: { channel: 'afbin-preview-connect-v1', requestId, type: 'ready' } }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
+    expect(popup.postMessage).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Unsaved changes');
+    expect((screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement).value).toBe('<main><h1>Broken');
+  });
+
   it('shows the offline identity, data time, live link and disabled Save reason', async () => {
     const file = fixture(); shell(file); await mountSolidOfflineFile();
     const bar = screen.getByRole('banner', { name: 'Offline copy' });

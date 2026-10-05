@@ -44,3 +44,4 @@ export type { HostedRemoteAgent, HostedAgentComment, HostedAgentCommentOperation
 export type {RunnerCapabilities,RunnerTerminal} from './runner';
 export * from './schedules';
 export {parseProgramDefinition,type ProgramDefinition} from './program';
+export * from './preview-connect';

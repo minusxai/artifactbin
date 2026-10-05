@@ -27,6 +27,8 @@ export interface PreviewEditControllerInput {
  initialNodes:JsxNode[];
  /** The current full source, so a structural draft asks the server with what the page is showing NOW. */
  sourceRef:{current:string};
+ /** Raw-source editing requests structural drafts without mounting a WYSIWYG session. */
+ isSourceEditing?():boolean;
  /** Where the selection bubble ("comment"/"edit") mounts. Absent: no selection-driven picking. */
  portal?:HTMLElement;
  onStatus?(status:string):void;
@@ -57,7 +59,7 @@ const componentPaths=(source:JsxNode[]):Map<string,string>=>{
 };
 
 /** One preview document's private handle for `createInPlaceEdit`'s `DocumentRuntimeRef`. */
-export function createPreviewEditController({win,root,file,initialNodes,sourceRef,portal,onStatus}:PreviewEditControllerInput):PreviewStoryController {
+export function createPreviewEditController({win,root,file,initialNodes,sourceRef,portal,onStatus,isSourceEditing=()=>false}:PreviewEditControllerInput):PreviewStoryController {
  let nodes:JsxNode[]=initialNodes;
  let disposed=false;
  const listeners=new Set<(event:unknown)=>void>();
@@ -66,6 +68,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
  const channel:RuntimeChannel={nonce,post:event=>queueMicrotask(()=>emit(event)),innerHtmlOf:element=>element.innerHTML};
  let edit:FrameEditSession|null=null;
  let editRequested=false;
+ const canPreviewDraft=()=>editRequested||isSourceEditing();
  let editLoading=false;
  let selection:FrameSelectionActions|null=null;
  let selectionFactory:typeof import('../../../app/lib/story-runtime/edit/selection-actions').createFrameSelectionActions|null=null;
@@ -121,9 +124,9 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
  };
  const applyDraft=async(allowFocused=false):Promise<void>=>{
   const pending=pendingDraft;
-  if(!pending||(focusedRegion()&&(!allowFocused||!edit?.canApplyDraft()))||disposed||!editRequested||pending.sequence!==draftSequence)return;
+  if(!pending||(focusedRegion()&&(!allowFocused||!edit?.canApplyDraft()))||disposed||!canPreviewDraft()||pending.sequence!==draftSequence)return;
   const {disposeChangedDraftIslands,hydrateDraftIslands,morphDraftDom}=await import('../../../app/lib/islands/morph/engine');
-  if(disposed||!editRequested||pending.sequence!==draftSequence||pendingDraft!==pending)return;
+  if(disposed||!canPreviewDraft()||pending.sequence!==draftSequence||pendingDraft!==pending)return;
   pendingDraft=null;
   if(quietDraftTimer!==null){win.clearTimeout(quietDraftTimer);quietDraftTimer=null;}
   swapSheets(win.document,pending.sheets);
@@ -192,7 +195,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
   },
   update(command:StoryDocumentUpdate){
    if(disposed)return;
-   if(editRequested&&command.source!==undefined){
+   if(canPreviewDraft()&&command.source!==undefined){
     const sequence=++draftSequence;
     const source=command.source;
     void win.fetch('/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file,source})}).then(async response=>{
@@ -200,7 +203,7 @@ export function createPreviewEditController({win,root,file,initialNodes,sourceRe
      if(!response.ok)throw new Error(`draft preview answered ${response.status}`);
      const payload=await response.json() as {html:string};
      const next=new DOMParser().parseFromString(payload.html,'text/html');
-     if(disposed||sequence!==draftSequence||!editRequested)return;
+     if(disposed||sequence!==draftSequence||!canPreviewDraft())return;
      const nextRoot=next.querySelector<HTMLElement>('[data-mx-inline-story]');
      if(!nextRoot)throw new Error('draft preview carried no story');
      const baseline=lastDraftSource??sourceRef.current;

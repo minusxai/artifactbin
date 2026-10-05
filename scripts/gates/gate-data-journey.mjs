@@ -23,6 +23,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
+import { readEditChartObservation } from './lib/edit-chart-observation.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
@@ -633,19 +634,19 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
       // loads, so a "data unavailable" flash during loading is seen; re-resolved each poll in case the page replaces it.
       const editFrame = () => p.locator(DOCUMENT_FRAME).elementHandle({ timeout: 150 }).then((h) => h?.contentFrame() ?? null, () => null);
       let sawUnavailable = false;
+      let observed = { editing: false, marks: 0, text: '', ready: false };
       // Up to 30 s: the editor loads its chart engine beside the other legs on a loaded CI runner.
       for (let i = 0; i < 200; i++) {
         await p.waitForTimeout(150);
         const fr = await editFrame();
-        const txt = fr ? await fr.locator('body').innerText({ timeout: 1000 }).catch(() => '') : '';
-        if (/data unavailable/.test(txt)) sawUnavailable = true;
-        if (fr && (await fr.locator('svg.marks, canvas').count().catch(() => 0))) break;
+        // Reader marks can exist before edit mode attaches (and its frame may be replaced).
+        // Sample the actual editing-host contract and chart in one frame, in one browser task.
+        observed = fr ? await fr.evaluate(readEditChartObservation).catch(() => ({ editing: false, marks: 0, text: '', ready: false })) : { editing: false, marks: 0, text: '', ready: false };
+        if (/data unavailable/.test(observed.text)) sawUnavailable = true;
+        if (observed.ready) break;
       }
-      const ef = await editFrame();
-      const marks = ef ? await ef.locator('svg.marks, canvas').count().catch(() => 0) : 0;
-      const text = ef ? await ef.locator('body').innerText({ timeout: 5000 }).catch(() => '') : '';
-      check(marks > 0, `a chart renders in EDIT mode (${marks} marks)`);
-      check(!/data unavailable/.test(text), 'and does not say "data unavailable"');
+      check(observed.ready, `a chart renders in EDIT mode (${observed.marks} marks)`);
+      check(!/data unavailable/.test(observed.text), 'and does not say "data unavailable"');
       check(!sawUnavailable, 'and never flashed the failure message while loading');
     }
     await p.close();

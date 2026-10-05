@@ -7,11 +7,16 @@ Command examples use `afbin` as shorthand for `npx --yes @afbin/cli@latest` (`np
 ## Preview and host
 
 ```sh
+afbin preview --port 7474
 afbin preview report.jsx appendix.jsx
 afbin preview . --share
 afbin serve --dir ./team --port 7445
 afbin config set host http://app.lvh.me:7445
 ```
+
+With no paths, `afbin preview --port 7474` starts an empty preview service; it does not select other files in the current directory. Open the printed URL to **Import an HTML file**, or choose **Connect to server** in your `.jsx.html` file and enter `http://localhost:7474`. Confirm the title, comment count and workspace filename, then choose **Import and open**. The server imports a workspace copy using the same validation and conflict checks as `afbin import`, and opens the existing full editor. The original HTML file stays unchanged; browser edits/comments then save to the workspace. Nothing is published. HTML payloads are limited to 25 MB; encoded JSON requests are separately limited to 50 MB, so unusually escaped files may reach the transport limit earlier.
+
+A custom hosted preview service uses an HTTPS reverse proxy and `afbin preview --public-url https://preview.example.com`; the explicit public origin enables its Host/Origin checks and does not broaden the listener. Use `--share` only if the proxy or users must reach the listener from another machine. This is a preview-service connection, separate from account hosting through `serve`. Everyone who can reach a preview service can import, edit and comment within its workspace.
 
 Preview writes browser saves to selected local files without publishing. Shared previews allow
 anyone who can reach them to edit/comment; stop the foreground process to end the session.

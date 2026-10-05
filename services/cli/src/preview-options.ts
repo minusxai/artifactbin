@@ -1,8 +1,9 @@
+import {normalizeOrigin} from '../../contracts/src/server-identity';
 import {readdir,realpath,stat} from 'node:fs/promises';
 import {join,relative,resolve} from 'node:path';
 import {confinedPath} from './journal';
 import {CliError} from './errors';
-export interface PreviewOptions {cwd:string;home:string;paths:string[];port:number;share:boolean;server?:string;json:boolean}
+export interface PreviewOptions {cwd:string;home:string;paths:string[];port:number;share:boolean;server?:string;publicUrl?:string;json:boolean}
 /** Expand explicit directories without following symlinks or traversing hidden/dependency trees. */
 export async function previewFiles(root:string,cwd:string,inputs:string[]):Promise<string[]>{
  root=await realpath(root);const files=new Set<string>();
@@ -19,4 +20,11 @@ export async function previewFiles(root:string,cwd:string,inputs:string[]):Promi
  for(const input of inputs)await visit(resolve(cwd,input));
  if(!files.size)throw new CliError('missing_file','No JSX documents were found in the selected paths.');
  return [...files];
+}
+
+export function previewPublicOrigin(value:string|undefined):string|undefined{
+ if(value===undefined)return undefined;
+ const origin=normalizeOrigin(value);
+ if(!origin||!origin.startsWith('https://'))throw new CliError('invalid_arguments','--public-url must be an HTTPS origin without a path, credentials, query or fragment.');
+ return origin;
 }

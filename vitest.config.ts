@@ -61,7 +61,7 @@ const ISLANDS_SHARED = globSync([ISLAND_TESTS, SOLID_TESTS], { cwd: import.meta.
 // (scripts/lib/cached-solid.mjs). Tests render client-side (`hydratable` off); the build emits
 // hydratable code. Fresh plugin instances per project: each project has its own Vite server.
 const solidJsdom = () => ({
-  plugins: [declaredLucideIcons(import.meta.dirname), cachedSolid(import.meta.dirname, { include: ['services/app/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
+  plugins: [declaredLucideIcons(import.meta.dirname), cachedSolid(import.meta.dirname, { include: ['services/app/**/*.{tsx,jsx}', 'services/cli/src/preview/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
   server: { deps: { inline: [/@solidjs\/router/, /@solidjs\/testing-library/, /lucide-solid/] } },
 });
 

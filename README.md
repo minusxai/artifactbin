@@ -32,6 +32,8 @@ Push explicitly publishes a separate copy with remote IDs, preserving the origin
 
 The package includes SQLite. Chromium is downloaded lazily when rendering requires it. Prepare an exact npm version and browser assets before disconnecting; warmed npm execution supports `--offline`, while a cold cache needs internet. Connected commands may show update notices, but never replace software automatically. Restart with a newer npm version to update.
 
+For downloaded `.jsx.html` files, **Save** or **Cmd/Ctrl+S** keeps edits and comments. Start an empty server with `npx --yes @afbin/cli@latest preview --port 7474`, then choose **Connect to server**. See [portable files and server connections](docs/editing.md#edit-a-downloaded-html-file) for Save behavior, Windows commands and remote preview servers.
+
 ## Run your own server
 
 ```sh
@@ -83,6 +85,4 @@ The local test wrapper runs affected tests within its file budget; broader suite
 
 [Apache-2.0](LICENSE). Third-party license files remain with their runtime packages; the pinned Node runtime release includes its license.
 
-The app root is the authenticated workspace. Logged-out visits redirect to `/login`.
-Marketing, examples, and hosted-service legal pages belong to the separate
-`artifactbin-web` repository and are not included in this toolkit.
+The app root is the authenticated workspace. Logged-out visits redirect to `/login`. Marketing, examples, and hosted-service legal pages belong to the separate `artifactbin-web` repository and are not included in this toolkit.
