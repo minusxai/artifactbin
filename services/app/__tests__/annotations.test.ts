@@ -70,6 +70,20 @@ const headEditId = async (token: string, id: string) => {
 };
 
 describe('creating (browser door, owner only)', () => {
+  it('persists optional review context through create and fresh list; old comments remain context-free', async () => {
+    const { doc, cookie } = await publish();
+    const view_state = { v: 1, components: { checkout: { screen: 'payment', error: false } } };
+    const res = await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'Review this state', view_state });
+    expect(res.status).toBe(201);
+    expect((await res.json()).view_state).toEqual(view_state);
+    const listed = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { cookie }), params({ id: doc.id }));
+    expect((await listed.json()).annotations[0].view_state).toEqual(view_state);
+    const plain = await annotate(doc.id, cookie, { path: '0', edit_id: doc.edit_id, body: 'Ordinary text' });
+    expect((await plain.json()).view_state).toBeUndefined();
+    const bad = await annotate(doc.id, cookie, { path: '0', edit_id: doc.edit_id, body: 'Invalid', view_state: { v: 2, components: {} } });
+    expect(bad.status).toBe(400);
+  });
+
   it('the owner annotates a node by BODY path; the stored anchor honours the Helmet offset', async () => {
     const { doc, cookie } = await publish();
     const res = await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'this number looks wrong' });

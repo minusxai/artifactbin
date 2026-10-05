@@ -111,3 +111,8 @@ it('a reader\'s document trust belongs to the app, one row per person per docume
  expect(declared()['app.document_trust']).toBe('app');
  expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.document_trust \([\s\S]*?user_id TEXT NOT NULL[\s\S]*?extensions JSONB NOT NULL[\s\S]*?PRIMARY KEY \(user_id, artifact_id\)/);
 });
+
+it('optional comment view state stays with app-owned annotations', () => {
+  expect(declared()['app.annotations']).toBe('app');
+  expect(renderedSchema().schema).toContain('view_state JSONB');
+});

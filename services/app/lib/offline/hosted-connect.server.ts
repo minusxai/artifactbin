@@ -51,7 +51,7 @@ async function publishComments(actor:TokenActor,request:Request,id:string,file:A
    // Author/permission checks precede receipt replay; supplied labels never grant attribution.
    const guard=await capabilityGuard(actor,'comment',id);if(guard)throw Error('Comment access changed. Your file has been retained.');
    const result=await durableMutation(actor,request.url,key,{id,thread:thread.id,comment:comment.id,body},async receipt=>{
-    const made=remote?await actOnAnnotationFor(actor,id,remote.id,{reply:body},author,receipt):await createAnnotationFor(actor,id,{nodeId:thread.anchor?.nodeId??thread.anchor?.key,body,...(thread.quote?{quote:thread.quote}:{}),...(thread.range?{range:thread.range}:{})},author,receipt);
+    const made=remote?await actOnAnnotationFor(actor,id,remote.id,{reply:body},author,receipt):await createAnnotationFor(actor,id,{nodeId:thread.anchor?.nodeId??thread.anchor?.key,body,...(thread.quote?{quote:thread.quote}:{}),...(thread.range?{range:thread.range}:{}),...(thread.view_state?{viewState:thread.view_state}:{})},author,receipt);
     if(made instanceof Response)return {status:made.status,body:await made.json()};
     if(!made||'refused' in made)return {status:409,body:{error:made&&'refused' in made?made.refused:'comment_unavailable'}};
     return {status:200,body:made as unknown as Record<string,unknown>};

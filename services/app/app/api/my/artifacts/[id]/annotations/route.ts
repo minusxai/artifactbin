@@ -1,3 +1,4 @@
+import { parseCommentViewState } from '@artifactbin/contracts';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
@@ -35,7 +36,7 @@ async function scopeFor(request: Request) {
  * range, and a range that is not the grammar is its own refusal (`bad_range`)
  * rather than a generic malformed body — the caller can only fix what it is told.
  */
-type CreateBodyResult = { input: CreateAnnotationInput } | { error: 'invalid_annotation_body' | 'bad_range' };
+type CreateBodyResult = { input: CreateAnnotationInput } | { error: 'invalid_annotation_body' | 'bad_range' | 'bad_view_state' };
 
 function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   const invalid = { error: 'invalid_annotation_body' } as const;
@@ -59,6 +60,11 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
     // does was not made by the page.
     if (isAreaRange(refinementRange(range)) && typeof body.quote === 'string') return { error: 'bad_range' };
     input.range = range;
+  }
+  if (body.view_state !== undefined) {
+    const state = parseCommentViewState(body.view_state);
+    if (!state) return { error: 'bad_view_state' };
+    input.viewState = state;
   }
   return { input };
 }

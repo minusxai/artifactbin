@@ -1,3 +1,4 @@
+import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
@@ -90,6 +91,7 @@ export interface AnnotationCommentWire {
 }
 
 export interface AnnotationWire {
+  view_state?: CommentViewState;
   revision?: number;
   image?: CommentImageWire;
   remote_work?:RemoteWork[];
@@ -124,6 +126,7 @@ export interface AnnotationWire {
 }
 
 export interface CreateAnnotationInput {
+  viewState?: CommentViewState;
   attachmentId?: string;
   /** Stable source identity; preferred by all new callers. */
   nodeId?: string;
@@ -140,7 +143,7 @@ export interface CreateAnnotationInput {
 
 type CreateAnnotationRefusal =
   | { refused: 'not_markup' }
-  | { refused: 'bad_path' | 'invalid_attachment' }
+  | { refused: 'bad_path' | 'invalid_attachment' | 'bad_view_state' }
   | { refused: 'quote_not_found' | 'ambiguous_quote' }
   /** The document moved under the click — retry with fresh coords (the page is live). */
   | { refused: 'stale'; head: { editId: string; version: number } };
@@ -184,6 +187,7 @@ interface AnnotationRowDb {
   quote: string | null;
   /** JSON `AnnotationRange`, parsed on read — a malformed value reads as no range, never a throw. */
   range: string | null;
+  view_state: CommentViewState | null;
 }
 
 const scopedRow = async (q: Queryable, scope: Scope, id: string): Promise<ArtifactRow | null> => {
@@ -316,6 +320,8 @@ export async function createAnnotationFor(
   author: AnnotationAuthor,
   receipt?:MutationReceipt,
 ): Promise<AnnotationWire | CreateAnnotationRefusal | Response | null> {
+  const viewState = input.viewState === undefined ? null : parseCommentViewState(input.viewState);
+  if (input.viewState !== undefined && !viewState) return { refused: 'bad_view_state' };
   const db = await getDb();
   const scope = annotationScope(actor);
   const stale = (head: { editId: string; version: number }) => ({ refused: 'stale' as const, head });
@@ -350,11 +356,11 @@ export async function createAnnotationFor(
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet, quote, range)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13)`,
+        status, anchor_key, anchor_version, snippet, quote, range, view_state)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14)`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
       anchorKey, row.version, snippetOf(source.slice(node.start, node.end)),
-      quote, input.range ? JSON.stringify(input.range) : null],
+      quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
@@ -408,9 +414,11 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     const bodyPath = found ? sourcePathToBodyPath(source, found.path) : null;
     const anchored = !!found && bodyPath !== null;
     const range = storedRange(root.range);
+    const viewState = parseCommentViewState(root.view_state);
     return {
       id: root.id,
       revision: root.revision,
+      ...(viewState ? { view_state: viewState } : {}),
       ...(images.has(root.id) ? {image:images.get(root.id)} : {}),
       status: root.status,
       anchor: anchored
