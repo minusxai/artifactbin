@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createStore } from 'solid-js/store';
-import { createIslandRuntime, Repeat, When, hydrateIsland } from '../rt';
+import { createIslandRuntime, Repeat, When } from '../rt';
 import { rowAttrs } from '../kit/basic';
 import { IslandProvider, useIsland } from '../context';
 import { createDataflowStore } from '@/lib/story-runtime/store';
@@ -71,16 +71,8 @@ describe('createIslandRuntime', () => {
     dispose();
   });
 
-  it('hydrateIsland adopts the served island root and hands the static siblings back as the same nodes', () => {
-    const host = document.createElement('div');
-    host.innerHTML = '<p id="before">static</p><div data-hk="s0-0" id="island">served</div><p id="after">static</p>';
-    const before = host.querySelector('#before'), after = host.querySelector('#after');
-    const rt = runtime();
-    hydrateIsland('s0-', () => <div data-hk="s0-0" id="island">hydrated</div>, rt.context, host);
-    expect(host.querySelector('#before')).toBe(before);
-    expect(host.querySelector('#after')).toBe(after);
-    expect(host.querySelector('#island')?.textContent).toBe('hydrated');
-  });
+  // Actual served-root adoption is covered by rt-adopt.test.ts with hydratable compiled code.
+
 });
 
 describe('IslandContext declarations', () => {

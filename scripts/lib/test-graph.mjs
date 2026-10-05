@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSyn
 import path from 'node:path';
 import pm from 'picomatch';
 
-const VERSION = 1;
+const VERSION = 2;
 const sha = (buffer) => createHash('sha256').update(buffer).digest('hex');
 
 function configKey(root) {
@@ -44,6 +44,13 @@ export async function changedSpecifications(vitest, changedSince) {
   if (matcher && related.some((file) => matcher(file))) return specs;
   if (!related.length) return [];
 
+  const graphs = await specificationGraphs(vitest, specs);
+  return specs.filter((spec, i) => related.some((file) => graphs[i].has(file)));
+}
+
+/** Walk the same Vite import edges for selection and asset provisioning; never guess from test names. */
+async function specificationGraphs(vitest, specs) {
+  const root = vitest.config.root;
   const cacheFile = path.join(root, 'node_modules/.cache/test-graph.json');
   const cache = loadCache(cacheFile, configKey(root));
   const used = {};
@@ -65,12 +72,9 @@ export async function changedSpecifications(vitest, changedSince) {
       used[id] = { ...entry, size, mtimeMs }; dirty = true;
       return entry.deps;
     }
-    let transformed;
-    try {
-      transformed = project.vite.environments.ssr.moduleGraph.getModuleById(file)?.transformResult
-        || await project.vite.environments.ssr.transformRequest(file);
-    } catch { transformed = undefined; }
-    if (!transformed) return [];
+    const transformed = project.vite.environments.ssr.moduleGraph.getModuleById(file)?.transformResult
+      || await project.vite.environments.ssr.transformRequest(file);
+    if (!transformed) throw new Error(`Dependency discovery could not transform ${file} (${project.name}).`);
     const deps = [...new Set([...transformed.deps || [], ...transformed.dynamicDeps || []])]
       .map((dep) => dep.startsWith('/@fs/') ? dep.slice(4) : path.join(project.config.root, dep))
       .filter((dep) => !dep.includes('node_modules'));
@@ -92,7 +96,6 @@ export async function changedSpecifications(vitest, changedSince) {
   }
 
   const graphs = await Promise.all(specs.map(graph));
-  const selected = specs.filter((spec, i) => related.some((file) => graphs[i].has(file)));
   if (dirty) {
     try {
       mkdirSync(path.dirname(cacheFile), { recursive: true });
@@ -102,5 +105,13 @@ export async function changedSpecifications(vitest, changedSince) {
       renameSync(temporary, cacheFile);
     } catch { /* the cache is an optimisation only */ }
   }
-  return selected;
+  return graphs;
+}
+
+/** App tests keep the full cold-build contract. Other tests skip it only with an app-free import graph.
+ * Direct Vitest/IDE runs do not call this boundary and conservatively provision all assets. */
+export async function needsReaderAssets(vitest, specs) {
+  const app = path.join(vitest.config.root, 'services/app') + path.sep;
+  if (specs.some(spec => spec.moduleId.startsWith(app))) return true;
+  return (await specificationGraphs(vitest, specs)).some(graph => [...graph].some(file => file.startsWith(app)));
 }

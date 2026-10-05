@@ -16,7 +16,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 const script = new URL('../ci/test-changed.mjs', import.meta.url).pathname;
-function fixture({ count = 1, cli = 0, discoveryExit = 0, malformed = false, runExit = 0, stray = [], unrelated = 0, triggers = [], runs = 1 } = {}, args = []) {
+function fixture({ count = 1, cli = 0, discoveryExit = 0, transformExit = 0, appDependency = false, malformed = false, runExit = 0, stray = [], unrelated = 0, triggers = [], runs = 1 } = {}, args = []) {
   const cwd = mkdtempSync(path.join(tmpdir(), 'local-test-budget-'));
   try {
     const put = (file, value) => { mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true }); writeFileSync(path.join(cwd, file), value); };
@@ -26,6 +26,7 @@ function fixture({ count = 1, cli = 0, discoveryExit = 0, malformed = false, run
     execFileSync('git', ['add', '.'], { cwd });
     execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=mxmx_test_runner@example.com', 'commit', '-qm', 'base'], { cwd });
     put('source.ts', 'changed');
+    if (appDependency) put('services/app/pure.ts', 'export const value = 1;');
     put('node_modules/tsx/package.json', JSON.stringify({ type: 'module', exports: './index.mjs' }));
     put('node_modules/tsx/index.mjs', '');
     for (let i = 0; i < cli; i++) put(`services/cli/test/c${i}.test.ts`, `import fs from 'node:fs'; fs.appendFileSync('../../commands.jsonl', '["cli"]\\n');`);
@@ -39,8 +40,8 @@ function fixture({ count = 1, cli = 0, discoveryExit = 0, malformed = false, run
       const log=(entry)=>fs.appendFileSync('commands.jsonl',JSON.stringify(entry)+'\\n');
       const files=${JSON.stringify(files)};
       const root=process.cwd();
-      const transformRequest=async (file)=>{ log(['transform', path.basename(file)]);
-        return { deps: fs.readFileSync(file,'utf8').includes('source.ts') ? ['/source.ts'] : [] }; };
+      const transformRequest=async (file)=>{ log(['transform', path.basename(file)]); if (${transformExit} === 1) throw new Error('module transform failed'); if (${transformExit} === 2) return null;
+        return { deps: fs.readFileSync(file,'utf8').includes('source.ts') ? ['/source.ts'] : ${appDependency} && file.endsWith('/source.ts') ? ['/services/app/pure.ts'] : [] }; };
       const project={ name: 'node', config: { root }, vite: { environments: { ssr: { moduleGraph: { getModuleById: () => undefined }, transformRequest } } } };
       const specs=()=>${malformed ? "'not a list'" : "files.map(f => ({ moduleId: f.file, project }))"};
       export async function createVitest(mode, options) {
@@ -58,6 +59,7 @@ function fixture({ count = 1, cli = 0, discoveryExit = 0, malformed = false, run
             log(['list', filters]);
             return specs().filter(s => filters.some(f => s.moduleId.endsWith(f)));
           },
+          provide(key, value) { log(['provide', key, value]); },
           async standalone() {},
           async runTestSpecifications(selected) {
             log(['run', selected.map(s => path.relative(root, fs.realpathSync(s.moduleId)))]);
@@ -69,7 +71,7 @@ function fixture({ count = 1, cli = 0, discoveryExit = 0, malformed = false, run
     let res;
     for (let i = 0; i < runs; i++) res = spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
     let commands = []; try { commands = readFileSync(path.join(cwd, 'commands.jsonl'), 'utf8').trim().split('\n').map(JSON.parse); } catch {}
-    return { ...res, commands: commands.filter(c => c[0] !== 'transform'), transforms: commands.filter(c => c[0] === 'transform') };
+    return { ...res, commands: commands.filter(c => !['transform', 'provide'].includes(c[0])), provided: commands.filter(c => c[0] === 'provide'), transforms: commands.filter(c => c[0] === 'transform') };
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
 
@@ -156,4 +158,29 @@ describe('local test command budget', () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('No affected tests');
   });
+});
+
+it('fails visibly when dependency discovery cannot transform a module', () => {
+  for (const transformExit of [1, 2]) {
+    const result = fixture({ transformExit });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/module transform failed|could not transform/);
+    expect(result.stderr).not.toContain('No affected tests');
+    expect(result.commands.some(command => command[0] === 'run')).toBe(false);
+  }
+});
+
+
+it('provisions reader assets conservatively from the selected import graph', () => {
+  const infrastructure = fixture({}, ['--files', 'scripts/__tests__/t0.test.mjs']);
+  expect(infrastructure.status, infrastructure.stderr).toBe(0);
+  expect(infrastructure.provided).toEqual([['provide', 'readerAssetsRequired', false]]);
+  const appConsumer = fixture({ appDependency: true }, ['--files', 'scripts/__tests__/t0.test.mjs']);
+  expect(appConsumer.status, appConsumer.stderr).toBe(0);
+  expect(appConsumer.provided).toEqual([['provide', 'readerAssetsRequired', true]]);
+  const broken = fixture({ transformExit: 1 }, ['--files', 'scripts/__tests__/t0.test.mjs']);
+  expect(broken.status).toBe(1);
+  expect(broken.stderr).toContain('module transform failed');
+  expect(broken.provided).toEqual([]);
+  expect(broken.commands.some(command => command[0] === 'run')).toBe(false);
 });
