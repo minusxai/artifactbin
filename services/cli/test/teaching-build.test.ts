@@ -31,6 +31,14 @@ test('teaching bootstraps without its output and repairs stale output determinis
   const content=readFileSync(target,'utf8');
   const bundle=JSON.parse(content);
   assert.ok(bundle.files['SKILL.md']);assert.ok(bundle.files['references/remote-review.md']);
+  const authGuide=bundle.files['references/publishing-auth.md'];
+  for(const instruction of ['npx --yes @afbin/cli@latest','npx.cmd','ensure-node.sh','ensure-node.ps1','never replaces a running executable'])assert.ok(authGuide.includes(instruction),instruction);
+  assert.doesNotMatch(authGuide,/verified installer|published SHA-256|replaces that executable|Standalone installs check|chat\/install\.sh/);
+  const publishingGuide=bundle.files['references/publishing.md'];
+  for(const instruction of ['.artifactbin','local-to-remote ID mapping','credentials remain'])assert.ok(publishingGuide.includes(instruction),instruction);
+  assert.doesNotMatch(publishingGuide,/writes nothing into your working directory|publication preserves them/);
+  assert.match(bundle.files['references/publishing-versions.md'],/\.jsx\.html/);
+  assert.doesNotMatch(bundle.files['references/publishing-versions.md'],/It requires a published head/);
   const remoteGuide=bundle.files['references/remote-review.md'];
   const launch=remoteGuide.match(/```sh\n(afbin remote --json codex)\n```/);
   assert.ok(launch,'remote guide includes an afbin JSON launch example');

@@ -10,7 +10,7 @@ import {TEACHING_BASE} from './teaching-origin';
 export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
  approval_origin_mismatch:{meaning:'The selected server advertises its browser approval page on a different origin, and has not published that origin as another address of itself, so the pairing cannot be trusted for the selected origin.',fix:'Select the server by its public origin with --server; credentials are never sent to an origin you did not select.'},
  unmanaged_installation:{meaning:'This command needs the npm distribution.',fix:`Prepare Node with ${TEACHING_BASE}/chat/ensure-node.sh (Windows: ensure-node.ps1), then run npx --yes @afbin/cli@latest <command>.`},
- compatible_release_unavailable:{meaning:'No published release matches the version and protocol the selected server named.',fix:'Retry after a compatible CLI release is published; afbin update --dry-run reports what it resolved.'},
+ compatible_release_unavailable:{meaning:'No published release matches the version and protocol the selected server named.',fix:'Retry after a compatible npm release is published, using npx --yes @afbin/cli@latest <command> (Windows: npx.cmd).'},
  outside_workspace:{meaning:'The destination is outside the workspace afbin runs in.',fix:'Write inside the workspace, e.g. --output shot.png, and move the file afterwards if it must live elsewhere.'},
  sql_in_argument:{meaning:'A query argument was SQL; arguments name the datasets or documents to query.',fix:'Put the SQL in a file and run afbin query <ref> --input query.sql, or pipe it: afbin query <ref> --input - < query.sql.'},
  image_fetch_failed:{meaning:'The server could not fetch an external image URL named by the document.',fix:'Check the URL is public and reachable, or register the local image with afbin add --json and reference its returned ID.'},
@@ -32,7 +32,8 @@ export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
  approval_required:{meaning:'Browser approval is pending; --yes cannot approve it.',fix:'Use afbin auth --email <email> when a browser is unavailable, or open verification_url, approve, and rerun afbin auth before expires_at.'},
  access_denied:{meaning:'Browser approval was denied.',fix:'Run afbin auth only when you intend to start a new approval request.'},
  approval_expired:{meaning:'The browser approval window expired.',fix:'Run afbin auth --email <email> when a browser is unavailable, or afbin auth to start another browser approval.'},
- cli_update_required:{meaning:'The server requires a newer CLI protocol.',fix:'Run afbin update, then retry the command.'},
+ cli_update_required:{meaning:'The server requires a newer CLI protocol.',fix:'Run npx --yes @afbin/cli@latest <command> (Windows: npx.cmd), then retry the command.'},
+ cli_npm_required:{meaning:'afbin now runs through npm.',fix:'Install Node.js if needed, then use npx --yes @afbin/cli@latest <command> (Windows: npx.cmd). Your files and account stay the same.'},
  state_conflict:{meaning:'Metadata or content changed since the observed head.',fix:'Inspect afbin diff --remote <ref>, reconcile the changes, then push. Use --force only when you intend a conditional replacement.'},
  version_conflict:{meaning:'The content version changed since the observed head.',fix:'Inspect afbin diff --remote <ref> and reconcile the current content before pushing again.'},
  edit_conflict:{meaning:'The body edit could not be rebased without a conflict.',fix:'Inspect the returned diff and current source; reconcile your proposal before pushing again.'},

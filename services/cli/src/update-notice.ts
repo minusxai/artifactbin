@@ -6,7 +6,7 @@ import {HOME_SCOPE,State,withLock} from './state';
 export const UPDATE_NOTICE_INTERVAL_MS=60*60*1000;
 export interface UpdateNoticeOptions {
  home:string;server:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;stderr:(value:string)=>void;
- localOnly?:boolean;now?:()=>number;currentVersion?:string;release?:{version:string;protocol:number};
+ localOnly?:boolean;platform?:string;now?:()=>number;currentVersion?:string;release?:{version:string;protocol:number};
 }
 /** Connected boundaries alone opt in. Local commands never discover a server to check releases. */
 export async function checkUpdateNotice(options:UpdateNoticeOptions):Promise<void>{
@@ -24,6 +24,6 @@ export async function checkUpdateNotice(options:UpdateNoticeOptions):Promise<voi
    }finally{state.close();}
   },{waitMs:0,reentrant:false},options.env);
   if(!claimed)return;
-  options.stderr(`A newer afbin version is available (${data.version}). Run npx --yes @afbin/cli@${data.version} <command> to use it.\n`);
+  options.stderr(`A newer afbin version is available (${data.version}). Run ${(options.platform??process.platform)==='win32'?'npx.cmd':'npx'} --yes @afbin/cli@${data.version} <command> to use it.\n`);
  }catch{/* Response notices and busy/unavailable local state never change command success. */}
 }

@@ -10,6 +10,6 @@ interface UpdateOptions {
 /** npm owns installation and version selection. This command only explains the explicit next launch. */
 export async function updateCli(options:UpdateOptions){
  return {version:CLI_VERSION,server:normalizeServer(options.server),...(options.dryRun?{dry_run:true}:{}),
-  update_required:false,installations:[] as SkillInstallation[],harnesses:[] as SkillHarness[],command:'npx --yes @afbin/cli@latest <command>',
+  update_required:false,installations:[] as SkillInstallation[],harnesses:[] as SkillHarness[],command:`${(options.platform??process.platform)==='win32'?'npx.cmd':'npx'} --yes @afbin/cli@latest <command>`,
   message:'Run the command above with your desired afbin command to use the latest published package. No running process or installed executable was changed.'};
 }

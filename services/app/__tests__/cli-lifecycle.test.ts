@@ -1,4 +1,7 @@
 import cliRelease from '../public/chat/release.json';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {CliError} from '../../cli/src/errors';
 import {documentPublicationBody,documentEditBody,restoreDocument} from './prepared-document';
 /**
  * Document lifecycle through the REAL handlers: restore from trash, preconditions on a stale edit,
@@ -260,12 +263,41 @@ describe('cli-preconditions', () => {
   });
   it('refuses an incompatible CLI write contract before creating anything and advertises the supported protocol',async()=>{
    const token=await mintToken('protocol');
+   // Exact response-parser fragment from native 0.3.21, commit d17d041cc998939471def49639f6e026c7fce087.
+   // Its protocol-header check precedes JSON parsing; run that immutable behavior against real handlers.
+   const legacySource=readFileSync(new URL('./fixtures/legacy-cli-0.3.21-response.js.txt',import.meta.url),'utf8');
+   // Erase the fragment's sole TypeScript annotation; its control flow stays byte-for-byte intact.
+   const legacyRead=runInNewContext(`(async function(response){const method='POST',binary=false;${legacySource.replace('(d:unknown)','(d)')}})`,{CliError,CLI_PROTOCOL_VERSION:3});
+   const before=await(await list(request('/api/artifacts',{token:token.token}))).json();
    for(const protocol of ['0','1','2','unknown']){
     const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':protocol},json:{markup:'<p>Must not publish</p>'}}));
-    expect(response.status).toBe(426);expect(await response.json()).toMatchObject({error:'cli_update_required',required_protocol:3,required_version:cliRelease.version,hint:expect.stringContaining(`npx --yes @afbin/cli@${cliRelease.version}`)});expect(response.headers.get('X-Artifactbin-Protocol')).toBe('3');expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
+    expect(response.status).toBe(426);
+    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_update_required',fix:expect.stringContaining(`npx --yes @afbin/cli@${cliRelease.version}`),details:{required_protocol:3,required_version:cliRelease.version,http_status:426}});
+    expect(await response.json()).toMatchObject({error:'cli_update_required',required_protocol:3,required_version:cliRelease.version,hint:expect.stringContaining(`npx --yes @afbin/cli@${cliRelease.version}`)});expect(response.headers.get('X-Artifactbin-Protocol')).toBeNull();expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
    }
+   expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':'3'},json:{markup:'<p>Supported contract</p>'}}));
    expect(response.status).toBe(201);expect(response.headers.get('X-Artifactbin-Protocol')).toBe('3');expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
+  });
+  it('asks recognized older afbin users to launch through npm before any handler runs',async()=>{
+   const token=await mintToken('older-cli');
+   const before=await(await list(request('/api/artifacts',{token:token.token}))).json();
+   const legacySource=readFileSync(new URL('./fixtures/legacy-cli-0.3.21-response.js.txt',import.meta.url),'utf8').replace('(d:unknown)','(d)');
+   const legacyRead=runInNewContext(`(async function(response){const method='POST',binary=false;${legacySource}})`,{CliError,CLI_PROTOCOL_VERSION:3});
+   for(const agent of ['afbin/0.3.21','afbin/0.2.5'])for(const method of ['GET','POST']){
+    const response=await(method==='GET'?list:create)(request('/api/artifacts',{method,token:token.token,headers:{'User-Agent':agent,'X-Artifactbin-Protocol':'3'},...(method==='POST'?{json:{markup:'<p>Must not publish</p>'}}:{})}));
+    expect(response.status).toBe(426);
+    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_npm_required',message:expect.stringContaining('afbin now runs through npm'),fix:expect.stringContaining('npx --yes @afbin/cli@latest <command>')});
+    expect(response.headers.get('X-Artifactbin-Protocol')).toBeNull();
+    expect((await response.json()).hint).toContain('npx.cmd');
+   }
+   expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
+   for(const agent of ['afbin/0.4.0','afbin/1.0.0','afbin/broken','curl/8.0','afbin/0.3.21 extra',null]){
+    expect((await list(request('/api/artifacts',{token:token.token,headers:agent?{'User-Agent':agent}:{}}))).status).toBe(200);
+   }
+   for(const tokenValue of ['', 'unknown-bearer'])expect((await list(request('/api/artifacts',{token:tokenValue,headers:{'User-Agent':'afbin/0.3.21'}}))).status).toBe(401);
+   // Demonstrate the immutable old parser really masks JSON when a future server sends a newer header.
+   await expect(legacyRead.call({},Response.json({error:'cli_update_required',hint:'Use npm'},{status:426,headers:{'X-Artifactbin-Protocol':'4'}}))).rejects.toMatchObject({code:'protocol_mismatch'});
   });
 });
 

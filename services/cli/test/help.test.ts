@@ -269,12 +269,14 @@ describe('the bundled teaching and the manual', () => {
    assert.doesNotMatch(corpus,/\bMCP\b|\/docs\/|source="<datasetId>"|from ref_<id>/);
    assert.match(corpus,/source="ref:<id>"/);
    // The same rule over the GENERATED bundle, which is what ships: an agent must never be told to
-   // install the CLI from a registry, or to fetch a skill from anywhere else.
+   // run a retired unscoped npm package or install a global executable.
    for(const [file,text] of Object.entries(teaching.files as Record<string,string>)){
     assert.ok(!/npm install -g|npx afbin|npm i -g/.test(text),`${file} teaches npm installation`);
     assert.ok(!/MCP|\/docs\/llm|skills\.download/.test(text),`${file} teaches a remote or MCP surface`);
    }
-   assert.match(teaching.files['references/publishing-auth.md'],/\/chat\/install\.sh/);
+   assert.match(teaching.files['references/publishing-auth.md'],/\/chat\/ensure-node\.sh/);
+   assert.match(teaching.files['references/publishing-auth.md'],/npx --yes @afbin\/cli@latest/);
+   assert.doesNotMatch(teaching.files['references/publishing-auth.md'],/\/chat\/install\.sh/);
   });
 
   test('help formats, destinations and the manual come from one command registry',async()=>{

@@ -20,6 +20,7 @@ import type { Harness } from '@/lib/platform';
 import type { Credential } from '@artifactbin/contracts';
 import { isCookieCredential } from './viewer';
 import { matchesWorkspaceAccount } from './guest-owner';
+import {cliNpmRequired} from './cli-version-support';
 
 interface TokenContext {
   tokenId: string;
@@ -153,7 +154,6 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     routeCtx?: { params: Promise<Record<string, string>> },
   ): Promise<Response> => {
     const protocol=request.headers.get('X-Artifactbin-Protocol');
-    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliRelease.version,hint:`Run npx --yes @afbin/cli@${cliRelease.version} <command>, then retry with the current write contract.`}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),'X-Artifactbin-CLI-Version':cliRelease.version}});
     const auth = request.headers.get('authorization') ?? '';
     const presented = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
     const resolved = presented ? await resolveToken(presented) : null;
@@ -169,6 +169,11 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
       if (actor && refusesCrossSite(request, browser)) return json({ error: 'forbidden' }, 403);
     }
     if (!actor) return unauthorized(request);
+    const npmRequired=cliNpmRequired(request);
+    if(npmRequired)return npmRequired;
+    // Old clients inspect this header before JSON errors: keep required protocol in the body
+    // so a future incompatible server cannot mask its concrete npm launch instruction.
+    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliRelease.version,hint:`Run npx --yes @afbin/cli@${cliRelease.version} <command>, then retry with the current write contract.`}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-CLI-Version':cliRelease.version}});
     const account=actor.userId??actor.id;
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
     if(expectedAccount&&!await matchesWorkspaceAccount(expectedAccount,account))return json({error:'account_mismatch',hint:'Use the credentials for this workspace account.'},409);
