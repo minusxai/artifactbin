@@ -55,8 +55,19 @@ async function ready(page:Page){
  await page.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
  await page.getByRole('button',{name:'Edit',exact:true}).waitFor();
 }
+/** Done persists then reloads: networkidle on the old document is not a readiness boundary. */
+async function finishEditing(page:Page){
+ const [saved]=await Promise.all([
+  page.waitForResponse(response=>response.url().endsWith('/save')),
+  page.waitForNavigation({waitUntil:'load'}),
+  page.getByRole('button',{name:'Done editing',exact:true}).click(),
+ ]);
+ assert.equal(saved.status(),200);
+ await ready(page);
+ return saved;
+}
 async function retainDiagnostics(error:unknown){
- const destination=resolve('test-results','local-journey','preview-'+phase);
+ const destination=resolve('test-results','preview',phase);
  await mkdir(destination,{recursive:true});
  await writeFile(join(destination,'failure.json'),JSON.stringify({entry,root,url:server?.url,error:error instanceof Error?error.stack:String(error),browserEvents},null,2));
  for(const file of ['report.jsx','appendix.jsx','published.jsx','sales.csv'])await writeFile(join(destination,file),await readFile(join(root,file)));
@@ -95,20 +106,18 @@ try{
  await a.keyboard.insertText('Browser saved paragraph');
  await a.waitForFunction(()=>document.getElementById('text')?.textContent==='Browser saved paragraph');
  await a.waitForSelector('text=Unsaved');
- const saved=a.waitForResponse(response=>response.url().endsWith('/save'));
- await a.getByRole('button',{name:'Done editing',exact:true}).click();
- const savedResponse=await saved;assert.equal(savedResponse.status(),200);
+ const savedResponse=await finishEditing(a);
  assert.match(await readFile(join(root,'report.jsx'),'utf8'),/<p id="text">Browser saved paragraph<\/p>/);
  assert.ok((await readFile(join(root,'report.jsx'),'utf8')).includes('href="/a/'+ids['appendix.jsx']+'"'));
  assert.ok((await readFile(join(root,'report.jsx'),'utf8')).includes('src="ref:'+ids['pixel.png']+'"'));
- await a.waitForLoadState('networkidle');await a.getByRole('button',{name:'Edit',exact:true}).waitFor();
  await b.locator('#text').filter({hasText:'Browser saved paragraph'}).waitFor({timeout:5000});
  console.log('PASS production in-place editor -> HTTP -> file -> second browser');
  // Observe real SQLite result changes through the production control/dataflow runtime (a plain GET query door).
- const firstQuery=a.waitForResponse(response=>response.url().includes('/query')&&decodeURIComponent(response.url()).includes('"minimum":15'));
- await a.getByRole('button',{name:'Minimum',exact:true}).click();
- await a.getByRole('option',{name:'Above fifteen',exact:true}).click();
- const answer=await (await firstQuery).json();assert.deepEqual(answer.tables.sales.rows,[{total:20}]);
+ const [firstQuery]=await Promise.all([
+  a.waitForResponse(response=>response.url().includes('/query')&&decodeURIComponent(response.url()).includes('"minimum":15')),
+  (async()=>{await a.getByRole('button',{name:'Minimum',exact:true}).click();await a.getByRole('option',{name:'Above fifteen',exact:true}).click();})(),
+ ]);
+ const answer=await firstQuery.json();assert.deepEqual(answer.tables.sales.rows,[{total:20}]);
  console.log('PASS control-driven SQL uses local CSV and the built-in SQLite engine');
  const staleRevision=savedResponse.request().postDataJSON().revision;
  const stale=await b.request.post(server.url+'/save',{data:{file:'report.jsx',revision:staleRevision,body:'<p id="text">Stale overwrite</p>'}});
@@ -135,13 +144,10 @@ try{
  await a.getByRole('button',{name:'Edit',exact:true}).click();
  await a.getByRole('tab',{name:'Edit the source',exact:true}).click();
  await a.locator('.cm-editor').waitFor();
- const codeSaved=a.waitForResponse(response=>response.url().endsWith('/save'));
  const sourceInput=a.getByRole('textbox',{name:'Markup source',exact:true});
  await a.bringToFront();await sourceInput.click();await sourceInput.press('ControlOrMeta+a');await a.keyboard.insertText('<p id="text">Local v3 edit</p>');
  await a.locator('#text').filter({hasText:'Local v3 edit'}).waitFor();
- await a.getByRole('button',{name:'Done editing',exact:true}).click();
- assert.equal((await codeSaved).status(),200);
- await a.waitForLoadState('networkidle');
+ await finishEditing(a);
  await a.locator('#text').filter({hasText:'Local v3 edit'}).waitFor();
  assert.match(await readFile(join(root,'published.jsx'),'utf8'),/Local v3 edit/);
  assert.match(await readFile(join(root,'published.jsx'),'utf8'),/head_version: 3/);

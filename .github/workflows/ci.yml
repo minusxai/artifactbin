@@ -948,7 +948,9 @@ jobs:
         if: failure() && matrix.phase == 'experience'
         with:
           name: npm-local-journey-${{ matrix.os }}-${{ matrix.node }}
-          path: services/cli/test-results/local-journey
+          path: |
+            services/cli/test-results/local-journey
+            services/cli/test-results/preview
           if-no-files-found: ignore
           retention-days: 7
 
