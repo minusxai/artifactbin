@@ -245,8 +245,8 @@ function OfflineShell(props: Opened) {
     event.preventDefault();
     if (!event.repeat) void save();
   };
-  document.addEventListener('keydown', saveShortcut);
-  onCleanup(() => { document.removeEventListener('keydown', saveShortcut); cancelConnect?.(); });
+  document.addEventListener('keydown', saveShortcut, true);
+  onCleanup(() => { document.removeEventListener('keydown', saveShortcut, true); cancelConnect?.(); });
   const connect = () => {
     if (connecting()) return;
     setConnectError(''); setConnectedUrl('');

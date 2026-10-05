@@ -93,6 +93,25 @@ describe('Solid offline file', () => {
     expect(document.body.textContent).not.toContain('Unsaved changes');
   });
 
+  it('saves from a focused editor even when its keydown handler stops propagation', async () => {
+    const file = fixture();
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => ({ name: 'from-editor.jsx.html', createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) })));
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const editor = screen.getByRole('textbox', { name: 'Markup source' });
+    fireEvent.input(editor, { target: { value: file.source.replace('Regional sales</h1>', 'Saved from editor</h1>') } });
+    editor.addEventListener('keydown', (event) => event.stopPropagation());
+    editor.focus();
+    const shortcut = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    editor.dispatchEvent(shortcut);
+    expect(shortcut.defaultPrevented).toBe(true);
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(written[0]).toContain('Saved from editor');
+  });
+
   it('keeps edits unsaved when the shortcut save picker is cancelled', async () => {
     const picker = vi.fn(async () => { throw new DOMException('Cancelled', 'AbortError'); });
     vi.stubGlobal('showSaveFilePicker', picker);
