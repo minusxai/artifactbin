@@ -31,7 +31,7 @@ const FLOW = await compiledOf(
   { Sales0001: COLUMNS, Other0001: COLUMNS },
 );
 
-function setup() {
+function setup(load = () => loadSqlite()) {
   let rows = ROWS;
   const fetched: string[] = [];
   const runs: Array<{ values: Record<string, Scalar>; only: string[] }> = [];
@@ -46,7 +46,7 @@ function setup() {
     mutate: (request) => new Promise((resolve, reject) => { writes.push({ request, resolve, reject }); }),
   };
   const engine = createPageEngine({
-    load: () => loadSqlite(),
+    load,
     fetch: async (name) => { fetched.push(name); return { rows: { rows, columns: COLUMNS } }; },
   });
   const store = createDataflowStore({ flow: FLOW, hold: ['sales'] }, { transport, debounceMs: 0, page: { engine, userId: 'usr_1' } });
@@ -118,6 +118,37 @@ describe('the store places each run', () => {
 });
 
 describe('writes the page can compute', () => {
+  it('reports failed local engine loading without sending the write to a server', async () => {
+    const { store, writes } = setup(async () => { throw new Error('wasm unavailable'); });
+    open.push(store);
+    store.start();
+    await settled(store);
+    await expect(store.mutate('remember')).rejects.toThrow('not loaded');
+    expect(writes).toEqual([]);
+  });
+
+  it('keeps an immediate local write in the page while its SQLite core is still loading', async () => {
+    let finish!: (core: Awaited<ReturnType<typeof loadSqlite>>) => void;
+    const loading = new Promise<Awaited<ReturnType<typeof loadSqlite>>>(resolve => { finish = resolve; });
+    const { store, writes, runs } = setup(() => loading);
+    open.push(store);
+    store.start();
+    await settled(store);
+    runs.length = 0;
+    store.setValue('region', 'EU');
+    await settled(store);
+    runs.length = 0;
+    const written = store.mutate('remember');
+    expect(writes).toEqual([]);
+    finish(await loadSqlite());
+    await written;
+    await settled(store);
+    expect(writes).toEqual([]);
+    expect(runs).toEqual([]);
+    expect(store.getTable('todo')!.rows).toEqual([{ t: 'EU' }]);
+    expect(store.getTable('todos')!.rows).toEqual([{ n: 1 }]);
+  });
+
   it('a local-table write runs entirely in the page', async () => {
     const { store, writes } = await started();
     store.setValue('region', 'EU');

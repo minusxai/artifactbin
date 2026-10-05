@@ -461,7 +461,7 @@ export function createDataflowStore(
    */
   const writeThrough = (m: CompiledDataflow['mutations'][number], request: MutationRequest): Promise<MutationAnswer> => {
     const where = placement.mutations[m.name];
-    if (page && where === 'browser' && page.engine.ready(flow, m.reads.imports)) {
+    if (page && where === 'browser') {
       return page.engine.write(flow, m, request, context()).then((local) => ({ dataset: '', local }));
     }
     const t = transport;

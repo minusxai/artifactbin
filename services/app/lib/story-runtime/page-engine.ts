@@ -106,6 +106,7 @@ interface Held {
   /** Bumped by every invalidation; a fetch that started under an older one is stale when it lands. */
   generation: number;
   loading?: number;
+  waiting?: Promise<void>;
 }
 
 export function createPageEngine(source: PageEngineSource): PageEngine {
@@ -121,7 +122,7 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
   const fetch = (entry: Held) => {
     const generation = entry.generation;
     entry.loading = generation;
-    source.fetch(entry.name).then((tables) => {
+    entry.waiting = source.fetch(entry.name).then((tables) => {
       if (entry.generation !== generation) return;
       entry.base = tables;
       // Confirmed before this fetch began: its rows are these rows now.
@@ -195,24 +196,26 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
     return bound;
   };
 
+  const prepare = (flow: CompiledDataflow, imports: readonly string[]) => {
+    if (closed) return;
+    // Failed loading remains final for query routing; a local write rejects instead of leaving the page.
+    loadingCore ??= source.load().then((loaded) => { core = loaded; view = null; }, () => {});
+    for (const name of imports) {
+      const ref = importRef(flow, name);
+      if (!ref) continue;
+      let entry = held.get(ref);
+      if (!entry) held.set(ref, entry = { name, generation: 1 });
+      if (!entry.base && entry.loading === undefined) fetch(entry);
+    }
+  };
+
   return {
     close() {
       closed = true;
       database?.db.close();
       database = null;
     },
-    prepare(flow, imports) {
-      if (closed) return;
-      // A core that will not load is final for this document: its queries run on the server.
-      loadingCore ??= source.load().then((loaded) => { core = loaded; view = null; }, () => {});
-      for (const name of imports) {
-        const ref = importRef(flow, name);
-        if (!ref) continue;
-        let entry = held.get(ref);
-        if (!entry) held.set(ref, entry = { name, generation: 1 });
-        if (!entry.base && entry.loading === undefined) fetch(entry);
-      }
-    },
+    prepare,
     ready(flow, imports) {
       return !closed && !!core && imports.every((name) => {
         const ref = importRef(flow, name);
@@ -240,6 +243,12 @@ export function createPageEngine(source: PageEngineSource): PageEngine {
       return table;
     },
     async write(flow, m, request, ctx) {
+      // Activation can precede the lazy engine: keep local state here while its prerequisites load.
+      prepare(flow, m.reads.imports);
+      await loadingCore;
+      await Promise.all(m.reads.imports.map(name => held.get(importRef(flow, name) ?? '')?.waiting));
+      engine();
+      if (!m.reads.imports.every(name => !!held.get(importRef(flow, name) ?? '')?.base)) throw new Error('the page engine has not loaded the mutation imports');
       const { params, paramTypes } = bind(flow, m, request, ctx);
       const tables = localTableOverrides(flow, request.localTables);
       return runLocalStateMutation(flow, m, { tables }, {
