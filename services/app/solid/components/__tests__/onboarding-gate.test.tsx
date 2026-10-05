@@ -20,8 +20,8 @@ it('waits for identity and sends an unonboarded account to welcome with its retu
   await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`/welcome?callbackUrl=${encodeURIComponent('/@owner/story?tab=2#note')}`));
 });
 
-it('exempts welcome, login, start, and guests', async () => {
-  for (const path of ['/welcome', '/login', '/start']) {
+it('exempts welcome, login, start, an in-memory connect offer, and guests', async () => {
+  for (const path of ['/welcome', '/login', '/start','/connect?request=portable-offer']) {
     setSession({ user: { id: 'new' }, onboarded: false });
     at(path);
     expect(screen.getByTestId('where')).toHaveTextContent(path);

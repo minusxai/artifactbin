@@ -300,7 +300,7 @@ describe('Solid offline file', () => {
     let finish!: () => void;
     let delayWrite = true;
     const written: string[] = [];
-    const picker = vi.fn(async () => ({ name: 'kept.jsx.html', createWritable: async () => ({
+    const picker = vi.fn(async (_options: unknown) => ({ name: 'kept.jsx.html', createWritable: async () => ({
       write: async (blob: Blob) => { written.push(await blob.text()); if (delayWrite) await new Promise<void>((resolve) => { finish = resolve; }); }, close: async () => {},
     }) }));
     vi.stubGlobal('showSaveFilePicker', picker);
@@ -323,6 +323,8 @@ describe('Solid offline file', () => {
     await waitFor(() => expect(written).toHaveLength(2));
     await waitFor(() => expect(trustedText()).not.toContain('Unsaved changes'));
     expect(picker).toHaveBeenCalledTimes(1);
+    expect(picker.mock.calls[0]?.[0]).toMatchObject({ suggestedName: `${file.artifactId}-regional-sales.jsx.html` });
+    expect(trustedText()).toContain('kept.jsx.html');
     expect(written[1]).toContain('Comment while saving');
   });
 
@@ -598,7 +600,9 @@ describe('Solid offline file', () => {
     expect(readDraft(file)).toBeNull();
     writeDraft({ ...file, localIds: ['x'] }, new Date('2026-09-26T12:00:05.000Z'));
     expect(readDraft(file)?.file.localIds).toEqual(['x']);
-    expect(suggestedFileName('Sales', { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).jsx.html');
+    expect(suggestedFileName(file, { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).html');
+    expect(suggestedFileName(file, { protocol: 'file:', pathname: '/Downloads/chosen.jsx.html' })).toBe('chosen.jsx.html');
+    expect(suggestedFileName({ ...file, artifactId:'4B7rjX', metadata:{ ...file.metadata,title:'Artifact + run: a proposal' } }, { protocol:'https:',pathname:'/a/4B7rjX' })).toBe('4B7rjX-artifact-run-a-proposal.jsx.html');
   });
 
   it('saves the compiled story exactly as downloaded, never spliced with edited text', async () => {

@@ -15,6 +15,8 @@ import { GET as read } from '@/app/api/artifacts/[id]/route';
 import { tracking } from '../../cli/test/tracking';
 import { parseDocument, writeDocument } from '../../cli/src/document';
 import type {LocalHtmlOptions} from '../../cli/src/local-html-options';
+import {readArtifactFileHtml} from '@/lib/offline/offer';
+import {artifactFileName} from '@artifactbin/utils';
 import { publishJsx } from '@/lib/story/document/jsx-tier';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 import { createUser } from '@/lib/accounts';
@@ -160,7 +162,7 @@ describe('cli-export', () => {
   it('renders published URLs and historical images through viewer routes, and exports edited local HTML without requests',async()=>{
    const calls:CliCall[]=[];
    const localHtmlRequests:LocalHtmlOptions[]=[];
-   const localBytes=Buffer.from('<html data-test-renderer="local">Edited</html>');
+   let localBytes:Buffer;
    const cli=await cliWorkspace('handler-export',{fetch:transportFor(calls),localHtml:async options=>{
     localHtmlRequests.push(options);
     expect(parseDocument(await readFile(join(options.cwd,options.path),'utf8')).body).toMatch(/<h1\b[^>]*>Edited<\/h1>/);
@@ -192,6 +194,9 @@ describe('cli-export', () => {
     const offline=await readFile(join(root,'deck.html'),'utf8');
     expect(offline).toContain('<html');
     expect(offline).toContain('id="afbin-file"');
+    localBytes=Buffer.from(offline);
+    const carrier=readArtifactFileHtml(offline);
+    const localName=artifactFileName(carrier.artifactId,carrier.metadata.title);
 
     expect(localHtmlRequests).toEqual([]);
 
@@ -202,8 +207,8 @@ describe('cli-export', () => {
     const local=await run(['export','deck.jsx','--format','html'],async()=>{throw new Error('a local HTML export attempted a request');});
     expect(local.code,JSON.stringify(local.result)).toBe(0);
     expect(localHtmlRequests).toEqual([{cwd:await realpath(root),home:cli.home,path:'deck.jsx'}]);
-    expect(local.result.operations[0].path).toBe('deck.jsx.html');
-    expect(await readFile(join(root,'deck.jsx.html'))).toEqual(localBytes);
+    expect(local.result.operations[0].path).toBe(localName);
+    expect(await readFile(join(root,localName))).toEqual(localBytes);
     expect(calls).toEqual([]);
 
     /*

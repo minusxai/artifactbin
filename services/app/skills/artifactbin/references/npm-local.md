@@ -20,16 +20,24 @@ Write `report.jsx`, then run each command through npm:
 ```sh
 npx --yes @afbin/cli@latest preview report.jsx
 npx --yes @afbin/cli@latest export report.jsx --format html
-npx --yes @afbin/cli@latest import report.jsx.html
+npx --yes @afbin/cli@latest import ID-SLUG.jsx.html --output report.jsx
 npx --yes @afbin/cli@latest push report.jsx
 ```
 
+Replace `ID-SLUG.jsx.html` with the filename printed by export.
+
 Preview binds localhost and edits the source without sign-in or cloud requests. `--share` explicitly enables network access; anyone who can reach that server may edit. Close preview when finished.
 
-HTML export defaults to `report.jsx.html`, a self-contained offline file that opens normally in a browser. Web downloads and browser Save use the same `.jsx.html` suffix. JSX source stays `.jsx`; PNG, CSV and other formats keep their own extensions. Save edits and comments from the offline browser before importing its downloaded file.
+HTML export defaults to `<artifact-id>-<URL-slug>.jsx.html`, a self-contained offline file that opens normally in a browser. Use the emitted filename, or pass `--output report.jsx.html` to choose an explicit name. Web downloads and browser Save use the same `.jsx.html` suffix. JSX source stays `.jsx`; PNG, CSV and other formats keep their own extensions. Save edits and comments from the offline browser before importing its downloaded file.
 
-Import reads that HTML file locally. With no `--output`, `report.jsx.html` becomes `report.jsx` (legacy `.html` is also accepted). Use `--output revised.jsx` to choose another JSX destination. Existing local documents reconcile against their baseline; conflicts preserve copies instead of silently replacing your work. Tracked remote destinations are refused. Import has no `--force`, does not publish, and never writes to stdout.
+Import reads that HTML file locally. With no `--output`, the `.jsx.html` suffix becomes `.jsx` (legacy `.html` is also accepted). Use `--output revised.jsx` to choose another JSX destination. Existing local documents reconcile against their baseline; conflicts preserve copies instead of silently replacing your work. Tracked remote destinations are refused. Import has no `--force`, does not publish, and never writes to stdout.
 
 Push is the explicit cloud publication step. It preserves remote identity and refuses conflicting remote changes. Browser approval in the CLI may continue as a guest; `auth --email <email>` is available for headless use. Direct HTTP clients require email authentication and cannot use guest browser approval.
 
 Before disconnecting, cache an exact npm package version and prepare any required browser assets. Substitute that version in the offline command above for every local operation. npm packaging does not sandbox the CLI or guarantee that arbitrary commands avoid network access.
+
+## Connect an offline copy
+
+Start an empty local server with `npx --yes @afbin/cli@latest preview --port 7474`, then choose **Connect to server** in the HTML file and enter `http://localhost:7474`. Confirm the workspace import. This preserves the standalone file and does not publish. The local server uses the same editor and comments components as hosted artifactbin.
+
+For an existing hosted artifact, enter its artifactbin HTTPS server origin instead. Sign in and explicitly apply to the recognized embedded ID. The existing JSONB update guards allow independent concurrent edits and refuse overlapping changes. An unknown or unauthorized ID never silently becomes a new artifact. Renaming the file does not change the ID stored inside it. Save remains a separate local action; connecting does not silently synchronize either copy.

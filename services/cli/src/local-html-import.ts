@@ -1,16 +1,16 @@
 import {recordLocalHistory} from './local-history';
 /** An HTML file is untrusted data. Parse its JSON carrier, never run its embedded reader or author scripts. */
-import {parse,type DefaultTreeAdapterMap} from 'parse5';
+import {readArtifactFileHtml as readSharedArtifactFileHtml} from '../../app/lib/offline/offer';
 import {readFile,stat,realpath,lstat} from 'node:fs/promises';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {isAbsolute,relative,resolve,join,sep} from 'node:path';
-import {parseArtifactFile,sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
+import {sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
 import {resolveStoredStoryDesign} from '../../app/lib/data/story/story-themes';
 import {collectRefUses} from '../../app/lib/story/data/refs';
 import {validateMarkupStructure} from '../../app/lib/story/document/local-validation';
 import {parseJsx} from '../../app/lib/jsx';
 import {nodeIndex} from '../../app/lib/story/document/node-ids';
-import {parseAnnotationRange} from '../../app/lib/story/annotations/annotation-range';
+import {validateFileComments} from '../../app/lib/offline/comment-validation';
 import type {AnnotationWire} from '../../app/lib/annotations/store';
 import {confinedPath,type FileChange} from './journal';
 import {atomicWrite,digest,readOptional,privateDirectory,isMissing} from './files';
@@ -25,35 +25,13 @@ const safePath=(path:string)=>!!path&&!isAbsolute(path)&&!/[\\:\x00-\x1f]/.test(
 const damaged=(message:string)=>new CliError('invalid_html',message);
 
 export function readArtifactFileHtml(html:string):ArtifactFile{
- if(Buffer.byteLength(html)>MAX_BYTES)throw damaged('The HTML file exceeds the 25 MB import limit.');
- const payloads:string[]=[];
- const visit=(node:DefaultTreeAdapterMap['node'])=>{
-  if('tagName' in node&&node.attrs.some(attr=>attr.name==='id'&&attr.value==='afbin-file')){
-   if(node.tagName!=='script'||!node.attrs.some(attr=>attr.name==='type'&&attr.value==='application/json'))throw damaged('Invalid artifact file payload.');
-   payloads.push(node.childNodes.map(child=>'value' in child?child.value:'').join(''));
-  }
-  if('childNodes' in node)for(const child of node.childNodes)visit(child);
- };
- visit(parse(html));
- if(payloads.length!==1)throw damaged('Expected exactly one artifact file payload.');
- let parsed:unknown;try{parsed=JSON.parse(payloads[0]!);}catch{throw damaged('The artifact file payload is not valid JSON.');}
- return parseArtifactFile(parsed);
+ try{return readSharedArtifactFileHtml(html);}catch(error){throw damaged(error instanceof Error?error.message:String(error));}
 }
 
 async function noSymlink(root:string,path:string):Promise<void>{
  let current=root;for(const part of path.split('/')){current=join(current,part);try{if((await lstat(current)).isSymbolicLink())throw damaged('Imported paths may not follow symlinks.');}catch(error){if(isMissing(error))break;throw error;}}
 }
 
-function validThreads(file:ArtifactFile):void{
- const ids=new Set<string>();
- for(const thread of file.threads){
-  if(!thread||typeof thread.id!=='string'||!thread.id||thread.id.length>200||ids.has(thread.id)||!['open','resolved'].includes(thread.status)||!Array.isArray(thread.thread)||!thread.thread.length||thread.thread.length>1000)throw damaged('Invalid or duplicate comment thread.');
-  ids.add(thread.id);
-  if(thread.range!=null&&!parseAnnotationRange(thread.range))throw damaged('Invalid comment selection.');
-  if(thread.anchor!==null&&(!thread.anchor||typeof (thread.anchor.nodeId??thread.anchor.key)!=='string'||(thread.anchor.nodeId??thread.anchor.key).length>200))throw damaged('Invalid comment anchor.');
-  for(const reply of thread.thread)if(!reply||typeof reply.id!=='string'||typeof reply.body!=='string'||reply.body.length>10000||!reply.author||reply.author.label!==null&&(typeof reply.author.label!=='string'||reply.author.label.length>100)||typeof reply.created_at!=='string')throw damaged('Invalid comment reply.');
- }
-}
 
 /** Remote downloads already carry approved rows and inlined bytes; recover them without contacting their origin. */
 function downloadedAssets(file:ArtifactFile,identity:string):NonNullable<ArtifactFile['localWorkspace']>['assets']{
@@ -83,7 +61,7 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
  const html=await readFile(inputPath,'utf8'),file=readArtifactFileHtml(html);
  const checked=validateMarkupStructure(file.source);
  if(!parseJsx(file.source).ok||checked.errors.length)throw damaged('The imported document is invalid: '+checked.errors.map(error=>error.message).join('; '));
- validThreads(file);
+ try{validateFileComments(file);}catch(error){throw damaged(error instanceof Error?error.message:String(error));}
  const provenance=file.localWorkspace;
  if(provenance&&(!ID.test(provenance.documentId)||provenance.documentId!==file.artifactId||provenance.baseDigest!==sourceDigest(file.base.source)))throw damaged('The local document baseline or identity is inconsistent.');
  const inputName=relative(workspace.root,inputPath).split(sep).join('/').replace(/(\.jsx)?\.html?$/i,'.jsx');

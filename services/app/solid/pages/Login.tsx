@@ -1,12 +1,12 @@
 /* @jsxImportSource solid-js */
-import { createEffect, createSignal, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, Show, untrack, type JSX } from 'solid-js';
 import { loginRedirectTarget, internalRedirectTarget } from '@/lib/http/safe-redirect';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 
 import { FormPage, FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../components/FormControls';
 
-export function LoginPage(): JSX.Element {
+export function LoginPage(props:{onAuthenticated?:()=>void}={}): JSX.Element {
   const { session, sessionError } = useSession();
   const [email, setEmail] = createSignal('');
   const [code, setCode] = createSignal('');
@@ -14,7 +14,10 @@ export function LoginPage(): JSX.Element {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   createEffect(() => {
-    if (session()?.user) window.location.replace(loginRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin));
+    if (session()?.user) {
+      if(props.onAuthenticated)untrack(props.onAuthenticated);
+      else window.location.replace(loginRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin));
+    }
   });
   const requestCode = async () => {
     setBusy(true); setError(null);
@@ -30,7 +33,8 @@ export function LoginPage(): JSX.Element {
     const response = await apiFetch('/api/auth/sign-in/email-otp', 'POST', { email: email(), otp: code() }).catch(() => null);
     setBusy(false);
     if (!response?.ok) { setError('That code isn’t right, or it expired. Request a new one.'); return; }
-    window.location.href = internalRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin);
+    if(props.onAuthenticated)props.onAuthenticated();
+    else window.location.href = internalRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin);
   };
   return <Show when={!session()?.user && (session() || sessionError())}>
     <FormPage narrow>

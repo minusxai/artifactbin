@@ -2,7 +2,7 @@
 # Compatibility URL: the only supported afbin distribution is now npm.
 # This entry prepares Node, then runs npm; it never downloads an afbin executable.
 set -eu
-  version=0.4.4
+  version=0.4.5
   origin=''
 if [ -z "$origin" ]; then origin=https://app.artifactbin.dev; fi
 if [ "$#" -gt 0 ]; then

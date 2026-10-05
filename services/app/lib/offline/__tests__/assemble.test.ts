@@ -11,7 +11,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { documentEditBody } from '@/__tests__/prepared-document';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor, type AnnotationAuthor } from '@/lib/annotations';
-import { getArtifactById, type RoleActor } from '@/lib/artifacts';
+import { getArtifactById, getVersionFor, type RoleActor } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
@@ -116,6 +116,21 @@ describe('access', () => {
     const notADocument = await assembleArtifactFile({ id: w.ds, actor: w.owner.actor, origin: ORIGIN });
     expect(notADocument).toMatchObject({ refused: 'not_found' });
     expect((notADocument as { message: string }).message).toMatch(/only documents/i);
+  });
+
+  it('retains an admitted shared-reader download without granting history or retaining refused private reads', async () => {
+    const owner = await account('retention_owner');
+    const bob = await account('retention_reader');
+    const ownerScope = { userId: owner.user.id, tokenId: owner.token.id };
+    const readerScope = { userId: bob.user.id, tokenId: bob.token.id };
+    const shared = await create(owner.token.token, { markup: '<p>Shared baseline</p>', visibility: 'unlisted' });
+    const privateId = await create(owner.token.token, { markup: '<p>Private baseline</p>', visibility: 'private' });
+    expect(await getVersionFor(ownerScope, shared, 1)).toBeNull();
+    await download(shared, reader(bob));
+    expect(await getVersionFor(ownerScope, shared, 1)).toMatchObject({ version: 1 });
+    expect(await getVersionFor(readerScope, shared, 1)).toBeNull();
+    expect(await assembleArtifactFile({ id: privateId, actor: reader(bob), origin: ORIGIN })).toMatchObject({ refused: 'forbidden' });
+    expect(await getVersionFor(ownerScope, privateId, 1)).toBeNull();
   });
 
   it('serves an archived version only to someone who may read the history', async () => {

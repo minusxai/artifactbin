@@ -90,6 +90,15 @@ describe('portable preview handoff', () => {
     timed.cancel(); closed.cancel();
   });
 
+  it('keeps a handed-off file available through long authentication and accepts released workspace-compatible hosted redirects', async () => {
+    vi.useFakeTimers();const test=connection();test.send('ready');await settle();
+    vi.advanceTimersByTime(30*60_000);
+    expect(test.options.onError).not.toHaveBeenCalled();
+    test.send('opened',{path:'/workspace/Ab12Cd'});
+    expect(test.options.onOpened).toHaveBeenCalledWith('http://localhost:7474/workspace/Ab12Cd');
+    test.cancel();
+  });
+
   it('restricts origins and editor paths', () => {
     expect(previewServerOrigin(' https://preview.example.com ')).toBe('https://preview.example.com');
     expect(previewServerOrigin('http://localhost:7474')).toBe('http://localhost:7474');

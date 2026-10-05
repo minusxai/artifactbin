@@ -270,10 +270,10 @@ function OfflineShell(props: Opened) {
       if (!dirty()) return;
       const generation = editGeneration;
       // Preserve the downloaded runtime and matching served markup; the saved source is projected after hydration.
-      const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current.metadata.title), handle: saveHandle });
+      const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current), handle: saveHandle });
       if (result.outcome !== 'cancelled') {
         saveHandle = result.handle;
-        const target = result.handle?.name || suggestedFileName(current.metadata.title);
+        const target = result.handle?.name || suggestedFileName(current);
         setSaveReceipt(result.outcome === 'written'
           ? `Saved to “${target}”. This tab stays on the file you opened. If you chose another location, open that saved file to continue. Later saves in this tab update the selected file.`
           : `Downloaded updated “${target}”. Open the downloaded file to continue. This tab stays on the file you opened.`);
@@ -303,11 +303,11 @@ function OfflineShell(props: Opened) {
         origin,
         prepare: async () => {
           const current = await flushFile();
-          return { html: renderArtifactFileHtml({ ...props.parts, file: current }), filename: suggestedFileName(current.metadata.title) };
+          return { html: renderArtifactFileHtml({ ...props.parts, file: current }), filename: suggestedFileName(current) };
         },
         onStatus: setConnectStatus,
         onError: (message) => { setConnecting(false); setConnectStatus(''); setConnectError(message); },
-        onOpened: (url) => { setConnecting(false); setConnectedUrl(url); setConnectStatus('Imported a workspace copy. Continue editing in the server tab. Your original HTML file is unchanged.'); },
+        onOpened: (url) => { setConnecting(false); setConnectedUrl(url); setConnectStatus('Connected. Continue editing in the server tab. Your original HTML file is unchanged.'); },
       });
     } catch (error) { setConnecting(false); setConnectError(error instanceof Error ? error.message : 'Could not open the server.'); }
   };
@@ -380,12 +380,12 @@ function OfflineShell(props: Opened) {
       <button class={BUTTON} aria-expanded={changes()} onClick={() => setChanges(!changes())}>Changes{file().journal.length ? ` (${file().journal.length})` : ''}</button>
     </PageControlsPanel></Show>
     <Show when={connectDialog()}><DialogShell onClose={() => { cancelConnect?.(); setConnecting(false); setConnectDialog(false); }}><section role="dialog" aria-label="Connect to server" class="fixed left-1/2 top-16 z-[2000] w-[min(90vw,32rem)] -translate-x-1/2 rounded-lg border border-edge bg-surface p-5 font-mono text-sm shadow-xl space-y-4">
-      <p>Connect to a compatible preview server to edit and comment on a workspace copy. The original HTML file stays here; this does not publish it.</p>
+      <p>Connect to a local preview server for a workspace copy, or to hosted artifactbin to update the original. Connecting only sends a copy for review. Nothing is published until you confirm “Apply to original” or “Create independent copy” in the server tab. Your original HTML file stays here.</p>
       <p><a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Install Node.js if needed</a>, then start a local server:</p>
       <p class="break-words text-xs">macOS / Linux: <code>npx --yes @afbin/cli@latest preview --port 7474</code></p>
       <p class="break-words text-xs">Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest preview --port 7474</code></p>
       <label class="block space-y-2">Server address <input class={FORM_INPUT} aria-label="Server address" value={serverAddress()} onInput={(event) => setServerAddress(event.currentTarget.value)} disabled={connecting()} /></label>
-      <p>Use http://localhost:7474, or the HTTPS address of your own compatible preview server.</p>
+      <p>Use http://localhost:7474, or the HTTPS address of hosted artifactbin or your compatible server.</p>
       <button class={FORM_PRIMARY_BUTTON} disabled={connecting()} onClick={connect}>{connecting() ? 'Connecting…' : 'Connect'}</button>
       <button class={BUTTON} onClick={() => { cancelConnect?.(); cancelConnect = null; setConnecting(false); setConnectStatus(''); setConnectDialog(false); }}>{connecting() ? 'Cancel connection' : 'Close'}</button>
       <Show when={connectStatus()}><p role="status">{connectStatus()}</p></Show>

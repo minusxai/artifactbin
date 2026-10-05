@@ -27,7 +27,7 @@ import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations/store
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/serving/archived-version';
 import { acceptedMembers, dataflowForRow, dataflowRunsForRow, importsFingerprint, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ImportCache } from '@/lib/artifacts/dataflow';
 import { canReadArtifact, type ArtifactRow, type RoleActor, type TokenActor } from '@/lib/artifacts/access';
-import { getArtifactById } from '@/lib/artifacts/store';
+import { getArtifactById, retainDownloadedVersion } from '@/lib/artifacts/store';
 import type { ImportTables } from '@/lib/story/data';
 import { placeDataflow } from '@/lib/story/data';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -301,6 +301,9 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const admitted = (!!actor.tokenId && actor.tokenId === artifact.token_id) || (await timed(timings, 'access', () => canReadArtifact(artifact, viewer)));
   if (!admitted) return refuse('forbidden', 'You do not have access to this document.');
   if (artifact.format !== 'markup') return refuse('not_found', 'Only documents can be downloaded for offline use.');
+
+  // Only an admitted live server snapshot can become a download checkpoint.
+  if (input.version === undefined) await retainDownloadedVersion(artifact);
 
   const history = tokenActorOf(actor);
   const at = input.version === undefined ? null : await archivedVersionForActor(history, artifact, input.version);

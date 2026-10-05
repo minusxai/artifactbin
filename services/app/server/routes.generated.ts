@@ -128,11 +128,14 @@ import * as r124 from '@/app/assets/[hash]/route';
 import * as r125 from '@/app/assets/export/[id]/route';
 import * as r126 from '@/app/assets/mermaid/[file]/route';
 import * as r127 from '@/app/basemap/[...path]/route';
-import * as r128 from '@/app/email/[id]/route';
-import * as r129 from '@/app/health/route';
-import * as r130 from '@/app/llms.txt/route';
-import * as r131 from '@/app/people/[id]/route';
-import * as r132 from '@/app/tiles/[...tile]/route';
+import * as r128 from '@/app/connect/import/route';
+import * as r129 from '@/app/connect/inspect/route';
+import * as r130 from '@/app/email/[id]/route';
+import * as r131 from '@/app/health/route';
+import * as r132 from '@/app/llms.txt/route';
+import * as r133 from '@/app/people/[id]/route';
+import * as r134 from '@/app/tiles/[...tile]/route';
+import * as r135 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -264,9 +267,12 @@ export const ROUTES: RouteEntry[] = [
   { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r125 },
   { path: "/assets/mermaid/:file", dir: "/assets/mermaid/[file]", methods: ["GET","HEAD"], module: r126 },
   { path: "/basemap/:path{.+}", dir: "/basemap/[...path]", methods: ["GET"], module: r127 },
-  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r128 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r129 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r130 },
-  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r131 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r132 },
+  { path: "/connect/import", dir: "/connect/import", methods: ["POST"], module: r128 },
+  { path: "/connect/inspect", dir: "/connect/inspect", methods: ["POST"], module: r129 },
+  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r130 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r131 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r132 },
+  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r133 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r134 },
+  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r135 },
 ];

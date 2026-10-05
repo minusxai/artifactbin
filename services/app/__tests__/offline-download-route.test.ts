@@ -43,7 +43,7 @@ describe('GET /a/<id>/download', () => {
     const res = await download(request(`/a/${id}/download`, { token }), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/^text\/html/);
-    expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="Trip plan\.jsx\.html"/);
+    expect(res.headers.get('content-disposition')).toBe(`attachment; filename="${id}-trip-plan.jsx.html"; filename*=UTF-8''${id}-trip-plan.jsx.html`);
     const html = await res.text();
     expect(html).toContain('id="afbin-code"');
     const file = fileOf(html);

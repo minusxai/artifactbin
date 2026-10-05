@@ -18,6 +18,10 @@ With no paths, `afbin preview --port 7474` starts an empty preview service; it d
 
 A custom hosted preview service uses an HTTPS reverse proxy and `afbin preview --public-url https://preview.example.com`; the explicit public origin enables its Host/Origin checks and does not broaden the listener. Use `--share` only if the proxy or users must reach the listener from another machine. This is a preview-service connection, separate from account hosting through `serve`. Everyone who can reach a preview service can import, edit and comment within its workspace.
 
+The same **Connect to server** action can target a hosted artifactbin origin. The hosted server recognizes the embedded artifact ID, checks sign-in and edit permission, and requires an explicit apply before updating the original. It uses the existing guarded JSONB update protocol against the verified downloaded baseline, so independent edits can coexist and overlapping edits report conflicts. Local preview imports remain workspace operations.
+
+Default HTML downloads/exports use `<artifact-id>-<URL-slug>.jsx.html`; explicit output paths and names already opened or chosen in Save are retained. The embedded ID survives renaming.
+
 Preview writes browser saves to selected local files without publishing. Shared previews allow
 anyone who can reach them to edit/comment; stop the foreground process to end the session.
 Add assigns stable workspace-local IDs. Preview retains those IDs without sign-in or cloud access, including after publication. Push preserves the local files and creates a separate publication copy whose references use remote IDs.

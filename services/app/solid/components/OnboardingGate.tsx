@@ -4,7 +4,7 @@ import { Navigate, useLocation } from '@solidjs/router';
 import { readIntent } from '@/lib/http/intent';
 import { useSession } from '../lib/session';
 
-const EXEMPT = new Set(['/welcome', '/login', '/start']);
+const EXEMPT = new Set(['/welcome', '/login', '/start', '/connect']);
 
 /**
  * True once the page the reader asked for has finished loading, a task after its `load` event: a document's app page

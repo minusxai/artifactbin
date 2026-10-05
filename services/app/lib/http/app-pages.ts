@@ -6,7 +6,7 @@
  *
  * Value-only, no imports: the server and the client page both read it.
  */
-export const SPA_PATHS = /^(\/|\/login|\/start|\/account|\/notifications|\/welcome|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new|\/schedules|\/programs\/new|\/programs\/[^/]+\/edit)$/;
+export const SPA_PATHS = /^(\/|\/login|\/connect|\/start|\/account|\/notifications|\/welcome|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new|\/schedules|\/programs\/new|\/programs\/[^/]+\/edit)$/;
 /** A profile page (server/app `/:user{@[a-z0-9_]+}`); `/@name/<slug>` is a document's pretty alias, not this. */
 export const PROFILE_PATH = /^\/@[a-z0-9_]+$/;
 

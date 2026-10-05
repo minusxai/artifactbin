@@ -1,4 +1,5 @@
 /** A portable file hands a copy to a user-selected preview server without granting it network access. */
+import {runtimeId} from '../story-runtime/runtime-id';
 import { normalizeOrigin, PREVIEW_CONNECT_CHANNEL, PREVIEW_CONNECT_PATH, PREVIEW_CONNECT_MAX_BYTES, type PreviewConnectMessage } from '@artifactbin/contracts';
 
 export function previewServerOrigin(value: string): string {
@@ -27,7 +28,7 @@ export interface PreviewConnectionOptions {
 /** Call directly from the user's click: opening the tab must precede any asynchronous editing flush. */
 export function connectPreview(options: PreviewConnectionOptions, browser: Window = window): () => void {
   const origin = previewServerOrigin(options.origin);
-  const requestId = crypto.randomUUID();
+  const requestId = runtimeId();
   const popup = browser.open(`${origin}${PREVIEW_CONNECT_PATH}?request=${encodeURIComponent(requestId)}`, '_blank');
   if (!popup) throw new Error('The browser blocked the server tab. Allow popups for this file, or open the server and use “Import an HTML file” after saving this file.');
   let disposed = false;
@@ -48,8 +49,8 @@ export function connectPreview(options: PreviewConnectionOptions, browser: Windo
     if (message.type === 'ready' && !offered) {
       offered = true;
       browser.clearTimeout(timeout);
-      timeout = browser.setTimeout(() => fail('The import confirmation timed out. Try connecting again. Your edits are still here.'), 10 * 60_000);
-      options.onStatus('Preparing this file. Confirm “Import and open” in the server tab.');
+      // Authentication and explicit review have no deadline. Closing/cancelling the receiver still ends the handoff.
+      options.onStatus('Preparing this file. Review and confirm in the server tab.');
       void options.prepare().then((offer) => {
         if (disposed) return;
         if (new TextEncoder().encode(offer.html).byteLength > PREVIEW_CONNECT_MAX_BYTES) throw new Error('This file is too large to connect (maximum 25 MB).');
@@ -67,6 +68,6 @@ export function connectPreview(options: PreviewConnectionOptions, browser: Windo
   browser.addEventListener('message', receive);
   let timeout = browser.setTimeout(() => fail('The connection timed out. Start the preview server, then try again. Your edits are still here.'), 30_000);
   const closed = browser.setInterval(() => { if (popup.closed) fail('The server tab was closed. Your edits are still here.'); }, 1000);
-  options.onStatus('Opening the server. Confirm “Import and open” in its tab.');
+  options.onStatus('Opening the server. Review and confirm in its tab.');
   return () => { if (disposed) return; finish(); popup.close(); };
 }

@@ -23,6 +23,8 @@ import {withLock} from './state';
 import {readPendingRequest} from './pending-request';
 import {readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 import {snapshotDocument} from './local';
+import {ARTIFACT_ID_PATTERN,type DocumentGraph} from '@artifactbin/contracts';
+import {graphSource} from '../../app/lib/story/graph/document-graph';
 import {canonicalizeMarkup} from '../../app/lib/story/document/canonical-source';
 import {parseJsx,serializeJsx,type JsxNode} from '../../app/lib/jsx';
 import {collectRefUses} from '../../app/lib/story/data/refs';
@@ -34,6 +36,30 @@ export interface LocalPublicationResult {operations:Array<Record<string,unknown>
 interface Options {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface Input {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
 interface ImportedBaseline {artifactId:string;origin:string;base:{version:number;editId:string;source:string};source:string}
+function validImportedBaseline(baseline:ImportedBaseline):boolean{
+ return typeof baseline.artifactId==='string'&&ARTIFACT_ID_PATTERN.test(baseline.artifactId)&&!!baseline.base&&Number.isSafeInteger(baseline.base.version)&&baseline.base.version>0&&typeof baseline.base.source==='string'&&typeof baseline.base.editId==='string'&&!!baseline.base.editId;
+}
+interface ArchivedDocument {artifact_id:string;version:number;markup:string;format:string;document:DocumentGraph;title?:string|null;description?:string|null;meta?:Record<string,unknown>}
+/** The imported bytes never supply a trusted graph. Obtain the original author's
+ * graph through the authenticated history door, then retain its dependency versions.
+ * The current head contributes identity/permission and current sharing, not source. */
+async function importedAuthoringBase(head:Snapshot,baseline:ImportedBaseline,path:string,client:HttpClient):Promise<Snapshot>{
+ const refusal=()=>new CliError('import_conflict',`The downloaded baseline for ${path} cannot be verified.`,
+  'Preserve your local proposal and obtain its original authenticated source before resolving.',{path,base:baseline.base?.source,remote:head.markup});
+ if(!validImportedBaseline(baseline)||baseline.base.version>head.version)throw refusal();
+ let base:Snapshot=head;
+ if(head.version!==baseline.base.version){
+  const archived=await client.request<ArchivedDocument>(`/artifacts/${head.id}/versions/${baseline.base.version}`);
+  if(archived.artifact_id!==head.id||archived.version!==baseline.base.version||archived.format!=='markup'||typeof archived.markup!=='string')throw refusal();
+  base={...head,version:archived.version,markup:archived.markup,document:archived.document,
+   title:archived.title??null,description:archived.description??null,
+   theme:(archived.meta?.theme as Snapshot['theme'])??null,template:(archived.meta?.template as Snapshot['template'])??null,colorMode:archived.meta?.colorMode??null};
+ }else if(head.edit_id!==baseline.base.editId)throw refusal();
+ const document=base.document as DocumentGraph|undefined;
+ if(document?.schema!==3||document.kind!=='graph'||canonicalizeMarkup(base.markup!)!==canonicalizeMarkup(baseline.base.source))throw refusal();
+ try{if(canonicalizeMarkup(graphSource(document))!==canonicalizeMarkup(baseline.base.source))throw refusal();}catch{throw refusal();}
+ return base;
+}
 interface Publication {format:1;server:string;account:string;root:string;inputs:Record<string,Input>;ids:Record<string,string>}
 const fence=['id','edit_id','head_version','state','version'] as const;
 /** Only entire resource-address values carry an identity; prose never does. */
@@ -155,18 +181,19 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
  if(!client.account)throw new CliError('account_required','Publication requires an authenticated account.');
  let manifest:Publication=stored??{format:1,server:client.connection.server,account:client.account,root,inputs:{},ids:{}};
  if(manifest.format!==1||!client.sameServer(manifest.server)||manifest.account!==client.account)throw new CliError('account_mismatch','This publication copy is bound to a different server or account.');
- const imported:Array<{path:string;localId:string;head:Snapshot;baseline:ImportedBaseline}>=[];
+ const imported:Array<{path:string;localId:string;head:Snapshot;base:Snapshot;baseline:ImportedBaseline}>=[];
  const portable=await readLocalWorkspaceState(workspace.root),pathIds=Object.fromEntries(Object.entries(identities).map(([id,path])=>[path,id]));
  for(const path of ordered){
   const baseline=portable?.get<ImportedBaseline>(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/'+path)?.value;
   if(!baseline)continue;
   if(typeof baseline.origin!=='string'||!client.sameServer(baseline.origin))throw new CliError('import_server_mismatch',`The imported ${path} belongs to another server.`,'Select the original server before publishing.');
   const localId=pathIds[path];if(!localId||manifest.ids[localId])continue;
+  if(!validImportedBaseline(baseline))throw new CliError('import_conflict',`The downloaded baseline for ${path} is invalid.`,'Preserve the local proposal and obtain its original authenticated source.');
   const head=await client.request<Snapshot>(`/artifacts/${baseline.artifactId}`);
   if((head.capabilities as {edit?:boolean}|undefined)?.edit!==true)throw new CliError('edit_required',`Your account cannot edit the original artifact for ${path}.`,'Sign in with an account allowed to edit it.');
   if(head.id!==baseline.artifactId||typeof head.markup!=='string'||typeof head.edit_id!=='string'||typeof head.state!=='string'||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','The original artifact snapshot is incomplete.');
-  if(head.version!==baseline.base.version||head.edit_id!==baseline.base.editId||canonicalizeMarkup(head.markup)!==canonicalizeMarkup(baseline.base.source))throw new CliError('import_conflict',`The original artifact changed since ${path} was downloaded.`,'Preserve your local proposal and compare it with the current remote source before resolving.',{path,base:baseline.base.source,local:baseline.source,remote:head.markup,head});
-  imported.push({path,localId,head,baseline});
+  const base=await importedAuthoringBase(head,baseline,path,client);
+  imported.push({path,localId,head,base,baseline});
  }
  await mkdir(root,{recursive:true,mode:0o700});
  return withPrivateStateHome(home,join(home,'.artifactbin'),()=>withLock(home,publication,async()=>{
@@ -176,11 +203,11 @@ export async function publishLocalWorkspace(workspace:Workspace,paths:string[],c
   // absolute path; rebase it before ordinary journal recovery or discovery.
   const state=await stateFor(home);if(manifest.root!==root){state.rebaseScope(manifest.root,root);manifest={...manifest,root};await saveManifest(manifestPath,manifest);}
   let stage=await loadWorkspace(root,home);
-  for(const {path,localId,head,baseline} of imported.filter(binding=>!manifest.ids[binding.localId])){
-   const target=await confinedPath(root,path);await mkdir(dirname(target),{recursive:true});const bytes=Buffer.from(writeDocument(snapshotDocument(head)));await atomicWrite(target,bytes);
-   await saveTracking(stage,{server:client.connection.server,account:client.account!,set:{[path]:{id:head.id,file:digest(bytes),url:`${client.connection.server}/a/${head.id}`,snapshot:head}}});
+  for(const {path,localId,head,base,baseline} of imported.filter(binding=>!manifest.ids[binding.localId])){
+   const target=await confinedPath(root,path);await mkdir(dirname(target),{recursive:true});const bytes=Buffer.from(writeDocument(snapshotDocument(base)));await atomicWrite(target,bytes);
+   await saveTracking(stage,{server:client.connection.server,account:client.account!,set:{[path]:{id:head.id,file:digest(bytes),url:`${client.connection.server}/a/${head.id}`,snapshot:base}}});
    manifest.ids[localId]=head.id;
-   const local=parseDocument((await readFile(await confinedPath(workspace.root,path))).toString());const original=Buffer.from(writeDocument({...local,body:baseline.base.source}));
+   const local=parseDocument((await readFile(await confinedPath(workspace.root,path))).toString());const original=Buffer.from(writeDocument({...local,metadata:{...local.metadata,...snapshotDocument(base).metadata,id:local.metadata.id},body:baseline.base.source}));
    manifest.inputs[path]={localId,bytes:original.toString('base64'),hash:digest(original),ids:{}};
   }
   if(imported.length){await saveManifest(manifestPath,manifest);stage=await loadWorkspace(root,home);}
