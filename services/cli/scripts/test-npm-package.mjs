@@ -8,6 +8,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {npmConsumerArgs} from './npm-consumer-args.mjs';
 import {runAcceptanceProcesses} from './acceptance-processes.mjs';
+import {nativeBootstrapCheck,cleanupFailedNativeConsumer} from './native-consumer-lifecycle.mjs';
 const ci=process.argv[2]==='--ci';
 const installOnly=process.argv.includes('--install-only');
 if(installOnly&&!ci)throw new Error('--install-only requires the CI candidate.');
@@ -24,10 +25,11 @@ const run=args=>{const start=performance.now();try{return execFileSync(process.e
 // The absent-Node proof is independent of this cold install: different homes and npm caches.
 // Run it only on Node22 matrix entries; it installs and validates the official Node24 bootstrap.
 const bootstrap=process.argv.includes('--parallel-bootstrap')&&process.versions.node.startsWith('22.')
- ?runAcceptanceProcesses([{label:'absent-Node bootstrap',command:process.platform==='win32'?'powershell.exe':process.execPath,args:process.platform==='win32'?['-NoProfile','-File','services/cli/scripts/test-node-bootstrap.ps1','-Tarball',tarball]:['services/cli/scripts/test-node-bootstrap.mjs'],cwd:repository,env:process.env}])
+ ?runAcceptanceProcesses([nativeBootstrapCheck({platform:process.platform,executable:process.execPath,repository,tarball,environment:process.env})])
  :Promise.resolve();
 // Attach a handler immediately while synchronous npm install/native checks are running.
 bootstrap.catch(()=>{});
+let nativeLoaded=false;
 try{
  await writeFile(join(root,'package.json'),'{}\n');
  const installStarted=performance.now();
@@ -49,6 +51,7 @@ try{
  const offline=JSON.parse(run(['exec','--offline',...args.slice(1)]));assert.deepEqual(offline,online);
  if(process.platform==='win32')await assert.rejects(readdir(join(env.npm_config_cache,'_npx')),error=>error.code==='ENOENT','Windows native execution must not duplicate the candidate install');
  const require=createRequire(join(cli,'package.json'));
+ nativeLoaded=true;
  const sharp=require('sharp');const image=await sharp({create:{width:2,height:2,channels:3,background:'red'}}).png().toBuffer();assert.equal((await sharp(image).metadata()).width,2);
  const ptyRoot=dirname(require.resolve('node-pty/package.json'));
  assert.ok(await readFile(join(ptyRoot,'prebuilds',`${process.platform}-${process.arch}`,process.platform==='win32'?'conpty.node':'pty.node')),'The installed terminal dependency must contain this platform prebuild');
@@ -65,4 +68,4 @@ try{
  if(proof)await writeFile(join(resolve(proof),'installed-path.txt'),join(cli,'dist/afbin.mjs'));
  // CI browser conformance consumes this install, so keep it when requested.
  if(!proof)await rm(root,{recursive:true,force:true});
-}catch(error){await bootstrap.catch(()=>{});await rm(root,{recursive:true,force:true});throw error;}
+}catch(error){await bootstrap.catch(()=>{});await cleanupFailedNativeConsumer(root,{platform:process.platform,nativeLoaded});throw error;}
