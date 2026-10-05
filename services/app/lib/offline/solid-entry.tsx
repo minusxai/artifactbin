@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /** The file's Solid chrome. The compiled story is already in the DOM and boots separately. */
-import { createEffect, createSignal, For, onCleanup, Show, lazy } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, onMount, Show, lazy } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { JsxNode } from '@/lib/jsx';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
@@ -11,9 +11,10 @@ import { createLiveEditsCore, type LiveEditsCore } from '@/solid/lib/live-edits-
 import { createFileBackend, rebuildArtifactFile, sourceChangedOutside } from './file-backend';
 import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from './extras';
 import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest } from './file-format';
-import { ARTIFACT_FILE_IDS, readArtifactFileParts, type ArtifactFileParts } from './file-html';
+import { ARTIFACT_FILE_IDS, readArtifactFileParts, renderArtifactFileHtml, type ArtifactFileParts } from './file-html';
 import { clearDraft, readDraft, readName, writeDraft, writeName } from './local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-file';
+import { connectPreview, previewServerOrigin } from './preview-connect';
 import { unranQueriesOf } from './snapshot-current';
 import { projectDocument, sameSourceContent } from './project-document';
 
@@ -115,6 +116,14 @@ function OfflineShell(props: Opened) {
   const [dataMenu, setDataMenu] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [saveError, setSaveError] = createSignal('');
+  const [saveReceipt, setSaveReceipt] = createSignal('');
+  const [connecting, setConnecting] = createSignal(false);
+  const [connectDialog, setConnectDialog] = createSignal(false);
+  const [serverAddress, setServerAddress] = createSignal('http://localhost:7474');
+  const [connectStatus, setConnectStatus] = createSignal('');
+  const [connectError, setConnectError] = createSignal('');
+  const [connectedUrl, setConnectedUrl] = createSignal('');
+  let cancelConnect: (() => void) | null = null;
   const [editStatus, setEditStatus] = createSignal('');
   const [extrasState, setExtrasState] = createSignal<'idle' | 'loading' | 'ready' | 'failed'>('idle');
   const extras = createExtrasLoader(extrasScriptUrl(file().origin, file().extras), file().extras?.integrity ?? null);
@@ -122,12 +131,14 @@ function OfflineShell(props: Opened) {
   let editMount: CompiledEditMount | null = null;
   let live: LiveEditsCore | null = null;
   let saveHandle: SaveHandle | null = null;
+  let editGeneration = 0;
   let draftTimer = 0;
   let projectedSource = file().base.source;
   let nameAnswer: (() => void) | null = null;
   const backend = createFileBackend(file(), {
     author: () => name(),
     onChange(next) {
+      editGeneration++;
       const prior = file();
       const pendingSource = source();
       setFile(next);
@@ -171,7 +182,7 @@ function OfflineShell(props: Opened) {
     if (picked?.trim()) { writeName(picked.trim()); setName(picked.trim()); }
     setAsking(false); setRenaming(false); nameAnswer?.(); nameAnswer = null;
   };
-  const queueSource = (next: string) => { setSource(next); setDirty(true); live?.queue({ source: next });
+  const queueSource = (next: string) => { editGeneration++; setSource(next); setDirty(true); live?.queue({ source: next });
     window.clearTimeout(draftTimer);
     draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
   };
@@ -199,23 +210,60 @@ function OfflineShell(props: Opened) {
       onError: setEditStatus,
     });
   };
+  const flushFile = async () => {
+    if (props.invalid) throw new Error('Fix the invalid markup in the original file before saving or connecting.');
+    editMount?.flush();
+    await live?.flushNow();
+    if (live && !live.isIdle()) throw new Error('Fix the source before saving or connecting. Your unsaved changes are still in the editor.');
+    return file();
+  };
   const save = async () => {
-    setSaving(true); setSaveError('');
+    if (saving() || !dirty()) return;
+    setSaving(true); setSaveError(''); setSaveReceipt('');
     try {
-      editMount?.flush();
-      await live?.flushNow();
-      if (live && !live.isIdle()) { setSaveError('Fix the source before saving. Your unsaved changes are still in the editor.'); return; }
-      // The compiled module and its served markup are never touched by an edit (only `source`
-      // and what derives from it change, file-backend.ts `derive`): save them exactly as
-      // downloaded, so a reopen hydrates a pristine, matching pair and projects the edited
-      // text onto it afterwards (afterReady), instead of re-hydrating an already-spliced copy.
-      const current = file();
+      const current = await flushFile();
+      const generation = editGeneration;
+      // Preserve the downloaded runtime and matching served markup; the saved source is projected after hydration.
       const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current.metadata.title), handle: saveHandle });
       if (result.outcome !== 'cancelled') {
-        saveHandle = result.handle; window.clearTimeout(draftTimer); clearDraft(current); setDirty(false);
+        saveHandle = result.handle;
+        const target = result.handle?.name || suggestedFileName(current.metadata.title);
+        setSaveReceipt(result.outcome === 'written'
+          ? `Saved to “${target}”. This tab stays on the file you opened. If you chose another location, open that saved file to continue. Later saves in this tab update the selected file.`
+          : `Downloaded updated “${target}”. Open the downloaded file to continue. This tab stays on the file you opened.`);
+        if (generation === editGeneration && file() === current && (!live || live.isIdle())) {
+          window.clearTimeout(draftTimer); clearDraft(current); setDirty(false);
+        } else {
+          setDirty(true); writeDraft(file(), new Date(), source() !== file().source ? source() : undefined);
+        }
       }
     } catch (error) { setSaveError(error instanceof Error ? `Could not save: ${error.message}` : 'Could not save this file.'); }
     finally { setSaving(false); }
+  };
+  const saveShortcut = (event: KeyboardEvent) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.isComposing || event.key.toLowerCase() !== 's') return;
+    event.preventDefault();
+    if (!event.repeat) void save();
+  };
+  document.addEventListener('keydown', saveShortcut);
+  onCleanup(() => { document.removeEventListener('keydown', saveShortcut); cancelConnect?.(); });
+  const connect = () => {
+    if (connecting()) return;
+    setConnectError(''); setConnectedUrl('');
+    try {
+      const origin = previewServerOrigin(serverAddress());
+      setConnecting(true);
+      cancelConnect = connectPreview({
+        origin,
+        prepare: async () => {
+          const current = await flushFile();
+          return { html: renderArtifactFileHtml({ ...props.parts, file: current }), filename: suggestedFileName(current.metadata.title) };
+        },
+        onStatus: setConnectStatus,
+        onError: (message) => { setConnecting(false); setConnectStatus(''); setConnectError(message); },
+        onOpened: (url) => { setConnecting(false); setConnectedUrl(url); setConnectStatus('Imported a workspace copy. Continue editing in the server tab. Your original HTML file is unchanged.'); },
+      });
+    } catch (error) { setConnecting(false); setConnectError(error instanceof Error ? error.message : 'Could not open the server.'); }
   };
   const refreshThreads = async () => {
     const open = await backend.listAnnotations('open');
@@ -263,6 +311,20 @@ function OfflineShell(props: Opened) {
   style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', file().css.base, file().css.compiled, file().css.author, CHROME_CSS].filter(Boolean).join('\n');
   document.head.append(style);
   onCleanup(() => style.remove());
+  // Chrome wraps on narrow windows and grows after a save. Keep the document below its actual height.
+  onMount(() => {
+    const chrome = document.getElementById('afbin-chrome');
+    if (!chrome) return;
+    const previousPadding = document.body.style.paddingTop;
+    let disposed = false;
+    const measure = () => { if (!disposed) document.body.style.paddingTop = `${Math.ceil(chrome.getBoundingClientRect().height) || 42}px`; };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(chrome);
+    window.addEventListener('resize', measure);
+    createEffect(() => { saveReceipt(); dirty(); saveError(); editStatus(); queueMicrotask(measure); });
+    measure();
+    onCleanup(() => { disposed = true; observer?.disconnect(); window.removeEventListener('resize', measure); document.body.style.paddingTop = previousPadding; });
+  });
   // Only after the compiled tree hydrates (or immediately when there is none to hydrate): the
   // story DOM served with this file is still the pristine compile hydrate() must match.
   afterReady(() => {
@@ -283,9 +345,24 @@ function OfflineShell(props: Opened) {
         <button class={BUTTON} aria-expanded={changes()} onClick={() => setChanges(!changes())}>Changes{file().journal.length ? ` (${file().journal.length})` : ''}</button>
         <button class={BUTTON} aria-pressed={comments()} onClick={() => setComments(!comments())}>Comments{threads().filter((t) => t.status === 'open').length ? ` (${threads().filter((t) => t.status === 'open').length})` : ''}</button>
         <button class={BUTTON} aria-pressed={editing()} disabled={!!props.invalid} aria-description={props.invalid ? INVALID_SOURCE_EDIT : undefined} onClick={() => void edit()}>{editing() ? 'Done editing' : 'Edit'}</button>
+        <button class={BUTTON} onClick={() => setConnectDialog(true)}>Connect to server</button>
         <button class={BUTTON} disabled={!dirty() || saving()} aria-description={!dirty() ? NOTHING_TO_SAVE : undefined} onClick={() => void save()}>{saving() ? 'Saving…' : 'Save'}</button>
       </span>
     </header>
+    <Show when={saveReceipt()}><p role="status" class="m-0 px-4 pb-2 text-xs">{saveReceipt()}</p></Show>
+    <Show when={connectDialog()}><section role="dialog" aria-label="Connect to server" class="fixed left-1/2 top-16 z-[2000] w-[min(90vw,32rem)] -translate-x-1/2 border bg-white p-4 text-sm">
+      <p>Connect to a compatible preview server to edit and comment on a workspace copy. The original HTML file stays here; this does not publish it.</p>
+      <p><a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Install Node.js if needed</a>, then start a local server:</p>
+      <p>macOS / Linux: <code>npx --yes @afbin/cli@latest preview --port 7474</code></p>
+      <p>Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest preview --port 7474</code></p>
+      <label>Server address <input aria-label="Server address" value={serverAddress()} onInput={(event) => setServerAddress(event.currentTarget.value)} disabled={connecting()} /></label>
+      <p>Use http://localhost:7474, or the HTTPS address of your own compatible preview server.</p>
+      <button class={BUTTON} disabled={connecting()} onClick={connect}>{connecting() ? 'Connecting…' : 'Connect'}</button>
+      <button class={BUTTON} onClick={() => { cancelConnect?.(); cancelConnect = null; setConnecting(false); setConnectStatus(''); setConnectDialog(false); }}>{connecting() ? 'Cancel connection' : 'Close'}</button>
+      <Show when={connectStatus()}><p role="status">{connectStatus()}</p></Show>
+      <Show when={connectError()}><p role="alert">{connectError()}</p></Show>
+      <Show when={connectedUrl()}><a href={connectedUrl()} target="_blank" rel="noopener">Open server editor</a></Show>
+    </section></Show>
     <Show when={props.invalid}><div role="alert" class="bg-red-100 p-2 text-sm">The source was changed outside this file and is not valid, so this is the last version that worked. {props.invalid}</div></Show>
     <Show when={changes()}><section role="region" aria-label="Changes in this file" class="fixed right-3 top-12 z-50 max-h-80 w-80 overflow-auto border bg-white p-3 text-xs"><For each={file().journal}>{(entry) => <div>{entry.by} · {entry.summary}</div>}</For></section></Show>
     <Show when={selected() && !editing()}><div data-mx-selection-actions="" class="fixed left-1/2 top-12 z-40 border bg-white p-2"><button onClick={() => setCommenting(true)}>Comment on selected text</button></div></Show>
