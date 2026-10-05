@@ -56,6 +56,10 @@ it('persists independent-service delivery, retries ambiguous acceptance with the
   expect((await f.call('reply',{body:'Working',phase:'acknowledged'})).status).toBe(200);
   expect((await f.call('reply',{body:'Done',phase:'completed'})).status).toBe(200);
   expect((await remoteAgents.work(await getDb(),f.doc.id,f.thread.id))[0].phase).toBe('completed');
+  const again=await f.call('reply',{body:'Reconstructed completion',phase:'completed'});expect(again.status).toBe(200);expect(await again.json()).toMatchObject({alreadyDelivered:true});
+  const delivered=await (await getDb()).query<{count:number}>("SELECT count(*)::int AS count FROM annotations WHERE root_id=$1 AND author_kind='agent'",[f.thread.id]);expect(delivered.rows[0]?.count).toBe(2);
+  expect((await f.call('reply',{body:'Actually failed',phase:'failed'})).status).toBe(409);
+  expect((await remoteAgents.work(await getDb(),f.doc.id,f.thread.id))[0].phase).toBe('completed');
  }finally{await f.service.close();}
 });
 it('denies browser signatures, another owner/session/work, unacknowledged completion and resolution over a later comment',async()=>{
@@ -99,9 +103,11 @@ it('delivers a failure before acknowledgment exactly once and preserves its term
   const response=await f.call('reply',{body:'Execution timed out. Please mention again to retry.',phase:'failed'});
   expect(response.status).toBe(200);
   expect((await f.call('reply',{body:'Execution timed out. Please mention again to retry.',phase:'failed'})).status).toBe(200);
+  const reconstructed=await f.call('reply',{body:'A reconstructed timeout delivery',phase:'failed'});expect(reconstructed.status).toBe(200);expect(await reconstructed.json()).toMatchObject({alreadyDelivered:true});
   const db=await getDb();expect((await remoteAgents.work(db,f.doc.id,f.thread.id))[0].phase).toBe('failed');
   const replies=await db.query<{count:number}>('SELECT count(*)::int AS count FROM annotations WHERE root_id=$1',[f.thread.id]);expect(replies.rows[0]?.count).toBe(1);
   expect((await f.call('reply',{body:'Working',phase:'acknowledged'})).status).toBe(409);
+  expect((await f.call('reply',{body:'Done instead',phase:'completed'})).status).toBe(409);
  }finally{await f.service.close();}
 });
 

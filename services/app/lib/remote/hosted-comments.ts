@@ -70,6 +70,8 @@ export async function hostedCommentOperation(request:Request):Promise<Response>{
  const headers=new Headers();
  if(body.operation==='reply'){
   if(typeof input.body!=='string'||!input.body||input.body.length>32000||!['acknowledged','completed','blocked','failed'].includes(String(input.phase))||(input.resolve!==undefined&&typeof input.resolve!=='boolean'))return json({error:'invalid_reply'},400);
+  // The durable terminal receipt owns delivery identity, even if recovery reconstructs different prose.
+  if(work.phase===input.phase&&['completed','failed'].includes(work.phase))return json({ok:true,alreadyDelivered:true});
   headers.set('X-Artifactbin-Remote-Session',work.session_id);
   headers.set('X-Artifactbin-Remote-Proof',proof);
   headers.set('Idempotency-Key',`${work.id}-${input.phase}`);
