@@ -657,11 +657,14 @@ jobs:
             services/app/public/libraries
             services/app/server/routes.generated.ts
             services/cli/dist
-          key: app-build-v2-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-${{ needs.plan.outputs.cli }}
+          key: app-build-v2-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-false
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: npm run build -w services/cli
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: node scripts/build/build-server.mjs dist/server.mjs
+      # This writer must retain the package expected by ordinary builds restoring this key.
+      - if: steps.build-cache.outputs.cache-hit != 'true'
+        run: npm run pack:release -w services/cli -- "$GITHUB_WORKSPACE/dist/npm-candidate"
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: rm -rf services/cli/dist/runtime services/cli/dist/afbin-runtime-*.gz
       # What the test shards restore (see the api job): the server reader and islands with their markers.

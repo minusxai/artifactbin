@@ -43,3 +43,15 @@ it('does not compile the app twice or repeat email-source conformance in the ref
  expect(command.match(/wait_pair\n/g)).toHaveLength(1);
  expect(command).toContain('CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth');
 });
+it('warms the complete ordinary package cache without a nonexistent plan dependency',()=>{
+ const job=workflow().jobs['warm-caches'];
+ expect(job.needs).toBeUndefined();
+ const cache=job.steps.find(step=>step.id==='build-cache');
+ expect(cache.with.key).not.toContain('needs.');
+ expect(cache.with.key).toMatch(/-npm-false$/);
+ const pack=job.steps.findIndex(step=>step.run?.includes('pack:release'));
+ const prune=job.steps.findIndex(step=>step.run?.includes('rm -rf services/cli/dist/runtime'));
+ expect(pack).toBeGreaterThan(job.steps.findIndex(step=>step.run==='npm run build -w services/cli'));
+ expect(prune).toBeGreaterThan(pack);
+ expect(job.steps[pack].run).toContain('dist/npm-candidate');
+});
