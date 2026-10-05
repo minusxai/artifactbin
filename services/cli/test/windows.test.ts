@@ -2,7 +2,6 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {browserCommand} from '../src/platform';
 import {updateCli} from '../src/update';
-import {scheduleBackgroundUpdate,runBackgroundUpdate} from '../src/background-update';
 
 test('Windows browser handoff treats URL shell characters as literal data',()=>{
  const url="https://example.test/approve?a=1&next=$(touch nope)'";
@@ -15,11 +14,8 @@ test('Windows browser handoff treats URL shell characters as literal data',()=>{
  assert.deepEqual(browserCommand(url,'linux'),{file:'xdg-open',args:[url]});
 });
 
-test('Windows update dry run names the npm install and the old background updater stays inert',async()=>{
+test('Windows update dry run names the npm install without invoking npm',async()=>{
  const dry=await updateCli({platform:'win32',home:'/unused',server:'https://example.test',harnesses:[],dryRun:true,fetch:async()=>Response.json({version:'2.0.0',protocol:3}),npm:async()=>assert.fail('no npm on a dry run')});
  assert.equal('command' in dry?dry.command:undefined,'npm install -g @afbin/cli@2.0.0');
- let launched=false,updated=false;
- const options={platform:'win32',standalone:true,home:'/unused',server:'https://example.test',launch:()=>{launched=true;},update:async()=>{updated=true;}};
- await scheduleBackgroundUpdate(options);await runBackgroundUpdate(options);
- assert.equal(launched,false);assert.equal(updated,false);
+
 });

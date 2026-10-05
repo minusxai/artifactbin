@@ -5,7 +5,7 @@ import {validVersion} from './version-order';
 import {globalInstall,type GlobalInstallResult,type NpmRunner} from './global-install';
 import {installSkills,type SkillHarness,type SkillInstallation} from './skill-install';
 /** Foreground progress events; npm does the download, so only the release and install stages are drawn. */
-export type UpdateProgress={stage:'release';current:string;available:string}|{stage:'download';received:number;total?:number}|{stage:'downloaded';bytes:number}|{stage:'install';version:string;recovered:boolean};
+export type UpdateProgress={stage:'release';current:string;available:string}|{stage:'install';version:string;recovered:boolean};
 interface UpdateOptions {
  home:string;server:string;env?:NodeJS.ProcessEnv;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;npm?:NpmRunner;
  chooseHarnesses?:()=>Promise<SkillHarness[]>;report?:(event:UpdateProgress)=>void;platform?:string;

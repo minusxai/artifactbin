@@ -8,6 +8,7 @@ import {runCli} from '../src/dispatch';
 import {commandHelp} from '../src/commands';
 import {diagnosticCatalog} from '../src/diagnostics';
 import {CLI_VERSION} from '../src/version';
+import {progressRenderer} from '../src/update-progress';
 
 const SERVER='https://example.test';
 const pointer=(body:unknown,status=200)=>{const urls:string[]=[];return {urls,fetch:(async(input:RequestInfo|URL)=>{urls.push(String(input));return Response.json(body,{status});}) as typeof fetch};};
@@ -64,4 +65,12 @@ test('update help and npm recovery copy name the npm install',()=>{
  assert.match(diagnosticCatalog.cli_update_required!.fix,/npx --yes @afbin\/cli@latest/);
  assert.match(diagnosticCatalog.cli_update_required!.fix,/npx.cmd/);
  assert.doesNotMatch(diagnosticCatalog.compatible_release_unavailable!.fix,/afbin update --dry-run reports what it resolved/);
+});
+
+
+test('foreground update progress retains release and npm installation messages',()=>{
+ const output:string[]=[];const report=progressRenderer(text=>output.push(text));
+ report({stage:'release',current:'1.0.0',available:'2.0.0'});
+ report({stage:'install',version:'2.0.0',recovered:false});
+ assert.equal(output.join(''),'Updating afbin 1.0.0 → 2.0.0\nInstalling afbin 2.0.0…\n');
 });
