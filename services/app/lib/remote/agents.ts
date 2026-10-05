@@ -15,7 +15,7 @@ import type {RemoteSessionInfo,RemoteExchange,RemoteWork,RemoteWorkPhase} from '
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 interface AgentRow {id:string;owner:string;active:boolean;proof_hash:string;info:RemoteSessionInfo & {removed?:boolean}}
 interface WorkRow {agent_info?:RemoteSessionInfo;connected?:boolean;active?:boolean;id:string;session_id:string;artifact_id:string;thread_id:string;comment_id:string;phase:RemoteWorkPhase;data:{name:string;color:RemoteWork['color'];reason?:RemoteWork['reason'];payload:Record<string,unknown>};updated_at:string}
-export interface ReviewReceipt {id:string;sessionId:string;proof:string;phase:'acknowledged'|'completed'|'blocked'}
+export interface ReviewReceipt {id:string;sessionId:string;proof:string;phase:'acknowledged'|'completed'|'blocked'|'failed'}
 /** Durable names and work receipts; terminal bytes and interactive input remain in the relay. */
 export class RemoteAgents {
  constructor(readonly relay:RemoteRegistry=remoteSessions){}
@@ -165,16 +165,17 @@ export class RemoteAgents {
   if(!agent.active||agent.info.activity==='stopping')throw new RemoteError('Session stopped',410);
   const row=(await tx.query<WorkRow>('SELECT * FROM remote_work WHERE id=$1 AND session_id=$2 AND artifact_id=$3 AND thread_id=$4 FOR UPDATE',[receipt.id,agent.id,artifactId,threadId])).rows[0];
   if(!row)throw new RemoteError('Request does not belong to this agent and thread',403);
-  const allowed=receipt.phase==='acknowledged'?['dispatching','delivered','uncertain']:['acknowledged','blocked','uncertain'];
+  const allowed=receipt.phase==='failed'?['queued','dispatching','delivered','acknowledged','blocked','uncertain']:receipt.phase==='acknowledged'?['dispatching','delivered','uncertain']:['acknowledged','blocked','uncertain'];
   if(!allowed.includes(row.phase))throw new RemoteError('Acknowledge this request before completing it',409);
   if(resolve){
    if(receipt.phase!=='completed')throw new RemoteError('Only completed work can resolve a thread',409);
    const later=(await tx.query("SELECT id FROM annotations WHERE artifact_id=$1 AND (id=$2 OR root_id=$2) AND author_kind IN ('human','owner') AND deleted_at IS NULL AND seq>(SELECT seq FROM annotations WHERE id=$3) LIMIT 1",[artifactId,threadId,row.comment_id])).rows.length;
-   const pending=(await tx.query("SELECT id FROM remote_work WHERE thread_id=$1 AND id<>$2 AND phase NOT IN ('completed','unavailable','superseded') LIMIT 1",[threadId,row.id])).rows.length;
+   const pending=(await tx.query("SELECT id FROM remote_work WHERE thread_id=$1 AND id<>$2 AND phase NOT IN ('completed','failed','unavailable','superseded') LIMIT 1",[threadId,row.id])).rows.length;
    if(later||pending)throw new RemoteError('A newer comment or pending request still needs attention',409);
   }
   await tx.query('UPDATE remote_work SET phase=$2,updated_at=now() WHERE id=$1',[row.id,receipt.phase]);
-  agent.info.activity=receipt.phase==='acknowledged'?'working':receipt.phase==='blocked'?'blocked':'listening';await this.save(tx,agent);
+  const busy=(await tx.query("SELECT id FROM remote_work WHERE session_id=$1 AND phase IN ('dispatching','delivered','acknowledged','uncertain') LIMIT 1",[agent.id])).rows.length;
+  agent.info.activity=busy?'working':receipt.phase==='blocked'?'blocked':'listening';await this.save(tx,agent);
   return {label:agent.info.name,sessionId:agent.id,color:agent.info.color};
  }
  private async notify(tx:Queryable,artifactId:string,threadId:string){await tx.query('SELECT pg_notify($1,$2)',[channelForAnnotations(artifactId),threadId]);}

@@ -165,3 +165,27 @@ it('delivers a startup comment after readiness despite a web terminal cursor rep
  expect(sent.inputs.some(input=>input.requestId)).toBe(true);
  expect((await a.work(db,artifactId,'thread'))[0].phase).toBe('dispatching');
 });
+
+it('accepts a known failure before acknowledgment and allows the next queued request',async()=>{
+ const token=await mintToken('failure');const user=await createUser({email:'mxmx_test_failure@example.com'});await claimToken(user.id,token.token);
+ const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>failure review</p>'}}));const artifactId=(await made.json()).id;
+ const a=fresh(),s=await a.create(user.id,registration),db=await getDb();
+ const add=(thread:string)=>db.transaction(tx=>a.enqueue(tx,user.id,artifactId,thread,{id:thread,body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}}));
+ await add('failed-first');await add('next');await a.ready(user.id,s.id,s.runnerKey);
+ const input=(await a.exchange(user.id,s.id,exchange(s.runnerKey))).inputs[0];
+ await db.transaction(tx=>a.receipt(tx,user.id,artifactId,'failed-first',{id:input.requestId!,sessionId:s.id,proof:s.runnerKey,phase:'failed'},false));
+ expect((await a.work(db,artifactId,'failed-first'))[0].phase).toBe('failed');
+ expect((await a.read(user.id,s.id)).activity).toBe('listening');
+ const next=await a.exchange(user.id,s.id,{...exchange(s.runnerKey),ack:input.id});
+ expect(next.inputs).toHaveLength(1);expect(next.inputs[0].requestId).not.toBe(input.requestId);
+});
+it('a failure receipt preserves working status for another active request',async()=>{
+ const a=fresh(),s=await a.create('owner',registration),db=await getDb();
+ await db.transaction(async tx=>{
+  for(const id of ['failing','active'])await a.enqueue(tx,'owner','artifact',id,{id,body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}});
+ });
+ await db.query("UPDATE remote_work SET phase='acknowledged' WHERE session_id=$1",[s.id]);
+ const failing=(await a.work(db,'artifact','failing'))[0];
+ await db.transaction(tx=>a.receipt(tx,'owner','artifact','failing',{id:failing.id,sessionId:s.id,proof:s.runnerKey,phase:'failed'},false));
+ expect((await a.read('owner',s.id)).activity).toBe('working');
+});

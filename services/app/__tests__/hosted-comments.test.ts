@@ -4,6 +4,7 @@ import {createUser,claimToken,mintToken} from '@/lib/accounts';
 import {getDb} from '@/lib/platform';
 import {remoteAgents} from '@/lib/remote/agents';
 import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
+import {readCommentContext} from '@/lib/remote/comment-context';
 import {externalHostedComments,clearExternalHostedComments} from '@/lib/remote/hosted-comments';
 import {POST as callback} from '@/app/api/remote/hosted/operations/route';
 import {POST as publish} from '@/app/api/artifacts/route';
@@ -34,17 +35,21 @@ async function fixture(){
  const agent=hostedAgentClient(service.url,hostedAgentTransport(service.url,secret),hostedAgentDeliveryTransport(service.url,secret));
  const tick=externalHostedComments(agent,secret,{publicBaseUrl:'https://app.fixture'});setHostedRemoteAgent(agent);
  await remoteAgents.list(user.id);
- const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{path:'0',edit_id:doc.edit_id,body:`[@artifactbin](/chat?session=${id}) fix this`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();
+ const root=await comment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',cookie,json:{path:'0',edit_id:doc.edit_id,quote:'Remote comments',body:`[@artifactbin](/chat?session=${id}) fix this`}}),{params:Promise.resolve({id:doc.id})});expect(root.status).toBe(201);const thread=await root.json();
  const work=thread.remote_work[0];
  const call=(operation:string,input:unknown={},overrides:Record<string,unknown>={},owner=user.id,key=hostedAgentCallbackKey(secret))=>callback(request('/api/remote/hosted/operations',{method:'POST',headers:{[ACTOR_HEADER]:signActor({userId:'proxy-browser',credential:'session'},secret),'x-artifactbin-hosted-callback':signActor({userId:owner,credential:'session'},key)},json:{requestId:work.id,sessionId:id,operation,input,...overrides}}));
  return {user,doc,thread,work,tick,call,accepted,attempts,service};
 }
 it('persists independent-service delivery, retries ambiguous acceptance with the same ID, and completes actual comment receipts',async()=>{
  const f=await fixture();try{
-  await f.tick();expect(f.accepted.size).toBe(1);expect((await remoteAgents.work(await getDb(),f.doc.id,f.thread.id))[0].phase).toBe('dispatching');
+  await f.tick();expect(f.accepted.size).toBe(1);
+  const originalContext=f.accepted.get(f.work.id)?.commentContext;
+  expect(originalContext).toMatchObject({artifactId:f.doc.id,threadId:f.thread.id,commentId:f.thread.id,quote:'Remote comments',thread:[{id:f.thread.id,body:expect.stringContaining('fix this')}]});
+  await (await getDb()).query("INSERT INTO annotations(id,artifact_id,root_id,body,author_kind,author_user_id) VALUES('after-delivery',$1,$2,'later background','human',$3)",[f.doc.id,f.thread.id,f.user.id]);expect((await remoteAgents.work(await getDb(),f.doc.id,f.thread.id))[0].phase).toBe('dispatching');
   // Recreate the URL adapter/outbox; the committed queue, not memory, drives retry.
   const client=hostedAgentClient(f.service.url,hostedAgentTransport(f.service.url,secret),hostedAgentDeliveryTransport(f.service.url,secret));
   await externalHostedComments(client,secret)();expect(f.attempts).toEqual([f.work.id,f.work.id]);expect(f.accepted.size).toBe(1);
+  expect(f.accepted.get(f.work.id)?.commentContext).toEqual(originalContext);
   expect(f.accepted.get(f.work.id)).toMatchObject({sessionId:hostedAgentSessionId(f.user.id),artifactId:f.doc.id,threadId:f.thread.id,callbackUrl:'http://localhost:3030/api/remote/hosted/operations'});
   const read=await f.call('read',{id:'unrelated'});expect(read.status).toBe(200);
   const ack=await f.call('reply',{body:'Working',phase:'acknowledged'});expect(ack.status).toBe(200);
@@ -86,5 +91,43 @@ it('stops app-owned queued comments without dispatching them to a URL service',a
   await remoteAgents.stop(f.user.id,hostedAgentSessionId(f.user.id));await f.tick();
   expect(f.accepted.size).toBe(0);
   expect((await remoteAgents.work(await getDb(),f.doc.id,f.thread.id))[0].phase).toBe('unavailable');
+ }finally{await f.service.close();}
+});
+
+it('delivers a failure before acknowledgment exactly once and preserves its terminal phase',async()=>{
+ const f=await fixture();try{
+  const response=await f.call('reply',{body:'Execution timed out. Please mention again to retry.',phase:'failed'});
+  expect(response.status).toBe(200);
+  expect((await f.call('reply',{body:'Execution timed out. Please mention again to retry.',phase:'failed'})).status).toBe(200);
+  const db=await getDb();expect((await remoteAgents.work(db,f.doc.id,f.thread.id))[0].phase).toBe('failed');
+  const replies=await db.query<{count:number}>('SELECT count(*)::int AS count FROM annotations WHERE root_id=$1',[f.thread.id]);expect(replies.rows[0]?.count).toBe(1);
+  expect((await f.call('reply',{body:'Working',phase:'acknowledged'})).status).toBe(409);
+ }finally{await f.service.close();}
+});
+
+it('bounds selected context in JSON bytes and includes recent whole messages through the trigger',async()=>{
+ const f=await fixture();try{
+  const db=await getDb();await db.query('UPDATE annotations SET quote=$2 WHERE id=$1',[f.thread.id,'😀\n'.repeat(10000)]);
+  for(let i=0;i<8;i++)await db.query("INSERT INTO annotations(id,artifact_id,root_id,body,author_kind,author_user_id) VALUES($1,$2,$3,$4,'human',$5)",[`context-${i}`,f.doc.id,f.thread.id,`message-${i}:`+'z'.repeat(8000),f.user.id]);
+  const context=await readCommentContext(db,f.doc,'context-thread-does-not-exist','context-5');
+  expect(context).toMatchObject({thread:[]});
+  const selected=await readCommentContext(db,f.doc,f.thread.id,'context-5') as {quote:string;thread:Array<{id:string;body:string}>;truncated:boolean};
+  expect(Buffer.byteLength(JSON.stringify(selected))).toBeLessThanOrEqual(65536);
+  expect(selected.quote).toMatch(/^😀\n/);expect(selected.truncated).toBe(true);
+  expect(selected.thread.at(-1)?.id).toBe('context-5');
+  expect(selected.thread.every(message=>message.body.length===8010)).toBe(true);
+  expect(selected.thread.some(message=>message.id==='context-6')).toBe(false);
+ }finally{await f.service.close();}
+});
+it('a failed earlier request does not prevent a later completed request resolving the thread',async()=>{
+ const f=await fixture();try{
+  expect((await f.call('reply',{body:'Execution failed',phase:'failed'})).status).toBe(200);
+  const db=await getDb(),sessionId=hostedAgentSessionId(f.user.id);
+  await db.query("INSERT INTO annotations(id,artifact_id,root_id,body,author_kind,author_user_id) VALUES('retry-human',$1,$2,'retry','human',$3)",[f.doc.id,f.thread.id,f.user.id]);
+  await db.transaction(tx=>remoteAgents.enqueue(tx,f.user.id,f.doc.id,f.thread.id,{id:'retry-human',body:`[@artifactbin](/chat?session=${sessionId}) retry`,author:{kind:'human',label:'Owner'}}));
+  await db.query("UPDATE remote_work SET phase='acknowledged' WHERE comment_id='retry-human'");
+  const next=(await remoteAgents.work(db,f.doc.id,f.thread.id)).at(-1)!;
+  const completed=await f.call('reply',{body:'Done',phase:'completed',resolve:true},{requestId:next.id});
+  expect(completed.status).toBe(200);
  }finally{await f.service.close();}
 });

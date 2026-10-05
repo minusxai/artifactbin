@@ -33,3 +33,8 @@ it('marks awaiting acknowledgment as pending while keeping acknowledged and comp
  expect(remoteWorkLabel({...work,phase:'acknowledged'})).toBe('Working');
  expect(remoteWorkLabel({...work,phase:'completed'})).toBe('Answered');
 });
+
+it('labels known terminal failure independently of agent readiness',()=>{
+ const work={id:'request',sessionId:'session',artifactId:'doc',threadId:'thread',commentId:'comment',name:'codex',color:'blue' as const,updatedAt:'now',phase:'failed' as const};
+ expect(remoteWorkLabel(work)).toBe('Execution failed · retry by mentioning again');
+});
