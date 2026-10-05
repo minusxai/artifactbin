@@ -767,7 +767,10 @@ async function connecting(engineName, browser) {
   const context = await newContext(browser);
   const page = await context.newPage();
   const errors = [];
-  context.on('page', (opened) => opened.on('pageerror', (error) => errors.push(String(error))));
+  const browserEvents = [];
+  context.on('requestfailed', request => browserEvents.push({ type: 'requestfailed', url: request.url(), error: request.failure()?.errorText }));
+  context.on('response', response => { if (/\/(?:bundle|draft|save)(?:\/|$)/.test(new URL(response.url()).pathname)) browserEvents.push({ type: 'response', url: response.url(), status: response.status() }); });
+  context.on('page', (opened) => { opened.on('pageerror', (error) => errors.push(String(error))); opened.on('console', message => { if (['error', 'warning'].includes(message.type())) browserEvents.push({ type: 'console', level: message.type(), text: message.text() }); }); });
   page.on('pageerror', (error) => errors.push(String(error)));
   const prose = engineFiles.find((entry) => entry.label === 'prose');
   const originalPath = fileURLToPath(prose.url);
@@ -825,6 +828,8 @@ async function connecting(engineName, browser) {
         await expect(page.getByRole('link', { name: 'Open server editor', exact: true })).toBeVisible();
       });
       await step('comments travel and server source edits persist in the workspace copy', async () => {
+        let sourceBeforeFill, sourceAfterFill;
+        try {
         const response = await fetch(`${server.url}/editor`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ file: 'connected.jsx', operation: 'annotations.list', status: 'open' }) });
         check(response.ok, `${engineName}: imported comments can be read through the existing backend`);
         const threads = await response.json();
@@ -833,7 +838,10 @@ async function connecting(engineName, browser) {
         await popup.getByRole('tab', { name: 'Edit the source', exact: true }).click();
         await popup.locator('.cm-editor').waitFor();
         const source = popup.getByRole('textbox', { name: 'Markup source' });
-        await source.fill((await source.evaluate(node => 'value' in node ? node.value : node.textContent)).replace('Connected prose', 'Saved on the server'));
+        const beforeSource = sourceBeforeFill = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
+        if (!beforeSource.includes('Connected prose')) throw new Error(`Source editor does not contain the imported heading: ${JSON.stringify(beforeSource)}`);
+        await source.fill(beforeSource.replace('Connected prose', 'Saved on the server'));
+        sourceAfterFill = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
         // Native contenteditable changes reach CodeMirror's model through its DOM observer.
         // Observe the real source adapter and projection before asking Done to persist that model.
         await expect(popup.getByRole('status').filter({ hasText: /^Unsaved$/ })).toBeVisible();
@@ -847,6 +855,23 @@ async function connecting(engineName, browser) {
         check(readFileSync(originalPath, 'utf8') === originalHtml, `${engineName}: original HTML remains unchanged`);
         check(empty(await violations(page)), `${engineName}: connection needs no CSP relaxation`);
         check(empty(errors), `${engineName}: no connection/editor page errors ${show(errors)}`);
+        } catch (error) {
+          const snapshot = await popup.evaluate(() => {
+            const roots = [document, ...Array.from(document.querySelectorAll('[data-trusted-ui]')).flatMap(host => host.shadowRoot ? [host.shadowRoot] : [])];
+            const nodes = selector => roots.flatMap(root => Array.from(root.querySelectorAll(selector)));
+            const describe = node => ({ tag: node.tagName, label: node.getAttribute('aria-label'), text: 'value' in node ? node.value : node.textContent, visible: node.getClientRects().length > 0 });
+            let active = document.activeElement;
+            while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+            return { url: location.href, ready: document.documentElement.getAttribute('data-mx-ready'), active: active ? describe(active) : null,
+              tabs: nodes('[role="tab"]').map(node => ({ ...describe(node), selected: node.getAttribute('aria-selected') })),
+              statuses: nodes('[role="status"], [role="alert"]').map(describe), sources: nodes('[aria-label="Markup source"]').map(describe),
+              editors: nodes('.cm-editor').map(node => ({ ...describe(node), html: node.outerHTML.slice(0, 12000) })),
+              headings: nodes('h1,h2').map(describe), csp: window.__cspViolations ?? [] };
+          }).catch(reason => ({ snapshotError: String(reason) }));
+          const documentResponse = await fetch(`${server.url}/document?file=connected.jsx`);
+          const saved = documentResponse.ok ? await documentResponse.json() : { status: documentResponse.status };
+          throw new Error(`${error.message}\nPreview diagnostic: ${JSON.stringify({ sourceBeforeFill, sourceAfterFill, snapshot, server: { body: saved.body, revision: saved.revision, title: saved.metadata?.title }, errors, browserEvents })}`);
+        }
       });
     });
   } finally { await context.close(); await server.close(); }
