@@ -15,11 +15,15 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { REPO, ROSTER, STATUS, SKELETON_CSS, loadSpec, typeCss } from './pages.mjs';
 import { fontFaceCss } from './fonts.mjs';
+import { renderPicker } from './picker.mjs';
 import { PAGE_CHROME, filterBlock, selectorOf } from './css-blocks.mjs';
 
 export const NAMES = path.join(REPO, 'services', 'app', 'lib', 'validation', 'story-system-names.ts');
 export const DATA = path.join(REPO, 'services', 'app', 'lib', 'data', 'story', 'story-systems.json');
 export const SHEETS = path.join(REPO, 'services', 'app', 'lib', 'data', 'story', 'story-system-sheets.json');
+export const PICKER_FONTS = path.join(REPO, 'services', 'app', 'public', 'design-system-fonts.css');
+export const PICKER_DATA = path.join(REPO, 'services', 'app', 'solid', 'components', 'design-system-specimens.json');
+export const PICKER_CSS = path.join(REPO, 'services', 'app', 'public', 'design-system-specimens.css');
 
 /** The variable block as a map, in the order the page's binding block writes it. */
 export function varsMap(spec, mode) {
@@ -88,14 +92,19 @@ export function renderRuntime() {
 export const STORY_SYSTEM_NAMES = [${ROSTER.map((s) => `'${s}'`).join(', ')}] as const;
 export type StorySystemName = (typeof STORY_SYSTEM_NAMES)[number];
 `;
-  return { names, data: JSON.stringify(entries, null, 1) + '\n', sheets: JSON.stringify(sheets, null, 1) + '\n', entries: full };
+  const pickerFonts = [...new Set(full.flatMap(entry => entry.fontFaces.split('\n')))].join('\n') + '\n';
+  return { names, data: JSON.stringify(entries, null, 1) + '\n', sheets: JSON.stringify(sheets, null, 1) + '\n', pickerFonts, entries: full };
 }
 
 export function writeRuntime() {
-  const { names, data, sheets, entries } = renderRuntime();
+  const { names, data, sheets, pickerFonts, entries } = renderRuntime();
+  const picker = renderPicker();
   writeFileSync(NAMES, names);
   writeFileSync(DATA, data);
   writeFileSync(SHEETS, sheets);
-  const files = [[NAMES, names], [DATA, data], [SHEETS, sheets]].map(([p, text]) => ({ path: p, bytes: Buffer.byteLength(text) }));
+  writeFileSync(PICKER_FONTS, pickerFonts);
+  writeFileSync(PICKER_DATA, picker.data);
+  writeFileSync(PICKER_CSS, picker.css);
+  const files = [[NAMES, names], [DATA, data], [SHEETS, sheets], [PICKER_FONTS, pickerFonts], [PICKER_DATA, picker.data], [PICKER_CSS, picker.css]].map(([p, text]) => ({ path: p, bytes: Buffer.byteLength(text) }));
   return { files, entries };
 }

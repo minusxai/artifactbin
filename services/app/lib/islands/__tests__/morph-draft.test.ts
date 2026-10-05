@@ -62,6 +62,48 @@ async function editing(source: string, served: string, compiled: (source: string
 }
 
 describe('a draft drawn in place', () => {
+  it('switches the standalone document sheets and root appearance without replacing its content', async () => {
+    const head = document.head.innerHTML;
+    const attributes = document.documentElement.outerHTML.match(/^<html([^>]*)>/)?.[1];
+    document.documentElement.setAttribute('data-theme', 'signout');
+    document.documentElement.className = 'light';
+    document.head.innerHTML = '<style data-mx-bare-type></style><style data-mx-system>.old{color:red}</style><style data-mx-author>.custom{color:purple}</style>';
+    const source = '<p id="copy">Unchanged content</p>';
+    const root = document.createElement('div');
+    root.setAttribute('data-mx-inline-story', '');
+    root.innerHTML = '<p id="copy" data-mx-ast="0">Unchanged content</p>';
+    document.body.append(root);
+    const copy = root.firstElementChild;
+    vi.spyOn(window, 'fetch').mockImplementation((async (_url: string, init?: RequestInit) => {
+      const { theme, colorMode } = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ html: `<html class="${colorMode}" ${theme ? `data-theme="${theme}"` : ''}><head><style data-mx-bare-type></style><style data-mx-fonts>:root{--font-body:NewFace}</style>${theme ? '<style data-mx-system>.new{color:blue}</style>' : ''}</head><body><div data-mx-inline-story class="${colorMode}">${root.innerHTML}</div></body></html>` }));
+    }) as typeof window.fetch);
+    const controller = createIslandController({ win: window, root, islands: null, nodes: [], id: 'doc', editId: () => 'e1', initialSource: () => source, portal: { current: null } });
+    try {
+      const mounts = editSession.mounts;
+      controller.send({ type: STORY_EDIT_MODE_MESSAGE, on: true });
+      await settle(() => editSession.mounts > mounts);
+      controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source, editId: 'e1', theme: 'volta', colorMode: 'dark', redraw: true });
+      await settle(() => root.classList.contains('dark'));
+      expect(document.documentElement.getAttribute('data-theme')).toBe('volta');
+      expect(document.documentElement.classList.contains('dark')).toBe(true);
+      expect(document.querySelector('style[data-mx-system]')?.textContent).toContain('.new');
+      expect(document.querySelector('style[data-mx-fonts]')?.textContent).toContain('NewFace');
+      expect(document.querySelector('style[data-mx-author]')).toBeNull();
+      expect(root.firstElementChild).toBe(copy);
+      controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: [], source, editId: 'e1', theme: null, colorMode: 'light', redraw: true });
+      await settle(() => root.classList.contains('light'));
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+      expect(document.querySelector('style[data-mx-system]')).toBeNull();
+    } finally {
+      controller.dispose();
+      document.head.innerHTML = head;
+      const original = new DOMParser().parseFromString(`<html${attributes ?? ''}></html>`, 'text/html').documentElement;
+      for (const attr of [...document.documentElement.attributes]) document.documentElement.removeAttribute(attr.name);
+      for (const attr of [...original.attributes]) document.documentElement.setAttribute(attr.name, attr.value);
+    }
+  });
+
   const chart = (title: string, id = ' id="chart"') => `<Question${id} title="${title}" />`;
 
   for (const [name, painted] of [

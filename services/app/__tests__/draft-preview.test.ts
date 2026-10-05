@@ -57,7 +57,7 @@ describe('the editor draft preview door', () => {
     expect(document.querySelector('img')?.getAttribute('src')).toContain(`/a/${imageId}/raw`);
     expect((await getArtifactById(id))?.source).not.toContain(imageId);
   });
-  it("answers an editor the whole sheet a draft of the head compiles with, and nobody else", async () => {
+  it('keeps the legacy inline-sheet endpoint private while drafts use standalone sheets', async () => {
     const { token } = await mintToken('draft-preview-sheet');
     const user = await ensureUsername(await createUser({ email: `mxmx_test_draft_sheet_${Math.random().toString(36).slice(2, 8)}@example.com` }));
     await claimToken(user.id, token);
@@ -69,9 +69,11 @@ describe('the editor draft preview door', () => {
     expect(answer.status).toBe(200);
     const { css } = (await answer.json()) as { css: string };
     const draft = await preview(request(`/a/${id}/draft-preview`, { method: 'POST', token, json: { editId: row.edit_id, source } }), params(id));
-    const drafted = new JSDOM(((await draft.json()) as { html: string }).html).window.document.querySelector('style[data-mx-story-css]')?.textContent;
-    // The first compile reply of an unchanged draft finds this sheet already in place: nothing to swap.
-    expect(css).toBe(drafted);
+    const drafted = new JSDOM(((await draft.json()) as { html: string }).html).window.document;
+    expect(css).toContain('[data-mx-inline-story]');
+    expect(css).toContain('.text-lg');
+    expect(drafted.querySelector('style[data-mx-story-css]')).toBeNull();
+    expect(drafted.querySelector('style[data-mx-tw]')?.textContent).toContain('.text-lg');
     const stranger = await mintToken('draft-preview-sheet-stranger');
     expect((await editSheet(request(`/a/${id}/draft-preview`, { token: stranger.token }), params(id))).status).toBe(404);
   });

@@ -38,7 +38,7 @@ import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const HK = 'data-hk';
 /** Sheets that belong to one version and may be absent from the next (lib/story/styles/document-styles, the assembler). */
-const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-font-vars', 'data-mx-author'];
+const VERSION_SHEETS = ['data-mx-tw', 'data-mx-story-css', 'data-mx-font-vars', 'data-mx-system', 'data-mx-author'];
 /** How often a version the server is still compiling is asked for again, and how long apart. */
 const NOT_READY_RETRIES = 6;
 const NOT_READY_DELAY_MS = 250;
@@ -512,7 +512,7 @@ export function readRestoreBlocker(root: HTMLElement, doc: Document, next: Docum
  * page's, so the next version is compared with what is on screen, exactly as after a reader's morph.
  */
 export function adoptVersionRecord(doc: Document, next: Document): void {
-  syncHead(doc, next, { adopted: true, override: null });
+  syncHead(doc, next, { adopted: !standaloneStyles(next), override: null });
   const data = next.getElementById(ISLAND_DATA_ID);
   if (data) {
     const here = doc.getElementById(ISLAND_DATA_ID);
@@ -663,6 +663,14 @@ const withMode = (classes: string, mode: 'light' | 'dark'): string =>
 /* ──────────────────────────────────────────────────────────────────────────
  * The page around the story
  * ────────────────────────────────────────────────────────────────────────── */
+
+const standaloneStyles = (doc: Document): boolean => !!doc.head.querySelector('style[data-mx-bare-type]');
+
+/** Apply a compiled draft's appearance on its isolated document, before the body is morphed. */
+export function syncDraftHead(doc: Document, next: Document): void {
+  // Legacy inline previews have one scoped sheet, managed by the controller; never restyle their app shell.
+  if (standaloneStyles(next)) syncHead(doc, next, { adopted: false, override: null });
+}
 
 /** The version's sheets (new classes, fonts, the author's own CSS), its title, and the document's colour. */
 function syncHead(doc: Document, next: Document, { adopted, override }: { adopted: boolean; override: 'light' | 'dark' | null }): void {

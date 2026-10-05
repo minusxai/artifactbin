@@ -184,7 +184,9 @@ function appCsp({ frames = [], connect = [] }: { frames?: readonly string[]; con
     "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
     // Listing thumbnails redirect from /a/:id/export to the configured asset
     // origin. Admit that destination for images; local posters remain same-origin.
-    `img-src 'self' data: blob:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`, "font-src 'self' data:",
+    `img-src 'self' data: blob:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`,
+    // The design-system picker uses the same fixed font faces as the documents. Its CSS is local.
+    "font-src 'self' data: https://fonts.gstatic.com",
     // `media-src` has no default of its own either, so without this line every
     // <video> and <audio> on an app page is refused by `default-src 'none'`.
     // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the

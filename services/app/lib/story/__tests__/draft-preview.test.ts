@@ -15,10 +15,10 @@ describe('compiled editor draft preview', () => {
     const input = {
       source: '<div id="root"><h1 id="heading">Draft</h1><p id="copy">Editable prose</p></div>',
       title: 'Draft',
-      theme: null,
+      theme: 'volta' as const,
       template: null,
       colorMode: 'light' as const,
-      compiledCss: null,
+      compiledCss: '.sample { color: var(--primary); }',
       refData: {},
     };
     const [preview, reader] = await Promise.all([renderDraftPreview(input), compiledDocument(input)]);
@@ -27,8 +27,13 @@ describe('compiled editor draft preview', () => {
     const readerStory = parse(reader).querySelector('[data-mx-inline-story]');
     expect(previewStory?.outerHTML).toBe(readerStory?.outerHTML);
     expect(previewStory?.querySelector('#copy')?.getAttribute('data-mx-ast')).toBe('0.1');
-    expect(parse(preview).querySelector('style[data-mx-story-css]')).not.toBeNull();
-    expect(parse(preview).querySelector('style[data-mx-tw]')).toBeNull();
+    const draft = parse(preview), saved = parse(reader);
+    expect(draft.documentElement.getAttribute('data-theme')).toBe('volta');
+    expect(draft.querySelector('style[data-mx-story-css]')).toBeNull();
+    for (const attr of ['data-mx-tw', 'data-mx-fonts', 'data-mx-system']) {
+      expect(draft.querySelector(`style[${attr}]`)?.textContent).toBe(saved.querySelector(`style[${attr}]`)?.textContent);
+      expect(draft.querySelector(`style[${attr}]`)).not.toBeNull();
+    }
     expect(preview).not.toContain('story-ssr.cjs');
   });
 });

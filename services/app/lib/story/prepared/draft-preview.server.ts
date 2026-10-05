@@ -3,7 +3,7 @@ import { assembleReaderPage } from '@/lib/compiled-page/assembler';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { loadSsrModule } from '@/lib/compiled-page/bundle.server';
 import { compilePage } from '@/lib/compiled-page/compiler';
-import { inlineStoryCss } from '@/lib/story/styles/inline-css';
+import { documentStyleSheets } from '@/lib/story/styles/document-styles';
 import { prepareStoryParts, type PrepareStoryInput } from '@/lib/story/prepared/prepare-runtime.server';
 
 /** The caller admits the editor and supplies its current source and data. Nothing here is persisted. */
@@ -31,7 +31,13 @@ export async function renderDraftPreview(input: PrepareStoryInput): Promise<stri
   return assembleReaderPage({
     compiled,
     story,
-    css: inlineStoryCss(parts.runtime),
+    css: '',
+    // Drafts run in the document's own origin, with the same sheet contract as the saved reader.
+    sheets: documentStyleSheets({
+      compiledCss: input.compiledCss, chrome: input.chrome ?? true, bare: false,
+      theme: input.theme, docFonts: parts.docFonts, systemCss: parts.baseRecipe.systemCss ?? '',
+      authorCss: parts.runtime.authorCss,
+    }),
     fontPreloads: parts.runtime.fontPreloads ?? [],
     title: parts.runtime.title,
     theme: input.theme,

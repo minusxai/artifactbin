@@ -9,11 +9,11 @@ import { isWebUrl } from '@/lib/story/assets/asset-url';
 import { storyUpdatePartsShared } from '@/lib/story/document/update-parts';
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { STORY_DOCUMENT_MESSAGE, type EditDraft } from '@/lib/story-runtime/contract';
-import type { StoryThemeName } from '@/lib/validation/story-theme-names';
+import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 
 export interface EditDraftState {
   editId(): string;
-  theme(): StoryThemeName | null;
+  theme(): StoryDesignName | null;
   colorMode(): 'light' | 'dark';
 }
 

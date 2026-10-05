@@ -3,7 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
 import { faces } from '../../design-systems/lib/fonts.mjs';
-import { DATA, NAMES, SHEETS, renderRuntime } from '../../design-systems/lib/runtime.mjs';
+import { DATA, NAMES, SHEETS, PICKER_FONTS, PICKER_DATA, PICKER_CSS, renderRuntime, varsMap } from '../../design-systems/lib/runtime.mjs';
+import { pickerSpecimen, renderPicker } from '../../design-systems/lib/picker.mjs';
 import { REFS, catalogueMd, systemMd } from '../../design-systems/lib/skill.mjs';
 
 /**
@@ -52,6 +53,37 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
+  it('retains cover grounds after comments and resolves every drawing token in both modes', () => {
+    for (const slug of ROSTER) {
+      const spec = loadSpec(slug);
+      const { css } = pickerSpecimen(spec);
+      for (const mode of ['light', 'dark']) {
+        const defined = new Set([...Object.keys(varsMap(spec, 'light')), ...Object.keys(varsMap(spec, mode)), ...css.matchAll(/(--[\w-]+)\s*:/g)].map(x => typeof x === 'string' ? x : x[1]));
+        for (const [, token] of css.matchAll(/var\((--[\w-]+)/g)) expect(defined.has(token), `${slug} ${mode} resolves ${token}`).toBe(true);
+      }
+    }
+    expect(pickerSpecimen(loadSpec('dossier')).css).toContain('.do-paper { fill: var(--ds-paper); }');
+    expect(pickerSpecimen(loadSpec('redline')).css).toContain('.rl-paper { fill: var(--ds-paper); }');
+  });
+  it('keeps the editor gallery faithful to the catalogue without importing page layout or active markup', () => {
+    const picker = renderPicker();
+    expect(read(PICKER_DATA)).toBe(picker.data);
+    expect(read(PICKER_CSS)).toBe(picker.css);
+    for (const slug of ROSTER) {
+      const specimen = pickerSpecimen(loadSpec(slug));
+      expect(specimen.svg).toContain('<svg');
+      expect(specimen.svg).not.toMatch(/className=|textAnchor=|clipPath=|<script|<foreignObject|\son\w+=/);
+      expect(specimen.css).not.toMatch(/display:|grid-template|margin:|background:|animation:|\.ds-/);
+      expect(specimen.css).toContain(`[data-design-specimen="${slug}"]`);
+    }
+  });
+  it('ships only deduplicated font rules for the live picker, not document component styles', () => {
+    const { pickerFonts, entries } = renderRuntime();
+    expect(read(PICKER_FONTS)).toBe(pickerFonts);
+    const rules = entries.flatMap(entry => entry.fontFaces.split('\n'));
+    expect(pickerFonts).toBe([...new Set(rules)].join('\n') + '\n');
+    expect(pickerFonts).not.toContain('data-theme');
+  });
   it('the runtime registry, its sheets and the names leaf', () => {
     const { names, data, sheets } = renderRuntime();
     expect(read(NAMES)).toBe(names);

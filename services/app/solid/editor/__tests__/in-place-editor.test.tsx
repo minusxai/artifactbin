@@ -5,6 +5,7 @@ import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_TEXT_EDIT_MESSAGE } from '@/lib/story-runtime/contract';
 import { fakeBackend } from '@/test/helpers/artifact-backend';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
+import { screen } from '@testing-library/dom';
 import type { PendingChange } from '../create-live-edits';
 
 /** Every change the editor hands to persistence, in order (the real live-edits core still runs behind it). */
@@ -66,6 +67,17 @@ function mountEditor(source = SOURCE, backend = fakeBackend()) {
 }
 
 const drafts = (sent: Array<Record<string, unknown>>) => sent.filter((m) => m.type === STORY_DOCUMENT_MESSAGE).map((m) => m.source);
+
+it('saves a design-system pick and redraws with its identity and default mode, then can undo it', () => {
+  const { sent, view } = mountEditor();
+  fireEvent.click(view.getByRole('button', { name: 'Design system' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Design system Nocturne' }));
+  expect(queued).toEqual([{ theme: 'nocturne' }]);
+  expect(sent.filter(m => m.type === STORY_DOCUMENT_MESSAGE).at(-1)).toMatchObject({ theme: 'nocturne', colorMode: 'dark', redraw: true, source: SOURCE });
+  fireEvent.click(view.getByRole('button', { name: 'Undo design change' }));
+  expect(queued.at(-1)).toEqual({ theme: null });
+  expect(sent.filter(m => m.type === STORY_DOCUMENT_MESSAGE).at(-1)).toMatchObject({ theme: null, redraw: true, source: SOURCE });
+});
 
 it('Ctrl-Z after typing restores the source, draws it, and queues it once', async () => {
   const { emit, sent, view } = mountEditor();
