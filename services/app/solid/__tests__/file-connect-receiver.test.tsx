@@ -3,7 +3,7 @@ import {render,screen,fireEvent,waitFor,cleanup} from '@solidjs/testing-library'
 import {afterEach,it,expect,vi} from 'vitest';
 import {FileConnectReceiver,type ConnectAdapter} from '../components/FileConnectReceiver';
 import {PREVIEW_CONNECT_CHANNEL} from '@artifactbin/contracts';
-afterEach(()=>{cleanup();vi.restoreAllMocks();window.history.replaceState(null,'','/');Object.defineProperty(window,'opener',{value:null,configurable:true});});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();window.history.replaceState(null,'','/');Object.defineProperty(window,'opener',{value:null,configurable:true});});
 it('keeps an old-runtime offer through inline authentication and partial-error retry without remounting it',async()=>{
  window.history.replaceState(null,'','/connect?request=old-file-request');
  const opener={postMessage:vi.fn()};Object.defineProperty(window,'opener',{value:opener,configurable:true});
@@ -21,4 +21,11 @@ it('keeps an old-runtime offer through inline authentication and partial-error r
  await waitFor(()=>expect(adapter.apply).toHaveBeenCalledTimes(2));
  const calls=vi.mocked(adapter.apply).mock.calls;expect(calls[0]).toEqual(calls[1]);expect(calls[0]![0]).toEqual({html:offer.html,filename:offer.filename});
  expect(opener.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({type:'opened'}),expect.anything());
+});
+
+it('opens on ordinary HTTP without requiring the secure-context randomUUID API',()=>{
+ const random=crypto.getRandomValues.bind(crypto);vi.stubGlobal('crypto',{getRandomValues:random});
+ const adapter:ConnectAdapter={inspect:vi.fn(),apply:vi.fn()};
+ expect(()=>render(()=> <FileConnectReceiver adapter={adapter}/>)).not.toThrow();
+ expect(screen.getByRole('heading',{name:'Import an HTML file'})).toBeVisible();
 });

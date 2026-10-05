@@ -3,6 +3,7 @@ import {createSignal,Show,onCleanup,type JSX} from 'solid-js';
 import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,type PreviewConnectMessage} from '@artifactbin/contracts';
 import {previewWorkspaceUrl} from '@/lib/offline/preview-connect';
 import {PageBar,DocumentTitle} from './PageBar';
+import {runtimeId} from '../../lib/story-runtime/runtime-id';
 import {FormPage,FORM_INPUT,FORM_PRIMARY_BUTTON} from './FormControls';
 export interface ConnectOffer {html:string;filename:string}
 export interface ConnectInspection {title:string|null;comments:number;target:string;kind?:'local'|'update'|'copy';requiresAuth?:boolean;reason?:string}
@@ -18,12 +19,12 @@ export async function connectRequest<T>(path:string,body:unknown):Promise<T>{
 }
 export function FileConnectReceiver(props:{adapter:ConnectAdapter;authentication?:(done:()=>void)=>JSX.Element}):JSX.Element {
  const [offer,setOffer]=createSignal<ConnectOffer>(),[inspection,setInspection]=createSignal<ConnectInspection>(),[target,setTarget]=createSignal(''),[error,setError]=createSignal(''),[busy,setBusy]=createSignal(false);
- let operationId=crypto.randomUUID();
+ let operationId=runtimeId();
  const requestId=new URLSearchParams(location.search).get('request'),opener=window.opener as Window|null;
  let peerOrigin:string|undefined;
  const reply=(message:PreviewConnectMessage)=>opener?.postMessage(message,peerOrigin==='null'||peerOrigin===undefined?'*':peerOrigin);
  const inspect=async(value:ConnectOffer,fresh=true)=>{
-  if(busy())return;setBusy(true);setError('');setInspection(undefined);setOffer(value);if(fresh)operationId=crypto.randomUUID();
+  if(busy())return;setBusy(true);setError('');setInspection(undefined);setOffer(value);if(fresh)operationId=runtimeId();
   try{const result=await props.adapter.inspect(value);setInspection(result);setTarget(result.target);}catch(error){setError(error instanceof Error?error.message:String(error));}finally{setBusy(false);}
  };
  const receive=(event:MessageEvent)=>{

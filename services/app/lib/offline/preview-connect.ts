@@ -1,4 +1,5 @@
 /** A portable file hands a copy to a user-selected preview server without granting it network access. */
+import {runtimeId} from '../story-runtime/runtime-id';
 import { normalizeOrigin, PREVIEW_CONNECT_CHANNEL, PREVIEW_CONNECT_PATH, PREVIEW_CONNECT_MAX_BYTES, type PreviewConnectMessage } from '@artifactbin/contracts';
 
 export function previewServerOrigin(value: string): string {
@@ -27,7 +28,7 @@ export interface PreviewConnectionOptions {
 /** Call directly from the user's click: opening the tab must precede any asynchronous editing flush. */
 export function connectPreview(options: PreviewConnectionOptions, browser: Window = window): () => void {
   const origin = previewServerOrigin(options.origin);
-  const requestId = crypto.randomUUID();
+  const requestId = runtimeId();
   const popup = browser.open(`${origin}${PREVIEW_CONNECT_PATH}?request=${encodeURIComponent(requestId)}`, '_blank');
   if (!popup) throw new Error('The browser blocked the server tab. Allow popups for this file, or open the server and use “Import an HTML file” after saving this file.');
   let disposed = false;
