@@ -1,15 +1,15 @@
 name: CodeQL
 
-# CODE SCANNING AFTER MERGE, NOT ON EVERY PULL REQUEST. The repository's default setup ran three
-# analyses on every PR (JavaScript/TypeScript 103-109 s, Python 47 s, Actions 33 s): ~190 runner-s per
-# PR beside a CI run that must fit in four minutes. The same queries run here on every push to main and
-# weekly, so a finding lands on main after the merge instead of blocking it. Python is not analysed:
-# its only sources are two binary-injection helpers (services/cli/scripts/sea-inject-*.py).
-# Same default query suite as before. This is advanced setup: the repository's default setup must be
-# off (state `not-configured`), or GitHub rejects these uploads.
+# Code scanning runs after merge and weekly, outside the required PR CI path.
+# Both languages retain the default security query suite and complete source coverage.
+# Prose-only merges need no new source scan; weekly scans catch newly published queries.
+# Advanced setup requires GitHub default setup to remain off (not-configured).
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
   schedule:
     - cron: '23 6 * * 1'
   workflow_dispatch:
@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   analyze:
@@ -44,3 +44,6 @@ jobs:
       - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           category: /language:${{ matrix.language }}
+          # SARIF findings still upload on every scan. Database archives are optional,
+          # expensive to bundle, and retained for weekly/manual investigations only.
+          upload-database: ${{ github.event_name != 'push' }}
