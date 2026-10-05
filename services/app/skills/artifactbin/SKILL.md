@@ -7,10 +7,10 @@ description: >-
 
 artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit JSX with Tailwind `className`. Datasets/media are artifacts too.
 
-npm CLI: local files/browser approval. Direct HTTP: email auth without CLI installation; [HTTP API](references/http-api.md).
+npm CLI: local files/browser approval, guests allowed. Direct HTTP: email auth, no CLI; [HTTP API](references/http-api.md).
 
-- Run via `npx --yes @afbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
-- Local previews; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.
+- If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. [Setup details](references/npm-local.md).
+- Preview is local; HTML downloads use `.jsx.html`.
 - Automatic browser approval also applies to `--yes`. If unavailable, ask for email: `afbin auth --email <email>`; then code: `afbin auth --email <email> --otp <code>`. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write and push the file. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.

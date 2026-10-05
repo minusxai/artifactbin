@@ -54,7 +54,7 @@ describe('llms.txt and the discovery head', () => {
     expect(text.split('\n')[0]).toBe(agentBlurb());
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.instruction).toBe(`afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`);
+    expect(help.instruction).toBe(`afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`);
     expect(help.instruction.length).toBeLessThanOrEqual(150);
     expect(help.instruction).toContain('afbin');
     expect(help.instruction).toContain('Windows: npx.cmd');
@@ -67,10 +67,13 @@ describe('llms.txt and the discovery head', () => {
 
   it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
-    for (const line of [`npx --yes @afbin/cli@latest`, '@afbin/cli@latest help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, '@afbin/cli@latest pull', 'afbin validate', '@afbin/cli@latest push', 'skill']) {
+    for (const line of [`npx --yes @afbin/cli@latest setup --server '${BASE}'`, `npx.cmd --yes @afbin/cli@latest setup --server '${BASE}'`, 'installs the afbin command and the agent skills', 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin pull', 'afbin validate', 'afbin push', 'afbin preview report.jsx', 'afbin help http-api', 'skill']) {
       expect(text, line).toContain(line);
     }
     expect(text).not.toContain('[[');
+    // npm is the one setup line (and its Windows twin); every other command is `afbin <command>`.
+    expect(text.split('npx --yes @afbin/cli@').length - 1).toBe(1);
+    for (const [, command] of text.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command).toBe('setup');
     // `afbin setup`, /raw, MCP and /docs/ are retired-surfaces.test.ts's row for the one-pager.
     expect(llmsText(`${BASE}/`)).toBe(text);
   });
@@ -85,9 +88,10 @@ describe('llms.txt and the discovery head', () => {
   it('its command line ends at push, because push validates — no separate validate step', () => {
     const then = llmsText(BASE).split('\n').find((line) => line.startsWith('Then:'))!;
     expect(then).toBeDefined();
-    expect(then).toContain('@afbin/cli@latest pull <artifact url> --output report.jsx');
+    expect(then).toContain('afbin pull <artifact url> --output report.jsx');
     expect(then).toContain('edit the file');
-    expect(then).toContain('@afbin/cli@latest push report.jsx');
+    expect(then).toContain('afbin push report.jsx');
+    expect(then).not.toContain('npx');
     // A validate standing as its own step in the sequence — `afbin validate report.jsx;` — is the offence.
     expect(then).not.toMatch(/afbin validate [^;()]*;/);
     expect(then).toMatch(/push runs .*afbin validate/i);
@@ -96,7 +100,7 @@ describe('llms.txt and the discovery head', () => {
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
     expect(AGENT_HELP_TITLE).toBe('Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
-    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
+    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
   });
 });
 

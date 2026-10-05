@@ -275,7 +275,13 @@ describe('the bundled teaching and the manual', () => {
     assert.ok(!/MCP|\/docs\/llm|skills\.download/.test(text),`${file} teaches a remote or MCP surface`);
    }
    assert.match(teaching.files['references/publishing-auth.md'],/\/chat\/ensure-node\.sh/);
-   assert.match(teaching.files['references/publishing-auth.md'],/npx --yes @afbin\/cli@latest/);
+   assert.ok(teaching.files['references/publishing-auth.md'].includes('If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.'));
+   // Every bundled file spells npm at most once, as the setup line; every other command is `afbin <command>`.
+   for(const [file,text] of Object.entries(teaching.files as Record<string,string>)){
+    assert.ok(text.split('npx --yes @afbin/cli@').length-1<=1,`${file} repeats the npm spelling`);
+    // `npm exec --offline … -- afbin <command>` is the pinned offline form, not an npx spelling.
+    for(const [,command] of text.matchAll(/npx(?:\.cmd)? (?:--yes )?@afbin\/cli@\S+ ([a-z-]+)/g))assert.equal(command,'setup',`${file} runs ${command} through npx`);
+   }
    assert.doesNotMatch(teaching.files['references/publishing-auth.md'],/\/chat\/install\.sh/);
   });
 

@@ -9,7 +9,7 @@ import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { GET as listMine } from '@/app/api/my/tokens/route';
 
 const BASE = 'http://localhost:3000';
-const HELP = `Retry through afbin: npx --yes @afbin/cli@latest auth --server ${BASE}. Prepare Node: ${BASE}/chat/ensure-node.sh; Windows: ${BASE}/chat/ensure-node.ps1. CLI browser approval allows guests; direct HTTP requires email sign-in.`;
+const HELP = `Retry through afbin: afbin auth --server ${BASE}. If \`afbin\` is not installed, run \`npx --yes @afbin/cli@latest setup\` once (Windows PowerShell: \`npx.cmd --yes @afbin/cli@latest setup\`); it installs the \`afbin\` command and the agent skills.`;
 
 describe('401 bodies', () => {
   /*

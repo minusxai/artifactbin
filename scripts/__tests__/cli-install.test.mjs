@@ -20,8 +20,8 @@ it('prepares Node then delegates setup to npx, without installing a binary', () 
   const result = run();
   expect(result.status, result.stderr).toBe(0);
   expect(readFileSync(path.join(dir, 'args'), 'utf8')).toBe(`--yes\n@afbin/cli@latest\nsetup\n--server\n${defaultServer}\n`);
-  expect(result.stdout).toContain('npx --yes @afbin/cli@latest');
-  expect(result.stdout.trimEnd().split('\n').at(-1)).toBe('Open a new terminal, then use afbin <command> (or npx --yes @afbin/cli@latest <command>).');
+  expect(result.stdout.trimEnd().split('\n').at(-1)).toBe('Open a new terminal, then use afbin <command>.');
+  expect(result.stdout).not.toContain('@afbin/cli@latest <command>');
 });
 it('refuses old binary installer flags with actionable npm instructions', () => {
   const result = run(['--dir', 'legacy-bin']);
@@ -39,6 +39,6 @@ it('Windows wrapper uses npm cmd shims and never changes execution policy', () =
   const source = readFileSync(path.join(root, 'services/app/public/chat/install.ps1'), 'utf8');
   expect(source).toContain('ensure-node.ps1');
   expect(source).toContain('npx.cmd');
-  expect(source.trimEnd().split('\n').at(-1)).toContain('Open a new terminal, then use afbin <command> (or npx.cmd --yes @afbin/cli@latest <command>).');
+  expect(source.trimEnd().split('\n').at(-1)).toBe("Write-Host 'Open a new terminal, then use afbin.cmd <command>.'");
   expect(source).not.toMatch(/Set-ExecutionPolicy|ExecutionPolicy Bypass|afbin-windows/);
 });

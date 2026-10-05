@@ -18,41 +18,41 @@ Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1 | Invoke-Expr
 npx.cmd --yes @afbin/cli@latest setup
 ```
 
-Run both commands in the same terminal. The helper reuses supported Node/npm or installs official Node LTS for your user. npm is the sole CLI distribution. Windows uses `npx.cmd` for the commands below.
+Run both commands once, in the same terminal. The helper reuses supported Node/npm or installs official Node LTS for your user; `setup` installs the `afbin` command and the agent skills. npm is the sole CLI distribution. Where PowerShell scripts are disabled, run `afbin.cmd` in place of `afbin`.
 
 ```sh
-npx --yes @afbin/cli@latest add report.jsx sales.csv --json
-npx --yes @afbin/cli@latest preview report.jsx
-npx --yes @afbin/cli@latest push report.jsx
+afbin add report.jsx sales.csv --json
+afbin preview report.jsx
+afbin push report.jsx
 ```
 
 Add assigns stable workspace-local IDs without uploading or signing in. Use `ref:ID` for datasets/media and `/a/ID` for navigation; artifact references reject local paths. Preview edits selected local source files without cloud access or credentials. Carry the project's `.artifactbin` directory with its files to preserve local identity, comments, history and recovery.
 
 Push explicitly publishes a separate copy with remote IDs, preserving the originals and their local references. Its mapping lets later pushes update that publication. Local preview continues independently after publication. The default remote host is `app.artifactbin.dev`; CLI browser approval permits guests, while direct HTTP authentication requires email.
 
-The package includes SQLite. Chromium is downloaded lazily when rendering requires it. Prepare an exact npm version and browser assets before disconnecting; warmed npm execution supports `--offline`, while a cold cache needs internet. Connected commands may show update notices, but never replace software automatically. Restart with a newer npm version to update.
+The package includes SQLite. Chromium is downloaded lazily when rendering requires it. Prepare an exact npm version and browser assets before disconnecting; warmed npm execution supports `--offline`, while a cold cache needs internet. Connected commands may show update notices, but never replace software automatically. `afbin update` installs the newer version.
 
-For downloaded `.jsx.html` files, **Save** or **Cmd/Ctrl+S** keeps edits and comments. Start an empty server with `npx --yes @afbin/cli@latest preview --port 7474`, then choose **Connect to server**. See [portable files and server connections](docs/editing.md#edit-a-downloaded-html-file) for Save behavior, Windows commands and remote preview servers.
+For downloaded `.jsx.html` files, **Save** or **Cmd/Ctrl+S** keeps edits and comments. Start an empty server with `afbin preview --port 7474`, then choose **Connect to server**. See [portable files and server connections](docs/editing.md#edit-a-downloaded-html-file) for Save behavior, Windows commands and remote preview servers.
 
 ## Run your own server
 
 ```sh
-npx --yes @afbin/cli@latest serve --dir ./artifactbin-data --port 7445
+afbin serve --dir ./artifactbin-data --port 7445
 # In another terminal:
-npx --yes @afbin/cli@latest config set host http://app.lvh.me:7445
-npx --yes @afbin/cli@latest auth
-npx --yes @afbin/cli@latest add report.jsx --json
-npx --yes @afbin/cli@latest preview report.jsx
-npx --yes @afbin/cli@latest push report.jsx
+afbin config set host http://app.lvh.me:7445
+afbin auth
+afbin add report.jsx --json
+afbin preview report.jsx
+afbin push report.jsx
 ```
 
 Use the origin the server prints (`http://app.lvh.me:7445` by default). Approval and login must happen at that exact origin; `localhost` and `127.0.0.1` are different origins and fail with `approval_origin_mismatch`. `lvh.me` and its subdomains resolve to loopback; app and document origins need the same site for private document cookies.
 
 `serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, Node helper links and npm setup for this host, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; SQLite still handles document queries.
 
-Use `--server URL` for one command without changing defaults. `npx --yes @afbin/cli@latest config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. Published IDs belong to their host/account; local IDs belong to the portable workspace.
+Use `--server URL` for one command without changing defaults. `afbin config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. Published IDs belong to their host/account; local IDs belong to the portable workspace.
 
-For trusted local collaboration, `npx --yes @afbin/cli@latest preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Hosting details](docs/extraction/team.md), and [team on a network](docs/extraction/team.md#team-on-a-network) for what a shared host needs: an HTTPS public URL, a login method and the URL teammates type.
+For trusted local collaboration, `afbin preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Hosting details](docs/extraction/team.md), and [team on a network](docs/extraction/team.md#team-on-a-network) for what a shared host needs: an HTTPS public URL, a login method and the URL teammates type.
 
 ## Develop
 

@@ -19,7 +19,7 @@ export const afbinInstallCommand=(base:string):string=>`afbin_node_setup="$(mkte
 export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/ensure-node.ps1`,true)} | Invoke-Expression\nnpx.cmd --yes @afbin/cli@latest setup${setupServer(base,true)}`;
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
- return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`};
+ return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @afbin/cli@latest setup; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`};
 }
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="${escapeHtml(help.instruction)}">`;

@@ -381,9 +381,9 @@ function OfflineShell(props: Opened) {
     </PageControlsPanel></Show>
     <Show when={connectDialog()}><DialogShell onClose={() => { cancelConnect?.(); setConnecting(false); setConnectDialog(false); }}><section role="dialog" aria-label="Connect to server" class="fixed left-1/2 top-16 z-[2000] w-[min(90vw,32rem)] -translate-x-1/2 rounded-lg border border-edge bg-surface p-5 font-mono text-sm shadow-xl space-y-4">
       <p>Connect to a local preview server for a workspace copy, or to hosted artifactbin to update the original. Connecting only sends a copy for review. Nothing is published until you confirm “Apply to original” or “Create independent copy” in the server tab. Your original HTML file stays here.</p>
-      <p><a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Install Node.js if needed</a>, then start a local server:</p>
-      <p class="break-words text-xs">macOS / Linux: <code>npx --yes @afbin/cli@latest preview --port 7474</code></p>
-      <p class="break-words text-xs">Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest preview --port 7474</code></p>
+      <p><a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Install Node.js if needed</a>. If <code>afbin</code> is not installed, run <code>npx --yes @afbin/cli@latest setup</code> once (Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest setup</code>); it installs the <code>afbin</code> command and the agent skills. Then start a local server:</p>
+      <p class="break-words text-xs">macOS / Linux: <code>afbin preview --port 7474</code></p>
+      <p class="break-words text-xs">Windows PowerShell: <code>afbin.cmd preview --port 7474</code></p>
       <label class="block space-y-2">Server address <input class={FORM_INPUT} aria-label="Server address" value={serverAddress()} onInput={(event) => setServerAddress(event.currentTarget.value)} disabled={connecting()} /></label>
       <p>Use http://localhost:7474, or the HTTPS address of hosted artifactbin or your compatible server.</p>
       <button class={FORM_PRIMARY_BUTTON} disabled={connecting()} onClick={connect}>{connecting() ? 'Connecting…' : 'Connect'}</button>
