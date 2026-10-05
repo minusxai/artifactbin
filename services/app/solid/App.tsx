@@ -2,7 +2,7 @@
 /** The Solid app: every route below, every artifact address included. */
 import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
-import { useLocation } from '@solidjs/router';
+import { useParams, useLocation } from '@solidjs/router';
 import { SessionProvider } from './lib/session';
 import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
@@ -25,6 +25,9 @@ const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
 const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
+const SchedulesPage = lazy(() => import('./pages/Schedules').then(m => ({default:m.SchedulesPage})));
+const ProgramPage = lazy(() => import('./pages/Program').then(m => ({default:m.ProgramPage})));
+const ProgramEditPage = () => { const params=useParams<{id:string}>(); return <ProgramPage artifactId={params.id}/>; };
 const ChatPage = lazy(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage })));
 const DocumentPage = lazy(() => import('./pages/Document').then((m) => ({ default: m.DocumentPage })));
 
@@ -92,6 +95,9 @@ export function App(): JSX.Element {
       <Route path="/datasets/new" component={DatasetEditorPage} />
       <Route path="/files/new" component={FileUploadPage} />
       <Route path="/a/:id/edit" component={ArtifactEditRoute} />
+      <Route path="/schedules" component={SchedulesPage} />
+      <Route path="/programs/new" component={ProgramPage} />
+      <Route path="/programs/:id/edit" component={ProgramEditPage} />
       <Route path="/chat" component={ChatPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/start" component={StartPage} />

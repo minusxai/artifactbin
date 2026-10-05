@@ -36,7 +36,7 @@ export function CommentMentionPicker(props: {
   const sessionsUnavailable = props.backend.unavailable('remoteSessions');
   const peopleUnavailable = props.backend.unavailable('mentions');
   const matches = () => sessions().filter((session) =>
-    (session.managed ? session.exitCode === null && session.activity !== 'stopped' : session.online)
+    !session.runId && (session.managed ? session.exitCode === null && session.activity !== 'stopped' : session.online)
     && `${session.name} ${session.harness}`.toLowerCase().includes(props.query.toLowerCase()));
   const choose = (session: RemoteSessionInfo) => props.onSelect(remoteMention(session));
   const keyboard: MentionKeyboard = { keyDown(key) {

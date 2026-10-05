@@ -52,6 +52,16 @@ describe('picking a block to comment on', () => {
     expect(document.documentElement).not.toHaveAttribute('data-mx-annotate-picking');
   });
 
+  it('paints a pointer already over the block when Select arrives asynchronously', () => {
+    env.session.setNodes(PICK_NODES);
+    picking(false);
+    anchor().dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+    expect(anchor()).not.toHaveAttribute('data-mx-annotate-pick-hover');
+    picking(true);
+    expect(anchor()).toHaveAttribute('data-mx-annotate-pick-hover');
+    expect(window.getComputedStyle(anchor()).outline).toBe('1px solid rgba(245, 158, 11, 0.85)');
+  });
+
   it('outlines nothing when the layer is on but nobody is picking', () => {
     env.session.setNodes(PICK_NODES);
     env.session.update({ ...state('on'), pins: [] });

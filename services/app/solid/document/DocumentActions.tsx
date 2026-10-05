@@ -41,6 +41,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={activeCommenter()}><button type="button" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW}><MessageSquare size={14} /><span class="flex-1">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></button></Show>
       <Show when={activeEditor()}><button type="button" aria-label="Edit artifact" onClick={props.onEdit} class={ROW}><Pencil size={14} />edit artifact</button></Show>
       <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} class={ROW} /></Show>
+      <Show when={props.accountSession && !props.archived}><a href={`/schedules?artifact=${encodeURIComponent(props.id)}`} class={ROW}>Schedule artifact</a></Show>
       <DownloadOffline id={props.id} version={props.archived ? props.version : undefined} />
       <Show when={!props.hideFork}><ForkArtifact id={props.id} title={props.title} /></Show>
       <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />

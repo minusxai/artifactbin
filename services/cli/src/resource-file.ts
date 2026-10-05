@@ -1,3 +1,4 @@
+import {isProgramFile,programFileDefinition} from './program-file';
 import {ARTIFACT_RESOURCE_TYPES,type ArtifactResourceFile} from '@artifactbin/contracts';
 import {parseDatasetAccessPolicy} from '../../utils/src/dataset-grants';
 import {dirname,extname,isAbsolute,relative,resolve} from 'node:path';
@@ -76,7 +77,8 @@ export async function resourceContent(resource:ArtifactResourceFile,path:string,
  const source=captured!.path,bytes=Buffer.from(captured!.bytes,'base64');
  const extension=extname(source).toLowerCase();
  if(resource.type==='artifact'){
-  if(extension!=='.jsx')throw new CliError('invalid_resource_source','An artifact source must be a JSX file.');
+  if(isProgramFile(source))return {program:programFileDefinition(bytes,source)};
+  if(extension!=='.jsx')throw new CliError('invalid_resource_source','An artifact source must be a JSX or .program.json file.');
   return {markup:parseDocument(bytes.toString()).body};
  }
  if(resource.type==='dataset'&&extension==='.jsx'){

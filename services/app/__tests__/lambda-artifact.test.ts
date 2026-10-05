@@ -20,7 +20,7 @@ it('runs published JSX with real Solid bindings, authenticated data calls, mutat
  const script=`import {signal,query,mutation} from 'page';
 const [region,setRegion]=signal('$region');const rows=query('$rows');const add=mutation('$add');
 export default async function(input){const initial=await rows.ready;setRegion('east');const pending=rows.loading();const east=await rows.ready;await add({n:input.n});const updated=await rows.ready;return {initial,east,updated,pending,region:region(),document:typeof document,process:typeof process};}`;
- const id=await make({markup:`<Helmet><Import name="data" src="ref:${ds}" /><Value name="region" type="string" default="west" /><Query name="rows">{\`select n from data.rows where region=$region order by n\`}</Query><Mutation name="add">{\`insert into data.rows values ('east',$n)\`}</Mutation><Notify name="added" on="add">{\`select null as "to", 'Row added' as message\`}</Notify><script>{${JSON.stringify(script)}}</script></Helmet><p>Executable report</p>`});
+ const id=await make({markup:`<Helmet><Import name="data" src="ref:${ds}" /><Value name="region" type="string" default="west" /><Query name="rows">{\`select n from data.rows where region=$region order by n\`}</Query><Mutation name="add">{\`insert into data.rows values ('east',$n)\`}</Mutation><Notify name="added" on="add">{\`select null as "to", 'Row added' as message\`}</Notify><script>{${JSON.stringify('export const browserLabel = "browser-handler-only";')}}</script><script type="server">{${JSON.stringify(script)}}</script></Helmet><p>Executable report</p>`});
  const secret='mxmx_test_signed_runner_context_secret';const app=new Hono();actorReceiver(secret).mount(app);app.post('/api/runner/operations',c=>operation(c.req.raw));
  const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:hostCapabilities({artifactbin:async(ctx,op,args)=>{
   const response=await app.request(new Request('http://internal/api/runner/operations',{method:'POST',headers:{'content-type':'application/json',[ACTOR_HEADER]:signActor(runnerIdentity(ctx),secret)},body:JSON.stringify({operation:op.replace(/^artifactbin\./,''),input:args,documentSource:ctx.request.document?.source})}));
@@ -36,6 +36,6 @@ export default async function(input){const initial=await rows.ready;setRegion('e
  close.push(await startLambdaSchedules(db));
  const scheduled=await artifactSchedule(request('/schedule',{method:'POST',actor:{userId:owner.id,credential:'session'},json:{cron:'*/5 * * * *',timezone:'UTC',input:{n:4}}}),id);
  expect(scheduled.status,await scheduled.clone().text()).toBe(201);
- const saved=(await db.query<{spec:{document:{source:string};version:string}}>('SELECT spec FROM runner_schedules WHERE id=$1',[(await scheduled.json()).id])).rows[0]!;
- expect(saved.spec.document.source).toContain(script.split('\n')[0]!);expect(saved.spec.version).toBe('1');
+ const saved=(await db.query<{spec:Record<string,unknown>}>('SELECT spec FROM runner_schedules WHERE id=$1',[(await scheduled.json()).id])).rows[0]!;
+ expect(saved.spec.artifactId).toBe(id);expect(saved.spec).not.toHaveProperty('document');expect(saved.spec).not.toHaveProperty('version');expect(saved.spec).not.toHaveProperty('program');
 },25000);

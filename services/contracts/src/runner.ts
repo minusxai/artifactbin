@@ -17,13 +17,17 @@ export interface RunnerLimits {
 }
 
 export interface RunStart {
+  name?: string;
+  command?: string[]; // Native argv; requires an empty program source.
+  compute?: { vcpu: number; memoryMiB: number; ttlSeconds: number; idleSeconds?: number };
+  sshPublicKey?: string;
   /** Deduplicate within this user's runs; a changed payload is a conflict. */
   requestId: string;
   userId: string;
   artifactId?: string;
-  /** App pins the published version before submission; not an authorization grant. */
+  /** Version loaded for this execution; schedules always reference the live artifact. */
   artifactVersion?: string;
-  /** Trusted app snapshot; retained with the run/schedule, never supplied by author code. */
+  /** Trusted app snapshot; retained with the execution attempt, never supplied by author code. */
   document?: { source: string; editId: string };
   program: { source: string; language: 'typescript' | 'javascript' };
   input: RunnerJson;
@@ -75,6 +79,10 @@ export interface RunSnapshot {
 }
 
 export interface RunnerService {
+  capabilities?(): Promise<RunnerCapabilities>;
+  terminal?(input: RunLookup): Promise<RunnerTerminal>;
+  write?(input: RunLookup & { text: string }): Promise<void>;
+  checkpoint?(input: RunLookup & {reference: string}): Promise<RunnerJson>;
   /** Returns after durable admission, not program completion. Runner generates runId. */
   start(input: RunStart): Promise<{ runId: string }>;
   getRun(input: RunLookup): Promise<RunSnapshot>;
@@ -82,4 +90,13 @@ export interface RunnerService {
   events(input: RunLookup & { afterSequence: number; limit?: number }): Promise<RunEventPage>;
   /** Idempotent; resolves once cancellation is accepted. getRun observes terminal cleanup. */
   cancel(input: RunLookup): Promise<void>;
+}
+
+export interface RunnerCapabilities {
+  version: 1; managedProcesses: boolean; persistence: boolean; ssh: boolean;
+  defaults: { vcpu: number; memoryMiB: number; ttlSeconds?: number };
+}
+export interface RunnerTerminal {
+  snapshot: string; seq?: number; status?: string;
+  ssh?: { hostname?: string; host?: string; port?: number; username?: string; hostKey?: string; command?: string } | null;
 }

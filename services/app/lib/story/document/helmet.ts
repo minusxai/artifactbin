@@ -15,8 +15,8 @@
  * Grammar (violations are publish 400s with precise spans):
  *  - at most ONE `<Helmet>` in the document, anywhere (canonicalization hoists
  *    it to first top-level node — `hoistHelmet`, a fixpoint);
- *  - no attributes on `<Helmet>` or its children;
- *  - children: at most one each of `<title>`, `<style>`, `<script>`, plus any
+ *  - no attributes on `<Helmet>`, title or style; scripts may declare only type;
+ *  - children: at most one each of `<title>`, `<style>`, browser `<script>` and `<script type="server">`, plus any
  *    number of `<meta>` (unique `name`s) and of the DATA declarations
  *    `<Import>` / `<Value>` / `<Query>` / `<Mutation>` (lib/story/data/dataflow.ts owns their shape and the
  *    `$name` reference rules; the grammar here only admits them);
@@ -47,6 +47,8 @@ export interface HelmetContent {
   title: string | null;
   style: string | null;
   script: string | null;
+  /** Server-only entry point; never included in reader runtime data or browser modules. */
+  serverScript?: string;
   /** `<meta name content>` pairs in authored order; names are unique. */
   meta: HelmetMeta[];
   /** `<Import>` declarations in authored order (lib/story/data/dataflow.ts). */
@@ -131,6 +133,14 @@ function textPayload(el: JsxElement, allowText: boolean): string | null {
   return null;
 }
 
+/** Script contexts are explicit; unknown types are never interpreted as browser code. */
+function scriptMode(el: JsxElement): 'server' | 'browser' | 'invalid' {
+  const types = el.attributes.filter(a => a.name === 'type');
+  if (!types.length) return 'browser';
+  if (types.length !== 1 || !types[0].value.static) return 'invalid';
+  return types[0].value.json === 'server' ? 'server' : types[0].value.json === 'module' ? 'browser' : 'invalid';
+}
+
 /** Helmet-grammar validation (see module doc). [] = valid. */
 export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
   const errors: ValidationError[] = [];
@@ -149,7 +159,7 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
     errors.push({ message: `<Helmet> takes no attributes (got "${a.name}")`, tag: HELMET_TAG, attr: a.name, start: a.start, end: a.end });
   }
 
-  const seen = new Set<HelmetChildTag>();
+  const seen = new Set<string>();
   const seenMetaNames = new Set<string>();
   for (const child of contentChildren(helmet)) {
     // The DATA declarations (lib/story/data/dataflow.ts owns their shape; the
@@ -200,13 +210,19 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
     }
 
     const singleton = tag as HelmetChildTag;
-    if (seen.has(singleton)) {
-      errors.push({ message: `<Helmet> may carry at most one <${singleton}>`, tag, start: child.start, end: child.end });
+    const mode = singleton === 'script' ? scriptMode(child) : null;
+    if (singleton === 'script' && mode === 'invalid') {
+      errors.push({ message: '<script> type must be "server" or "module" (or omitted for a browser module)', tag, start: child.start, end: child.end });
+    }
+    const key = singleton === 'script' && mode === 'server' ? 'server script' : singleton;
+    if (seen.has(key)) {
+      errors.push({ message: `<Helmet> may carry at most one ${key === 'server script' ? '<script type="server">' : `<${singleton}>`}`, tag, start: child.start, end: child.end });
       continue;
     }
-    seen.add(singleton);
-    if (child.attributes.length > 0) {
-      const a = child.attributes[0];
+    seen.add(key);
+    const unexpected = child.attributes.find(a => singleton !== 'script' || a.name !== 'type');
+    if (unexpected) {
+      const a = unexpected;
       errors.push({ message: `<${singleton}> inside <Helmet> takes no attributes (got "${a.name}")`, tag, attr: a.name, start: a.start, end: a.end });
     }
     const text = textPayload(child, singleton === 'title');
@@ -243,7 +259,11 @@ function helmetContent(helmet: JsxElement): HelmetContent {
       continue;
     }
     const tag = child.tag.toLowerCase();
-    if (tag === 'title' || tag === 'style' || tag === 'script') {
+    if (tag === 'script') {
+      const mode = scriptMode(child);
+      if (mode === 'server') content.serverScript ??= textPayload(child, false) ?? undefined;
+      else if (mode === 'browser') content.script ??= textPayload(child, false);
+    } else if (tag === 'title' || tag === 'style') {
       content[tag] = content[tag] ?? textPayload(child, tag === 'title');
     } else if (tag === 'meta') {
       const read = (attr: string): string | null => {

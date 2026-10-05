@@ -135,3 +135,10 @@ it('treats @ as a plain character where no one can be mentioned (an offline file
   expect(screen.queryByLabelText('Agent sessions')).toBeNull();
   expect(offline.remoteSessions).not.toHaveBeenCalled();
 });
+
+it('excludes native boxes without a comment relay while retaining the hosted default agent',async()=>{
+ vi.stubGlobal('fetch',sessions([{id:'native',runId:'run-one',name:'Native',harness:'codex',online:true,managed:true,exitCode:null,activity:'working'},{id:'default',name:'Default',harness:'pi',online:true,managed:true,exitCode:null,activity:'listening'}]));
+ render(()=><CommentMentionPicker backend={http()} query="" onSelect={()=>{}} />);
+ await screen.findByLabelText('Mention Default (pi)');
+ expect(screen.queryByLabelText('Mention Native (codex)')).toBeNull();
+});

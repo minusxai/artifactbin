@@ -1,5 +1,11 @@
 /** V0 remote-terminal protocol. PTY bytes stay on the user's machine until explicitly shared. */
 export interface RemoteSessionInfo {
+  /** App-owned managed Run mapping; never an authorization grant. */
+  runId?: string;
+  /** Non-secret configuration fingerprint used for named-box admission. */
+  managedConfigHash?: string;
+  sshCommand?: string;
+  sshHostKey?: string;
   id: string;
   name: string;
   harness: string;

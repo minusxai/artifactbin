@@ -81,7 +81,7 @@ export default async function(input, context) {
 ```
 
 The supported imports are pinned in `src/compiler.ts`. Pi agent-core is usable
-through a custom model transport; the fixed hosted program is `src/agent.ts.txt`.
+through a custom model transport. Default-agent programs belong to the deployment.
 The host chooses AI destinations and credentials, rejects managed redirects,
 bounds responses, and records request metadata and provider usage. Blank AI keys
 are supported. Cost and unavailable measurements are **null**, not fabricated
@@ -95,11 +95,22 @@ zeroes. Generic external network access is deliberately not enabled in this rele
 | Operator-selected OpenAI endpoint/key | Production selects its internal endpoint/key |
 | Existing artifact operation ACLs | Same ACLs with a fresh signed user identity attached by the host |
 
-`createAppHost({hostedAgent: {secret, model}})` installs the managed agent. The
-normal OSS `server.ts` never supplies this option. The shared package supplies
-the hook and implementation; deployments must activate it in their composition.
-A deployment must configure its app's runner URL and the matching Actor signing
-secret. Nothing is enabled merely by a user's program asking for it.
+`createAppHost({hostedAgent: factory})` installs a deployment-owned managed agent.
+The factory receives app storage, the runner contract and operation schemas, and
+returns `{agent, tick, close?}`. The open-source package contains no default prompt,
+conversation coordinator or provider-specific allocator.
+
+Self-hosted operators may instead configure `HOSTED_AGENT__SERVICE_URL` plus
+`CONTRACT__ACTOR_SECRET`. The URL wins over injected implementations; a missing
+secret fails closed. Unconfigured installations retain locally connected user
+agents and have no managed default agent.
+
+The optional service accepts signed Actor requests at `POST /v1/agents/ensure`,
+`view`, `input`, `stop`, and `operation`. The owner comes only from the verified
+Actor, never from JSON. Managed session IDs use `hostedAgentSessionId(owner)`;
+IDs are routing identifiers, not credentials. View/input/stop preserve the existing
+remote terminal protocol. Deployment implementations own job/state storage and
+must enforce owner checks on every request.
 
 ## Production controller
 
@@ -186,20 +197,6 @@ Missed ticks coalesce, the same schedule cannot overlap, and permission is check
 again before dispatch. Removing a schedule stops future occurrences; cancelling an
 already admitted run is a separate operation. Cron uses the specified IANA timezone.
 
-## Hosted conversations
-
-The coordinator owns conversation branches by `(userId, artifactId)`, with `chat`
-for the user's general session. A comment's work ID deduplicates dispatch. Each
-branch starts a fixed Pi program with bounded prior history and other branch
-references/outcomes. Ordered checkpoint events survive a run failure. Finalization
-locks the conversation and branch and increments revision once. Original branch
-transcripts remain intact; incompatible parallel tool chains are never interleaved.
-The history tool can read branches from the current conversation only.
-
-The default agent uses the existing session list, terminal view/input and managed
-comment receipts. Its reply proof stays on the host. The complete comment path is
-covered by `hosted-runner.test.ts`, including actual annotation persistence.
-
 ## Bounds and verification
 
 Default limits: 30s wall time, 200ms per synchronous isolate entry, 64MiB isolate
@@ -211,7 +208,7 @@ Fast checks:
 
 ```sh
 npm run validate
-npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/hosted-runner.test.ts services/app/__tests__/runner-api.test.ts
+npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/server/__tests__/hosted-boundary.test.ts services/utils/__tests__/hosted-agent-client.test.ts services/app/__tests__/runner-api.test.ts
 ```
 
 The runner CI repeats these against the production worker image and checks OS

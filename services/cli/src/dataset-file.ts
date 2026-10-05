@@ -1,3 +1,4 @@
+import {isProgramFile} from './program-file';
 import {extname} from 'node:path';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {coerceRows} from '../../app/lib/data-ingest/coerce';
@@ -12,7 +13,7 @@ import {CliError} from './errors';
  * pulls a dataset file asks here, so the three never disagree.
  */
 export const DATASET_EXTENSIONS=['.csv','.json','.geojson'];
-export const isDatasetFile=(path:string):boolean=>DATASET_EXTENSIONS.includes(extname(path).toLowerCase());
+export const isDatasetFile=(path:string):boolean=>!isProgramFile(path)&&DATASET_EXTENSIONS.includes(extname(path).toLowerCase());
 
 type Row=Record<string,unknown>;
 const isRows=(rows:unknown):rows is Row[]=>Array.isArray(rows)&&rows.every(row=>row!==null&&typeof row==='object'&&!Array.isArray(row));

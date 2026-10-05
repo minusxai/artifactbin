@@ -1,3 +1,6 @@
+import {services} from '../platform/services';
+import {managedTerminalView,managedTerminalInput,stopManagedTerminal} from './managed-terminal';
+import {externalHostedProofHash} from './hosted-comments';
 import {hostedRemoteAgent} from './hosted-interface';
 import {isTerminalFeedback} from './terminal-input';
 import { getArtifactById } from '../artifacts/store';
@@ -42,12 +45,22 @@ export class RemoteAgents {
  }
  async list(owner:string){
   const hosted=hostedRemoteAgent();const defaultAgent=hosted?await hosted.ensure(owner):undefined;
-  const db=await getDb();const saved=(await db.query<AgentRow>("SELECT * FROM remote_agents WHERE owner=$1 AND COALESCE(info->>'removed','false')<>'true' ORDER BY seen_at DESC LIMIT 100",[owner])).rows;
-  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)}))];
+  const db=await getDb();
+  if(defaultAgent){
+   // External services do not share app storage. Keep only routing/mention metadata here;
+   // The proof stays app-internal; it is never returned as a local-agent credential.
+   await db.query('INSERT INTO remote_agents(id,owner,name,proof_hash,info) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',[defaultAgent.id,owner,defaultAgent.name,externalHostedProofHash(owner,defaultAgent.id)??hash(randomUUID()),JSON.stringify(defaultAgent)]);
+   const registered=await this.row(db,owner,defaultAgent.id);
+   if(registered&&externalHostedProofHash(owner,defaultAgent.id))await db.query('UPDATE remote_agents SET proof_hash=$3,seen_at=now() WHERE id=$1 AND owner=$2',[defaultAgent.id,owner,externalHostedProofHash(owner,defaultAgent.id)]);
+   if(!registered)throw new RemoteError('Managed session conflicts with an existing agent',409);
+  }
+  const saved=(await db.query<AgentRow>("SELECT * FROM remote_agents WHERE owner=$1 AND COALESCE(info->>'removed','false')<>'true' ORDER BY seen_at DESC LIMIT 100",[owner])).rows;
+  await Promise.all(saved.filter(r=>r.info.runId).map(async r=>{try{const run=await services().runner.getRun({userId:owner,runId:r.info.runId!});r.info.online=['queued','running'].includes(run.status)&&r.active;}catch{r.info.online=false;}}));
+  const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:r.info.runId?r.info.online:defaultAgent?.id===r.id?defaultAgent.online:live.some(s=>s.id===r.id&&s.online)})),...(defaultAgent&&!saved.some(r=>r.id===defaultAgent.id)?[defaultAgent]:[])];
  }
  async read(owner:string,id:string){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.ensure(owner);const saved=await this.row(await getDb(),owner,id);if(saved){if(saved.info.removed)throw new RemoteError('Session removed',410);let online=false;try{online=this.relay.read(owner,id).online;}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
- async view(owner:string,id:string,since:number){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.view(owner,id,since);const session=await this.read(owner,id);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
- async owns(owner:string,id:string){return this.relay.owns(owner,id)||!!await this.row(await getDb(),owner,id);}
+ async view(owner:string,id:string,since:number){const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.view(owner,id,since);const session=await this.read(owner,id);if(session.runId)return managedTerminalView(owner,session);try{return {...await this.relay.view(owner,id,since),session};}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
+ async owns(owner:string,id:string){return !!hostedRemoteAgent()?.owns(owner,id)||this.relay.owns(owner,id)||!!await this.row(await getDb(),owner,id);}
  async ready(owner:string,id:string,proof:string){
   const db=await getDb();await db.transaction(async tx=>{
    const r=await this.row(tx,owner,id,true);if(!r){this.relay.ready(owner,id,proof);return;}
@@ -58,6 +71,7 @@ export class RemoteAgents {
  }
  async input(owner:string,id:string,data:string){
   const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.input(owner,id,data);
+  const native=await this.row(await getDb(),owner,id);if(native?.info.runId){if(!native.active)throw new RemoteError('Session stopped',410);return managedTerminalInput(owner,native.info,data);}
   const db=await getDb();await db.transaction(async tx=>{
    const r=await this.row(tx,owner,id,true);
    if(r&&(!r.active||r.info.activity==='stopping'))throw new RemoteError('Session stopped',410);
@@ -68,7 +82,8 @@ export class RemoteAgents {
   });
  }
  async stop(owner:string,id:string){
-  const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.stop(owner,id);
+  const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id)){await hosted.stop(owner,id);if(externalHostedProofHash(owner,id)){const db=await getDb();await db.transaction(tx=>this.unavailable(tx,id));}return;}
+  const native=(await this.row(await getDb(),owner,id))?.info;if(native?.runId){await stopManagedTerminal(owner,native);await (await getDb()).query("UPDATE remote_agents SET active=false,info=$3 WHERE id=$1 AND owner=$2",[id,owner,JSON.stringify({...native,online:false,activity:'stopping'})]);return;}
   const db=await getDb();await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(!r){this.relay.stop(owner,id);return;}if(r.active){r.info.activity='stopping';await this.save(tx,r);}});
  }
  async stopped(owner:string,id:string,exitCode:number){
@@ -78,6 +93,7 @@ export class RemoteAgents {
  async remove(owner:string,id:string){
   const hosted=hostedRemoteAgent();if(hosted?.owns(owner,id))return hosted.stop(owner,id);
   if(!await this.owns(owner,id))throw new RemoteError('Session not found',404);
+  const native=(await this.row(await getDb(),owner,id))?.info;if(native?.runId)await stopManagedTerminal(owner,native);
   const db=await getDb();const managed=await db.transaction(async tx=>{const r=await this.row(tx,owner,id,true);if(r){r.active=false;r.info.removed=true;r.info.activity='stopped';r.info.online=false;await this.save(tx,r);await this.unavailable(tx,id);}return !!r;});
   // Durable agents can outlive their relay; legacy sessions retain its 410 on repeated removal.
   try{this.relay.remove(owner,id);}catch(error){if(!managed||!(error instanceof RemoteError)||![404,410].includes(error.status))throw error;}
@@ -125,6 +141,7 @@ export class RemoteAgents {
   if(!owner||comment.author.kind!=='human')return;
   for(const [id,label] of new Map([...sessionMentions(comment.body)].map(m=>[m[2]!,m[1]!.slice(1)]))){
    const r=await this.row(tx,owner,id,true);
+   if(r?.info.runId)continue; // Native terminal access is not an AFbin comment relay.
    if(!r&&this.relay.owns(owner,id))continue; // legacy delivery remains in mentions.ts
    if(r?.active){
     const superseded=await tx.query("UPDATE remote_work SET phase='superseded',updated_at=now() WHERE session_id=$1 AND thread_id=$2 AND phase IN ('blocked','uncertain') RETURNING id",[id,threadId]);

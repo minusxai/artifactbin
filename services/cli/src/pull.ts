@@ -1,3 +1,4 @@
+import {programFileBytes} from './program-file';
 import {rowsCsv} from './tabular';
 import type {ArtifactResourceFile} from '@artifactbin/contracts';
 import {datasetRows,endLine} from './dataset-source';
@@ -76,8 +77,9 @@ function checkResourceType(requested:unknown,snapshot:Snapshot):void{
 }
 async function representation(snapshot:Snapshot,head:Snapshot,format:string|undefined,client:HttpClient):Promise<string>{
  if(format==='yaml')return writeResourceFile(snapshotResource(snapshot,{type:resourceKind(snapshot.format)} as ArtifactResourceFile));
- if(format==='jsx'&&snapshot.format!=='markup'||['csv','json'].includes(format??'')&&snapshot.format!=='dataset')throw new CliError('unsupported_format',`${snapshot.format} cannot be pulled as ${format}.`);
+ if(format==='jsx'&&snapshot.format!=='markup'||(format==='csv'&&snapshot.format!=='dataset'||format==='json'&&!['dataset','program'].includes(snapshot.format??'')))throw new CliError('unsupported_format',`${snapshot.format} cannot be pulled as ${format}.`);
  if(snapshot.format==='markup'||snapshot.format==='folder')return writeDocument(snapshotDocument({...snapshot,edit_id:head.edit_id,state:head.state}));
+ if(snapshot.format==='program')return programFileBytes(snapshot.program??JSON.parse((await client.content(`/artifacts/${snapshot.id}/content?version=${snapshot.version}`)).bytes.toString())).toString();
  if(snapshot.format==='dataset'){
   const content=await client.content(`/artifacts/${snapshot.id}/content?version=${snapshot.version}`);
   if(!content.contentType.startsWith('application/json'))return endLine(content.bytes.toString());
@@ -135,7 +137,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
      selected={...head,...history,id:head.id,version:target.version,edit_id:head.edit_id,state:head.state,theme:meta?.theme as string|null??head.theme,template:meta?.template as string|null??head.template} as Snapshot;}
    }
    const snapshot=selected??head;
-   if(options.format==='jsx'&&snapshot.format!=='markup'||['csv','json'].includes(options.format??'')&&snapshot.format!=='dataset')throw new CliError('unsupported_format',`${snapshot.format} cannot be pulled as ${options.format}.`);
+   if(options.format==='jsx'&&snapshot.format!=='markup'||(options.format==='csv'&&snapshot.format!=='dataset'||options.format==='json'&&!['dataset','program'].includes(snapshot.format??'')))throw new CliError('unsupported_format',`${snapshot.format} cannot be pulled as ${options.format}.`);
    const path=target.path??join(target.directory??'',`${target.id}${options.format&&options.format!=='original'?'.'+options.format:defaultExtension(snapshot)}`);
    const before=target.path?target.before:await readOptional(await confinedPath(workspace.root,path));
    if(before&&!target.path&&!options.force)throw new CliError('local_changed',`${path} already exists. Choose a destination or use --force.`);
@@ -157,6 +159,8 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
      }
      bytes=Buffer.from(writeDocument(merged.document));
     }
+   }else if(snapshot.format==='program'){
+    bytes=programFileBytes(snapshot.program??JSON.parse((await client.content(`/artifacts/${target.id}/content?version=${snapshot.version}`)).bytes.toString()));
    }else if(['dataset','image','pdf','file'].includes(snapshot.format??'')){
     const content=await client.content(`/artifacts/${target.id}/content?version=${snapshot.version}`);
     if(snapshot.format!=='dataset')bytes=content.bytes;
@@ -191,6 +195,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
  return options.dryRun?run():withLock(workspace.home,workspace.root,run);
 }
 function defaultExtension(snapshot:Snapshot):string{
+ if(snapshot.format==='program')return '.program.json';
  if(snapshot.format==='dataset')return '.json';
  if(snapshot.format==='pdf')return '.pdf';
  if(snapshot.format==='file'&&typeof snapshot.filename==='string')return extname(snapshot.filename).replace(/[^.a-zA-Z0-9]/g,'')||'.bin';

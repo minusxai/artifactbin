@@ -199,6 +199,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   let pick: 'block' | 'area' | 'select' | null = null;
   /** The selectable node under the pointer while block-picking — one at a time. */
   let pickHovered: Element | null = null;
+  let pointerTarget: EventTarget | null = null;
   /** An area being drawn: where the press landed. The band element exists once the drag is real. */
   let drawing: { startX: number; startY: number; target: EventTarget | null } | null = null;
   /** The drawn area whose comment is being composed — repainted from its anchor on every sync, gone with the selection. */
@@ -562,6 +563,13 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if (mode) (root ?? doc.documentElement).setAttribute(ANNOTATE_PICKING_ATTR, mode);
     else (root ?? doc.documentElement).removeAttribute(ANNOTATE_PICKING_ATTR);
     if (mode !== 'block' && mode !== 'select') setPickHovered(null);
+    else {
+      // The asynchronous parent message may arrive after the pointer entered
+      // this block. Pointerover will not fire again until it leaves the node.
+      const remembered = pointerTarget as Element | null;
+      const target = remembered?.isConnected ? remembered : [...scope.querySelectorAll(':hover')].at(-1) ?? null;
+      setPickHovered(selectableAt(target));
+    }
     if (mode !== 'area' && mode !== 'select' && drawing) { drawing = null; removeBand(); }
   };
 
@@ -649,7 +657,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   };
 
   const onAreaPointerMove = (event: PointerEvent) => {
-    if (!drawing) return;
+    pointerTarget = event.target;
+    if (!drawing) {
+      if (pick === 'block' || pick === 'select') setPickHovered(selectableAt(event.target));
+      return;
+    }
     const rect = bandRect(drawing, event);
     const real = rect.width >= ANNOTATION_AREA_MIN_PX || rect.height >= ANNOTATION_AREA_MIN_PX;
     if (!real && !scope.querySelector(`[${ANNOTATE_BAND_ATTR}]`)) return;
@@ -696,10 +708,12 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   const cancelDrawing = () => { if (!drawing) return; swallowSelectionClick = false; drawing = null; removeBand(); setPickHovered(null); };
 
   const onPointerOver = (event: PointerEvent) => {
+    pointerTarget = event.target;
     reportHover(event.target);
     if ((pick === 'block' || pick === 'select') && !drawing) setPickHovered(selectableAt(event.target));
   };
   const onPointerOut = (event: PointerEvent) => {
+    pointerTarget = event.relatedTarget;
     reportHover(event.relatedTarget);
     if ((pick === 'block' || pick === 'select') && !drawing) setPickHovered(selectableAt(event.relatedTarget));
   };

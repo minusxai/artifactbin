@@ -1,6 +1,6 @@
 # Compatibility URL: npm is the only supported afbin distribution.
 $ErrorActionPreference = 'Stop'
-$Version = '0.4.0'
+$Version = '0.4.1'
 $Origin = 'https://app.artifactbin.dev'
 Invoke-RestMethod "$Origin/chat/ensure-node.ps1" | Invoke-Expression
 npx.cmd --yes @afbin/cli@latest setup --server $Origin

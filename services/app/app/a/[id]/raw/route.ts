@@ -147,6 +147,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       });
     }
 
+    case 'program':
     case 'viz':
       return new Response(artifact.source ?? '', {
         status: 200,

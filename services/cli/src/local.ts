@@ -1,3 +1,4 @@
+import {isProgramFile} from './program-file';
 import {readConflicts} from './conflict-state';
 import type {ShareEntry} from '@artifactbin/contracts';
 import {createTwoFilesPatch} from 'diff';
@@ -22,7 +23,7 @@ export async function localDiff(workspace:Workspace,paths?:string[]){
  for(const file of files.filter(file=>file.status!=='unchanged')){
   const before=file.tracked?(await baselineOf(workspace,file.path,file.tracked))?.toString()??'':'';
   const after=file.bytes?.toString()??'';
-  if(before!==after)diffs.push({path:file.path,diff:file.document||file.resource?createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,before,after,'last observed','working file',{context:3}):`Binary file ${file.path}: ${file.status}`});
+  if(before!==after)diffs.push({path:file.path,diff:file.document||file.resource||isProgramFile(file.path)?createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,before,after,'last observed','working file',{context:3}):`Binary file ${file.path}: ${file.status}`});
   const source=await localSourceDiff(workspace,file);if(source)diffs.push(source);
  }
  return{remote:'last_observed',diffs};

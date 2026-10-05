@@ -1,2 +1,4 @@
-import {deleteSchedule} from '@/lib/runner';
-export const DELETE=(request:Request,{params}:{params:Promise<{id:string}>})=>params.then(p=>deleteSchedule(request,p.id));
+import {scheduleRequest} from '@/lib/runner';
+export const GET=(request:Request,{params}:{params:Promise<{id:string}>})=>params.then(p=>scheduleRequest(request,p.id));
+export const PATCH=GET;
+export const DELETE=GET;

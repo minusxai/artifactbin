@@ -33,7 +33,7 @@ describe('the annotation composer', () => {
     expect(JSON.parse(String(creates()[0]?.init?.body)).body).toBe('[@review](/chat?session=11111111-1111-1111-1111-111111111111) Please update this');
   });
 
-  it.each([[], [online, { ...online, id: 'second' }], [{ ...online, online: false }], [{ ...online, activity: 'stopped' }]].map((sessions) => ({ sessions })))('leaves new comments empty without a sole eligible online agent: %j', async ({ sessions }) => {
+  it.each([[], [online, { ...online, id: 'second' }], [{ ...online, online: false }], [{ ...online, activity: 'stopped' }], [{...online,runId:'native-box'}]].map((sessions) => ({ sessions })))('leaves new comments empty without a sole eligible online agent: %j', async ({ sessions }) => {
     knobs.sessions = sessions;
     openComposer(); await flush();
     expect(screen.getByLabelText('Annotation comment')).toHaveValue('');

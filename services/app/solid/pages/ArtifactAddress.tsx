@@ -26,6 +26,7 @@ import { NotFoundPage } from './NotFound';
 import type { DataAnswer } from './ArtifactData';
 import type { StarterAnswer } from './Starter';
 
+const ProgramPage = lazy(() => import('./Program').then(m => ({default:m.ProgramPage})));
 const FolderPage = lazy(() => import('./Folder').then((m) => ({ default: m.FolderPage })));
 const ArtifactDataPage = lazy(() => import('./ArtifactData').then((m) => ({ default: m.ArtifactDataPage })));
 const StarterPage = lazy(() => import('./Starter').then((m) => ({ default: m.StarterPage })));
@@ -52,6 +53,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
   const served = takeBootstrap<ArtifactAnswer>(window.location.pathname, 'artifact');
   if (editing()) {
     // `/edit`: a dataset's address is its editor; every other artifact keeps its one page.
+    if (served?.surface?.format==='program') return <ProgramPage artifactId={id()} owner={served.role==='owner'}/>;
     if (served?.folder) return <FolderPage folder={served.folder} role={served.role} workspace={served.workspace} ownerUsername={served.ownerUsername} />;
     if (isStarter(served)) return <StarterPage answer={served as unknown as StarterAnswer} />;
     if (isData(served) && served!.surface!.format !== 'dataset') return <ArtifactDataPage answer={served as unknown as DataAnswer} />;
@@ -60,7 +62,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
   const page = usePageData<ArtifactAnswer>(() => `/api/page/artifact/${id()}`, { seed: () => served });
   const compiledDocument = () => {
     const answer = page.data();
-    return !!answer?.surface && !answer.folder && !isData(answer) && !isStarter(answer);
+    return !!answer?.surface && !answer.folder && !isData(answer) && !isStarter(answer) && answer.surface.format!=='program';
   };
   createEffect(() => {
     // A document found by a client navigation: the server's page for it is the compiled one.
@@ -72,6 +74,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
     <Match when={(page.error() as { status?: number } | undefined)?.status === 404}><NotFoundPage /></Match>
     <Match when={page.data()?.folder}>{(folder) => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}</Match>
     <Match when={isStarter(page.data())}><StarterPage answer={page.data() as unknown as StarterAnswer} /></Match>
+    <Match when={page.data()?.surface?.format==='program'}><ProgramPage artifactId={id()} owner={page.data()?.role==='owner'}/></Match>
     <Match when={isData(page.data())}><ArtifactDataPage answer={page.data() as unknown as DataAnswer} /></Match>
     <Match when={compiledDocument() && served}><NotFoundPage /></Match>
   </Switch>;

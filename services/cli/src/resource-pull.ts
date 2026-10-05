@@ -1,3 +1,4 @@
+import {programFileBytes} from './program-file';
 import {basename,dirname,extname,join,relative} from 'node:path';
 import type {ArtifactResourceFile} from '@artifactbin/contracts';
 import {baselineOf,type Snapshot,type TrackedFile,type Workspace} from './workspace';
@@ -12,7 +13,7 @@ import {parseResourceFile,reconcileResource,snapshotResource,writeResourceFile,t
 /** Prepare YAML and native source bytes together; the caller journals the complete local commit. */
 export async function prepareResourcePull(workspace:Workspace,path:string,snapshot:Snapshot,previous:TrackedFile|undefined,before:Buffer|null,client:HttpClient,force=false){
  const root=workspace.root;
- const type=snapshot.format==='markup'?'artifact':snapshot.format==='folder'?'folder':snapshot.format==='dataset'?'dataset':'file';
+ const type=['markup','program'].includes(snapshot.format??'')?'artifact':snapshot.format==='folder'?'folder':snapshot.format==='dataset'?'dataset':'file';
  const changes:FileChange[]=[];
  const backups:Array<{path:string;bytes:Buffer}>=[];
  let source:ResourceSource|undefined;
@@ -24,11 +25,11 @@ export async function prepareResourcePull(workspace:Workspace,path:string,snapsh
   // A dataset's source is its rows when the server serves rows, and its <Dataset> definition otherwise.
   // The served representation is the only discriminator every actor can see; a reader's catalog is stripped.
   const definition=type==='dataset'&&(fetched?!fetched.contentType.startsWith('application/json'):extname(previousPath??'').toLowerCase()==='.jsx');
-  const extension=type==='dataset'?definition?'.jsx':'.json':type==='artifact'?'.jsx':snapshot.format==='pdf'?'.pdf':typeof snapshot.filename==='string'?extname(snapshot.filename):'.bin';
+  const extension=type==='dataset'?definition?'.jsx':'.json':type==='artifact'?snapshot.format==='program'?'.program.json':'.jsx':snapshot.format==='pdf'?'.pdf':typeof snapshot.filename==='string'?extname(snapshot.filename):'.bin';
   const sourcePath=previousPath??join(dirname(path),basename(path,extname(path))+extension);
   const absolute=await confinedPath(root,sourcePath);
   const local=await readOptional(absolute);
-  let bytes=same?Buffer.from(previous!.source!.bytes,'base64'):type==='artifact'?Buffer.from(snapshot.markup??''):fetched!.bytes;
+  let bytes=same?Buffer.from(previous!.source!.bytes,'base64'):type==='artifact'?snapshot.format==='program'?programFileBytes(snapshot.program):Buffer.from(snapshot.markup??''):fetched!.bytes;
   if(type==='dataset'&&!same)bytes=definition?Buffer.from(endLine(bytes.toString())):Buffer.from(extname(sourcePath).toLowerCase()==='.csv'?rowsCsv(datasetRows(bytes)):JSON.stringify(datasetRows(bytes),null,2)+'\n');
   const declared=relative(dirname(path),sourcePath);
   source={path:sourcePath,declared,bytes:bytes.toString('base64'),version:snapshot.version};

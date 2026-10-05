@@ -186,3 +186,16 @@ unchanged; what needs artifactbin says so through `unavailable()`. Save rewrites
 (`save-file.ts`); offline edits sync later by a three-way merge onto the version the file was downloaded
 from, and the server re-validates everything. `snapshot-transport.ts` answers the file's queries from the
 snapshot, and nothing in the file opens a connection.
+
+**Artifact server handlers.** An ordinary markup artifact can carry one
+`<Helmet><script type="server">{\`…\`}</script></Helmet>` alongside its browser
+module. Publish validates the server module and default handler; reader preparation
+never includes it in browser code, island data or generated HTML. The source is
+still part of the artifact's permission-checked source/edit/export API, so it
+must contain no credentials. `POST /api/artifacts/:id/runs` authenticates the
+caller and pins the current published handler, declarations, source, version and
+edit ID before sending to the configured RunnerService. Run reads, events and
+cancellation are user scoped; current artifact/dataset ACLs are checked on
+operations, not frozen in the pinned source. Schedules keep the pinned program.
+Existing untyped default-exporting Lambda scripts remain invocable as a legacy
+compatibility path; republish with `type="server"` to remove browser execution.

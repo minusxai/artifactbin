@@ -5,6 +5,7 @@ import { useSearchParams } from '@solidjs/router';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import type {RunnerCapabilities} from '@artifactbin/contracts';
 import type { RemoteSessionInfo, RemoteView } from '../../../contracts/src/remote';
 import { Tooltip } from '../components/Tooltip';
 import { Button } from '../components/ui';
@@ -82,7 +83,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
         }
         if (stopped) return;
         cursor = view.seq; failures = 0;
-        setConnection(view.session.online || view.session.exitCode !== null ? '' : 'Reconnecting… Waiting for your local terminal.');
+        setConnection(view.session.online || view.session.exitCode !== null ? '' : view.session.runId ? view.session.activity==='starting'?'Starting your hosted box…':view.session.activity==='stopped'?'This run has ended. Start the same box name to restore your home files.':'Waiting for your hosted terminal…' : 'Reconnecting… Waiting for your local terminal.');
       } catch (reason) {
         if (!stopped) {
           failures++;
@@ -107,7 +108,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
     container.addEventListener('touchstart', touchStart, { passive: true });
     container.addEventListener('touchmove', touchMove, { passive: false, capture: true });
     const observer = new ResizeObserver(() => {
-      if (current?.controller === 'web') {
+      if (current?.controller === 'web' && !current.runId) {
         const size = f.proposeDimensions();
         if (size && (size.cols !== t.cols || size.rows !== t.rows)) void send({ type: 'control', controller: 'web', cols: Math.max(2, Math.min(300, size.cols)), rows: Math.max(2, Math.min(120, size.rows)) }).catch(() => {});
       }
@@ -122,6 +123,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
 
   const switchView = () => {
     const previous = mobile(); setResizing(true); setMobile(!previous);
+    if(current?.runId){setResizing(false);return;}
     requestAnimationFrame(() => {
       const size = fit?.proposeDimensions();
       if (!size) { setMobile(previous); setResizing(false); setError('Could not measure the terminal. Try switching views again.'); return; }
@@ -132,7 +134,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
   const online = () => info()?.online ?? false;
   const canType = () => online() && !connection();
   const ended = () => info()?.exitCode !== null && info()?.exitCode !== undefined;
-  const canStop = () => !!info()?.managed && online() && !ended();
+  const canStop = () => !!info()?.managed && (online() || !!info()?.runId && info()?.activity==='starting') && !ended();
   const actionLabel = () => ended() ? 'Remove session' : info()?.managed ? (canStop() ? 'Stop agent' : 'Remove agent') : 'Disconnect remote session';
   const removeOrStop = () => {
     setActing(true);
@@ -156,6 +158,9 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
       <Show when={!ended()}><button aria-label={mobile() ? 'Switch to desktop' : 'Switch to mobile'} disabled={!online() || resizing()} class="rounded border border-edge px-3 py-2 disabled:opacity-40" onClick={switchView}>{mobile() ? 'Switch to desktop' : 'Switch to mobile'}</button></Show>
       <button aria-label={actionLabel()} disabled={!info() || acting() || (canStop() && info()?.activity === 'stopping')} class="rounded border border-edge px-3 py-2 disabled:opacity-40" onClick={removeOrStop}>{acting() ? (canStop() ? 'Stopping…' : 'Removing…') : canStop() && info()?.activity === 'stopping' ? 'Stopping…' : actionLabel()}</button>
     </div>
+    <Show when={info()?.runId}><p class="mb-3 text-xs text-muted">Hosted terminals use a fixed 100 × 30 size; narrow views scroll horizontally.</p><p class="mb-3 text-xs text-muted">For Codex authentication, run <code>codex login --device-auth</code> in a shell, then follow its browser link. For Claude Code, use its <code>/login</code> flow.</p><p class="mb-3 text-xs text-muted">To connect artifact comments, run afbin remote for your installed agent in a separate shell or SSH session.</p></Show>
+    <Show when={info()?.sshCommand}><CopyCommand label="SSH into this box" command={info()!.sshCommand!} /></Show>
+    <Show when={info()?.sshHostKey}><CopyCommand label="SSH known_hosts entry" command={info()!.sshHostKey!} /><p class="mb-3 text-xs text-muted">Add this entry to your SSH known_hosts file to verify this box before connecting.</p></Show>
     <Show when={connection()}><p role="status" class="mb-2 text-sm text-muted">{connection()}</p></Show>
     <Show when={error()}><p role="alert" class="mb-2 text-sm text-red-500">{error()}</p></Show>
     <div style={{ 'max-width': mobile() ? '420px' : undefined }}>
@@ -171,7 +176,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
         <button aria-label="Send message" disabled={!canType() || sending() || !draft().trim()} class="rounded bg-accent px-4 text-bg disabled:opacity-40">Send</button>
       </form></Show>
       <Show when={!ended()}><div class="mt-2 flex flex-wrap gap-2"><For each={([['Enter', '\r'], ['Escape', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['Ctrl+C', '\x03']] as const)}>{([name, data]) => <button aria-label={`Send ${name}`} disabled={!canType()} class="rounded border border-edge px-3 py-2 text-xs disabled:opacity-40" onClick={() => void send({ type: 'input', data }).catch(() => {})}>{name}</button>}</For></div></Show>
-      <p class="mt-3 text-xs text-muted" hidden={ended()}>Swipe up or down in the terminal to scroll its history, or use the scroll buttons. Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect until you switch views. {info()?.managed ? (canStop() ? 'Stop agent ends this background process.' : 'Remove agent removes remote access and prevents this session from reconnecting. The local process may still be running.') : 'Disconnect removes remote access; your local process keeps running.'}</p>
+      <p class="mt-3 text-xs text-muted" hidden={ended()}>Swipe up or down in the terminal to scroll its history, or use the scroll buttons. Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect until you switch views. {info()?.runId ? (canStop() ? 'Stop agent ends this run. Your home files are retained for the same box name.' : 'This terminal belongs to a hosted run. Home files are retained when the run ends; removing the entry does not erase them.') : info()?.managed ? (canStop() ? 'Stop agent ends this background process.' : 'Remove agent removes remote access and prevents this session from reconnecting. The local process may still be running.') : 'Disconnect removes remote access; your local process keeps running.'}</p>
     </div>
   </section>;
 }
@@ -204,14 +209,40 @@ function InstallInstructions(): JSX.Element {
   </div>;
 }
 
+function ManagedRunSetup(props:{onCreated:(session:RemoteSessionInfo)=>void}):JSX.Element {
+  const [name,setName]=createSignal('my-agent'),[command,setCommand]=createSignal('bash'),[key,setKey]=createSignal('');
+  const [busy,setBusy]=createSignal(false),[error,setError]=createSignal('');
+  const start=async(event:SubmitEvent)=>{
+    event.preventDefault();if(busy())return;setBusy(true);setError('');
+    try {
+      const response=await fetch('/api/runs',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:crypto.randomUUID?.()??Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join(''),name:name(),command:[command()],...(key().trim()?{sshPublicKey:key().trim()}:{}),compute:{vcpu:1,memoryMiB:2048,ttlSeconds:3600}})});
+      const result=await response.json();if(!response.ok)throw Error(result.error??'Could not start your agent');
+      props.onCreated(result.session);
+    }catch(reason){setError(reason instanceof Error?reason.message:'Could not start your agent');}finally{setBusy(false);}
+  };
+  return <form class="mb-5 space-y-3 rounded border border-edge p-3" onSubmit={start}>
+    <h2 class="font-semibold">Run your agent on a hosted box</h2>
+    <label class="block text-sm">Box name<input aria-label="Box name" class="mt-1 w-full rounded border border-edge bg-surface p-2" value={name()} onInput={e=>setName(e.currentTarget.value)} pattern="[a-z][a-z0-9_-]{0,31}" required /></label>
+    <label class="block text-sm">Program<select aria-label="Hosted program" class="mt-1 w-full rounded border border-edge bg-surface p-2" value={command()} onChange={e=>setCommand(e.currentTarget.value)}><option value="bash">Shell</option><option value="claude">Claude Code</option><option value="codex">Codex</option></select></label>
+    <label class="block text-sm">SSH public key (optional)<textarea aria-label="SSH public key" class="mt-1 w-full rounded border border-edge bg-surface p-2" value={key()} onInput={e=>setKey(e.currentTarget.value)} placeholder="ssh-ed25519 …" /></label>
+    <p class="text-xs text-muted">1 vCPU · 2 GiB RAM · up to 1 hour. Sign in to your agent in the terminal. Your home files are retained for the same box name.</p>
+    <button class="rounded bg-accent px-3 py-2 text-bg disabled:opacity-40" disabled={busy()}>{busy()?'Starting…':'Start hosted box'}</button>
+    <Show when={error()}><p role="alert" class="text-sm text-red-500">{error()}</p></Show>
+  </form>;
+}
+
 export function ChatPage(): JSX.Element {
   const [params, setParams] = useSearchParams();
   const id = () => typeof params.session === 'string' ? params.session : null;
+  const [managed,setManaged]=createSignal(false);
+  const capabilitiesAbort=new AbortController();
+  void fetch('/api/run-capabilities',{credentials:'same-origin',signal:capabilitiesAbort.signal}).then(async response=>{if(response.ok){const value=await response.json() as RunnerCapabilities;setManaged(value.version===1&&value.managedProcesses);}}).catch(()=>{});
+  onCleanup(()=>capabilitiesAbort.abort());
   const [setupExpanded, setSetupExpanded] = createSignal(false);
   const [historyExpanded, setHistoryExpanded] = createSignal(false);
   const page = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions', { loader: (signal) => request('', undefined, 'GET', signal) });
   const sessions = () => page.data()?.sessions ?? [];
-  const isActive = (session: RemoteSessionInfo) => session.online && session.exitCode == null;
+  const isActive = (session: RemoteSessionInfo) => (session.online || !!session.runId && session.activity==='starting') && session.exitCode == null;
   const previousCount = () => sessions().filter((session) => !isActive(session)).length;
   const visibleSessions = () => sessions().filter((session) => isActive(session) || historyExpanded() || session.id === id());
   const error = () => page.error() ? connectionMessage(page.error()) : '';
@@ -229,9 +260,10 @@ export function ChatPage(): JSX.Element {
     <h1 class="mb-1 text-xl font-semibold">Remote sessions</h1><p class="mb-6 text-sm text-muted">Your agents, on your machine or hosted for you.</p>
     <Show when={error()}><p role="alert" class="mb-4 text-sm">{error()} <Show when={error().startsWith('Sign in')}><a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id() ? `?session=${id()}` : ''}`)}`} class="underline">Sign in</a></Show></p></Show>
     <div class="flex flex-col gap-6 md:flex-row"><aside class="shrink-0 md:w-80">
-      <For each={visibleSessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : 'Offline'}</span></button>}</For>
+      <For each={visibleSessions()}>{(session) => <button aria-label={`Open ${session.name}`} aria-pressed={session.id === id()} class={`mb-2 block w-full rounded border p-3 text-left ${session.id === id() ? 'border-accent bg-surface' : 'border-edge'}`} onClick={() => setParams({ session: session.id })}><span class="block truncate">{session.name}</span><span class="text-xs text-muted">{session.harness} · {session.exitCode !== null && session.exitCode !== undefined ? 'Ended' : session.online ? 'Online' : session.runId&&session.activity==='starting'?'Starting':'Offline'}</span></button>}</For>
       <Show when={previousCount() > 0}><button type="button" aria-expanded={historyExpanded()} class="mb-4 w-full rounded border border-edge px-3 py-2 text-left text-sm text-muted" onClick={() => setHistoryExpanded((value) => !value)}>{historyExpanded() ? 'Hide' : 'Show'} previous sessions ({previousCount()})</button></Show>
       <Show when={id()}><button type="button" aria-expanded={setupExpanded()} aria-controls="cli-setup" class="mt-2 flex w-full items-center justify-between rounded border border-edge px-3 py-2 text-sm md:hidden" onClick={() => setSetupExpanded((value) => !value)}>CLI setup <span aria-hidden="true">{setupExpanded() ? '−' : '+'}</span></button></Show>
+      <Show when={managed()}><ManagedRunSetup onCreated={session=>{page.seed({sessions:[...sessions().filter(s=>s.id!==session.id),session]});setParams({session:session.id});}} /></Show>
       <div id="cli-setup" class={id() && !setupExpanded() ? 'hidden md:block' : ''}><InstallInstructions /></div>
     </aside><Show when={id()} keyed fallback={<div class="rounded border border-edge p-8 text-muted">Select a session, or start one from your CLI.</div>}>{(sessionId) => <SessionTerminal id={sessionId} onClose={close} />}</Show></div>
   </main>;

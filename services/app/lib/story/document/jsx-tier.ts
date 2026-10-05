@@ -33,6 +33,8 @@ import { documentFonts, invalidFontFamilies } from '../styles/document-fonts';
 import { cspExtensionsOf } from './csp-extensions';
 import { checkDocumentData } from '../data/data-checks';
 import { COMPILED_DATAFLOW } from '../data/parsed-artifact-metadata';
+import { buildLambdaModule } from '@/lib/runner/program.server';
+import { EMPTY_COMPILED_DATAFLOW } from '../data/compiled-dataflow';
 import { validateIconNames } from '../assets/icon-validation.server';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
@@ -156,6 +158,10 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
     compiled = checked.compiled;
   }
 
+  if (split.content.serverScript !== undefined) {
+    try { await buildLambdaModule(split.content.serverScript, compiled ?? EMPTY_COMPILED_DATAFLOW, authorModuleNames(split.content)); }
+    catch (error) { return json({error:'invalid_server_script',details:[{message:error instanceof Error?error.message:'Server handler compilation failed'}]},400); }
+  }
   const compiledCss = await compileStoryCss(sanitized, { force: true });
 
   // The Helmet <title> names the document when the request carries no explicit

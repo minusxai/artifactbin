@@ -39,3 +39,8 @@ export * from './document-update';
 export * from './mutation-notifications';
 
 export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunEvent, RunEventPage, RunReceipt, RunSnapshot, RunnerService } from './runner';
+export type { HostedRemoteAgent, HostedAgentComment, HostedAgentCommentOperation } from './hosted-agent';
+
+export type {RunnerCapabilities,RunnerTerminal} from './runner';
+export * from './schedules';
+export {parseProgramDefinition,type ProgramDefinition} from './program';

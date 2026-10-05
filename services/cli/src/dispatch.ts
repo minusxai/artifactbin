@@ -4,6 +4,7 @@ import {localHistory,localHistoryHead} from './local-history';
 import {importLocalHtml} from './local-html-import';
 import {publishLocalWorkspace} from './local-publication';
 import {registerLocalFiles,findLocalWorkspace,moveLocalFile} from './local-workspace';
+import {scheduleCommand} from './schedules';
 import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
@@ -300,6 +301,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // login JavaScript. Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,onRelease:release=>checkUpdateNotice({home,server:connection!.server,env:context.env,stderr,release}),account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){
    const action=positionals[0];let id=positionals[1];
    if(action==='start'){

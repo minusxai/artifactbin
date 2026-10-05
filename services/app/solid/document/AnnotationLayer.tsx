@@ -125,7 +125,7 @@ function createNewCommentDraft(backend: ArtifactBackend, open: () => boolean) {
     void backend.remoteSessions({ signal: abort.signal })
       .then((data) => {
         if (abort.signal.aborted || touched) return;
-        const online = (data.sessions ?? []).filter((session) => session.online && session.activity !== 'stopped' && session.exitCode === null);
+        const online = (data.sessions ?? []).filter((session) => !session.runId && session.online && session.activity !== 'stopped' && session.exitCode === null);
         if (online.length === 1) setDraft(remoteMention(online[0]!));
       })
       .catch(() => { /* Discovery is optional: a comment can always be written by hand. */ });

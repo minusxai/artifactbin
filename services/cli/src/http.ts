@@ -1,6 +1,6 @@
 import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,isLocalDevelopmentHost,normalizeOrigin} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
-import {CliError} from './commands.js';
+import {CliError} from './errors.js';
 import {CLI_VERSION} from './version';
 import {validVersion} from './version-order';
 import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,type Connection} from './config.js';

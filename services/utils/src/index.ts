@@ -26,3 +26,4 @@ export { renderConnectionPage } from './connection-page';
 export { tableQueryInput } from './table-query';
 
 export {runnerClient} from "./runner-client";
+export { hostedAgentClient, hostedAgentSessionId, hostedAgentCallbackKey, hostedAgentDeliveryKey, hostedAgentDeliveryTransport, hostedAgentTransport } from './hosted-agent-client';
