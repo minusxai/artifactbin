@@ -22,6 +22,7 @@
  */
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { agentDiscovery, agentDiscoveryHead } from '@/lib/serving/agent-discovery-tags';
+import { documentRootAttributes } from '@/lib/story/styles/document-root';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { withModuleDataId } from '@/lib/compiled-page/carriers';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
@@ -144,7 +145,7 @@ export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
   const compiledStory = file.compiled ? inlineStoryElement(compiledHtml, file.metadata.colorMode ?? 'light', file.metadata.theme) : '';
   // `source` right after `format`: the first "source" in the text is the one to edit, not `base.source`.
   const { format, source, ...rest } = file;
-  return `<!doctype html>\n<!-- ${commentSafe(artifactFileAgentNote(file))} -->\n<html lang="en">\n<head>\n<meta charset="utf-8">\n`
+  return `<!doctype html>\n<!-- ${commentSafe(artifactFileAgentNote(file))} -->\n<html lang="en" ${documentRootAttributes(file.metadata.colorMode, file.metadata.theme)}>\n<head>\n<meta charset="utf-8">\n`
     + `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(artifactFileCsp(file.origin, file.bundle !== 'solid' || !!parts.wasm))}">\n`
     + '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
     + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`

@@ -116,6 +116,8 @@ const source = readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/dashb
 const exported = await download(await publish({ markup: source, visibility: 'unlisted' }));
 const FILE_JSON = /(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/;
 const file = parseArtifactFile(JSON.parse(FILE_JSON.exec(exported)[2]));
+// Authored global CSS must affect the document, never the first-party controls.
+file.css.author += '\nbutton { border-radius: 0 !important; font: 40px serif !important; } header { height: 91px !important; }';
 // The second dataset is intentionally not held by this copy. Its free-text
 // filter is frozen while the first import remains live in SQLite.
 file.snapshot.frozen = ['note'];
@@ -218,6 +220,27 @@ const empty = (list) => Array.isArray(list) && list.length === 0;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const show = (value) => JSON.stringify(value).slice(0, 300);
 
+/** Theme recipes read :root, so the shell must match the embedded document metadata. */
+async function expectDocumentRoot(page, metadata, label) {
+  const actual = await page.evaluate(() => ({ theme: document.documentElement.getAttribute('data-theme'),
+    light: document.documentElement.classList.contains('light'), dark: document.documentElement.classList.contains('dark') }));
+  const mode = metadata.colorMode ?? 'light';
+  check(actual.theme === (metadata.theme || null) && actual.light === (mode === 'light') && actual.dark === (mode === 'dark'),
+    `${label}: document root matches embedded theme and mode ${JSON.stringify(actual)}`);
+}
+
+/** FontFaceSet returns actual loaded first-party faces, never a fallback font-family string. */
+async function expectUiFonts(page, label) {
+  const loaded = await page.evaluate(async () => {
+    const families = ['JetBrains Mono Variable', 'IBM Plex Sans'];
+    return Promise.all(families.map(async family => {
+      const faces = await document.fonts.load(`14px "${family}"`, 'Comment Edit Save');
+      return { family, loaded: faces.length > 0 && faces.every(face => face.status === 'loaded') };
+    }));
+  });
+  check(loaded.every(face => face.loaded), `${label}: shared UI font bytes loaded ${JSON.stringify(loaded)}`);
+}
+
 /** Select the first `length` characters of the heading's text, as a reader's drag does. */
 async function selectHeading(page, length) {
   await page.evaluate(({ id, length }) => {
@@ -281,10 +304,18 @@ async function reading(engineName, browser) {
     });
     check((await page.title()) === file.metadata.title, `${name}: document title`);
     await step('the top bar says offline copy, data as of, and links the live version', async () => {
-      const bar = page.getByRole('banner', { name: 'Offline copy' });
-      await expect(bar).toContainText(`Offline copy of ${file.metadata.title}`);
-      await expect(bar).toContainText('data as of');
-      await expect(bar.getByRole('link', { name: 'Open live version' })).toHaveAttribute('href', file.liveUrl);
+      const bar = page.getByRole('banner', { name: 'Page bar' });
+      await expect(bar).toContainText(file.metadata.title);
+      await expect(bar).toContainText('Offline');
+      const metrics = await page.getByRole('button', { name: 'Comment', exact: true }).evaluate(button => ({ height: button.getBoundingClientRect().height, radius: getComputedStyle(button).borderRadius, fontSize: getComputedStyle(button).fontSize, barHeight: button.closest('header').getBoundingClientRect().height, shadow: button.getRootNode() instanceof ShadowRoot }));
+      await expectDocumentRoot(page, file.metadata, name);
+      await expectUiFonts(page, name);
+      check(metrics.shadow && metrics.barHeight === 44 && metrics.height === 36 && metrics.radius === '8px' && metrics.fontSize !== '40px', `${name}: shared protected chrome metrics ${JSON.stringify(metrics)}`);
+      await page.getByRole('button', { name: 'Open artifact controls', exact: true }).click();
+      const controls = page.getByRole('region', { name: 'Artifact controls' });
+      await expect(controls).toContainText('Data as of');
+      await expect(controls.getByRole('link', { name: 'Open live version' })).toHaveAttribute('href', file.liveUrl);
+      await page.getByRole('button', { name: 'Dismiss Offline copy' }).click();
     });
 
     // The chart draws, from the same rows: one bar per month, summed.
@@ -385,7 +416,7 @@ async function editing(engineName, browser) {
 
     // What needs artifactbin says so where its control is.
     await step('history, image URL and query notebook reasons', async () => {
-      const history = page.getByRole('tab', { name: 'History' }).first();
+      const history = page.getByRole('button', { name: 'History' }).first();
       await expect(history).toBeDisabled();
       await expect(history).toHaveAccessibleDescription(HISTORY_REASON);
       await page.getByRole('button', { name: 'Insert', exact: true }).click();
@@ -417,13 +448,17 @@ async function editing(engineName, browser) {
     await reopened.goto(pathToFileURL(saved).href);
     await step('reopened: the edit, and Changes by name', async () => {
       await expect(reopened.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
+      await expectDocumentRoot(reopened, file.metadata, `${name} saved copy`);
+      await expectUiFonts(reopened, `${name} saved copy`);
       await expect(reopened.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
       await expect(reopened.getByRole('alertdialog')).toHaveCount(0); // no crash-buffer offer for a copy just saved
+      await reopened.getByRole('button', { name: 'Open artifact controls' }).click();
       await reopened.getByRole('button', { name: /^Changes/ }).click();
       const changes = reopened.getByRole('region', { name: 'Changes in this file' });
       await expect(changes).toContainText('Asha');
       await expect(changes).toContainText("Edited text in 'Quarterly sales'");
       await reopened.getByRole('button', { name: /^Changes/ }).click();
+      await reopened.getByRole('button', { name: 'Dismiss Offline copy' }).click();
     });
 
     // Invalid markup in code view: the validator's reason, and nothing applied.
@@ -454,7 +489,28 @@ async function editing(engineName, browser) {
       await expect(reopened.getByRole('alert').filter({ hasText: 'Fix the source before saving' })).toBeVisible();
       await expect(plain).toHaveValue(rejected);
       await expect(reopened.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+      await reopened.getByRole('button', { name: 'Open artifact controls' }).click();
       await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
+    });
+    await step('phone source and comments share the viewport without overflowing the toolbar', async () => {
+      await reopened.getByRole('button', { name: 'Dismiss Offline copy' }).click();
+      const desktop = reopened.viewportSize();
+      const sourceBeforeResize = await plain.inputValue();
+      await reopened.setViewportSize({ width: 390, height: 844 });
+      await expect.poll(() => reopened.evaluate(() => innerWidth)).toBe(390);
+      for (const label of ['Page bar', 'Editor toolbar']) {
+        const bounds = await reopened.getByRole('banner', { name: label }).boundingBox();
+        check(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390, `${name}: ${label} fits the phone viewport`);
+      }
+      await reopened.getByRole('button', { name: 'Comment', exact: true }).click();
+      await expect(reopened.getByRole('dialog', { name: 'Annotation sidebar' })).toBeVisible();
+      await expect(plain).toBeVisible();
+      const reservation = await reopened.getByRole('region', { name: 'Source pane' }).evaluate(panel => ({ right: panel.style.right, margin: document.body.style.marginRight }));
+      check(reservation.right === '0px' && reservation.margin !== '320px', `${name}: phone source remains full width beside the comments sheet`);
+      await reopened.keyboard.press('Escape');
+      await expect(reopened.getByRole('dialog', { name: 'Annotation sidebar' })).toHaveCount(0);
+      await expect(plain).toHaveValue(sourceBeforeResize);
+      await reopened.setViewportSize(desktop);
     });
     check(empty(await violations(reopened)), `${name}: CSP violations in the reopened copy`);
 
@@ -472,14 +528,15 @@ async function editing(engineName, browser) {
         await second.waitForTimeout(250);
       }
       await second.getByRole('button', { name: 'Comment on selected text' }).click();
+      await answerName(second, 'Ravi');
       await second.getByRole('textbox', { name: 'Annotation comment' }).fill('Is "Quarterly" right for a monthly table?');
       await second.getByRole('button', { name: 'Save annotation' }).click();
-      await answerName(second, 'Ravi');
       await expect(doc.locator(`#${headingId}[data-mx-annotated]`)).toHaveCount(1, { timeout: 10_000 });
-      await second.getByRole('button', { name: /^Comments/ }).click();
+      if (!(await second.getByRole('complementary', { name: 'Annotation sidebar' }).isVisible().catch(() => false))) await second.getByRole('button', { name: 'Comment', exact: true }).click();
       const thread = second.getByLabel('Annotation thread', { exact: true }).first();
       await expect(thread).toContainText('Ravi');
       await expect(thread).toContainText('monthly table');
+      if (!(await second.getByRole('textbox', { name: 'Reply to annotation' }).isVisible().catch(() => false))) await second.getByRole('button', { name: 'Open annotation thread' }).first().click();
       await second.getByRole('textbox', { name: 'Reply to annotation' }).first().fill('Checked: it is the Q3 view.');
       await second.getByRole('button', { name: 'Send reply' }).first().click();
       await expect(thread).toContainText('Checked: it is the Q3 view.');
@@ -498,7 +555,7 @@ async function editing(engineName, browser) {
     await third.goto(pathToFileURL(commented).href);
     await step('reopened: resolved thread with the name', async () => {
       await expect(third.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
-      await third.getByRole('button', { name: /^Comments/ }).click();
+      await third.getByRole('button', { name: 'Comment', exact: true }).click();
       const resolved = third.getByLabel('Resolved annotation thread');
       await expect(resolved).toHaveCount(1, { timeout: 10_000 });
       await expect(resolved).toContainText('Ravi');
@@ -608,9 +665,11 @@ async function editedByAnAgent(engineName, browser) {
       await expect(page.getByRole('table').first().getByRole('row').filter({ hasNot: page.getByRole('columnheader') })).toHaveCount(westRows.length);
       await expect(page.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
       await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+      await page.getByRole('button', { name: 'Open artifact controls' }).click();
       await page.getByRole('button', { name: /^Changes/ }).click();
       await expect(page.getByRole('region', { name: 'Changes in this file' })).toContainText(CHANGED_OUTSIDE);
       await page.getByRole('button', { name: /^Changes/ }).click();
+      await page.getByRole('button', { name: 'Dismiss Offline copy' }).click();
       await expect(saveButton(page)).toBeEnabled();
       return saveByDownload(page, path.join(work, `agent-saved-${engineName}.html`));
     });
@@ -733,7 +792,10 @@ async function connecting(engineName, browser) {
   const context = await newContext(browser);
   const page = await context.newPage();
   const errors = [];
-  context.on('page', (opened) => opened.on('pageerror', (error) => errors.push(String(error))));
+  const browserEvents = [];
+  context.on('requestfailed', request => browserEvents.push({ type: 'requestfailed', url: request.url(), error: request.failure()?.errorText }));
+  context.on('response', response => { if (/\/(?:bundle|draft|save)(?:\/|$)/.test(new URL(response.url()).pathname)) browserEvents.push({ type: 'response', url: response.url(), status: response.status() }); });
+  context.on('page', (opened) => { opened.on('pageerror', (error) => errors.push(String(error))); opened.on('console', message => { if (['error', 'warning'].includes(message.type())) browserEvents.push({ type: 'console', level: message.type(), text: message.text() }); }); });
   page.on('pageerror', (error) => errors.push(String(error)));
   const prose = engineFiles.find((entry) => entry.label === 'prose');
   const originalPath = fileURLToPath(prose.url);
@@ -775,22 +837,47 @@ async function connecting(engineName, browser) {
         [popup] = await Promise.all([page.waitForEvent('popup'), dialog.getByRole('button', { name: 'Connect', exact: true }).click()]);
         await expect(popup.getByRole('button', { name: 'Import and open', exact: true })).toBeEnabled({ timeout: 20_000 });
         await expect(popup.getByRole('heading', { name: 'Import an HTML file', exact: true })).toHaveCount(1);
+        await expect(popup.getByRole('banner', { name: 'Page bar' })).toHaveCount(1);
+        await expect(popup.getByRole('main')).toHaveCount(1);
+        await expectUiFonts(popup, `${engineName} receiver`);
+        const brand = popup.getByRole('banner', { name: 'Page bar' }).locator('img');
+        await brand.evaluate(image => image.decode());
+        check(await brand.evaluate(image => image.naturalWidth > 0 && image.getBoundingClientRect().width === 28), `${engineName}: receiver displays the shared embedded brand`);
+        const headingTop = await popup.getByRole('heading', { name: 'Import an HTML file', exact: true }).evaluate(heading => heading.getBoundingClientRect().top);
+        check(headingTop >= 100, `${engineName}: receiver uses shared form-page spacing below its bar`);
         // The handoff is an offer. There is no filesystem write until this confirmation.
         check(!readFileSync(path.join(directory, 'unselected.jsx'), 'utf8').includes('Connected'), `${engineName}: unselected source unchanged`);
         await popup.getByRole('textbox', { name: 'Workspace file', exact: true }).fill('connected.jsx');
         await popup.getByRole('button', { name: 'Import and open', exact: true }).click();
         await expect(popup.getByRole('heading', { name: 'Connected prose' })).toBeVisible({ timeout: 20_000 });
-        await expect(popup.getByRole('button', { name: 'Edit document', exact: true })).toBeVisible();
+        await expect(popup.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
         await expect(page.getByRole('link', { name: 'Open server editor', exact: true })).toBeVisible();
       });
       await step('comments travel and server source edits persist in the workspace copy', async () => {
+        let sourceBeforeInput, sourceAfterInput;
+        try {
+        await expectUiFonts(popup, `${engineName} preview`);
         const response = await fetch(`${server.url}/editor`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ file: 'connected.jsx', operation: 'annotations.list', status: 'open' }) });
         check(response.ok, `${engineName}: imported comments can be read through the existing backend`);
         const threads = await response.json();
         check(threads.some((thread) => thread.thread?.some((comment) => comment.body === 'This comment must travel to the local editor.')), `${engineName}: unsaved comment retained`);
-        await popup.getByRole('button', { name: 'Edit the source', exact: true }).click();
+        await popup.getByRole('button', { name: 'Edit', exact: true }).click();
+        await popup.getByRole('tab', { name: 'Edit the source', exact: true }).click();
+        await popup.locator('.cm-editor').waitFor();
         const source = popup.getByRole('textbox', { name: 'Markup source' });
-        await source.fill((await source.inputValue()).replace('Connected prose', 'Saved on the server'));
+        const beforeSource = sourceBeforeInput = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
+        if (!beforeSource.includes('Connected prose')) throw new Error(`Source editor does not contain the imported heading: ${JSON.stringify(beforeSource)}`);
+        // Match a user pasting into the focused editor; WebKit fill() left CM DOM unchanged.
+        await popup.bringToFront();
+        await source.click();
+        await source.press('ControlOrMeta+a');
+        await popup.keyboard.insertText(beforeSource.replace('Connected prose', 'Saved on the server'));
+        sourceAfterInput = await source.evaluate(node => 'value' in node ? node.value : node.textContent);
+        // Native contenteditable changes reach CodeMirror's model through its DOM observer.
+        // Observe the real source adapter and projection before asking Done to persist that model.
+        await expect(popup.getByRole('status').filter({ hasText: /^Unsaved$/ })).toBeVisible();
+        await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible();
+        check(empty(await violations(popup)), `${engineName}: preview editor retains strict CSP without violations`);
         await popup.getByRole('button', { name: 'Done editing', exact: true }).click();
         await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 20_000 });
         await expect.poll(() => readFileSync(path.join(directory, 'connected.jsx'), 'utf8')).toContain('Saved on the server');
@@ -800,6 +887,24 @@ async function connecting(engineName, browser) {
         check(readFileSync(originalPath, 'utf8') === originalHtml, `${engineName}: original HTML remains unchanged`);
         check(empty(await violations(page)), `${engineName}: connection needs no CSP relaxation`);
         check(empty(errors), `${engineName}: no connection/editor page errors ${show(errors)}`);
+        } catch (error) {
+          const snapshot = await popup.evaluate(() => {
+            const roots = [document, ...Array.from(document.querySelectorAll('[data-trusted-ui]')).flatMap(host => host.shadowRoot ? [host.shadowRoot] : [])];
+            const nodes = selector => roots.flatMap(root => Array.from(root.querySelectorAll(selector)));
+            const describe = node => ({ tag: node.tagName, label: node.getAttribute('aria-label'), text: 'value' in node ? node.value : node.textContent, visible: node.getClientRects().length > 0 });
+            let active = document.activeElement;
+            while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+            return { url: location.href, ready: document.documentElement.getAttribute('data-mx-ready'), active: active ? describe(active) : null,
+              tabs: nodes('[role="tab"]').map(node => ({ ...describe(node), selected: node.getAttribute('aria-selected') })),
+              statuses: nodes('[role="status"], [role="alert"]').map(describe), sources: nodes('[aria-label="Markup source"]').map(describe),
+              editors: nodes('.cm-editor').map(node => ({ ...describe(node), html: node.outerHTML.slice(0, 12000) })),
+              headings: nodes('h1,h2').map(describe), csp: window.__cspViolations ?? [] };
+          }).catch(reason => ({ snapshotError: String(reason) }));
+          const documentResponse = await fetch(`${server.url}/document?file=connected.jsx`);
+          const saved = documentResponse.ok ? await documentResponse.json() : { status: documentResponse.status };
+          check.note(`${engineName} Preview diagnostic: ${JSON.stringify({ sourceBeforeInput, sourceAfterInput, snapshot, server: { body: saved.body, revision: saved.revision, title: saved.metadata?.title }, errors, browserEvents })}`);
+          throw error;
+        }
       });
     });
   } finally { await context.close(); await server.close(); }

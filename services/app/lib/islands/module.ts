@@ -33,23 +33,34 @@ export function lazyEngine(load: () => Promise<PageEngine>, identified: () => bo
   let loading: Promise<void> | null = null;
   let closed = false;
   const asked: Array<Parameters<PageEngine['prepare']>> = [];
-  const loaded = () => engine!;
+  const loaded = () => {
+    if (closed) throw new Error('the page engine is closed');
+    if (!engine) throw new Error('the page engine module did not load');
+    return engine;
+  };
+  const prepare = (flow: Parameters<PageEngine['prepare']>[0], imports: readonly string[]) => {
+    if (closed) return;
+    if (engine) return engine.prepare(flow, imports);
+    asked.push([flow, imports]);
+    loading ??= load().then((made) => {
+      if (closed) return made.close();
+      engine = made;
+      for (const [f, i] of asked.splice(0)) made.prepare(f, i);
+    }, () => {});
+  };
   return {
-    prepare(flow, imports) {
-      if (closed) return;
-      if (engine) return engine.prepare(flow, imports);
-      asked.push([flow, imports]);
-      loading ??= load().then((made) => {
-        if (closed) return made.close();
-        engine = made;
-        for (const [f, i] of asked.splice(0)) made.prepare(f, i);
-      }, () => {});
-    },
+    prepare,
     ready: (flow, imports) => !!engine && identified() && engine.ready(flow, imports),
     invalidate: (refs) => engine?.invalidate(refs),
     run: (...args) => loaded().run(...args),
     page: (...args) => loaded().page(...args),
-    write: (...args) => loaded().write(...args),
+    async write(...args) {
+      // Never replace a local write with a remote request or evaluate $_me before identification.
+      if (!identified()) throw new Error('the page is still identifying its reader');
+      prepare(args[0], args[1].reads.imports);
+      await loading;
+      return loaded().write(...args);
+    },
     apply: (...args) => engine?.apply(...args) ?? null,
     close: () => { closed = true; engine?.close(); },
   };

@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 /** The file's Solid chrome. The compiled story is already in the DOM and boots separately. */
-import { createEffect, createSignal, For, onCleanup, onMount, Show, lazy } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { JsxNode } from '@/lib/jsx';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
@@ -17,16 +17,39 @@ import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-fil
 import { connectPreview, previewServerOrigin } from './preview-connect';
 import { unranQueriesOf } from './snapshot-current';
 import { projectDocument, sameSourceContent } from './project-document';
+import { applyDocumentRootAppearance } from '@/lib/story/styles/document-root';
+import { configureTrustedUiStyles } from '@/lib/serving/trusted-ui-styles';
+import { TrustedUi } from '@/solid/components/TrustedUi';
+import { trustedPortalOf } from '@/lib/islands/trusted-portal';
+import { createDocumentViewport } from '@/solid/document/create-document-viewport';
+import { PageBar, DocumentTitle, PageControlsPanel } from '@/solid/components/PageBar';
+import { DocumentAction, DocumentCommentAction, DocumentEditAction } from '@/solid/document/DocumentBarActions';
+import { AnnotationLayer } from '@/solid/document/AnnotationLayer';
+import SourceEditorPane from '@/solid/editor/SourceEditorPane';
+import { SourceEditorToolsProvider, type SourceEditorTools } from '@/solid/editor/source-editor-tools';
+import { EditorToolbar, EditorViewTabs, EditorSourcePanel } from '@/solid/editor/EditorChrome';
+import { createFileAnnotationController } from './annotation-controller';
+import { STORY_DOCUMENT_MESSAGE, type StoryController, type StoryEditSelection } from '@/lib/story-runtime/contract';
+import Code from 'lucide-solid/icons/code';
+import Paintbrush from 'lucide-solid/icons/paintbrush';
+import Database from 'lucide-solid/icons/database';
+import Save from 'lucide-solid/icons/save';
+import Plug from 'lucide-solid/icons/plug';
+import History from 'lucide-solid/icons/rotate-ccw-clock';
+import Settings from 'lucide-solid/icons/settings';
+import { closeOnEscape } from '@/solid/lib/close-on-escape';
+import { FORM_INPUT, FORM_PRIMARY_BUTTON, FORM_SECONDARY_BUTTON } from '@/solid/components/FormControls';
+import { DialogShell } from '@/solid/components/DialogShell';
+import { Tooltip } from '@/solid/components/Tooltip';
 
 declare const __AFBIN_APP_CSS__: string;
 declare global { interface Window { __afbinOfflineReady?: Promise<void>; } }
 
-const SourceEditor = lazy(() => import('@/solid/editor/SourceEditor'));
 const NOTHING_TO_SAVE = 'No changes to save';
 const EDIT_REFUSED = 'This text could not be applied to the current document.';
 const INVALID_SOURCE_EDIT = 'Editing needs a valid source. Fix the markup in the file, then open it again.';
-const CHROME_CSS = 'body{margin:0;padding-top:42px}#afbin-chrome{position:fixed;inset:0 0 auto;z-index:1000;background:var(--surface,#fff);border-bottom:1px solid #aaa} [data-mx-annotated]{outline:2px solid #e8a93a}';
-const BUTTON = 'inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-edge px-2 font-sans text-xs text-fg disabled:cursor-default disabled:opacity-50';
+const CHROME_CSS = 'body{margin:0;padding-top:44px}';
+const BUTTON = FORM_SECONDARY_BUTTON;
 
 function textOf(node: JsxNode): string { return node.type === 'text' ? node.value : node.type === 'element' ? node.children.map(textOf).join('') : ''; }
 
@@ -94,6 +117,7 @@ interface Opened { parts: ArtifactFileParts; invalid: string | null; restored: b
 function OfflineShell(props: Opened) {
   const story = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
   const [file, setFile] = createSignal(props.parts.file);
+  createEffect(() => applyDocumentRootAppearance(document.documentElement, file().metadata.colorMode, file().metadata.theme));
   const [dirty, setDirty] = createSignal(props.restored);
   const [name, setName] = createSignal(readName());
   const [asking, setAsking] = createSignal(false);
@@ -102,17 +126,18 @@ function OfflineShell(props: Opened) {
   const [changes, setChanges] = createSignal(false);
   const [comments, setComments] = createSignal(false);
   const [threads, setThreads] = createSignal(file().threads);
-  const [selected, setSelected] = createSignal<{ id: string; quote: string } | null>(null);
-  const [commenting, setCommenting] = createSignal(false);
-  const [commentBody, setCommentBody] = createSignal('');
-  const [replies, setReplies] = createSignal<Record<string, string>>({});
+  const [selected, setSelected] = createSignal<StoryEditSelection | null>(null);
   const [sourceMode, setSourceMode] = createSignal(props.sourceDraft !== undefined);
   const [source, setSource] = createSignal(props.sourceDraft ?? file().source);
-  const [formatted, setFormatted] = createSignal(false);
-  const [formattedText, setFormattedText] = createSignal('');
   const [sourceRevision, setSourceRevision] = createSignal(0);
   const [insertMenu, setInsertMenu] = createSignal(false);
   const [imageMenu, setImageMenu] = createSignal(false);
+  const [controls, setControls] = createSignal(false);
+  const [chromeHeight, setChromeHeight] = createSignal(44);
+  const [runtimeNonce, setRuntimeNonce] = createSignal<string | null>(null);
+  const runtimeRef: { current: StoryController | null } = { current: null };
+  let chromeRoot: HTMLDivElement | undefined;
+  let nameInput: HTMLInputElement | undefined;
   const [dataMenu, setDataMenu] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [saveError, setSaveError] = createSignal('');
@@ -144,6 +169,7 @@ function OfflineShell(props: Opened) {
       setFile(next);
       if (pendingSource === prior.source || sameSourceContent(pendingSource, next.source)) setSource(next.source);
       setThreads(next.threads); setDirty(true);
+      runtimeRef.current?.update({ type: STORY_DOCUMENT_MESSAGE, nodes: next.island.nodes });
       afterReady(() => {
         if (editing() && !sourceMode()) return; // The live prose editor already shows its own structural draft.
         if (sourceMode()) { editMount?.dispose(); editMount = null; }
@@ -151,7 +177,7 @@ function OfflineShell(props: Opened) {
         if (sourceMode() || !editing()) projectText(story, next.island.nodes);
         showStaleQueries(story, next);
         projectedSource = next.source;
-        style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', next.css.base, next.css.compiled, next.css.author, CHROME_CSS].filter(Boolean).join('\n');
+        style.textContent = [next.css.base, next.css.compiled, next.css.author, CHROME_CSS].filter(Boolean).join('\n');
       });
       window.clearTimeout(draftTimer);
       draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
@@ -182,6 +208,22 @@ function OfflineShell(props: Opened) {
     if (picked?.trim()) { writeName(picked.trim()); setName(picked.trim()); }
     setAsking(false); setRenaming(false); nameAnswer?.(); nameAnswer = null;
   };
+  // The shared composer stays transport-independent; portable comment writes ask for a local name.
+  const annotationBackend: typeof backend = {
+    ...backend,
+    async createAnnotation(...args) {
+      await ensureName();
+      if (!name()) throw new Error('Set your name before saving the comment. Your draft is still here.');
+      return backend.createAnnotation(...args);
+    },
+    async actOnAnnotation(...args) {
+      if (args[1].reply !== undefined) {
+        await ensureName();
+        if (!name()) throw new Error('Set your name before sending the reply. Your draft is still here.');
+      }
+      return backend.actOnAnnotation(...args);
+    },
+  };
   const queueSource = (next: string) => { editGeneration++; setSource(next); setDirty(true); live?.queue({ source: next });
     window.clearTimeout(draftTimer);
     draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
@@ -200,7 +242,7 @@ function OfflineShell(props: Opened) {
       setEditing(false); setSourceMode(false); return;
     }
     await ensureName();
-    if (props.invalid) return;
+    if (props.invalid || !name()) return;
     setEditing(true);
     editMount = mountCompiledEditRegions(story, file().island.nodes, {
       // The app's own flow-edit kernel: the region at `path`, checked against what the editor last saw, prose only.
@@ -269,65 +311,44 @@ function OfflineShell(props: Opened) {
       });
     } catch (error) { setConnecting(false); setConnectError(error instanceof Error ? error.message : 'Could not open the server.'); }
   };
-  const refreshThreads = async () => {
-    const open = await backend.listAnnotations('open');
-    const resolved = await backend.listAnnotations('resolved');
-    setThreads([...open, ...resolved]);
+  const openSource = () => { setSourceMode(true); setDataMenu(false); void extras.load().catch(() => {}); };
+  const closeControls = () => { setControls(false); chromeRoot?.querySelector<HTMLButtonElement>('[aria-label="Open artifact controls"]')?.focus(); };
+  createEffect(() => { if (controls()) onCleanup(closeOnEscape(closeControls)); });
+  const sourceTools: SourceEditorTools = {
+    editor: () => new Promise((resolve) => {
+      const ready = () => { if (extras.state() === 'ready') void import('@/solid/editor/SourceEditor').then(resolve); };
+      const unsubscribe = extras.subscribe(ready); onCleanup(unsubscribe); ready();
+      void extras.load().catch(() => {});
+    }),
+    formatter: () => import('@/lib/workspace/format-jsx-preview'),
+    get formatterUnavailable() { return extrasState() === 'ready' ? null : FORMATTING_OFFLINE; },
+    get editorUnavailable() { return extrasState() === 'failed' ? RICH_EDITOR_OFFLINE : null; },
   };
-  const createComment = async () => {
-    const target = selected();
-    if (!target || !commentBody().trim()) return;
-    await ensureName();
-    await backend.createAnnotation({ node_id: target.id, body: commentBody(), quote: target.quote }, crypto.randomUUID());
-    setCommentBody(''); setCommenting(false); setSelected(null); await refreshThreads();
-  };
-  const markAnnotations = () => {
-    for (const element of story.querySelectorAll('[data-mx-annotated]')) element.removeAttribute('data-mx-annotated');
-    for (const thread of threads()) {
-      const id = thread.anchor?.nodeId;
-      if (id) story.querySelector(`#${CSS.escape(id)}`)?.setAttribute('data-mx-annotated', '');
-    }
-  };
-  createEffect(markAnnotations);
-  const selectionChanged = () => {
-    if (editing() || commenting()) return;
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || !selection.toString().trim()) { setSelected(null); return; }
-    const quote = selection.toString().trim();
-    const range = selection.getRangeAt(0);
-    const node = [...story.querySelectorAll<HTMLElement>('[id][data-mx-ast]')]
-      .filter((candidate) => range.intersectsNode(candidate) && candidate.textContent?.includes(quote))
-      .sort((a, b) => (a.textContent?.length ?? Infinity) - (b.textContent?.length ?? Infinity))[0];
-    if (!node) return;
-    setSelected({ id: node.id, quote });
-  };
-  document.addEventListener('selectionchange', selectionChanged);
-  onCleanup(() => document.removeEventListener('selectionchange', selectionChanged));
-  const openSource = () => {
-    setSourceMode(true); setFormatted(false);
-    void extras.load().catch(() => {});
-  };
-  const format = () => {
-    if (extrasState() !== 'ready') return;
-    void import('@/lib/workspace/format-jsx-preview').then(({ formatJsxPreview }) => formatJsxPreview(source())).then((result) => { setFormattedText(result); setFormatted(true); });
-  };
+  createDocumentViewport({ barHeight: chromeHeight, editing, commentsOpen: comments });
   const style = document.createElement('style');
-  style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', file().css.base, file().css.compiled, file().css.author, CHROME_CSS].filter(Boolean).join('\n');
+  style.textContent = [file().css.base, file().css.compiled, file().css.author, CHROME_CSS].filter(Boolean).join('\n');
   document.head.append(style);
   onCleanup(() => style.remove());
   // Chrome wraps on narrow windows and grows after a save. Keep the document below its actual height.
   onMount(() => {
-    const chrome = document.getElementById('afbin-chrome');
+    const chrome = chromeRoot;
     if (!chrome) return;
-    const previousPadding = document.body.style.paddingTop;
     let disposed = false;
-    const measure = () => { if (!disposed) document.body.style.paddingTop = `${Math.ceil(chrome.getBoundingClientRect().height) || 42}px`; };
+    const measure = () => { if (!disposed) { setChromeHeight(Math.ceil(chrome.getBoundingClientRect().height) || 44); } };
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(chrome);
     window.addEventListener('resize', measure);
-    createEffect(() => { saveReceipt(); dirty(); saveError(); editStatus(); queueMicrotask(measure); });
+    createEffect(() => { saveReceipt(); dirty(); saveError(); editStatus(); editing(); queueMicrotask(measure); });
     measure();
-    onCleanup(() => { disposed = true; observer?.disconnect(); window.removeEventListener('resize', measure); document.body.style.paddingTop = previousPadding; });
+    afterReady(() => {
+      if (disposed) return;
+      const portal = trustedPortalOf(document);
+      if (!portal) return;
+      const controller = createFileAnnotationController({ root: story, nodes: file().island.nodes, portal, editing,
+        onComment: (picked) => { void ensureName().then(() => { if (name()) setSelected(picked); }); } });
+      runtimeRef.current = controller; setRuntimeNonce(controller.nonce);
+    });
+    onCleanup(() => { disposed = true; runtimeRef.current?.dispose(); runtimeRef.current = null; observer?.disconnect(); window.removeEventListener('resize', measure); });
   });
   // Only after the compiled tree hydrates (or immediately when there is none to hydrate): the
   // story DOM served with this file is still the pristine compile hydrate() must match.
@@ -336,67 +357,68 @@ function OfflineShell(props: Opened) {
     projectText(story, file().island.nodes); showStaleQueries(story, file()); projectedSource = file().source;
   });
 
-  return <div id="afbin-chrome">
-    <header aria-label="Offline copy" class="flex flex-wrap items-center gap-2 px-4 py-2 text-xs">
-      <span>Offline copy of <strong>{file().metadata.title}</strong></span>
-      <span>· data as of <time dateTime={file().snapshot.at}>{new Date(file().snapshot.at).toLocaleString()}</time></span>
-      <a href={file().liveUrl}>Open live version</a>
-      <span class="ml-auto flex items-center gap-2">
+  return <>
+    <TrustedUi overlay layer="navigation"><div ref={chromeRoot} id="afbin-chrome" class="fixed inset-x-0 top-0 text-fg">
+      <PageBar home={file().liveUrl || null} mobileTitle={file().metadata.title} navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title={file().metadata.title} /><span class="shrink-0 text-xs text-muted">Offline</span></>} actions={<>
+        <DocumentCommentAction count={threads().filter(thread => thread.status === 'open').length} active={comments()} onClick={() => setComments(!comments())} />
+        <DocumentEditAction editing={editing()} disabled={!!props.invalid} description={props.invalid ? INVALID_SOURCE_EDIT : undefined} onMouseDown={keepEditorFocus} onClick={() => void edit()} />
+        <DocumentAction label={saving() ? 'Saving…' : 'Save'} disabled={!dirty() || saving()} description={!dirty() ? NOTHING_TO_SAVE : 'Save current edits and comments'} onMouseDown={keepEditorFocus} onClick={() => void save()}><Save size={18} stroke-width={1.5} /></DocumentAction>
+        <DocumentAction label="Connect to server" onClick={() => setConnectDialog(true)}><Plug size={18} stroke-width={1.5} /></DocumentAction>
+        <DocumentAction label="Open artifact controls" active={controls()} onClick={() => setControls(!controls())}><Settings size={18} stroke-width={1.5} /></DocumentAction>
+      </>} />
+      <Show when={dirty() || editStatus() || saveError() || saveReceipt()}><div class="flex flex-wrap items-center gap-3 border-b border-edge bg-surface px-3 py-1 font-mono text-xs">
         <Show when={dirty()}><span role="status">Unsaved changes</span></Show>
         <Show when={editStatus()}><span role="status">{editStatus()}</span></Show>
         <Show when={saveError()}><span role="alert">{saveError()}</span></Show>
-        <button class={BUTTON} onClick={() => setRenaming(true)}>{name() ? `You: ${name()}` : 'Set your name'}</button>
-        <button class={BUTTON} aria-expanded={changes()} onClick={() => setChanges(!changes())}>Changes{file().journal.length ? ` (${file().journal.length})` : ''}</button>
-        <button class={BUTTON} aria-pressed={comments()} onClick={() => setComments(!comments())}>Comments{threads().filter((t) => t.status === 'open').length ? ` (${threads().filter((t) => t.status === 'open').length})` : ''}</button>
-        <button class={BUTTON} onMouseDown={keepEditorFocus} aria-pressed={editing()} disabled={!!props.invalid} aria-description={props.invalid ? INVALID_SOURCE_EDIT : undefined} onClick={() => void edit()}>{editing() ? 'Done editing' : 'Edit'}</button>
-        <button class={BUTTON} onClick={() => setConnectDialog(true)}>Connect to server</button>
-        <button class={BUTTON} onMouseDown={keepEditorFocus} disabled={!dirty() || saving()} aria-description={!dirty() ? NOTHING_TO_SAVE : undefined} onClick={() => void save()}>{saving() ? 'Saving…' : 'Save'}</button>
-      </span>
-    </header>
-    <Show when={saveReceipt()}><p role="status" class="m-0 px-4 pb-2 text-xs">{saveReceipt()}</p></Show>
-    <Show when={connectDialog()}><section role="dialog" aria-label="Connect to server" class="fixed left-1/2 top-16 z-[2000] w-[min(90vw,32rem)] -translate-x-1/2 border bg-white p-4 text-sm">
+        <Show when={saveReceipt()}><span role="status">{saveReceipt()}</span></Show>
+      </div></Show>
+    </div>
+    <Show when={controls()}><button type="button" aria-label="Close panel" class="fixed inset-0 z-40 cursor-default border-0 bg-black/25 p-0" onClick={closeControls} /><PageControlsPanel label="Artifact controls" title="Offline copy" onClose={closeControls}>
+      <p>Data as of <time dateTime={file().snapshot.at}>{new Date(file().snapshot.at).toLocaleString()}</time></p>
+      <Show when={file().liveUrl}><a href={file().liveUrl}>Open live version</a></Show>
+      <button class={BUTTON} onClick={() => setRenaming(true)}>{name() ? `You: ${name()}` : 'Set your name'}</button>
+      <button class={BUTTON} aria-expanded={changes()} onClick={() => setChanges(!changes())}>Changes{file().journal.length ? ` (${file().journal.length})` : ''}</button>
+    </PageControlsPanel></Show>
+    <Show when={connectDialog()}><DialogShell onClose={() => { cancelConnect?.(); setConnecting(false); setConnectDialog(false); }}><section role="dialog" aria-label="Connect to server" class="fixed left-1/2 top-16 z-[2000] w-[min(90vw,32rem)] -translate-x-1/2 rounded-lg border border-edge bg-surface p-5 font-mono text-sm shadow-xl space-y-4">
       <p>Connect to a compatible preview server to edit and comment on a workspace copy. The original HTML file stays here; this does not publish it.</p>
       <p><a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Install Node.js if needed</a>, then start a local server:</p>
-      <p>macOS / Linux: <code>npx --yes @afbin/cli@latest preview --port 7474</code></p>
-      <p>Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest preview --port 7474</code></p>
-      <label>Server address <input aria-label="Server address" value={serverAddress()} onInput={(event) => setServerAddress(event.currentTarget.value)} disabled={connecting()} /></label>
+      <p class="break-words text-xs">macOS / Linux: <code>npx --yes @afbin/cli@latest preview --port 7474</code></p>
+      <p class="break-words text-xs">Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest preview --port 7474</code></p>
+      <label class="block space-y-2">Server address <input class={FORM_INPUT} aria-label="Server address" value={serverAddress()} onInput={(event) => setServerAddress(event.currentTarget.value)} disabled={connecting()} /></label>
       <p>Use http://localhost:7474, or the HTTPS address of your own compatible preview server.</p>
-      <button class={BUTTON} disabled={connecting()} onClick={connect}>{connecting() ? 'Connecting…' : 'Connect'}</button>
+      <button class={FORM_PRIMARY_BUTTON} disabled={connecting()} onClick={connect}>{connecting() ? 'Connecting…' : 'Connect'}</button>
       <button class={BUTTON} onClick={() => { cancelConnect?.(); cancelConnect = null; setConnecting(false); setConnectStatus(''); setConnectDialog(false); }}>{connecting() ? 'Cancel connection' : 'Close'}</button>
       <Show when={connectStatus()}><p role="status">{connectStatus()}</p></Show>
       <Show when={connectError()}><p role="alert">{connectError()}</p></Show>
       <Show when={connectedUrl()}><a href={connectedUrl()} target="_blank" rel="noopener">Open server editor</a></Show>
-    </section></Show>
+    </section></DialogShell></Show>
     <Show when={props.invalid}><div role="alert" class="bg-red-100 p-2 text-sm">The source was changed outside this file and is not valid, so this is the last version that worked. {props.invalid}</div></Show>
-    <Show when={changes()}><section role="region" aria-label="Changes in this file" class="fixed right-3 top-12 z-50 max-h-80 w-80 overflow-auto border bg-white p-3 text-xs"><For each={file().journal}>{(entry) => <div>{entry.by} · {entry.summary}</div>}</For></section></Show>
-    <Show when={selected() && !editing()}><div data-mx-selection-actions="" class="fixed left-1/2 top-12 z-40 border bg-white p-2"><button onClick={() => setCommenting(true)}>Comment on selected text</button></div></Show>
-    <Show when={commenting()}><div class="fixed right-4 top-14 z-50 border bg-white p-3"><textarea aria-label="Annotation comment" value={commentBody()} onInput={(event) => setCommentBody(event.currentTarget.value)} /><button onClick={() => void createComment()}>Save annotation</button></div></Show>
-    <Show when={comments()}><aside class="fixed right-0 top-12 z-40 max-h-[80vh] w-80 overflow-auto border bg-white p-3" aria-label="Comments"><For each={threads()}>{(thread) => <section aria-label={thread.status === 'resolved' ? 'Resolved annotation thread' : 'Annotation thread'} class="mb-3 border-b pb-2"><For each={thread.thread}>{(reply) => <p>{reply.author.label}: {reply.body}</p>}</For><Show when={thread.status === 'open'}><textarea aria-label="Reply to annotation" value={replies()[thread.id] ?? ''} onInput={(event) => setReplies({ ...replies(), [thread.id]: event.currentTarget.value })} /><button onClick={() => void backend.actOnAnnotation(thread.id, { reply: replies()[thread.id] }).then(refreshThreads)}>Send reply</button><button onClick={() => void backend.actOnAnnotation(thread.id, { resolve: true }).then(refreshThreads)}>Resolve annotation</button></Show></section>}</For></aside></Show>
-    <Show when={editing()}><div class="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-2 text-sm">
-      <span role="tablist" aria-label="Editor view" class="inline-flex gap-2">
-        <button role="tab" aria-selected={!sourceMode() && !dataMenu()} onClick={() => { setSourceMode(false); setDataMenu(false); }}>Edit on the page</button>
-        <button role="tab" aria-selected={sourceMode()} onClick={openSource}>Edit the source</button>
-        <button role="tab" aria-selected={dataMenu()} onClick={() => { setSourceMode(false); setDataMenu(true); }}>Show data</button>
-        <button role="tab" disabled aria-description="Version history lives on artifactbin. Open the live version.">History</button>
-      </span>{' · '}
-      <button onClick={() => setInsertMenu(!insertMenu())}>Insert</button>{' · '}
-      <Show when={insertMenu()}><button onClick={() => setImageMenu(true)}>Image…</button></Show>
-      <Show when={imageMenu()}><div><input aria-label="Image URL" disabled aria-description={OFFLINE_ASSET_REASON} /><button disabled>Import image from URL</button><button onClick={() => setImageMenu(false)}>Close</button></div></Show>
-      <Show when={dataMenu()}><div>shape unavailable — {OFFLINE_QUERY_REASON}</div></Show>
-      <Show when={sourceMode()}><div class="h-[45vh] bg-neutral-900 p-2 text-white">
-        <button disabled={extrasState() !== 'ready'} aria-description={extrasState() === 'ready' ? undefined : FORMATTING_OFFLINE} onClick={format}>View formatted</button>
-        <Show when={extrasState() === 'ready'} fallback={<><textarea aria-label="Markup source" aria-description={RICH_EDITOR_OFFLINE} class="h-2/3 w-full text-black" value={source()} onInput={(event) => queueSource(event.currentTarget.value)} /><p>{RICH_EDITOR_OFFLINE}</p></>}><SourceEditor value={source()} revision={sourceRevision()} onChange={queueSource} /></Show>
-        <Show when={formatted()}><div>Formatted preview · read-only</div><SourceEditor value={formattedText()} revision={sourceRevision()} onChange={() => {}} readOnly ariaLabel="Formatted JSX" /></Show>
-      </div></Show>
-    </div></Show>
-    <Show when={asking() || renaming()}><div role="dialog" aria-label="What should we call you?" class="fixed left-1/2 top-1/3 z-[2000] border bg-white p-4"><label>Your name <input aria-label="Your name" id="afbin-name" /></label><button onClick={() => answerName((document.getElementById('afbin-name') as HTMLInputElement).value)}>Save</button><button onClick={() => answerName(null)}>Cancel</button></div></Show>
-  </div>;
+    <Show when={changes()}><section role="region" aria-label="Changes in this file" class="fixed right-3 top-12 z-50 max-h-80 w-80 overflow-auto rounded-lg border border-edge bg-surface p-3 text-xs"><For each={file().journal}>{(entry) => <div>{entry.by} · {entry.summary}</div>}</For></section></Show>
+    <Show when={editing()}>
+      <EditorToolbar top={chromeHeight()}>
+        <div class="flex min-w-0 items-center overflow-x-auto"><EditorViewTabs tabs={[
+          { key: 'design', label: 'App', aria: 'Edit on the page', tip: 'edit on the page', icon: <Paintbrush size={12} />, active: !sourceMode() && !dataMenu(), choose: () => { setSourceMode(false); setDataMenu(false); } },
+          { key: 'code', label: 'Code', aria: 'Edit the source', tip: 'edit the source', icon: <Code size={12} />, active: sourceMode(), choose: openSource },
+          { key: 'data', label: 'Data', aria: 'Show data', tip: 'the document’s snapshots', icon: <Database size={12} />, active: dataMenu(), choose: () => { setSourceMode(false); setDataMenu(true); } },
+        ]} /></div>
+        <div class="flex items-center gap-2"><Tooltip content="Version history lives on artifactbin. Open the live version."><button type="button" disabled aria-label="History" aria-description="Version history lives on artifactbin. Open the live version." class={BUTTON}><History size={14} /></button></Tooltip><button class={BUTTON} onClick={() => setInsertMenu(!insertMenu())}>Insert</button></div>
+      </EditorToolbar>
+      <Show when={insertMenu()}><div class="fixed left-3 z-40 rounded border border-edge bg-surface p-3" style={{ top: `${chromeHeight() + 50}px` }}><button class={BUTTON} onClick={() => setImageMenu(true)}>Image…</button></div></Show>
+      <Show when={imageMenu()}><div class="fixed left-3 top-32 z-50 rounded border border-edge bg-surface p-3"><input class={FORM_INPUT} aria-label="Image URL" disabled aria-description={OFFLINE_ASSET_REASON} /><button class={FORM_PRIMARY_BUTTON} disabled>Import image from URL</button><button class={BUTTON} onClick={() => setImageMenu(false)}>Close</button></div></Show>
+      <Show when={dataMenu()}><aside aria-label="Data" class="fixed inset-x-0 bottom-0 z-20 overflow-auto bg-surface p-4" style={{ top: `${chromeHeight() + 44}px` }}>shape unavailable — {OFFLINE_QUERY_REASON}</aside></Show>
+      <Show when={sourceMode()}><EditorSourcePanel top={chromeHeight() + 44} commentsOpen={comments()}><SourceEditorToolsProvider value={sourceTools}><SourceEditorPane value={source()} revision={sourceRevision()} onChange={queueSource} /></SourceEditorToolsProvider></EditorSourcePanel></Show>
+    </Show>
+    <Show when={asking() || renaming()}><DialogShell onClose={() => answerName(null)}><div role="dialog" aria-label="What should we call you?" class="fixed left-1/2 top-1/3 z-[2000] -translate-x-1/2 rounded-lg border border-edge bg-surface p-5 text-fg shadow-xl space-y-3 w-[min(90vw,24rem)]"><label class="block space-y-2">Your name <input class={FORM_INPUT} ref={nameInput} aria-label="Your name" id="afbin-name" /></label><button class={FORM_PRIMARY_BUTTON} onClick={() => answerName(nameInput?.value ?? '')}>Save</button><button class={BUTTON} onClick={() => answerName(null)}>Cancel</button></div></DialogShell></Show>
+    </TrustedUi>
+    <TrustedUi overlay layer="discussion"><AnnotationLayer id={file().artifactId ?? 'offline-file'} backend={annotationBackend} railOpen={comments()} onRailOpenChange={setComments} liveAnnotations={threads().filter(thread => thread.status === 'open')} runtimeRef={runtimeRef} sessionNonce={runtimeNonce()} initialSelection={selected()} onSelectionConsumed={() => setSelected(null)} pickOnOpen={!editing()} showViewComments topOffset={chromeHeight() + (editing() ? 44 : 0)} /></TrustedUi>
+  </>;
 }
 
 let mountedDispose: (() => void) | null = null;
 export function disposeSolidOfflineFile(): void { mountedDispose?.(); mountedDispose = null; }
 export async function mountSolidOfflineFile(): Promise<void> {
   disposeSolidOfflineFile();
+  configureTrustedUiStyles(typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '');
   const openedParts = readArtifactFileParts(document);
   const migrating = openedParts.file.bundle !== 'solid';
   if (migrating && openedParts.file.compiled?.module && !openedParts.compiledCode) {
@@ -411,11 +433,11 @@ export async function mountSolidOfflineFile(): Promise<void> {
   let sourceDraft: string | undefined;
   if (draft) {
     const restore = await new Promise<boolean>((resolve) => {
-      const dispose = render(() => <div role="alertdialog" aria-label="Restore unsaved changes" class="fixed left-1/2 top-1/3 z-[2000] border bg-white p-4">
+      const dispose = render(() => <TrustedUi overlay layer="modal"><DialogShell onClose={() => { dispose(); resolve(false); }}><div role="alertdialog" aria-label="Restore unsaved changes" class="fixed left-1/2 top-1/3 z-[2000] -translate-x-1/2 rounded-lg border border-edge bg-surface p-4 text-fg shadow-xl">
         <p>Restore unsaved changes from {new Date(draft.savedAt).toLocaleString()}?</p>
-        <button onClick={() => { dispose(); resolve(true); }}>Restore</button>
-        <button onClick={() => { dispose(); resolve(false); }}>Discard</button>
-      </div>, host);
+        <button class={FORM_PRIMARY_BUTTON} onClick={() => { dispose(); resolve(true); }}>Restore</button>
+        <button class={BUTTON} onClick={() => { dispose(); resolve(false); }}>Discard</button>
+      </div></DialogShell></TrustedUi>, host);
     });
     if (restore) { opened = { ...rebuilt, file: draft.file, rebuilt: true }; sourceDraft = draft.sourceDraft; }
     else clearDraft(parts.file);

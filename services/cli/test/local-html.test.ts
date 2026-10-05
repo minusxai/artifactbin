@@ -29,7 +29,7 @@ test('real packaged assets produce compiled self-contained HTML and safely reimp
  const runtime=resolve('../app'),cwd=process.cwd();await writeFile(join(root,'report.jsx'),'<p id="words">Packaged reader</p>');
  try{
   const bytes=await exportLocalHtml({cwd:root,home,path:'report.jsx'},runtime),file=readArtifactFileHtml(bytes.toString());
-  assert.ok(file.compiled);assert.equal(file.bundle,'solid');assert.match(bytes.toString(),/id="afbin-code"/);assert.match(file.css.base,/data:font\/woff2;base64,/);assert.doesNotMatch(file.css.base,/url\(["']?\/fonts\//);
+  assert.ok(file.compiled);assert.equal(file.bundle,'solid');assert.match(bytes.toString(),/id="afbin-code"/);assert.match(file.css.base,/data:font\/woff2;base64,/);assert.match(file.css.base,/font-family:'JetBrains Mono Variable'/);assert.match(file.css.base,/font-family:'IBM Plex Sans'/);assert.doesNotMatch(file.css.base,/url\(["']?\/fonts\//);
   const edited={...file,source:file.source.replace('Packaged reader','Offline edit')};const updated=bytes.toString().replace(/^(<script type="application\/json" id="afbin-file">)[\s\S]*?(<\/script>)/m,(_match,open,close)=>open+JSON.stringify(edited).replace(/</g,'\\u003c')+close);await writeFile(join(root,'report.html'),updated);await importLocalHtml(await loadWorkspace(root,home),'report.html','report.jsx');assert.match(await readFile(join(root,'report.jsx'),'utf8'),/Offline edit/);
  }finally{process.chdir(cwd);}
 }));

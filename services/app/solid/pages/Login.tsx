@@ -4,8 +4,7 @@ import { loginRedirectTarget, internalRedirectTarget } from '@/lib/http/safe-red
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 
-const INPUT = 'w-full rounded-[4px] border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none';
-const BUTTON = 'cursor-pointer rounded-[4px] border border-accent bg-accent px-3 py-1.5 font-mono text-xs font-semibold text-bg transition-colors hover:brightness-110 disabled:opacity-50';
+import { FormPage, FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../components/FormControls';
 
 export function LoginPage(): JSX.Element {
   const { session, sessionError } = useSession();
@@ -34,7 +33,7 @@ export function LoginPage(): JSX.Element {
     window.location.href = internalRedirectTarget(new URLSearchParams(window.location.search).get('callbackUrl'), window.location.origin);
   };
   return <Show when={!session()?.user && (session() || sessionError())}>
-    <main class="mx-auto mt-16 max-w-xl px-6"><div class="mx-auto max-w-sm">
+    <FormPage narrow>
       <h1 class="text-base font-semibold"><span class="text-accent">&gt;</span> log in</h1>
       <Show when={!sent()} fallback={<>
         <p class="mt-2 text-xs text-muted">We emailed a code to <span class="text-fg">{email()}</span>. It expires in 10 minutes.</p>
@@ -52,6 +51,6 @@ export function LoginPage(): JSX.Element {
         <p class="mt-10 text-xs text-muted"><b>Note:</b> Your guest artifacts and connected agents will join this account.</p>
       </Show>
       <Show when={error()}><p class="mt-3 text-xs text-danger">{error()}</p></Show>
-    </div></main>
+    </FormPage>
   </Show>;
 }

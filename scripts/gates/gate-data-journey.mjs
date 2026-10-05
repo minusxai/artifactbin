@@ -221,7 +221,8 @@ if (!lsDataset.id || !lsDoc.id || !aclDoc.id) throw new Error(`fixture publish f
     });
     await frame.waitForFunction(() => document.documentElement.hasAttribute('data-mx-ready'));
     check((await frame.textContent(named('Branch'))) === 'bee', `${who}: URL scalar seeds the ternary`);
-    await page.waitForTimeout(500);
+    // Child hydration is independent of the parent SPA and its frame bridge.
+    await page.getByRole('banner', { name: 'Page bar', exact: true }).waitFor();
     await frame.click(named('Add draft'));
     await frame.waitForFunction(root => document.querySelector(`${root}[aria-label="Rows"]`)?.textContent?.trim() === '2', root);
     await frame.click(named('Add draft'));

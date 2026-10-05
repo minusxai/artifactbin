@@ -243,6 +243,13 @@ test('preview serves the compiled reader: no React, a live Select re-runs its qu
   const page=await fetch(session.url+'/workspace/report.jsx');
   assert.equal(page.status,200);
   const html=await page.text();
+  assert.doesNotMatch(html,/<base\b/);
+  assert.match(html,/data-afbin-ui-fonts/);
+  assert.match(html,/font-family:'JetBrains Mono Variable'/);
+  assert.match(html,/font-family:'IBM Plex Sans'/);
+  const canonical=await fetch(session.url+'/?file=report.jsx',{redirect:'manual'});
+  assert.equal(canonical.status,302);
+  assert.equal(canonical.headers.get('location'),'/workspace/report.jsx');
   assert.doesNotMatch(html,/react-dom|"react"|from"react"/i);
   assert.match(html,/data-mx-ast/);
   assert.match(html,/Some prose/);
@@ -347,6 +354,15 @@ test('the preview browser bundle carries no react or react-dom',async()=>{
  try{
   await buildPreview(outdir);
   const files=await readdir(outdir);
+  const chromeCss=await readFile(join(outdir,'chrome.css'),'utf8');
+  const fonts=await readFile(join(outdir,'fonts.css'),'utf8');
+  assert.match(fonts,/font-family:'JetBrains Mono Variable'/);
+  assert.match(fonts,/font-family:'IBM Plex Sans'/);
+  assert.equal(fonts.replace(/@font-face\{[^}]*\}/g,'').trim(),'','the global UI sheet contains font definitions only');
+  assert.doesNotMatch(fonts,/https?:|font-family:'Cormorant/);
+  assert.doesNotMatch(chromeCss,/@font-face/,'font definitions remain global, never duplicated in TrustedUi');
+  assert.match(chromeCss,/\.mt-16\{/,'the shared import/login page spacing must be included in the preview stylesheet');
+  assert.match(chromeCss,/\.space-y-5/,'the shared import form spacing must be included in the preview stylesheet');
   assert.ok(files.some(name=>name==='client.js'),files.join(', '));
   for(const name of files){
    if(!name.endsWith('.js'))continue;

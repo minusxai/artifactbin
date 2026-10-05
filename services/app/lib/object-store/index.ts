@@ -12,10 +12,11 @@
  * is what keeps `S3_URL` optional: unset, the app still runs on a laptop and in
  * CI with no external service, which is the same promise PGLite makes.
  */
+import {atomicWrite} from '@artifactbin/utils/node/atomic-file';
 import type { RenderUploadRequest } from '@artifactbin/contracts';
 import { createRequire } from 'node:module';
 import { createHash, randomBytes } from 'crypto';
-import { mkdir, open, readFile, rm, writeFile } from 'fs/promises';
+import { mkdir, open, readFile, rm } from 'fs/promises';
 import type { Readable } from 'node:stream';
 import path from 'path';
 import { S3_URL, LOCAL_OBJECT_DIR } from '@/lib/platform/config';
@@ -122,8 +123,8 @@ const forget = (key: string): void => {
 export function cachedReads(store: ObjectStore): ObjectStore {
   return {
     ...store,
-    async put(key, body, contentType) { forget(key); return store.put(key, body, contentType); },
-    async delete(key) { forget(key); return store.delete(key); },
+    async put(key, body, contentType) { forget(key); try { await store.put(key, body, contentType); } finally { forget(key); } },
+    async delete(key) { forget(key); try { await store.delete(key); } finally { forget(key); } },
     // Deliberately NOT cached and deliberately not counted: a streaming read is
     // the one this cache must never hold (see ObjectStore.getStream).
     getStream(key, range) { return store.getStream(key, range); },
@@ -134,6 +135,8 @@ export function cachedReads(store: ObjectStore): ObjectStore {
         bytes: 0,
         reading: store.get(key).then(
           (bytes) => {
+            // A write/delete may have invalidated this pending read and installed a newer one.
+            if (reads.get(key) !== entry) return bytes;
             // Admit it only if it fits; a single object larger than the whole
             // budget is served and forgotten rather than evicting everything.
             if (bytes.byteLength <= READ_CACHE_BYTES) {
@@ -149,7 +152,7 @@ export function cachedReads(store: ObjectStore): ObjectStore {
             }
             return bytes;
           },
-          (error) => { forget(key); throw error; },
+          (error) => { if (reads.get(key) === entry) forget(key); throw error; },
         ),
       };
       reads.set(key, entry);
@@ -251,7 +254,7 @@ export function createLocalStore(dir: string): ObjectStore {
     async put(key, body) {
       const file = resolve(key);
       await mkdir(path.dirname(file), { recursive: true });
-      await writeFile(file, body);
+      await atomicWrite(file, body);
     },
     async get(key) {
       try {

@@ -4,6 +4,8 @@
  * here: they are server-rendered by the story runtime's own esbuild bundle.
  */
 import path from 'node:path';
+import { appFontFaceCss } from './services/app/lib/serving/app-font-face-css.mjs';
+import type { AppFontFace } from './services/app/lib/serving/app-fonts';
 import tailwindcss from '@tailwindcss/vite';
 import solid from 'vite-plugin-solid';
 import { readFileSync } from 'node:fs';
@@ -45,9 +47,8 @@ const appFontFaces = (): Plugin => ({
   enforce: 'pre',
   transform(code, id) {
     if (!id.split('?')[0].endsWith('/web/shell.css') || !code.includes(FONT_MARKER)) return null;
-    const faces = (JSON.parse(readFileSync(FONT_MANIFEST, 'utf8')) as { app: Array<Record<string, string>> }).app;
-    const css = faces.map((f) => `@font-face{font-family:'${f.family}';font-style:${f.style};font-display:${f.display};font-weight:${f.weight};`
-      + `src:url(${f.url}) format('${f.format}');${f.unicodeRange ? `unicode-range:${f.unicodeRange};` : ''}}`).join('\n');
+    const faces = (JSON.parse(readFileSync(FONT_MANIFEST, 'utf8')) as { app: AppFontFace[] }).app;
+    const css = appFontFaceCss(faces);
     return { code: code.replace(FONT_MARKER, css), map: null };
   },
 });

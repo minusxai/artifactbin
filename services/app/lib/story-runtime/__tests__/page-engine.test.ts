@@ -124,6 +124,21 @@ describe('createPageEngine', () => {
     await expect(engine.write(FLOW, m, { mutation: 'remember', args: { region: 'EU', nope: 1 } }, CTX)).rejects.toThrow('remember takes no argument nope');
   });
 
+  it('waits for the imports an immediately activated local write reads', async () => {
+    const flow = await compiledOf('<Import name="sales" src="ref:Sales0001"/><Value name="todo" type="table" columns={[{name:"t",type:"string"}]} value={[]}/><Mutation name="copy">{`insert into todo (t) select region from sales.rows`}</Mutation>', { Sales0001: COLUMNS });
+    let fetched!: (value: { rows: { rows: typeof ROWS; columns: typeof COLUMNS } }) => void;
+    const pending = new Promise<{ rows: { rows: typeof ROWS; columns: typeof COLUMNS } }>(resolve => { fetched = resolve; });
+    const engine = createPageEngine({ load: () => loadSqlite(), fetch: () => pending });
+    const mutation = flow.mutations[0]!;
+    let committed = false;
+    const written = engine.write(flow, mutation, mutationRequestFor(mutation, { values: {} }), CTX).then(result => { committed = true; return result; });
+    await Promise.resolve();
+    expect(committed).toBe(false);
+    fetched({ rows: { rows: ROWS, columns: COLUMNS } });
+    expect((await written).table.rows).toEqual(ROWS.map(row => ({ t: row.region })));
+    engine.close();
+  });
+
   it('applies a held write at once, keeps it until a fetch after the server confirmed it, and withdraws a refused one', async () => {
     const { engine, fetched, setRows } = engineOver();
     await settle(engine);
@@ -190,4 +205,3 @@ describe('createPageEngine', () => {
     expect([counts.tables.from_a!.rows, counts.tables.from_b!.rows]).toEqual([[{ n: 4 }], [{ n: 4 }]]);
   });
 });
-

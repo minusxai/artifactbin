@@ -90,6 +90,10 @@ describe('the page around the story', () => {
     expect(page.getElementById(ISLAND_DATA_ID)).toBeNull();
   });
 
+  it('lets unframed pages keep their own navigation context without a base element', () => {
+    expect(assembleReaderPage(input({ navigationTarget: null })).html).not.toContain('<base');
+  });
+
   it('sends the page\'s links out of its frame', () => {
     expect(assembleReaderPage(input()).html).toContain('<base target="_top">');
   });

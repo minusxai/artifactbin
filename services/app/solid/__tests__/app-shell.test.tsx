@@ -40,6 +40,16 @@ describe('Solid shell', () => {
     expect(screen.getByRole('group', { name: 'Color mode' })).toBeInTheDocument();
   });
 
+  it('routes a new account to welcome even while its home data is pending', async () => {
+    session = { user: { id: 'new', email: 'mxmx_test_new@example.com', username: 'new', image: null }, kind: 'account', onboarded: false };
+    const existing = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input, init) => String(input).startsWith('/api/page/home') ? new Promise<Response>(() => {}) : existing(input, init));
+    window.history.replaceState(null, '', '/');
+    render(() => <App />);
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/welcome?callbackUrl=%2F'));
+    expect(await screen.findByRole('heading', { name: /welcome/ })).toBeInTheDocument();
+  });
+
   it('renders the one 404 for an unknown path, with sign-in for a stranger', async () => {
     session = { user: null, kind: 'none', onboarded: true };
     window.history.replaceState(null, '', '/nowhere?x=1');

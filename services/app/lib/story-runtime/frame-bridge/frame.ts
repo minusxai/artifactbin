@@ -22,6 +22,7 @@
  * page's `restored` has drawn the saved version, as the app page's in-page mount does for its lifetime.
  */
 import { createIslandController, type IslandStoryController } from '@/lib/story-runtime/island-controller';
+import { writeUrlValues } from '@/lib/story/data/url-values';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { ISLANDS_READY_EVENT, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 import { ISLAND_DATA_ID, READER_READY_ATTR } from '@/lib/compiled-page/contract';
@@ -206,7 +207,10 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       doc.removeEventListener('focusout', onFocusOut, true);
       win.removeEventListener('scroll', onScroll);
     });
-    post({ kind: 'ready', nonce: controller.nonce });
+    // Child controls can move before the app installs its listener. Replay only declared URL scalars
+    // with each keyed ready receipt, including reattachment after a load; later changes still debounce.
+    const store = islandDocumentOf(root)?.store;
+    post({ kind: 'ready', nonce: controller.nonce, ...(store ? { urlValues: writeUrlValues('', store.flow, store.getState().values) } : {}) });
     for (const queued of queue.splice(0)) receive(queued);
   };
   cleanups.push(whenIslandsReady(win, start));

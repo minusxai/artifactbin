@@ -30,6 +30,46 @@ const backing = (bytes: Record<string, Buffer>, calls: string[]) => ({
 beforeEach(() => { resetReadCache(); });
 
 describe('the store read cache', () => {
+  it('forgets bytes read during a pending replacement once publication completes', async () => {
+    const calls: string[] = [];
+    const bytes = { 'module/current': Buffer.from('complete old module') };
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const store = cachedReads({
+      ...backing(bytes, calls),
+      async put() { await pending; bytes['module/current'] = Buffer.from('complete new module'); },
+    });
+    await store.get('module/current');
+    const publishing = store.put('module/current', 'complete new module');
+    expect((await store.get('module/current')).toString()).toBe('complete old module');
+    release();
+    await publishing;
+    expect((await store.get('module/current')).toString()).toBe('complete new module');
+  });
+
+  it('does not charge an invalidated late read against the retained byte budget', async () => {
+    const calls:string[]=[];
+    const old=Buffer.alloc(32*1024*1024,1),stable=Buffer.alloc(16*1024*1024,2);
+    let resolveOld!:(value:Buffer)=>void;const pending=new Promise<Buffer>(resolve=>{resolveOld=resolve;});
+    let replaced=false;
+    const store=cachedReads({...backing({},calls),
+      async get(key:string){calls.push(key);if(key==='stable')return stable;if(!replaced)return pending;return Buffer.from('new');},
+      async put(){replaced=true;},
+    });
+    await store.get('stable');const late=store.get('changing');
+    await store.put('changing','new');await store.get('changing');resolveOld(old);await late;
+    await store.get('stable');expect(calls.filter(key=>key==='stable')).toHaveLength(1);
+  });
+
+  it('does not let rejection of an invalidated read evict a newer successful read', async () => {
+    const calls:string[]=[];let rejectOld!:(error:Error)=>void;
+    const pending=new Promise<Buffer>((_resolve,reject)=>{rejectOld=reject;});let replaced=false;
+    const store=cachedReads({...backing({},calls),async get(key:string){calls.push(key);return replaced?Buffer.from('new'):pending;},async put(){replaced=true;}});
+    const late=store.get('changing');await store.put('changing','new');await store.get('changing');
+    rejectOld(Error('late read failure'));await expect(late).rejects.toThrow('late read failure');
+    await store.get('changing');expect(calls).toEqual(['changing','changing']);
+  });
+
   it('asks the backing store once per key', async () => {
     const calls: string[] = [];
     const store = cachedReads(backing({ 'dataset/abc': Buffer.from('[1,2]') }, calls));

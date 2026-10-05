@@ -904,7 +904,7 @@ export type FrameBridgeParentPayload =
 export type FrameBridgeFramePayload =
   | { kind: 'hello' }
   /** The controller runs; `nonce` is what its events carry. */
-  | { kind: 'ready'; nonce: string }
+  | { kind: 'ready'; nonce: string; urlValues?: string }
   | { kind: 'event'; event: unknown }
   | { kind: 'restored'; call: number; ok: true }
   | { kind: 'restored'; call: number; ok: false; error: string }

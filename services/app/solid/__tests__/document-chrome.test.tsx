@@ -84,7 +84,7 @@ it('opens the artifact controls and the menu from the app bar', () => {
 it('names the author and the document in the bar', () => {
   mount();
   expect(screen.getByRole('link', { name: "View @ada's profile" })).toHaveAttribute('href', '/@ada');
-  expect(screen.getByText('A copy')).toHaveAttribute('data-mx-document-title');
+  expect(screen.getByText('A copy', { selector: '[data-mx-document-title]' })).toHaveAttribute('data-mx-document-title');
 });
 
 it('says where a fork came from in the controls panel, linked to the source', () => {

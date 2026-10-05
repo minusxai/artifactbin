@@ -463,6 +463,8 @@ export interface AssembleInput {
   compiled: CompiledPage;
   /** False for captures that intentionally omit the document's own navigation. */
   documentChrome?: boolean;
+  /** Framed documents default to _top; unframed previews omit the navigation override. */
+  navigationTarget?: '_top' | null;
   /**
    * The story HTML for THIS request: `compiled.html` when no snapshot exists,
    * else the SSR module's render with the snapshot's rows (serve.server.ts,

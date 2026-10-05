@@ -17,7 +17,7 @@ import {imageReferenceId} from '../../../app/lib/story/assets/image-source';
 import {fileContentType} from '../../../app/lib/story/assets/file-types';
 import {createServer} from 'node:http';
 import {readFile,mkdir,realpath} from 'node:fs/promises';
-import {join,relative,dirname} from 'node:path';
+import {join,relative} from 'node:path';
 import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
 import {prepareStoryRuntime} from '../../../app/lib/story/prepared/prepare-runtime.server';
 import {compileStoryCss} from '../../../app/lib/data/story/story-css.server';
@@ -161,7 +161,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&(target.pathname===PREVIEW_CONNECT_PATH||target.pathname==='/'&&!options.files.length)){
    if(options.capture)throw new Refusal(403,'Image export is read-only');
    res.setHeader('Content-Type','text/html');
-   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
    return res.end(previewConnectPage());
   }
   if(req.method==='POST'&&(target.pathname===PREVIEW_CONNECT_INSPECT_PATH||target.pathname===PREVIEW_CONNECT_IMPORT_PATH)){
@@ -263,7 +263,6 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){
    const current=await read(file);
    if(!current.prepared)throw new Refusal(500,'Local preview has no runtime assets configured.');
-   const directory=dirname(file),base='/workspace/'+(directory==='.'?'':directory.split('/').map(encodeURIComponent).join('/')+'/');
    const compiled=await compileDocument({data:current.data,flow:current.flow,authorScript:current.prepared.authorScript,capture:!!options.capture}).catch((error:unknown)=>{if(options.capture)failure=error instanceof Error?error.message:String(error);throw error;});
    // A capture bakes its own rows server-side (as `/raw`'s export path does): nothing for the
    // headless page to wait on after paint, and no reader-side race to detect "settled".
@@ -279,12 +278,12 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     values=ran.values;story=await renderStoryHtml(compiled,{values:ran.values,results:{tables:ran.tables,errors:ran.errors}});
    }
    const assembled=assembleDocument({compiled,prepared:current.prepared,colorMode:current.data.colorMode,file,capture:!!options.capture,story,values});
-   let html=assembled.html.replace('<head>',`<head><base href="${base}">`);
+   let html=assembled.html;
    // A capture is the document alone, as /a/:id/raw serves it. The editor's chrome sheet is the app's own
    // globals, whose `body` rules (a mono family, 14px) would restyle every element the design's root family
    // reaches, and its client mounts nothing under `?capture=1` anyway (preview/client.tsx).
    if(options.capture)html=html.replace('<body','<body data-afbin-export-ready=""');
-   else html=html.replace('</body>',`<link rel="stylesheet" href="/bundle/chrome.css"><script type="module" src="/bundle/client.js"></script></body>`);
+   else html=html.replace('</body>',`<script type="module" src="/bundle/client.js"></script></body>`);
    res.setHeader('Content-Type','text/html');
    for(const [name,value] of Object.entries(assembled.headers))res.setHeader(name,value);
    return res.end(html);

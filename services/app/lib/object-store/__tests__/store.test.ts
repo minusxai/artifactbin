@@ -1,17 +1,52 @@
 /**
  * The store itself, exercised through its real interface.
  *
- * The local backend is tested against a real temp directory (no mocks — the
- * filesystem is the thing under test), and the S3 backend against a real MinIO
+ * The local backend is tested against a real temp directory (publication fault injection
+ * still uses real filesystem operations), and the S3 backend against a real MinIO
  * when one is running, skipped otherwise so CI stays dependency-free. Both
  * satisfy the SAME contract, which is the point of the abstraction: if the two
  * ever diverge, the app behaves differently on a laptop than in production.
  */
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { mkdtemp, rm } from 'fs/promises';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
+import { mkdtemp, rm, readdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, createS3Store, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
+
+// Fault injection still writes/truncates real files. Pause before bytes finish so a reader deterministically
+// observes the publication boundary; an atomic writer's temporary file is not the reader's destination.
+const publication = vi.hoisted(() => ({active:false,fail:false,reached:()=>{},pending:Promise.resolve()}));
+const mockedFs = vi.hoisted(() => async () => {
+  const real = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const writing = async (truncate:()=>Promise<void>,finish:()=>Promise<void>) => {
+    if (!publication.active) return finish();
+    await truncate(); publication.reached(); await publication.pending;
+    if (publication.fail) throw new Error('simulated disk write failure');
+    await finish();
+  };
+  return {
+    ...real,
+    writeFile: (...args:Parameters<typeof real.writeFile>) => writing(() => real.writeFile(args[0], ''), () => real.writeFile(...args)),
+    open: async (...args:Parameters<typeof real.open>) => {
+      const handle = await real.open(...args);
+      if (typeof args[1] !== 'string' || !args[1].includes('w')) return handle;
+      return new Proxy(handle, {get(target,key) {
+        if (key === 'writeFile') return (...writeArgs:Parameters<typeof handle.writeFile>) => writing(() => handle.writeFile(''), () => handle.writeFile(...writeArgs));
+        const value = Reflect.get(target,key,target); return typeof value === 'function' ? value.bind(target) : value;
+      }});
+    },
+  };
+});
+vi.mock('fs/promises', () => mockedFs());
+vi.mock('node:fs/promises', () => mockedFs());
+
+function pausePublication(fail=false) {
+  let reached!:()=>void,release!:()=>void;
+  const ready=new Promise<void>(resolve=>{reached=resolve;});
+  publication.active=true;publication.fail=fail;publication.reached=reached;
+  publication.pending=new Promise<void>(resolve=>{release=resolve;});
+  return {ready,release:()=>{publication.active=false;release();}};
+}
 
 describe('object keys', () => {
   it('are content-addressed, so identical bytes reuse one object', () => {
@@ -287,5 +322,37 @@ describe('getStream', () => {
     expect(gets).toBe(1);
 
 
+  });
+});
+
+describe('local objects publish complete bytes', () => {
+  it('keeps old bytes visible to get and getStream until the replacement is published', async () => {
+    const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-'));tmpDirs.push(dir);const store=createLocalStore(dir);
+    await store.put('islands/module','complete old module');
+    const pause=pausePublication(),pending=store.put('islands/module','complete new module');await pause.ready;
+    try {
+      const bytes=(await store.get('islands/module')).toString();
+      const stream=await store.getStream('islands/module');const parts:Buffer[]=[];for await(const part of stream)parts.push(Buffer.from(part));
+      expect({bytes,stream:Buffer.concat(parts).toString()}).toEqual({bytes:'complete old module',stream:'complete old module'});
+    } finally {pause.release();await pending;}
+    expect((await store.get('islands/module')).toString()).toBe('complete new module');
+    expect(await readdir(path.join(dir,'islands'))).toEqual(['module']);
+  });
+
+  it('keeps a new object absent until its complete bytes are published', async () => {
+    const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-new-'));tmpDirs.push(dir);const store=createLocalStore(dir);
+    const pause=pausePublication(),pending=store.put('islands/module','complete module');await pause.ready;
+    try {await expect(store.get('islands/module')).rejects.toBeInstanceOf(ObjectUnavailable);}
+    finally {pause.release();await pending;}
+    expect((await store.get('islands/module')).toString()).toBe('complete module');
+  });
+
+  it('preserves an existing object and removes temporary bytes when replacement fails', async () => {
+    const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-fail-'));tmpDirs.push(dir);const store=createLocalStore(dir);
+    await store.put('islands/module','complete old module');
+    const pause=pausePublication(true),pending=store.put('islands/module','complete new module');await pause.ready;pause.release();
+    await expect(pending).rejects.toThrow('simulated disk write failure');
+    expect((await store.get('islands/module')).toString()).toBe('complete old module');
+    expect(await readdir(path.join(dir,'islands'))).toEqual(['module']);
   });
 });

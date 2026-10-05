@@ -12,7 +12,8 @@
  *          (solid/editor/create-live-edits), and pushes structural changes back down as
  *          `mx:document`, which the controller previews through the server compiler.
  */
-import { createEffect, createMemo, createSignal, on, onCleanup, onMount, For, Show, untrack, type JSX } from 'solid-js';
+import { EditorToolbar, EditorViewTabs } from './EditorChrome';
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import { firstHeadingTitle } from '@/lib/story/document/title';
 import { scriptExportLocation } from '@/lib/story/document/script-export-location';
 import { Portal } from 'solid-js/web';
@@ -91,8 +92,7 @@ const narrowTabClass = (active: boolean) =>
   `inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
     active ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
   }`;
-const viewTabClass = (active: boolean) => `inline-flex h-11 cursor-pointer items-center gap-2 border-b-2 px-2 font-mono text-sm font-semibold transition-colors sm:px-4 ${
-  active ? 'border-accent text-accent' : 'border-transparent text-muted hover:bg-raised hover:text-fg'}`;
+
 
 export interface EditorArtifact {
   document?: DocumentGraph;
@@ -734,27 +734,9 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
           <button type="button" onClick={() => setHistoryError(null)} aria-label="Dismiss undo message">{' '}×</button>
         </div>
       </Show>
-      <header aria-label="Editor toolbar"
-        class="fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px] items-center gap-x-1 border-b border-edge bg-surface px-2 sm:gap-x-2 sm:px-3"
-        style={{ top: `${barTop()}px`, height: `${barH}px`, left: '0px', right: `${props.rightInset ?? 0}px` }}>
+      <EditorToolbar top={barTop()} right={props.rightInset}>
         <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:gap-2">
-          <div role="tablist" aria-label="Editor view" class="flex h-11 shrink-0 items-stretch sm:gap-1" onKeyDown={(event) => {
-            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-            const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-            const current = tabs.indexOf(event.target as HTMLButtonElement);
-            const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-            event.preventDefault();
-            tabs[index]?.focus();
-            tabs[index]?.click();
-          }}>
-            <For each={viewTabs()}>{(tab) => (
-              <Tooltip content={tab.tip}>
-                <button type="button" role="tab" aria-label={tab.aria} aria-selected={tab.active} tabIndex={tab.active ? 0 : -1} onClick={() => tab.choose()} class={viewTabClass(tab.active)}>
-                  {tab.icon}<span class="hidden sm:inline">{tab.label}</span>
-                </button>
-              </Tooltip>
-            )}</For>
-          </div>
+          <EditorViewTabs tabs={viewTabs()} />
         </div>
         <div aria-label="Document actions" class="flex shrink-0 items-center sm:gap-2">
           <span role="status" class="hidden text-xs text-muted lg:inline">{live.state.status || (live.state.pending ? 'Saving…' : `v${live.state.version} · Saved`)}</span>
@@ -802,7 +784,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
             </button>
           </Tooltip>
         </div>
-      </header>
+      </EditorToolbar>
       <Show when={imageError()}>
         <div aria-label="Image upload error" class="fixed z-30 flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-1.5 font-mono text-[11px] text-red-800"
           style={{ top: `${barTop() + barH}px`, left: '0px', right: `${panelWidth()}px` }}>

@@ -18,6 +18,42 @@ const FLOW = { queries: [], mutations: [] } as never;
 const NONE = [] as never;
 
 describe('lazyEngine', () => {
+  it('holds an activated local write until its one module load completes', async () => {
+    const made = engineStub();
+    const loading = deferred<PageEngine>();
+    const load = vi.fn(() => loading.promise);
+    const engine = lazyEngine(load);
+    const mutation = { reads: { imports: [] } } as never;
+    const request = { mutation: 'remember' } as never;
+    const context = { userId: null, now: '2026-10-05', tz: 'UTC' };
+    const written = engine.write(FLOW, mutation, request, context);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(made.write).not.toHaveBeenCalled();
+    loading.resolve(made);
+    await written;
+    expect(made.prepare).toHaveBeenCalledWith(FLOW, []);
+    expect(made.write).toHaveBeenCalledWith(FLOW, mutation, request, context);
+  });
+
+  it('rejects local writes when the module fails, the page closes, or identity is unresolved', async () => {
+    const mutation = { reads: { imports: [] } } as never;
+    const context = { userId: null, now: '2026-10-05', tz: 'UTC' };
+    const failed = lazyEngine(() => Promise.reject(new Error('missing module')));
+    await expect(failed.write(FLOW, mutation, {} as never, context)).rejects.toThrow('module did not load');
+    const made = engineStub();
+    const loading = deferred<PageEngine>();
+    const closing = lazyEngine(() => loading.promise);
+    const written = closing.write(FLOW, mutation, {} as never, context);
+    closing.close();
+    loading.resolve(made);
+    await expect(written).rejects.toThrow('closed');
+    expect(made.write).not.toHaveBeenCalled();
+    const load = vi.fn(() => Promise.resolve(made));
+    const anonymous = lazyEngine(load, () => false);
+    await expect(anonymous.write(FLOW, mutation, {} as never, context)).rejects.toThrow('identifying');
+    expect(load).not.toHaveBeenCalled();
+  });
+
   it('closes an engine that finishes loading after the page closed it', async () => {
     const made = engineStub();
     const loading = deferred<PageEngine>();

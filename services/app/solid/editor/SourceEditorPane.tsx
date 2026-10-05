@@ -10,7 +10,7 @@ import { createEffect, createSignal, createUniqueId, lazy, onCleanup, Show, Susp
 import type { SourceEditorProps } from './SourceEditor';
 import { useSourceEditorTools } from './source-editor-tools';
 
-function PlainSourceFallback(props: SourceEditorProps & { remember: (selection: { start: number; end: number } | null) => void }) {
+function PlainSourceFallback(props: SourceEditorProps & { unavailable?: string | null; remember: (selection: { start: number; end: number } | null) => void }) {
   let input!: HTMLTextAreaElement;
   onCleanup(() => {
     const scope = input?.getRootNode() as Document | ShadowRoot | undefined;
@@ -22,7 +22,7 @@ function PlainSourceFallback(props: SourceEditorProps & { remember: (selection: 
       <div aria-hidden="true" class="w-12 shrink-0 overflow-hidden text-right" style={{ color: '#858585' }}>
         <pre data-source-line-numbers class="m-0 py-2 pr-3" style={{ font: 'inherit' }}>{props.value.split('\n').map((_, index) => index + 1).join('\n')}</pre>
       </div>
-      <textarea ref={input} aria-label={props.ariaLabel ?? 'Markup source'} readOnly={props.readOnly}
+      <textarea ref={input} aria-label={props.ariaLabel ?? 'Markup source'} aria-description={props.unavailable ?? undefined} readOnly={props.readOnly}
         class="min-h-0 min-w-0 flex-1 resize-none border-0 px-1 py-2 outline-none"
         style={{ 'background-color': '#1e1e1e', color: '#d4d4d4', font: 'inherit', 'tab-size': '2' }} wrap="off"
         spellcheck={false} autocapitalize="off" value={props.value}
@@ -32,7 +32,7 @@ function PlainSourceFallback(props: SourceEditorProps & { remember: (selection: 
         }}
         on:scroll={(event) => { const numbers = event.currentTarget.parentElement?.querySelector<HTMLElement>('[data-source-line-numbers]'); if (numbers) numbers.style.transform = `translateY(${-event.currentTarget.scrollTop}px)`; }} />
     </div>
-    <div class="px-3 py-2 text-xs" style={{ color: '#a0a0a0', 'border-top': '1px solid #333' }} role="status">Loading rich editor… You can keep editing.</div>
+    <div class="px-3 py-2 text-xs" style={{ color: '#a0a0a0', 'border-top': '1px solid #333' }} role="status">{props.unavailable ?? 'Loading rich editor… You can keep editing.'}</div>
   </div>;
 }
 
@@ -72,7 +72,7 @@ export default function SourceEditorPane(props: SourceEditorProps) {
       <Show when={unavailable()}>{(reason) => <span id={reasonId} hidden>{reason()}</span>}</Show>
     </div>
     <div class={`min-h-0 flex-1 ${formatted() ? 'hidden' : ''}`}>
-      <Suspense fallback={<PlainSourceFallback {...props}
+      <Suspense fallback={<PlainSourceFallback {...props} unavailable={tools.editorUnavailable}
         onChange={(text) => { setPlainDraft({ text, revision: props.revision }); props.onChange(text); }}
         remember={(selection) => { if (selection) handoff = selection; }} />}>
         <Editor {...props} value={plainDraft()?.revision === props.revision ? plainDraft()!.text : props.value}

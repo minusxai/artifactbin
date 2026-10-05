@@ -191,6 +191,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         attached = true;
         for (const queued of backlog.splice(0)) envelope(queued);
         if (inset) envelope({ kind: 'inset', top: inset });
+        const values = urlValuesOf({ type: STORY_URL_VALUES_MESSAGE, search: payload.urlValues });
+        if (values !== null) options.onUrlValues?.(values);
         options.onReady?.(nonce);
         return;
       case 'event':

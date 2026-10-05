@@ -17,6 +17,7 @@ import {loadSsrModule} from '../../../app/lib/compiled-page/bundle.server';
 import {bindModuleCode} from '../../../app/lib/compiled-page/runtime-binding';
 import {ISLANDS_PATH,SPECULATION_RULES_HEADER, type CompileInput, type CompiledPage, type CompilerBuild} from '../../../app/lib/compiled-page/contract';
 import type {PreparedStoryRuntime} from '../../../app/lib/story/prepared/prepared-runtime';
+import {DOCUMENT_UI_FONT_CSS} from '../../../app/lib/serving/app-fonts';
 import {documentStyleSheets} from '../../../app/lib/story/styles';
 import type {StoryIslandData, ServedResults} from '../../../app/lib/story-runtime/contract';
 import type {Scalar} from '../../../contracts/src/index';
@@ -152,14 +153,15 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
  const assembled=assembleReaderPage({
   compiled: input.compiled,
   documentChrome: !input.capture,
+  navigationTarget: null,
   story: input.story ?? input.compiled.html,
   outline: input.compiled.outline,
   capture: input.capture,
   css: '',
-  sheets: documentStyleSheets({
+  sheets: [...documentStyleSheets({
    compiledCss: input.prepared.compiledCss, chrome: !input.capture, bare: false, theme: input.prepared.theme,
    docFonts: input.prepared.base.fonts, systemCss: input.prepared.base.systemCss ?? '', authorCss: input.prepared.authorCss,
-  }),
+  }), ...(input.capture ? [] : [{ attr: 'data-afbin-ui-fonts', css: DOCUMENT_UI_FONT_CSS }])],
   fontPreloads: input.prepared.fontPreloads ?? [],
   title: input.prepared.title,
   theme: input.prepared.theme,
