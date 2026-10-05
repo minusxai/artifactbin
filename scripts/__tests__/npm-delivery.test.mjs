@@ -7,9 +7,18 @@ import {realpathSync} from 'node:fs';
 import {npmConsumerArgs} from '../../services/cli/scripts/npm-consumer-args.mjs';
 const npmCli=process.env.npm_execpath??realpathSync(spawnSync('/bin/sh',['-c','command -v npm'],{encoding:'utf8'}).stdout.trim());
 const pack=new URL('../../services/cli/scripts/pack-release.mjs',import.meta.url);
+const transition=new URL('../../services/cli/scripts/transition-assets.mjs',import.meta.url);
+const bootstrap=new URL('../../services/cli/transition/afbin',import.meta.url);
 async function fixture(run){const root=await mkdtemp(join(tmpdir(),'afbin-pack-'));try{
  const cli=join(root,'services/cli');await mkdir(join(cli,'scripts'),{recursive:true});await mkdir(join(cli,'dist/runtime'),{recursive:true});
  await cp(pack,join(cli,'scripts/pack-release.mjs'));
+ // The pack also builds the transition assets old 0.3.x installs download: the generator, the bootstrap pinned
+ // to this fixture's version, the protocol constant and a minimal teaching bundle.
+ await cp(transition,join(cli,'scripts/transition-assets.mjs'));
+ await mkdir(join(cli,'transition'),{recursive:true});await mkdir(join(cli,'src/generated'),{recursive:true});await mkdir(join(root,'services/contracts/src'),{recursive:true});
+ await writeFile(join(cli,'transition/afbin'),(await readFile(bootstrap,'utf8')).replace(/^AFBIN_VERSION=.*$/m,'AFBIN_VERSION=0.1.0'),{mode:0o755});
+ await writeFile(join(root,'services/contracts/src/cli-auth.ts'),'export const CLI_PROTOCOL_VERSION = 3;\n');
+ await writeFile(join(cli,'src/generated/teaching.json'),JSON.stringify({version:'0.1.0',protocol:3,files:{'SKILL.md':'---\nname: artifactbin\ndescription: fixture\n---\nfixture'}}));
  await writeFile(join(cli,'scripts/prepare-pty.mjs'),'// fixture postinstall\n');
  await writeFile(join(cli,'dist/afbin.mjs'),'#!/usr/bin/env node\nconsole.log("fixture-0.1.0");\n',{mode:0o755});
  await writeFile(join(cli,'package.json'),JSON.stringify({name:'@afbin/cli',version:'0.1.0',type:'module',bin:{afbin:'dist/afbin.mjs'},files:['dist','scripts/prepare-pty.mjs','npm-shrinkwrap.json'],scripts:{postinstall:'node scripts/prepare-pty.mjs'}}));

@@ -1,0 +1,60 @@
+#!/bin/sh
+# afbin transition bootstrap. The 0.3.x self-updater installs this file over the old executable.
+# On its first real run it installs @afbin/cli through npm, hands the command over, and removes itself.
+AFBIN_VERSION=0.4.7
+AFBIN_PROTOCOL=3
+set -u
+
+# The old updater verifies a download by running it with --version --json in an EMPTY environment.
+if [ "$#" -eq 2 ] && [ "$1" = "--version" ] && [ "$2" = "--json" ]; then
+  printf '{"version":"%s","protocol":%s}\n' "$AFBIN_VERSION" "$AFBIN_PROTOCOL"
+  exit 0
+fi
+# A still-running old process may spawn its executable path as a background updater. Nothing to do.
+if [ "$#" -ge 1 ] && [ "$1" = "--internal-background-update" ]; then exit 0; fi
+
+home="${HOME:-}"
+original_path="$PATH"
+self="$0"
+case "$self" in /*) ;; *) self="$(cd "$(dirname "$self")" 2>/dev/null && pwd)/$(basename "$self")" ;; esac
+
+# Find npm: PATH first, then the private Node the artifactbin helper installs.
+npm_bin="$(command -v npm 2>/dev/null || true)"
+if [ -z "$npm_bin" ] && [ -n "$home" ]; then
+  for candidate in "$home"/.artifactbin/node-v*/bin/npm; do
+    if [ -x "$candidate" ]; then npm_bin="$candidate"; PATH="$(dirname "$candidate"):$PATH"; export PATH; break; fi
+  done
+fi
+if [ -z "$npm_bin" ]; then
+  printf '%s\n' "afbin now installs through npm, and Node.js was not found." >&2
+  printf '%s\n' "Run: npx --yes @afbin/cli@latest setup   (after installing Node 22+ from https://nodejs.org)" >&2
+  exit 1
+fi
+
+printf '%s\n' "afbin now installs through npm: installing @afbin/cli@$AFBIN_VERSION once (this can take a minute)." >&2
+prefix="$("$npm_bin" prefix -g 2>/dev/null || true)"
+installed=""
+if [ -n "$prefix" ]; then
+  if "$npm_bin" install -g --no-fund --no-audit "@afbin/cli@$AFBIN_VERSION" >&2; then installed="$prefix/bin/afbin"; fi
+fi
+if [ -z "$installed" ] && [ -n "$home" ]; then
+  # The global prefix is not user-writable (Node from the system installer): use a user prefix instead.
+  user_prefix="${ARTIFACTBIN_HOME:-$home/.artifactbin}/npm"
+  mkdir -p "$user_prefix"
+  if "$npm_bin" install -g --prefix "$user_prefix" --no-fund --no-audit "@afbin/cli@$AFBIN_VERSION" >&2; then
+    installed="$user_prefix/bin/afbin"
+    PATH="$user_prefix/bin:$PATH"; export PATH
+    printf '%s\n' "Installed to $user_prefix/bin. Add it to PATH: export PATH=\"$user_prefix/bin:\$PATH\"" >&2
+  fi
+fi
+if [ -z "$installed" ] || [ ! -x "$installed" ] || [ "$installed" = "$self" ]; then
+  printf '%s\n' "The npm install did not complete; afbin will retry next time. Or run: npx --yes @afbin/cli@latest setup" >&2
+  exit 1
+fi
+# Hand over only once the real command exists somewhere else. If PATH cannot see it, leave a two-line
+# shim in this file's place so the command the user had keeps working; setup removes it later.
+rm -f "$self"
+if ! found="$(PATH="$original_path" command -v afbin 2>/dev/null)" || [ ! -x "$found" ] || [ "$found" = "$self" ]; then
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$installed" > "$self"; chmod 755 "$self"
+fi
+exec "$installed" "$@"

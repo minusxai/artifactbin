@@ -5,6 +5,8 @@ import {isQueryFailure} from '@artifactbin/contracts';
 import {CliError} from './commands';
 import {installSkills,selectSkills,harnessLabels,type SkillChoice,type SkillHarness,type SkillInstallation} from './skill-install';
 import {type Style} from './style';
+import {CLI_VERSION} from './version';
+import {findAfbinOnPath,globalInstall,installKind,retireAfbin,type GlobalInstallResult,type InstallKind,type NpmRunner,type RetiredAfbin} from './global-install';
 
 /** Offline setup owns selection before any writes, including an explicitly empty selection. */
 interface SetupOptions {
@@ -14,6 +16,33 @@ interface SetupOptions {
 export async function setupSkills(options:SetupOptions){
  const selected=await selectSkills(options);
  return installSkills(selected,options);
+}
+export type SetupGlobal=GlobalInstallResult|{status:'skipped';reason:string};
+export const manualInstallHint=(version:string)=>`Run npm install -g @afbin/cli@${version} yourself, or npx --yes @afbin/cli@latest <command>.`;
+/**
+ * From a package (npx, a global install), setup makes `afbin` npm's global command and retires an old
+ * standalone `afbin` on PATH. A checkout never installs globally, so `npm run afbin -- setup` stays harmless.
+ */
+export async function setupGlobal(options:{home:string;env:NodeJS.ProcessEnv;noGlobal:boolean;kind?:InstallKind;npm?:NpmRunner;platform?:string}):Promise<{global:SetupGlobal;retired:RetiredAfbin[]}>{
+ const skipped=(reason:string)=>({global:{status:'skipped' as const,reason},retired:[]});
+ if(options.noGlobal)return skipped('--no-global');
+ if(options.env.ARTIFACTBIN_GLOBAL==='off')return skipped('ARTIFACTBIN_GLOBAL=off');
+ if((options.kind??installKind())!=='package')return skipped('dev checkout');
+ const platform=options.platform??process.platform;
+ const global=await globalInstall({version:CLI_VERSION,home:options.home,env:options.env,platform,...(options.npm?{npm:options.npm}:{})});
+ if(global.status!=='installed')return {global,retired:[]};
+ return {global,retired:await retireAfbin(await findAfbinOnPath(options.env,platform),global,options.home,{env:options.env,platform})};
+}
+export function globalSummary(result:{global:SetupGlobal;retired:readonly RetiredAfbin[]},s:Style):string{
+ const {global}=result;if(global.status==='skipped')return '';
+ const rows=['',`  ${s.bold('afbin command')}`];
+ if(global.status==='failed')rows.push(`    ${s.yellow('!')} afbin command  not installed: ${global.reason??'npm failed'}`,`      ${s.dim(manualInstallHint(global.version))}`);
+ else rows.push(global.on_path?`    ${s.green('✓')} afbin command  ${s.dim(global.bin)}`:`    ${s.yellow('!')} afbin command  ${global.bin} — not on PATH: ${global.path_line}`);
+ for(const item of result.retired){
+  if(item.status==='kept')rows.push(`    ${s.yellow('!')} Old afbin kept  ${item.path} — ${item.reason}`);
+  else rows.push(`    ${s.green('✓')} Retired old afbin  ${item.path}${item.backup?` (backup ${item.backup}${item.status==='forwarded'?'; it now runs the npm command':''})`:item.status==='forwarded'?' (it now runs the npm command)':''}`);
+ }
+ return rows.join('\n')+'\n';
 }
 /** Absolute paths, never `~`: an agent reading this expanded `~` to /root and looked in the wrong home. */
 export function setupSummary(installations:readonly SkillInstallation[],s:Style):string{

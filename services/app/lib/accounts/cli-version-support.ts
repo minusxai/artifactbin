@@ -5,5 +5,6 @@ export function cliNpmRequired(request:Request):Response|null {
  const version=/^afbin\/(\d+)\.(\d+)\.(\d+)$/.exec(request.headers.get('User-Agent')??'');
  if(!version||BigInt(version[1]!)!==0n||BigInt(version[2]!)>=4n)return null;
  const origin=baseUrl(request);
- return Response.json({error:'cli_npm_required',message:'afbin now runs through npm. Install Node.js if needed, then use npx --yes @afbin/cli@latest <command>.',hint:`Node/npm setup: ${origin}/chat/ensure-node.sh (macOS/Linux), ${origin}/chat/ensure-node.ps1 (Windows). Then run npx --yes @afbin/cli@latest <command>. In Windows PowerShell use npx.cmd --yes @afbin/cli@latest <command>. Your files and account stay the same.`},{status:426});
+ // The old CLI prints message, then hint: together they read as one instruction, npx line first.
+ return Response.json({error:'cli_npm_required',message:'afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',hint:`Windows PowerShell: npx.cmd --yes @afbin/cli@latest setup. If Node.js 22+ is missing, run ${origin}/chat/ensure-node.sh (macOS/Linux) or ${origin}/chat/ensure-node.ps1 (Windows) first. Your files, account and skills stay.`},{status:426});
 }

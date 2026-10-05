@@ -11,7 +11,9 @@ import {checkDirectHttp,checkGuestHttpIssuance} from '../../../scripts/gates/lib
 useAppHarness();
 const base='https://example.test';
 const json=(body:unknown,status=200,headers:Record<string,string>={})=>Response.json(body,{status,headers});
-function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperBase=base}={}){
+const npmNotice=(helperBase:string)=>({message:'afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',hint:`Windows PowerShell: npx.cmd --yes @afbin/cli@latest setup. If Node.js 22+ is missing, run ${helperBase}/chat/ensure-node.sh (macOS/Linux) or ${helperBase}/chat/ensure-node.ps1 (Windows) first. Your files, account and skills stay.`});
+const legacyNotice=(helperBase:string)=>({message:'afbin now runs through npm',hint:`Node/npm setup: ${helperBase}/chat/ensure-node.sh (macOS/Linux), ${helperBase}/chat/ensure-node.ps1 (Windows). npx --yes @afbin/cli@latest <command>; npx.cmd`});
+function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperBase=base,legacyCopy=false}={}){
  let rows=[{region:'EU',amount:2}],version=1;
  const calls:Array<{path:string;init:RequestInit}>=[];
  const fetch=async(input:string,init:RequestInit={})=>{
@@ -25,7 +27,7 @@ function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperB
   if(init.method==='PUT'){
    if(new Headers(init.headers).get('user-agent')==='afbin/0.3.21'){
     if(mutates)rows=[{region:'EU',amount:999}];
-    return json({error:'cli_npm_required',message:'afbin now runs through npm',hint:`Node/npm setup: ${helperBase}/chat/ensure-node.sh (macOS/Linux), ${helperBase}/chat/ensure-node.ps1 (Windows). npx --yes @afbin/cli@latest <command>; npx.cmd`},426);
+    return json({error:'cli_npm_required',...(legacyCopy?legacyNotice:npmNotice)(helperBase)},426);
    }
    const body=JSON.parse(String(init.body));expect(body.expectedVersion).toBe(version);expect(body.expectedState).toBe('head'+version);
    rows=[{region:'EU',amount:20}];version++;return json({id:'csv123',version,state:'head'+version});
@@ -43,7 +45,7 @@ it('guest issuance acceptance refuses a minted credential and requires no-store 
  await checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({error:'email_auth_required'},401,{'Cache-Control':'no-store'})});
  await expect(checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({access_token:'mx_test_guest'},201)})).rejects.toThrow();
 });
-it.each([{cache:'public'},{mutates:true},{filename:'Report.html'},{helperBase:'http://artifactbin-app:3000'},{helperBase:'https://wrong-public.example'}])('acceptance catches a broken release contract %j',async options=>{
+it.each([{cache:'public'},{mutates:true},{filename:'Report.html'},{helperBase:'http://artifactbin-app:3000'},{helperBase:'https://wrong-public.example'},{legacyCopy:true}])('acceptance catches a broken release contract %j',async options=>{
  const fake=host(options);
  await expect(checkDirectHttp({base,fetch:fake.fetch,accountCookie:'email=session',artifactId:'doc123',stamp:'unit',onArtifact:()=>{}})).rejects.toThrow();
 });
@@ -70,6 +72,12 @@ it('acceptance runs against real composed email, artifact and download handlers'
   const ids:string[]=[];
   await checkDirectHttp({base:origin,fetch,accountCookie,artifactId:(await created.json()).id,stamp:'real',onArtifact:(id:string)=>ids.push(id)});
   expect(ids).toHaveLength(1);
+  const retired=await fetch(origin+'/api/artifacts',{headers:{authorization:'Bearer '+token.access_token,'user-agent':'afbin/0.3.21'}});
+  expect(retired.status).toBe(426);
+  const notice=await retired.json();
+  expect(notice.error).toBe('cli_npm_required');
+  expect(notice.message.startsWith('afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup')).toBe(true);
+  expect(notice.hint).toContain(`${origin}/chat/ensure-node.sh`);
   expect((await fetch(origin+'/api/my/tokens/'+token.id,{method:'DELETE',headers:{cookie:accountCookie,origin}})).status).toBe(204);
  }finally{await drainPreparedPageWarmups();await drainSnapshotRevalidations();await application.close();await rm(directory,{recursive:true,force:true});}
 });

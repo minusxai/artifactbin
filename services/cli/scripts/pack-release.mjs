@@ -27,4 +27,6 @@ try{
  await cp(join(stage,'npm-shrinkwrap.json'),join(cli,'npm-shrinkwrap.json'));
  await mkdir(output,{recursive:true});
  console.log(run(['pack','--json','--pack-destination',output]));
+ // The files old 0.3.x installs download from the same GitHub release (see transition-assets.mjs).
+ execFileSync(process.execPath,[join(cli,'scripts/transition-assets.mjs'),'build',join(output,'transition')],{stdio:'inherit'});
 }finally{await rm(stage,{recursive:true,force:true});}
