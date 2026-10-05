@@ -49,3 +49,25 @@ it('pins browser tooling to its actual aliased manifest and installs OS dependen
  expect(proof.run).toContain('playwright/cli.js install chromium');
  expect(proof.run).not.toContain('--with-deps');
 });
+
+it('keeps ten cold native consumers and six complete platform/runtime journeys',()=>{
+ const matrix=workflow().jobs.cli.strategy.matrix;
+ const expanded=matrix.os.flatMap(os=>matrix.node.flatMap(node=>matrix.phase.map(phase=>({os,node,phase}))));
+ const selected=expanded.filter(row=>!(matrix.exclude??[]).some(excluded=>Object.entries(excluded).every(([key,value])=>row[key]===value)));
+ expect(selected.filter(row=>row.phase==='native')).toHaveLength(10);
+ const experience=selected.filter(row=>row.phase==='experience');
+ expect(experience).toHaveLength(6);
+ expect(experience.filter(row=>row.node==='22.22.3').map(row=>row.os).sort()).toEqual([...matrix.os].sort());
+ expect(experience.filter(row=>row.node==='24.21.0')).toEqual([{os:'ubuntu-24.04',node:'24.21.0',phase:'experience'}]);
+});
+it('keeps a cold standard-user query without repeating native offline acceptance',()=>{
+ const script=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ expect(script).toContain("Set-ExecutionPolicy -Scope CurrentUser Restricted -Force");
+ expect(script).toContain("throw 'Expected standard user'");
+ expect(script).toContain("throw 'Expected Node-free PATH'");
+ expect(script).toContain("throw 'Expected genuinely cold npm cache'");
+ expect(script).toContain("Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\\candidate.tgz','afbin','query',$rows,'--json')");
+ expect(script).not.toContain('warmed-npx-consumer');
+ expect(script).not.toContain('warmed-offline-query');
+ expect(script).not.toContain('expected-package.json');
+});

@@ -916,6 +916,13 @@ jobs:
         os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
         node: [22.22.3, 24.21.0]
         phase: [native, experience]
+        # Native ABI and offline execution cover both Node versions on every OS.
+        # The full shared application journey needs each OS and one Node 24 cross-check.
+        exclude:
+          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: experience }
+          - { os: macos-14, node: 24.21.0, phase: experience }
+          - { os: macos-15-intel, node: 24.21.0, phase: experience }
+          - { os: windows-2022, node: 24.21.0, phase: experience }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020

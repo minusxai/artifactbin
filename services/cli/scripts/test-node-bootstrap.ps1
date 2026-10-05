@@ -10,8 +10,6 @@ New-Item -ItemType Directory $root | Out-Null
 Copy-Item services/app/public/chat/ensure-node.ps1 (Join-Path $root 'ensure-node.ps1')
 if (!$Tarball) { throw 'Pass the exact npm candidate tarball.' }
 Copy-Item $Tarball (Join-Path $root 'candidate.tgz')
-Copy-Item services/cli/scripts/warmed-npx-consumer.mjs (Join-Path $root 'warmed-npx-consumer.mjs')
-Copy-Item services/cli/package.json (Join-Path $root 'expected-package.json')
 New-LocalUser -Name $identity -Password $secure -PasswordNeverExpires | Out-Null
 Add-LocalGroupMember -Group Users -Member $identity
 Start-Service seclogon
@@ -98,21 +96,8 @@ if(Test-Path $env:npm_config_cache){throw 'Expected genuinely cold npm cache'}
 $phase='standard-user online npx query'
 $result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\candidate.tgz','afbin','query',$rows,'--json')
 if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
-# A local tarball --package spec forces npm to re-extract/reify its package even offline.
-# Inspect the one cold install's version + exact tarball SHA512 lock receipt, then reuse
-# those same installed bytes without a second consumer or registry connection.
-$phase='verify warmed npx consumer'
-$consumer=Invoke-Candidate 'node.exe' @('__ROOT__\warmed-npx-consumer.mjs',$env:npm_config_cache,'__ROOT__\candidate.tgz','__ROOT__\expected-package.json') | ConvertFrom-Json
-$phase='standard-user warmed offline npm query'
-Push-Location $consumer.directory
-try {
-  $result=Invoke-Candidate 'npm.cmd' @('exec','--offline','--yes','--','afbin','query',$rows,'--json')
-} finally { Pop-Location }
-if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('20'))){throw 'Standard-user warmed offline query failed'}
-$phase='verify unchanged warmed npx consumer'
-$after=Invoke-Candidate 'node.exe' @('__ROOT__\warmed-npx-consumer.mjs',$env:npm_config_cache,'__ROOT__\candidate.tgz','__ROOT__\expected-package.json') | ConvertFrom-Json
-if($after.directory -ne $consumer.directory){throw 'Offline execution created another npm consumer'}
-[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","same-tarball-standard-user-npx","warmed-offline-query","exact-tarball-integrity","no-second-npx-consumer"]}')
+# Warmed offline/native behavior is proved by both Windows native matrix versions.
+[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","same-tarball-standard-user-npx"]}')
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
 # CreateProcessWithLogonW limits command lines to1024characters; keep script as
