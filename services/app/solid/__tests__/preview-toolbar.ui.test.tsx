@@ -1,7 +1,9 @@
 /* @jsxImportSource solid-js */
 /** The CLI preview uses the same compiled controller; raw source must own its save independently. */
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {fireEvent,screen,waitFor} from '@testing-library/dom';
+import {fireEvent,waitFor} from '@testing-library/dom';
+import {screen, trustedQuery} from './trusted-screen';
+import {EditorView} from '@codemirror/view';
 import {render} from 'solid-js/web';
 import type {InPlaceEditOptions} from '@/solid/editor/create-in-place-edit';
 import type {PreviewDocument} from '../../../cli/src/preview/types';
@@ -21,37 +23,40 @@ beforeEach(()=>{
 });
 afterEach(()=>{dispose?.();dispose=undefined;vi.unstubAllGlobals();document.body.innerHTML='';});
 async function mount(){const {Toolbar}=await import('../../../cli/src/preview/client');const host=document.createElement('div');document.body.append(host);dispose=render(()=> <Toolbar initial={initial} />,host);}
-it('keeps the in-place controller inactive behind the raw source overlay',async()=>{
- await mount();fireEvent.click(screen.getByRole('button',{name:'Edit the source'}));
- await waitFor(()=>expect(screen.getByRole('textbox',{name:'Markup source'})).toBeDefined());
- expect(edit.options!.editing).toBe(false);expect(edit.commit).not.toHaveBeenCalled();
+async function code() {
+ fireEvent.click(screen.getByRole('button',{name:'Edit'}));
+ fireEvent.click(screen.getByRole('tab',{name:'Edit the source'}));
+ await waitFor(()=>expect(trustedQuery('.cm-editor')).not.toBeNull());
+ return EditorView.findFromDOM(trustedQuery('.cm-editor')!)!;
+}
+function replaceSource(view:EditorView,value:string){view.dispatch({changes:{from:0,to:view.state.doc.length,insert:value},userEvent:'input.type'});}
+it('keeps the in-place controller inactive behind the shared source pane',async()=>{
+ await mount();await code();
+ expect(edit.options!.editing).toBe(false);expect(edit.commit).toHaveBeenCalledOnce();expect(edit.commit).toHaveBeenCalledWith(true);
 });
 it('saves raw source without waiting for an unrelated compiled editor acknowledgement',async()=>{
- edit.commit.mockRejectedValue(Error('editor commit timed out'));await mount();
- fireEvent.click(screen.getByRole('button',{name:'Edit the source'}));
- const source=screen.getByRole('textbox',{name:'Markup source'});fireEvent.input(source,{target:{value:'<p id="words">Raw edit</p>'}});
+ await mount();const source=await code();edit.commit.mockClear();edit.commit.mockRejectedValue(Error('editor commit timed out'));
+ replaceSource(source,'<p id="words">Raw edit</p>');
  fireEvent.click(screen.getByRole('button',{name:'Done editing'}));
  await waitFor(()=>expect(fetch_).toHaveBeenCalledWith('/save',expect.objectContaining({body:JSON.stringify({file:'report.jsx',revision:'observed-revision',body:'<p id="words">Raw edit</p>'})})));
  expect(edit.commit).not.toHaveBeenCalled();await waitFor(()=>expect(reload).toHaveBeenCalledOnce());
 });
 it('flushes active in-place typing before capturing the source shown in code mode',async()=>{
  edit.commit.mockImplementation(async()=>{edit.options!.onSourceEdited('<p id="words">Last typed text</p>',false);});await mount();
- fireEvent.click(screen.getByRole('button',{name:'Edit document'}));expect(edit.options!.editing).toBe(true);
- fireEvent.click(screen.getByRole('button',{name:'Edit the source'}));
- await waitFor(()=>expect(edit.commit).toHaveBeenCalledWith(true));
- await waitFor(()=>expect((screen.getByRole('textbox',{name:'Markup source'}) as HTMLTextAreaElement).value).toBe('<p id="words">Last typed text</p>'));expect(edit.options!.editing).toBe(false);
+ const source=await code();
+ expect(edit.commit).toHaveBeenCalledWith(true);
+ expect(source.state.doc.toString()).toBe('<p id="words">Last typed text</p>');expect(edit.options!.editing).toBe(false);
 });
 it('keeps in-place editing and its unsaved source available if the switch cannot collect pending typing',async()=>{
- edit.commit.mockRejectedValue(Error('editor commit timed out'));await mount();fireEvent.click(screen.getByRole('button',{name:'Edit document'}));fireEvent.click(screen.getByRole('button',{name:'Edit the source'}));
+ edit.commit.mockRejectedValue(Error('editor commit timed out'));await mount();fireEvent.click(screen.getByRole('button',{name:'Edit'}));fireEvent.click(screen.getByRole('tab',{name:'Edit the source'}));
  await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('editor commit timed out'));
  expect(screen.queryByRole('textbox',{name:'Markup source'})).toBeNull();expect(edit.options!.editing).toBe(true);expect(fetch_).not.toHaveBeenCalledWith('/save',expect.anything());
 });
-
 it('renders a structural raw-source draft before Save while the in-place editor remains inactive',async()=>{
- edit.realController=true;edit.commit.mockRejectedValue(Error('editor commit timed out'));
+ edit.realController=true;
  fetch_.mockImplementation(async(path:string)=>new Response(JSON.stringify(path==='/draft'?{html:'<html><body><div data-mx-inline-story><p id="words">Live raw edit</p></div></body></html>'}:{}),{headers:{'content-type':'application/json'}}));
- await mount();fireEvent.click(screen.getByRole('button',{name:'Edit the source'}));
- fireEvent.input(screen.getByRole('textbox',{name:'Markup source'}),{target:{value:'<p id="words">Live raw edit</p>'}});
+ await mount();const source=await code();edit.commit.mockClear();edit.commit.mockRejectedValue(Error('editor commit timed out'));
+ replaceSource(source,'<p id="words">Live raw edit</p>');
  await waitFor(()=>expect(fetch_).toHaveBeenCalledWith('/draft',expect.objectContaining({body:JSON.stringify({file:'report.jsx',source:'<p id="words">Live raw edit</p>'})})));
  await waitFor(()=>expect(document.getElementById('words')?.textContent).toBe('Live raw edit'));
  expect(edit.options!.editing).toBe(false);expect(edit.commit).not.toHaveBeenCalled();expect(reload).not.toHaveBeenCalled();

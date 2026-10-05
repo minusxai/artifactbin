@@ -467,6 +467,26 @@ async function editing(engineName, browser) {
       await reopened.getByRole('button', { name: 'Open artifact controls' }).click();
       await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
     });
+    await step('phone source and comments share the viewport without overflowing the toolbar', async () => {
+      await reopened.getByRole('button', { name: 'Dismiss Offline copy' }).click();
+      const desktop = reopened.viewportSize();
+      const sourceBeforeResize = await plain.inputValue();
+      await reopened.setViewportSize({ width: 390, height: 844 });
+      await expect.poll(() => reopened.evaluate(() => innerWidth)).toBe(390);
+      for (const label of ['Page bar', 'Editor toolbar']) {
+        const bounds = await reopened.getByRole('banner', { name: label }).boundingBox();
+        check(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390, `${name}: ${label} fits the phone viewport`);
+      }
+      await reopened.getByRole('button', { name: 'Comment', exact: true }).click();
+      await expect(reopened.getByRole('dialog', { name: 'Annotation sidebar' })).toBeVisible();
+      await expect(plain).toBeVisible();
+      const reservation = await reopened.getByRole('region', { name: 'Source pane' }).evaluate(panel => ({ right: panel.style.right, margin: document.body.style.marginRight }));
+      check(reservation.right === '0px' && reservation.margin !== '320px', `${name}: phone source remains full width beside the comments sheet`);
+      await reopened.keyboard.press('Escape');
+      await expect(reopened.getByRole('dialog', { name: 'Annotation sidebar' })).toHaveCount(0);
+      await expect(plain).toHaveValue(sourceBeforeResize);
+      await reopened.setViewportSize(desktop);
+    });
     check(empty(await violations(reopened)), `${name}: CSP violations in the reopened copy`);
 
     // ── Ravi, somewhere else, comments on the copy he was sent ───────────────
@@ -789,6 +809,13 @@ async function connecting(engineName, browser) {
         [popup] = await Promise.all([page.waitForEvent('popup'), dialog.getByRole('button', { name: 'Connect', exact: true }).click()]);
         await expect(popup.getByRole('button', { name: 'Import and open', exact: true })).toBeEnabled({ timeout: 20_000 });
         await expect(popup.getByRole('heading', { name: 'Import an HTML file', exact: true })).toHaveCount(1);
+        await expect(popup.getByRole('banner', { name: 'Page bar' })).toHaveCount(1);
+        await expect(popup.getByRole('main')).toHaveCount(1);
+        const brand = popup.getByRole('banner', { name: 'Page bar' }).locator('img');
+        await brand.evaluate(image => image.decode());
+        check(await brand.evaluate(image => image.naturalWidth > 0 && image.getBoundingClientRect().width === 28), `${engineName}: receiver displays the shared embedded brand`);
+        const headingTop = await popup.getByRole('heading', { name: 'Import an HTML file', exact: true }).evaluate(heading => heading.getBoundingClientRect().top);
+        check(headingTop >= 100, `${engineName}: receiver uses shared form-page spacing below its bar`);
         // The handoff is an offer. There is no filesystem write until this confirmation.
         check(!readFileSync(path.join(directory, 'unselected.jsx'), 'utf8').includes('Connected'), `${engineName}: unselected source unchanged`);
         await popup.getByRole('textbox', { name: 'Workspace file', exact: true }).fill('connected.jsx');
@@ -804,8 +831,13 @@ async function connecting(engineName, browser) {
         check(threads.some((thread) => thread.thread?.some((comment) => comment.body === 'This comment must travel to the local editor.')), `${engineName}: unsaved comment retained`);
         await popup.getByRole('button', { name: 'Edit', exact: true }).click();
         await popup.getByRole('tab', { name: 'Edit the source', exact: true }).click();
+        await popup.locator('.cm-editor').waitFor();
         const source = popup.getByRole('textbox', { name: 'Markup source' });
         await source.fill((await source.evaluate(node => 'value' in node ? node.value : node.textContent)).replace('Connected prose', 'Saved on the server'));
+        // Native contenteditable changes reach CodeMirror's model through its DOM observer.
+        // Observe the real source adapter and projection before asking Done to persist that model.
+        await expect(popup.getByRole('status').filter({ hasText: /^Unsaved$/ })).toBeVisible();
+        await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible();
         await popup.getByRole('button', { name: 'Done editing', exact: true }).click();
         await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 20_000 });
         await expect.poll(() => readFileSync(path.join(directory, 'connected.jsx'), 'utf8')).toContain('Saved on the server');

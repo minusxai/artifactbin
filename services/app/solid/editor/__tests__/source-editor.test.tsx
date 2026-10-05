@@ -7,6 +7,7 @@
  * replacement, and the view is destroyed exactly once per mount.
  */
 import { afterEach, expect, it, vi } from 'vitest';
+import { waitFor } from '@testing-library/dom';
 import { createSignal } from 'solid-js';
 import { EditorView } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
@@ -32,6 +33,17 @@ it('mounts the engine with the value and a labelled editable surface', () => {
   const view = mount('<p>Draft</p>');
   expect(view.cm().state.doc.toString()).toBe('<p>Draft</p>');
   expect(view.getByLabelText('Markup source').getAttribute('contenteditable')).toBe('true');
+});
+
+it('publishes native contenteditable changes through the DOM observer before the source model is ready', async () => {
+  const view = mount('<p>Before</p>');
+  view.cm().focus();
+  // A browser paste/fill changes the editable DOM before the observer reads it.
+  view.cm().contentDOM.querySelector('.cm-line')!.textContent = '<p>After native input</p>';
+  expect(view.value()).toBe('<p>Before</p>');
+  await waitFor(() => expect(view.value()).toBe('<p>After native input</p>'));
+  expect(view.cm().state.doc.toString()).toBe('<p>After native input</p>');
+  expect(view.changes).toEqual(['<p>After native input</p>']);
 });
 
 it('typing echoes through the parent without writing back into the buffer, even when the echo lags', () => {

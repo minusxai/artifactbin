@@ -347,6 +347,9 @@ test('the preview browser bundle carries no react or react-dom',async()=>{
  try{
   await buildPreview(outdir);
   const files=await readdir(outdir);
+  const chromeCss=await readFile(join(outdir,'chrome.css'),'utf8');
+  assert.match(chromeCss,/\.mt-16\{/,'the shared import/login page spacing must be included in the preview stylesheet');
+  assert.match(chromeCss,/\.space-y-5/,'the shared import form spacing must be included in the preview stylesheet');
   assert.ok(files.some(name=>name==='client.js'),files.join(', '));
   for(const name of files){
    if(!name.endsWith('.js'))continue;

@@ -49,5 +49,5 @@ export async function importPreviewOffer(root:string,home:string,value:unknown){
 }
 
 export function previewConnectPage():string{
- return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect to artifactbin preview</title><link rel="stylesheet" href="/bundle/chrome.css"></head><body><main id="afbin-connect"><h1>Import an HTML file</h1><p>Start with an artifactbin .jsx.html file. Importing creates or reconciles a workspace copy; the original HTML file is unchanged.</p><p>JavaScript is required to choose a file and confirm its import.</p></main><script type="module" src="/bundle/connect.js"></script></body></html>';
+ return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect to artifactbin preview</title><link rel="stylesheet" href="/bundle/chrome.css"></head><body><div id="afbin-connect"><main><h1>Import an HTML file</h1><p>Start with an artifactbin .jsx.html file. Importing creates or reconciles a workspace copy; the original HTML file is unchanged.</p><p>JavaScript is required to choose a file and confirm its import.</p></main></div><script type="module" src="/bundle/connect.js"></script></body></html>';
 }

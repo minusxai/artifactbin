@@ -13,6 +13,13 @@ function file(source=base):ArtifactFile{return {format:1,origin:'http://localhos
 const html=(value:ArtifactFile)=>`<html><script>throw new Error('MUST NOT RUN')</script><script type="application/json" id="afbin-file">${JSON.stringify(value).replace(/</g,'\\u003c')}</script></html>`;
 async function fixture(run:(root:string,session:Awaited<ReturnType<typeof startPreview>>)=>Promise<void>){const root=await mkdtemp(join(tmpdir(),'preview-connect-'));const session=await startPreview({root,files:[],home:join(root,'home')});try{await run(root,session);}finally{await session.close();await rm(root,{recursive:true,force:true});}}
 function post(session:{url:string},path:string,body:unknown,origin:string|undefined=session.url){return fetch(session.url+path,{method:'POST',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(body)});}
+test('the receiver admits its embedded brand image while keeping external resources denied',()=>fixture(async(_root,session)=>{
+ const response=await fetch(session.url+'/connect');assert.equal(response.status,200);
+ const policy=response.headers.get('content-security-policy')!;
+ assert.match(policy,/(?:^|;)\s*img-src data:(?:;|$)/);
+ assert.match(policy,/(?:^|;)\s*default-src 'none'(?:;|$)/);
+ assert.doesNotMatch(policy,/img-src[^;]*(?:https?:|\*|'self')/);
+}));
 test('browser inspection is inert and import admits only the confirmed document and its registered resources',()=>fixture(async(root,session)=>{
  await writeFile(join(root,'private.jsx'),'<p>Private</p>');
  const value=file();value.source=base+'<img src="ref:image01" alt="Cover" />';value.localWorkspace!.assets.image01={path:'cover.png',contentType:'image/png',base64:Buffer.from('image bytes').toString('base64')};const offer={html:html(value),filename:'report.jsx.html'};

@@ -2,7 +2,7 @@
 import {createSignal,Show,onCleanup} from 'solid-js';
 import {render} from 'solid-js/web';
 import {PageBar, DocumentTitle} from '../../../app/solid/components/PageBar';
-import {FORM_INPUT, FORM_PRIMARY_BUTTON} from '../../../app/solid/components/FormControls';
+import {FormPage, FORM_INPUT, FORM_PRIMARY_BUTTON} from '../../../app/solid/components/FormControls';
 import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_INSPECT_PATH,PREVIEW_CONNECT_IMPORT_PATH,PREVIEW_CONNECT_MAX_BYTES,type PreviewConnectMessage} from '../../../contracts/src/preview-connect';
 
 interface Offer {html:string;filename:string}
@@ -46,7 +46,7 @@ function Connect(){
    location.replace(result.path);
   }catch(error){const message=error instanceof Error?error.message:String(error);setError(message);if(requestId)reply({channel:PREVIEW_CONNECT_CHANNEL,type:'error',requestId,message});setBusy(false);}
  };
- return <><PageBar home={null} mobileTitle="Preview server" navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title="Preview server"/><span class="text-xs text-muted">Local</span></>} actions={<></>}/><main class="mx-auto my-12 max-w-xl space-y-5 px-6 font-mono text-sm text-fg">
+ return <><PageBar home={null} mobileTitle="Preview server" navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title="Preview server"/><span class="text-xs text-muted">Local</span></>} actions={<></>}/><FormPage>
   <h1 class="text-base font-semibold">Import an HTML file</h1>
   <p class="text-muted">Choose an artifactbin .jsx.html file, or use Connect to server in your offline file.</p>
   <p class="text-muted">Importing creates or reconciles a copy in this server’s workspace. Your original HTML file stays unchanged. Nothing is published.</p>
@@ -59,6 +59,6 @@ function Connect(){
    <p>Existing files use the same conflict checks as CLI import. If both copies changed, the server retains both and reports the conflict.</p>
    <button class={FORM_PRIMARY_BUTTON} type="submit" disabled={busy()}>Import and open</button>
   </form>}</Show>
- </main></>;
+ </FormPage></>;
 }
 const mount=document.getElementById('afbin-connect');if(mount){mount.replaceChildren();render(()=> <Connect />,mount);}

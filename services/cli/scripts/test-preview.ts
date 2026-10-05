@@ -53,7 +53,7 @@ async function ready(page:Page){
  // SSR prose alone says nothing about either the reader module or the independently
  // fetched preview chrome. Do not navigate away while that first boot is pending.
  await page.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
- await page.getByRole('button',{name:'Edit document',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Edit',exact:true}).waitFor();
 }
 async function retainDiagnostics(error:unknown){
  const destination=resolve('test-results','local-journey','preview-'+phase);
@@ -77,11 +77,11 @@ try{
  await a.goto(server.url);await b.goto(server.url);await ready(a);await ready(b);
  await a.locator('#text').waitFor();assert.equal(await a.locator('#text').textContent(),'Draft paragraph');
  await a.getByRole('img',{name:'Local image'}).evaluate((image:HTMLImageElement)=>image.decode());
- // The compiled reader is a clean read-only page until "Edit document" is pressed; a link just navigates.
+ // The compiled reader is a clean read-only page until "Edit" is pressed; a link just navigates.
  await a.getByRole('link',{name:'Local appendix'}).click();await a.locator('#text').filter({hasText:'Unpublished appendix'}).waitFor();await a.goto(server.url);await ready(a);await a.locator('#text').waitFor();
  console.log('PASS offline CLI add, ID preview, image and JSX link resolve before publication');
  // `b` stays a clean reader for the rest of this run.
- await a.getByRole('button',{name:'Edit document',exact:true}).click();
+ await a.getByRole('button',{name:'Edit',exact:true}).click();
  await a.waitForFunction(()=>document.getElementById('text')?.isContentEditable);
  await a.locator('#text').dblclick();
  await a.locator('#text').evaluate(element=>{
@@ -101,7 +101,7 @@ try{
  assert.match(await readFile(join(root,'report.jsx'),'utf8'),/<p id="text">Browser saved paragraph<\/p>/);
  assert.ok((await readFile(join(root,'report.jsx'),'utf8')).includes('href="/a/'+ids['appendix.jsx']+'"'));
  assert.ok((await readFile(join(root,'report.jsx'),'utf8')).includes('src="ref:'+ids['pixel.png']+'"'));
- await a.waitForLoadState('networkidle');await a.getByRole('button',{name:'Edit document',exact:true}).waitFor();
+ await a.waitForLoadState('networkidle');await a.getByRole('button',{name:'Edit',exact:true}).waitFor();
  await b.locator('#text').filter({hasText:'Browser saved paragraph'}).waitFor({timeout:5000});
  console.log('PASS production in-place editor -> HTTP -> file -> second browser');
  // Observe real SQLite result changes through the production control/dataflow runtime (a plain GET query door).
@@ -119,23 +119,25 @@ try{
  await b.locator('#text').filter({hasText:'External editor saved'}).waitFor({timeout:5000});
  console.log('PASS external file edit refreshes clean viewer');
  await b.reload();
- await b.getByRole('button',{name:/Comments/,exact:false}).click();
+ await b.getByRole('button',{name:'Comment',exact:true}).click();
  // `pickOnOpen`'s own floating hint ("tap a block…") sits fixed near the top and can cover this
  // short fixture's first (only) paragraph outright — a forced click still lands ON the hint, not
  // the paragraph underneath it. The hint is not what this step tests; drop it, then click for real.
- await b.evaluate(() => document.querySelector('[aria-label="Select tool active"]')?.remove());
+ await b.locator('[aria-label="Select tool active"]').evaluate(element=>element.remove());
  await b.locator('#text').click();
  await b.getByRole('textbox').last().fill('Persistent note');
  await b.getByRole('button',{name:'Save annotation'}).click();
  await b.getByText('Persistent note',{exact:true}).first().waitFor();
  const port=Number(new URL(server.url).port);await server.close();server=await launch(port);
- await b.reload();await b.getByRole('button',{name:/Comments/,exact:false}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();
+ await b.reload();await b.getByRole('button',{name:'Comment',exact:true}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();
  console.log('PASS production comments survive process restart with the same node anchor');
  await a.goto(server.url+'/?file=published.jsx');await a.locator('#text').filter({hasText:'Published local draft'}).waitFor();
- await a.getByRole('button',{name:'Edit the source',exact:true}).click();
+ await a.getByRole('button',{name:'Edit',exact:true}).click();
+ await a.getByRole('tab',{name:'Edit the source',exact:true}).click();
+ await a.locator('.cm-editor').waitFor();
  const codeSaved=a.waitForResponse(response=>response.url().endsWith('/save'));
  await a.getByRole('textbox',{name:'Markup source',exact:true}).fill('<p id="text">Local v3 edit</p>');
- await a.waitForSelector('text=Local v3 edit');
+ await a.locator('#text').filter({hasText:'Local v3 edit'}).waitFor();
  await a.getByRole('button',{name:'Done editing',exact:true}).click();
  assert.equal((await codeSaved).status(),200);
  await a.waitForLoadState('networkidle');
