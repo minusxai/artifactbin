@@ -25,7 +25,8 @@ describe('the skill’s first page', () => {
   });
 
   it('keeps the measured rule for documents, and says a push does not verify a write', () => {
-    expect(sheet).toContain('A successful push IS the verification');
+    expect(sheet).toContain('Push confirms source acceptance');
+    expect(sheet).toContain('Sessions are browser/UI QA for newly authored or changed `<Mutation>`');
     const writes = bullets.find((b) => b.includes('<Mutation>') && /live session/i.test(b));
     expect(writes).toBeDefined();
     expect(writes).toContain('--as guest');

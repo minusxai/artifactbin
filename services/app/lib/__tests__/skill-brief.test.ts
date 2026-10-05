@@ -76,7 +76,7 @@ describe('llms.txt and the discovery head', () => {
   });
 
   /**
-   * PUSH VALIDATES. The brief's Few turns bullet says there is no separate validate step — push
+   * PUSH VALIDATES. The brief's publishing guidance says there is no separate validate step — push
    * runs `afbin validate` itself — and the one-pager is what the agent with NOTHING installed
    * reads, so a validate of its own in that command line is the one place the contradiction costs
    * a real call. The line still NAMES the validation, as part of push, rather than dropping it:
