@@ -25,12 +25,13 @@ trap {
 function Invoke-Candidate([string]$Command,[string[]]$Arguments) {
   Write-Host ('Native phase: '+$phase)
   $previous=$ErrorActionPreference
+  $clock=[Diagnostics.Stopwatch]::StartNew()
   try {
     # PS5.1 emits native stderr as ErrorRecord objects; exit code owns success.
     $ErrorActionPreference='Continue'
     $output=& $Command @Arguments 2>&1
     $code=$LASTEXITCODE
-  } finally { $ErrorActionPreference=$previous }
+  } finally { $ErrorActionPreference=$previous;Write-Host ('Native timing: '+$phase+' '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s') }
   foreach($record in $output){if($record -is [Management.Automation.ErrorRecord]){Write-Host ('Native stderr: '+$record)}}
   $text=($output | Where-Object {$_ -isnot [Management.Automation.ErrorRecord]} | Out-String)
   Write-Host $text
@@ -48,11 +49,15 @@ $env:PATH="$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Win
 if(Get-Command node.exe -ErrorAction SilentlyContinue){throw 'Expected Node-free PATH'}
 $helper=[IO.File]::ReadAllText('__ROOT__\ensure-node.ps1')
 $ErrorActionPreference='Continue';$ProgressPreference='Continue'
+$clock=[Diagnostics.Stopwatch]::StartNew()
 Invoke-Expression $helper
+Write-Host ('Native timing: absent Node official bootstrap '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')
 if($ErrorActionPreference -ne 'Continue' -or $ProgressPreference -ne 'Continue'){throw 'Bootstrap changed caller preferences'}
 $ErrorActionPreference='Stop'
 if($LASTEXITCODE -ne 0){throw 'Bootstrap failed'}
+$clock=[Diagnostics.Stopwatch]::StartNew()
 Invoke-Expression $helper
+Write-Host ('Native timing: repeat bootstrap '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')
 if((Get-ExecutionPolicy -Scope CurrentUser) -ne 'Restricted' -or (Get-ExecutionPolicy) -ne 'Restricted'){throw 'Execution policy changed'}
 $version=& node.exe --version
 if($version -ne 'v24.21.0'){throw 'Wrong Node'}
@@ -63,7 +68,9 @@ $broken=Join-Path '__ROOT__' 'broken-bin';[IO.Directory]::CreateDirectory($broke
 [IO.File]::WriteAllText((Join-Path $broken 'npm.cmd'),"@exit /b 7`r`n")
 [IO.File]::WriteAllText((Join-Path $broken 'npx.cmd'),"@exit /b 7`r`n")
 $env:PATH="$broken;$env:PATH"
+$clock=[Diagnostics.Stopwatch]::StartNew()
 Invoke-Expression $helper
+Write-Host ('Native timing: broken npm repair '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')
 Write-Output ('Repaired npm command: '+(Resolve-AfbinApplication 'npm.cmd'))
 Write-Output ('PowerShell npm command: '+(Get-Command npm.cmd -CommandType Application).Source)
 $null=& npm.cmd --version;if($LASTEXITCODE -ne 0){throw 'Broken npm repair failed'}
