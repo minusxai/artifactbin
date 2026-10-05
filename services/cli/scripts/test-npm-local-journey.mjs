@@ -111,8 +111,8 @@ try{
  await offlinePage.waitForFunction(()=>document.getElementById('title')?.isContentEditable);
  await offlinePage.locator('#title').evaluate(element=>{(element.closest('.ProseMirror')??element).focus();const text=document.createTreeWalker(element,NodeFilter.SHOW_TEXT).nextNode();const selection=getSelection();selection.removeAllRanges();selection.setBaseAndExtent(text,0,text,text.textContent.length);});
  await offlinePage.keyboard.insertText('Offline saved report');await offlinePage.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
- await offlinePage.getByRole('button',{name:'Done editing',exact:true}).click();
  const downloaded=await Promise.all([offlinePage.waitForEvent('download'),offlinePage.keyboard.press('Control+s')]);
+ await offlinePage.getByRole('button',{name:'Done editing',exact:true}).click();
  const savedHtml=join(recovery,'report.jsx.html');await downloaded[0].saveAs(savedHtml);
  const incoming=payload(await readFile(savedHtml,'utf8'));assert.match(incoming.source,/Offline saved report/);assert.equal(incoming.threads[0].id,thread.id);
  const reopened=trackPage(await offline.newPage(),'reopened');await reopened.goto(pathToFileURL(savedHtml).href);await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();await reopened.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
@@ -127,6 +127,7 @@ try{
  await connectDialog.getByRole('textbox',{name:'Server address'}).fill(active.origin);
  const [popup]=await Promise.all([reopened.waitForEvent('popup'),connectDialog.getByRole('button',{name:'Connect',exact:true}).click()]);trackPage(popup,'connected');
  await popup.getByRole('button',{name:'Import and open',exact:true}).waitFor();
+ assert.equal(await popup.getByRole('heading',{name:'Import an HTML file',exact:true}).count(),1,'The interactive import page replaces its non-JavaScript fallback');
  await popup.getByRole('textbox',{name:'Workspace file',exact:true}).fill('connected.jsx');
  await popup.getByRole('button',{name:'Import and open',exact:true}).click();
  await popup.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor({timeout:30000});

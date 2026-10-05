@@ -59,4 +59,4 @@ function Connect(){
   </form>}</Show>
  </div>;
 }
-const mount=document.getElementById('afbin-connect');if(mount)render(()=> <Connect />,mount);
+const mount=document.getElementById('afbin-connect');if(mount){mount.replaceChildren();render(()=> <Connect />,mount);}

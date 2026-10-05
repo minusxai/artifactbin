@@ -402,8 +402,8 @@ async function editing(engineName, browser) {
 
     const saved = path.join(work, `saved-${engineName}.html`);
     const first = await step('Save downloads the file, then nothing is unsaved', async () => {
-      await page.getByRole('button', { name: 'Done editing' }).click();
       const result = await saveByDownload(page, saved, true);
+      await page.getByRole('button', { name: 'Done editing' }).click();
       await expect(saveButton(page)).toBeDisabled();
       await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toHaveCount(0);
       return result;
@@ -760,6 +760,7 @@ async function connecting(engineName, browser) {
         await dialog.getByRole('textbox', { name: 'Server address' }).fill(server.url);
         [popup] = await Promise.all([page.waitForEvent('popup'), dialog.getByRole('button', { name: 'Connect', exact: true }).click()]);
         await expect(popup.getByRole('button', { name: 'Import and open', exact: true })).toBeEnabled({ timeout: 20_000 });
+        await expect(popup.getByRole('heading', { name: 'Import an HTML file', exact: true })).toHaveCount(1);
         // The handoff is an offer. There is no filesystem write until this confirmation.
         check(!readFileSync(path.join(directory, 'unselected.jsx'), 'utf8').includes('Connected'), `${engineName}: unselected source unchanged`);
         await popup.getByRole('textbox', { name: 'Workspace file', exact: true }).fill('connected.jsx');
