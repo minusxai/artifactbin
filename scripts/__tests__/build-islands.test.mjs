@@ -140,7 +140,6 @@ describe('buildIslands', () => {
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/comment-view-state.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
     expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
-    const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     const menuFiles = Object.entries(outputInputs).filter(([, inputs]) => inputs.some(input => input.endsWith('islands/kit/select-popup.tsx'))).map(([url]) => url);
     expect(menuFiles.length).toBeGreaterThan(0);
     expect(menuFiles.every(url => !staticUrls.includes(url)), 'Select menu loads only on interaction').toBe(true);
