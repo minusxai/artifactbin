@@ -46,6 +46,93 @@ describe('Number', () => {
 });
 
 describe('Select', () => {
+  const option = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(el => el.getAttribute('aria-label') === name)!;
+  const done = () => document.querySelector<HTMLButtonElement>('button[aria-label="Done"]')!;
+  function multi(initial = '[]', extra: Record<string, unknown> = {}) {
+    const ctx = fakeIsland({ tags: initial, other: '' });
+    const [value, setValue] = createSignal(initial);
+    ctx.value = name => name === 'tags' ? value() : '';
+    ctx.setValue = vi.fn((_name, next) => setValue(String(next)));
+    const mounted = mount(ctx, () => <><Select label="Tags" value="$tags" multiple valueFormat="json" options={[{ value: 'design,ux', label: 'Design, UX' }, { value: 'fix', label: 'Fix' }]} placeholder="Any tags" {...extra} /><Select label="Other" value="$other" options={['One']} /></>);
+    return { ...mounted, ctx, value, trigger: mounted.host.querySelector<HTMLButtonElement>('[aria-label="Tags"]')! };
+  }
+  it('shows multi-select labels, stages toggles, and commits one deduplicated JSON array on Done', () => {
+    const { ctx, trigger, value, dispose } = multi('["missing","missing"]');
+    try {
+      expect(trigger.textContent).toContain('missing');
+      expect(trigger.textContent).not.toContain('["');
+      trigger.click();
+      expect(document.querySelector('[role="listbox"][aria-label="Tags"]')).toHaveAttribute('aria-multiselectable', 'true');
+      option('Design, UX').click(); option('Fix').click(); option('Fix').click();
+      expect(ctx.setValue).not.toHaveBeenCalled();
+      expect(option('Design, UX')).toHaveAttribute('aria-selected', 'true');
+      done().click();
+      expect(value()).toBe('["missing","design,ux"]');
+      expect(ctx.setValue).toHaveBeenCalledTimes(1);
+      expect(trigger.textContent).toContain('missing, Design, UX');
+      expect(document.querySelector('[role="listbox"]')).toBeNull();
+      trigger.click(); option('missing').click(); option('Design, UX').click(); done().click();
+      expect(value()).toBe('[]'); expect(trigger.textContent).toContain('Any tags');
+    } finally { dispose(); }
+  });
+  it('commits multi-select on outside dismissal, another picker, and trigger close; Escape cancels', () => {
+    const { ctx, host, trigger, value, dispose } = multi();
+    try {
+      trigger.click(); option('Fix').click();
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      expect(value()).toBe('["fix"]'); expect(ctx.setValue).toHaveBeenCalledTimes(1);
+      trigger.click(); option('Design, UX').click();
+      done().focus(); done().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(value()).toBe('["fix"]'); expect(ctx.setValue).toHaveBeenCalledTimes(1); expect(document.activeElement).toBe(trigger);
+      trigger.click(); option('Design, UX').click();
+      host.querySelector<HTMLButtonElement>('[aria-label="Other"]')!.click();
+      expect(value()).toBe('["fix","design,ux"]'); expect(ctx.setValue).toHaveBeenCalledTimes(2);
+      trigger.click(); option('Fix').click(); trigger.click();
+      expect(value()).toBe('["design,ux"]'); expect(ctx.setValue).toHaveBeenCalledTimes(3);
+    } finally { dispose(); }
+  });
+  it('creates exact string values with punctuation and Unicode without duplicate choices', () => {
+    const { trigger, value, dispose } = multi('[]', { allowCreate: true });
+    try {
+      trigger.click();
+      const search = document.querySelector<HTMLInputElement>('[aria-label="Search Tags"]')!;
+      for (const text of ['a,b', 'say "hi"', '雪']) {
+        search.value = text; search.dispatchEvent(new Event('input', { bubbles: true }));
+        option(`Create ${text}`).click();
+      }
+      search.value = 'a,b'; search.dispatchEvent(new Event('input', { bubbles: true }));
+      expect(option('Create a,b')).toBeUndefined();
+      done().click(); expect(JSON.parse(value())).toEqual(['a,b', 'say "hi"', '雪']);
+    } finally { dispose(); }
+  });
+  it('supports keyboard toggles without committing until Done', () => {
+    const { ctx, trigger, value, dispose } = multi();
+    try {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      const search = document.querySelector<HTMLInputElement>('[aria-label="Search Tags"]')!;
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(ctx.setValue).not.toHaveBeenCalled();
+      done().click(); expect(value()).toBe('["design,ux"]');
+    } finally { dispose(); }
+  });
+  it.each(['not JSON', '[1,"fix"]', '{"fix":true}'])('refuses malformed multi-select state %s without overwriting it', initial => {
+    const { ctx, trigger, host, dispose } = multi(initial);
+    try {
+      expect(trigger).toBeDisabled(); expect(host.querySelector('[role="alert"]')).toHaveTextContent('JSON array of strings');
+      trigger.click(); expect(ctx.setValue).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  });
+  it('discards an open draft if the control becomes disabled', () => {
+    const ctx = fakeIsland({ tags: '[]' }); ctx.setValue = vi.fn();
+    const [disabled, setDisabled] = createSignal(false);
+    const { host, dispose } = mount(ctx, () => <Select label="Tags" value="$tags" multiple options={['Fix']} disabled={disabled()} />);
+    try {
+      host.querySelector<HTMLButtonElement>('button')!.click(); option('Fix').click(); setDisabled(true);
+      expect(document.querySelector('[role="listbox"]')).toBeNull();
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      expect(ctx.setValue).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  });
   it('keeps one placeholder and an opaque popup for a nullable options table', () => {
     const ctx = fakeIsland({ department: null as unknown as string });
     ctx.table = () => ({ rows: [{ value: null, label: 'All' }, { value: 'Police', label: 'Police' }], columns: [{ name: 'value', type: 'string' }, { name: 'label', type: 'string' }] });
