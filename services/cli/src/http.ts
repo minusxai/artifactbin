@@ -1,9 +1,10 @@
 import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,isLocalDevelopmentHost,normalizeOrigin} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
-import {CliError} from './commands';
+import {CliError} from './commands.js';
 import {CLI_VERSION} from './version';
-import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,type Connection} from './config';
-interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
+import {validVersion} from './version-order';
+import {configDir,remoteContext,loadConnection,saveConnection,normalizeServer,type Connection} from './config.js';
+interface HttpOptions {onRelease?:(release:{version:string;protocol:number})=>Promise<void>;connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
 /**
  * THE SECOND READ-ONLY PREFLIGHT. A dry run may send nothing that writes, which is why the
  * gate below allows exactly one POST — /api/artifacts/preflight. The fork door has the same
@@ -67,6 +68,13 @@ export class HttpClient {
     if(readOnly||['GET','HEAD','DELETE'].includes(method))throw transportFailure(this.connection.server,error);
     throw new CliError('outcome_unknown',`The ${method} request to ${this.connection.server} did not return a confirmed response (${transportFailure(this.connection.server,error).message}).`);
    }
+   // The normal selected-server response carries release metadata; no update-only HTTP query.
+   // Viewer/export grants can follow another origin and never supply trusted release metadata.
+   if(address===apiUrl&&this.options.onRelease){
+    const version=response.headers.get('X-Artifactbin-CLI-Version'),wireProtocol=response.headers.get('X-Artifactbin-Protocol');
+    const releaseProtocol=wireProtocol&&/^[1-9][0-9]*$/.test(wireProtocol)?Number(wireProtocol):NaN;
+    if(validVersion(version)&&Number.isSafeInteger(releaseProtocol))try{await this.options.onRelease({version,protocol:releaseProtocol});}catch{/* Notices cannot affect request success. */}
+   }
    if(imageExport&&response.status===302){
     const asset=new URL(response.headers.get('location')??'',url);
     const secure=asset.protocol==='https:'||(asset.origin===url.origin&&isLocalDevelopmentHost(asset.hostname));
@@ -89,7 +97,10 @@ export class HttpClient {
     throw new CliError('auth_required','auth_required: sign-in is required.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.',{http_status:401});
    }
    const protocol=response.headers.get('X-Artifactbin-Protocol');
-   if(protocol&&protocol!==String(CLI_PROTOCOL_VERSION))throw new CliError('protocol_mismatch','The CLI and server use different write protocols. Update both before publishing.');
+   if(response.ok&&protocol&&protocol!==String(CLI_PROTOCOL_VERSION)){
+    const required=response.headers.get('X-Artifactbin-CLI-Version');
+    throw new CliError('protocol_mismatch','The selected server requires a different CLI protocol.',`Run npx --yes @afbin/cli@${validVersion(required)?required:'latest'} <command>, then retry.`);
+   }
    const account=response.headers.get('X-Artifactbin-Account');
    if(account){if(this.account&&this.account!==account)throw new CliError('account_mismatch','The server account differs from this workspace.','Use the workspace account credentials.');this.account=account;}
    if(response.ok&&binary)return{bytes:Buffer.from(await response.arrayBuffer()),contentType:response.headers.get('Content-Type')??'application/octet-stream'};

@@ -269,12 +269,14 @@ describe('the bundled teaching and the manual', () => {
    assert.doesNotMatch(corpus,/\bMCP\b|\/docs\/|source="<datasetId>"|from ref_<id>/);
    assert.match(corpus,/source="ref:<id>"/);
    // The same rule over the GENERATED bundle, which is what ships: an agent must never be told to
-   // install the CLI from a registry, or to fetch a skill from anywhere else.
+   // run a retired unscoped npm package or install a global executable.
    for(const [file,text] of Object.entries(teaching.files as Record<string,string>)){
     assert.ok(!/npm install -g|npx afbin|npm i -g/.test(text),`${file} teaches npm installation`);
     assert.ok(!/MCP|\/docs\/llm|skills\.download/.test(text),`${file} teaches a remote or MCP surface`);
    }
-   assert.match(teaching.files['references/publishing-auth.md'],/\/chat\/install\.sh/);
+   assert.match(teaching.files['references/publishing-auth.md'],/\/chat\/ensure-node\.sh/);
+   assert.match(teaching.files['references/publishing-auth.md'],/npx --yes @afbin\/cli@latest/);
+   assert.doesNotMatch(teaching.files['references/publishing-auth.md'],/\/chat\/install\.sh/);
   });
 
   test('help formats, destinations and the manual come from one command registry',async()=>{
@@ -336,23 +338,23 @@ describe('the bundled teaching and the manual', () => {
    // A bundle that named one deployment would teach a self-hoster's agent to publish somewhere else.
    const corpus=Object.values(localSkillFiles).join('\n');
    for(const line of corpus.split('\n'))assert.doesNotMatch(line,/https?:\/\/[^\s`)'"]*artifactbin\.dev/,`the bundle addresses a deployment: ${line.trim().slice(0,120)}`);
-   assert.ok(corpus.includes(`${TEACHING_BASE}/chat/install.sh`),'the installer address must survive compilation as the placeholder');
+   assert.ok(corpus.includes(`${TEACHING_BASE}/chat/ensure-node.sh`),'the installer address must survive compilation as the placeholder');
 
    const self='https://docs.self-hosted.example';
    const addressed=skillFilesFor(self);
-   assert.ok(addressed['SKILL.md'].includes(`${self}/chat/install.sh`));
+   assert.ok(addressed['references/npm-local.md'].includes(`${self}/chat/ensure-node.sh`));
    assert.ok(!Object.values(addressed).join('\n').includes(TEACHING_BASE),'no placeholder may survive into an installed skill');
-   assert.ok(addressed['references/errors.md'].includes(`${self}/chat/install.sh`),'the recovery catalogue is addressed too');
+   assert.ok(addressed['references/errors.md'].includes(`${self}/chat/ensure-node.sh`),'the recovery catalogue is addressed too');
 
    const home=await mkdtemp(join(tmpdir(),'afbin-skill-origin-'));
    try{
     await installSkills(['pi'],{home,env:{},origin:self});
-    const installed=await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8');
-    assert.ok(installed.includes(`${self}/chat/install.sh`));
+    const installed=await readFile(join(skillTargets(home,{}).pi,'references/npm-local.md'),'utf8');
+    assert.ok(installed.includes(`${self}/chat/ensure-node.sh`));
     assert.doesNotMatch(installed,/__AFBIN_SERVER__|artifactbin\.dev\/chat/);
     // Re-pointing the CLI at another server rewrites the installed skill rather than calling it current.
     await installSkills(['pi'],{home,env:{},origin:'https://other.example'});
-    assert.ok((await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8')).includes('https://other.example/chat/install.sh'));
+    assert.ok((await readFile(join(skillTargets(home,{}).pi,'references/npm-local.md'),'utf8')).includes('https://other.example/chat/ensure-node.sh'));
    }finally{await rm(home,{recursive:true,force:true});}
 
    // The terminal screens are the default HUMAN path and never take the plain-text branch.
@@ -362,9 +364,19 @@ describe('the bundled teaching and the manual', () => {
     assert.equal(await runCli(['help'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:true,color:false,stdout:(x:string)=>screen.push(x),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')}),0);
     assert.doesNotMatch(screen.join(''),/__AFBIN_SERVER__/);
     const topic:string[]=[];
-    assert.equal(await runCli(['help','publishing-auth'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:true,color:false,stdout:(x:string)=>topic.push(x),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')}),0);
-    assert.ok(topic.join('').includes(`${self}/chat/install.sh`));
+    assert.equal(await runCli(['help','npm-local'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:true,color:false,stdout:(x:string)=>topic.push(x),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')}),0);
+    assert.ok(topic.join('').includes(`${self}/chat/ensure-node.sh`));
     assert.doesNotMatch(topic.join(''),/__AFBIN_SERVER__/);
+    const http:string[]=[];
+    assert.equal(await runCli(['help','http-api'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:false,color:false,stdout:(x:string)=>http.push(x),stderr:()=>{},fetch:async()=>assert.fail('HTTP reference help must stay offline')}),0);
+    const guide=http.join('');
+    assert.ok(guide.includes('Origin: '+self));
+    assert.ok(guide.includes('/api/auth/email-otp/send-verification-otp'));
+    assert.ok(guide.includes('/api/auth/sign-in/email-otp'));
+    assert.ok(guide.includes('/api/authentication/token'));
+    assert.ok(guide.includes('Authorization: Bearer <access_token>'));
+    assert.doesNotMatch(guide,/__AFBIN_SERVER__|\[\[ base \]\]/);
+
    }finally{await rm(screenRoot,{recursive:true,force:true});}
   });
 
@@ -548,4 +560,14 @@ test('unknown write outcomes recover the original command and arguments', async 
  assert.match(fix,/same command and arguments/);
  assert.match(fix,/same operation key/);
  assert.ok(!fix.includes('rerun afbin push'));
+});
+
+test('offline HTML import is a local command with safe JSX output',()=>{
+ assert.equal(parseCommand(['import','review.jsx.html']).command,'import');
+ assert.deepEqual(parseCommand(['import','review.jsx.html','--output','report.jsx']).flags,{output:'report.jsx'});
+ assert.throws(()=>parseCommand(['import','review.jsx.html','--output','-']),/JSX file/);
+ assert.throws(()=>parseCommand(['import','review.jsx.html','--output','report.txt']),/JSX file/);
+ assert.throws(()=>parseCommand(['import','one.jsx.html','two.jsx.html']),/Usage/);
+ assert.match(commandHelp('import'),/without publishing/);
+ assert.match(commandHelp('export'),/\.jsx\.html/);
 });

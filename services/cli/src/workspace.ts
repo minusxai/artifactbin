@@ -1,3 +1,4 @@
+import {findLocalWorkspace,readLocalWorkspaceState,localReferenceMap,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 /**
  * A workspace is a directory the CLI has registered in its own store. No file is
  * ever written into it to mark it: discovery walks up from the working directory
@@ -8,7 +9,7 @@
  * the server snapshot by `baselineOf`.
  */
 import {realpath} from 'node:fs/promises';
-import {dirname,extname,relative,resolve} from 'node:path';
+import {dirname,extname,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN,type ArtifactResourceFile} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {normalizeServer} from './config';
@@ -50,13 +51,18 @@ const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value
 export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Workspace>{
  cwd=await realpath(cwd);
  const state=await readState(home);
- const found=state?.nearestWorkspace<WorkspaceRecord>(cwd);
- if(!state||!found)return{home,root:cwd,cwd,tracking:null};
+ const portableRoot=await findLocalWorkspace(cwd);
+ const portable=portableRoot?await readLocalWorkspaceState(portableRoot):null;
+ const legacy=state?.nearestWorkspace<WorkspaceRecord>(cwd);
+ const found=legacy&&(!portableRoot||legacy.root===portableRoot)?legacy:portableRoot&&portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)?{root:portableRoot,value:portable.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)!.value}:null;
+ if(!found)return{home,root:portableRoot??cwd,cwd,tracking:null};
  const {root,value}=found;
+ const trackingStore=legacy===found?state!:portable!;
+ const trackingScope=legacy===found?root:LOCAL_WORKSPACE_SCOPE;
  if(typeof value?.server!=='string'||typeof value.account!=='string')throw new CliError('invalid_tracking','The stored workspace record is incomplete.','Run afbin pull to re-establish tracking for this directory.');
  normalizeServer(value.server);
  const files:Record<string,TrackedFile>={};const ids=new Set<string>();
- for(const record of state.list<TrackedFile>(root,'tracked')){
+ for(const record of trackingStore.list<TrackedFile>(trackingScope,'tracked')){
   const entry=record.value;
   await confinedPath(root,record.key);
   if(!entry||!ARTIFACT_ID_PATTERN.test(entry.id)||ids.has(entry.id)||!hash(entry.file)||entry.snapshot?.id!==entry.id||!Number.isSafeInteger(entry.snapshot.version)||entry.snapshot.version<1||!entry.snapshot.edit_id||!hash(entry.snapshot.state))throw new CliError('invalid_tracking',`Invalid tracking entry for ${record.key}.`);
@@ -88,7 +94,7 @@ export async function baselineOf(_workspace:Workspace,path:string,tracked:Tracke
 }
 
 export async function inspectWorkspace(workspace:Workspace,paths?:string[]):Promise<LocalFile[]>{
- const selected=paths?.length?await Promise.all(paths.map(async path=>relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,path))))):[...Object.keys(workspace.tracking?.files??{}),...((await readState(workspace.home))?.list(workspace.root,'draft-identity').map(row=>row.key)??[])];
+ const selected=paths?.length?await Promise.all(paths.map(async path=>relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,path))).split(sep).join('/'))):[...Object.keys(workspace.tracking?.files??{}),...Object.values(await localReferenceMap(workspace.root)),...((await readState(workspace.home))?.list(workspace.root,'draft-identity').map(row=>row.key)??[])];
  const seen=new Map<string,string>();
  const results:LocalFile[]=[];
  for(const path of [...new Set(selected)]){

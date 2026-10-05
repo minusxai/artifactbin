@@ -45,6 +45,6 @@ describe('the CLI installer', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/x-shellscript');
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(await res.text()).toContain('afbin-$platform-$arch');
+    expect(await res.text()).toContain('npx --yes @afbin/cli@latest setup');
   });
 });

@@ -9,13 +9,15 @@ describe('local editing guidance',()=>{
   expect(text).toMatch(/Move.*same id/);
   expect(text).toMatch(/never reuse an id/);
  });
- it('teaches the native file workflow: one push for create and update, node-scoped rebasing and recovery',()=>{
+ it('teaches portable local files, explicit publication copies and conditional recovery',()=>{
   expect(doc('SKILL.md')).toContain('afbin push report.jsx');
   const text=doc('references/publishing.md');
   expect(text).toContain('YAML fence');
-  // Local state is the CLI's own, never a file in the user's working directory.
-  expect(text).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
-  expect(text).toContain('writes nothing into your working directory');
+  expect(text).toContain('workspace .artifactbin directory');
+  expect(text).toContain('credentials remain in your private home state');
+  expect(text).toContain('local-to-remote ID mapping');
+  expect(text).toContain('local source keeps its local identity');
+  expect(text).not.toContain('writes nothing into your working directory');
   expect(text).toContain('Push preserves edits made while the request was in flight');
   expect(text).toContain('frozen journal recovers the original result');
   expect(text).toContain('conditional replacement');

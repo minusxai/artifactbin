@@ -1,13 +1,14 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {validVersion} from './version-order';
 import { readFile } from "node:fs/promises";
 import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
-import { DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
+import { DEFAULT_SERVER as CONTRACT_DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
 
 /** Where afbin talks when nothing selects a server (spelled once, in contracts). */
-export { DEFAULT_SERVER };
+export const DEFAULT_SERVER = CONTRACT_DEFAULT_SERVER;
 /** Client-only defaults. Reading or changing these never starts a server. */
 export interface ClientDefaults { host?: string; output?: "text" | "json"; updates?: boolean }
 
@@ -18,9 +19,16 @@ export interface Connection {
   clientId?: string;
   expiresAt?: number;
 }
+const privateStateHomes = new AsyncLocalStorage<ReadonlyMap<string,string>>();
+/** A nested, task-local private store. Never changes process environment or credentials for other homes. */
+export function withPrivateStateHome<T>(home:string,directory:string,run:()=>T):T {
+  const homes=new Map(privateStateHomes.getStore());homes.set(home,directory);
+  return privateStateHomes.run(homes,run);
+}
+
 /** The CLI's private state directory: `~/.artifactbin`, or `ARTIFACTBIN_HOME` when set. Skills never live here. */
 export function configDir(home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
-  return env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin");
+  return privateStateHomes.getStore()?.get(home) ?? (env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin"));
 }
 /** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
 function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
@@ -154,19 +162,10 @@ export async function saveConnection(
   await atomicWrite(path, Object.entries(values).filter(([,value]) => value !== undefined).map(([key,value]) => `${key}=${value}\n`).join(''));
 }
 
-/** Optional service mirror changes transport only; the executable still pins every package checksum. */
-export function servicePackageUrl(releaseUrl:string,env:NodeJS.ProcessEnv=process.env):string{
- if(!env.CLI__SERVICE_BASE_URL)return releaseUrl;
- const path=new URL(releaseUrl).pathname.split('/').slice(-2).join('/');
- const base=new URL(env.CLI__SERVICE_BASE_URL),origin=normalizeServer(base.origin);
- if(base.username||base.password||base.search||base.hash)throw new Error('Use a service base URL without credentials, query or fragment.');
- return `${origin}${base.pathname.replace(/\/+$/,'')}/${path}`;
-}
-
 /** Automatic checks are opt-out; a version pin disables background changes entirely. */
 export function autoUpdatePolicy(env:NodeJS.ProcessEnv=process.env):{enabled:boolean;pin?:string} {
  const pin=env.CLI__VERSION_PIN;
- return {enabled:!['0','false','off'].includes((env.CLI__AUTO_UPDATE??'').toLowerCase())&&!pin,...(pin?{pin:validVersion(pin)?pin:'invalid'}:{})};
+ return {enabled:!['0','false','off'].includes((env.CLI__AUTO_UPDATE??'').toLowerCase())&&!['true','1'].includes((env.npm_config_offline??'').toLowerCase())&&!pin,...(pin?{pin:validVersion(pin)?pin:'invalid'}:{})};
 }
 
 /** Managed remote children inherit scoped proof; never serialize these values into documents or logs. */
@@ -184,4 +183,9 @@ export function remotePermissionEnv(command:string,env:NodeJS.ProcessEnv=process
 }
 export function remoteWorkerEnv(directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
  return {...env,PATH:directory+separator+(env.PATH??''),ARTIFACTBIN_URL:connection.server,ARTIFACTBIN_TOKEN:connection.token,ARTIFACTBIN__REMOTE_REFRESH_TOKEN:connection.refreshToken,ARTIFACTBIN__REMOTE_CLIENT_ID:connection.clientId};
+}
+
+/** Portable workspace state never follows the machine-wide ARTIFACTBIN_HOME override. */
+export function workspaceStateEnv(root: string): NodeJS.ProcessEnv {
+ return {ARTIFACTBIN_HOME: join(root, ".artifactbin")};
 }

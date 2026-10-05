@@ -1,0 +1,17 @@
+{
+  "name": "afbin-ci-acceptance",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "typescript": "5.9.3",
+    "tsx": "4.23.11",
+    "@types/node": "22.20.2",
+    "parse5": "8.0.1",
+    "hono": "4.13.5",
+    "@hono/node-server": "2.1.1",
+    "sharp": "0.35.4",
+    "playwright": "npm:playwright-core@1.62.1",
+    "@artifactbin/contracts": "file:../../../services/contracts",
+    "@artifactbin/utils": "file:../../../services/utils"
+  }
+}

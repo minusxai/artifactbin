@@ -9,7 +9,7 @@ import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { GET as listMine } from '@/app/api/my/tokens/route';
 
 const BASE = 'http://localhost:3000';
-const HELP = `Retry — afbin authenticates itself when it needs the server; there is nothing to set up. Install it if it is missing: curl -fsSL ${BASE}/chat/install.sh | sh`;
+const HELP = `Retry through afbin: npx --yes @afbin/cli@latest auth --server ${BASE}. Prepare Node: ${BASE}/chat/ensure-node.sh; Windows: ${BASE}/chat/ensure-node.ps1. CLI browser approval allows guests; direct HTTP requires email sign-in.`;
 
 describe('401 bodies', () => {
   /*

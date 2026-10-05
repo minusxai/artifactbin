@@ -1,113 +1,54 @@
-// Both installer entrypoints share the current CLI download and origin contract.
-import { createHash } from 'node:crypto';
+/** Served installers prepare Node and launch the sole npm package on this origin. */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
 
 const publicDir = path.resolve(__dirname, '..', 'public');
-const script = fs.readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
-const pinned = script.match(/^ {2}version=(\S+)$/m)![1];
-const GITHUB = 'https://github.com/minusxai/artifactbin/releases/download/afbin-v$version';
-/** The script as served: the only change on a server with no CLI build is the origin it names. */
-const addressed = (origin: string) => script.replace("  origin=''", `  origin='${origin}'`);
-const app = (cliReleaseDir?: string) => createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>', publicDir, cliReleaseDir });
-const payload = '#!/bin/sh\necho local build\n';
-let dirs: string[] = [];
-/** What `npm run build:binary -w services/cli` leaves in dist: the executable, its manifest and the checksum list. */
-const localBuild = (version = pinned) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afbin-local-release-'));
-  dirs.push(dir);
-  fs.writeFileSync(path.join(dir, 'afbin-darwin-arm64'), payload);
-  fs.writeFileSync(path.join(dir, 'afbin-darwin-arm64.manifest.json'), JSON.stringify({ version, platform: 'darwin', arch: 'arm64' }));
-  fs.writeFileSync(path.join(dir, 'SHA256SUMS'), `${createHash('sha256').update(payload).digest('hex')}  afbin-darwin-arm64\n`);
-  return dir;
-};
-afterEach(() => { for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true }); dirs = []; });
+const app = (dir = publicDir) => createAppServer({ indexHtml: async () => '<div>SPA</div>', publicDir: dir });
+const headers = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifacts.example.test' };
+const directories: string[] = [];
+afterEach(() => { for (const dir of directories) fs.rmSync(dir, { recursive: true, force: true }); directories.length = 0; });
+const temporary = () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afbin served npm ')); directories.push(dir); return dir; };
 
-describe('GET /install.sh', () => {
-  it.each([false, true])('matches the CLI installer for a custom origin (local build: %s)', async (local) => {
-    const server = app(local ? localBuild() : path.join(os.tmpdir(), 'afbin-no-such-dir'));
-    const headers = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifacts.example.test' };
-    const canonical = await server.request('/chat/install.sh', { headers });
-    const alias = await server.request('/install.sh', { headers });
-    expect(alias.status).toBe(200);
-    const body = await alias.text();
-    expect(body).toBe(await canonical.text());
-    expect(body).toContain("  origin='https://artifacts.example.test'");
-    expect(body).not.toContain('docker');
-    for (const header of ['content-type', 'cache-control', 'x-content-type-options']) {
-      expect(alias.headers.get(header)).toBe(canonical.headers.get(header));
-    }
+describe('served npm installer compatibility URLs', () => {
+  it.each(['/install.sh', '/chat/install.sh'])('prepares Node and selects this origin through the actual served shell: %s', async route => {
+    const response = await app().request(route, { headers });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/x-shellscript');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    const script = await response.text();
+    const dir = temporary(), bin = path.join(dir, 'tools'); fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'curl'), `#!/bin/sh\nwhile [ "$#" -gt 0 ]; do case "$1" in -o) output="$2"; shift;; http*) printf '%s\\n' "$1" > "$AFBIN_PROBE/helper-url";; esac; shift; done\nprintf ':\\n' > "$output"\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'npx'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$AFBIN_PROBE/npm-args"\n', { mode: 0o755 });
+    const run = spawnSync('sh', [], { input: script, encoding: 'utf8', cwd: dir, env: { PATH: `${bin}:/usr/bin:/bin`, HOME: dir, AFBIN_PROBE: dir }, timeout: 10000 });
+    expect(run.status, run.stderr).toBe(0);
+    expect(fs.readFileSync(path.join(dir, 'helper-url'), 'utf8')).toBe('https://artifacts.example.test/chat/ensure-node.sh\n');
+    expect(fs.readFileSync(path.join(dir, 'npm-args'), 'utf8')).toBe('--yes\n@afbin/cli@latest\nsetup\n--server\nhttps://artifacts.example.test\n');
+    expect(script).not.toContain('releases/download');
   });
-});
-
-describe('GET /chat/*.sh', () => {
-  it.each(['/chat/install.sh', '/chat/uninstall.sh'])('serves %s as a briefly cached shell script for `curl … | sh`', async (route) => {
-    const res = await app().request(route);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type') ?? '').toMatch(/^text\/x-shellscript/);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=300');
-    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
-    expect((await res.text()).startsWith('#!/bin/sh')).toBe(true);
+  it('serves both shell aliases identically', async () => {
+    const server = app();
+    expect(await (await server.request('/install.sh', { headers })).text()).toBe(await (await server.request('/chat/install.sh', { headers })).text());
   });
-  it('serves the installer byte for byte, pointing at GitHub, when this server has no CLI build', async () => {
-    const body = await (await app(path.join(os.tmpdir(), 'afbin-no-such-dir')).request('/chat/install.sh')).text();
-    expect(body).toBe(addressed('http://localhost'));
-    expect(body).toContain(`release="${GITHUB}"`);
+  it('serves PowerShell with its selected origin and npm cmd shim', async () => {
+    const response = await app().request('/chat/install.ps1', { headers });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    const script = await response.text();
+    expect(script).toContain("$Origin = 'https://artifacts.example.test'");
+    expect(script).toContain('"$Origin/chat/ensure-node.ps1"');
+    expect(script).toContain('npx.cmd --yes @afbin/cli@latest setup --server $Origin');
+    expect(script).not.toMatch(/Set-ExecutionPolicy|ReleaseRoot|afbin-windows/);
   });
-  it('points the installer at its own origin when a local CLI build matches the pinned version', async () => {
-    const server = app(localBuild());
-    const body = await (await server.request('/chat/install.sh')).text();
-    expect(body).toContain('release="http://localhost/chat/releases/afbin-v$version"');
-    expect(body).not.toContain('github.com');
-    expect(body.replace('http://localhost/chat/releases/afbin-v$version', GITHUB)).toBe(addressed('http://localhost'));
-    const forwarded = await (await server.request('/chat/install.sh', { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifacts.example.test' } })).text();
-    expect(forwarded).toContain('release="https://artifacts.example.test/chat/releases/afbin-v$version"');
+  it('retires binary release assets even if old files remain in public storage', async () => {
+    const dir = temporary(), release = path.join(dir, 'chat/releases/afbin-v0.4.0'); fs.mkdirSync(release, { recursive: true });
+    fs.writeFileSync(path.join(release, 'afbin-darwin-arm64'), '#!/bin/sh\necho retired\n');
+    const server = app(dir);
+    for (const route of ['/chat/releases/afbin-v0.4.0/afbin-darwin-arm64', '/chat/releases/afbin-v0.4.0/SHA256SUMS', '/chat/releases/afbin-v0.4.0/missing']) expect((await server.request(route)).status, route).toBe(404);
   });
-  // The CLI installed from a local origin published its first dataset to
-  // artifactbin.dev, anonymously, because nothing had told it where it came from.
-  it('tells the installer the origin it was served from, so afbin adopts it at setup', async () => {
-    expect(script).toContain("  origin=''");
-    expect(script).toContain('[ -z "$origin" ] || server="--server=$origin"');
-    expect(script).toContain('setup --yes $server');
-    const forwarded = await (await app().request('/chat/install.sh', { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifacts.example.test' } })).text();
-    expect(forwarded).toContain("  origin='https://artifacts.example.test'");
-    expect(forwarded).not.toContain("origin=''");
-  });
-  it('keeps GitHub when the local build is another version than the installer pins', async () => {
-    expect(await (await app(localBuild('9.9.9')).request('/chat/install.sh')).text()).toBe(addressed('http://localhost'));
-  });
-});
-
-describe('GET /chat/releases', () => {
-  it('serves the local build for its own version only, by plain file names, uncached', async () => {
-    const server = app(localBuild());
-    const binary = await server.request(`/chat/releases/afbin-v${pinned}/afbin-darwin-arm64`);
-    expect(binary.status).toBe(200);
-    expect(binary.headers.get('content-length')).toBe(String(Buffer.byteLength(payload)));
-    expect(binary.headers.get('cache-control')).toBe('no-store');
-    expect(await binary.text()).toBe(payload);
-    const sums = await server.request(`/chat/releases/afbin-v${pinned}/SHA256SUMS`);
-    expect(sums.status).toBe(200);
-    expect(await sums.text()).toMatch(/^[0-9a-f]{64} {2}afbin-darwin-arm64\n$/);
-    for (const route of [`/chat/releases/afbin-v9.9.9/afbin-darwin-arm64`, `/chat/releases/afbin-v${pinned}/missing`, `/chat/releases/afbin-v${pinned}/..%2Fafbin-darwin-arm64`, `/chat/releases/other/afbin-darwin-arm64`, `/chat/releases/afbin-v${pinned}/.hidden`]) {
-      expect((await server.request(route)).status, route).toBe(404);
-    }
-    expect((await app(path.join(os.tmpdir(), 'afbin-no-such-dir')).request(`/chat/releases/afbin-v${pinned}/afbin-darwin-arm64`)).status).toBe(404);
-  });
-});
-
-describe('GET /chat/install.ps1',()=>{
- it.each([false,true])('serves Windows installation for this origin (local build: %s)',async local=>{
-  const response=await app(local?localBuild():path.join(os.tmpdir(),'afbin-no-such-dir')).request('/chat/install.ps1',{headers:{'x-forwarded-proto':'https','x-forwarded-host':'artifacts.example.test'}});
-  expect(response.status).toBe(200);
-  expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
-  expect(response.headers.get('x-content-type-options')).toBe('nosniff');
-  const body=await response.text();
-  expect(body).toContain("$Origin = 'https://artifacts.example.test'");
-  expect(body).toContain(`$Version = '${pinned}'`);
-  expect(body).toContain(`$ReleaseRoot = '${local?'https://artifacts.example.test/chat/releases':'https://github.com/minusxai/artifactbin/releases/download'}'`);
- });
 });

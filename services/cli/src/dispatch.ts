@@ -1,3 +1,9 @@
+import {collectionFilters} from './collection-filters';
+import {localCommentCommand} from './local-comments-command';
+import {localHistory,localHistoryHead} from './local-history';
+import {importLocalHtml} from './local-html-import';
+import {publishLocalWorkspace} from './local-publication';
+import {registerLocalFiles,findLocalWorkspace,moveLocalFile} from './local-workspace';
 import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
@@ -7,7 +13,7 @@ import {serveTeam} from './host-runtime';
 import type {ServeOptions} from './serve-config';
 import { browserSessionCommand } from './browser-sessions';
 import {testUserCommand,viewerChoice} from './testuser';
-import {scheduleBackgroundUpdate} from './background-update';
+import {checkUpdateNotice} from './update-notice';
 import {compareVersions,validVersion} from './version-order';
 import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
 import {forkResources} from './fork';
@@ -53,7 +59,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const stdout=context.stdout??(value=>process.stdout.write(value));const stderr=context.stderr??(value=>process.stderr.write(value));
  // Colour only reaches a real terminal: a supplied writer stays plain unless the caller asks for colour.
@@ -80,16 +86,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
    const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
    const paths=await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path));
-   // Preview registers local files against a server, so it crosses the same boundary the rest of the
-   // CLI does: one identity, then the canonical origin for the binding, the credential and approval.
-   const selected=typeof flags.server==='string'?flags.server:workspace.tracking?.server??defaults.host??DEFAULT_SERVER;
-   const previewIdentity=await serverIdentity(selected,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
-   const server=previewIdentity.canonical;const previewAliases=serverAddresses(previewIdentity);
-   if(workspace.tracking&&!sameServer(previewIdentity,workspace.tracking.server))
-    throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; preview selected ${selected}.`,`Run preview from another directory, or pass --server ${workspace.tracking.server}.`);
-   const connection=await loadConnectionFor(previewIdentity,home,context.env)??(workspace.tracking?{server,token:''}:await browserAuthenticate(server,{...context.auth,home,env:context.env,interactive,aliases:previewAliases,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')}));
-   await addFiles(workspace,paths.map(path=>resolve(workspace.root,path)),new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:previewAliases}));
-   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,server});
+   await registerLocalFiles(workspace,paths.map(path=>resolve(workspace.root,path)));
+   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,server:typeof flags.server==='string'?flags.server:workspace.tracking?.server??await exportedServer(home,context.env)});
   }
   if(command==='config'&&!flags.help){
    const [action,key,value]=positionals;
@@ -111,7 +109,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // wrong_server on the first fixed build because only the connection loader read it.
   const exportedOrigin=await exportedServer(home,context.env);
   const declaredServer=typeof flags.server==='string'?flags.server:exportedOrigin??DEFAULT_SERVER;
-  if(command!=='update'&&command!=='setup')await scheduleBackgroundUpdate({home,server:declaredServer,env:context.env});
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout(`${String(flags.service)} is ready for offline use.\n`);return 0;}
@@ -143,7 +140,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
-  if(command==='mv'){await moveFile(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
+  if(command==='import'){emit(await importLocalHtml(workspace,positionals[0]!,typeof flags.output==='string'?flags.output:undefined));return 0;}
+  const portable=!!await findLocalWorkspace(workspace.root);
+  if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
+  if(command==='mv'){await (await findLocalWorkspace(workspace.root)?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
   const chosenHost=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
@@ -199,6 +199,22 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // JSON out of the file with Python before pushing (local deck, 14 Sep).
    const verified=localValidation.valid?await verifiedSummary(workspace,positionals):undefined;
    emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
+  if(command==='log'&&portable&&!urlArgument()){
+   const filters=collectionFilters('log',flags.filter as string[]|undefined);
+   if(filters.author)throw new CliError('unsupported_local_filter','Local history does not record verified author identities. Use since or until.');
+   const known=await localIdentities(workspace),results=[];
+   for(const input of positionals){
+    const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:declaredServer});
+    const path=ref.kind==='path'?ref.path:known[ref.id];
+    if(!path)throw new CliError('unresolved_reference',`${input} is not in this local workspace.`,'Use an explicit artifact URL for remote history.');
+    const head=await localHistoryHead(workspace.root,path),entries=await localHistory(workspace.root,path);
+    const offset=flags.cursor===undefined?0:Number(flags.cursor),limit=flags.limit===undefined?100:Number(flags.limit);
+    if(!Number.isSafeInteger(offset)||offset<0)throw new CliError('invalid_cursor','A local history cursor must be a nonnegative integer.');
+    const selected=entries.filter(entry=>(ref.version===undefined||entry.version===ref.version)&&(!filters.since||Date.parse(entry.at)>=Date.parse(filters.since))&&(!filters.until||Date.parse(entry.at)<=Date.parse(filters.until)));
+    results.push({path,local:true,head,versions:selected.slice(offset,offset+limit),next_cursor:offset+limit<selected.length?String(offset+limit):null});
+   }
+   emit(results.length===1?results[0]:{operations:results});return 0;
+  }
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
    try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style,await addresses());if(result)emit(result);return 0;}
@@ -222,23 +238,24 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const selectedAddresses=await addresses();
   const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,
    ...(typeof flags.as==='string'?{as:{testuser:flags.as}}:{})});
-  const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
+  const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,emit,...(context.localHtml?{localHtml:context.localHtml}:{}),...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
   if(command==='open'){
    const launch=context.auth?.open??openBrowser;
    emit(await openResources(workspace,positionals,{server:selectedServer,aliases:selectedAddresses,json,launch}));return 0;
   }
   if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
+  let commentBody=typeof flags.body==='string'?flags.body:undefined;
+  if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
+  if(command==='comment'&&portable){const local=await localCommentCommand(workspace,parsed,commentBody);if(local!==undefined){emit(local);return 0;}}
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log',selectedAddresses);
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,aliases:selectedAddresses,writable:true});
-  if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
-  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin(),serverAddresses(await identity()));if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
-  if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
+  if(command==='push'&&!account&&!portable&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
+  if(command==='push'&&!account&&!portable&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin(),serverAddresses(await identity()));if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
+  if(command==='push'&&!account&&!portable&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
    const result=await finishLocalPush(workspace,positionals,{force:!!flags.force,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(result){emit(result);return 0;}
   }
   if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined,selectedAddresses);if(!targets.length){emit({operations:[]});return 0;}}
-  let commentBody=typeof flags.body==='string'?flags.body:undefined;
-  if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
   if(commentBody!==undefined&&(!commentBody.trim()||commentBody.length>100000))throw new CliError('invalid_comment','Comment text must contain 1–100000 characters.');
   /*
    * THE REMOTE BOUNDARY. From here every byte this command sends goes to ONE origin: the
@@ -246,6 +263,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    * deployment is only ever a name a link or a tracking record may carry — never a
    * destination, and never a place a credential is sent.
    */
+  if(command==='push'&&!account&&portable&&flags['dry-run']){emit(await publishLocalWorkspace(workspace,positionals,new HttpClient({connection:{server:selectedServer,token:''}}),{dryRun:true,force:!!flags.force}));return 0;}
   const resolved=await identity();
   const server=serverOrigin()===undefined?undefined:resolved.canonical;
   const serverAliases=serverAddresses(resolved);
@@ -281,8 +299,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
   // login JavaScript. Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
-  if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,onRelease:release=>checkUpdateNotice({home,server:connection!.server,env:context.env,stderr,release}),account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='runs'){
    const action=positionals[0];let id=positionals[1];
    if(action==='start'){
@@ -340,6 +357,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account){
+   if(portable){emit(await publishLocalWorkspace(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined}));return 0;}
    if(!flags['dry-run']){const selected=await inspectWorkspace(workspace,positionals.length?positionals:undefined);await addFiles(workspace,selected.filter(file=>file.bytes&&!file.tracked&&!file.document?.metadata.head_version&&!file.resource?.head_version).map(file=>resolve(workspace.root,file.path)),client);workspace=await loadWorkspace(workspace.cwd,home);}
    const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});
    // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and

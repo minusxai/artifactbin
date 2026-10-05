@@ -197,6 +197,8 @@ export function callbackCode(location: string): string | null {
 }
 
 interface AcquireOptions {
+  /** Default OAuth account grant; direct HTTP uses only the verified email session. */
+  grant?: 'oauth' | 'http-email';
   /** Where the product is, from the DRIVER's side. */
   base: string;
   env: CredentialEnv;
@@ -239,8 +241,22 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
   }
   const origin = opts.origin ?? opts.base;
   const cookie = await logIn({ base: opts.base, origin, email, read, fetch: call, sleep });
-  const token = await grantAsMcpClient({ base: opts.base, origin, cookie, fetch: call });
+  const token = opts.grant === 'http-email'
+    ? await httpEmailGrant(opts.base, origin, cookie, call)
+    : await grantAsMcpClient({ base: opts.base, origin, cookie, fetch: call });
   return { token, email, cookie };
+}
+
+/** No consent page or device grant: this endpoint admits verified email sessions only. */
+async function httpEmailGrant(base: string, origin: string, cookie: string, call: typeof fetch): Promise<string> {
+  const response = await call(`${base}/api/authentication/token`, {
+    method: 'POST', redirect: 'error', headers: { Cookie: cookie, Origin: origin },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || typeof body?.access_token !== 'string' || !body.access_token)
+    throw new Error(`HTTP email-session token grant failed (${response.status}); verified email login is required`);
+  return body.access_token;
 }
 
 /** What `shareForScoring` needs: the product, the session, and the documents to hand out links to. */

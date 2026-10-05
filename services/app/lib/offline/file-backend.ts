@@ -14,6 +14,7 @@
  * disabled with that reason) and the matching requests reject with it. Nothing
  * here opens a connection: the file's CSP would refuse it anyway.
  */
+import { assertProjectionSupported } from './project-document';
 import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate } from '@artifactbin/contracts';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/annotations/anchors';
@@ -332,6 +333,9 @@ export async function rebuildArtifactFile(file: ArtifactFile, author: string | n
     for (const id of Object.keys(file.island.refData ?? {})) have.add(`ref:ref:${id}`);
     for (const input of authoringInputs(source)) if (!have.has(input)) return { file, rebuilt: false, error: OFFLINE_ASSET_REASON };
   }
+  try { assertProjectionSupported(file.base.source, source); } catch (error) {
+    return { file, rebuilt: false, error: error instanceof Error ? error.message : 'This markup needs the local compiler.' };
+  }
   const derived = await derive(file, source, file.metadata, inlinedAssets(source, file.island.nodes), {
     css: true,
     // The source is all there is to go on: keep the inlined sheet only when it is the same sheet.
@@ -435,6 +439,9 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
       if (!next) return conflict();
 
       const source = graphSource(next);
+      try { assertProjectionSupported(file.source, source); } catch (error) {
+        return { ok: false, status: 422, body: { error: 'invalid_jsx', details: [{ message: error instanceof Error ? error.message : 'This markup needs the local compiler.' }] } as unknown as FlushResponse };
+      }
       const metadata = { ...file.metadata };
       for (const [key, value] of Object.entries(update.metadata ?? {})) {
         if (key === 'title' && typeof value === 'string') metadata.title = value;
@@ -461,10 +468,11 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
     },
 
     async prepare(source): Promise<DocumentResourcePreparation> {
-      if (!needsAuthoringContext(source)) return {};
+      if (!needsAuthoringContext(source)) { assertProjectionSupported(file.source, source); return {}; }
       const have = authoringInputs(file.source);
       for (const id of Object.keys(file.island.refData ?? {})) have.add(`ref:ref:${id}`);
       for (const input of authoringInputs(source)) if (!have.has(input)) throw new Error(OFFLINE_ASSET_REASON);
+      assertProjectionSupported(file.source, source);
       return {};
     },
 

@@ -1,7 +1,6 @@
 import {spawn} from 'node:child_process';
 import {readFile,stat} from 'node:fs/promises';
 import {basename,resolve} from 'node:path';
-import {isSea} from 'node:sea';
 import {REMOTE_HISTORY_BYTES,REMOTE_NAME} from '../../contracts/src/remote';
 import {REMOTE_WORKER_ARG} from './entry-args';
 import {CliError} from './errors';
@@ -26,7 +25,7 @@ export async function launchRemote(options:RemoteLaunchOptions):Promise<RemoteLa
   if(bytes.length>REMOTE_HISTORY_BYTES)throw new CliError('invalid_history','History grew beyond the size limit.');
   try{history=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw new CliError('invalid_history','History must be valid UTF-8.');}
  }
- const worker=options.worker??{command:process.execPath,args:[...(isSea()?[]:[...process.execArgv,process.argv[1]!]),REMOTE_WORKER_ARG]};
+ const worker=options.worker??{command:process.execPath,args:[...process.execArgv,process.argv[1]!,REMOTE_WORKER_ARG]};
  const child=spawn(worker.command,worker.args,{cwd:options.cwd,env:options.env??process.env,detached:true,stdio:['ignore','ignore','ignore','ipc']});
  return new Promise((resolveReceipt,reject)=>{
   let settled=false;

@@ -34,15 +34,15 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
-    expect(html).toContain(`<meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
+    expect(html).toContain(`<meta name="afbin" content="afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
   });
   it('the plain app shell carries the same head pointer, and /llms.txt is the one-pager on the request base', async () => {
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const shell = await app.request(`${BASE}/login`, { headers: { accept: 'text/html' } });
     expect(shell.status).toBe(200);
     const html = await shell.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
     expect(html.match(/name="afbin"/g)).toHaveLength(1);
     // FIRST in the head: a fetch that keeps only the first few kilobytes must still see the pointer
     // (it sat after every preload link, one line past where OpenCode's fetch cut).
@@ -56,15 +56,27 @@ describe('GET /a/:id (the document itself)', () => {
     expect(llms.status).toBe(200);
     const text = await llms.text();
     expect(text.split('\n')[0]).toBe(agentBlurb());
-    expect(agentBlurb()).toMatch(/^artifactbin: .*afbin CLI\.$/);
-    expect(text).toContain(`curl -fsSL ${BASE}/chat/install.sh | sh`);
-    expect(text).toContain(`${BASE}/chat/install.ps1`);
-    expect(text).not.toContain('afbin setup');
+    expect(agentBlurb()).toMatch(/^artifactbin: .*npm CLI or direct HTTP API\.$/);
+    expect(text).toContain(`npx --yes @afbin/cli@latest`);
+    expect(text).toContain(`${BASE}/chat/ensure-node.ps1`);
+    expect(text).toContain('@afbin/cli@latest setup');
+    expect(text).toContain('npx.cmd --yes @afbin/cli@latest');
+    expect(text).toContain('POST '+BASE+'/api/auth/email-otp/send-verification-otp');
+    expect(text).toContain('POST '+BASE+'/api/auth/sign-in/email-otp');
+    expect(text).toContain('POST '+BASE+'/api/authentication/token');
+    expect(text).toContain('Authorization: Bearer <access_token>');
+    expect(text).toContain('function buildPlainTextUpdate(snapshot, nodeId, before, after)');
+    expect(text).toContain('patch.claims');
+    expect(text).toContain('/api/artifacts/<id>/edits');
+    expect(text).toContain('HTTP client does not need Node or the CLI');
+    expect(text).toContain('guest browser approval is CLI-only');
+    expect(text).toContain('Local and offline edits do not call these HTTP endpoints');
+    expect(text).not.toContain('[[ base ]]');
     const t = await mintToken('t');
     const row = await createArtifact(t.id, null, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
     const refused = await app.request(`${BASE}/api/artifacts/${row.id}`);
     expect(refused.status).toBe(401);
-    expect(await refused.json()).toMatchObject({ error: 'unauthorized', help: `Retry — afbin authenticates itself when it needs the server; there is nothing to set up. Install it if it is missing: curl -fsSL ${BASE}/chat/install.sh | sh`, guide: `${BASE}/llms.txt` });
+    expect(await refused.json()).toMatchObject({ error: 'unauthorized', help: `Retry through afbin: npx --yes @afbin/cli@latest auth --server ${BASE}. Prepare Node: ${BASE}/chat/ensure-node.sh; Windows: ${BASE}/chat/ensure-node.ps1. CLI browser approval allows guests; direct HTTP requires email sign-in.`, guide: `${BASE}/llms.txt` });
   });
   it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
     const t = await mintToken('t');
@@ -85,8 +97,8 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
-    expect(html).toContain(`<meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
+    expect(html).toContain(`<meta name="afbin" content="afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
     expect(html).toContain('hop');
     expect(html).toMatch(new RegExp(`<link rel="canonical" href="[^"]*${canonical}">`));
     expect(html).toContain(`"address":"${canonical}"`);
@@ -96,7 +108,7 @@ describe('GET /a/:id (the document itself)', () => {
     const t = await mintToken('t', owner.id);
     const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>tail</div>', meta: {}, title: 'Tail', description: null, visibility: 'public' });
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
-    const tail = `<!-- Agents: read this to create, edit, or operate artifacts on the CLI using afbin: ${BASE}/llms.txt. afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell) --></body>`;
+    const tail = `<!-- Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API: ${BASE}/llms.txt. afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API. --></body>`;
     for (const path of [`/@${owner.username}/${row.id}-tail`, '/login', `/a/${row.id}/raw`]) {
       const res = await app.request(`${BASE}${path}`, { headers: { accept: 'text/html' } });
       expect(res.status, path).toBe(200);
@@ -114,7 +126,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
-    expect(html).toContain(`<meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
+    expect(html).toContain(`<meta name="afbin" content="afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.">`);
   });
 });

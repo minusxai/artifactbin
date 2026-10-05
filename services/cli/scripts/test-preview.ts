@@ -1,14 +1,11 @@
 import sharp from 'sharp';
 /** CI-only real Chromium proof. No mocked HTTP, persistence or SQL. */
-import {State,HOME_SCOPE} from '../src/state';
-import {saveConnection} from '../src/config';
-import {chromium} from 'playwright';
+import {chromium,type Page} from 'playwright';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdtemp,mkdir,readFile,writeFile,rm,realpath} from 'node:fs/promises';
+import {tmpdir,homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
-import {createServer} from 'node:http';
 const root=await realpath(await mkdtemp(join(tmpdir(),'preview-browser-')));
 const source='<p>Draft</p>';
 await writeFile(join(root,'report.jsx'),source);await writeFile(join(root,'sales.csv'),'amount\n10\n20\n');
@@ -17,50 +14,71 @@ await writeFile(join(root,'covers.csv'),'id,title,cover_ref\na,Placeholder,\n');
 for(const color of ['red','blue'])await sharp({create:{width:48,height:64,channels:3,background:color}}).png().toFile(join(root,`${color}-cover.png`));
 await writeFile(join(root,'pixel.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4KsAAAAASUVORK5CYII=','base64'));
 await writeFile(join(root,'published.jsx'),'---\nid: abc123\nhead_version: 3\n---\n<p id="text">Published local draft</p>');
-const binary=resolve(process.argv[2]??`dist/afbin-${process.platform}-${process.arch}`);
-const packaged=!binary.endsWith('.mjs');
-const runtimeBytes=packaged?await readFile(resolve(`dist/afbin-runtime-${process.platform}-${process.arch}.gz`)):null;
-const chromiumBytes=packaged?await readFile(resolve(`dist/afbin-chromium-${process.platform}-${process.arch}.gz`)):null;
-let downloads=0;
-const packages=createServer((req,res)=>{downloads++;if(req.url?.includes('/afbin-runtime-'))res.end(runtimeBytes);else if(req.url?.includes('/afbin-chromium-'))res.end(chromiumBytes);else{res.writeHead(404);res.end();}});
-await new Promise<void>(resolve=>packages.listen(0,'127.0.0.1',resolve));
-const packagePort=(packages.address() as {port:number}).port;
-// Seed a server-issued pool fixture, then exercise actual offline add in the built CLI.
-const privateHome=join(root,'engine-cache'),origin='http://127.0.0.1:7445';
-const account='usr_preview_proof';
-const state=await State.open(root,{ARTIFACTBIN_HOME:privateHome});
-state.put(root,'workspace',root,{server:origin,account});
-state.put(HOME_SCOPE,'identity-pool',JSON.stringify([origin,account]),{ids:Array.from({length:100},(_,i)=>'P'+String(i).padStart(5,'0'))});state.close();
-await saveConnection({server:origin,token:'mxmx_test_offline_preview'},root,{ARTIFACTBIN_HOME:privateHome});
+const entry=resolve(process.argv[2]??'dist/afbin.mjs');
+// A fresh workspace needs no account, reservation pool or credentials.
+const privateHome=join(root,'engine-cache');
+const browserCache=process.env.PLAYWRIGHT_BROWSERS_PATH??(process.platform==='darwin'?join(homedir(),'Library/Caches/ms-playwright'):process.platform==='win32'?join(process.env.LOCALAPPDATA??join(homedir(),'AppData/Local'),'ms-playwright'):join(homedir(),'.cache/ms-playwright'));
+const environment={...process.env,HOME:privateHome,USERPROFILE:privateHome,ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:privateHome,ARTIFACTBIN_URL:'http://127.0.0.1:1',CLI__AUTO_UPDATE:'0',PLAYWRIGHT_BROWSERS_PATH:browserCache};
 const addArgs=['add','sales.csv','appendix.jsx','pixel.png','report.jsx','covers.csv','red-cover.png','blue-cover.png','--json'];
 const ids=await new Promise<Record<string,string>>((resolve,reject)=>{
- const child=spawn(packaged?binary:process.execPath,packaged?addArgs:[binary,...addArgs],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,CLI__AUTO_UPDATE:'0'},stdio:['ignore','pipe','pipe']});
- let out='',err='';child.stdout.on('data',chunk=>out+=chunk);child.stderr.on('data',chunk=>err+=chunk);child.on('error',reject);child.on('exit',code=>code===0?resolve(JSON.parse(out)):reject(Error(out+err)));
+ const child=spawn(process.execPath,[entry,...addArgs],{cwd:root,env:environment,stdio:['ignore','pipe','pipe']});
+ let out='',err='';child.stdout!.on('data',chunk=>out+=chunk);child.stderr!.on('data',chunk=>err+=chunk);child.on('error',reject);child.on('exit',code=>code===0?resolve(JSON.parse(out)):reject(Error(out+err)));
 });
 const registered=(await readFile(join(root,'report.jsx'),'utf8'));
 await writeFile(join(root,'covers.csv'),'id,title,cover_ref\n'+['red','blue'].map(color=>`${color},${color},ref:${ids[color+'-cover.png']}`).join('\n')+'\n');
 await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
 async function launch(port=0){
  const args=['preview',ids['report.jsx']!,'published.jsx','--port',String(port),'--json'];
- const child=spawn(packaged?binary:process.execPath,packaged?args:[binary,...args],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:join(root,'engine-cache'),CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe']});
- let output='';child.stderr.on('data',chunk=>process.stderr.write(chunk));
- const url=await new Promise<string>((resolve,reject)=>{child.stdout.on('data',chunk=>{output+=chunk;for(const line of output.split('\n')){try{const value=JSON.parse(line);if(value.url)resolve(value.url);}catch{}}});child.on('exit',code=>reject(Error(`Host exited ${code}: ${output}`)));});
- return {url,close:()=>new Promise<void>((resolve,reject)=>{if(child.exitCode!==null){resolve();return;}child.once('exit',code=>code===0?resolve():reject(Error(`Host exit ${code}`)));child.kill('SIGTERM');})};
+ const child=spawn(process.execPath,[entry,...args],{cwd:root,env:environment,stdio:['ignore','pipe','pipe','ipc']});
+ let output='';child.stderr!.on('data',chunk=>process.stderr.write(chunk));
+ const url=await new Promise<string>((resolve,reject)=>{child.stdout!.on('data',chunk=>{output+=chunk;for(const line of output.split('\n')){try{const value=JSON.parse(line);if(value.url)resolve(value.url);}catch{}}});child.on('exit',code=>reject(Error(`Host exited ${code}: ${output}`)));});
+ return {url,close:()=>new Promise<void>((resolve,reject)=>{if(child.exitCode!==null){child.exitCode===0?resolve():reject(Error(`Host exit ${child.exitCode}`));return;}const timer=setTimeout(()=>{child.kill();reject(Error('Preview did not shut down through IPC'));},15000);child.once('exit',code=>{clearTimeout(timer);code===0?resolve():reject(Error(`Host exit ${code}`));});child.send({type:'afbin.shutdown'},error=>{if(error){clearTimeout(timer);reject(error);}});})};
 }
 const phase=process.argv.find(value=>value.startsWith('--phase='))?.slice(8)??'all';
 if(!['all','preview','export-basic','export-variants'].includes(phase))throw new Error('Unknown preview proof phase');
 let server=phase.startsWith('export-')?undefined:await launch();
 let browser=phase.startsWith('export-')?undefined:await chromium.launch();
 const errors:string[]=[];
+const browserEvents:Array<Record<string,unknown>>=[];
+const trackedPages:Array<{page:Page;label:string}>=[];
+function trackPage(page:Page,label:string){
+ trackedPages.push({page,label});
+ page.on('pageerror',error=>{errors.push(error.message);browserEvents.push({page:label,type:'pageerror',message:error.stack??error.message});});
+ page.on('console',message=>browserEvents.push({page:label,type:'console',level:message.type(),message:message.text()}));
+ page.on('requestfailed',request=>browserEvents.push({page:label,type:'requestfailed',url:request.url(),error:request.failure()?.errorText}));
+ page.on('response',response=>{if(response.url().includes('/document?')||response.url().includes('/bundle/')||response.status()>=400)browserEvents.push({page:label,type:'response',url:response.url(),status:response.status()});});
+ return page;
+}
+async function ready(page:Page){
+ // SSR prose alone says nothing about either the reader module or the independently
+ // fetched preview chrome. Do not navigate away while that first boot is pending.
+ await page.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
+ await page.getByRole('button',{name:'Edit document',exact:true}).waitFor();
+}
+async function retainDiagnostics(error:unknown){
+ const destination=resolve('test-results','local-journey','preview-'+phase);
+ await mkdir(destination,{recursive:true});
+ await writeFile(join(destination,'failure.json'),JSON.stringify({entry,root,url:server?.url,error:error instanceof Error?error.stack:String(error),browserEvents},null,2));
+ for(const file of ['report.jsx','appendix.jsx','published.jsx','sales.csv'])await writeFile(join(destination,file),await readFile(join(root,file)));
+ for(const {page,label} of trackedPages){
+  if(page.isClosed())continue;
+  try{
+   await writeFile(join(destination,label+'-dom.html'),await page.content());
+   await writeFile(join(destination,label+'-aria.txt'),await page.locator('body').ariaSnapshot());
+   await writeFile(join(destination,label+'-state.json'),JSON.stringify(await page.evaluate(()=>({url:location.href,ready:document.documentElement.hasAttribute('data-mx-ready'),previewBars:document.querySelectorAll('.afbin-preview-bar').length,scripts:[...document.scripts].map(script=>({src:script.src,type:script.type}))})),null,2));
+   await page.screenshot({path:join(destination,label+'.png'),fullPage:true});
+  }catch(reason){await writeFile(join(destination,label+'-unavailable.txt'),String(reason));}
+ }
+ console.error('Preview diagnostics retained at '+destination);
+}
 try{
  if(server&&browser){
- const a=await browser.newPage(),b=await browser.newPage();
- a.on('pageerror',error=>errors.push(error.message));b.on('pageerror',error=>errors.push(error.message));
- await a.goto(server.url);await b.goto(server.url);
+ const a=trackPage(await browser.newPage(),'editing'),b=trackPage(await browser.newPage(),'reader');
+ await a.goto(server.url);await b.goto(server.url);await ready(a);await ready(b);
  await a.locator('#text').waitFor();assert.equal(await a.locator('#text').textContent(),'Draft paragraph');
  await a.getByRole('img',{name:'Local image'}).evaluate((image:HTMLImageElement)=>image.decode());
  // The compiled reader is a clean read-only page until "Edit document" is pressed; a link just navigates.
- await a.getByRole('link',{name:'Local appendix'}).click();await a.locator('#text').filter({hasText:'Unpublished appendix'}).waitFor();await a.goto(server.url);await a.locator('#text').waitFor();
+ await a.getByRole('link',{name:'Local appendix'}).click();await a.locator('#text').filter({hasText:'Unpublished appendix'}).waitFor();await a.goto(server.url);await ready(a);await a.locator('#text').waitFor();
  console.log('PASS offline CLI add, ID preview, image and JSX link resolve before publication');
  // `b` stays a clean reader for the rest of this run.
  await a.getByRole('button',{name:'Edit document',exact:true}).click();
@@ -119,25 +137,25 @@ try{
  console.log('PASS production Code editor saves local bytes and retains remote version');
  assert.equal((await a.request.get(server.url+'/document?file=home/preview-comments.sqlite')).status(),403);
  assert.equal((await a.request.post(server.url+'/save',{headers:{origin:'https://unrelated.example'},data:{}})).status(),403);
- assert.deepEqual(errors,[]);if(packaged)assert.equal(downloads,1,'The runtime downloads once and reuses its verified cache after process restart; SQL is built in');console.log('PASS scope/origin restrictions; no browser exceptions'+(packaged?'; SEA ran outside checkout with lazy runtime and engine downloads':''));
+ assert.deepEqual(errors,[]);console.log('PASS npm scope/origin restrictions; no browser exceptions');
  // Export owns another browser. Release preview resources while retaining the
- // same home so cold runtime and SQL installation is not repeated for exports.
+ // same home so local state and browser preparation are reused for exports.
  await browser.close();browser=undefined;await server.close();server=undefined;
  }
  if(phase!=='preview'){
- // Same proof runs against installed npm and all four standalone executables.
+ // Same proof runs against the installed npm entry on every supported platform.
  async function imageExport(args:string[],ok=true,interrupt=false){
   const out=await new Promise<{code:number|null;stdout:string;stderr:string}>((resolve,reject)=>{
    const argv=['export',...args,'--json'];
-   const child=spawn(packaged?binary:process.execPath,packaged?argv:[binary,...argv],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe']});
+   const child=spawn(process.execPath,[entry,...argv],{cwd:root,env:environment,stdio:['ignore','pipe','pipe']});
    const cancellation=interrupt?setTimeout(()=>child.kill('SIGTERM'),500):undefined;
    let stdout='',stderr='';const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error(`Local export did not finish: ${args.join(' ')}\n${stdout.slice(-2000)}\n${stderr.slice(-2000)}`));},120000);
-   child.stdout.on('data',chunk=>stdout+=chunk);child.stderr.on('data',chunk=>stderr+=chunk);child.once('error',error=>{clearTimeout(timer);clearTimeout(cancellation);reject(error);});child.once('exit',code=>{clearTimeout(timer);clearTimeout(cancellation);resolve({code,stdout,stderr});});
+   child.stdout!.on('data',chunk=>stdout+=chunk);child.stderr!.on('data',chunk=>stderr+=chunk);child.once('error',error=>{clearTimeout(timer);clearTimeout(cancellation);reject(error);});child.once('exit',code=>{clearTimeout(timer);clearTimeout(cancellation);resolve({code,stdout,stderr});});
   });
   assert.equal(out.code===0,ok,out.stdout+out.stderr);return out;
  }
  // Include dataset images in the existing cold export: no extra browser launch is
- // needed to prove the shared resolver in every packaged executable.
+ // needed to prove the shared resolver in the installed npm runtime.
  await writeFile(join(root,'report.jsx'),(await readFile(join(root,'report.jsx'),'utf8')).replace('</Helmet>',`<Import name="books_data" src="ref:${ids['covers.csv']}" /><Query name="books">{\`select * from books_data.rows\`}</Query></Helmet>`)+`<For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
  const beforeExport=await readFile(join(root,'report.jsx'));
  await imageExport([ids['report.jsx']!,'--output','report.png']);
@@ -180,7 +198,6 @@ try{
  }
  const workers=await Promise.allSettled(Array.from({length:3},async()=>{for(let proof;(proof=proofs.shift());)await proof();}));
  for(const worker of workers)if(worker.status==='rejected')throw worker.reason;
- if(packaged)assert.equal(downloads,2,'Runtime and Chromium are downloaded once, then reused; SQL is built in');
  console.log(`PASS local image export proof (${phase}); sources unchanged and lazy caches reused`);
  }
-}catch(error){console.error('Browser errors:',errors);for(const context of browser?.contexts()??[])for(const page of context.pages())console.error((await page.locator('body').innerText()).slice(0,5000));throw error;}finally{await browser?.close();await server?.close();await new Promise<void>(resolve=>packages.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+}catch(error){try{await retainDiagnostics(error);}catch(reason){console.error('Could not retain preview diagnostics',reason);}console.error('Browser errors:',errors);for(const context of browser?.contexts()??[])for(const page of context.pages())console.error((await page.locator('body').innerText()).slice(0,5000));throw error;}finally{await browser?.close();await server?.close();await rm(root,{recursive:true,force:true});}

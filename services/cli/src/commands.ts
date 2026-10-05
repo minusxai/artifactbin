@@ -1,7 +1,7 @@
 import {collectionFilters} from './collection-filters';
 import {enumArgument} from './arguments';
-import {CliError} from './errors';
-export {CliError} from './errors';
+import {CliError} from './errors.js';
+export {CliError} from './errors.js';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
@@ -73,11 +73,12 @@ export interface Command {name:string; aliases?:string[]; usage:string; descript
 export const commands: Command[] = [
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},
  {name:'mv',usage:'<from> <to>',description:'Move a registered local file while retaining its identity.',min:2,max:2,flags:[],examples:['afbin mv sales.csv data.csv']},
+ {name:'import',usage:'<file.jsx.html> [--output <file.jsx>]',description:'Import an offline HTML file into local JSX without publishing; defaults to the same basename with .jsx. Existing local documents reconcile safely.',min:1,max:1,flags:['output'],examples:['afbin import report.jsx.html','afbin import review.jsx.html --output report.jsx']},
  {name:'preview',usage:'<path> [<path> ...]',description:'Preview and edit local JSX files without publishing. Directories select their JSX files.',min:1,max:Infinity,flags:['port','share'],examples:['afbin preview report.jsx appendix.jsx','afbin preview . --share']},
  {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or declared queries; --write runs a named mutation or dataset SQL.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','dry-run','output','format'],examples:['afbin query sales.csv','afbin query report123 --name tasks','afbin query report123 --write --name change_status --param task_id=1 --param status=Done']},
  {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts or account resources and reconcile tracked files.',min:0,max:Infinity,flags:['type','output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2','afbin pull --type profile']},
  {name:'fork',usage:'<ref> [<ref> ...]',description:'Create a distinct private local draft from a resource; publish it later with push. --as gives the copy to a test user instead.',min:1,max:Infinity,flags:['type','output','as','dry-run'],examples:['afbin fork abc123 --output copy.jsx','afbin fork report.jsx --dry-run','afbin fork abc123 --as tu_9fA2b --json']},
- {name:'export',usage:'<ref> [<ref> ...]',description:'Export one image of the whole document, every slide stacked; --page picks one slide; --format html saves the offline file (one .html that opens, edits and comments without a connection); data and original bytes too.',min:1,max:Infinity,flags:['type','format','output','name','page','og','refresh','force','dry-run'],examples:['afbin export abc123 --output report.png','afbin export abc123 --format html --output report.html','afbin export sales.csv --format json --output -']},
+ {name:'export',usage:'<ref> [<ref> ...]',description:'Export one image of the whole document, every slide stacked; --page picks one slide; --format html saves the offline file (one .jsx.html that opens, edits and comments without a connection); data and original bytes too.',min:1,max:Infinity,flags:['type','format','output','name','page','og','refresh','force','dry-run'],examples:['afbin export abc123 --output report.png','afbin export abc123 --format html --output report.jsx.html','afbin export sales.csv --format json --output -']},
  {name:'push',usage:'[<ref> ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['type','access','policy','restore','refresh','secret-env','dry-run','force'],examples:['afbin push report.jsx','afbin push tasks.csv --type dataset --access readwrite','afbin push --dry-run','afbin push --restore abc123']},
  {name:'validate',usage:'[path ...]',description:'Check local files without network access; --remote adds read-only server checks.',min:0,max:Infinity,flags:['fix','remote'],examples:['afbin validate report.jsx','afbin validate --fix report.jsx']},
  {name:'status',usage:'[<ref> ...]',description:'Report local changes, conflicts and installation state; remote state is last observed.',min:0,max:Infinity,flags:['type','remote'],examples:['afbin status','afbin status --remote']},
@@ -93,7 +94,7 @@ export const commands: Command[] = [
  {name:'auth',usage:'[<artifact>]',description:'Sign in through browser approval, or use --email when a browser is unavailable.',min:0,max:1,flags:['email','otp'],examples:['afbin auth','afbin auth --email you@example.com','afbin auth --email you@example.com --otp 123456']},
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in. Set ARTIFACTBIN_SKILLS=off in the environment to install no skill at all and leave every harness folder untouched \u2014 what a checkout\u2019s development loop (npm run afbin) runs under.',min:0,max:0,flags:['harness','service'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 
- {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
+ {name:'update',usage:'',description:'Show the npm command for your next launch with the latest version.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
  {name:'runs',usage:'start <artifact> | status|events|cancel <run-id>',description:'Execute a published Lambda artifact and inspect its output, receipt and events. Read afbin help lambdas.',min:2,max:2,flags:['input','request','after','limit'],examples:['afbin runs start abc123 --request weekly-1 --input input.json --json','afbin runs status run_123 --json','afbin runs events run_123 --after 0 --json','afbin runs cancel run_123 --json']},
  {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions script new --as tu_9fA2b --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
  {name:'mention',usage:'<ref> <@username> [<@username> ...]',description:'Resolve eligible @usernames to stable mentions. Save the returned markup or post the comment to notify them.',min:2,max:31,flags:['include-access'],examples:['afbin mention a1B2c3 @alex --json']},
@@ -161,6 +162,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(result.flags.help||result.flags.version)return result;
  if(result.positionals.length<command.min||result.positionals.length>command.max)throw new CliError('invalid_arguments',`Usage: afbin ${command.name} ${command.usage}`.trim());
  const f=result.flags;
+ if(command.name==='import'&&f.output!==undefined&&(typeof f.output!=='string'||f.output==='-'||!f.output.toLowerCase().endsWith('.jsx')))throw new CliError('invalid_arguments','Import output must be a JSX file ending in .jsx.','Use --output report.jsx, or omit it to use the input basename.');
  if(command.name==='auth'){
   if(f.otp&&!f.email)throw new CliError('invalid_arguments','--otp requires --email.');
   if(f.email&&result.positionals.length)throw new CliError('invalid_arguments','Sign in with --email first, then run the artifact command.');

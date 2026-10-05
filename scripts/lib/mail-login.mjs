@@ -44,11 +44,39 @@ export async function startMailSink() {
  * /signup and /login separately both come here.
  */
 export async function loginViaEmail(page, base, sink, email) {
-  await page.goto(`${base}/login`, { waitUntil: 'load' });
-  // The pages render in the browser now: wait for the form rather than assuming
-  // it is in the HTML the server sent.
-  // The login page shares the runner with the other legs of a journey gate: a long wait, not a flake.
-  await page.waitForSelector('[aria-label="Email"]', { timeout: 45_000 });
+  // Record only public navigation/resource paths and session shape, never a cookie or response body.
+  // A blank SPA, an auth redirect and an unresolved session used to look like the same 45s timeout.
+  const failures = [];
+  let navigationStatus = null;
+  let session = 'not observed';
+  const pathname = url => { try { return new URL(url).pathname; } catch { return 'unknown'; } };
+  const remember = value => { if (failures.length < 8) failures.push(value); };
+  const onFailure = request => remember(`${request.resourceType()} ${pathname(request.url())}: ${request.failure()?.errorText ?? 'failed'}`);
+  const onPageError = error => remember(`page error: ${error.name}`);
+  const onResponse = response => {
+    const request = response.request();
+    const route = pathname(response.url());
+    if (response.status() >= 400 && ['script', 'stylesheet', 'document'].includes(request.resourceType()))
+      remember(`${request.resourceType()} ${route}: HTTP ${response.status()}`);
+    if (route === '/api/page/session') {
+      session = `HTTP ${response.status()}`;
+      void response.json().then(body => { session = `HTTP ${response.status()}, kind=${body.kind}, user=${!!body.user}`; }).catch(() => {});
+    }
+  };
+  page.on('requestfailed', onFailure);
+  page.on('pageerror', onPageError);
+  page.on('response', onResponse);
+  try {
+    navigationStatus = (await page.goto(`${base}/login`, { waitUntil: 'load' }))?.status() ?? null;
+    // Wait for the real hydrated form; keep the established gate budget.
+    await page.waitForSelector('[aria-label="Email"]', { timeout: 45_000 });
+  } catch (cause) {
+    throw new Error(`Login email form unavailable: navigation HTTP ${navigationStatus}, path=${pathname(page.url())}, session=${session}; ${failures.join('; ') || 'no resource or page error observed'}`, { cause });
+  } finally {
+    page.off('requestfailed', onFailure);
+    page.off('pageerror', onPageError);
+    page.off('response', onResponse);
+  }
   await page.fill('[aria-label="Email"]', email);
   await page.click('[aria-label="Log in with email"]');
   await page.waitForSelector('[aria-label="Login code"]', { timeout: 15_000 });

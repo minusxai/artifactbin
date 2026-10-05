@@ -18,8 +18,7 @@ concurrency:
     github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Every job here only reads the repo; the GITHUB_TOKEN should be able to do
-# exactly that and nothing else (CodeQL: actions/missing-workflow-permissions).
+# Jobs read the repo. cli-pack alone can request a signing identity for its npm artifact.
 permissions:
   contents: read
 
@@ -224,8 +223,7 @@ jobs:
         if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
         run: |
           (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build/build-islands.mjs --cache)
-          node services/cli/scripts/fetch-runtime.mjs
-          PATH="$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node:$PATH" npm test -w services/cli
+          npm test -w services/cli
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
@@ -700,6 +698,7 @@ jobs:
         build,
         api,
         gates,
+        cli-pack,
         cli,
         cli-preview,
         reference-compatibility
@@ -728,7 +727,7 @@ jobs:
       # this into a red merge button teaching everyone to re-run.
       #
       # Two budgets. 240s is the ordinary one, measured from what this branch achieves. The multi-platform
-      # CLI build is the exception: it compiles a standalone executable and drives real browsers against
+      # CLI build is the exception: it installs the npm package on native platforms and drives real browsers against
       # it, it runs only for a release, and it is the whole reason the rest of the run had to get out of
       # its way. Its allowance is named here rather than hidden in a slower default for everything.
       #
@@ -767,13 +766,13 @@ jobs:
           over=0
           : > over-budget.txt
           {
-            echo "## Job wall clock (budget ${BUDGET_S}s, CLI binaries ${SLOW_BUDGET_S}s)"
+            echo "## Job wall clock (budget ${BUDGET_S}s, CLI release ${SLOW_BUDGET_S}s)"
             echo
             echo '| | job | seconds | result | slowest step |'
             echo '| --- | --- | ---: | --- | --- |'
             while IFS=$'\t' read -r seconds name conclusion slowest; do
               budget="$BUDGET_S"
-              case "$name" in "CLI ("*|"CLI distributions"*) budget="$SLOW_BUDGET_S";; esac
+              case "$name" in "CLI ("*|"CLI npm ("*|"CLI npm pack"|"CLI distributions"*) budget="$SLOW_BUDGET_S";; esac
               mark=''
               if [ "$seconds" -gt "$budget" ]; then
                 mark='OVER'
@@ -835,109 +834,127 @@ jobs:
   # multi-platform build was 4.5 minutes on the Intel runner with the render proofs queued behind it,
   # on every full run, for bytes the publisher never uploads unless the version moved. An ordinary
   # CLI change is guarded by the bundle build and the source suite in the node job.
-  cli:
+  cli-pack:
+    name: CLI npm pack
+    permissions:
+      contents: read
+      id-token: write
     needs: [ plan ]
     if: needs.plan.outputs.cli == 'true'
-    name: CLI (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: Preserve source bytes on Windows
-        if: runner.os == 'Windows'
-        run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
-      # itself: see the `checks` job above, which carries the full note.
-      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - run: npm ci
+      - run: npm run build -w services/cli
+      - run: npm run pack:release -w services/cli
+      - name: Sign the actual build's npm provenance
+        if: github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GITHUB_REPOSITORY_VISIBILITY: public
+          AFBIN_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          AFBIN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          version=$(node -p "require('./services/cli/package.json').version")
+          node scripts/ci/npm-provenance.mjs sign "services/cli/dist/packages/afbin-cli-$version.tgz" "$version"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-npm-release
+          path: |
+            services/cli/dist/packages/*.tgz
+            services/cli/dist/packages/*.sigstore
+            services/cli/dist/packages/*.build.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+  cli:
+    needs: [ plan, cli-pack ]
+    if: needs.plan.outputs.cli == 'true'
+    name: CLI npm (${{ matrix.os }} Node ${{ matrix.node }} ${{ matrix.phase }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
+        node: [22.22.3, 24.21.0]
+        phase: [native, experience]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+      # Acceptance tooling has its own pinned lock: no app build or local execution engines.
+      # Each phase's clock includes restoring or installing all its prerequisites.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: matrix.phase == 'experience'
         id: install
         with:
           path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
-      - if: steps.install.outputs.cache-hit != 'true'
-        run: npm ci
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+            scripts/ci/npm-acceptance/node_modules
+          key: npm-acceptance-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('scripts/ci/npm-acceptance/package-lock.json', 'services/contracts/package.json', 'services/utils/package.json') }}
+      - if: matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'
+        run: npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund
+      - if: matrix.phase == 'experience'
+        run: node scripts/ci/link-npm-acceptance.mjs
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          path: |
-            ~/.cache/ms-playwright
-            ~/Library/Caches/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          path: node_modules/.cache/cli-prebuilt-node/node
-          key: cli-prebuilt-node-${{ matrix.os }}-${{
-            hashFiles('services/cli/runtime-lock.json') }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: services/cli/.cache/chromium-archive
-          key: chromium-archive-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json', 'services/cli/scripts/runtime-archive.mjs') }}
-      - name: Download and verify pinned prebuilt Node
-        run: node services/cli/scripts/fetch-runtime.mjs
-      - name: Chromium system libraries
-        if: startsWith(matrix.os, 'ubuntu')
-        run: npx playwright install-deps chromium
-      # These assets are checked against their source fingerprints by build-prep --cache.
-      # Preserve the markers as well as the bytes; a stale restore rebuilds normally.
-      # Keep platform/architecture separate, and still build and test the shipped binary.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cli-reader-assets
-        with:
-          path: |
-            services/app/public/islands
-            services/app/lib/build-assets
-            node_modules/.cache/build-islands.json
-          key: cli-reader-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
-          restore-keys: cli-reader-v1-${{ runner.os }}-${{ runner.arch }}-
-      - name: Build compact standalone CLI
-        run: npm run build:binary -w services/cli
-      - if: runner.os != 'Windows'
-        run: npm run test:binary -w services/cli
-      - name: Windows installed release acceptance
-        if: runner.os == 'Windows'
-        timeout-minutes: 20
-        shell: pwsh
-        run: ./services/cli/scripts/test-windows.ps1
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && runner.os == 'Windows'
-        with:
-          name: windows-acceptance-evidence
-          path: .agent/windows-evidence/*
-          if-no-files-found: warn
-      # Intel acceptance consumes this exact artifact in cli-preview below. The other
-      # platforms fit packaging and acceptance together inside the release-job budget.
-      - name: File preview from the actual executable
-        if: matrix.os != 'macos-15-intel' && runner.os != 'Windows'
+          name: afbin-npm-release
+          path: npm-candidate
+      - name: Official Node bootstrap from absent Node on Unix
+        if: matrix.phase == 'native' && runner.os != 'Windows' && matrix.node == '22.22.3'
+        run: node services/cli/scripts/test-node-bootstrap.mjs
+      - name: Standard-user Windows Node bootstrap under Restricted PS5.1
+        if: matrix.phase == 'native' && runner.os == 'Windows' && matrix.node == '22.22.3'
+        shell: powershell
+        run: ./services/cli/scripts/test-node-bootstrap.ps1 -Tarball (Get-ChildItem npm-candidate/*.tgz | Select-Object -First 1).FullName
+      - name: Same-tarball native npm and warmed offline acceptance
+        if: matrix.phase == 'native'
+        run: npm run test:npm-package -w services/cli -- --ci
+      - name: Install the same candidate for experience checks
+        if: matrix.phase == 'experience'
+        run: npm run test:npm-package -w services/cli -- --ci --install-only
+      - name: Installed public library declarations compile without private workspace aliases
+        if: matrix.phase == 'experience'
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs types
+      - name: Installed foreground server preserves the remote runner boundary
+        if: matrix.phase == 'experience'
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs runner
+      - name: Actual installed CLI terminal exits naturally
+        if: matrix.phase == 'experience'
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs terminal
+      - name: Installed npm preview and export, with process shutdown
+        if: matrix.phase == 'experience'
         working-directory: services/cli
         run: |
-          npx playwright install chromium
-          node --import tsx scripts/test-preview.ts
+          node ../../node_modules/playwright/cli.js install --with-deps chromium
+          node scripts/test-installed-npm.mjs preview
+      - name: Complete installed npm local and HTML round-trip journey
+        if: matrix.phase == 'experience'
+        working-directory: services/cli
+        run: node scripts/test-installed-npm.mjs local
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure() && matrix.phase == 'experience'
         with:
-          name: afbin-${{ matrix.os }}
-          # Release assets include large gzip archives; avoid compressing them again.
-          compression-level: 0
-          path: |
-            services/cli/dist/afbin-*
-            services/cli/dist/afbin.1
-          if-no-files-found: error
-          # The publisher downloads these from the run that built them, which is now a run that may
-          # predate the merge. Anything shorter than the merge window loses the release.
-          retention-days: 14
+          name: npm-local-journey-${{ matrix.os }}-${{ matrix.node }}
+          path: services/cli/test-results/local-journey
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Intel acceptance also splits its existing phases: run 35761410997 spent
   # 447s on combined acceptance (277s proofs, ~170s setup/downloads). Every
-  # phase consumes the same tested binary and retains the 420s job budget.
+  # phase consumes the same tested npm tarball.
   # Any failed phase blocks the tested-tree receipt and release through the
   # test roll-up, including nightly/bump-only runs.
   cli-preview:
@@ -977,21 +994,17 @@ jobs:
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: afbin-macos-15-intel
-          path: services/cli/dist
-      # Artifact transport does not preserve executable permissions. Runtime/SQL/
-      # Chromium archives are consumed by the binary's normal verified downloader.
-      - name: File preview from the uploaded executable
+          name: afbin-npm-release
+          path: npm-candidate
+      # Install the identical universal npm artifact; Playwright prepares Chromium lazily.
+      - name: File preview from the uploaded npm package
         working-directory: services/cli
         run: |
-          chmod +x dist/afbin-darwin-x64
+          npm install --prefix "$RUNNER_TEMP/npm-preview" "$GITHUB_WORKSPACE"/npm-candidate/*.tgz
           npx playwright install chromium
-          node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 --phase=${{ matrix.phase }}
+          node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/npm-preview/node_modules/@afbin/cli/dist/afbin.mjs" --phase=${{ matrix.phase }}
 
-  # THE LINUX BINARY THE `cli` MATRIX ALREADY BUILT AND SMOKED is the one tested here: rebuilding it
-  # cost this job the whole SEA compile (prebuilt Node, Chromium archive, injection) for the same
-  # bytes. The bundle, types and host runtime that `npm pack` and the bundle conformance read are still
-  # built here (`npm run build -w services/cli`); only the executable comes from `afbin-ubuntu-24.04`.
+  # Reference conformance checks the source bundle and the exact tested installed npm package.
   reference-compatibility:
     needs: [ plan, cli ]
     if: needs.plan.outputs.reference-compatibility == 'true'
@@ -1029,25 +1042,23 @@ jobs:
         working-directory: candidate
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: afbin-ubuntu-24.04
-          path: candidate/services/cli/dist
-      # Artifact transport does not preserve executable permissions.
-      - run: chmod +x candidate/services/cli/dist/afbin-linux-x64
+          name: afbin-npm-release
+          path: npm-candidate
       - name: Install real package artifacts outside both checkouts
         working-directory: candidate
         run: |
           mkdir -p "$RUNNER_TEMP/afbin-packages" "$RUNNER_TEMP/afbin-consumer"
-          npm pack -w services/contracts -w services/utils -w services/sql -w services/cli --pack-destination "$RUNNER_TEMP/afbin-packages"
+          cp "$GITHUB_WORKSPACE"/npm-candidate/*.tgz "$RUNNER_TEMP/afbin-packages/"
           npm install --prefix "$RUNNER_TEMP/afbin-consumer" --no-audit "$RUNNER_TEMP"/afbin-packages/*.tgz
       - run: npx playwright install --with-deps chromium
         working-directory: candidate
       - name: Installed npm package runs file preview
         working-directory: candidate/services/cli
-        run: node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs"
+        run: node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs"
       - name: Build OSS host
         working-directory: candidate
         run: npm run build
-      - name: ID-first conformance for bundle, installed package and executable
+      - name: ID-first conformance for source bundle and installed npm package
         working-directory: candidate
         run: |
           # Each runner owns a PID-scoped data directory, outbox and OS-allocated port.
@@ -1057,15 +1068,15 @@ jobs:
             return "$ci_result"
           }
           ci_pids=()
-          for cli in "$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" "$RUNNER_TEMP/afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs"; do
+          for cli in "$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" "$RUNNER_TEMP/afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs"; do
             CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
             ci_pids+=("$!")
           done
           wait_pair
           ci_pids=()
-          CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
+          CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
           ci_pids+=("$!")
-          CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
+          CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
           ci_pids+=("$!")
           wait_pair
 
@@ -1085,9 +1096,9 @@ jobs:
             if docker exec afbin-serve-postgres pg_isready -U postgres; then break; fi
             sleep 1
           done
-          node scripts/test-team-host.mjs &
+          node scripts/test-team-host.mjs dist/afbin.mjs &
           ci_local_pid=$!
-          CONFORMANCE__DB_URL=postgres://postgres:afbin@127.0.0.1:5432/afbin node scripts/test-team-host.mjs &
+          CONFORMANCE__DB_URL=postgres://postgres:afbin@127.0.0.1:5432/afbin node scripts/test-team-host.mjs dist/afbin.mjs &
           ci_postgres_pid=$!
           ci_result=0
           wait "$ci_local_pid" || ci_result=1
@@ -1126,6 +1137,7 @@ jobs:
         build,
         api,
         gates,
+        cli-pack,
         cli,
         cli-preview,
         test,

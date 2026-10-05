@@ -1,3 +1,6 @@
+import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile} from '../local-workspace';
+import {workspaceStateEnv} from '../config';
+import {localHistory,localHistoryHead} from '../local-history';
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
 import {createPreviewEditor} from './editor';
@@ -16,13 +19,12 @@ import {compileStoryCss} from '../../../app/lib/data/story/story-css.server';
 import {validateMarkupStructure} from '../../../app/lib/story/document/local-validation';
 import {STORY_DESIGN_NAMES,type StoryDesignName} from '../../../app/lib/validation/atlas-schemas';
 import {collectRefUses} from '../../../app/lib/story/data/refs';
-import {State,withLock} from '../state';
-import {configDir} from '../config';
+import {State} from '../state';
 import {networkInterfaces} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {parseDocument,writeDocument} from '../document';
-import {confinedPath,stageFiles,recoverFiles} from '../journal';
-import {digest,atomicWrite} from '../files';
+import {confinedPath} from '../journal';
+import {digest} from '../files';
 import {parseJsx} from '../../../app/lib/jsx';
 import {splitHelmet} from '../../../app/lib/story/document/helmet';
 import {stampNodeIds,nodeIndex} from '../../../app/lib/story/document/node-ids';
@@ -41,6 +43,7 @@ class Refusal extends Error {constructor(readonly status:number,message:string){
 export async function startPreview(options:{root:string;files:string[];home:string;localFiles?:Record<string,string>;assets?:string;publicAssets?:string;port?:number;share?:boolean;capture?:boolean;origin?:string;asset?:(id:string)=>Promise<{bytes:Buffer;contentType:string}>;dataset?:(id:string)=>Promise<LocalDataset>}){
  let failure:string|undefined;
  const root=await realpath(options.root),{home}=options;
+ await localWorkspaceState(root);await recoverLocalFiles(root);
  const allowed=new Set(options.files),resources=new Set<string>();
  for(const file of options.files)for(const path of await previewGraph(root,file,options.localFiles)){if(path.toLowerCase().endsWith('.jsx'))allowed.add(path);else resources.add(path);}
  await mkdir(home,{recursive:true});
@@ -105,7 +108,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(options.capture&&Object.keys(result.errors).length)failure=Object.values(result.errors).join("; ");
   return result;
  };
- const save=async(file:string,revision:string,source:string,metadata?:DocumentMetadata)=>withLock(home,root,async()=>{
+ const save=async(file:string,revision:string,source:string,metadata?:DocumentMetadata)=>{
     const current=await read(file);
     if(revision!==current.revision)throw new Refusal(409,'File changed; draft retained');
     if(typeof source!=='string'||!parseJsx(source).ok)throw new Refusal(400,'Invalid JSX');
@@ -113,14 +116,14 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     const body=stampNodeIds(source,{previousSource:current.body}).source;
     const bytes=Buffer.from(writeDocument({metadata:metadata??current.metadata,body}));
     await read(file,bytes.toString()); // Validate the proposed tree and dependency scope before writing.
-    await mkdir(join(configDir(home),'backups','preview'),{recursive:true});
-    await atomicWrite(join(configDir(home),'backups','preview',randomUUID()),current.source);
-    await stageFiles(home,root,[{path:file,before:current.revision,data:bytes}]);
-    await recoverFiles(home,root);
+    await saveLocalFile(root,file,current.revision,bytes).catch(error=>{if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;});
     return read(file);
- });
- const editor=createPreviewEditor({read,write:save});
- const comments=await State.open(home);
+ };
+ const editor=createPreviewEditor({read,write:save,history:file=>localHistory(root,file),version:async(file,revision)=>{
+  try{return (await localHistoryHead(root,file,revision)).version;}catch(error){if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;}
+ }});
+ const comments=await State.open(root,workspaceStateEnv(root));
+ await migrateLocalDiscussion(root,home,comments);
  let url='';
  const server=createServer((req,res)=>{void (async()=>{
   const target=new URL(req.url??'/',url);
@@ -135,7 +138,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const file=workspaceFile??target.searchParams.get('file')??options.files[0]!;
   if(req.method==='GET'&&target.pathname==='/'){res.writeHead(302,{Location:'/workspace/'+file.split('/').map(encodeURIComponent).join('/')+(options.capture?'?capture=1':'')});return res.end();}
   if(req.method==='GET'&&target.pathname==='/document'){const {flow:_flow,declared:_declared,...document}=await read(file);return json(document);}
-  if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<PreviewComment>(root,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
+  if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<PreviewComment>(LOCAL_WORKSPACE_SCOPE,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
   if(req.method==='GET'&&(target.pathname==='/resource'||workspaceFile&&resources.has(file))){if(!resources.has(file))throw new Refusal(403,'Resource not selected');res.setHeader('Content-Type',fileContentType(file)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,file))));}
   if(req.method==='GET'&&/^\/a\/[A-Za-z0-9]{6,12}$/.test(target.pathname)){
    const local=options.localFiles?.[target.pathname.slice(3)];
@@ -175,6 +178,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    if(target.pathname==='/editor')return json(await serial(async()=>{
     if(input.operation==='load')return editor.load(input.file);
     if(input.operation==='commit')return editor.commit(input.file,input);
+    if(input.operation==='versions')return editor.versions(input.file);
+    if(input.operation==='version')return editor.version(input.file,input.version);
+    if(input.operation==='revert')return editor.revert(input.file,input);
     const current=await read(input.file);
     if(input.operation==='prepare'){
      if(typeof input.markup!=='string')throw new Refusal(400,'Invalid markup');
@@ -186,7 +192,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
      const draft=await read(input.file,writeDocument({metadata:current.metadata,body:String(input.markup)}));
      return {...await runLocal(draft.flow,tableFor,{values:{}}),flow:draft.flow};
     }
-    const annotations=previewAnnotations(comments,root,input.file,current.body);
+    const annotations=previewAnnotations(comments,LOCAL_WORKSPACE_SCOPE,input.file,current.body);
     if(input.operation==='annotations.list')return annotations.list(input.status);
     if(input.operation==='annotations.create')return annotations.create(input.input??{},input.key);
     if(input.operation==='annotations.act')return annotations.act(input.id,input.input??{});
@@ -210,7 +216,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     const range=input.range==null?null:parseAnnotationRange(input.range);
     if(typeof input.node!=='string'||!nodeIndex(current.body).has(input.node)||typeof input.name!=='string'||!input.name.trim()||input.name.length>100||typeof input.text!=='string'||!input.text.trim()||input.text.length>10000||input.range!=null&&!range||input.quote!==undefined&&(typeof input.quote!=='string'||input.quote.length>10000))throw new Refusal(400,'Invalid comment');
     const comment:PreviewComment={id:randomUUID(),file:input.file,node:input.node,name:input.name.trim(),text:input.text.trim(),...(input.quote!==undefined?{quote:input.quote}:{}),range};
-    comments.put(root,'preview-comment',comment.id,comment);return json(comment);
+    comments.put(LOCAL_WORKSPACE_SCOPE,'preview-comment',comment.id,comment);return json(comment);
    }
   }
   if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){

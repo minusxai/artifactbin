@@ -44,7 +44,7 @@ export function unauthorized(request: Request): Response {
   return json(
     {
       error: 'unauthorized',
-      help: `Retry — afbin authenticates itself when it needs the server; there is nothing to set up. Install it if it is missing: curl -fsSL ${base}/chat/install.sh | sh`,
+      help: `Retry through afbin: npx --yes @afbin/cli@latest auth --server ${base}. Prepare Node: ${base}/chat/ensure-node.sh; Windows: ${base}/chat/ensure-node.ps1. CLI browser approval allows guests; direct HTTP requires email sign-in.`,
       guide: `${base}/llms.txt`,
     },
     401,

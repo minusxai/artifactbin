@@ -1,179 +1,118 @@
-name: Release tested afbin CLI
-
+name: Release tested afbin npm package
 on:
   workflow_run:
     workflows: [ci]
     types: [completed]
     branches: [main]
-
 permissions:
   actions: read
   contents: write
-
+  id-token: write
 concurrency:
   group: release-tested-afbin
   cancel-in-progress: false
-
 jobs:
   release:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    # The bundle is ~1 GB (four Chromium archives of ~170 MB each), uploaded one asset at a time. Ten
-    # minutes cut afbin-v0.1.37 off mid-upload four times running, leaving a draft that blocked every
-    # production deploy behind it (run 35247592662); a slow upload is not a hung job.
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN: ${{ github.event.workflow_run.id }}
-      # Every platform a release carries, as `<CI runner>:<asset suffix>`: the `cli` job uploads
-      # `afbin-<runner>`, and the release ships `afbin-<suffix>`.
-      PLATFORMS: macos-14:darwin-arm64 macos-15-intel:darwin-x64 ubuntu-24.04:linux-x64 ubuntu-24.04-arm:linux-arm64 windows-2022:win32-x64
-    outputs:
-      tag: ${{ steps.publish.outputs.tag }}
-      sha: ${{ steps.publish.outputs.sha }}
     steps:
-      # No checkout or execution of downloaded code in this privileged workflow.
-      - name: Identify the tested release
-        id: release
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.21.0
+          registry-url: https://registry.npmjs.org
+      - name: Select the exact tested immutable npm artifact
+        id: package
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
-          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ && "$SOURCE_RUN" =~ ^[0-9]+$ ]]
           version_at() { gh api "repos/$GITHUB_REPOSITORY/contents/services/cli/package.json?ref=$1" --jq .content | base64 --decode | jq -r .version; }
           version=$(version_at "$SOURCE_SHA")
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          # A newer version on main supersedes this one. Merges that landed on top WITHOUT a bump do not:
-          # requiring the bump to still be main's head stranded afbin 0.1.48 and 0.1.49, whose builds
-          # finished after other work merged, and no later build could publish them.
-          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
-          if [ "$(version_at "$head")" != "$version" ]; then exit 0; fi
-          tag="afbin-v$version"
-          installer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/install.sh?ref=$SOURCE_SHA" --jq .content | base64 --decode)
-          grep -Fxq "  version=$version" <<< "$installer"
-          # The pointer the CLI resolves its release from ships with the same commit.
           pointer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/release.json?ref=$SOURCE_SHA" --jq .content | base64 --decode)
           test "$(jq -r .version <<< "$pointer")" = "$version"
-          # Existing published versions are immutable.
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
-            if [ "$(cat draft.txt)" = false ]; then exit 0; fi
-          elif ! grep -qi 'not found\|HTTP 404' release-error.txt; then
-            cat release-error.txt >&2; exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      # WHICH RUN HOLDS THE TESTED BYTES. Main's CI no longer always builds them itself: when the
-      # merged tree was already tested on its pull request it selects no job at all and records, in a
-      # `tested-run` artifact, the id of the run that did the work (scripts/ci/ci.mjs `record-tree`).
-      # Reading it keeps this workflow publishing exactly what CI built and proved. Absent — an older
-      # run, or a main build that did everything itself — the workflow_run's own id is still right.
-      #
-      # WHETHER THERE IS ANYTHING TO PUBLISH is that run's artifacts, not the commit's history. Asking
-      # whether the parent carried the same version stood in for "this run built no binaries" and was
-      # wrong for a rebase merge: PR #124 landed the 0.3.3 bump one commit below main's head, main CI
-      # ran for the head alone, and its tested run held 0.3.3's binaries that nothing published.
-      - name: The run whose binaries this publishes
-        id: publish
-        if: steps.release.outputs.tag != ''
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name tested-run --dir tested-run 2> tested-run-error.txt; then
-            tested=$(jq -r '.run_id' tested-run/tested-run.json)
-            # Artifact content is data, never a command: it is one integer or this stops.
-            [[ "$tested" =~ ^[0-9]+$ ]]
-            # $GITHUB_ENV reaches the later steps; this one reads the run's artifacts below.
-            SOURCE_RUN=$tested
-            echo "SOURCE_RUN=$tested" >> "$GITHUB_ENV"
-            echo "Publishing the binaries built by run $tested."
-          else
-            cat tested-run-error.txt >&2
-            echo "No tested-run artifact; publishing from run $SOURCE_RUN itself."
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$(version_at "$head")" != "$version" ]; then exit 0; fi
+          if gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name tested-run --dir tested-run 2> receipt-error.txt; then
+            SOURCE_RUN=$(jq -r .run_id tested-run/tested-run.json)
+            [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
           fi
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' > artifacts.txt
-          present=0
-          missing=''
-          for mapping in $PLATFORMS; do
-            if grep -Fxq "afbin-${mapping%%:*}" artifacts.txt; then present=$((present + 1)); else missing="$missing afbin-${mapping%%:*}"; fi
-          done
-          # A merge that did not change the version built no binaries: the run that did publishes them.
-          if [ "$present" = 0 ]; then echo "Run $SOURCE_RUN built no release binaries; nothing to publish."; exit 0; fi
-          if [ -n "$missing" ]; then echo "::error::Run $SOURCE_RUN holds only some of afbin $VERSION's binaries; missing$missing"; exit 1; fi
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Download the binaries tested by this CI run
-        if: steps.publish.outputs.tag != ''
+          if ! grep -Fxq afbin-npm-release artifacts.txt; then echo 'No new npm artifact; nothing to publish.'; exit 0; fi
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name afbin-npm-release --dir package
+          file="package/afbin-cli-$version.tgz"
+          test -f "$file" && test ! -L "$file"
+          tar -xOf "$file" package/package.json > manifest.json
+          test "$(jq -r .name manifest.json)" = '@afbin/cli'
+          test "$(jq -r .version manifest.json)" = "$version"
+          tar -tzf "$file" > package-files.txt
+          grep -Fxq package/npm-shrinkwrap.json package-files.txt
+          if grep -q '^package/dist/runtime/node_modules/' package-files.txt; then echo 'Build-machine dependencies in universal package' >&2; exit 1; fi
+          test -f "$file.build.json" && test ! -L "$file.build.json"
+          test "$(jq -r .run_id "$file.build.json")" = "$SOURCE_RUN"
+          head_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq .head_sha)
+          test "$(jq -r .head_sha "$file.build.json")" = "$head_sha"
+          build_sha=$(jq -r .source_sha "$file.build.json")
+          [[ "$build_sha" =~ ^[a-f0-9]{40}$ ]]
+          test -f "$file.sigstore" && test ! -L "$file.sigstore"
+          node scripts/ci/npm-provenance.mjs verify "$file" "$version" "$build_sha" "$SOURCE_RUN"
+          {
+            echo "build_run=$SOURCE_RUN"
+            echo "file=$file"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+      - name: Publish tested tarball through npm trusted publishing
+        id: publish
+        if: steps.package.outputs.file != ''
         env:
-          VERSION: ${{ steps.release.outputs.version }}
-        shell: bash
+          PACKAGE_BUILD_RUN: ${{ steps.package.outputs.build_run }}
+          PACKAGE_FILE: ${{ steps.package.outputs.file }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
           set -euo pipefail
-          mkdir bundle
-          for mapping in $PLATFORMS; do
-            runner=${mapping%%:*}
-            binary=afbin-${mapping#*:}
-            if [ "$runner" = windows-2022 ]; then binary="$binary.exe"; fi
-            gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "afbin-$runner" --dir "downloads/$runner"
-            test -f "downloads/$runner/$binary"
-            test ! -L "downloads/$runner/$binary"
-            test -s "downloads/$runner/$binary"
-            cp "downloads/$runner/$binary" "bundle/$binary"
-            for asset in "$binary.manifest.json" "$binary.gz" "$binary.sizes.json" "afbin-runtime-${mapping#*:}.gz" "afbin-chromium-${mapping#*:}.gz"; do
-              test -f "downloads/$runner/$asset"
-              test ! -L "downloads/$runner/$asset"
-              test -s "downloads/$runner/$asset"
-              cp "downloads/$runner/$asset" "bundle/$asset"
-            done
-            # Bytes built from another version are never published under this one's tag.
-            built=$(jq -r .version "bundle/$binary.manifest.json")
-            if [ "$built" != "$VERSION" ]; then echo "::error::afbin-$runner from run $SOURCE_RUN was built as $built, not $VERSION"; exit 1; fi
-            for common in afbin-skills.json afbin.1; do
-              if [ -f "bundle/$common" ]; then cmp "bundle/$common" "downloads/$runner/$common"; else cp "downloads/$runner/$common" "bundle/$common"; fi
-            done
-          done
-          (cd bundle && sha256sum afbin-* afbin.1 > SHA256SUMS)
-
-      - name: Tag and publish together
-        if: steps.publish.outputs.tag != ''
+          if npm view "@afbin/cli@$PACKAGE_VERSION" version > npm-existing.txt 2> npm-error.txt; then
+            test "$(cat npm-existing.txt)" = "$PACKAGE_VERSION"
+            published=$(npm view "@afbin/cli@$PACKAGE_VERSION" dist.integrity)
+            candidate=$(node -e 'const fs=require("node:fs"),crypto=require("node:crypto");console.log("sha512-"+crypto.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"))' "$PACKAGE_FILE")
+            test "$published" = "$candidate" || { echo 'Published version has different bytes; refuse to mislabel the tested tarball.' >&2; exit 1; }
+          else
+            grep -q E404 npm-error.txt || { cat npm-error.txt >&2; exit 1; }
+            if ! npm view '@afbin/cli' name > npm-package.txt 2> npm-package-error.txt; then
+              grep -q E404 npm-package-error.txt || { cat npm-package-error.txt >&2; exit 1; }
+              echo 'First publication requires a verified maintainer npm login. No GitHub release has been created.'
+              echo 'After successful main CI and publication approval, run locally:'
+              echo "gh run download $PACKAGE_BUILD_RUN --repo $GITHUB_REPOSITORY --name afbin-npm-release --dir afbin-first-release"
+              echo "npm publish afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz --access public --provenance=false --provenance-file afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz.sigstore --ignore-scripts"
+              echo "Then configure npm trusted publishing with direct publish allowed and run: gh run rerun $GITHUB_RUN_ID --repo $GITHUB_REPOSITORY"
+              exit 0
+            fi
+            test "$(cat npm-package.txt)" = '@afbin/cli'
+            npm publish "$PACKAGE_FILE" --access public --provenance=false --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts
+          fi
+          echo "published=true" >> "$GITHUB_OUTPUT"
+      - name: Record tested package in GitHub release
+        if: steps.publish.outputs.published != ''
         env:
-          RELEASE_TAG: ${{ steps.publish.outputs.tag }}
-        shell: bash
+          PACKAGE_FILE: ${{ steps.package.outputs.file }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
           set -euo pipefail
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" > tag.json 2> tag-error.txt; then
-            test "$(jq -r .object.type tag.json)" = commit
-            test "$(jq -r .object.sha tag.json)" = "$SOURCE_SHA"
-          else
-            grep -q 'HTTP 404' tag-error.txt || { cat tag-error.txt >&2; exit 1; }
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$SOURCE_SHA"
+          tag="afbin-v$PACKAGE_VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
+            if [ "$(cat draft.txt)" = true ]; then
+              gh release upload "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --clobber
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+            fi
+            exit 0
           fi
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
-            # A partial draft from an earlier attempt is recovered below, never a published release.
-            test "$(cat draft.txt)" = true
-          else
-            grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes ''
-          fi
-          # ONE ASSET AT A TIME, each retried. Handing gh the whole bundle uploads several ~180 MB Chromium
-          # archives at once, and GitHub answered `HTTP 500: Error saving asset` on one of them for
-          # afbin-v0.1.37 and again for v0.1.38 (runs 35247592662, 35254779106) — each time leaving a draft
-          # that blocked every production deploy behind it. A single 200 MB upload is accepted every time.
-          for asset in bundle/*; do
-            for attempt in 1 2 3 4; do
-              if gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber "$asset"; then continue 2; fi
-              echo "upload of $asset failed (attempt $attempt)" >&2
-              sleep $((attempt * 15))
-            done
-            echo "::error::$asset could not be uploaded"
-            exit 1
-          done
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
+          gh release create "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "$tag" --notes '' --latest=false

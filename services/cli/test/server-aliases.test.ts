@@ -272,7 +272,7 @@ test('browser approval on a plain-http development app at app.lvh.me pairs; plai
  assert.deepEqual(seen,[]);
 });
 
-test('preview binds a folder tracked against a verified alias to the canonical origin',async()=>{
+test('local preview uses the chosen link origin without server discovery or registration',async()=>{
  await withHome(async home=>{
   await saveConnection({server:CANONICAL,token:'test-token'},home,{});
   await trackWorkspace(home,home,ALIAS);
@@ -290,7 +290,7 @@ test('preview binds a folder tracked against a verified alias to the canonical o
    auth:{open:async()=>{throw new Error('a test must not open a browser');}}} as never);
   assert.equal(code,0,out.join(''));
   assert.equal(served?.server,CANONICAL);
-  assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS),[]);
+  assert.deepEqual(net.seen,[],'local preview does not discover or register with either origin');
  });
 });
 

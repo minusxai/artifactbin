@@ -100,7 +100,7 @@ describe('refusals an afbin command reaches name the afbin action', () => {
   it('a malformed comment names the flags that carry it (afbin comment --body/--node/--quote)', async () => {
     const t = await mintToken('t');
     const { id } = await create(t.token, { markup: '<p>Body</p>' });
-    const res = await createAnnotation(request(`/api/artifacts/${id}/annotations`, { method: 'POST', token: t.token, json: { body: 'hi', node_id: 'a', quote: 'Body' } }), params({ id }));
+    const res = await createAnnotation(request(`/api/artifacts/${id}/annotations`, { method: 'POST', token: t.token, json: { body: 'hi' } }), params({ id }));
     expect(res.status).toBe(400);
     const refusal = await body(res);
     expect(refusal.error).toBe('invalid_annotation_body');

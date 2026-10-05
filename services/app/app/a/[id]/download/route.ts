@@ -12,7 +12,7 @@ import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
 
 /** A filename every OS accepts, from the document's title. */
-const fileName = (title: string) => `${title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'artifact'}.html`;
+const fileName = (title: string) => `${title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'artifact'}.jsx.html`;
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;

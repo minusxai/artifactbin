@@ -80,8 +80,20 @@ export interface ArtifactFileExtras {
   integrity: string;
 }
 
+export interface ArtifactFileWorkspace {
+  documentId: string;
+  /** Baseline fingerprint checked by the local importer before replacing source. */
+  baseDigest: string;
+  threadsDigest?: string;
+  /** Design/title baseline for field-wise reconciliation; changed independently from source. */
+  metadataBaseline?: ArtifactFile['metadata'];
+  /** Portable local assets; importers revalidate paths and content before writing. */
+  assets: Record<string, { path: string; contentType: string; base64: string }>;
+}
+
 export interface ArtifactFile {
   format: typeof ARTIFACT_FILE_FORMAT;
+  localWorkspace?: ArtifactFileWorkspace;
   /** Where the file came from, e.g. https://app.artifactbin.dev. */
   origin: string;
   artifactId: string;
@@ -186,9 +198,32 @@ const isEdit = (v: unknown) => isObject(v) && isString(v.at) && isString(v.by) &
  * fields to be the right KIND to render without throwing, and the server
  * re-validates everything a sync sends it.
  */
+function isWorkspace(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isObject(value) || !isString(value.documentId) || !/^[A-Za-z0-9_-]{1,128}$/.test(value.documentId)
+    || (value.metadataBaseline !== undefined && (!isObject(value.metadataBaseline)
+      || Object.keys(value.metadataBaseline).length !== 5
+      || !isString(value.metadataBaseline.title) || !isStringOrNull(value.metadataBaseline.description)
+      || !isStringOrNull(value.metadataBaseline.theme) || !isStringOrNull(value.metadataBaseline.template)
+      || ![null, 'light', 'dark'].includes(value.metadataBaseline.colorMode as never)))
+    || (value.threadsDigest !== undefined && (!isString(value.threadsDigest) || !value.threadsDigest.length || value.threadsDigest.length > 128))
+    || !isString(value.baseDigest) || !value.baseDigest.length || value.baseDigest.length > 128 || !isObject(value.assets)) return false;
+  let total = 0;
+  return Object.values(value.assets).every((asset) => {
+    if (!isObject(asset) || !isString(asset.path) || !asset.path.length || asset.path.length > 1024
+      || asset.path.startsWith('/') || /[\\:\x00-\x1f]/.test(asset.path)
+      || asset.path.split('/').some((part) => !part || part === '.' || part === '..')
+      || !isString(asset.contentType) || !/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(asset.contentType)
+      || asset.contentType.length > 128 || !isString(asset.base64) || asset.base64.length > 25 * 1024 * 1024
+      || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(asset.base64)) return false;
+    total += asset.base64.length;
+    return total <= 25 * 1024 * 1024;
+  });
+}
+
 function isWellFormed(v: Json): boolean {
   const { base, metadata, island, snapshot } = v;
-  return isString(v.origin) && isString(v.artifactId) && isString(v.liveUrl)
+  return isWorkspace(v.localWorkspace) && isString(v.origin) && isString(v.artifactId) && isString(v.liveUrl)
     && isString(v.downloadedBy) && isString(v.downloadedAt)
     && isObject(base) && typeof base.version === 'number' && Number.isInteger(base.version) && isString(base.editId) && isString(base.source)
     && isString(v.source)

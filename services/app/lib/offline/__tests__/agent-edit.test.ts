@@ -34,6 +34,9 @@ describe('an offline file edited by an agent', () => {
     const note = /^<!doctype html>\n<!-- ([^\n]*) -->\n/.exec(html)?.[1];
     expect(note).toContain('change the top-level "source" string');
     expect(note).toContain('Leave "#afbin-code" untouched');
+    expect(note).not.toContain('/api/');
+    expect(html).toContain('direct HTTP API');
+    expect(html).toContain('Local/offline editing needs no remote API.');
     // The JSON comes before the megabytes of code, so a reader that stops early still has it.
     expect(html.indexOf('id="afbin-file"')).toBeLessThan(html.indexOf('id="afbin-code"'));
   });

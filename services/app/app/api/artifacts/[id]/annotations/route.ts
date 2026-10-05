@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {parseAnnotationRange,isAreaRange,refinementRange} from '@/lib/story/annotations/annotation-range';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import {readableArtifact} from '@/lib/artifacts';
 import {canAnnotate} from '@/lib/artifacts';
@@ -45,12 +46,14 @@ export const GET = withTokenAuth((request, { tokenId, userId, params }) =>
 export const POST = withTokenAuth(async (request, {tokenId, userId, params, clientHarness}) => {
   const body = await readJson(request);
   if (!body) return json({error: 'invalid_json'}, 400);
-  if (Object.keys(body).some(key => !['node_id', 'quote', 'body'].includes(key)) ||
+  if (Object.keys(body).some(key => !['node_id', 'quote', 'range', 'body'].includes(key)) ||
     typeof body.body !== 'string' || !body.body.trim() || body.body.length > 100000 ||
     (body.node_id !== undefined && (typeof body.node_id !== 'string' || !body.node_id.trim())) ||
     (body.quote !== undefined && (typeof body.quote !== 'string' || !body.quote.trim())) ||
-    (body.node_id === undefined) === (body.quote === undefined))
-    return json({error: 'invalid_annotation_body', hint: 'Supply the comment text with --body (or --input) and exactly one anchor: --node ID or --quote TEXT.'}, 400);
+    (body.node_id === undefined && body.quote === undefined))
+    return json({error: 'invalid_annotation_body', hint: 'Supply the comment text with --body (or --input) and an anchor: --node ID or --quote TEXT. HTTP node anchors may include selected quote and range.'}, 400);
+  const range=body.range==null?undefined:parseAnnotationRange(body.range);
+  if(body.range!=null&&(!range||(isAreaRange(refinementRange(range))&&body.quote!==undefined)))return json({error:'bad_range'},400);
   const actor={tokenId,userId};
   // Commenting is an act attributed to a PERSON: a guest is sent to sign in and
   // a test user is held inside its sandbox, at this door exactly as at the
@@ -60,7 +63,7 @@ export const POST = withTokenAuth(async (request, {tokenId, userId, params, clie
   const key=request.headers.get('Idempotency-Key');
   const work=async(receipt?:MutationReceipt)=>{
   const made = await createAnnotationFor({tokenId, userId}, params.id, {
-    body: body.body as string, ...(typeof body.node_id === 'string' ? {nodeId: body.node_id} : {quote: body.quote as string}),
+    body: body.body as string, ...(typeof body.node_id === 'string'?{nodeId:body.node_id}:{}),...(typeof body.quote==='string'?{quote:body.quote}:{}),...(range?{range}:{}),
   }, annotationAuthorForRequest(request, clientHarness),receipt);
   if (made instanceof Response) return made;
   if (!made) return json({error: 'not_found'}, 404);

@@ -3,6 +3,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { STORY_TEMPLATE_NAMES, STORY_THEME_NAMES } from '@/lib/validation/atlas-schemas';
+import GetStarted from '@/solid/components/GetStarted';
+import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 import { App } from '@/solid/App';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
@@ -19,4 +21,16 @@ it('serves the human tour with current templates, themes, install command and wo
   expect(screen.getByRole('button', { name: 'Copy the CLI install command' })).toBeInTheDocument();
   const contents = screen.getByRole('navigation', { name: 'Contents' });
   for (const link of within(contents).getAllByRole('link')) expect(document.getElementById(link.getAttribute('href')!.slice(1))).toBeInTheDocument();
+});
+
+it.each(['Win32','MacIntel'])('shows executable Node preparation and npm instructions on %s', (platform) => {
+  const prior=Object.getOwnPropertyDescriptor(window.navigator,'platform');
+  Object.defineProperty(window.navigator,'platform',{configurable:true,value:platform});
+  try {
+    render(()=><GetStarted />);
+    const command=platform==='Win32'?afbinWindowsInstallCommand(window.location.origin):afbinInstallCommand(window.location.origin);
+    expect(screen.getByText(command,{normalizer:text=>text})).toBeInTheDocument();
+    expect(screen.getByText(/reuses supported Node\/npm/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('ExecutionPolicy Bypass');
+  } finally { if(prior)Object.defineProperty(window.navigator,'platform',prior);else Reflect.deleteProperty(window.navigator,'platform'); }
 });

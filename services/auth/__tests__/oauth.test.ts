@@ -21,7 +21,7 @@ const REDIRECT = 'http://127.0.0.1:9987/callback';
 const verifier = 'v'.repeat(43);
 let pg: PGlite;
 let app: ReturnType<typeof assemble<any>>;
-let session: { userId: string; email: string } | null = null;
+let session: { userId: string; email: string; emailVerified?:boolean } | null = null;
 let mintedCount = 0;
 
 const optionsOf = async (): Promise<AuthOptions> => {
@@ -29,7 +29,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
   const base = await testAuthOptions({
     env: { APP__PUBLIC_BASE_URL: BASE },
     sessions: {
-      resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: true } : null,
+      resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: session.emailVerified??true } : null,
     },
     upstream: async (request, actor) => {
       if (new URL(request.url).pathname === INTERNAL_ARTIFACT_APPROVAL_PATH) return Response.json({ userId: 'usr_guest', tokenId: 'tok_guest_browser', guest: true });
@@ -385,4 +385,36 @@ it('a new CLI session refreshes expired saved credentials without opening a brow
   expect(saved?.refreshToken).not.toBe(initial.refresh_token);
   expect(saved?.expiresAt).toBeGreaterThan(Date.now());
  } finally {await rm(home,{recursive:true,force:true});}
+});
+
+it('direct HTTP token issuance refuses guest sessions and never offers browser approval',async()=>{
+ const response=await app.request('/api/authentication/token',{method:'POST',headers:{'content-type':'application/json',origin:BASE},body:'{}'});
+ expect(response.status).toBe(401);expect(await response.json()).toMatchObject({error:'email_auth_required'});
+});
+it('direct HTTP token issuance binds a verified email session to an API-scoped bearer',async()=>{
+ const response=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
+ expect(response.status).toBe(201);const body=await response.json();expect(body.token_type).toBe('Bearer');
+ const token=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];expect(token).toMatchObject({user_id:'usr_1',audience:RESOURCE,scope:'artifacts'});
+});
+
+it('direct HTTP bearer mint rejects unverified email and cross-site sessions',async()=>{
+ asUser();session!.emailVerified=false;
+ const request=(origin:string)=>app.request('/api/authentication/token',{method:'POST',headers:{cookie:'sess=1',origin,'content-type':'application/json'},body:'{}'});
+ expect((await request(BASE)).status).toBe(401);session!.emailVerified=true;
+ expect((await request('https://other.test')).status).toBe(403);
+});
+it('a direct HTTP consumer obtains its scoped bearer through real email OTP without device or browser approval',async()=>{
+ let otp='';const human=await createHumanAuth({pglite:pg,secret:'oauth-routes-secret'.padEnd(32,'0'),baseURL:BASE,mail:{send:async message=>{otp=message.otp??'';}}});
+ const options=await optionsOf();const direct=assemble(authParts({...options,sessions:{...human.sessions,handler:human.handler}}));
+ const email='mxmx_test_direct_http@example.com';
+ const post=(path:string,body:unknown,cookie?:string)=>direct.request(path,{method:'POST',headers:{origin:BASE,'content-type':'application/json',...(cookie?{cookie}:{})},body:JSON.stringify(body)});
+ expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
+ expect((await post('/api/auth/sign-in/email-otp',{email,otp:'bad-code'})).ok).toBe(false);
+ const login=await post('/api/auth/sign-in/email-otp',{email,otp});expect(login.status).toBe(200);
+ const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
+ const response=await post('/api/authentication/token',{},cookie);expect(response.status).toBe(201);
+ const body=await response.json();expect(body.access_token).toMatch(/^mx_/);
+ const row=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];
+ expect(row.user_id).toBeTruthy();expect(row.audience).toBe(RESOURCE);expect(row.scope).toBe('artifacts');
+ expect((await testDb().query('SELECT email FROM auth.user WHERE id=$1',[row.user_id])).rows[0]?.email).toBe(email);
 });

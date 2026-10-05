@@ -21,9 +21,10 @@ import esbuild from 'esbuild';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import { generateTeaching } from '../lib/generate-teaching.mjs';
-import { existsSync, mkdirSync, readFileSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { EXTERNALS } from './runtime-externals.mjs';
+import { copyRunnerAssets } from './copy-runner-assets.mjs';
 
 /*
  * Requires the bundle names but never reaches, so no image installs them: @babel/core (the
@@ -91,9 +92,8 @@ await esbuild.build({
 if (!existsSync(out)) { console.error(`build-server: ${out} missing`); process.exit(1); }
 console.log(`build-server: ${entry} → ${out}`);
 
-// The runner launches this file out-of-process; it must remain beside the host bundle.
-copyFileSync(new URL('../../services/runner/src/runner-worker.mjs',import.meta.url),join(dirname(out),'runner-worker.mjs'));
-copyFileSync(new URL('../../services/runner/src/agent.ts.txt',import.meta.url),join(dirname(out),'agent.ts.txt'));
+// Only compositions owning local execution launch these workers. Packaged CLI hosts use HTTP.
+await copyRunnerAssets(dirname(out),{remoteRunner:process.argv.includes('--remote-runner')});
 
 // A Lambda module bundles this DOM-free page runtime; production carries no TypeScript source tree.
 await esbuild.build({

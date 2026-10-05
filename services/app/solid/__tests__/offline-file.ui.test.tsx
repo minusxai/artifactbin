@@ -1,8 +1,10 @@
 /** Solid offline chrome over the same serialized file as the three-browser gate. */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import type { EditorView } from 'prosemirror-view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/dom';
+import { storyBodyFor } from '@/lib/story/document/body';
 import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
 import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
@@ -12,14 +14,14 @@ import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from
 import type { CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
 
 // The real mounter, with the callbacks the offline shell hands it kept for the flow-edit cases.
-const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null }));
+const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null }));
 vi.mock('@/solid/editor/dom-mounter', async (real) => {
   const actual = await real<typeof import('@/solid/editor/dom-mounter')>();
   return {
     ...actual,
     mountCompiledEditRegions: (...args: Parameters<typeof actual.mountCompiledEditRegions>) => {
       mounted.callbacks = args[2];
-      return actual.mountCompiledEditRegions(...args);
+      return actual.mountCompiledEditRegions(args[0], args[1], { ...args[2], onView(view) { if (view?.state.doc.textContent === 'Local report') mounted.view = view; args[2].onView?.(view); } });
     },
   };
 });
@@ -41,7 +43,7 @@ function shell(file: ArtifactFile) {
   document.head.innerHTML = doc.head.innerHTML;
   document.body.innerHTML = doc.body.innerHTML;
 }
-beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; });
+beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; mounted.view = null; });
 
 /** A file whose source, as downloaded, has two identical paragraphs right after the description (body paths 1.5 and 1.7). */
 const TWICE = '<p>Same words.</p>';
@@ -126,6 +128,126 @@ describe('Solid offline file', () => {
     expect(screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(true);
   });
 
+  it('retains compiled widget DOM and behavior when the source includes Helmet and added structure', async () => {
+    const file = fixture();
+    file.compiled!.html = file.compiled!.html.replace('<p data-mx-ast="1.3">', '<div data-mx-ast="1.5"><button id="VVgD" data-mx-ast="1.5.1" aria-label="Region">Region</button></div><p data-mx-ast="1.3">');
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Regional sales</h1><section id="added"><h2>Added heading</h2></section>') });
+    const control = screen.getByRole('button', { name: 'Region' });
+    let clicked = 0; control.addEventListener('click', () => { clicked += 1; });
+    await mountSolidOfflineFile();
+    expect(screen.getByRole('heading', { name: 'Added heading' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Region' })).toBe(control);
+    fireEvent.click(control); expect(clicked).toBe(1);
+    expect(document.querySelector('[data-mx-inline-story]')!.textContent).toContain('2026-07 rows');
+  });
+
+  it('renders added structure after accepting source, saving and reopening', async () => {
+    const file = fixture();
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const source = screen.getByRole('textbox', { name: 'Markup source' });
+    const next = file.source.replace('Regional sales</h1>', 'Regional sales</h1><section id="new-section"><h2>Added offline</h2><p>A new paragraph.</p></section>');
+    fireEvent.input(source, { target: { value: next } });
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(screen.getByRole('heading', { name: 'Added offline' })).toBeTruthy();
+    disposeSolidOfflineFile();
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    shell(saved); await mountSolidOfflineFile();
+    expect(screen.getByRole('heading', { name: 'Added offline' })).toBeTruthy();
+    expect(document.querySelector('#new-section')?.textContent).toContain('A new paragraph.');
+    expect(saved.compiled).toEqual(file.compiled);
+  });
+
+  it('saves and reopens a prose edit in a compact top-level local document', async () => {
+    const original = fixture();
+    const source = '<Helmet><Query name="sales">{`select 30 as revenue`}</Query></Helmet><h1 id="title">Local report</h1><img id="picture" src="data:image/png;base64,AAAA" alt="Portable image"/><Number id="sum" data="$sales" col="revenue" agg="sum"/><p id="text">Initial paragraph</p>';
+    const file = { ...original, source, base: { ...original.base, source }, derivedFrom: sourceDigest(source),
+      island: { ...original.island, nodes: storyBodyFor(source)!.body },
+      compiled: { ...original.compiled!, html: '<h1 id="title" data-mx-ast="0">Local report</h1><img id="picture" data-mx-ast="1" alt="Portable image"/><div id="sum" data-mx-ast="2">30</div><p id="text" data-mx-ast="3">Initial paragraph</p>' } };
+    await openAndEdit(file);
+    const view = mounted.view!;
+    view.dispatch(view.state.tr.insertText('Offline saved report', 1, 1 + 'Local report'.length));
+    fireEvent.click(screen.getByRole('button', { name: 'Done editing' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy());
+    expect(screen.getByRole('heading', { name: 'Offline saved report' })).toBeTruthy();
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(written).toHaveLength(1));
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    expect(saved.source).toContain('Offline saved report');
+    disposeSolidOfflineFile(); shell(saved); await mountSolidOfflineFile();
+    expect(screen.getByRole('heading', { name: 'Offline saved report' })).toBeTruthy();
+    expect(saved.compiled).toEqual(file.compiled);
+  });
+
+  it('keeps rejected textarea drafts unsaved and refuses Save without discarding them', async () => {
+    const file = fixture();
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const source = screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement;
+    const rejected = file.source.replace('Regional sales</h1>', 'Regional sales</h1><script>alert(1)</script>');
+    fireEvent.input(source, { target: { value: rejected } });
+    const picker = vi.fn(); vi.stubGlobal('showSaveFilePicker', picker);
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getAllByRole('status').some((status) => status.textContent?.includes('not saved'))).toBe(true));
+    expect(picker).not.toHaveBeenCalled();
+    expect(source.value).toBe(rejected);
+    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
+  });
+
+  it('retains newer rejected typing when an earlier accepted save finishes', async () => {
+    const file = fixture(); await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const textarea = screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement;
+    const accepted = file.source.replace('Regional sales</h1>', 'Changed heading</h1>');
+    fireEvent.input(textarea, { target: { value: accepted } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const newer = `${accepted}<script>bad()</script>`;
+    fireEvent.input(textarea, { target: { value: newer } });
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
+    expect(textarea.value).toBe(newer);
+    expect(document.body.textContent).toContain('Unsaved changes');
+  });
+
+  it('restores a rejected source draft separately from the last valid document', async () => {
+    const file = fixture();
+    const rejected = `${file.source}<script>bad()</script>`;
+    writeDraft(file, new Date('2026-10-04T00:00:00Z'), rejected);
+    shell(file);
+    const opening = mountSolidOfflineFile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    await opening;
+    expect((screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement).value).toBe(rejected);
+    expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
+    expect(document.body.textContent).toContain('Unsaved changes');
+  });
+
+  it('refuses new compiled components without saving or blanking the valid reader', async () => {
+    const file = fixture();
+    await openAndEdit(file);
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    const source = screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement;
+    const next = file.source.replace('Regional sales</h1>', 'Regional sales</h1><Card><p>New kit shell</p></Card>');
+    fireEvent.input(source, { target: { value: next } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
+    expect(source.value).toBe(next);
+    expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
+    expect(document.body.textContent).toContain('local compiler');
+  });
+
   it('edits the paragraph at the edited path, not the first paragraph with the same words', async () => {
     const file = withTwice(fixture());
     expect(file.source.split(TWICE)).toHaveLength(3);
@@ -171,7 +293,7 @@ describe('Solid offline file', () => {
     expect(readDraft(file)).toBeNull();
     writeDraft({ ...file, localIds: ['x'] }, new Date('2026-09-26T12:00:05.000Z'));
     expect(readDraft(file)?.file.localIds).toEqual(['x']);
-    expect(suggestedFileName('Sales', { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).html');
+    expect(suggestedFileName('Sales', { protocol: 'file:', pathname: '/Downloads/Regional%20sales%20(2).html' })).toBe('Regional sales (2).jsx.html');
   });
 
   it('saves the compiled story exactly as downloaded, never spliced with edited text', async () => {

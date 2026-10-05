@@ -11,7 +11,7 @@ import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layou
 import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
 import type { StoryLayoutRect } from '@/lib/story-runtime/contract';
 import { FlowEditor } from '@/solid/editor/FlowEditor';
-import { repathFlowView } from '@/lib/editor-v2/flow-view';
+import { flushFlowView, repathFlowView } from '@/lib/editor-v2/flow-view';
 import { GridEdit, type GridTile } from '@/solid/editor/GridEdit';
 import { discoverSlides } from '@/lib/story-runtime/slides';
 import { AST_PATH_ATTR as AST_PATH } from '@/lib/story-ui/ast-path';
@@ -32,6 +32,8 @@ export interface CompiledEditCallbacks {
 }
 
 export interface CompiledEditMount {
+  /** Hand pending typing to the owner before it flushes or saves source. */
+  flush(): void;
   dispose(): void;
   /**
    * Adopt a compiled draft WITHOUT touching the editor when it changes nothing but the text the prose
@@ -680,6 +682,7 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
     return decided;
   };
   return {
+    flush() { for (const editor of mounted.values()) { const view = editor.view(); if (view) flushFlowView(view); } },
     dispose() { for (const cleanup of cleanups.reverse()) cleanup(); },
     prepareHold(next, draft, more) {
       if (!plan || plan.next !== next || plan.draft !== draft || !planCurrent(plan)) plan = planHold(next, draft);

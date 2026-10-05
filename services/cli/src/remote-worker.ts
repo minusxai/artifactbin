@@ -3,7 +3,6 @@ import {State,HOME_SCOPE} from './state';
 import {remoteStateKey,type RemoteLocalState} from './remote-state';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {join,delimiter} from 'node:path';
-import {isSea} from 'node:sea';
 import {configDir,remoteChildEnv,remoteWorkerEnv,remotePermissionEnv} from './config';
 import {privateDirectory} from './files';
 import {HttpClient} from './http';
@@ -24,7 +23,7 @@ export async function remoteWorkerMain():Promise<void>{
  const stopTimer=setInterval(()=>{if(stateKey&&state.get<RemoteLocalState>(HOME_SCOPE,'remote-agent',stateKey)?.value.stopRequested)controller.abort();},500);
  try{
   // Use this CLI build from the helper, even when a different afbin is installed globally.
-  const invocation=[process.execPath,...(isSea()?[]:[...process.execArgv,process.argv[1]!])];
+  const invocation=[process.execPath,...process.execArgv,process.argv[1]!];
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
   await writeFile(join(directory,'afbin'),`#!/bin/sh\nexec ${invocation.map(quote).join(' ')} "$@"\n`,{mode:0o700});
   const client=new HttpClient({connection:input.connection,home:input.home});

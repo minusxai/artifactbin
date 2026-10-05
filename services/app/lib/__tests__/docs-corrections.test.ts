@@ -51,7 +51,11 @@ describe('the publishing skill', () => {
   });
   it('push handles the canonical response and sync identity', () => {
     expect(doc).toContain('canonical source and identity in the same response');
-    expect(doc).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
+    expect(doc).toContain('workspace .artifactbin directory');
+    expect(doc).toContain('credentials remain in your private home state');
+    expect(doc).toContain('local-to-remote ID mapping under .artifactbin/publications');
+    expect(doc).toContain('local source keeps its local identity');
+    expect(doc).not.toContain('writes nothing into your working directory');
   });
   it('one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
     expect(doc).not.toContain('for the full reference before authoring');

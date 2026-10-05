@@ -182,14 +182,26 @@ test('composed push reports a published dependency when the document is refused'
  const root=await mkdtemp(join(tmpdir(),'afbin-partial-'));
  try{
   await saveTestConnection({server:'https://example.com',token:'mx_test'},root);await writeFile(join(root,'notes.txt'),'notes');await writeFile(join(root,'doc.jsx'),'<a href="/a/abc123">Read</a>');
-  const register=await runCli(['add','notes.txt','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json({ids:['abc123',...Array.from({length:99},(_,i)=>'id'+String(i).padStart(4,'0'))]},{headers:{'X-Artifactbin-Account':'usr_one'}})});assert.equal(register,0);
-  const output:string[]=[];
+  const registered:string[]=[];
+  const register=await runCli(['add','notes.txt','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>registered.push(s),stderr:()=>{},fetch:async()=>assert.fail('local registration must not connect')});assert.equal(register,0);
+  const localIds=JSON.parse(registered[0]) as Record<string,string>;
+  await writeFile(join(root,'doc.jsx'),(await readFile(join(root,'doc.jsx'),'utf8')).replace('/a/abc123',`/a/${localIds['notes.txt']}`));
+  const output:string[]=[];let dependencyId:string|undefined;const writes:string[]=[];
   const code=await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(input,init)=>{
-   const body=JSON.parse(String(init?.body));if(String(input).endsWith('/preflight'))return Response.json({valid:true});
-   if(body.file)return Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'file'},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+   const headers={'X-Artifactbin-Account':'usr_one'};
+   if(init?.method==='GET')return Response.json({artifacts:[]},{headers});
+   if(String(input).endsWith('/reservations'))return Response.json({ids:['abc123',...Array.from({length:99},(_,i)=>'id'+String(i).padStart(4,'0'))]},{headers});
+   const body=JSON.parse(String(init?.body));if(String(input).endsWith('/preflight'))return Response.json({valid:true},{headers});
+   if(body.file){
+    assert.equal(body.file.filename,'notes.txt');assert.equal(typeof body.reserved_id,'string');
+    dependencyId=body.reserved_id;writes.push('notes.txt');
+    return Response.json({id:dependencyId,version:1,edit_id:'one',state:digest('one'),format:'file'},{status:201,headers});
+   }
+   assert.ok(dependencyId,'The dependency is accepted before refusing the document');
+   assert.ok(JSON.stringify(body).includes(`/a/${dependencyId}`),'The document references the accepted dependency identity');writes.push('doc.jsx');
    return Response.json({error:'quota_exceeded'},{status:403,headers:{'X-Artifactbin-Account':'usr_one'}});
   }});
-  assert.notEqual(code,0);const result=JSON.parse(output[0]);assert.equal(result.error.code,'quota_exceeded');assert.deepEqual(result.error.details.completed_operations,[{path:'notes.txt',status:'published',id:'abc123',version:1}]);
+  assert.notEqual(code,0);const result=JSON.parse(output[0]);assert.equal(result.error.code,'quota_exceeded',JSON.stringify(result));assert.deepEqual(writes,['notes.txt','doc.jsx']);assert.deepEqual(result.error.details.completed_operations,[{path:'notes.txt',status:'published',id:dependencyId,version:1}]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('pushing a renamed unchanged file updates tracking locally without credentials or requests',async()=>{

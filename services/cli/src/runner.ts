@@ -5,7 +5,7 @@ import serialize from "@xterm/addon-serialize";
 import { hostname } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { pty } from "./pty";
-import { httpStatus, type HttpClient } from "./http";
+import { httpStatus, type HttpClient } from "./http.js";
 import type {
   RemoteExchange,
   RemoteExchangeResult,
@@ -59,7 +59,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
   } catch (error) {
     // Registration, context and durable startup receipt form one launch boundary.
     // A failed state write must not strand a child after the launcher reports failure.
-    if(child){try{if(options.managed)process.kill(-child.pid,"SIGKILL");else child.kill();}catch{try{child.kill();}catch{/* already exited */}}}
+    if(child){try{if(options.managed&&process.platform!=='win32')process.kill(-child.pid,"SIGKILL");else child.kill();}catch{try{child.kill();}catch{/* already exited */}}}
     await client.request(`/remote/sessions/${session.id}`, "DELETE", undefined, {}, { timeoutMs: 10000 }).catch(() => {});
     throw error;
   }
@@ -95,7 +95,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
   const shutdown = new AbortController();
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   let killTimer: ReturnType<typeof setTimeout> | undefined;
-  const killManaged=(signal:NodeJS.Signals)=>{try{process.kill(-child.pid,signal);}catch{try{child.kill(signal);}catch{/* already exited */}}};
+  const killManaged=(signal:NodeJS.Signals)=>{if(process.platform==='win32'){try{child.kill();}catch{/* already closed */}return;}try{process.kill(-child.pid,signal);}catch{try{child.kill(signal);}catch{/* already exited */}}};
   const stopChild=()=>{
     if(exitCode!==undefined)return;
     if(!options.managed){child.kill();return;}
@@ -104,7 +104,12 @@ export async function runRemote(options: RunOptions): Promise<number> {
   };
   const exited = child.onExit((event) => {
     exitCode = event.exitCode;
-    clearTimeout(killTimer);if(options.managed)killManaged('SIGKILL');
+    clearTimeout(killTimer);
+    // ConPTY's native process exit does not dispose its output worker/pipe handles.
+    // Close the owned PTY object even after natural exit; never signal a Windows PID group.
+    // Unix PTYs need no post-exit close and retain managed descendant cleanup.
+    if(process.platform==='win32'){try{child.kill();}catch{/* already closed */}}
+    else if(options.managed)killManaged('SIGKILL');
     detachTerminal();
     if (interactive)
       process.stderr.write(`\r\n[afbin: Closing session… sending final output (up to 1 second)]\r\n`);

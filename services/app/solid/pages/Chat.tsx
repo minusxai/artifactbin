@@ -1,3 +1,4 @@
+import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
@@ -158,7 +159,7 @@ function SessionTerminal(props: { id: string; onClose: () => void }): JSX.Elemen
     <Show when={connection()}><p role="status" class="mb-2 text-sm text-muted">{connection()}</p></Show>
     <Show when={error()}><p role="alert" class="mb-2 text-sm text-red-500">{error()}</p></Show>
     <div style={{ 'max-width': mobile() ? '420px' : undefined }}>
-      <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). Start a new session with afbin remote to reconnect.</p></Show>
+      <Show when={ended()}><p role="status" class="mb-3 rounded border border-edge bg-surface p-4 text-sm">Session ended (exit {info()?.exitCode}). Start a new session with npx --yes @afbin/cli@latest remote to reconnect.</p></Show>
       <div class="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended()}><div ref={container} aria-label="Remote terminal" style={{ height: 'min(58dvh, 650px)', 'min-height': '240px' }} /></div>
       <div class="mt-2 flex flex-wrap gap-2" aria-label="Terminal scroll controls" hidden={ended()}>
         <button class="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal?.scrollPages(-1)}>Scroll up</button>
@@ -192,12 +193,13 @@ function InstallInstructions(): JSX.Element {
   const [harness, setHarness] = createSignal('claude');
   const origin = window.location.origin;
   return <div class="mt-4 space-y-4">
-    <CopyCommand label="Install CLI" command={`curl -fsSL ${origin}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`} />
-    <p class="text-xs text-muted">Remote agents: macOS and Linux · Intel and ARM. On Windows, use WSL for remote agents; native artifact commands have a PowerShell installer.</p>
-    <CopyCommand label="Install Windows CLI for artifacts" command={`Invoke-WebRequest -UseBasicParsing ${origin}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} />
+    <CopyCommand label="Install CLI" command={afbinInstallCommand(origin)} />
+    <p class="text-xs text-muted">macOS / Linux: run both commands in the same terminal. Supported Node/npm is reused; otherwise official Node LTS is installed for your user.</p>
+    <CopyCommand label="Install Windows CLI for artifacts" command={afbinWindowsInstallCommand(origin)} />
+    <p class="text-xs text-muted">Windows: run both commands in PowerShell; npx.cmd works without changing script execution policy.</p>
     <p class="text-xs text-muted">Use the command below to sign in to this server and start your installed agent.</p>
     <div><label for="remote-harness" class="mb-2 block text-sm">Choose your agent</label><select id="remote-harness" value={harness()} onChange={(event) => setHarness(event.currentTarget.value)} class="w-full rounded border border-edge bg-surface p-2 text-sm"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="pi">Pi</option><option value="opencode">OpenCode</option></select></div>
-    <CopyCommand label="Start a session" command={`afbin remote --server '${origin}' ${harness()}`} />
+    <CopyCommand label="Start a session" command={`npx --yes @afbin/cli@latest remote --server '${origin}' ${harness()}`}  />
     <p class="text-xs text-muted">Your agent must already be installed. Type @ in an artifact comment to mention an online session.</p>
   </div>;
 }

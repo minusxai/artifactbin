@@ -96,5 +96,7 @@ describe('docs addresses', () => {
     const html = await (await app.request('/login')).text();
     expect(html).toMatch(/<link rel="help" href="[^"]+\/llms.txt" title="[^"]+"/);
     expect(html).toMatch(/<meta name="afbin" content="[^"]*afbin[^"]*"/);
+    expect(html).toContain('Windows: npx.cmd');
+    expect(html).toContain('HTTP: email auth');
   });
 });

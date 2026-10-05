@@ -30,7 +30,7 @@ import { DATASET_ACCESS, canReadArtifact, canWriteDataset, writerFor, type Artif
 import { SHARE_ROLES, type ShareEntry, type ShareRole } from './share-roles';
 import { artifactQuotaExceeded, byteQuotaFor, createArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, replaceArtifactFor, setMetadataFor, type ArtifactInput, type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { findDependentsFor, refLoaderForActor, refreshWarningsFor, declarationsForRow, runDocumentMutation } from './dataflow';
-import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations/store';
+import { AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations/store';
 import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/document/node-ids';
 import { isMutationRefused, mutateDataset } from '@/lib/story/datasets/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
@@ -737,6 +737,7 @@ export async function respondToEdit(
 /** Body → action; null = malformed (neither field, or wrong types). */
 function parseAnnotationAction(body: Record<string, unknown>): AnnotationAction | null {
   const action: AnnotationAction = {};
+  if(body.expected_revision!==undefined){if(!Number.isSafeInteger(body.expected_revision)||Number(body.expected_revision)<0)return null;action.expectedRevision=Number(body.expected_revision);}
   if (typeof body.reply === 'string' && body.reply.trim().length > 0) action.reply = body.reply;
   else if (body.reply !== undefined) return null;
   if (typeof body.resolve === 'boolean') action.resolve = body.resolve;
@@ -763,7 +764,7 @@ export async function respondToAnnotationAction(
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
   let wire;
   try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
-  catch(error){if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
+  catch(error){if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; no reply or state change was applied.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);

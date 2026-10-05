@@ -198,15 +198,18 @@ describe('public serving', () => {
   });
 });
 
-describe('CLI discovery',()=>{
- it('is the one-pager: what artifactbin is, local help, automatic sign-in and both URL forms, under 2 KB',async()=>{
+describe('CLI and HTTP discovery',()=>{
+ it('serves a compact overview under 2 KB followed by full email HTTP authoring instructions',async()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
-  expect(text.split('\n')[0]).toMatch(/^artifactbin: .*afbin CLI\.$/);
-  expect(text).toContain('curl -fsSL http://localhost:3000/chat/install.sh | sh');expect(text).toContain('http://localhost:3000/a/<id>');
-  expect(text).not.toContain('afbin setup');
-  expect(text).toContain('afbin help');expect(text).toContain('/chat/install.sh | sh');expect(text).not.toMatch(/releases\/download|npm install/);
+  expect(text.split('\n')[0]).toMatch(/^artifactbin: .*npm CLI or direct HTTP API\.$/);
+  expect(text).toContain('npx --yes @afbin/cli@latest');expect(text).toContain('http://localhost:3000/a/<id>');
+  expect(text).toContain('@afbin/cli@latest setup');
+  expect(text).toContain('@afbin/cli@latest help');expect(text).toContain('/chat/ensure-node.sh');expect(text).not.toMatch(/releases\/download|npm install/);
   // MCP and /docs/ on this text are retired-surfaces.test.ts's row for the one-pager.
-  expect(Buffer.byteLength(text)).toBeLessThan(2048);
+  expect(Buffer.byteLength(text.split('## Direct HTTP API')[0]!)).toBeLessThan(2048);
+  expect(text).toContain('/api/authentication/token');
+  expect(text).toContain('function buildPlainTextUpdate');
+  expect(text).toContain('guest browser approval is CLI-only');
  });
 });

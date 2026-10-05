@@ -15,6 +15,7 @@ import { ARTIFACT_FILE_IDS, readArtifactFileParts, type ArtifactFileParts } from
 import { clearDraft, readDraft, readName, writeDraft, writeName } from './local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-file';
 import { unranQueriesOf } from './snapshot-current';
+import { projectDocument, sameSourceContent } from './project-document';
 
 declare const __AFBIN_APP_CSS__: string;
 declare global { interface Window { __afbinOfflineReady?: Promise<void>; } }
@@ -23,6 +24,7 @@ const SourceEditor = lazy(() => import('@/solid/editor/SourceEditor'));
 const NOTHING_TO_SAVE = 'No changes to save';
 const EDIT_REFUSED = 'This text could not be applied to the current document.';
 const INVALID_SOURCE_EDIT = 'Editing needs a valid source. Fix the markup in the file, then open it again.';
+const CHROME_CSS = 'body{margin:0;padding-top:42px}#afbin-chrome{position:fixed;inset:0 0 auto;z-index:1000;background:var(--surface,#fff);border-bottom:1px solid #aaa} [data-mx-annotated]{outline:2px solid #e8a93a}';
 const BUTTON = 'inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-edge px-2 font-sans text-xs text-fg disabled:cursor-default disabled:opacity-50';
 
 function textOf(node: JsxNode): string { return node.type === 'text' ? node.value : node.type === 'element' ? node.children.map(textOf).join('') : ''; }
@@ -34,7 +36,7 @@ function projectText(root: HTMLElement, nodes: JsxNode[]): void {
     const path = parent ? `${parent}.${index}` : String(index);
     if (node.children.length && node.children.every((child) => child.type === 'text')) {
       const element = root.querySelector<HTMLElement>(`[data-mx-ast="${path}"]`);
-      if (element && !element.hasAttribute('data-hk')) element.textContent = textOf(node);
+      if (element) element.textContent = textOf(node);
     }
     walk(node.children, path);
   });
@@ -75,7 +77,18 @@ export function queryConsumersOf(nodes: JsxNode[], stale: ReadonlySet<string>): 
   return found;
 }
 
-interface Opened { parts: ArtifactFileParts; invalid: string | null; restored: boolean }
+function showStaleQueries(story: HTMLElement, file: ArtifactFileParts['file']): void {
+  const stale = new Set(unranQueriesOf(file));
+  if (file.compiledFlowDigest && file.compiledFlowDigest !== sourceDigest(JSON.stringify(file.island.dataflow?.flow ?? null))) {
+    for (const query of file.island.dataflow?.flow?.queries ?? []) stale.add(query.name);
+  }
+  for (const path of queryConsumersOf(file.island.nodes, stale)) {
+    const target = story.querySelector<HTMLElement>(`[data-mx-ast="${path}"]`);
+    if (target) target.textContent = OFFLINE_QUERY_REASON;
+  }
+}
+
+interface Opened { parts: ArtifactFileParts; invalid: string | null; restored: boolean; sourceDraft?: string }
 
 function OfflineShell(props: Opened) {
   const story = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
@@ -84,7 +97,7 @@ function OfflineShell(props: Opened) {
   const [name, setName] = createSignal(readName());
   const [asking, setAsking] = createSignal(false);
   const [renaming, setRenaming] = createSignal(false);
-  const [editing, setEditing] = createSignal(false);
+  const [editing, setEditing] = createSignal(props.sourceDraft !== undefined);
   const [changes, setChanges] = createSignal(false);
   const [comments, setComments] = createSignal(false);
   const [threads, setThreads] = createSignal(file().threads);
@@ -92,8 +105,8 @@ function OfflineShell(props: Opened) {
   const [commenting, setCommenting] = createSignal(false);
   const [commentBody, setCommentBody] = createSignal('');
   const [replies, setReplies] = createSignal<Record<string, string>>({});
-  const [sourceMode, setSourceMode] = createSignal(false);
-  const [source, setSource] = createSignal(file().source);
+  const [sourceMode, setSourceMode] = createSignal(props.sourceDraft !== undefined);
+  const [source, setSource] = createSignal(props.sourceDraft ?? file().source);
   const [formatted, setFormatted] = createSignal(false);
   const [formattedText, setFormattedText] = createSignal('');
   const [sourceRevision, setSourceRevision] = createSignal(0);
@@ -110,13 +123,27 @@ function OfflineShell(props: Opened) {
   let live: LiveEditsCore | null = null;
   let saveHandle: SaveHandle | null = null;
   let draftTimer = 0;
+  let projectedSource = file().base.source;
   let nameAnswer: (() => void) | null = null;
   const backend = createFileBackend(file(), {
     author: () => name(),
     onChange(next) {
-      setFile(next); setSource(next.source); setThreads(next.threads); setDirty(true);
+      const prior = file();
+      const pendingSource = source();
+      setFile(next);
+      if (pendingSource === prior.source || sameSourceContent(pendingSource, next.source)) setSource(next.source);
+      setThreads(next.threads); setDirty(true);
+      afterReady(() => {
+        if (editing() && !sourceMode()) return; // The live prose editor already shows its own structural draft.
+        if (sourceMode()) { editMount?.dispose(); editMount = null; }
+        projectDocument(story, next.island.nodes, projectedSource);
+        if (sourceMode() || !editing()) projectText(story, next.island.nodes);
+        showStaleQueries(story, next);
+        projectedSource = next.source;
+        style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', next.css.base, next.css.compiled, next.css.author, CHROME_CSS].filter(Boolean).join('\n');
+      });
       window.clearTimeout(draftTimer);
-      draftTimer = window.setTimeout(() => writeDraft(next), 800);
+      draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
     },
   });
   void backend.load().then((head) => {
@@ -128,6 +155,7 @@ function OfflineShell(props: Opened) {
       onRemoteDocument: (next) => { setSource(next); setSourceRevision((n) => n + 1); },
     }));
     live.subscribe((state) => setEditStatus(state.status));
+    if (props.sourceDraft !== undefined) live.queue({ source: props.sourceDraft });
   });
   onCleanup(() => { editMount?.dispose(); live?.dispose(); window.clearTimeout(draftTimer); });
   const warnOnLeave = (event: BeforeUnloadEvent) => {
@@ -143,11 +171,19 @@ function OfflineShell(props: Opened) {
     if (picked?.trim()) { writeName(picked.trim()); setName(picked.trim()); }
     setAsking(false); setRenaming(false); nameAnswer?.(); nameAnswer = null;
   };
-  const queueSource = (next: string) => { setSource(next); live?.queue({ source: next }); };
+  const queueSource = (next: string) => { setSource(next); setDirty(true); live?.queue({ source: next });
+    window.clearTimeout(draftTimer);
+    draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
+  };
   const edit = async () => {
     if (editing()) {
-      await live?.flushNow(); editMount?.dispose(); editMount = null;
-      projectText(story, file().island.nodes); setEditing(false); setSourceMode(false); return;
+      editMount?.flush();
+      await live?.flushNow();
+      if (live && !live.isIdle()) return;
+      editMount?.dispose(); editMount = null;
+      projectDocument(story, file().island.nodes, projectedSource);
+      projectText(story, file().island.nodes); showStaleQueries(story, file()); projectedSource = file().source;
+      setEditing(false); setSourceMode(false); return;
     }
     await ensureName();
     if (props.invalid) return;
@@ -166,7 +202,9 @@ function OfflineShell(props: Opened) {
   const save = async () => {
     setSaving(true); setSaveError('');
     try {
+      editMount?.flush();
       await live?.flushNow();
+      if (live && !live.isIdle()) { setSaveError('Fix the source before saving. Your unsaved changes are still in the editor.'); return; }
       // The compiled module and its served markup are never touched by an edit (only `source`
       // and what derives from it change, file-backend.ts `derive`): save them exactly as
       // downloaded, so a reopen hydrates a pristine, matching pair and projects the edited
@@ -222,13 +260,15 @@ function OfflineShell(props: Opened) {
     void import('@/lib/workspace/format-jsx-preview').then(({ formatJsxPreview }) => formatJsxPreview(source())).then((result) => { setFormattedText(result); setFormatted(true); });
   };
   const style = document.createElement('style');
-  style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', file().css.base, file().css.compiled, file().css.author,
-    'body{margin:0;padding-top:42px}#afbin-chrome{position:fixed;inset:0 0 auto;z-index:1000;background:var(--surface,#fff);border-bottom:1px solid #aaa} [data-mx-annotated]{outline:2px solid #e8a93a}'].filter(Boolean).join('\n');
+  style.textContent = [typeof __AFBIN_APP_CSS__ === 'string' ? __AFBIN_APP_CSS__ : '', file().css.base, file().css.compiled, file().css.author, CHROME_CSS].filter(Boolean).join('\n');
   document.head.append(style);
   onCleanup(() => style.remove());
   // Only after the compiled tree hydrates (or immediately when there is none to hydrate): the
   // story DOM served with this file is still the pristine compile hydrate() must match.
-  afterReady(() => projectText(story, file().island.nodes));
+  afterReady(() => {
+    projectDocument(story, file().island.nodes, projectedSource);
+    projectText(story, file().island.nodes); showStaleQueries(story, file()); projectedSource = file().source;
+  });
 
   return <div id="afbin-chrome">
     <header aria-label="Offline copy" class="flex flex-wrap items-center gap-2 px-4 py-2 text-xs">
@@ -287,6 +327,7 @@ export async function mountSolidOfflineFile(): Promise<void> {
   const host = document.createElement('div');
   document.body.insertBefore(host, document.getElementById(ARTIFACT_FILE_IDS.root));
   let opened = rebuilt;
+  let sourceDraft: string | undefined;
   if (draft) {
     const restore = await new Promise<boolean>((resolve) => {
       const dispose = render(() => <div role="alertdialog" aria-label="Restore unsaved changes" class="fixed left-1/2 top-1/3 z-[2000] border bg-white p-4">
@@ -295,7 +336,7 @@ export async function mountSolidOfflineFile(): Promise<void> {
         <button onClick={() => { dispose(); resolve(false); }}>Discard</button>
       </div>, host);
     });
-    if (restore) opened = { ...rebuilt, file: draft.file, rebuilt: true };
+    if (restore) { opened = { ...rebuilt, file: draft.file, rebuilt: true }; sourceDraft = draft.sourceDraft; }
     else clearDraft(parts.file);
   }
   window.__afbinOfflineFile = opened.file;
@@ -318,7 +359,7 @@ export async function mountSolidOfflineFile(): Promise<void> {
       }
     });
   }
-  mountedDispose = render(() => <OfflineShell parts={{ ...parts, file: opened.file }} invalid={opened.error} restored={opened.rebuilt} />, host);
+  mountedDispose = render(() => <OfflineShell parts={{ ...parts, file: opened.file }} invalid={opened.error} restored={opened.rebuilt} sourceDraft={sourceDraft} />, host);
   document.getElementById(ARTIFACT_FILE_IDS.boot)?.remove();
 }
 

@@ -1,4 +1,13 @@
 import {expect,it,vi} from 'vitest';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {runInNewContext} from 'node:vm';
+import {createTeamApplication} from '../../cli/src/team-application';
+import {AUTH_SECRET} from '@/lib/platform';
+import {drainPreparedPageWarmups} from '@/lib/story/prepared/prepared-page.server';
+import {drainSnapshotRevalidations} from '@/lib/compiled-page/snapshots.server';
+import type {DocumentUpdate} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
 import {mintToken} from '@/lib/accounts';
 import {getArtifactById,type ArtifactRow,type TokenActor} from '@/lib/artifacts';
@@ -68,4 +77,35 @@ it('refuses retired text-write bodies instead of silently using a read/retry fal
  const {token,id,row}=await setup();
  const response=await editRoute(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:{edit_id:row.edit_id,source:'<p>Text fallback</p>'}}),{params:Promise.resolve({id})});
  expect(response.status).toBe(400);expect((await getArtifactById(id))?.edit_id).toBe(row.edit_id);
+});
+
+it('the published direct HTTP example edits JSX with an email bearer, reserved identity and graph conflicts',async()=>{
+ const guide=await readFile(join(process.cwd(),'skills/artifactbin/references/http-authoring.md'),'utf8');
+ const code=/```js\n(\/\/ BEGIN HTTP TEXT EDIT[\s\S]*?\/\/ END HTTP TEXT EDIT)\n```/.exec(guide)?.[1];
+ expect(code,'HTTP authoring guide needs an executable JSON graph example').toBeTruthy();
+ const build=runInNewContext(code+'\nbuildPlainTextUpdate',{TextEncoder}) as (snapshot:Record<string,unknown>,nodeId:string,before:string,after:string)=>DocumentUpdate;
+ const directory=await mkdtemp(join(tmpdir(),'http-authoring-')),base='http://localhost:3000';
+ const host=await createTeamApplication({APP__PUBLIC_BASE_URL:base,AUTH__SECRET:AUTH_SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')},process.cwd());
+ try{
+  const post=(path:string,body:unknown,headers:Record<string,string>={})=>host.fetch(new Request(base+path,{method:'POST',headers:{origin:base,'content-type':'application/json',...headers},body:JSON.stringify(body)}));
+  const email='mxmx_test_direct_http_authoring@example.test';
+  expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
+  const mail=(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
+  const login=await post('/api/auth/sign-in/email-otp',{email,otp:mail.find(message=>message.to===email).otp});expect(login.status).toBe(200);
+  const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
+  const issued=await post('/api/authentication/token',{}, {cookie});expect(issued.status).toBe(201);
+  const auth={authorization:'Bearer '+(await issued.json()).access_token};
+  const reserved=await post('/api/artifacts/reservations',{}, {...auth,'Idempotency-Key':'http_authoring_batch_001'});expect(reserved.status).toBe(200);
+  const ids=(await reserved.json()).ids;expect(ids).toHaveLength(100);
+  const body={reserved_id:ids[0],markup:'<p id="message">Alpha</p>',title:'HTTP example',visibility:'unlisted'};
+  const created=await post('/api/artifacts',body,{...auth,'Idempotency-Key':'http_authoring_create_001'});expect(created.status,await created.clone().text()).toBe(201);
+  const {id}=await created.json();expect(id).toBe(ids[0]);
+  const read=()=>host.fetch(new Request(base+'/api/artifacts/'+id,{headers:auth}));
+  const snapshot=await(await read()).json();expect(snapshot.markup).toBe(body.markup);
+  const document_update=build(snapshot,'message','Alpha','Updated HTTP text 😀');
+  const prepared=await post('/api/artifacts/'+id+'/prepare',{source:'<p id="message">Updated HTTP text 😀</p>'},auth);expect(prepared.status).toBe(200);expect(await prepared.json()).toMatchObject({valid:true});
+  const edited=await post('/api/artifacts/'+id+'/edits',{edit_id:snapshot.edit_id,document_update},auth);expect(edited.status,await edited.clone().text()).toBe(200);
+  const head=await(await read()).json();expect(head.markup).toBe('<p id="message">Updated HTTP text 😀</p>');expect(head.version).toBe(snapshot.version+1);
+  const stale=await post('/api/artifacts/'+id+'/edits',{edit_id:snapshot.edit_id,document_update},auth);expect(stale.status).toBe(409);expect((await(await read()).json()).markup).toBe(head.markup);
+ }finally{await drainPreparedPageWarmups();await drainSnapshotRevalidations();await host.close();await rm(directory,{recursive:true,force:true});}
 });

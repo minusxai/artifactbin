@@ -25,7 +25,7 @@ describe('the public repository boundary', () => {
 
 describe('workflow supply-chain pins', () => {
   it('uses immutable full commit SHAs for every third-party action', () => {
-    for (const file of ['ci.yml', 'cli-runtime.yml', 'release-cli.yml', 'codeql.yml', 'page-speed.yml']) {
+    for (const file of ['ci.yml', 'release-cli.yml', 'codeql.yml', 'page-speed.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
       const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
       if (file !== 'release-cli.yml') expect(refs.length, file).toBeGreaterThan(0);
@@ -143,35 +143,53 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
 });
 
 describe('source host compatibility matrix', () => {
-  it('runs source, installed package and standalone CLI against the ID-first host', () => {
+  it('runs source bundle and installed npm package against the ID-first host', () => {
     const steps = ci.jobs['reference-compatibility'].steps;
-    const candidate = steps.find(step => step.name === 'ID-first conformance for bundle, installed package and executable');
+    const candidate = steps.find(step => step.name === 'ID-first conformance for source bundle and installed npm package');
     expect(candidate?.['working-directory']).toBe('candidate');
-    expect(candidate?.run).toContain('afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs');
+    expect(candidate?.run).toContain('afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('services/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('scripts/gates.mjs --servers=1 --only=accounts-and-workspace');
     expect(readFileSync(ciPath, 'utf8')).not.toContain('build-public-packages.mjs');
   });
 });
 
-describe('Intel release acceptance consumes the tested binary',()=>{
-  it('keeps packaging and browser acceptance bounded without dropping either release gate',()=>{
+describe('one immutable npm artifact supplies every release acceptance',()=>{
+  it('packs once, runs the same tarball on every supported OS/runtime, and publishes those bytes',()=>{
+    const pack=ci.jobs['cli-pack'];
+    expect(pack).toBeDefined();
+    expect(pack.permissions).toEqual({contents:'read','id-token':'write'});
+    const signing=pack.steps.find(step=>step.run?.includes('npm-provenance.mjs sign'));
+    expect(signing.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(signing.run).not.toContain('GITHUB_SHA=');
+    expect(pack.steps.find(step=>step.with?.name==='afbin-npm-release').with.path).toContain('*.sigstore');
+    expect(pack.steps.some(step=>step.run?.includes('pack:release'))).toBe(true);
+    const matrix=ci.jobs.cli;
+    expect(matrix.needs).toContain('cli-pack');
+    expect(matrix.strategy.matrix.node).toEqual(['22.22.3','24.21.0']);
+    expect(matrix.strategy.matrix.os).toContain('windows-2022');
+    expect(matrix.strategy.matrix.phase).toEqual(['native','experience']);
+    const install = matrix.steps.find(step => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
+    expect(install.if).toContain("matrix.phase == 'experience'");
+    const native = matrix.steps.find(step => step.name === 'Same-tarball native npm and warmed offline acceptance');
+    expect(native.if).toBe("matrix.phase == 'native'");
+    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase == 'experience'");
+    for (const name of ['Installed public library declarations compile without private workspace aliases','Installed foreground server preserves the remote runner boundary','Actual installed CLI terminal exits naturally','Installed npm preview and export, with process shutdown','Complete installed npm local and HTML round-trip journey']) {
+      expect(matrix.steps.find(step => step.name === name)?.if,name).toBe("matrix.phase == 'experience'");
+    }
+    expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase == 'experience'");
+    for(const job of ['cli','cli-preview','reference-compatibility']){
+      const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
+      expect(download,job).toBeDefined();
+    }
     const proof=ci.jobs['cli-preview'];
-    expect(proof).toBeDefined();
-    expect(proof.needs).toEqual(expect.arrayContaining(['plan','cli']));
-    expect(proof['runs-on']).toBe('macos-15-intel');
-    expect(proof.if).toContain('needs.plan.outputs.cli-preview');
     expect(proof.strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
-    expect(proof.strategy['fail-fast']).toBe(false);
-    expect(proof.name).toContain('${{ matrix.phase }}');
-    const download=proof.steps.find(step=>step.uses?.startsWith('actions/download-artifact'));
-    expect(download?.with).toMatchObject({name:'afbin-macos-15-intel',path:'services/cli/dist'});
-    expect(proof.steps.some(step=>step.run?.includes('chmod +x dist/afbin-darwin-x64'))).toBe(true);
-    expect(proof.steps.some(step=>step.run?.includes('scripts/test-preview.ts dist/afbin-darwin-x64 --phase=${{ matrix.phase }}'))).toBe(true);
     expect(proof.steps.some(step=>/npm run build/.test(step.run??''))).toBe(false);
-    const bundledProof=ci.jobs.cli.steps.find(step=>step.name==='File preview from the actual executable');
-    expect(bundledProof.if).toContain("matrix.os != 'macos-15-intel'");
-    for(const job of ['test'])expect(ci.jobs[job].needs).toContain('cli-preview');
+    const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');
+    expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance=false --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');
+    expect(release).toContain('afbin-npm-release');
+    expect(release).not.toContain('afbin-darwin');
+    expect(existsSync(path.join(root,'.github/workflows/cli-runtime.yml'))).toBe(false);
   });
 });
 

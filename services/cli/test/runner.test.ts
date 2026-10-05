@@ -343,3 +343,22 @@ test("relay restart restores acknowledged history at the original link, includin
   assert.equal(snapshot.split("BEFORE-RESTART").length, 2, "history is not duplicated");
   assert.match(snapshot, /AFTER-RECOVERY/);
 });
+
+import {pty} from '../src/pty';
+test('Windows natural PTY exit releases ConPTY handles and still sends final output and exit',async(t)=>{
+ const platform=Object.getOwnPropertyDescriptor(process,'platform')!;
+ Object.defineProperty(process,'platform',{value:'win32',configurable:true});t.after(()=>Object.defineProperty(process,'platform',platform));
+ t.mock.method(process,'kill',()=>assert.fail('Windows cleanup must not signal a numeric PID/group'));
+ let killed=0;let onData:((value:string)=>void)|undefined;let onExit:((event:{exitCode:number})=>void)|undefined;
+ t.mock.method(pty,'spawn',()=>({pid:12345,onData:(listener:(value:string)=>void)=>{onData=listener;return{dispose(){}};},onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return{dispose(){}};},kill:()=>{killed++;},resize(){},write(){}} as unknown as import('node-pty').IPty));
+ let output='';let reportedExit:number|undefined;let fired=false;
+ const client=new HttpClient({connection:{server:'https://example.test',token:'test'},fetch:async(_url,init)=>{
+  const body=JSON.parse(String(init?.body));if(!body.runnerKey)return Response.json({id:'natural-exit',runnerKey:'proof'});
+  if(!fired){fired=true;onData!('final-native-output');onExit!({exitCode:7});}
+  output+=body.output;reportedExit=body.exitCode;
+  return Response.json({controller:'local',inputs:[]});
+ }});
+ assert.equal(await runRemote({client,command:'cmd.exe',args:[],interactive:false,managed:true,onOutput:()=>{}}),7);
+ assert.equal(killed,1,'natural ConPTY exit must close its worker handles without a process-group signal');
+ assert.equal(reportedExit,7);assert.equal(output,'final-native-output');
+});
