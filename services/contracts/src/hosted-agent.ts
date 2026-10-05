@@ -10,6 +10,8 @@ export interface HostedAgentComment {
   commentId: string;
   body: string;
   author: string | null;
+  /** Frozen selected text, anchor and thread through the triggering comment; at most 64 KiB JSON. */
+  commentContext?: RunnerJson;
   /** App-owned, authenticated operation callback; contains no bearer credentials. */
   callbackUrl: string;
 }

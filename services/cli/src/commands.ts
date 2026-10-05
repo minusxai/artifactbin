@@ -33,7 +33,7 @@ export const flags: Record<string,Flag> = {
  as:{value:'WHO',description:'Act as somebody else: a test user id from afbin testuser new, or guest on a session. fork --as <testuser-id> gives the copy to that test user, inside its sandbox; sessions script new --as guest|<testuser-id> chooses who a NEW session\'s pages browse as, once, when it is created. Omit --as and everything runs as you.'},
  all:{description:'Erase every test user this account holds; testuser delete only.'},
  request:{value:'ID',description:'Stable idempotency identity for runs start or schedule run, or correlation for a managed agent reply.'},
- phase:{value:'PHASE',description:'Record acknowledged, completed or blocked with a reply.'},
+ phase:{value:'PHASE',description:'Record acknowledged, completed, blocked or failed with a reply.'},
  history:{value:'PATH',description:'Snapshot a UTF-8 context handoff for the background agent.'},
  foreground:{description:'Keep the local terminal attached instead of launching in the background.'},
  stop:{value:'ID',description:'Stop a managed remote agent and its local process.'},
@@ -226,7 +226,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
   if(op!=='delete'&&(target!==undefined||f.all))throw new CliError('invalid_arguments',`testuser ${op} takes no target.`,'Name a test user only when deleting one: afbin testuser delete <id>.');
   if(op==='delete'&&(f.all?target!==undefined:target===undefined))throw new CliError('invalid_arguments','testuser delete takes one id, or --all for every test user this account holds.','Run afbin testuser list for the ids you hold.');
  }
- if(command.name==='comment'&&(f.request||f.phase)&&(!f.thread||!f.request||!['acknowledged','completed','blocked'].includes(String(f.phase))||(!f.body&&!f.input)))throw new CliError('invalid_arguments','Use --request and --phase acknowledged|completed|blocked with --thread and a reply.');
+ if(command.name==='comment'&&(f.request||f.phase)&&(!f.thread||!f.request||!['acknowledged','completed','blocked','failed'].includes(String(f.phase))||(!f.body&&!f.input)))throw new CliError('invalid_arguments','Use --request and --phase acknowledged|completed|blocked|failed with --thread and a reply.');
  if(command.name==='remote'&&f.history&&(f.foreground||f.session))throw new CliError('invalid_arguments','--history is only supported for a background launch.');
  if(command.name==='remote'&&(f.stop||f.ready)){if(result.positionals.length||f.name||f.history||f.foreground||f.session||(f.stop&&f.ready))throw new CliError('invalid_arguments','Use --stop or --ready with one session ID, without launch or attach options.');}
  if(command.name==='remote'&&f.session!==undefined&&(result.positionals.length||f.name!==undefined))throw new CliError('invalid_arguments','--session attaches to an existing session; omit the command and --name.');
