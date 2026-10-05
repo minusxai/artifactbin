@@ -69,6 +69,19 @@ describe('CI change selection', () => {
     expect(planCi(['docs/executable.mjs']).full).toBe(true);
   });
 
+  it('runs workflow contracts for scanner-only changes without product journeys', () => {
+    const inputs = ['.github/workflows/codeql.yml', 'scripts/__tests__/workflows.test.mjs'];
+    const plan = planCi(inputs);
+    expect(plan.full).toBe(false);
+    expect(plan.cliTests).toBe(false);
+    expect(plan.nodeRoots).toEqual(['scripts/']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'node']);
+    expect(planCi([...inputs, 'services/app/lib/auth/auth.ts']).jobs.gates).toBe(true);
+    expect(planCi([...inputs, '.github/workflows/ci.yml']).full).toBe(true);
+    expect(planCi(inputs, {full: true}).full).toBe(true);
+    expect(planCi(inputs, {cliRelease: true}).jobs.cli).toBe(true);
+  });
+
   it('selects the app without standalone service tests', () => {
     const plan = planCi(['services/app/components/AnnotationLayer.tsx']);
     expect(plan.nodeRoots).toEqual(['scripts/', 'services/app/']);
