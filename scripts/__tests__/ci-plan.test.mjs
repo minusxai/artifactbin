@@ -757,7 +757,7 @@ describe('CI job shape', () => {
 
   it('restores the whole install, so no job re-runs the postinstall by hand', () => {
     for (const workflow of [ci()]) {
-      const caches = steps(workflow.jobs).filter((step) => step.id === 'install');
+      const caches = Object.entries(workflow.jobs).filter(([name]) => name !== 'cli').flatMap(([,job]) => job.steps ?? []).filter((step) => step.id === 'install');
       expect(caches.length).toBeGreaterThan(0);
       for (const cache of caches) {
         // The postinstall's products live OUTSIDE node_modules; cached apart, a cache hit (which
@@ -776,6 +776,22 @@ describe('CI job shape', () => {
       }
       for (const step of steps(workflow.jobs)) expect(step.run ?? '').not.toContain('copy-assets.mjs');
     }
+  });
+
+
+  it('keeps npm consumer acceptance tooling separate from the complete app install', () => {
+    const jobs = ci().jobs;
+    const caches = jobs.cli.steps.filter((step) => step.id === 'install');
+    expect(caches).toHaveLength(1);
+    expect(caches[0].with.path.trim()).toBe('scripts/ci/npm-acceptance/node_modules');
+    expect(caches[0].with.key).toContain('npm-acceptance-v1-');
+    expect(caches[0].with.key).toContain("hashFiles('scripts/ci/npm-acceptance/package-lock.json'");
+    expect(caches[0].if).toBe("matrix.phase == 'experience'");
+    const install = jobs.cli.steps.find((step) => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
+    expect(install.if).toBe("matrix.phase == 'experience' && steps.install.outputs.cache-hit != 'true'");
+    expect(jobs.cli.steps.some((step) => step.run === 'npm ci')).toBe(false);
+    expect(jobs.cli.steps.find((step) => step.run === 'node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase == 'experience'");
+    expect(jobs.cli.steps.find((step) => step.name === 'Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");
   });
 
   it('fans the gate set over seven runners and pulls Postgres only for its assigned shard', () => {
