@@ -21,6 +21,10 @@ jobs:
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN: ${{ github.event.workflow_run.id }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.21.0
@@ -53,11 +57,22 @@ jobs:
           tar -tzf "$file" > package-files.txt
           grep -Fxq package/npm-shrinkwrap.json package-files.txt
           if grep -q '^package/dist/runtime/node_modules/' package-files.txt; then echo 'Build-machine dependencies in universal package' >&2; exit 1; fi
+          test -f "$file.build.json" && test ! -L "$file.build.json"
+          test "$(jq -r .run_id "$file.build.json")" = "$SOURCE_RUN"
+          head_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq .head_sha)
+          test "$(jq -r .head_sha "$file.build.json")" = "$head_sha"
+          build_sha=$(jq -r .source_sha "$file.build.json")
+          [[ "$build_sha" =~ ^[a-f0-9]{40}$ ]]
+          test -f "$file.sigstore" && test ! -L "$file.sigstore"
+          node scripts/ci/npm-provenance.mjs verify "$file" "$version" "$build_sha" "$SOURCE_RUN"
+          echo "build_run=$SOURCE_RUN" >> "$GITHUB_OUTPUT"
           echo "file=$file" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Publish tested tarball through npm trusted publishing
+        id: publish
         if: steps.package.outputs.file != ''
         env:
+          PACKAGE_BUILD_RUN: ${{ steps.package.outputs.build_run }}
           PACKAGE_FILE: ${{ steps.package.outputs.file }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
@@ -69,10 +84,21 @@ jobs:
             test "$published" = "$candidate" || { echo 'Published version has different bytes; refuse to mislabel the tested tarball.' >&2; exit 1; }
           else
             grep -q E404 npm-error.txt || { cat npm-error.txt >&2; exit 1; }
-            npm publish "$PACKAGE_FILE" --access public --provenance --ignore-scripts
+            if ! npm view '@afbin/cli' name > npm-package.txt 2> npm-package-error.txt; then
+              grep -q E404 npm-package-error.txt || { cat npm-package-error.txt >&2; exit 1; }
+              echo 'First publication requires the maintainer’s verified npm login. No GitHub release has been created.'
+              echo 'After successful main CI and publication approval, run locally:'
+              echo "gh run download $PACKAGE_BUILD_RUN --repo $GITHUB_REPOSITORY --name afbin-npm-release --dir afbin-first-release"
+              echo "npm publish afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz --access public --provenance=false --provenance-file afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz.sigstore --ignore-scripts"
+              echo "Then configure npm trusted publishing with direct publish allowed and run: gh run rerun $GITHUB_RUN_ID --repo $GITHUB_REPOSITORY"
+              exit 0
+            fi
+            test "$(cat npm-package.txt)" = '@afbin/cli'
+            npm publish "$PACKAGE_FILE" --access public --provenance=false --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts
           fi
+          echo "published=true" >> "$GITHUB_OUTPUT"
       - name: Record tested package in GitHub release
-        if: steps.package.outputs.file != ''
+        if: steps.publish.outputs.published != ''
         env:
           PACKAGE_FILE: ${{ steps.package.outputs.file }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}

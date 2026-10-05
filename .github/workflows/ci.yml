@@ -18,8 +18,7 @@ concurrency:
     github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Every job here only reads the repo; the GITHUB_TOKEN should be able to do
-# exactly that and nothing else (CodeQL: actions/missing-workflow-permissions).
+# Jobs read the repo. cli-pack alone can request a signing identity for its npm artifact.
 permissions:
   contents: read
 
@@ -837,6 +836,9 @@ jobs:
   # CLI change is guarded by the bundle build and the source suite in the node job.
   cli-pack:
     name: CLI npm pack
+    permissions:
+      contents: read
+      id-token: write
     needs: [ plan ]
     if: needs.plan.outputs.cli == 'true'
     runs-on: ubuntu-24.04
@@ -849,10 +851,22 @@ jobs:
       - run: npm ci
       - run: npm run build -w services/cli
       - run: npm run pack:release -w services/cli
+      - name: Sign the actual build's npm provenance
+        if: github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GITHUB_REPOSITORY_VISIBILITY: public
+          AFBIN_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          AFBIN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          version=$(node -p "require('./services/cli/package.json').version")
+          node scripts/ci/npm-provenance.mjs sign "services/cli/dist/packages/afbin-cli-$version.tgz" "$version"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: afbin-npm-release
-          path: services/cli/dist/packages/*.tgz
+          path: |
+            services/cli/dist/packages/*.tgz
+            services/cli/dist/packages/*.sigstore
+            services/cli/dist/packages/*.build.json
           compression-level: 0
           if-no-files-found: error
           retention-days: 14

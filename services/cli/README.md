@@ -214,6 +214,37 @@ The account and the app server can access the terminal content and input. Keep t
 
 Run `npm run release:cli` in the CLI PR. Main CI builds `npm run build -w services/cli`, then `npm run pack:release -w services/cli` creates one tarball with an isolated npm consumer shrinkwrap. That exact artifact is installed outside the checkout on Windows x64 and macOS/Linux arm64/x64, with Node 22 and 24. The official node-pty dependency is pinned to 1.2.0-beta.15 because its npm tarball includes native prebuilds for all supported architectures, including Linux; installation does not require a compiler. This prerelease pin must pass the Node22/24 native matrix. Native acceptance verifies SQLite, sharp, node-pty shutdown, warmed offline npm execution, preview and exports. Chromium stays lazy at package install.
 
-Successful main CI triggers `release-cli.yml`, resolves any tested-run receipt, and publishes the tested tarball to npm using OIDC trusted publishing. Configure `@afbin/cli`'s trusted publisher for this repository and workflow before the first release; no npm bearer token is embedded in installers or repository files. The package is public and immutable per version. There are no SEA/executable or platform-specific runtime release assets in this release path. The GitHub release records the same tested tarball for traceability.
+The public `cli-pack` job signs the exact tarball with npm's Sigstore/SLSA provenance helper from the pinned Node 22.22.3/npm 10.9.8 toolchain. Its `.tgz.sigstore` bundle identifies that build's real source commit and GitHub run. A companion `.tgz.build.json` receipt records the actual checkout SHA and API head SHA separately: an owned PR's tested merge SHA differs from its head SHA. Release validation checks the receipt against the selected run and signed payload, then cryptographically verifies the bundle and its owned CI workflow certificate identity. Owned PR builds can be signed and reused through a tested-run receipt; fork PR builds cannot sign. Successful main CI triggers `release-cli.yml`, which checks the bundle against the selected build run and publishes those same bytes and that same bundle. It never substitutes the later release workflow's source SHA for the build's SHA.
+
+**First publication of `@afbin/cli`:** npm requires a package to exist before configuring a trusted publisher. The release workflow detects a missing package, prints the exact commands, and stops without creating a GitHub release. Merge the product PR only after its checks are green. After main CI produces the signed candidate and publication is approved:
+
+1. Use the maintainer's verified npm login (`npm whoami`; run `npm login` if necessary). This first publish may require the account's 2FA confirmation.
+2. Copy the download command from the waiting release workflow log. It includes the selected **build run ID**, including any reused tested-run receipt:
+   ```sh
+   gh run download <selected-build-run-id> --repo minusxai/artifactbin --name afbin-npm-release --dir afbin-first-release
+   ```
+3. For this release, publish the downloaded package with its downloaded signature. Do not rebuild it locally:
+   ```sh
+   npm publish afbin-first-release/afbin-cli-0.4.0.tgz --access public --provenance=false --provenance-file afbin-first-release/afbin-cli-0.4.0.tgz.sigstore --ignore-scripts
+   ```
+   `--provenance=false` disables automatic generation; `--provenance-file` attaches and cryptographically verifies the original build's signed provenance. No placeholder package or CI bootstrap token is needed.
+4. Check a clean registry installation and signed provenance before advancing deployment:
+   ```sh
+   npm install --prefix afbin-registry-check @afbin/cli@0.4.0 --no-audit --no-fund
+   (cd afbin-registry-check && npx --yes npm@11.19.0 audit signatures --json --include-attestations)
+   ```
+   Require a successful audit with no invalid/missing signatures or attestations and a verified `@afbin/cli@0.4.0` provenance entry. The resumed release checks registry integrity against the downloaded tarball; downstream deployment verification repeats the integrity/provenance checks before serving installers. In npm's package settings, add the GitHub trusted publisher: owner `minusxai`, repository `artifactbin`, workflow `release-cli.yml`, no environment. **Allow direct publish**, because new trust configurations default to staging only. Alternatively, with npm 11.15 or newer:
+   ```sh
+   npm trust github @afbin/cli --repo minusxai/artifactbin --file release-cli.yml --allow-publish
+   ```
+5. Resume the waiting **release workflow run**, whose ID differs from the build ID:
+   ```sh
+   gh run rerun <waiting-release-run-id> --repo minusxai/artifactbin
+   ```
+   This verifies npm's immutable version contains the exact tested bytes and creates the GitHub release. It needs no additional version bump or app build. Only after registry installation/provenance verification and release creation should deployment advance the app source pin and serve the npm-only front page. This task does not change the downstream deployment pin.
+
+Subsequent releases publish through OIDC, with the signed build bundle supplied explicitly. A registry outage fails visibly; a different tarball under an existing version is rejected. The GitHub release is recorded only after npm publication or matching existing registry bytes, so downstream deployment verification keeps its publish-before-server order. No npm bearer token is embedded in installers or repository files.
+
+The package is public and immutable per version. GitHub records the tested tarball for traceability. Official npm references: [trusted publishing](https://docs.npmjs.com/trusted-publishers/), [trusted publisher prerequisites and direct publish](https://docs.npmjs.com/cli/v11/commands/npm-trust/), and [publishing with a provenance file](https://docs.npmjs.com/cli/v11/commands/npm-publish/). First-package registry acceptance remains unobserved until the approved publication; local tests and CI signing do not claim that registry proof.
 
 No local production build or npm publication is part of ordinary development. Use FAST validate and focused tests, then the combined PR's final CI matrix. Clean Windows 11 desktop policies remain separate from the native Windows Server runner's coverage.

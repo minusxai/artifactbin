@@ -158,6 +158,11 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
   it('packs once, runs the same tarball on every supported OS/runtime, and publishes those bytes',()=>{
     const pack=ci.jobs['cli-pack'];
     expect(pack).toBeDefined();
+    expect(pack.permissions).toEqual({contents:'read','id-token':'write'});
+    const signing=pack.steps.find(step=>step.run?.includes('npm-provenance.mjs sign'));
+    expect(signing.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(signing.run).not.toContain('GITHUB_SHA=');
+    expect(pack.steps.find(step=>step.with?.name==='afbin-npm-release').with.path).toContain('*.sigstore');
     expect(pack.steps.some(step=>step.run?.includes('pack:release'))).toBe(true);
     const matrix=ci.jobs.cli;
     expect(matrix.needs).toContain('cli-pack');
@@ -181,7 +186,7 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(proof.strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
     expect(proof.steps.some(step=>/npm run build/.test(step.run??''))).toBe(false);
     const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');
-    expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance --ignore-scripts');
+    expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance=false --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');
     expect(release).toContain('afbin-npm-release');
     expect(release).not.toContain('afbin-darwin');
     expect(existsSync(path.join(root,'.github/workflows/cli-runtime.yml'))).toBe(false);
