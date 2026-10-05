@@ -30,7 +30,7 @@ export async function checkDirectHttp({base,fetch,accountCookie,artifactId,stamp
   const refused=await api(`/api/artifacts/${id}`,json('PUT',{dataset:'region,amount\nEU,999\n',expectedVersion:before.version,expectedState:before.state},{'User-Agent':'afbin/0.3.21','X-Artifactbin-Protocol':'3'}));
   assert.equal(refused.status,426,'Retired native CLI is refused before mutation');
   assert.equal(refused.headers.get('X-Artifactbin-Protocol'),null);
-  const notice=await refused.json();assert.equal(notice.error,'cli_npm_required');assert.match(notice.message,/runs through npm/);assert.match(notice.hint,/npx --yes @afbin\/cli@latest/);assert.match(notice.hint,/npx\.cmd/);
+  const notice=await refused.json();assert.equal(notice.error,'cli_npm_required');assert.match(notice.message,/installs through npm/);assert.match(notice.message,/npx --yes @afbin\/cli@latest setup/);assert.match(notice.hint,/npx\.cmd/);
   const helperUrls=notice.hint.match(/https?:\/\/[^\s,)]+\/chat\/ensure-node\.(?:sh|ps1)/g)??[];
   assert.deepEqual(helperUrls,[`${base}/chat/ensure-node.sh`,`${base}/chat/ensure-node.ps1`],'Node setup helpers must use the public acceptance origin');
   const after=await read();assert.equal(after.version,before.version);assert.equal(after.state,before.state);assert.deepEqual(await content(),beforeContent,'Native refusal cannot change stored CSV');

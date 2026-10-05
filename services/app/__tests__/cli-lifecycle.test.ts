@@ -287,6 +287,7 @@ describe('cli-preconditions', () => {
    expect(response.status).toBe(426);
    const notice=await response.json();
    expect(notice.error).toBe('cli_npm_required');
+   expect(notice.message.startsWith('afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup')).toBe(true);
    expect(notice.hint).toContain('https://app.artifactbin.dev/chat/ensure-node.sh');
    expect(notice.hint).toContain('https://app.artifactbin.dev/chat/ensure-node.ps1');
    expect(notice.hint).not.toContain('artifactbin-app');
@@ -300,9 +301,12 @@ describe('cli-preconditions', () => {
    for(const agent of ['afbin/0.3.21','afbin/0.2.5'])for(const method of ['GET','POST']){
     const response=await(method==='GET'?list:create)(request('/api/artifacts',{method,token:token.token,headers:{'User-Agent':agent,'X-Artifactbin-Protocol':'3'},...(method==='POST'?{json:{markup:'<p>Must not publish</p>'}}:{})}));
     expect(response.status).toBe(426);
-    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_npm_required',message:expect.stringContaining('afbin now runs through npm'),fix:expect.stringContaining('npx --yes @afbin/cli@latest <command>')});
+    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_npm_required',message:'cli_npm_required: afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',fix:expect.stringContaining('ensure-node.sh')});
     expect(response.headers.get('X-Artifactbin-Protocol')).toBeNull();
-    expect((await response.json()).hint).toContain('npx.cmd');
+    const body=await response.json();
+    expect(body.message.startsWith('afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup')).toBe(true);
+    expect(body.hint).toContain('ensure-node.sh');
+    expect(body.hint).toContain('npx.cmd --yes @afbin/cli@latest setup');
    }
    expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
    for(const agent of ['afbin/0.4.0','afbin/1.0.0','afbin/broken','curl/8.0','afbin/0.3.21 extra',null]){
