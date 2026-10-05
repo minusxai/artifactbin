@@ -22,6 +22,7 @@ import { tsImport } from 'tsx/esm/api';
 import { lane } from './lane.mjs';
 import { fixtureFetch as fetch } from './fixture-http.mjs';
 import { connectAgent } from './cli-connection.mjs';
+import { checkGuestHttpIssuance, checkDirectHttp } from './http-conformance.mjs';
 import { loginViaEmail } from '../../lib/mail-login.mjs';
 
 /**
@@ -99,6 +100,7 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
       const profile = createHash('sha256').update(BASE).digest('hex').slice(0, 16);
       const saved = await readFile(join(home, 'hosts', profile, 'credentials.env'), 'utf8');
       const token = saved.match(/^ARTIFACTBIN_TOKEN=(.+)$/m)?.[1];
+      await step('guest session cannot mint a direct HTTP bearer', () => checkGuestHttpIssuance({base:BASE,fetch:globalThis.fetch,guestCookie}));
       let accountCookie;
       let id;
       let read;
@@ -142,6 +144,7 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
       const api = async (path, credential = token, init = {}) => fetch(`${BASE}${path}`, {
         ...init, headers: { ...(credential ? { authorization: `Bearer ${credential}` } : {}), ...init.headers },
       });
+      await scenario('email-only HTTP issuance, CSV read/write, retired native refusal and HTML filename', () => checkDirectHttp({base:BASE,fetch:globalThis.fetch,accountCookie,artifactId:id,stamp,onArtifact:created=>publishedIds.push(created)}));
       await step('CLI registration and publication preserve dataset identities', async () => {
         read = await api(`/api/artifacts/${id}`);
         assert.equal(read.status, 200);
