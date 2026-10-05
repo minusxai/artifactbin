@@ -45,3 +45,5 @@ export type {RunnerCapabilities,RunnerTerminal} from './runner';
 export * from './schedules';
 export {parseProgramDefinition,type ProgramDefinition} from './program';
 export * from './preview-connect';
+
+export {parseCommentViewState, COMMENT_VIEW_STATE_MAX_BYTES, type CommentViewState, type ReviewJson} from './comment-view-state';

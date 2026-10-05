@@ -20,9 +20,9 @@ const refused = async (script: string) => {
 };
 
 describe('the page module generator', () => {
-  it('exports exactly signal, query, mutation and proxy, each reading the runtime bindings by the name it is given', () => {
+  it('exports signal, query, mutation, proxy and reviewState, each reading the runtime bindings by the name it is given', () => {
     const source = pageModuleSource();
-    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation', 'proxy']);
+    expect([...source.matchAll(/export const (\w+)/g)].map((m) => m[1])).toEqual(['signal', 'query', 'mutation', 'proxy', 'reviewState']);
     expect(source).toContain('b.proxy(ref)');
     expect(source).toContain(`globalThis[${JSON.stringify(PAGE_GLOBAL)}]`);
     expect(source).toContain('b.signal(ref)');
@@ -97,7 +97,7 @@ describe('buildAuthorModule', () => {
   });
 
   it('refuses the retired per-name imports with the binder to use instead', async () => {
-    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, proxy, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
+    expect(await refused(`import { region } from 'page';`)).toMatch(/'page' exports signal, query, mutation, proxy, reviewState, not region; bind the declared name with const \[region, setRegion\] = signal\('\$region'\)/);
     expect(await refused(`import page from 'page';`)).toMatch(/import from 'page' by name/);
   });
 
@@ -129,4 +129,9 @@ describe('buildAuthorModule', () => {
     expect(await refused(`import x from './x.js';`)).toMatch(/nothing sits beside the script/);
     expect(await refused(`const a = ;`)).toMatch(/line 1:\d+/);
   });
+});
+
+it('publishes opt-in review state without requiring any Value declarations', async () => {
+  const result = await buildAuthorModule("import { reviewState } from 'page'; let screen = 'plans'; reviewState({id: 'navigation', get: () => screen, restore: value => {screen = value;}});", { values: [], queries: [], mutations: [] });
+  expect(result.ok).toBe(true);
 });
