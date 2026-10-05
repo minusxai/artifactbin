@@ -4,6 +4,7 @@ import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/story/data/dataflow';
 import { substituteRow } from '@/lib/story/data/row-scope';
+import { needsFrameReferrer } from '@/lib/story/styles/document-sources';
 import { AST_PATH_ATTR } from './ast-path';
 
 /** JSX attr names → React prop names for HTML tags (agents author HTML spellings). */
@@ -122,6 +123,9 @@ export function rawBuildProps(
     }
 
     props[name] = value;
+  }
+  if (!isComponent && tag.toLowerCase() === 'iframe' && typeof props.src === 'string' && needsFrameReferrer(props.src)) {
+    props.referrerpolicy = 'strict-origin-when-cross-origin';
   }
   return props;
 }
