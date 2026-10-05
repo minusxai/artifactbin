@@ -186,7 +186,7 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(proof.strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
     expect(proof.steps.some(step=>/npm run build/.test(step.run??''))).toBe(false);
     const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');
-    expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance=false --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');
+    expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');
     expect(release).toContain('afbin-npm-release');
     expect(release).not.toContain('afbin-darwin');
     expect(existsSync(path.join(root,'.github/workflows/cli-runtime.yml'))).toBe(false);

@@ -91,12 +91,12 @@ jobs:
               echo 'First publication requires a verified maintainer npm login. No GitHub release has been created.'
               echo 'After successful main CI and publication approval, run locally:'
               echo "gh run download $PACKAGE_BUILD_RUN --repo $GITHUB_REPOSITORY --name afbin-npm-release --dir afbin-first-release"
-              echo "npm publish afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz --access public --provenance=false --provenance-file afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz.sigstore --ignore-scripts"
+              echo "npm publish afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz --access public --provenance-file afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz.sigstore --ignore-scripts"
               echo "Then configure npm trusted publishing with direct publish allowed and run: gh run rerun $GITHUB_RUN_ID --repo $GITHUB_REPOSITORY"
               exit 0
             fi
             test "$(cat npm-package.txt)" = '@afbin/cli'
-            npm publish "$PACKAGE_FILE" --access public --provenance=false --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts
+            npm publish "$PACKAGE_FILE" --access public --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts
           fi
           echo "published=true" >> "$GITHUB_OUTPUT"
       - name: Record tested package in GitHub release

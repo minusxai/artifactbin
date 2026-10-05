@@ -1,4 +1,10 @@
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {parse} from 'yaml';
+import {npmDriver} from '../ci/npm-driver.mjs';
 import {describe,it,expect} from 'vitest';
 import {artifactSubject,inspectBundle,signArtifact} from '../ci/npm-provenance.mjs';
 const bytes=Buffer.from('the actual tested tarball');
@@ -20,4 +26,21 @@ describe('tested npm artifact provenance boundary',()=>{
   expect(result).toBe(signed);expect(calls).toEqual([[subject],subject]);
   await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>signed,verifyProvenance:async()=>{throw Error('untrusted signature');}})).rejects.toThrow('untrusted signature');
  });
+});
+
+it('accepts the actual workflow publish arguments through npm CLI without conflicting provenance flags',()=>{
+ const fixture=mkdtempSync(join(tmpdir(),'afbin-publish-args-'));
+ try{
+  writeFileSync(join(fixture,'package.json'),JSON.stringify({name:'@afbin/cli-publish-argument-test',version:'0.0.0'}));
+  const provenance=join(fixture,'bundle.sigstore');writeFileSync(provenance,'{}');
+  const config=join(fixture,'empty.npmrc');writeFileSync(config,'');
+  const definition=parse(readFileSync(resolve(import.meta.dirname,'../../.github/workflows/release-cli.yml'),'utf8'));
+  const command=definition.jobs.release.steps.find(step=>step.id==='publish').run.match(/^\s*npm publish "\$PACKAGE_FILE" (.+)$/m)[1];
+  const args=command.match(/"[^"]*"|\S+/g).map(value=>value.replace(/^"|"$/g,'').replace('$PACKAGE_FILE.sigstore',provenance));
+  const invoke=extra=>spawnSync(process.execPath,[npmDriver(),'publish',fixture,...extra,'--dry-run','--json','--offline','--registry','http://127.0.0.1:1','--userconfig',config],{cwd:fixture,encoding:'utf8',timeout:15000,env:{...process.env,npm_config_cache:join(fixture,'cache')}});
+  // npm's real CLI rejects even false when both mutually exclusive config keys are present.
+  const incompatible=invoke(['--access','public','--provenance=false','--provenance-file',provenance,'--ignore-scripts']);
+  expect(incompatible.status).not.toBe(0);expect(incompatible.stderr).toMatch(/provenance-file.*can not be provided when using --provenance/);
+  const actual=invoke(args);expect(actual.status,actual.stderr).toBe(0);expect(JSON.parse(actual.stdout).name).toBe('@afbin/cli-publish-argument-test');
+ }finally{rmSync(fixture,{recursive:true,force:true});}
 });
