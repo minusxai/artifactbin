@@ -1,8 +1,8 @@
 /** Execute the npm publisher's actual shell steps against isolated GitHub/npm fixtures. */
 import {spawnSync} from 'node:child_process';
-import {chmodSync,cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {chmodSync,cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {it,expect} from 'vitest';
 import {parse} from 'yaml';
@@ -28,10 +28,29 @@ function packageBytes(version,options={}){
   return readFileSync(file);
  }finally{rmSync(fixture,{recursive:true,force:true});}
 }
+/** The checked-out tree the transition verifier reads: its own script, the package version, the protocol and the pinned bootstrap. */
+function transitionTree(directory,version){
+ mkdirSync(join(directory,'services/cli/scripts'),{recursive:true});mkdirSync(join(directory,'services/cli/transition'),{recursive:true});mkdirSync(join(directory,'services/contracts/src'),{recursive:true});
+ cpSync(join(root,'services/cli/scripts/transition-assets.mjs'),join(directory,'services/cli/scripts/transition-assets.mjs'));
+ writeFileSync(join(directory,'services/cli/package.json'),JSON.stringify({name:'@afbin/cli',version}));
+ writeFileSync(join(directory,'services/contracts/src/cli-auth.ts'),'export const CLI_PROTOCOL_VERSION = 3;\n');
+ writeFileSync(join(directory,'services/cli/transition/afbin'),readFileSync(join(root,'services/cli/transition/afbin'),'utf8').replace(/^AFBIN_VERSION=.*$/m,`AFBIN_VERSION=${version}`).replace(/^AFBIN_PROTOCOL=.*$/m,'AFBIN_PROTOCOL=3'),{mode:0o755});
+}
+/** The nine files old 0.3.x installs download, built by the real builder from a stub tree. */
+function transitionFiles(version){
+ const fixture=mkdtempSync(join(tmpdir(),'npm-release-transition-'));
+ try{
+  transitionTree(fixture,version);mkdirSync(join(fixture,'services/cli/src/generated'),{recursive:true});
+  writeFileSync(join(fixture,'services/cli/src/generated/teaching.json'),JSON.stringify({version,protocol:3,files:{'SKILL.md':'# artifactbin\n','references/errors.md':'__AFBIN_SERVER__/chat\n'}}));
+  const out=join(fixture,'out'),built=spawnSync(process.execPath,[join(fixture,'services/cli/scripts/transition-assets.mjs'),'build',out],{encoding:'utf8'});if(built.status!==0)throw Error(built.stderr);
+  return Object.fromEntries(readdirSync(out).map(name=>[`transition/${name}`,readFileSync(join(out,name)).toString('base64')]));
+ }finally{rmSync(fixture,{recursive:true,force:true});}
+}
+const TRANSITION=[...['darwin-arm64','darwin-x64','linux-arm64','linux-x64'].flatMap(target=>[`afbin-${target}`,`afbin-${target}.manifest.json`]),'afbin-skills.json'];
 function artifact(version,bytes=packageBytes(version),run='42',source=sha('b'),head=source){
  const statement={_type:'https://in-toto.io/Statement/v1',subject:[{name:`pkg:npm/%40afbin/cli@${version}`,digest:{sha512:createHash('sha512').update(bytes).digest('hex')}}],predicateType:'https://slsa.dev/provenance/v1',predicate:{buildDefinition:{externalParameters:{workflow:{repository:'https://github.com/minusxai/artifactbin',path:'.github/workflows/ci.yml',ref:'refs/pull/12/merge'}},resolvedDependencies:[{uri:'git+https://github.com/minusxai/artifactbin@refs/heads/main',digest:{gitCommit:source}}]},runDetails:{metadata:{invocationId:`https://github.com/minusxai/artifactbin/actions/runs/${run}/attempts/1`}}}};
  const bundle={dsseEnvelope:{payload:Buffer.from(JSON.stringify(statement)).toString('base64'),signatures:[{sig:'fixture-signature'}]},verificationMaterial:{}};
- return {'afbin-npm-release':{[`afbin-cli-${version}.tgz`]:bytes.toString('base64'),[`afbin-cli-${version}.tgz.sigstore`]:Buffer.from(JSON.stringify(bundle)).toString('base64'),[`afbin-cli-${version}.tgz.build.json`]:Buffer.from(JSON.stringify({run_id:run,source_sha:source,head_sha:head})).toString('base64')}};
+ return {'afbin-npm-release':{[`afbin-cli-${version}.tgz`]:bytes.toString('base64'),[`afbin-cli-${version}.tgz.sigstore`]:Buffer.from(JSON.stringify(bundle)).toString('base64'),[`afbin-cli-${version}.tgz.build.json`]:Buffer.from(JSON.stringify({run_id:run,source_sha:source,head_sha:head})).toString('base64'),...transitionFiles(version)}};
 }
 const receipt=id=>({'tested-run':{'tested-run.json':Buffer.from(JSON.stringify({run_id:id})).toString('base64')}});
 const GH=String.raw`#!${process.execPath}
@@ -45,10 +64,11 @@ if(args[0]==='api'){
  const build=/^actions\/runs\/(\d+)$/.exec(route);if(build)answer({head_sha:state.buildSources?.[build[1]]??'b'.repeat(40),conclusion:'success',event:'push',head_branch:'main',path:'.github/workflows/ci.yml',head_repository:{full_name:'minusxai/artifactbin'},...state.runMetadata?.[build[1]]});
  const run=/actions\/runs\/(\d+)\/artifacts/.exec(route);if(run)answer({artifacts:Object.keys(state.runs[run[1]]??{}).map(name=>({name,expired:false}))});
 }
-if(args[0]==='run'&&args[1]==='download'){const files=state.runs[args[2]]?.[flag('--name')];if(!files)fail('No artifact');fs.mkdirSync(flag('--dir'),{recursive:true});for(const [name,data]of Object.entries(files))fs.writeFileSync(path.join(flag('--dir'),name),Buffer.from(data,'base64'));process.exit(0);}
+if(args[0]==='run'&&args[1]==='download'){const files=state.runs[args[2]]?.[flag('--name')];if(!files)fail('No artifact');fs.mkdirSync(flag('--dir'),{recursive:true});for(const [name,data]of Object.entries(files)){const target=path.join(flag('--dir'),name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,Buffer.from(data,'base64'));}process.exit(0);}
+const assets=()=>{const end=args.findIndex((a,i)=>i>2&&a.startsWith('--'));return args.slice(3,end).map(file=>{if(!fs.existsSync(file))fail('Missing asset '+file);return path.basename(file);});};
 if(args[0]==='release'&&args[1]==='view'){if(!state.releases[args[2]])fail('HTTP 404');answer({isDraft:state.releases[args[2]].draft});}
-if(args[0]==='release'&&args[1]==='create'){state.calls.push('release '+args[2]+' '+flag('--target'));state.releases[args[2]]={draft:false};save();process.exit(0);}
-if(args[0]==='release'&&args[1]==='upload'){state.calls.push('upload '+args[2]);save();process.exit(0);}
+if(args[0]==='release'&&args[1]==='create'){state.assets[args[2]]=assets();state.calls.push('release '+args[2]+' '+flag('--target'));state.releases[args[2]]={draft:false};save();process.exit(0);}
+if(args[0]==='release'&&args[1]==='upload'){state.assets[args[2]]=assets();state.calls.push('upload '+args[2]);save();process.exit(0);}
 if(args[0]==='release'&&args[1]==='edit'){state.calls.push('finish '+args[2]);state.releases[args[2]]={draft:false};save();process.exit(0);}
 fail('Unexpected gh '+args.join(' '));
 `;
@@ -61,8 +81,9 @@ throw Error('Unexpected npm '+args.join(' '));
 function release(repo,source,event='workflow_run',requestedRun='42'){
  const fixture=mkdtempSync(join(tmpdir(),'npm-release-flow-'));
  try{
-  const state=join(fixture,'state.json');writeFileSync(state,JSON.stringify({releases:{},runs:{},published:{},calls:[],...repo}));mkdirSync(join(fixture,'bin'));for(const [name,code]of [['gh',GH],['npm',NPM]]){const file=join(fixture,'bin',name);writeFileSync(file,code);chmodSync(file,0o755);}
+  const state=join(fixture,'state.json');writeFileSync(state,JSON.stringify({releases:{},runs:{},published:{},calls:[],assets:{},...repo}));mkdirSync(join(fixture,'bin'));for(const [name,code]of [['gh',GH],['npm',NPM]]){const file=join(fixture,'bin',name);writeFileSync(file,code);chmodSync(file,0o755);}
   mkdirSync(join(fixture,'scripts/ci'),{recursive:true});for(const file of ['npm-provenance.mjs','npm-driver.mjs'])cpSync(join(root,'scripts/ci',file),join(fixture,'scripts/ci',file));
+  transitionTree(fixture,repo.checkout??'0.4.0');
   // Mock only npm's official crypto boundary. Real carrier/source checks and shell run below.
   const fakeNpm=join(fixture,'fixture-npm');mkdirSync(join(fakeNpm,'bin'),{recursive:true});mkdirSync(join(fakeNpm,'node_modules/libnpmpublish/lib'),{recursive:true});mkdirSync(join(fakeNpm,'node_modules/sigstore'),{recursive:true});
   writeFileSync(join(fakeNpm,'package.json'),JSON.stringify({version:'11.19.0'}));writeFileSync(join(fakeNpm,'bin/npm-cli.js'),'');
@@ -88,6 +109,8 @@ function release(repo,source,event='workflow_run',requestedRun='42'){
 const base=()=>({head:sha('c'),commits:{[sha('b')]:{version:'0.4.0'},[sha('c')]:{version:'0.4.0'}},runs:{42:artifact('0.4.0')}});
 it('publishes exactly the artifact from the reused tested run after a rebase merge',()=>{
  const bytes=packageBytes('0.4.0');const repo={...base(),buildSources:{7:sha('d')},runs:{42:receipt(7),7:artifact('0.4.0',bytes,'7',sha('a'),sha('d'))}};const result=release(repo,sha('b'));expect(result.failure).toBeNull();expect(result.calls).toEqual(['npm '+integrity(bytes).slice(7),`release afbin-v0.4.0 ${sha('b')}`]);
+ // The release old 0.3.x installs update from carries the tarball and the nine transition files.
+ expect(result.assets['afbin-v0.4.0'].sort()).toEqual(['afbin-cli-0.4.0.tgz',...TRANSITION].sort());
 });
 it('allows a maintainer retry only for successful owned main push CI',()=>{
  const result=release(base(),sha('c'),'workflow_dispatch');expect(result.failure).toBeNull();
@@ -114,6 +137,7 @@ it('leaves an existing published GitHub release alone and recovers an incomplete
  const bytes=packageBytes('0.4.0');const repo={...base(),runs:{42:artifact('0.4.0',bytes)},published:{'0.4.0':integrity(bytes)}};
  const published=release({...repo,releases:{'afbin-v0.4.0':{draft:false}}},sha('b'));expect(published.failure).toBeNull();expect(published.calls).toEqual([]);
  const draft=release({...repo,releases:{'afbin-v0.4.0':{draft:true}}},sha('b'));expect(draft.failure).toBeNull();expect(draft.calls).toEqual(['upload afbin-v0.4.0','finish afbin-v0.4.0']);
+ expect(draft.assets['afbin-v0.4.0'].sort()).toEqual(['afbin-cli-0.4.0.tgz',...TRANSITION].sort());
 });
 it('fails a registry outage without mistaking it for a missing version to publish',()=>{const result=release({...base(),registryError:true},sha('b'));expect(result.failure).toMatch(/E500/);expect(result.calls).toEqual([]);});
 
@@ -134,4 +158,15 @@ it('rejects missing provenance and bundle subjects from different bytes or build
 it('rejects a tampered signature at the official crypto boundary before first publication or release',()=>{
  const value=artifact('0.4.0'),files=value['afbin-npm-release'],key='afbin-cli-0.4.0.tgz.sigstore',bundle=JSON.parse(Buffer.from(files[key],'base64'));bundle.dsseEnvelope.signatures[0].sig='tampered';files[key]=Buffer.from(JSON.stringify(bundle)).toString('base64');
  const result=release({...base(),runs:{42:value},packageAbsent:true},sha('b'));expect(result.failure).toMatch(/Untrusted fixture signature/);expect(result.calls).toEqual([]);
+});
+
+it('refuses to publish when the transition files old installs download are missing, tampered or for another release',()=>{
+ const cases=[
+  files=>{for(const name of Object.keys(files))if(name.startsWith('transition/'))delete files[name];},
+  files=>{delete files['transition/afbin-skills.json'];},
+  files=>{files['transition/afbin-linux-x64']=Buffer.from('#!/bin/sh\necho tampered\n').toString('base64');},
+ ];
+ for(const alter of cases){const value=artifact('0.4.0');alter(value['afbin-npm-release']);const result=release({...base(),runs:{42:value}},sha('b'));expect(result.failure).toMatch(/transition assets/);expect(result.calls).toEqual([]);}
+ const stale=release({...base(),runs:{42:artifact('0.4.0')},checkout:'0.4.1',commits:{[sha('b')]:{version:'0.4.0'},[sha('c')]:{version:'0.4.0'}}},sha('b'));
+ expect(stale.failure).toMatch(/transition assets/);expect(stale.calls).toEqual([]);
 });
