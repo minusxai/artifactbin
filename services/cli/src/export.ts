@@ -1,3 +1,6 @@
+import {artifactFileName} from '@artifactbin/utils/artifact-reference';
+import {readArtifactFileHtml} from './local-html-import';
+import {parseDocument} from './document';
 import {renderLocalHtml} from './local-html-runtime';
 import {renderLocalImage} from './local-image-runtime';
 import type {LocalImageRenderer} from './local-image-options';
@@ -45,7 +48,7 @@ interface ExportOptions {
  localHtml?:typeof renderLocalHtml;localImage?:LocalImageRenderer;type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
  server:string;/** Verified other addresses of `server`. */aliases?:readonly string[];client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
 }
-interface ExportTarget {ref:string;format:string;id?:string;path?:string;version?:number;render:boolean}
+interface ExportTarget {ref:string;format:string;id?:string;path?:string;version?:number;render:boolean;htmlName?:string;defaultHtmlName?:boolean}
 interface ExportResult {path?:string;bytes:Buffer;format:string}
 
 /**
@@ -81,22 +84,25 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
    targets.push({ref:input,format,render:true,...(ref.version!==undefined?{version:ref.version}:{}),...(path!==undefined?{path}:{id:ref.kind==='id'?ref.id:undefined})});
   }else targets.push({ref:input,format,render:false,...(ref.kind==='id'?{id:ref.id,...(ref.version?{version:ref.version}:{})}:{path:ref.path,...(ref.version?{version:ref.version}:{})})});
  }
- const destinations=await plan(workspace,targets,options);
+ let destinations=await plan(workspace,targets,options,true);
  // A dry run reports destinations and the capability each target needs; it renders nothing,
  // writes nothing and never sets up credentials.
  if(options.dryRun){
-  options.emit({dry_run:true,operations:targets.map((target,index)=>({ref:target.ref,format:target.format,...(destinations[index]?{path:destinations[index]}:{output:'-'}),
+  options.emit({dry_run:true,operations:targets.map((target,index)=>({ref:target.ref,format:target.format,...(destinations[index]===null?{filename_pending:true,message:'The final filename uses the ID and title captured during export.'}:destinations[index]!==undefined?{path:destinations[index]}:{output:'-'}),
    requires:target.render?(target.path!==undefined?'local_rendering':'server_rendering'):'local_conversion',status:'would_write'}))});
   return true;
  }
  if(targets.some(target=>target.id!==undefined&&!options.client))return false;
  const results:ExportResult[]=[];
- for(const [index,target] of targets.entries()){
+ for(const target of targets){
   const bytes=target.render
    ?await renderTarget(workspace,target,options)
    :target.path!==undefined?await convertLocal(workspace,target,options):await convertRemote(target,options);
-  results.push({...(destinations[index]!==undefined?{path:destinations[index]}:{}),bytes,format:target.format});
+  if(target.defaultHtmlName){const file=readArtifactFileHtml(bytes.toString('utf8'));target.htmlName=artifactFileName(file.artifactId,file.metadata.title);}
+  results.push({bytes,format:target.format});
  }
+ if(targets.some(target=>target.defaultHtmlName))destinations=await plan(workspace,targets,options);
+ for(const [index,result] of results.entries()){const destination=destinations[index];if(destination!==undefined&&destination!==null)result.path=destination;}
  const operations=[];
  for(const result of results){
   if(result.path===undefined){stdoutBytes(result.bytes);operations.push({format:result.format,output:'-',status:'written'});continue;}
@@ -181,8 +187,8 @@ function serialize(rows:Record<string,unknown>[],format:string):Buffer{
  return Buffer.from(JSON.stringify(rows,null,2)+'\n');
 }
 
-/** Destinations are decided for every target before anything is rendered or written. */
-async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOptions):Promise<(string|undefined)[]>{
+/** Explicit destinations are checked before rendering; default HTML names use its captured identity before any output is written. */
+async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOptions,deferHtml=false):Promise<(string|undefined|null)[]>{
  if(options.output==='-')return targets.map(()=>undefined);
  const outputPath=options.output?await confinedPath(workspace.root,resolve(workspace.cwd,options.output)).catch(error=>{
   // `--output /tmp/x.png` from a workspace elsewhere: an agent tried it in three tasks and got a generic failure.
@@ -192,18 +198,27 @@ async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOpt
  const outputStat=outputPath?await stat(outputPath).catch(error=>{if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}):null;
  if(targets.length>1&&outputPath&&!outputStat?.isDirectory())throw new CliError('ambiguous_output','Several exports require an --output directory.','Export one resource at a time, or create the directory.');
  const directory=outputStat?.isDirectory()?relative(workspace.root,outputPath!):undefined;
- const taken=new Set<string>();const destinations:(string|undefined)[]=[];
+ const taken=new Set<string>();const destinations:(string|undefined|null)[]=[];
  for(const target of targets){
-  if(outputPath&&!directory){destinations.push(relative(workspace.root,outputPath));taken.add(destinations.at(-1)!);continue;}
+  if(outputPath&&directory===undefined){destinations.push(relative(workspace.root,outputPath));taken.add(destinations.at(-1)!);continue;}
+  if(target.format==='html'){
+   target.defaultHtmlName=true;
+   if(deferHtml&&options.dryRun&&target.path!==undefined){
+    const bytes=await readOptional(await confinedPath(workspace.root,target.path));
+    if(bytes){const document=parseDocument(bytes.toString());if(document.metadata.id)target.htmlName=artifactFileName(document.metadata.id,document.metadata.title??target.path);}
+   }
+   if(!target.htmlName){destinations.push(null);continue;}
+  }
   const base=target.path!==undefined?basename(target.path,extname(target.path)):target.id!;
   const extension=target.format==='original'?originalExtension(target)??'.bin':`.${EXTENSIONS[target.format]}`;
-  let path=join(directory??'',`${base}${extension}`);
-  for(let attempt=2;taken.has(path)||path===target.path;attempt++)path=join(directory??'',`${base}-${attempt}${extension}`);
+  const name=target.htmlName??`${base}${extension}`;
+  let path=join(directory??'',name);
+  for(let attempt=2;taken.has(path)||path===target.path;attempt++)path=join(directory??'',target.htmlName?`${target.htmlName.slice(0,-9)}-${attempt}.jsx.html`:`${base}-${attempt}${extension}`);
   taken.add(path);destinations.push(path);
  }
  const sources=new Set([...targets.flatMap(target=>target.path===undefined?[]:[target.path]),...Object.values(await localIdentities(workspace))]);
  for(const destination of destinations){
-  if(destination===undefined)continue;
+  if(destination===undefined||destination===null)continue;
   if(sources.has(destination))throw new CliError('output_exists',`${destination} is a source file.`,'Choose a different output file.');
   if(!options.force&&await readOptional(await confinedPath(workspace.root,destination)))throw new CliError('output_exists',`${destination} already exists.`,'Choose a free --output path, or use --force.');
  }

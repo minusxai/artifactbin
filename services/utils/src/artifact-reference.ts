@@ -1,4 +1,4 @@
-import {ARTIFACT_SEGMENT_PATTERN} from '@artifactbin/contracts';
+import {ARTIFACT_ID_PATTERN,ARTIFACT_SEGMENT_PATTERN} from '@artifactbin/contracts';
 
 /** `/a/<segment>` or `/@<username>/<segment>`; group 1 is the segment, group 2 whatever follows it. */
 const ARTIFACT_PATH_PATTERN=/^\/(?:a|@[^/]+)\/([^/]+)(\/.*)?$/;
@@ -28,4 +28,17 @@ export function artifactIdFromPath(pathname:string):string|null{
  */
 export function artifactIdFromPathPrefix(pathname:string):string|null{
  return artifactIdFrom(pathname,true);
+}
+
+/** Derived from the title, shared by URL decoration and portable filenames. */
+export function titleSlug(title:string|null|undefined):string{
+ if(!title)return '';
+ return title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60).replace(/-+$/,'');
+}
+
+/** The stable artifact identity survives downloads, renames and portable edits. */
+export function artifactFileName(id:string,title:string|null|undefined):string{
+ if(!ARTIFACT_ID_PATTERN.test(id))throw new Error('Invalid artifact ID for filename.');
+ const slug=titleSlug(title);
+ return `${id}${slug?`-${slug}`:''}.jsx.html`;
 }

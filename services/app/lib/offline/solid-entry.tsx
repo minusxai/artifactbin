@@ -270,10 +270,10 @@ function OfflineShell(props: Opened) {
       if (!dirty()) return;
       const generation = editGeneration;
       // Preserve the downloaded runtime and matching served markup; the saved source is projected after hydration.
-      const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current.metadata.title), handle: saveHandle });
+      const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current), handle: saveHandle });
       if (result.outcome !== 'cancelled') {
         saveHandle = result.handle;
-        const target = result.handle?.name || suggestedFileName(current.metadata.title);
+        const target = result.handle?.name || suggestedFileName(current);
         setSaveReceipt(result.outcome === 'written'
           ? `Saved to “${target}”. This tab stays on the file you opened. If you chose another location, open that saved file to continue. Later saves in this tab update the selected file.`
           : `Downloaded updated “${target}”. Open the downloaded file to continue. This tab stays on the file you opened.`);
@@ -303,7 +303,7 @@ function OfflineShell(props: Opened) {
         origin,
         prepare: async () => {
           const current = await flushFile();
-          return { html: renderArtifactFileHtml({ ...props.parts, file: current }), filename: suggestedFileName(current.metadata.title) };
+          return { html: renderArtifactFileHtml({ ...props.parts, file: current }), filename: suggestedFileName(current) };
         },
         onStatus: setConnectStatus,
         onError: (message) => { setConnecting(false); setConnectStatus(''); setConnectError(message); },

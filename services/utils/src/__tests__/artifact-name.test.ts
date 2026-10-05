@@ -10,5 +10,6 @@ describe('artifact identity filenames',()=>{
   expect(artifactFileName('4B7rjX','🦊')).toBe('4B7rjX.jsx.html');
   expect(artifactFileName('4B7rjX','../ A: B / C')).toBe('4B7rjX-a-b-c.jsx.html');
   expect(titleSlug('x'.repeat(100))).toHaveLength(60);
+  expect(()=>artifactFileName('../report','Report')).toThrow('Invalid artifact ID');
  });
 });

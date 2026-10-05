@@ -16,18 +16,8 @@
  *   /a/<id>                            anonymous (or owner has no username yet)
  *   /@<username>/<id>[-<title-slug>]   owned
  */
-import {artifactIdFromSegment} from '@artifactbin/utils/artifact-reference';
-
-/** Derived from the title on every render — never stored, never trusted on read. */
-export function titleSlug(title: string | null | undefined): string {
-  if (!title) return '';
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-    .replace(/-+$/, '');
-}
+import {artifactIdFromSegment,titleSlug} from '@artifactbin/utils/artifact-reference';
+export {titleSlug} from '@artifactbin/utils/artifact-reference';
 
 /**
  * The forgiving parse: given the path segments AFTER /@username/, find the

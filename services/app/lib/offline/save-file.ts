@@ -13,6 +13,7 @@
  * Blob (the page's CSP governs fetches, not a download). The `data:` URL is
  * the fallback for a browser where creating the Blob URL itself throws.
  */
+import {artifactFileName} from '@artifactbin/utils/artifact-reference';
 import type { ArtifactFile } from './file-format';
 import { renderArtifactFileHtml } from './file-html';
 
@@ -22,17 +23,15 @@ interface WritableFile { write(data: Blob | string): Promise<void>; close(): Pro
 export interface SaveHandle { name?: string; createWritable(): Promise<WritableFile> }
 type SavePicker = (options: { suggestedName: string; types: Array<{ description: string; accept: Record<string, string[]> }> }) => Promise<SaveHandle>;
 
-/** The file name to suggest: the one this copy was opened from, else the document's title. */
-export function suggestedFileName(title: string, location: Pick<Location, 'protocol' | 'pathname'> | null = typeof window === 'undefined' ? null : window.location): string {
+/** Preserve an opened filename; new copies use the shared artifact ID and URL title slug. */
+export function suggestedFileName(file: Pick<ArtifactFile,'artifactId'|'metadata'>, location: Pick<Location, 'protocol' | 'pathname'> | null = typeof window === 'undefined' ? null : window.location): string {
   if (location?.protocol === 'file:') {
     try {
       const name = decodeURIComponent(location.pathname.split('/').pop() ?? '');
-      if (/\.jsx\.html$/i.test(name)) return name;
-      if (/\.html?$/i.test(name)) return `${name.replace(/\.html?$/i, '')}.jsx.html`;
+      if (/\.html?$/i.test(name)) return name;
     } catch { /* an undecodable path: fall back to the title */ }
   }
-  const safe = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-  return `${safe || 'artifactbin document'}.jsx.html`;
+  return artifactFileName(file.artifactId,file.metadata.title);
 }
 
 function download(html: string, name: string, doc: Document): void {

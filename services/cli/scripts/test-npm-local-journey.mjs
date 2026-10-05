@@ -48,7 +48,7 @@ async function get(origin,path){const response=await fetch(origin+path);assert.e
 async function post(origin,path,data){const response=await fetch(origin+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});assert.equal(response.status,200,`${path}: ${await response.clone().text()}`);return response.json();}
 const body=source=>source.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,'');
 
-let active,browser;
+let active,browser,exported;
 const diagnostics=resolve('test-results','local-journey');
 const browserEvents=[],trackedPages=[];
 function trackPage(page,label){
@@ -61,7 +61,7 @@ function trackPage(page,label){
 async function retainDiagnostics(error){
  await mkdir(diagnostics,{recursive:true});
  await writeFile(join(diagnostics,'failure.json'),JSON.stringify({error:error.stack??String(error),entry,scratch,remoteRequests,browserEvents},null,2));
- for(const [label,path] of [['exported',join(copy,'report.jsx.html')],['saved',join(recovery,'report.jsx.html')],['source',join(copy,'report.jsx')]]){
+ for(const [label,path] of [['exported',exported??join(copy,'report.jsx.html')],['saved',join(recovery,'report.jsx.html')],['source',join(copy,'report.jsx')]]){
   try{const content=await readFile(path,'utf8');await writeFile(join(diagnostics,label+(label==='source'?'.jsx':'.html')),content);if(label!=='source')await writeFile(join(diagnostics,label+'-carrier.json'),JSON.stringify(payload(content),null,2));}catch(reason){await writeFile(join(diagnostics,label+'-unavailable.txt'),String(reason));}
  }
  for(const {page,label} of trackedPages){
@@ -101,7 +101,8 @@ try{
  await context.close();await active.close();active=undefined;
  assert.equal(remoteBrowserRequests,0);
  await command(copy,profiles[1],['export','report.jsx','--format','html','--json']);
- const exported=join(copy,'report.jsx.html');const html=await readFile(exported,'utf8');const file=payload(html);
+ exported=join(copy,`${ids['report.jsx']}-report-jsx.jsx.html`);const html=await readFile(exported,'utf8');const file=payload(html);
+ assert.equal(file.metadata.title,'report.jsx');
  assert.equal(file.artifactId,ids['report.jsx']);assert.equal(file.threads[0].id,thread.id);assert.deepEqual(Object.keys(file.localWorkspace.assets).sort(),[ids['sales.csv'],ids['pixel.png']].sort());
  const offline=await browser.newContext({acceptDownloads:true});await offline.addInitScript(()=>{delete window.showSaveFilePicker;});
  let offlineRequests=0;await offline.route(/^https?:/,route=>{if(active&&new URL(route.request().url()).origin===active.origin)return route.continue();offlineRequests++;return route.abort();});
@@ -114,6 +115,7 @@ try{
  await offlinePage.keyboard.insertText('Offline saved report');await offlinePage.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
  const downloaded=await Promise.all([offlinePage.waitForEvent('download'),offlinePage.keyboard.press('Control+s')]);
  await offlinePage.getByRole('button',{name:'Done editing',exact:true}).click();
+ assert.equal(downloaded[0].suggestedFilename(),`${ids['report.jsx']}-report-jsx.jsx.html`);
  const savedHtml=join(recovery,'report.jsx.html');await downloaded[0].saveAs(savedHtml);
  const incoming=payload(await readFile(savedHtml,'utf8'));assert.match(incoming.source,/Offline saved report/);assert.equal(incoming.threads[0].id,thread.id);
  const reopened=trackPage(await offline.newPage(),'reopened');await reopened.goto(pathToFileURL(savedHtml).href);await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();await reopened.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));

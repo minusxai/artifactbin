@@ -1,9 +1,12 @@
 import {stateFor} from '../src/state-access';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,writeFile,readFile,realpath} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile,realpath,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
+import {parseDocument} from '../src/document';
+import {registerLocalFiles} from '../src/local-workspace';
+import {readArtifactFileHtml} from '../src/local-html-import';
 import {HttpClient} from '../src/http';
 import {serverRenderer,exportResources} from '../src/export';
 import {loadWorkspace} from '../src/workspace';
@@ -237,15 +240,44 @@ test('image download refuses ambiguous requests, escapes and failed responses wi
  }finally{await h.cleanup();}
 });
 
- test('local HTML exports the current draft without credentials and defaults to jsx.html',async()=>{
+test('local HTML default filename uses the identity captured by rendering without preregistration',async()=>{
  const h=await cliHarness('local-html-export-',{token:null});
  try{
-  await writeFile(join(h.root,'draft.jsx'),'<p>Unsynced</p>');
+  const source='---\ntitle: "Artifact + run: a proposal"\n---\n<p>Unsynced</p>';
+  await writeFile(join(h.root,'draft.jsx'),source);
   const workspace=await loadWorkspace(h.root,h.root);let calls=0;
-  const options={format:'html',server:'https://example.com',emit:()=>{},localHtml:async()=>{calls++;return Buffer.from('<!doctype html>local draft');}};
-  assert.equal(await exportResources(workspace,['draft.jsx'],{...options,dryRun:true,emit:value=>assert.equal((value as any).operations[0].requires,'local_rendering')}),true);
-  assert.equal(calls,0);assert.equal(await exportResources(workspace,['draft.jsx'],options),true);
-  assert.equal(calls,1);assert.equal(await readFile(join(h.root,'draft.jsx.html'),'utf8'),'<!doctype html>local draft');
-  assert.equal(h.network(),0);
+  const fixture=JSON.parse(await readFile(resolve(import.meta.dirname,'../../../scripts/fixtures/offline-file/artifact-file.json'),'utf8'));
+  const options={format:'html',server:'https://example.com',emit:()=>{},localHtml:async()=>{
+   calls++;await registerLocalFiles(workspace,['draft.jsx']);
+   const document=parseDocument(await readFile(join(h.root,'draft.jsx'),'utf8'));
+   return Buffer.from(`<script type="application/json" id="afbin-file">${JSON.stringify({...fixture,artifactId:document.metadata.id,metadata:{...fixture.metadata,title:document.metadata.title}}).replace(/</g,'\\u003c')}</script>`);
+  }};
+  assert.equal(await exportResources(workspace,['draft.jsx'],{...options,dryRun:true,emit:value=>{
+   assert.equal((value as any).operations[0].requires,'local_rendering');assert.equal((value as any).operations[0].filename_pending,true);
+  }}),true);
+  assert.equal(calls,0);assert.equal(await readFile(join(h.root,'draft.jsx'),'utf8'),source);
+  assert.equal(await exportResources(workspace,['draft.jsx'],options),true);
+  const id=parseDocument(await readFile(join(h.root,'draft.jsx'),'utf8')).metadata.id;
+  const output=await readFile(join(h.root,`${id}-artifact-run-a-proposal.jsx.html`),'utf8');
+  assert.equal(readArtifactFileHtml(output).artifactId,id);assert.equal(calls,1);assert.equal(h.network(),0);
+  await assert.rejects(exportResources(workspace,['draft.jsx'],options),/already exists/);
+  await mkdir(join(h.root,'copies'));
+  await exportResources(workspace,['draft.jsx'],{...options,output:'copies'});
+  assert.equal(readArtifactFileHtml(await readFile(join(h.root,'copies',`${id}-artifact-run-a-proposal.jsx.html`),'utf8')).artifactId,id);
+  assert.equal(await exportResources(workspace,['draft.jsx'],{...options,output:'chosen.html'}),true);
+  assert.equal(readArtifactFileHtml(await readFile(join(h.root,'chosen.html'),'utf8')).artifactId,id);
+  await exportResources(workspace,['draft.jsx'],{...options,dryRun:true,emit:value=>assert.equal((value as any).operations[0].path,`${id}-artifact-run-a-proposal.jsx.html`),force:true});
+ }finally{await h.cleanup();}
+});
+
+test('published default HTML names use the downloaded carrier without another metadata request',async()=>{
+ const h=await cliHarness('published-html-name-',{account:null});
+ try{
+  const fixture=JSON.parse(await readFile(resolve(import.meta.dirname,'../../../scripts/fixtures/offline-file/artifact-file.json'),'utf8'));
+  const html=`<script type="application/json" id="afbin-file">${JSON.stringify({...fixture,artifactId:'abc123',metadata:{...fixture.metadata,title:'Regional sales'}}).replace(/</g,'\\u003c')}</script>`;
+  assert.equal(await h.invoke(['export','abc123','--format','html','--json'],()=>new Response(html,{headers:{'Content-Type':'text/html'}})),0,h.out.join(''));
+  assert.deepEqual(h.paths,['/a/abc123/download']);
+  assert.equal(h.last().operations[0].path,'abc123-regional-sales.jsx.html');
+  assert.equal(readArtifactFileHtml(await readFile(join(h.root,'abc123-regional-sales.jsx.html'),'utf8')).artifactId,'abc123');
  }finally{await h.cleanup();}
 });
