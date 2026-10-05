@@ -218,10 +218,11 @@ function OfflineShell(props: Opened) {
     return file();
   };
   const save = async () => {
-    if (saving() || !dirty()) return;
+    if (saving()) return;
     setSaving(true); setSaveError(''); setSaveReceipt('');
     try {
       const current = await flushFile();
+      if (!dirty()) return;
       const generation = editGeneration;
       // Preserve the downloaded runtime and matching served markup; the saved source is projected after hydration.
       const result = await saveArtifactFile({ ...props.parts, file: current, name: suggestedFileName(current.metadata.title), handle: saveHandle });

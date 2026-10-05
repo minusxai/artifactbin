@@ -14,14 +14,15 @@ import { disposeSolidOfflineFile, mountSolidOfflineFile, queryConsumersOf } from
 import type { CompiledEditCallbacks } from '@/solid/editor/dom-mounter';
 
 // The real mounter, with the callbacks the offline shell hands it kept for the flow-edit cases.
-const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null }));
+const mounted = vi.hoisted(() => ({ callbacks: null as CompiledEditCallbacks | null, view: null as EditorView | null, onFlush: null as (() => void) | null }));
 vi.mock('@/solid/editor/dom-mounter', async (real) => {
   const actual = await real<typeof import('@/solid/editor/dom-mounter')>();
   return {
     ...actual,
     mountCompiledEditRegions: (...args: Parameters<typeof actual.mountCompiledEditRegions>) => {
       mounted.callbacks = args[2];
-      return actual.mountCompiledEditRegions(args[0], args[1], { ...args[2], onView(view) { if (view?.state.doc.textContent === 'Local report') mounted.view = view; args[2].onView?.(view); } });
+      const mount = actual.mountCompiledEditRegions(args[0], args[1], { ...args[2], onView(view) { if (view?.state.doc.textContent === 'Local report') mounted.view = view; args[2].onView?.(view); } });
+      return { ...mount, flush() { mounted.onFlush?.(); mount.flush(); } };
     },
   };
 });
@@ -48,7 +49,7 @@ function shell(file: ArtifactFile) {
   document.head.innerHTML = doc.head.innerHTML;
   document.body.innerHTML = doc.body.innerHTML;
 }
-beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; mounted.view = null; });
+beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; mounted.callbacks = null; mounted.view = null; mounted.onFlush = null; });
 
 /** A file whose source, as downloaded, has two identical paragraphs right after the description (body paths 1.5 and 1.7). */
 const TWICE = '<p>Same words.</p>';
@@ -91,6 +92,22 @@ describe('Solid offline file', () => {
     await waitFor(() => expect(document.body.textContent).toContain('chosen.jsx.html'));
     expect(document.body.textContent).toMatch(/tab.*(?:stays|still)|(?:reopen|open).*saved file/i);
     expect(document.body.textContent).not.toContain('Unsaved changes');
+  });
+
+  it('flushes pending in-place typing before deciding there is nothing to save', async () => {
+    const file = withTwice(fixture());
+    const callbacks = await openAndEdit(file);
+    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(true);
+    const written: string[] = [];
+    vi.stubGlobal('showSaveFilePicker', async () => ({ name: 'pending.jsx.html', createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    mounted.onFlush = () => { mounted.onFlush = null; callbacks.onFlow('1.7', TWICE, '<p>Saved queued typing.</p>'); };
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(written).toHaveLength(1));
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    expect(saved.source).toContain('Saved queued typing.');
+    await waitFor(() => expect(document.body.textContent).not.toContain('Unsaved changes'));
   });
 
   it('saves from a focused editor even when its keydown handler stops propagation', async () => {
