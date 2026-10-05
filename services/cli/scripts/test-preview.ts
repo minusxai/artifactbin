@@ -46,7 +46,14 @@ function trackPage(page:Page,label:string){
  page.on('pageerror',error=>{errors.push(error.message);browserEvents.push({page:label,type:'pageerror',message:error.stack??error.message});});
  page.on('console',message=>browserEvents.push({page:label,type:'console',level:message.type(),message:message.text()}));
  page.on('requestfailed',request=>browserEvents.push({page:label,type:'requestfailed',url:request.url(),error:request.failure()?.errorText}));
- page.on('response',response=>{if(response.url().includes('/document?')||response.url().includes('/bundle/')||response.status()>=400)browserEvents.push({page:label,type:'response',url:response.url(),status:response.status()});});
+ page.on('response',response=>{
+  const compiledModule=new URL(response.url()).pathname.startsWith('/islands/d/');
+  if(response.url().includes('/document?')||response.url().includes('/bundle/')||compiledModule||response.status()>=400){
+   const event:Record<string,unknown>={page:label,type:'response',url:response.url(),status:response.status()};browserEvents.push(event);
+   // A successful empty module has no browser error. Retain its byte count, never authored source.
+   if(compiledModule)void response.body().then(bytes=>{event.bytes=bytes.byteLength;},error=>{event.bodyError=error instanceof Error?error.name:'unavailable';});
+  }
+ });
  return page;
 }
 async function ready(page:Page){
