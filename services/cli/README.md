@@ -225,9 +225,9 @@ The public `cli-pack` job signs the exact tarball with npm's Sigstore/SLSA prove
    ```
 3. For this release, publish the downloaded package with its downloaded signature. Do not rebuild it locally:
    ```sh
-   npm publish afbin-first-release/afbin-cli-0.4.0.tgz --access public --provenance=false --provenance-file afbin-first-release/afbin-cli-0.4.0.tgz.sigstore --ignore-scripts
+   npm publish afbin-first-release/afbin-cli-0.4.0.tgz --access public --provenance-file afbin-first-release/afbin-cli-0.4.0.tgz.sigstore --ignore-scripts
    ```
-   `--provenance=false` disables automatic generation; `--provenance-file` attaches and cryptographically verifies the original build's signed provenance. No placeholder package or CI bootstrap token is needed.
+   `--provenance-file` attaches and cryptographically verifies the original build's signed provenance, taking precedence over automatic generation. Do not also supply `--provenance` or `--provenance=false`; npm rejects both combinations. No placeholder package or CI bootstrap token is needed.
 4. Check a clean registry installation and signed provenance before advancing deployment:
    ```sh
    npm install --prefix afbin-registry-check @afbin/cli@0.4.0 --no-audit --no-fund

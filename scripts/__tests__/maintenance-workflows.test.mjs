@@ -55,7 +55,7 @@ fail('Unexpected gh '+args.join(' '));
 const NPM=String.raw`#!${process.execPath}
 const fs=require('node:fs'),crypto=require('node:crypto'),file=process.env.RELEASE_STATE,state=JSON.parse(fs.readFileSync(file)),args=process.argv.slice(2);
 if(args[0]==='view'){if(state.registryError){console.error('E500 registry unavailable');process.exit(1);}if(args[1]==='@afbin/cli'){if(state.packageAbsent){console.error('E404 package absent');process.exit(1);}console.log('@afbin/cli');process.exit(0);}const version=args[1].split('@').at(-1),published=state.published[version];if(!published){console.error('E404 version absent');process.exit(1);}console.log(args[2]==='version'?version:published);process.exit(0);}
-if(args[0]==='publish'){for(const flag of ['--access','--provenance=false','--provenance-file','--ignore-scripts'])if(!args.includes(flag))throw Error('Unsafe publish arguments');const bytes=fs.readFileSync(args[1]);state.calls.push('npm '+crypto.createHash('sha512').update(bytes).digest('base64'));fs.writeFileSync(file,JSON.stringify(state));process.exit(0);}
+if(args[0]==='publish'){if(args.some(arg=>/^--provenance(?:=|$)/.test(arg)))throw Error('Conflicting provenance flags');for(const flag of ['--access','--provenance-file','--ignore-scripts'])if(!args.includes(flag))throw Error('Unsafe publish arguments');const bytes=fs.readFileSync(args[1]);state.calls.push('npm '+crypto.createHash('sha512').update(bytes).digest('base64'));fs.writeFileSync(file,JSON.stringify(state));process.exit(0);}
 throw Error('Unexpected npm '+args.join(' '));
 `;
 function release(repo,source){
@@ -112,7 +112,7 @@ it('withholds a GitHub release for the first package and gives exact login/boots
  const result=release({...base(),packageAbsent:true},sha('b'));
  expect(result.failure).toBeNull();expect(result.calls).toEqual([]);
  expect(result.messages).toContain('gh run download 42 --repo minusxai/artifactbin --name afbin-npm-release');
- expect(result.messages).toContain('npm publish afbin-first-release/afbin-cli-0.4.0.tgz --access public --provenance=false --provenance-file afbin-first-release/afbin-cli-0.4.0.tgz.sigstore --ignore-scripts');
+ expect(result.messages).toContain('npm publish afbin-first-release/afbin-cli-0.4.0.tgz --access public --provenance-file afbin-first-release/afbin-cli-0.4.0.tgz.sigstore --ignore-scripts');
  expect(result.messages).toContain('gh run rerun 99 --repo minusxai/artifactbin');
 });
 it('rejects missing provenance and bundle subjects from different bytes or build runs',()=>{
