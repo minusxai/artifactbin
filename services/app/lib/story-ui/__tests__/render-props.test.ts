@@ -44,4 +44,14 @@ describe('the renderer only renders', () => {
     expect(propsOf('<Tabs value="a"></Tabs>')).toMatchObject({ defaultValue: 'a' });
     expect(propsOf('<TabsTrigger value="a">A</TabsTrigger>')).toMatchObject({ value: 'a' });
   });
+
+  it('sends the document origin to a YouTube player, which refuses to play without a referrer, and to no other frame', () => {
+    for (const src of ['https://www.youtube.com/embed/abc', 'https://www.youtube-nocookie.com/embed/abc?start=5']) {
+      expect(propsOf(`<iframe src="${src}" title="t" />`), src).toMatchObject({ referrerpolicy: 'strict-origin-when-cross-origin' });
+    }
+    for (const src of ['https://player.vimeo.com/video/1', 'https://www.loom.com/embed/1', 'https://www.youtube.com.evil.example/embed/abc']) {
+      expect(propsOf(`<iframe src="${src}" title="t" />`), src).not.toHaveProperty('referrerpolicy');
+    }
+    expect(propsOf('<a href="https://www.youtube.com/watch?v=abc">x</a>')).not.toHaveProperty('referrerpolicy');
+  });
 });

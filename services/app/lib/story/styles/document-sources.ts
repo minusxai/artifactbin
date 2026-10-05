@@ -12,3 +12,11 @@ export const FONT_FILES = 'https://fonts.gstatic.com';
  * constructed. Any other host is a `<meta name="csp-frame">` in the document's Helmet (lib/story/document/csp-extensions).
  */
 export const FRAME_HOSTS = ['https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com', 'https://www.loom.com'] as const;
+/**
+ * The players that refuse to play without a referrer (YouTube: "Error 153"). The document is served `no-referrer`,
+ * so their frame alone sends its origin, never its path.
+ */
+const REFERRER_FRAME_HOSTS: ReadonlySet<string> = new Set(['https://www.youtube.com', 'https://www.youtube-nocookie.com']);
+export function needsFrameReferrer(src: string): boolean {
+  try { return REFERRER_FRAME_HOSTS.has(new URL(src).origin); } catch { return false; }
+}
