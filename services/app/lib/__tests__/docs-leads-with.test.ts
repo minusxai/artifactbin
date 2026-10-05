@@ -14,9 +14,20 @@
  * lives in skill-tree.test.ts.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc } from '../skills';
+import { buildQuickSheet, renderDoc, renderSkill, skillTree } from '../skills';
 
 const BASE = 'https://example.test';
+
+describe('report requests have an explicit page-type default', () => {
+  it('routes a report to editorial while distinguishing live monitoring and slides', () => {
+    const guide = renderDoc('artifactbin/references/templates.md', BASE);
+    expect(guide).toContain('“Make a report” selects `template: editorial` by default');
+    expect(guide).toContain('report select `dashboard`');
+    expect(guide).toContain('report presented as slides selects `deck`');
+    expect(renderDoc('artifactbin/references/templates-editorial.md', BASE))
+      .toContain('Reports, articles, briefings and long reads use `template: editorial`');
+  });
+});
 
 describe('the markup skill teaches vocabulary before configuration', () => {
   const doc = renderDoc('artifactbin/references/markup.md', BASE);
@@ -30,6 +41,17 @@ describe('the markup skill teaches vocabulary before configuration', () => {
 
 describe('the design skill leads with the rules an agent can act on', () => {
   const doc = renderDoc('artifactbin/references/design.md', BASE);
+  it('keeps plain-language and paragraph guidance in condensed page-type help', () => {
+    const file = skillTree().get('artifactbin/references/design.md')!;
+    const bundled = renderSkill(file, { base: BASE, bundle: true });
+    for (const text of [doc, bundled]) {
+      expect(text).toContain('## Copy is design material');
+      expect(text).toContain('Avoid text blobs');
+      expect(text).toContain('ASD-STE100-inspired');
+      expect(text).toContain('[copy guidance](copy.md)');
+    }
+    expect(buildQuickSheet(BASE)).toContain('references/copy.md');
+  });
   it('teaches the supported web-font route, and no longer sends agents to a data: URI blob or prefers-color-scheme', () => {
     expect(doc).toContain('name="font-display"');
     expect(doc).not.toContain('prefers-color-scheme');

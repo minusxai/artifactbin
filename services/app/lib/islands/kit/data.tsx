@@ -18,10 +18,7 @@ import { isServer } from 'solid-js/web';
 import type { createDataVirtualizer } from './data-virtualizer';
 import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
-import { TrustedOverlay } from './trusted-overlay';
-import { popupDismiss } from './popup-dismiss';
 import { refName, type TableResult } from '@/lib/story/data/dataflow';
-import { coerceScalarInput } from '@/lib/story/data/scalar-input';
 import { aggregateNumber, type NumberAgg } from '@/lib/story/data/number-aggregation';
 import { numberFormatter } from '@/lib/story/data/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story/data/data-table';
@@ -29,6 +26,7 @@ import { commentMetadata, keyedRowsError } from '@/lib/story/data/repeat-identit
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { personFaceBackground, personInitial } from '@/lib/accounts/person-face';
 import type { PersonCard } from '@artifactbin/contracts';
+export { Select } from './select';
 import type { Row } from '@/lib/story/data/dataflow';
 import { CHART_SLOT_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/compiled-page/contract';
 import { questionEnvelope } from '@/lib/viz/chart-envelope';
@@ -62,71 +60,6 @@ export function Number(props: { data: unknown; col?: string; agg?: NumberAgg; pr
   return <span {...rootProps(props)} aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() ? 'mx-busy-inline' : props.className)}><span aria-label={table() ? 'Live number' : 'Number placeholder'}>{text()}</span></span>;
 }
 
-interface SelectProps { label?: string; value?: unknown; options?: unknown; placeholder?: string; className?: string; id?: string; disabled?: boolean; [key: `data-${string}`]: unknown }
-const selectClass = 'mx-control relative inline-flex flex-col gap-1.5 align-top';
-/** The former trigger classes in SelectControl's own order (`cn(base, field appearance)`). */
-const SELECT_TRIGGER = 'inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 min-w-36 border border-input bg-background px-3 shadow-xs hover:bg-muted/40';
-const selectJoin = (...values: (string | false | undefined)[]) => values.filter(Boolean).join(' ');
-const CHEVRON = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
-const CHECK = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>;
-export function Select(p: SelectProps) {
-  const island = useIsland(); const [open,setOpen] = createSignal(false); const [query,setQuery] = createSignal(''); const [highlight,setHighlight] = createSignal(-1);
-  const valueName = () => nameOf(p.value);
-  const optionsName = () => nameOf(p.options);
-  const active = () => !!valueName() && Object.hasOwn(island.values(), valueName()) && p.disabled !== true;
-  const current = () => valueName() ? island.value(valueName()) == null ? null : String(island.value(valueName())) : typeof p.value === 'string' ? p.value : typeof p.value === 'number' ? String(p.value) : null;
-  const options = createMemo(() => {
-    const name = optionsName();
-    if (name) {
-      const table = island.table(name);
-      const [valueCol, labelCol] = table?.columns ?? [];
-      return table && valueCol ? table.rows.filter(row => row[valueCol.name] !== null && row[valueCol.name] !== undefined && row[valueCol.name] !== '').map(row => ({ value: String(row[valueCol.name]), label: String(row[labelCol?.name ?? valueCol.name] ?? row[valueCol.name]) })) : [];
-    }
-    return Array.isArray(p.options) ? p.options.map(option => typeof option === 'object' && option !== null ? { value: String(option.value ?? ''), label: String(option.label ?? option.value ?? '') } : { value: String(option), label: String(option) }) : [];
-  });
-  const label = () => current() === null ? p.placeholder ?? 'All' : options().find(o => o.value === current())?.label ?? current();
-  // An authored placeholder is the null choice (`$x is null` in SQL); without one the popup lists only the
-  // authored options, so a document that adds its own "All" row doesn't get a second one.
-  const entries = () => [...(valueName() && p.placeholder !== undefined ? [{ value: null, label: p.placeholder }] : []), ...options()];
-  const filtered = () => entries().filter(o => o.label.toLowerCase().includes(query().toLowerCase()));
-  // The popup speaks strings throughout (display and comparison); a write goes through the bound
-  // Value's declared type first — the same coercion the former NativeBoundControl applies — so a number
-  // or boolean Value never receives the option's string back verbatim (kit/controls.tsx BoundNative).
-  const choose = (value: string | null) => {
-   const name = valueName();
-   if (name) {
-    const type = island.valueType(name);
-    island.setValue(name, coerceScalarInput(type, value ?? ''), undefined);
-   }
-   setOpen(false); setQuery('');
-  };
-  let root!: HTMLDivElement; let trigger!: HTMLButtonElement; let popup: HTMLDivElement | undefined;
-  const announce = popupDismiss(open, () => setOpen(false), () => trigger, () => popup);
-  // No `data-mx-bound` stamp: that marks the former STATIC render of a bound control; the live SelectAdapter never writes it.
-  return <div {...rootProps(p)} class={selectJoin(selectClass,p.className)}>
-    <Show when={p.label}><span class="flex items-baseline gap-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>{p.label}</span></span></Show>
-    <div ref={root} class="relative min-w-0"><button ref={trigger} type="button" aria-label={p.label} aria-haspopup="listbox" aria-expanded={open()} disabled={!active()} on:click={() => { if (!open()) announce(); setOpen(!open()); }}
-      class={SELECT_TRIGGER}>
-      <span class={selectJoin('truncate',current() === null && 'text-muted-foreground')}>{label()}</span><CHEVRON /></button>
-      <TrustedOverlay open={open}><Show when={open()}><div ref={popup} data-theme={root.closest<HTMLElement>('[data-theme]')?.dataset.theme} class="rounded-md border border-border bg-popover text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:`${Math.max(root.getBoundingClientRect().width,200)}px`, '--popover': getComputedStyle(root).getPropertyValue('--popover'), '--popover-foreground': getComputedStyle(root).getPropertyValue('--popover-foreground'), '--border': getComputedStyle(root).getPropertyValue('--border')}}>
-        <div class="border-b border-border p-1.5"><input type="text" role="searchbox" aria-label={p.label ? `Search ${p.label}` : 'Search options'} placeholder="Type to filter…" value={query()}
-          on:input={e => { const q = e.currentTarget.value; setQuery(q); setHighlight(filtered().length ? 0 : -1); }}
-          class="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
-        <div role="listbox" aria-label={p.label} class="max-h-56 overflow-y-auto p-1"><For each={filtered()}>{(o,i) => <button type="button" role="option" aria-label={o.label} aria-selected={o.value === current()}
-          on:click={() => choose(o.value)} on:mouseenter={() => setHighlight(i())}
-          class={selectJoin('flex w-full cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left text-sm',i() === highlight() && 'bg-accent text-accent-foreground',o.value === null && o.value !== current() && 'text-muted-foreground')}>
-          <span class="truncate">{o.label}</span><Show when={o.value === current()}><CHECK /></Show></button>}</For>
-          <Show when={filtered().length === 0}><div role="status" class="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div></Show></div>
-      </div></Show></TrustedOverlay>
-    </div></div>;
-}
-
-
-/**
- * A `<Column>` of the table. The compiler passes `{ col, id, path, ids }` (the column's author id and AST
- * path, which the former header cell carries, and its content's author ids) beside the parsed `columns`; the
- * interpreter's shape also carries the column's `props` and its cell template `nodes`.
- */
 interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string[]; props?: Record<string, unknown>; nodes?: unknown[] }
 /** A column's content, compiled: drawn in each row's cell with the row and where the cell sits (interpreter renderCell). */
 type CellContent = (row: Row, cell: CellScope) => import('solid-js').JSX.Element;

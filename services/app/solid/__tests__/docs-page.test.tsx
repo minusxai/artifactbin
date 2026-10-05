@@ -2,18 +2,24 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
-import { STORY_TEMPLATE_NAMES, STORY_THEME_NAMES } from '@/lib/validation/atlas-schemas';
+import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
+import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import GetStarted from '@/solid/components/GetStarted';
 import { afbinInstallCommand, afbinWindowsInstallCommand } from '@/lib/serving/agent-discovery-tags';
 import { App } from '@/solid/App';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
-it('serves the human tour with current templates, themes, install command and working contents links', async () => {
+it('serves the human tour with current templates, live design systems, install command and working contents links', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/page/session' ? Response.json({ user: null, kind: 'none', onboarded: true }) : Response.json({})));
   window.history.replaceState(null, '', '/docs-human');
   render(() => <App />);
   const main = await screen.findByRole('main');
-  for (const theme of STORY_THEME_NAMES) expect(main).toHaveTextContent(theme);
+  for (const system of STORY_SYSTEMS) {
+    expect(main).toHaveTextContent(system.label);
+    expect(main.querySelector(`[data-design-specimen="${system.name}"] img`)).toHaveAttribute('src', `/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);
+  }
+  expect(main.querySelector('img[src^="/story-themes/"]')).toBeNull();
+  expect(main.querySelector('link[href*="design-system"]')).toBeNull();
   for (const template of STORY_TEMPLATE_NAMES) expect(main).toHaveTextContent(template);
   for (const field of ['markup', 'dataset', 'viz', 'image']) expect(main).toHaveTextContent(field);
   expect(main.textContent).not.toContain('/plugin');

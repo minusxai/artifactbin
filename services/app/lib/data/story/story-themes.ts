@@ -1,12 +1,11 @@
 /**
- * Story design themes — ONE registry, four consumers:
+ * Story design themes — Legacy theme registry:
  *  (a) the CSS emitter (`storyThemeCss` → appended to every jsx story's compiledCss by
  *      lib/data/story/story-css.server.ts, as tiny `[data-theme="<name>"]` variable blocks —
  *      instant in-app theme switching, no recompile),
  *  (b) the settings picker UI and the skill registry
  *      (lib/skills/render.ts projects this registry into `themes/<name>.md`),
- *  (c) preview-image generation (scripts/generate-theme-previews.ts),
- *  (d) font-asset generation (lib/data/story/story-fonts.ts maps each theme's families to
+ *  (c) font-asset generation (lib/data/story/story-fonts.ts maps each theme's families to
  *      the bundled font assets).
  *
  * A theme is a PERSONALITY — fonts, radius, structural CSS, a hue family — carried by TWO

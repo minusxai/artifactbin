@@ -55,7 +55,7 @@ import { tableChoices } from '@/lib/story/data/table-catalog';
 import { queryCells, updateQuerySqlInJsx } from '@/lib/story/data/query-notebook';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
 import type { DataflowState } from '@/lib/story/data/dataflow';
-import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { ArtifactVersionSnapshot } from '@/lib/artifact-backend/types';
 import { createInPlaceEdit, type ImageDropPlacement, type InPlaceEditController } from './create-in-place-edit';
@@ -149,7 +149,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   const [title, setTitle] = createSignal<string | null>(art.title?.trim() ? art.title : null);
   const shownTitle = () => title() ?? firstHeadingTitle(source()) ?? '';
   createEffect(() => props.onTitleChange?.(shownTitle()));
-  const [theme, setTheme] = createSignal<StoryThemeName | null>((art.theme as StoryThemeName) ?? null);
+  const [theme, setTheme] = createSignal<StoryDesignName | null>((art.theme as StoryDesignName) ?? null);
   const [colorMode, setColorMode] = createSignal<'light' | 'dark' | null>(art.colorMode === 'dark' ? 'dark' : art.colorMode === 'light' ? 'light' : null);
   const pwaEnabled = () => readPwaSettings(source()).enabled === true;
   createEffect(() => {

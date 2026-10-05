@@ -8,7 +8,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { esc, pyJson, pad2 } from './py.mjs';
-import { fontFaceCss } from './fonts.mjs';
 import { filterBlock, isChrome, isKit } from './css-blocks.mjs';
 import { handPanels, render as handRender, phone as handPhone, units as handUnits, screen as handScreen, screenMobile as handScreenMobile } from './hand.mjs';
 
@@ -246,31 +245,17 @@ export const specimen = (S, key, fn) => (S.templates ?? {})[key] || fn(S, S.data
 const templatesSection = (S) => TEMPLATES.map(([key, title, note, fn]) => `<div className="ds-tpl-block"><div className="ds-tpl-head"><h3 className="t-title">${title}</h3><p>${esc(note)}</p></div>${specimen(S, key, fn)}</div>`).join('\n');
 
 /** The page source for a spec, with `existing` (the current page, if any) supplying the fence identity. */
-export function buildPage(spec, existing, { runtime = false } = {}) {
+export function buildPage(spec, existing) {
   const slug = spec.slug;
   const names = new Set(spec.tokens.map((tk) => tk.name));
   const missing = STATUS.filter((s) => !names.has(s) && !(s in (spec.status_alias ?? {})));
   if (missing.length) throw new Error(`${slug}: status tokens missing (add tokens or status_alias): ${missing.join(', ')}`);
-  const faces = spec.fonts.map(([f, a]) => fontFaceCss(f, a)).join('\n');
   const skeleton = SKELETON_CSS.replaceAll('.ds-X', '.ds-' + slug);
   // Runtime-bound: the fence names the system and the server serves its tokens, faces, type roles, components,
   // hand and kit (exactly what runtime.mjs systemCss keeps); the page carries only its own chrome.
-  const css = runtime
-    ? `${swatchCss(spec)}
+  const css = `${swatchCss(spec)}
 ${filterBlock(skeleton, (l) => !isKit(l))}
 ${filterBlock((spec.css ?? '').trim(), isChrome)}
-`
-    : `${faces}
-:root {
-${tokenCss(spec, 'light')}
-}
-.dark {
-${tokenCss(spec, 'dark')}
-}
-${typeCss(spec)}
-${swatchCss(spec)}
-${skeleton}
-${(spec.css ?? '').trim()}
 `;
   const data = spec.data;
   const helmet = `<Helmet>
@@ -298,7 +283,7 @@ ${Object.entries(data.queries).map(([q, sql]) => `<Query name="${q}">{\`${sql}\`
   const cols = pyJson(data.table_columns);
   const chart = pyJson(data.chart);
   const motion = S.motion || S.depth;
-  const body = `<div data-design="tw" className="@container ds ds-${slug} bg-background text-foreground">
+  const body = `<div data-design="tw" className="@container ds ds-${slug} text-foreground">
 <section className="ds-cover">
   <div className="ds-cover-art" aria-hidden="true">${S.cover_svg}</div>
   <div className="ds-cover-words">
@@ -409,7 +394,7 @@ ${Object.entries(data.queries).map(([q, sql]) => `<Query name="${q}">{\`${sql}\`
 <footer className="ds-foot"><span className="t-label">${esc(S.name)} · design system · artifactbin</span><span>${esc(S.footer)}</span></footer>
 </div>
 </div>`;
-  return fence(spec, existing, runtime ? slug : null) + helmet + '\n' + body + '\n';
+  return fence(spec, existing, slug) + helmet + '\n' + body + '\n';
 }
 
 /** Write the pages for `slugs` (default: the roster) into PAGES_DIR; returns what was written. */

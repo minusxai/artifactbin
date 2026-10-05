@@ -168,14 +168,14 @@ try {
     await edit.waitForTimeout(2000);
     // Appearance controls live in the mobile Selection sheet.
     await edit.getByRole('button', { name: 'Show selection settings', exact: true }).click();
-    await edit.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
-    await edit.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
+    await edit.locator('[aria-label="Design system"]').click({ timeout: 30_000 });
+    await edit.waitForSelector('[aria-label="Design systems"]', { timeout: 10_000 });
     await edit.waitForTimeout(300);
-    const pop = await fitsAcross(edit, 'Themes');
+    const pop = await fitsAcross(edit, 'Design systems');
     check(pop.fits, `theme popover: fits the screen (${pop.left}..${pop.right}px of ${pop.viewport}px)`);
     check(!(await overflows(edit)), 'theme popover: and opening it does not make the page scroll sideways');
     // Every theme has to be reachable, not merely present in the DOM.
-    const clipped = await edit.locator('[aria-label^="Theme "]').evaluateAll(elements => {
+    const clipped = await edit.locator('[aria-label^="Design system "]').evaluateAll(elements => {
       const w = document.documentElement.clientWidth;
       return elements
         .filter((el) => el.getBoundingClientRect().right > w + 1).length;
@@ -197,9 +197,9 @@ try {
     const wide = await open({ width: 1600, height: 1000 }, '#edit');
     await wide.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
     await wide.waitForTimeout(2000);
-    await wide.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
-    await wide.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
-    const cols = await wide.locator('[aria-label="Themes"]').evaluate(el => {
+    await wide.locator('[aria-label="Design system"]').click({ timeout: 30_000 });
+    await wide.waitForSelector('[aria-label="Design systems"]', { timeout: 10_000 });
+    const cols = await wide.locator('[aria-label="Design systems"]').evaluate(el => {
       return getComputedStyle(el).gridTemplateColumns.split(' ').length;
     });
     check(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns)`);
@@ -221,7 +221,7 @@ try {
       while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
       return { found: true, reachable: !!(hit && el.contains(hit)), hit: hit?.tagName ?? null };
     });
-    const card = await reachable(wide, '[aria-label^="Theme "]');
+    const card = await reachable(wide, '[aria-label^="Design system "]');
     check(card.reachable, `desktop: a theme card can actually be clicked (hit ${card.hit})`);
     await wide.keyboard.press('Escape');
     await wide.waitForTimeout(300);

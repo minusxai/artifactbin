@@ -21,6 +21,7 @@ import { useOptionalInbox } from '../lib/notifications';
 import { Avatar } from './Avatar';
 import { closeOnEscape } from '../lib/close-on-escape';
 import { chooseTheme } from '@/lib/story-runtime/reader-mode';
+import { createIsPhoneViewport } from './MobileSheet';
 
 /** Artifact controls from the editor seam; the named export below owns app pages. */
 export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {
@@ -64,10 +65,13 @@ export interface PageChromeProps {
   mode?: Accessor<'light' | 'dark'>;
   onMode?: (next: 'light' | 'dark') => void;
   star?: boolean;
+  /** Document pages open the profile menu beside the avatar, or as a phone bottom sheet. */
+  menuDropdown?: boolean;
 }
 
 export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const location = useLocation();
+  const phone = createIsPhoneViewport();
   const { session } = useSession();
   // The app shell provides the inbox; a page rendered on its own (a test) has none and shows no unread mark.
   const inbox = useOptionalInbox();
@@ -117,7 +121,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
     <Show when={panel()}><Portal mount={trustedPortalOf(document) ?? document.body}>
       <button type="button" aria-label="Close panel" class="fixed inset-0 z-40 cursor-default border-0 bg-black/25 p-0" onClick={close} />
       <Show when={panel() === 'menu'}>
-        <PageMenuPanel close={close} />
+        <PageMenuPanel close={close} dropdown={props.menuDropdown} phone={phone()} />
       </Show>
       <Show when={panel() === 'controls'}><PageControlsPanel label={label()} title={controlsName()} onClose={close}><section aria-label="Appearance"><h2 class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">appearance</h2><div role="group" aria-label="Color mode" class="flex overflow-hidden rounded-[5px] border border-edge"><button type="button" aria-label="Light mode" aria-pressed={mode() === 'light'} onClick={() => pick('light')} class={modeClass('light')}><Sun size={14} strokeWidth={1.5} />light</button><button type="button" aria-label="Dark mode" aria-pressed={mode() === 'dark'} onClick={() => pick('dark')} class={modeClass('dark')}><Moon size={14} strokeWidth={1.5} />dark</button></div></section>
         <Show when={props.controls}>{render => <div class="mt-4 border-t border-edge pt-3">{render()(close)}</div>}</Show>

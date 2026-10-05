@@ -10,11 +10,11 @@ artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit
 npm CLI: local files/browser approval. Direct HTTP: email auth without CLI installation; [HTTP API](references/http-api.md).
 
 - Run via `npx --yes @afbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
-- Preview is local; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.
+- Local previews; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.
 - Automatic browser approval also applies to `--yes`. If unavailable, ask for email: `afbin auth --email <email>`; then code: `afbin auth --email <email> --otp <code>`. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
-- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
+- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write and push the file. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
-- Few turns: `afbin help <page type>`, ONE design system in the fence, then push a FIRST designed version within six calls of the pull — the fence, the title, real opening copy and one substantive section — and fill the rest in later pushes; a person is waiting on a blank page. A successful push IS the verification that source was accepted. Skip pulling, diffing or grepping it just to confirm publication; filling sections is not re-checking.
+- Read `afbin help <page type>` and choose ONE design system. Within six calls of the pull, push a first version with metadata, title, real opening copy and one substantive section; extend it in later pushes. Push confirms source acceptance; do not pull, diff or grep just to reconfirm it.
 - For an existing artifact, prefer `afbin query ID --name tasks` to read and `afbin query ID --write --name change_status --param task_id=1 --param status=Done` to update. Use its declared names/arguments; preserve its source.
 - Sessions are browser/UI QA for newly authored or changed `<Mutation>`, page-local state and row/cell action context. Use a live session (`afbin help live-sessions`) on each identity's isolated copy (`afbin help apps`), then the original `--as guest` (identity writes off). One session at a time. Stop once each works once per identity.
 - Local files: `afbin add <files> --json` assigns reference IDs; preview/push register named files. Push runs `afbin validate` and publishes unpublished IDs.
@@ -23,6 +23,7 @@ npm CLI: local files/browser approval. Direct HTTP: email auth without CLI insta
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork deliberately: copy the file and remove those five fields.
 - Questions: source first; answer plainly, internals on request. Render only if needed.
+- Copy: plain words, short sentences, small paragraphs. Cut AI filler and repetition; preserve facts and caveats. Follow [copy guidance](references/copy.md), inspired by ASD-STE100, not bound by it.
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 
@@ -42,7 +43,7 @@ Before writing, read `afbin help <page type>` for design and markup; skipping th
 - [markup](references/markup.md); [data](references/markup-data.md) and [example](references/markup-data-example.md).
 - [page types](references/templates.md) — `afbin help templates`, then `references/templates-<name>.md`.
 - [design systems](references/design-systems.md) — `afbin help design-systems`, then `system-<slug>.md`; [worked briefs](references/worked-briefs.md).
-- [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
+- [sync and recovery](references/publishing.md).
 - [errors](references/errors.md) — refusal codes and fixes.
 - [comments](references/publishing-annotations.md) — `afbin comment`; `afbin help remote-review`.
 - [apps](references/apps.md) — shared pages; interactive wireframes: `afbin help review-state`.
@@ -51,4 +52,4 @@ Before writing, read `afbin help <page type>` for design and markup; skipping th
 - [authentication](references/publishing-auth.md) — sign-in and credentials.
 - [lambdas](references/lambdas.md).
 - [live sessions](references/live-sessions.md) — Playwright, `mx`, screenshots.
-- [commands](references/commands.md) — every command and flag; [Markdown import](references/markdown.md) for a one-time `.md` push.
+- [commands](references/commands.md); [Markdown import](references/markdown.md) for a one-time `.md` push.

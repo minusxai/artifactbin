@@ -52,7 +52,7 @@ drawing leads. Pick ONE composition and build that. Publish with
 
 Skeleton of the runtime pieces (publishable as is; the proposal is yours):
 
-  <div data-design="tw" className="@container bg-background px-5 py-8 text-foreground @3xl:px-10">
+  <div data-design="tw" className="@container px-5 py-8 text-foreground @3xl:px-10">
     <header className="border-b-2 border-primary pb-5">
       <p className="t-label">Product design · Review draft</p>
       <h1 className="t-display-m mt-3">Appointment booking — UI plan</h1>
@@ -78,13 +78,13 @@ Do
   variants; label each screen and connect it to the flow.
 - Give each milestone an acceptance criterion; distinguish discovery from
   implementation from verified results. All implementation tasks start pending.
-- One accent for screen IDs, arrows and active status; text and shape as
-  well as colour.
+- Consistent system roles for screen IDs, arrows and active status; text
+  and shape as well as colour.
 
 Don't
 - Substitute a component inventory for wireframes, or a task timeline for
   screen transitions.
-- Decorative device frames, giant heroes, tiny diagram labels; prose the
+- Decoration that obscures the proposal, tiny diagram labels; prose the
   drawings already carry.
 
 Components: [markup.md](markup.md); publish API: [publishing.md](publishing.md).

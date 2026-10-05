@@ -20,32 +20,30 @@
 templates:
   editorial:
     label: Editorial
-    description: Typeset document/report — one centered text column paced in pages by a repeated folio rule, with numbered figures as the only wide elements.
+    description: Typeset document/report — an argument in measured prose, supported by numbered figures and navigable sections.
     personality: >-
-      A printed document rendered on screen: a white paper, a memo to the board, a report you
-      could hand across a desk. One quiet centered column of measured prose, paced in PAGES —
-      every section opens under the same folio rule as if a fresh sheet were fed in — and
-      numbered figures (Vega charts, drawn SVG diagrams, images) do the showing. Minimal is
-      the register: hairlines, small caps, and numbers; the restraint is what reads as
-      authority.
+      A document for sustained reading: a white paper, a memo to the board, an illustrated
+      feature or a research dossier. Measured prose carries the argument and numbered figures
+      (charts, diagrams, images) show the evidence. The design system supplies the visual
+      register, page ground and section treatments; compositions may include margin notes,
+      evidence spreads and bands while preserving reading order and a legible prose measure.
     beats:
-      - Title block (masthead rule · title · standfirst · byline/date)
-      - Summary (hairline-bounded, bold-lead findings)
-      - Numbered sections (3-6, one claim each, each opening on a fresh page and closing on a takeaway)
+      - Title block (title · standfirst · byline/date)
+      - Summary (key findings)
+      - Numbered sections (3-6, one claim each, closing on a takeaway)
       - Figures throughout (FIG-numbered — chart, diagram, or image)
       - Closing section (the so-what) + method footer
   deck:
     label: Deck
-    description: Presentation deck — full-viewport slides in acts; quiet paper slides between full-bleed accent dividers.
+    description: Presentation deck — full-viewport slides, one idea per slide, building toward a conclusion or decision.
     personality: >-
-      A boardroom keynote rendered as a scroll: one idea per full-viewport slide, headlines you
-      could speak aloud to the room, generous emptiness as the luxury. The deck moves in ACTS —
-      quiet paper slides punctuated by full-bleed solid-accent dividers — and its structure is
-      announced (contents, numbered acts), never discovered.
+      A presentation with headlines you could speak aloud to the room and space to understand
+      one idea at a time. Group slides into acts when that helps the argument. The design system
+      owns the stage, type scale, grounds and transitions; keep orientation and evidence legible.
     beats:
       - Cover
       - Contents (mirrors the act titles)
-      - Act divider (solid accent — at least one per deck, one per act)
+      - Act divider (when the argument moves to a new act)
       - Content slides (statement / columns / chart / table / big number)
       - Quote or image slide (a breather per act)
       - Timeline / roadmap
@@ -69,13 +67,12 @@ templates:
       - Methodology footer
   dashboard:
     label: Dashboard
-    description: Operating view — a full-screen grid of live tiles obeying a shared control row; almost no prose, nothing bold.
+    description: Operating view — live evidence and shared controls that make status and exceptions clear at a glance.
     personality: >-
-      A control room, not an article: the reader FILTERS and scans, and the page answers. Nothing
-      is bold and nothing is read twice — the whole page runs in the utility register, the tiles
-      carry the story, and the controls are the centerpiece of the design. It earns its keep in
-      five seconds: a quiet one-line verdict, a control row the entire page obeys, then live
-      evidence wall to wall.
+      The reader filters and scans, and the page answers. Controls and live evidence carry the
+      story; status, exceptions and comparisons should read at a glance. The design system owns
+      type weights, surfaces and accents. Give the key finding prominence while keeping the
+      controls easy to find and repeated signals easy to compare.
     beats:
       - Command bar (kicker · status chip · quiet verdict · the shared controls, one compact band)
       - KPI band (3-4 trend cards — value + delta + sparkline — in one Grid row)
@@ -86,7 +83,7 @@ templates:
     description: Visual working plan — screen designs or process diagrams, decisions, and milestones tracked through completion.
     personality: >-
       A carefully composed working board: generous space for the proposed design, compact
-      notes beside the evidence, and a crisp execution ledger. A restrained accent connects
+      notes beside the evidence, and a crisp execution ledger. The system's visual roles connect
       screen IDs, flow arrows and status; the drawings carry the proposal. UI plans show
       spatial wireframes and screen transitions; operational plans show dependencies and
       decision branches. Beautiful because the next decision and next action are clear.

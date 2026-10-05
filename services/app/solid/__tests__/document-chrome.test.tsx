@@ -77,8 +77,25 @@ it('opens the artifact controls and the menu from the app bar', () => {
   fireEvent.click(within(panel).getByRole('button', { name: 'Dark mode' }));
   expect(within(panel).getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-  expect(within(panelRoot()).getByRole('navigation', { name: 'Menu' })).toBeInTheDocument();
+  const menu = within(panelRoot()).getByRole('navigation', { name: 'Menu' });
+  expect(menu).toHaveClass('right-3', 'top-14');
+  expect(menu).not.toHaveClass('left-0', 'inset-y-0');
   expect(within(panelRoot()).getByRole('link', { name: 'Artifacts' })).toBeInTheDocument();
+});
+
+it('places the artifact menu in a bottom sheet on phones and a dropdown after resizing', () => {
+  vi.stubGlobal('innerWidth', 390);
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+  const menu = within(panelRoot()).getByRole('navigation', { name: 'Menu' });
+  expect(menu).toHaveClass('inset-x-0', 'bottom-0');
+  expect(menu).not.toHaveClass('left-0', 'inset-y-0');
+  vi.stubGlobal('innerWidth', 1280);
+  fireEvent(window, new Event('resize'));
+  expect(menu).toHaveClass('right-3', 'top-14');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(menu).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus();
 });
 
 it('names the author and the document in the bar', () => {

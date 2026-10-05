@@ -89,9 +89,10 @@ describe('design doc teaches motion and the subject motif', () => {
     expect(doc).toMatch(/orchestrated/i);
   });
 
-  it('promotes the subject motif / conceit beyond scrolly', () => {
-    expect(doc).toMatch(/motif/i);
-    expect(doc).toMatch(/deadpan|any register/i);
+  it('grounds the motif in the subject and the visual register in the chosen system', () => {
+    expect(doc).toContain('Choose a concrete subject');
+    expect(doc).toMatch(/Carry it through figures and chapter labels without adding\s+unrelated motifs/);
+    expect(doc).toMatch(/chosen design system set the visual register/);
   });
 });
 

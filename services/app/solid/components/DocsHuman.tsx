@@ -3,14 +3,15 @@
 import FlowSchematic from './FlowSchematic';
 import GetStarted from './GetStarted';
 import { FormatBadge, LINK, PAGE_COLUMN } from './ui';
-import { STORY_THEMES } from '@/lib/data/story/story-themes';
+import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
+import DesignSystemSpecimen from './DesignSystemSpecimen';
 
 
 /**
  * The human-readable tour. Agent guidance is installed locally by the CLI.
  *
  * Everything here that names part of the API is DERIVED, never retyped: the
- * themes come from the registry with their real preview images, the formats from
+ * design systems come from the registry with their live specimens, the formats from
  * the badge component.
  */
 const SECTION = 'font-mono text-xs tracking-[0.14em] text-faint uppercase';
@@ -24,7 +25,7 @@ const TOC = [
   { id: 'publish', label: 'what an agent can publish' },
   { id: 'keep-your-work', label: 'keep your work' },
   { id: 'editing', label: 'edit anything, safely' },
-  { id: 'themes', label: 'themes' },
+  { id: 'themes', label: 'design systems' },
   { id: 'templates', label: 'templates' },
 ] as const;
 
@@ -132,44 +133,20 @@ export default function DocsHuman() {
       <hr class="mt-10 border-0 border-t border-edge" />
 
       <section {...anchor('themes')}>
-        <h2 class={SECTION}>
-          themes <span class="normal-case">· mx-markup</span>
-        </h2>
+        <h2 class={SECTION}>design systems</h2>
         <p class={PROSE}>
-          One <code class="text-accent">theme</code> field sets the whole personality: palette,
-          fonts, component chrome, chart colors. Every theme carries a light and a dark palette:
-          the author picks the default, readers can flip the mode as they read.
+          One <code class="text-accent">theme</code> field selects a design system: its palette,
+          typography, components and drawing style. Every system carries a light and a dark palette.
+          Choose a system in the editor; readers can flip the color mode as they read.
+          Older documents can keep their legacy themes.
         </p>
-        {/* The registry's own previews, both modes per theme (defaultMode
-            first), so this can never disagree with what a theme actually
-            looks like. */}
         <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {STORY_THEMES.map((t) => {
-            const modes: Array<'light' | 'dark'> = t.defaultMode === 'dark' ? ['dark', 'light'] : ['light', 'dark'];
-            return (
-              <figure class="overflow-hidden rounded-[6px] border border-edge">
-                {modes.map((mode) => (
-                  /* eslint-disable-next-line @next/next/no-img-element -- fixed-size static previews */
-                  <img
-
-                    src={`/story-themes/${t.name}${mode === 'dark' ? '-dark' : ''}.png`}
-                    alt={`${t.label} theme, ${mode} mode`}
-                    width={640}
-                    height={400}
-                    class="block h-auto w-full"
-                  />
-                ))}
-                <figcaption class="flex items-center gap-1.5 px-2 py-1.5">
-                  <span
-                    aria-hidden="true"
-                    class="inline-block size-2.5 shrink-0 rounded-full"
-                    style={{ background: t.cssVars['--primary'] }}
-                  />
-                  <span class="font-mono text-[11px] text-fg">{t.name}</span>
-                </figcaption>
-              </figure>
-            );
-          })}
+          {STORY_SYSTEMS.map(system => (
+            <figure class="overflow-hidden rounded-[6px] border border-edge">
+              <DesignSystemSpecimen system={system} />
+              <figcaption class="sr-only">{system.label}</figcaption>
+            </figure>
+          ))}
         </div>
       </section>
 

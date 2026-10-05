@@ -13,6 +13,7 @@ const engine = vi.hoisted(() => {
     // Resolves at once unless a test holds it (a slow production module fetch).
     loadDraftModule: () => new Promise<null>((resolve) => { if (state.loads.length === 0 && !hold.on) resolve(null); else state.loads.push(() => resolve(null)); }),
     disposeChangedDraftIslands: () => {},
+    syncDraftHead: () => {},
     draftTreeKept: () => false,
     blocker: null as string | null,
     readRestoreBlocker: () => engine.blocker,

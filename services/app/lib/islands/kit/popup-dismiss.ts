@@ -3,7 +3,7 @@ import { createEffect, createUniqueId, onCleanup } from 'solid-js';
 const OPEN = 'mx:kit-popup-open';
 
 /** One document-wide dismissal contract for independently hydrated kit popups. */
-export function popupDismiss(open: () => boolean, close: () => void, trigger: () => HTMLElement | undefined, panel: () => HTMLElement | undefined) {
+export function popupDismiss(open: () => boolean, close: () => void, trigger: () => HTMLElement | undefined, panel: () => HTMLElement | undefined, cancel = close) {
   const id = createUniqueId();
   const announce = () => trigger()?.ownerDocument.dispatchEvent(new CustomEvent(OPEN, { detail: id }));
   createEffect(() => {
@@ -17,7 +17,7 @@ export function popupDismiss(open: () => boolean, close: () => void, trigger: ()
       if (!node.includes(target!) && !node.includes(panel()!)) { close(); target?.focus(); }
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); close(); target?.focus(); }
+      if (event.key === 'Escape') { event.preventDefault(); cancel(); target?.focus(); }
     };
     doc.addEventListener(OPEN, other);
     doc.addEventListener('pointerdown', away);

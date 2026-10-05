@@ -1,9 +1,10 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
+import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
 import { faces } from '../../design-systems/lib/fonts.mjs';
-import { DATA, NAMES, SHEETS, renderRuntime } from '../../design-systems/lib/runtime.mjs';
+import { DATA, NAMES, SHEETS, renderRuntime, varsMap } from '../../design-systems/lib/runtime.mjs';
+import { pickerSpecimen } from '../../design-systems/lib/picker.mjs';
 import { REFS, catalogueMd, systemMd } from '../../design-systems/lib/skill.mjs';
 
 /**
@@ -14,6 +15,22 @@ import { REFS, catalogueMd, systemMd } from '../../design-systems/lib/skill.mjs'
  * the generator would happily emit a system that leaves a contract key dangling.
  */
 const read = (file) => readFileSync(file, 'utf8');
+
+describe('specimens use the same system binding as authored documents', () => {
+  it('preserves identity while delegating system CSS and fonts to the runtime', () => {
+    for (const slug of ROSTER) {
+      const page = buildPage(loadSpec(slug), '---\nid: abc123\nhead_version: 8\ntheme: null\n---\n');
+      expect(page.split('---\n')[1]).toContain(`theme: ${slug}\n`);
+      expect(page).toContain('id: abc123\n');
+      expect(page).toContain('head_version: 8\n');
+      const helmet = page.split('</Helmet>')[0];
+      expect(helmet).not.toContain('@font-face');
+      expect(helmet).not.toContain('--background:');
+      expect(helmet).not.toContain('.t-display-xl {');
+      expect(page).toContain(`className="@container ds ds-${slug} text-foreground"`);
+    }
+  });
+});
 
 describe('the specs', () => {
   it('are the roster, each with its slug, every contract key, the status tokens and cached faces', () => {
@@ -36,6 +53,27 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
+  it('retains cover grounds after comments and resolves every drawing token in both modes', () => {
+    for (const slug of ROSTER) {
+      const spec = loadSpec(slug);
+      const { css } = pickerSpecimen(spec);
+      for (const mode of ['light', 'dark']) {
+        const defined = new Set([...Object.keys(varsMap(spec, 'light')), ...Object.keys(varsMap(spec, mode)), ...css.matchAll(/(--[\w-]+)\s*:/g)].map(x => typeof x === 'string' ? x : x[1]));
+        for (const [, token] of css.matchAll(/var\((--[\w-]+)/g)) expect(defined.has(token), `${slug} ${mode} resolves ${token}`).toBe(true);
+      }
+    }
+    expect(pickerSpecimen(loadSpec('dossier')).css).toContain('.do-paper { fill: var(--ds-paper); }');
+    expect(pickerSpecimen(loadSpec('redline')).css).toContain('.rl-paper { fill: var(--ds-paper); }');
+  });
+  it('keeps the editor gallery faithful to the catalogue without importing page layout or active markup', () => {
+    for (const slug of ROSTER) {
+      const specimen = pickerSpecimen(loadSpec(slug));
+      expect(specimen.svg).toContain('<svg');
+      expect(specimen.svg).not.toMatch(/className=|textAnchor=|clipPath=|<script|<foreignObject|\son\w+=/);
+      expect(specimen.css).not.toMatch(/display:|grid-template|margin:|background:|animation:|\.ds-/);
+      expect(specimen.css).toContain(`[data-design-specimen="${slug}"]`);
+    }
+  });
   it('the runtime registry, its sheets and the names leaf', () => {
     const { names, data, sheets } = renderRuntime();
     expect(read(NAMES)).toBe(names);

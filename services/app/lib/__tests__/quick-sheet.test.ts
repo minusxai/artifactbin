@@ -38,20 +38,19 @@ describe('the installed short skill',()=>{
   */
  it('counts the first push — six calls, a designed opening — then fills the rest, and markup for content, the script for behaviour',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
-  const fewTurns=bullet('- Few turns');
+  const fewTurns=bullet('- Read `afbin help <page type>`');
   expect(fewTurns).toBeDefined();
   // Countable, not exhortative: a number of calls and a named payload for the first push.
-  expect(fewTurns).toContain('push a FIRST designed version within six calls of the pull');
-  expect(fewTurns).toMatch(/the fence, the title, real opening copy and one substantive section/);
-  expect(fewTurns).toMatch(/fill the rest in later pushes/);
-  expect(fewTurns).toContain('waiting on a blank page');
-  expect(fewTurns).toMatch(/is not re-checking/);
+  expect(fewTurns).toContain('Within six calls of the pull, push a first version');
+  expect(fewTurns).toMatch(/metadata, title, real opening copy and one substantive section/);
+  expect(fewTurns).toMatch(/extend it in later pushes/);
+  expect(fewTurns).toContain('choose ONE design system');
   // Vague encouragement is the failure mode this replaced; it must not come back.
   for(const vague of ['first few calls','early','as soon as you can'])expect(fewTurns,vague).not.toContain(vague);
   // Publication acceptance and visual review are distinct checks.
-  expect(fewTurns).toContain('A successful push IS the verification');
-  expect(fewTurns).toContain('source was accepted');
-  expect(fewTurns).toContain('just to confirm publication');
+  expect(fewTurns).toContain('Push confirms source acceptance');
+  expect(fewTurns).toContain('do not pull, diff or grep just to reconfirm it');
+  expect(sheet).toContain('Publishing does not verify appearance');
   expect(fewTurns).not.toMatch(/Skip[^.]*exporting/);
   expect(fewTurns).not.toContain('write the whole document');
   expect(fewTurns.length).toBeLessThan(600);
@@ -62,7 +61,7 @@ describe('the installed short skill',()=>{
   expect(sheet).not.toContain('<Iframe>');
   // The bundle the CLI ships carries the same two bullets: a copy edit without
   // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
-  expect(teaching.files['SKILL.md']).toContain('push a FIRST designed version within six calls of the pull');
+  expect(teaching.files['SKILL.md']).toContain(fewTurns);
   expect(teaching.files['SKILL.md']).toContain(native);
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });

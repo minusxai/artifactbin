@@ -138,4 +138,3 @@ describe('the app CSP', () => {
     expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'").replace(/connect-src [^;]*/, "connect-src 'self' blob:")).toBe(APP_CSP);
   });
 });
-

@@ -6,9 +6,8 @@ description: >-
 ## Read first
 
 <!--bundle:skip-->
-Approach every artifact as the design lead at a small studio known for
-versatility: deliberate choices, never templated. The kit gives you
-components and the system gives you the look; use FEWER of them, better.
+Make deliberate choices. The kit supplies components; the design system
+supplies their appearance. Use only what the content needs.
 
 <!--/bundle:skip-->
 Three choices, in this order, each from its own reference: the PAGE TYPE
@@ -48,11 +47,9 @@ UI · Avoid the default AI look · Restraint.
 
 ## Calibrate the treatment
 
-- A doc deserves the same craft as a landing page; what changes is the
-  treatment. A plan, memo or working report wants a UTILITARIAN treatment:
-  real hierarchy, considered spacing, the system's quiet register, no giant
-  hero. Something the user will keep, present or share wants an EDITORIAL
-  treatment: opinionated calls, one real aesthetic risk where it serves the work.
+- Match the treatment to the reader’s task. Working reports need clear
+  hierarchy and useful detail. Presentations can be more expressive. Let
+  the chosen design system set the visual register.
 <!--/bundle:skip-->
 
 ## Ground it in the subject
@@ -64,25 +61,20 @@ UI · Avoid the default AI look · Restraint.
 
 ## The thesis
 
-One sentence before you build: the reader's benefit, the organizing visual
-idea, and how the evidence or the actions fit it. "A shift briefing that
-surfaces the queue with the largest overdue backlog, then opens its ledger"
-is a thesis; "clean, modern, blue" is a style label. The thesis names
-two things the system never supplies:
+State the reader's benefit, the visual idea and the role of the evidence in
+one sentence. “A shift briefing that identifies the largest backlog and
+opens its ledger” is a thesis; “clean, modern, blue” is a style label.
 
-- **The object.** One thing from the subject's own world, drawn in the
-  system's hand (its `h-*` classes) and carried through the chapter labels,
-  the figure numbering and one small drawing: the page's motif. One
-  object, total commitment, no second conceit; a quiet thesis in a deadpan
-  register is as valid as a loud one.
-- **The device.** Which of the system's devices carries the data: the split
-  bar, the stamp, the ledger. The data lives inside it.
+- **The object.** Choose a concrete subject to draw in the system's `h-*`
+  classes. Carry it through figures and chapter labels without adding
+  unrelated motifs.
+- **The device.** Choose which system device carries the data: a split bar,
+  stamp or ledger.
 
-Name the rejected default too: the composition any similar page would
-have had; if your thesis is that default, revise it.<!--bundle:skip--> The page
-type's guide offers two or three compositions; [worked-briefs.md](worked-briefs.md)
-shows six theses with their rejected defaults.<!--/bundle:skip--> Record system and
-thesis in the Helmet comment, so a later edit extends the design instead of reskinning it.
+Name the rejected default: the composition a generic page would use.
+If that describes your thesis, revise it.<!--bundle:skip--> See
+[worked-briefs.md](worked-briefs.md) for examples.<!--/bundle:skip--> Record the
+system and thesis in the Helmet comment so later edits preserve the design.
 
 ## Hierarchy
 
@@ -100,18 +92,18 @@ thesis in the Helmet comment, so a later edit extends the design instead of resk
   `t-label`, `t-numeral`) set size, leading, weight and tracking; headings
   take the display face without a class.
 - Spend the roles in three jobs. DISPLAY carries the argument: few, large,
-  sentence case. BODY carries reading, capped at `max-w-prose`. UTILITY
+  using the system's casing. BODY carries reading, capped at `max-w-prose`. UTILITY
   carries the apparatus: eyebrows, folios, figure numbers, table digits.
 - Stay on the system's scale; a size utility on an element that carries a
   role replaces the role, so put layout utilities there and never type ones.
 <!--bundle:skip-->
-- Uppercase belongs to the apparatus only, always tracked; aligned digits get
-  `tabular-nums`; if everything is bold, nothing is.
+- Casing, tracking and weight follow the system's type roles; aligned digits
+  get `tabular-nums`. Preserve a clear hierarchy between display and body.
 <!--/bundle:skip-->
 
 ## Space
 
-- Whitespace is structure, not waste. Pad sections generously (`py-16`); the
+- Whitespace is structure, not waste. Use the system's spacing rhythm; the
   gap between sections exceeds the gap within one. Space sibling groups with
   flex/grid `gap-*`, not per-element margins.
 - Align to the grid; when in doubt, flush left. Centered body copy is almost
@@ -123,8 +115,12 @@ thesis in the Helmet comment, so a later edit extends the design instead of resk
 - The system owns hue: author in its token classes. A subject that needs its
   own hue gets ONE `--ds-*` token reassigned under `:root` and `.dark`, and
   every component, chart and device follows; never a second palette.
-- ONE accent, meaning one thing (the subject, the exception). Context sits in
-  the system's quiet grounds. If everything is highlighted, nothing is.
+- Use the system's accent roles consistently: a system may pair several
+  expressive colours. Preserve a focal hierarchy and distinguish emphasis
+  from status and chart-series colours.
+- The runtime paints the system's page ground, including textures. Leave
+  layout wrappers transparent; opaque panels and sections are intentional
+  surfaces, not a blanket `bg-background` over the whole document.
 - Status colour (positive, caution, negative) is separate from the accent and
   always travels with a word or a glyph, never colour alone.
 
@@ -140,15 +136,20 @@ thesis in the Helmet comment, so a later edit extends the design instead of resk
 - The system's chart series order, unless the user requests custom colours.
   [Chart guidance](markup-data-authoring.md).
 
-<!--bundle:skip-->
 ## Copy is design material
 
-- Write from the reader's side of the screen: name things by what people
-  recognize, not how the system is built.
-- Active voice; a control says exactly what happens. Errors say what went
-  wrong and how to fix it, no apologies, no vagueness. Specific beats clever.
+- Use plain words and active voice. Lead with the fact or action; cut AI
+  filler, hype and repeated conclusions. Keep terminology consistent.
+- Avoid decorative contrastive negation (“It's not X; it's Y”). State the
+  claim directly; reserve contrast for a real distinction or misconception.
+- Avoid text blobs: one topic per paragraph, usually 1–3 sentences and
+  about 60 words or fewer. Use lists for steps and tables for comparisons.
+- Use ASD-STE100-inspired sentence limits: 20 words for instructions,
+  25 for descriptions. Preserve facts, qualifications and necessary detail.
+  These are aspirational editing targets, not a claim of formal STE compliance.
+- Controls name their action; errors explain the problem and the remedy.
+  See [copy guidance](copy.md) for examples and the final editing pass.
 
-<!--/bundle:skip-->
 ## Structure is information
 
 - Eyebrows, numbering, dividers and labels must encode something TRUE about
