@@ -1,5 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import * as annotations from '@/lib/annotations';
+import * as artifactStore from '@/lib/artifacts/store';
 import {useAppHarness,request} from './harness';
 import {mintToken,createUser} from '@/lib/accounts';
 import {getArtifactById,applyEditFor} from '@/lib/artifacts';
@@ -11,6 +12,7 @@ import {GET as redirect} from '@/app/workspace/[id]/route';
 import {artifactFile} from '@/lib/offline/__tests__/fixture';
 import {prepareClientDocumentUpdate} from '@/lib/story/graph/document-update-client';
 import type {ArtifactFile} from '@/lib/offline/file-format';
+import {assembleArtifactFile} from '@/lib/offline/assemble.server';
 useAppHarness();
 const html=(file:ArtifactFile)=>`<script id="afbin-file" type="application/json">${JSON.stringify(file).replaceAll('<','\\u003c')}</script><script>throw Error('must not execute')</script>`;
 async function setup(){
@@ -25,6 +27,36 @@ async function setup(){
  return {actor,file,row,document:row.document,send,scope:{userId:user.id,tokenId:token.id}};
 }
 describe('hosted portable file handoff',()=>{
+ it.each([false,true])('can apply a real download between coalesced saves (save interleaves with download: %s)',async(interleave)=>{
+  const {row,scope,actor}=await setup();
+  async function online(from:string,to:string){
+   const head=(await getArtifactById(row.id))!;
+   if(head.document?.kind!=='graph')throw Error('Expected a graph document');
+   expect(await applyEditFor(scope,row.id,{baseEditId:head.edit_id,documentUpdate:prepareClientDocumentUpdate({...head,document:head.document},{source:head.source!.replace(from,to)})})).toMatchObject({applied:true});
+  }
+  await online('Two','Online two');
+  const captured=(await getArtifactById(row.id))!;
+  const read=artifactStore.getArtifactById;
+  const boundary=interleave?vi.spyOn(artifactStore,'getArtifactById').mockImplementationOnce(async(id)=>{
+   const admitted=await read(id);
+   await online('Online two','Online three');
+   return admitted;
+  }):null;
+  const downloaded=await assembleArtifactFile({id:row.id,actor:scope,origin:'http://localhost:3000'});
+  boundary?.mockRestore();
+  expect((await artifactStore.getVersionFor(scope,row.id,2))?.document).toEqual(captured.document);
+  if('refused' in downloaded)throw Error(downloaded.message);
+  expect(downloaded.base.version).toBe(2);
+  downloaded.source=downloaded.source.replace('One','Offline one');
+  if(!interleave)await online('Online two','Online three');
+  const result=await inspect(request('/connect/inspect',{method:'POST',actor,origin:'same',json:{html:html(downloaded),filename:'Report.jsx.html'}}));
+  expect(await result.json()).toMatchObject({kind:'update',target:row.id});
+  const applied=await apply(request('/connect/import',{method:'POST',actor,origin:'same',json:{html:html(downloaded),filename:'Report.jsx.html',mode:'update'}}));
+  expect(applied.status,await applied.clone().text()).toBe(200);
+  const head=(await getArtifactById(row.id))!;
+  expect(head.source).toContain('Offline one');expect(head.source).toContain('Online three');
+ });
+
  it('does not mint a content version for a comments-only handoff',async()=>{
   const {file,row,scope,send}=await setup();
   const server=await createAnnotationFor(scope,row.id,{nodeId:'first',body:'Existing'},{kind:'human',label:'Account',transport:'browser'});
