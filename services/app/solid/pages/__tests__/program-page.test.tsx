@@ -34,3 +34,8 @@ it('loads the newly selected program when navigation reuses the editor',async()=
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>Response.json({id:url.split('/').pop(),title:'Program '+url.split('/').pop(),program:{version:1,command:['echo',url]},version:1,state:'state-one'})));
  const {createSignal}=await import('solid-js');const [id,setId]=createSignal('first');render(()=><ProgramPage artifactId={id()} owner/>);await screen.findByDisplayValue('Program first');setId('second');await screen.findByDisplayValue('Program second');
 });
+it('does not display an example or execution controls when a saved program cannot be read',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'not_found'},{status:404})));
+ render(()=><ProgramPage artifactId="private-program"/>);await screen.findByRole('alert');
+ expect(screen.queryByLabelText('Program JSON')).toBeNull();expect(screen.queryByRole('button',{name:'Run program'})).toBeNull();
+});

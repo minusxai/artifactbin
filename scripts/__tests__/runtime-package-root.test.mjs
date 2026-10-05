@@ -32,7 +32,7 @@ test('remote-runner host assets exclude local execution workers while app hosts 
  try{
   const local=join(root,'local'),remote=join(root,'remote');await mkdir(local);await mkdir(remote);
   await copyRunnerAssets(local);
-  expect((await readdir(local)).sort()).toEqual(['agent.ts.txt','runner-worker.mjs']);
+  expect((await readdir(local)).sort()).toEqual(['runner-worker.mjs']);
   await copyRunnerAssets(remote,{remoteRunner:true});
   expect(await readdir(remote)).toEqual([]);
  }finally{await rm(root,{recursive:true,force:true});}

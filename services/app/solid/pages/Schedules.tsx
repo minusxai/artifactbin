@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import {createResource,createSignal,For,Show,type JSX} from 'solid-js';
 import type {ScheduleRecord,ScheduleOccurrence,RunnerJson} from '@artifactbin/contracts';
-import {newRequestId} from '../lib/request-id';
+import {runtimeId as newRequestId} from '@/lib/story-runtime/runtime-id';
 import {apiRequest} from '../lib/api';
 import {useSession} from '../lib/session';
 const FIELD='mt-1 w-full rounded border border-edge bg-bg p-2 font-mono text-xs';
