@@ -16,9 +16,10 @@ it('serves the human tour with current templates, live design systems, install c
   const main = await screen.findByRole('main');
   for (const system of STORY_SYSTEMS) {
     expect(main).toHaveTextContent(system.label);
-    expect(main.querySelector(`[data-design-specimen="${system.name}"] svg`)).not.toBeNull();
+    expect(main.querySelector(`[data-design-specimen="${system.name}"] img`)).toHaveAttribute('src', `/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);
   }
   expect(main.querySelector('img[src^="/story-themes/"]')).toBeNull();
+  expect(main.querySelector('link[href*="design-system"]')).toBeNull();
   for (const template of STORY_TEMPLATE_NAMES) expect(main).toHaveTextContent(template);
   for (const field of ['markup', 'dataset', 'viz', 'image']) expect(main).toHaveTextContent(field);
   expect(main.textContent).not.toContain('/plugin');

@@ -5,7 +5,7 @@
  * table's rows and writes its value, a DataTable renders rows and sorts, a Question shows its
  * server-drawn chart until its table changes and loads Vega only then.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
@@ -13,6 +13,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { Number as KitNumber, Select, DataTable, Question } from '../kit/data';
+import { loadSelectPopup } from '../kit/select';
 import type { TableResult } from '@/lib/story/data/dataflow';
 import { rowsDigest } from '../digest';
 import { DRAWING_CLASS } from '../chart';
@@ -45,7 +46,57 @@ describe('Number', () => {
   });
 });
 
+describe('Select first open', () => {
+  it('loads the menu on demand, focuses search, and applies the selected option', async () => {
+    const ctx = fakeIsland({ region: '' }); ctx.setValue = vi.fn();
+    const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['west', 'east']} />);
+    try {
+      expect(host.querySelector('[role="listbox"]')).toBeNull();
+      host.querySelector<HTMLButtonElement>('button')!.click();
+      await vi.waitFor(() => expect(document.activeElement).toHaveAttribute('role', 'searchbox'));
+      document.querySelector<HTMLButtonElement>('[role="option"][aria-label="west"]')!.click();
+      expect(ctx.setValue).toHaveBeenCalledWith('region', 'west', undefined);
+    } finally { dispose(); }
+  });
+});
+
 describe('Select', () => {
+  // Unit cases exercise the loaded menu; the offline browser gate covers the first lazy open.
+  beforeAll(async () => { await loadSelectPopup(); });
+  it('keeps options open when focus moves from the trigger into a portaled search', async () => {
+    const story = document.createElement('div'); story.setAttribute('data-mx-inline-story', '');
+    const css = document.createElement('style'); css.setAttribute('data-mx-tw', '');
+    document.body.append(story, css);
+    const ctx = fakeIsland({ region: '' }); ctx.setValue = vi.fn();
+    const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['west', 'east']} />);
+    try {
+      const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Region"]')!;
+      trigger.focus(); trigger.click();
+      await new Promise<void>(resolve => queueMicrotask(resolve));
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(document.activeElement).toHaveAttribute('role', 'searchbox');
+      const west = story.querySelector<HTMLButtonElement>('[role="option"][aria-label="west"]');
+      expect(west).not.toBeNull();
+      west!.click();
+      expect(ctx.setValue).toHaveBeenCalledWith('region', 'west', undefined);
+    } finally { dispose(); story.remove(); css.remove(); }
+  });
+  it('keeps a searchable popup open across a shadow portal focus boundary', async () => {
+    const portalHost = document.createElement('div'); document.body.append(portalHost);
+    const shadow = portalHost.attachShadow({ mode: 'open' });
+    const portal = document.createElement('div'); shadow.append(portal);
+    const ctx = fakeIsland({ region: '' }); ctx.setValue = vi.fn(); ctx.trustedPortal = () => portal;
+    const { host, dispose } = mount(ctx, () => <Select label="Region" value="$region" options={['west', 'east']} />);
+    try {
+      const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Region"]')!;
+      trigger.focus(); trigger.click();
+      await new Promise<void>(resolve => queueMicrotask(resolve));
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(shadow.activeElement).toHaveAttribute('role', 'searchbox');
+      portal.querySelector<HTMLButtonElement>('[aria-label="west"]')!.click();
+      expect(ctx.setValue).toHaveBeenCalledWith('region', 'west', undefined);
+    } finally { dispose(); portalHost.remove(); }
+  });
   const option = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(el => el.getAttribute('aria-label') === name)!;
   const done = () => document.querySelector<HTMLButtonElement>('button[aria-label="Done"]')!;
   function multi(initial = '[]', extra: Record<string, unknown> = {}) {

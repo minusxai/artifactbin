@@ -1,11 +1,17 @@
 /* @jsxImportSource solid-js */
 /** Standalone kit picker. Multi-selection is a draft until dismissal/Done; Escape cancels. */
-import { createEffect, createMemo, createSignal, For, Show, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, Show, untrack, type Component } from 'solid-js';
 import { useIsland } from '../context';
 import { refName } from '@/lib/story/data/dataflow';
 import { coerceScalarInput } from '@/lib/story/data/scalar-input';
 import { TrustedOverlay } from './trusted-overlay';
 import { popupDismiss } from './popup-dismiss';
+import type { SelectPopupProps } from './select-popup';
+
+// The searchable menu is only needed after interaction; the SSR trigger stays in the ready-time bundle.
+let menuComponent: Component<SelectPopupProps> | undefined;
+let menuLoading: Promise<Component<SelectPopupProps>> | undefined;
+export const loadSelectPopup = () => menuLoading ??= import('./select-popup').then(module => menuComponent = module.default).catch(error => { menuLoading = undefined; throw error; });
 
 const nameOf = (value: unknown) => refName(value) ?? '';
 const rootProps = (props: object) => Object.fromEntries(Object.entries(props).filter(([key]) => key === 'id' || key.startsWith('data-')));
@@ -15,7 +21,6 @@ const selectClass = 'mx-control relative inline-flex flex-col gap-1.5 align-top'
 const SELECT_TRIGGER = 'inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 min-w-36 border border-input bg-background px-3 shadow-xs hover:bg-muted/40';
 const selectJoin = (...values: (string | false | undefined)[]) => values.filter(Boolean).join(' ');
 const CHEVRON = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 opacity-50" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
-const CHECK = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5 shrink-0" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>;
 const parseSelection = (value: string | null): string[] | null => {
   if (!value) return [];
   try {
@@ -25,6 +30,7 @@ const parseSelection = (value: string | null): string[] | null => {
   return null;
 };
 export function Select(p: SelectProps) {
+  const [Menu, setMenu] = createSignal(menuComponent);
   const island = useIsland(); const [open,setOpen] = createSignal(false); const [query,setQuery] = createSignal(''); const [highlight,setHighlight] = createSignal(-1);
   const [draft, setDraft] = createSignal<string[]>([]);
   const valueName = () => nameOf(p.value);
@@ -83,8 +89,8 @@ export function Select(p: SelectProps) {
   const announce = popupDismiss(open, () => close(), () => trigger, () => popup, () => close(false));
   const openList = () => {
     if (!active() || open()) return;
+    if (!Menu()) void loadSelectPopup().then(component => setMenu(() => component), () => close(false, true));
     announce(); setDraft(selection() ?? []); setQuery(''); setHighlight(-1); setOpen(true);
-    queueMicrotask(() => { if (open() && search?.isConnected) search.focus(); });
   };
   const create = () => { if (canCreate() && active()) choose(query().trim()); };
   const searchKey = (event: KeyboardEvent) => {
@@ -107,8 +113,14 @@ export function Select(p: SelectProps) {
     }
   };
   const blur = (event: FocusEvent) => {
-    const next = event.relatedTarget as Node | null;
-    if (next && !root?.contains(next) && !popup?.contains(next)) close();
+    const check = (next: Node | null) => { if (next && !root?.contains(next) && !popup?.contains(next)) close(); };
+    const next = event.relatedTarget as Element | null;
+    // The destination is a shadow host during focusout; activeElement settles after focusin.
+    if (next?.shadowRoot) queueMicrotask(() => {
+      let active = root.ownerDocument.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+      check(active);
+    }); else check(next);
   };
   createEffect(() => { if (!active()) untrack(() => close(false)); });
   // No `data-mx-bound` stamp: that marks the former STATIC render of a bound control; the live SelectAdapter never writes it.
@@ -117,26 +129,10 @@ export function Select(p: SelectProps) {
     <div ref={root} class="relative min-w-0" on:focusout={blur}><button ref={trigger} type="button" aria-label={p.label} aria-haspopup="listbox" aria-expanded={open()} disabled={!active()} on:click={() => open() ? close(true, true) : openList()} on:keydown={triggerKey}
       class={SELECT_TRIGGER}>
       <span class={selectJoin('truncate',current() === null && 'text-muted-foreground')}>{label()}</span><CHEVRON /></button>
-      <TrustedOverlay open={open}><Show when={open()}><div ref={popup} on:focusout={blur} data-theme={root.closest<HTMLElement>('[data-theme]')?.dataset.theme} class="rounded-md border border-border bg-popover text-popover-foreground shadow-md" style={{position:'fixed', 'z-index':50, left:`${root.getBoundingClientRect().left}px`, top:`${root.getBoundingClientRect().bottom + 4}px`, width:`${Math.max(root.getBoundingClientRect().width,200)}px`, '--popover': getComputedStyle(root).getPropertyValue('--popover'), '--popover-foreground': getComputedStyle(root).getPropertyValue('--popover-foreground'), '--border': getComputedStyle(root).getPropertyValue('--border')}}>
-        <div class="border-b border-border p-1.5"><input ref={search} type="text" role="searchbox" aria-label={p.label ? `Search ${p.label}` : 'Search options'} placeholder="Type to filter…" value={query()} on:keydown={searchKey}
-          on:input={e => { const q = e.currentTarget.value; setQuery(q); setHighlight(filtered().length ? 0 : -1); }}
-          class="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
-        <div role="listbox" aria-label={p.label} aria-multiselectable={multiple() ? 'true' : undefined} class="max-h-56 overflow-y-auto p-1" on:mousedown={event => event.preventDefault()}><For each={filtered()}>{(o,i) => <button type="button" role="option" aria-label={o.label} aria-selected={selected(o.value)}
-          on:click={() => choose(o.value)} on:mouseenter={() => setHighlight(i())}
-          class={selectJoin('flex w-full cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left text-sm',i() === highlight() && 'bg-accent text-accent-foreground',o.value === null && o.value !== current() && 'text-muted-foreground')}>
-          <span class="truncate">{o.label}</span><Show when={selected(o.value)}><CHECK /></Show></button>}</For>
-          <Show when={canCreate()} fallback={<Show when={filtered().length === 0}><div role="status" class="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div></Show>}>
-            <button type="button" role="option" aria-label={`Create ${query().trim()}`} aria-selected="false" on:click={create} on:mouseenter={() => setHighlight(filtered().length)} class={selectJoin('flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm', highlight() === filtered().length && 'bg-accent text-accent-foreground')}>Create “{query().trim()}”</button>
-          </Show></div>
-        <Show when={multiple()}><div class="flex justify-end border-t border-border p-1.5"><button type="button" aria-label="Done" on:mousedown={event => event.preventDefault()} on:click={() => close(true, true)} class="rounded-sm px-2 py-1 text-sm font-medium hover:bg-accent">Done</button></div></Show>
-      </div></Show></TrustedOverlay>
+      <TrustedOverlay open={open}><Show when={open()}><Show when={Menu()}>{loaded => { const View = loaded(); return <View root={root} label={p.label} query={query()} multiple={multiple()} current={current()}
+        filtered={filtered()} highlight={highlight()} canCreate={canCreate()} popupRef={el => popup = el} searchRef={el => search = el}
+        blur={blur} searchKey={searchKey} setQuery={q => { setQuery(q); setHighlight(filtered().length ? 0 : -1); }}
+        setHighlight={setHighlight} choose={choose} selected={selected} create={create} done={() => close(true, true)} />; }}</Show></Show></TrustedOverlay>
       <Show when={invalid()}><span role="alert">Expected a JSON array of strings.</span></Show>
     </div></div>;
 }
-
-
-/**
- * A `<Column>` of the table. The compiler passes `{ col, id, path, ids }` (the column's author id and AST
- * path, which the former header cell carries, and its content's author ids) beside the parsed `columns`; the
- * interpreter's shape also carries the column's `props` and its cell template `nodes`.
- */

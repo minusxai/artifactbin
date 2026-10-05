@@ -1,5 +1,4 @@
-/** The editor's live miniature gallery, from the same covers as the published catalogue. */
-import { ROSTER, loadSpec } from './pages.mjs';
+/** Static thumbnail source, using the same covers as the published catalogue. */
 
 // Keep SVG paint/type only. A cover class can also name an HTML component (so-grid, for example);
 // its layout rules must never turn an SVG group into a grid or escape into the editor.
@@ -28,12 +27,4 @@ export function pickerSpecimen(spec) {
   const svg = spec.cover_svg.replace(/className=/g, 'class=').replace(/textAnchor=/g, 'text-anchor=')
     .replace(/clipPath=/g, 'clip-path=').replace(/strokeWidth=/g, 'stroke-width=').replace(/shapeRendering=/g, 'shape-rendering=');
   return { name: spec.slug, mood: spec.mood, svg, css: rules.join('\n') };
-}
-
-export function renderPicker() {
-  const specimens = ROSTER.map(slug => pickerSpecimen(loadSpec(slug)));
-  return {
-    data: JSON.stringify(specimens.map(({ css, ...specimen }) => { void css; return specimen; }), null, 1) + '\n',
-    css: specimens.map(s => s.css).join('\n') + '\n',
-  };
 }

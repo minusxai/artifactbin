@@ -97,9 +97,10 @@ describe('buildIslands', () => {
   });
 
   it('keeps the editing cells in their own family: nothing the data family loads carries them', () => {
-    const { manifest, files } = first;
-    const reach = (urls, seen = new Set()) => { for (const u of urls) { if (seen.has(u)) continue; seen.add(u); reach(files[u].imports, seen); } return seen; };
-    const carries = (spec) => [...reach([manifest[spec]])].some((url) => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8').includes('Expected a JSON array of strings.'));
+    const { manifest, closure } = first;
+    const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
+    const carries = (spec) => closure([manifest[spec]]).flatMap(url => outputInputs[url])
+      .some(input => input.endsWith('islands/kit/cells.tsx'));
     expect(carries('@mx/kit/cells')).toBe(true);
     expect(carries('@mx/kit/data')).toBe(false);
   });
@@ -139,6 +140,10 @@ describe('buildIslands', () => {
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/comment-view-state.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
     expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
+    const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
+    const menuFiles = Object.entries(outputInputs).filter(([, inputs]) => inputs.some(input => input.endsWith('islands/kit/select-popup.tsx'))).map(([url]) => url);
+    expect(menuFiles.length).toBeGreaterThan(0);
+    expect(menuFiles.every(url => !staticUrls.includes(url)), 'Select menu loads only on interaction').toBe(true);
     const withImage = closure([manifest['@mx/kit/image'], ...staticUrls]);
     expect(withImage.reduce((sum, url) => sum + files[url].br, 0)).toBeLessThanOrEqual(85 * 1024);
     const dataCode = staticUrls.map(url => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).join('\n');

@@ -3,8 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
 import { faces } from '../../design-systems/lib/fonts.mjs';
-import { DATA, NAMES, SHEETS, PICKER_FONTS, PICKER_DATA, PICKER_CSS, renderRuntime, varsMap } from '../../design-systems/lib/runtime.mjs';
-import { pickerSpecimen, renderPicker } from '../../design-systems/lib/picker.mjs';
+import { DATA, NAMES, SHEETS, renderRuntime, varsMap } from '../../design-systems/lib/runtime.mjs';
+import { pickerSpecimen } from '../../design-systems/lib/picker.mjs';
 import { REFS, catalogueMd, systemMd } from '../../design-systems/lib/skill.mjs';
 
 /**
@@ -66,9 +66,6 @@ describe('the committed outputs are what the generator emits now', () => {
     expect(pickerSpecimen(loadSpec('redline')).css).toContain('.rl-paper { fill: var(--ds-paper); }');
   });
   it('keeps the editor gallery faithful to the catalogue without importing page layout or active markup', () => {
-    const picker = renderPicker();
-    expect(read(PICKER_DATA)).toBe(picker.data);
-    expect(read(PICKER_CSS)).toBe(picker.css);
     for (const slug of ROSTER) {
       const specimen = pickerSpecimen(loadSpec(slug));
       expect(specimen.svg).toContain('<svg');
@@ -76,13 +73,6 @@ describe('the committed outputs are what the generator emits now', () => {
       expect(specimen.css).not.toMatch(/display:|grid-template|margin:|background:|animation:|\.ds-/);
       expect(specimen.css).toContain(`[data-design-specimen="${slug}"]`);
     }
-  });
-  it('ships only deduplicated font rules for the live picker, not document component styles', () => {
-    const { pickerFonts, entries } = renderRuntime();
-    expect(read(PICKER_FONTS)).toBe(pickerFonts);
-    const rules = entries.flatMap(entry => entry.fontFaces.split('\n'));
-    expect(pickerFonts).toBe([...new Set(rules)].join('\n') + '\n');
-    expect(pickerFonts).not.toContain('data-theme');
   });
   it('the runtime registry, its sheets and the names leaf', () => {
     const { names, data, sheets } = renderRuntime();

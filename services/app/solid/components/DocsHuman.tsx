@@ -4,7 +4,7 @@ import FlowSchematic from './FlowSchematic';
 import GetStarted from './GetStarted';
 import { FormatBadge, LINK, PAGE_COLUMN } from './ui';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
-import DesignSystemSpecimen, { DesignSystemSpecimenStyles } from './DesignSystemSpecimen';
+import DesignSystemSpecimen from './DesignSystemSpecimen';
 
 
 /**
@@ -140,7 +140,6 @@ export default function DocsHuman() {
           Choose a system in the editor; readers can flip the color mode as they read.
           Older documents can keep their legacy themes.
         </p>
-        <DesignSystemSpecimenStyles />
         <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {STORY_SYSTEMS.map(system => (
             <figure class="overflow-hidden rounded-[6px] border border-edge">

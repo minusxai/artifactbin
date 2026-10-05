@@ -10,16 +10,16 @@ import ThemePicker from '../ThemePicker';
 beforeEach(() => vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} })));
 afterEach(() => vi.unstubAllGlobals());
 
-it('offers every current system as a live specimen, with the existing system selected', () => {
+it('offers every current system as a thumbnail, with the existing system selected', () => {
   render(() => <ThemePicker value="signout" onPick={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Design system' }));
   for (const system of STORY_SYSTEMS) {
     const option = screen.getByRole('button', { name: `Design system ${system.label}` });
     expect(option).toHaveAttribute('aria-pressed', String(system.name === 'signout'));
     expect(option.querySelector('[data-design-specimen]')).not.toBeNull();
-    expect(option.querySelector('[data-design-specimen] svg'), option.innerHTML.slice(0, 1800)).toHaveAttribute('viewBox', '0 0 480 288');
-    expect(option.querySelector('img')).toBeNull();
+    expect(option.querySelector('img')).toHaveAttribute('src', `/design-systems/${system.name}${system.defaultMode === 'dark' ? '-dark' : ''}.webp`);
   }
+  expect(document.querySelector('link[href*="design-system"]')).toBeNull();
   expect(screen.queryByRole('button', { name: /Modernist/ })).toBeNull();
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByLabelText('Design systems', { exact: true })).toBeNull();
@@ -46,8 +46,8 @@ it('resolves each specimen in the document mode without putting design tokens on
   for (const system of STORY_SYSTEMS) {
     const option = screen.getByRole('button', { name: `Design system ${system.label}` });
     const specimen = option.querySelector<HTMLElement>('[data-design-specimen]')!;
-    expect(specimen.style.getPropertyValue('--background')).toBe(system.darkCssVars['--background']);
-    expect(specimen.style.getPropertyValue('--font-display')).toBe(system.cssVars['--font-display']);
+    expect(specimen.querySelector('img')).toHaveAttribute('src', `/design-systems/${system.name}-dark.webp`);
+    expect(specimen.style.getPropertyValue('--font-display')).toBe('');
     expect(option.style.getPropertyValue('--background')).toBe('');
   }
 });

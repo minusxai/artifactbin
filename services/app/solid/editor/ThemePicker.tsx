@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /**
- * Document appearance: the current design, a grid of live system specimens, and color mode.
- * Only the specimens inherit design tokens; document component CSS never enters the app shell.
+ * Document appearance: the current design, a grid of system thumbnails, and color mode.
+ * The thumbnails need no document fonts or component CSS in the app shell.
  * Picking reports metadata to the editor's existing save/preview path. A one-step revert also
  * supports legacy themes and an unset design. On a phone the grid lives in MobileSheet.
  */
@@ -15,7 +15,7 @@ import MobileSheet, { isPhoneViewport } from '../components/MobileSheet';
 import { getStoryTheme, resolveStoryMode } from '@/lib/data/story/story-themes';
 import { STORY_SYSTEMS, getStorySystem } from '@/lib/data/story/story-systems';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
-import DesignSystemSpecimen, { DesignSystemSpecimenStyles } from '../components/DesignSystemSpecimen';
+import DesignSystemSpecimen from '../components/DesignSystemSpecimen';
 
 const designEntry = (name: StoryDesignName | null) => getStorySystem(name) ?? getStoryTheme(name);
 const designLabel = (name: StoryDesignName | null) => designEntry(name)?.label ?? name ?? 'None';
@@ -102,7 +102,6 @@ export default function ThemePicker(props: { value: StoryDesignName | null; colo
       class="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-1.5 font-mono text-xs text-fg hover:bg-raised sm:px-2">
       <ThemeDot theme={props.value} colorMode={props.colorMode} /><span class="opacity-60">Design system:</span><span>{designLabel(props.value)}</span><ChevronDown size={12} class="shrink-0 opacity-60" />
     </button>}>
-    <DesignSystemSpecimenStyles />
     <For each={STORY_SYSTEMS}>{(system) => <button type="button" aria-label={`Design system ${system.label}`} aria-pressed={props.value === system.name}
       onClick={() => pick(system.name)}
       class={`group min-w-0 shrink-0 cursor-pointer overflow-hidden rounded-[4px] border text-left transition-[border-color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-accent ${props.value === system.name ? 'border-accent ring-1 ring-accent' : 'border-edge hover:border-edge-bright hover:shadow-md'}`}>
