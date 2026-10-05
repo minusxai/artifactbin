@@ -6,8 +6,8 @@ import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
+import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
-import {expect} from 'playwright/test';
 import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
 const entry=resolve(process.argv[2]);
 const scratch=await realpath(await mkdtemp(join(tmpdir(),'afbin npm local é ')));
@@ -141,7 +141,12 @@ try{
  await connectedSource.fill((await connectedSource.inputValue()).replace('Offline saved report','Connected saved report'));
  await popup.getByRole('button',{name:'Done editing',exact:true}).click();
  await popup.getByRole('heading',{name:'Connected saved report',exact:true}).waitFor({timeout:30000});
- await expect.poll(()=>readFile(join(connected,'connected.jsx'),'utf8')).toMatch(/Connected saved report/);
+ const commitDeadline=Date.now()+5000;
+ let committed=await readFile(join(connected,'connected.jsx'),'utf8');
+ while(!/Connected saved report/.test(committed)&&Date.now()<commitDeadline){
+  await delay(100);committed=await readFile(join(connected,'connected.jsx'),'utf8');
+ }
+ assert.match(committed,/Connected saved report/);
  assert.equal(await readFile(exported,'utf8'),html,'Connect must not overwrite the opened HTML');
  await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
  await reopened.getByRole('link',{name:'Open server editor',exact:true}).waitFor();
