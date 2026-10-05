@@ -21,3 +21,7 @@ export async function runAcceptanceProcesses(checks,{spawnProcess=spawn,timeout=
 export function installedAcceptanceModes(mode,includeTypes=false){
  return mode==='experience'?['runner','terminal','preview','local',...(includeTypes?['types']:[])]:[mode];
 }
+export function installedAcceptanceGroups(mode,includeTypes=false){
+ const selected=installedAcceptanceModes(mode,includeTypes);
+ return mode==='experience'?[['terminal'],selected.filter(name=>name!=='terminal')]:[selected];
+}

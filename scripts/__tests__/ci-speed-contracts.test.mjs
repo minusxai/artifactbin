@@ -55,3 +55,17 @@ it('warms the complete ordinary package cache without a nonexistent plan depende
  expect(prune).toBeGreaterThan(pack);
  expect(job.steps[pack].run).toContain('dist/npm-candidate');
 });
+it('requires one isolated cold Windows bootstrap whenever the native CLI matrix is selected',()=>{
+ const jobs=workflow().jobs,job=jobs['cli-bootstrap'];
+ expect(job).toBeDefined();
+ expect(job.needs).toEqual(['plan','cli-pack']);
+ expect(job.if).toBe("needs.plan.outputs.cli-bootstrap == 'true'");
+ expect(job['runs-on']).toBe('windows-2022');
+ expect(job.strategy).toBeUndefined();
+ expect(job.steps.find(step=>step.with?.name==='afbin-npm-release')).toBeDefined();
+ const proof=job.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1'));
+ expect(proof.shell).toBe('powershell');expect(proof.run).toContain('npm-candidate/*.tgz');
+ expect(jobs.test.needs).toContain('cli-bootstrap');
+ expect(jobs['notify-consumer'].needs).toContain('cli-bootstrap');
+ expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain("runner.os != 'Windows'");
+});

@@ -1,6 +1,6 @@
 import {it,expect} from 'vitest';
 import {EventEmitter} from 'node:events';
-import {runAcceptanceProcesses,installedAcceptanceModes} from '../../services/cli/scripts/acceptance-processes.mjs';
+import {runAcceptanceProcesses,installedAcceptanceModes,installedAcceptanceGroups} from '../../services/cli/scripts/acceptance-processes.mjs';
 it('starts independent proofs together and waits for all verdicts before reporting failure',async()=>{
  const children=[];
  const pending=runAcceptanceProcesses(['preview','local','terminal'].map(label=>({label,command:'node',args:[label]})),{spawnProcess:()=>{const child=new EventEmitter();child.kill=()=>{};children.push(child);return child;}});
@@ -21,4 +21,9 @@ it('retains every installed experience proof and adds declarations only when sel
  expect(installedAcceptanceModes('experience')).toEqual(['runner','terminal','preview','local']);
  expect(installedAcceptanceModes('experience',true)).toEqual(['runner','terminal','preview','local','types']);
  expect(installedAcceptanceModes('types')).toEqual(['types']);
+});
+it('observes the tiny terminal proof before launching CPU-heavy experience checks',()=>{
+ expect(installedAcceptanceGroups('experience',true)).toEqual([['terminal'],['runner','preview','local','types']]);
+ expect(installedAcceptanceGroups('experience')).toEqual([['terminal'],['runner','preview','local']]);
+ expect(installedAcceptanceGroups('types')).toEqual([['types']]);
 });

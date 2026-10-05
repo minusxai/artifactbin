@@ -12,7 +12,7 @@ import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, s
 import { shardOf } from '../gates.shard.mjs';
 
 /** Built and proved only for a release: the universal npm package on all native consumer targets and the distributions gate. */
-const RELEASE_JOBS = ['cli', 'reference-compatibility'];
+const RELEASE_JOBS = ['cli', 'cli-bootstrap', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const script = path.join(root, 'scripts/ci/ci.mjs');
@@ -160,7 +160,7 @@ describe('a release is a version and nothing else', () => {
 
   it('selects npm acceptance and the typecheck, and nothing that tests an unchanged tree', () => {
     const plan = planCi(VERSION_BUMP_FILES, { versionOnly: true });
-    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli', 'cli-bootstrap']);
     expect(plan.cliRelease).toBe(true);
     expect(plan.cliTests).toBe(false);
     expect(plan.nodeRoots).toEqual([]);
@@ -170,7 +170,7 @@ describe('a release is a version and nothing else', () => {
 
   it('runs the CLI matrix, and only that, on the nightly', () => {
     const plan = planCi([], { nightly: true });
-    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['cli']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['cli', 'cli-bootstrap']);
     expect(plan.full).toBe(false);
   });
 });
@@ -1018,4 +1018,13 @@ describe('the build cache key covers every build input and nothing a build canno
     expect(key()).toMatch(/^[0-9a-f]{32}$/);
     expect(key()).toBe(key());
   });
+});
+
+it('requires the standalone Windows bootstrap verdict for releases including version-only and nightly',()=>{
+ for(const options of [{cliRelease:true},{versionOnly:true},{nightly:true}]){
+  const plan=planCi(['services/cli/package.json'],options);
+  expect(plan.jobs['cli-bootstrap']).toBe(true);
+  const results=Object.fromEntries(CI_JOBS.map(job=>[job,plan.jobs[job]?'success':'skipped']));
+  for(const conclusion of ['failure','skipped'])expect(checkCiResults(plan,{...results,'cli-bootstrap':conclusion})).toContain('cli-bootstrap');
+ }
 });

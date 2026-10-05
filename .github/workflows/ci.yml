@@ -48,6 +48,7 @@ jobs:
       api: ${{ steps.select.outputs.api }}
       gates: ${{ steps.select.outputs.gates }}
       cli: ${{ steps.select.outputs.cli }}
+      cli-bootstrap: ${{ steps.select.outputs.cli-bootstrap }}
       reference-compatibility: ${{ steps.select.outputs.reference-compatibility }}
       # Not a job: whether the node job runs the CLI source suite (every CLI change, not only a release).
       cli-tests: ${{ steps.select.outputs.cli-tests }}
@@ -713,6 +714,7 @@ jobs:
         gates,
         cli-pack,
         cli,
+        cli-bootstrap,
         reference-compatibility
       ]
     if: always()
@@ -882,6 +884,26 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # A genuinely cold standard-user bootstrap is a separate machine/user proof.
+  # It must not contend with native install/browser consumers in the same Windows VM.
+  cli-bootstrap:
+    needs: [ plan, cli-pack ]
+    if: needs.plan.outputs.cli-bootstrap == 'true'
+    name: CLI Windows standard-user bootstrap
+    runs-on: windows-2022
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: afbin-npm-release
+          path: npm-candidate
+      - name: Standard-user Windows Node bootstrap under Restricted PS5.1
+        shell: powershell
+        run: |
+          $env:PSModulePath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules"
+          ./services/cli/scripts/test-node-bootstrap.ps1 -Tarball (Get-ChildItem npm-candidate/*.tgz | Select-Object -First 1).FullName
+
   cli:
     needs: [ plan, cli-pack ]
     if: needs.plan.outputs.cli == 'true'
@@ -919,11 +941,11 @@ jobs:
         with:
           name: afbin-npm-release
           path: npm-candidate
-      # Bootstrap owns a separate fresh user/cache from the cold native package install.
-      # Both proofs start together; the harness waits for both verdicts before succeeding.
+      # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.
+      # Windows Restricted bootstrap runs on its own required runner above.
       - name: Same-tarball native npm and warmed offline acceptance
         if: matrix.phase == 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --parallel-bootstrap
+        run: npm run test:npm-package -w services/cli -- --ci ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
       - name: Install the same candidate for experience checks
         if: matrix.phase == 'experience'
         run: npm run test:npm-package -w services/cli -- --ci --install-only
@@ -1081,6 +1103,7 @@ jobs:
         gates,
         cli-pack,
         cli,
+        cli-bootstrap,
         test,
         reference-compatibility
       ]
