@@ -44,6 +44,7 @@ export interface AnnotationThreadProps {
   open: boolean;
   resolved?: boolean;
   targetMissing?: boolean;
+  viewStateError?: string;
   hovered: boolean;
   busy: boolean;
   /** This viewer folded the whole conversation away. */
@@ -148,6 +149,12 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           <span>{remoteWorkLabel(work)}</span>
         </p>
       )}</For>
+      <Show when={props.a.view_state}>
+        <div class="flex items-center justify-between gap-2 border-b border-edge px-3 py-1.5 text-[11px] text-muted">
+          <span role="status">{props.open && props.viewStateError ? props.viewStateError : 'Saved view attached'}</span>
+          <button type="button" class="shrink-0 cursor-pointer text-accent hover:underline" onClick={props.onOpen}>Restore saved view</button>
+        </div>
+      </Show>
       <Show when={props.targetMissing && !props.a.orphaned}>
         <p class="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-[10px] text-faint">Exact target is unavailable. This comment remains attached to its containing block.</p>
       </Show>

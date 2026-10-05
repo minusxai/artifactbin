@@ -169,6 +169,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [hoverId, setHoverId] = createSignal<string | null>(null);
   let uiHoverId: string | null = null;
   const hoverUi = (id: string | null) => { uiHoverId = id; setHoverId(id); };
+  const [viewStateRequest, setViewStateRequest] = createSignal(0);
+  const [viewStateError, setViewStateError] = createSignal<{ id: string; message: string } | null>(null);
   const [missingTargets, setMissingTargets] = createSignal<Set<string>>(new Set());
   const [anchorRects, setAnchorRects] = createSignal<Record<string, StoryEditRect>>({});
   let threadsRoot: HTMLDivElement | undefined;
@@ -221,6 +223,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
    */
   const openThread = (annId: string) => {
     batch(() => {
+      setViewStateRequest(value => value + 1);
       capture.reset();
       setPick(null);
       setOpenId(annId);
@@ -383,12 +386,12 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       .filter((row) => !row.orphaned && row.anchor)
       .map((row) => {
         const anchor = row.anchor! as typeof row.anchor & { nodeId?: string | null };
-        return { id: row.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: row.range,
+        return { id: row.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: row.range, ...(row.view_state ? {viewState: row.view_state} : {}),
           ...(row.status === 'resolved' && (row.id !== inspected || row.id !== open) ? { layoutOnly: true } : {}) };
       });
     const selected = selection();
     postToFrame({
-      type: STORY_ANNOTATIONS_MESSAGE, mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: hoverId(),
+      type: STORY_ANNOTATIONS_MESSAGE, viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: hoverId(),
       selectedPath: selected?.path ?? null, selected, canComment: true, pick: pick(),
     } satisfies StoryAnnotationsMessage);
   });
@@ -410,6 +413,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         return;
       }
       if (data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {
+        setViewStateError(data.viewStateError ?? null);
         const next: Record<string, StoryEditRect> = {};
         for (const position of data.positions) next[position.id] = position.rect;
         batch(() => {
@@ -453,7 +457,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             if (JSON.stringify(previous) === JSON.stringify(reported)) return previous;
             const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
             if (!sameIdentity || reported?.range) return reported;
-            const merged = { ...reported, ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}) };
+            const merged = { ...reported, ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}), ...(previous.viewState ? {viewState: previous.viewState} : {}), ...(previous.viewStateError ? {viewStateError: previous.viewStateError} : {}) };
             return JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged;
           });
           setFailure(null);
@@ -534,6 +538,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           ...(attachmentId ? { attachment_id: attachmentId, edit_id: shot!.editId } : {}),
           ...(subject.quote ? { quote: subject.quote } : {}),
           ...(subject.range ? { range: subject.range } : {}),
+          ...(subject.viewState ? { view_state: subject.viewState, edit_id: shot?.editId ?? props.editId } : {}),
         }, mutation.key);
       } catch (error) {
         if (!(error instanceof BackendRequestError)) throw error;
@@ -799,6 +804,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                 )}</For>
               </div>
             </CommentMarkdownField>
+            <Show when={selection()?.viewStateError}><p role="status" class="mb-2 text-xs text-muted">{selection()?.viewStateError}</p></Show>
             <Show when={failure()}><p role="alert" class="mb-2 font-mono text-[11px] text-danger">{failure()}</p></Show>
             <div class="flex items-center justify-end gap-2">
               <span class="mr-auto hidden font-mono text-[9px] text-faint sm:inline">⌘↵ to send</span>
@@ -822,7 +828,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             <For each={openIds()}>{(id) => (
               <Show when={openRow(id)}>{(row) => (
                 <AnnotationThread artifactId={props.id} backend={backend} a={row()} open={openId() === id} hovered={hoverId() === id} busy={busy()}
-                  targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
+                  viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
                   isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, false)} />
               )}</Show>
             )}</For>
@@ -834,7 +840,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             <For each={resolvedIds()}>{(id) => (
               <Show when={resolvedRow(id)}>{(row) => (
                 <AnnotationThread artifactId={props.id} backend={backend} a={row()} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
-                  targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
+                  viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
                   isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, true)} />
               )}</Show>
             )}</For>

@@ -1,3 +1,4 @@
+import { reviewStateFor, withReviewState } from '../review-state';
 'use client';
 
 import { COMMENT_PRESENTATION } from '../comment-presentation';
@@ -193,6 +194,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   let reportedHoverId: string | null = null;
   /** The openId whose node was last scrolled to — scroll once per open, not per re-apply. */
   let scrolledTo: string | null = null;
+  let restoredRequest: number | undefined;
+  let viewStateError: { id: string; message: string } | null = null;
   /** The ranges currently painted for each thread — the layout rect follows the WORDS when there are any. */
   let painted = new Map<string, Range[]>();
   /** The pick mode (the rail's tools). Read from the state message; never inferred. */
@@ -424,10 +427,10 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const status = isTargetRange(pin.range) ? (el.getAttribute(COMMENT_TARGET_ATTR) ? 'exact' : 'missing') : undefined;
       return [{ id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, ...(status ? {status}:{}) }];
     });
-    const key = JSON.stringify(positions);
+    const key = JSON.stringify([positions, viewStateError]);
     if (unchangedQuiet && key === postedLayout) return;
     postedLayout = key;
-    post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions });
+    post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions, viewStateError });
   };
 
   /** Whether the layer may have stamped, highlighted or banded anything since its last sweep. */
@@ -489,6 +492,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if (previous?.nodeId && previous.nodeId === selection.nodeId) {
       if (previous.quote !== undefined) selection.quote = previous.quote;
       if (previous.range) selection.range = previous.range;
+      if (previous.viewState) selection.viewState = previous.viewState;
+      if (previous.viewStateError) selection.viewStateError = previous.viewStateError;
     }
     report(selection);
   };
@@ -506,7 +511,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   /** Report a selection: stamp the node so the owner sees what they picked, tell the page. */
   const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire; captureRect?: AnnotationRect } = {}) => {
-    const selection = el ? describeCommentSelection(el, nodes) : null;
+    const described = el ? describeCommentSelection(el, nodes) : null;
+    const selection = described ? withReviewState(doc, described) : null;
     if (selection && extra.range && (selection.tag !== 'For' || isTargetRange(selection.range))) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
     if(selection && extra.captureRect)selection.captureRect=extra.captureRect;
     captureHandoff = Boolean(selection && extra.captureRect && pick === 'area');
@@ -759,6 +765,15 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     update(message) {
       captureHandoff = false; // The host now owns capture suppression and subsequent composer paint.
       state = message;
+      const reopening = message.openId !== scrolledTo || message.viewStateRequest !== restoredRequest;
+      if (message.mode !== 'off' && message.openId && reopening && !isEditing()) {
+        viewStateError = null;
+        const pin = message.pins.find(p => p.id === message.openId);
+        if (pin?.viewState) {
+          try { reviewStateFor(doc).restore(pin.viewState); }
+          catch { viewStateError = { id: message.openId, message: 'The saved view could not be restored. The app may have changed.' }; }
+        }
+      } else if (!message.openId) viewStateError = null;
       setPick(message.mode === 'off' || message.canComment === false ? null : message.pick ?? null);
       if (message.mode === 'off') selectedPath = null;
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;
@@ -771,7 +786,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       // per open, VERTICALLY only — scrollIntoView also scrolls the x-axis,
       // and centering a node near the document's right edge shoved the whole
       // page sideways the moment the sidebar narrowed the viewport.
-      if (message.mode !== 'off' && message.openId && message.openId !== scrolledTo) {
+      if (message.mode !== 'off' && message.openId && reopening) {
         const pin = message.pins.find((p) => p.id === message.openId);
         if (pin?.nodeId && isTargetRange(pin.range) && pin.range.target.kind === 'table') doc.dispatchEvent(new CustomEvent('mx:reveal-comment-target',{detail:{owner:pin.nodeId,target:pin.range.target}}));
         const el = pin ? elementForPin(pin) : null;
@@ -782,6 +797,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
         }
       }
       scrolledTo = message.openId;
+      restoredRequest = message.viewStateRequest;
     },
     setNodes(next) {
       nodes = next;
