@@ -77,7 +77,9 @@ describe('hosted portable file handoff',()=>{
  it('rejects overlapping edits and forged baselines without writing the original',async()=>{
   const {file,row,document,scope,send}=await setup();file.source=file.source.replace('One','Offline');
   await applyEditFor(scope,row.id,{baseEditId:row.edit_id,documentUpdate:prepareClientDocumentUpdate({document,version:row.version,meta:row.meta},{source:row.source!.replace('One','Online')})});
-  const head=(await getArtifactById(row.id))!;expect((await send()).status).toBe(409);expect((await getArtifactById(row.id))!.version).toBe(head.version);
+  const head=(await getArtifactById(row.id))!,conflict=await send();expect(conflict.status).toBe(409);
+  expect(await conflict.json()).toMatchObject({code:'doc_changed',error:'Your offline changes overlap with newer server edits.',hint:'Your changes were not applied. Keep this file and reconcile the edited blocks, or create an independent copy.'});
+  expect((await getArtifactById(row.id))!.version).toBe(head.version);
   file.base.source='forged';expect((await send()).status).toBe(409);expect((await getArtifactById(row.id))!.source).toBe(head.source);
  });
  it('rechecks account edit access and same-origin mutations, and offers copies explicitly',async()=>{
@@ -91,6 +93,11 @@ describe('hosted portable file handoff',()=>{
   expect(await (await send('copy')).json()).toMatchObject({artifactId:made.artifactId});
   const landed=await redirect(request(`/workspace/${row.id}`,{actor}),{params:Promise.resolve({id:row.id})});expect(landed.status).toBe(303);expect(landed.headers.get('location')).toBe(`http://localhost:3000/a/${row.id}/edit`);
   expect((await redirect(request(`/workspace/${row.id}`,{actor:stranger}),{params:Promise.resolve({id:row.id})})).status).toBe(404);
+ });
+ it.each(['app.artifactbin.dev','custom.artifactbin.example'])('redirects the verified original through the public proxy origin %s',async(host)=>{
+  const {row,actor}=await setup();
+  const landed=await redirect(request(`/workspace/${row.id}`,{actor,headers:{host:'artifactbin-app:5000','x-forwarded-host':host,'x-forwarded-proto':'https'}}),{params:Promise.resolve({id:row.id})});
+  expect(landed.status).toBe(303);expect(landed.headers.get('location')).toBe(`https://${host}/a/${row.id}/edit`);
  });
  it('preserves server threads, adds stable local comments and replies once, and refuses edited server comments',async()=>{
   const {file,row,scope,send}=await setup();

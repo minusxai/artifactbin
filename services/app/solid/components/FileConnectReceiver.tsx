@@ -4,7 +4,7 @@ import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_MAX_BYTES,type PreviewConnectMes
 import {previewWorkspaceUrl} from '@/lib/offline/preview-connect';
 import {PageBar,DocumentTitle} from './PageBar';
 import {runtimeId} from '../../lib/story-runtime/runtime-id';
-import {FormPage,FORM_INPUT,FORM_PRIMARY_BUTTON} from './FormControls';
+import {FormPage,FORM_INPUT,FORM_PRIMARY_BUTTON,FORM_SECONDARY_BUTTON} from './FormControls';
 export interface ConnectOffer {html:string;filename:string}
 export interface ConnectInspection {title:string|null;comments:number;target:string;kind?:'local'|'update'|'copy';requiresAuth?:boolean;reason?:string}
 export interface ConnectAdapter {
@@ -55,9 +55,10 @@ export function FileConnectReceiver(props:{adapter:ConnectAdapter;authentication
   <h1 class="text-base font-semibold">{props.adapter.hosted?'Connect an offline file':'Import an HTML file'}</h1>
   <p class="text-muted">Choose an artifactbin .jsx.html file, or use Connect to server in your offline file.</p>
   <p class="text-muted">{props.adapter.hosted?'Review the destination and confirm before anything is published. Your original HTML file stays unchanged.':'Importing creates or reconciles a copy in this server’s workspace. Your original HTML file stays unchanged. Nothing is published.'}</p>
-  <label class="block space-y-2">HTML file <input class={FORM_INPUT} aria-label="HTML file" type="file" accept=".html" disabled={busy()} onChange={event=>void choose(event)}/></label>
+  <Show when={offer()}>{incoming=><p class="break-words">Received file: <b>{incoming().filename}</b></p>}</Show>
+  <label class="block space-y-2">{offer()?'Choose another file':'HTML file'} <input class={FORM_INPUT} aria-label="HTML file" type="file" accept=".html" disabled={busy()} onChange={event=>void choose(event)}/></label>
   <Show when={busy()}><p role="status">Working…</p></Show>
-  <Show when={error()}><p role="alert" class="text-danger">{error()}</p><p>Your offered file and unsaved edits remain available here. Retry the same action to recover confirmed operations without duplicates.</p></Show>
+  <Show when={error()}><p role="alert" class="text-danger">{error()}</p><p>Your file and unsaved edits are still here.</p></Show>
   <Show when={offer()&&!inspection()&&!busy()}><button class={FORM_PRIMARY_BUTTON} onClick={()=>void inspect(offer()!,false)}>Retry review</button></Show>
   <Show when={inspection()}>{value=><Show when={!value().requiresAuth} fallback={<><p>Log in with email to continue. This file stays in this tab.</p>{props.authentication?.(()=>{const current=offer();if(current)void inspect(current,false);})}</>}>
    <form class="space-y-4" onSubmit={event=>{event.preventDefault();void submit(value().kind??'local');}}>
@@ -65,8 +66,10 @@ export function FileConnectReceiver(props:{adapter:ConnectAdapter;authentication
     <Show when={props.adapter.hosted} fallback={<><label class="block space-y-2">Workspace file <input class={FORM_INPUT} aria-label="Workspace file" required value={target()} onInput={event=>setTarget(event.currentTarget.value)} disabled={busy()}/></label><p>Existing files use the same conflict checks as CLI import. If both copies changed, the server retains both and reports the conflict.</p></>}>
      <Show when={value().kind==='update'} fallback={<p>{value().reason} Creating an independent copy makes a new unlisted document; it does not update the original.</p>}><p>Verified original: <b>{value().target}</b> on this server. Apply uses the same conflict checks as the live editor. Independent edits are retained; overlapping edits are refused.</p></Show>
     </Show>
+    <div class="flex flex-wrap items-center gap-3">
     <button class={FORM_PRIMARY_BUTTON} type="submit" disabled={busy()}>{value().kind==='update'?'Apply to original':value().kind==='copy'?'Create independent copy':'Import and open'}</button>
-    <Show when={value().kind==='update'}><button class={FORM_PRIMARY_BUTTON} type="button" disabled={busy()} onClick={()=>void submit('copy')}>Create independent copy instead</button></Show>
+    <Show when={value().kind==='update'}><button class={FORM_SECONDARY_BUTTON} type="button" disabled={busy()} onClick={()=>void submit('copy')}>Create independent copy instead</button></Show>
+    </div>
    </form>
   </Show>}</Show>
  </FormPage></>;

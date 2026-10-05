@@ -97,6 +97,7 @@ export async function applyHostedOffer(request:Request,value:unknown):Promise<Re
   }
   return {status:response.status,body:await response.json()};
  });
+ if(result.status===409&&result.body.error==='doc_changed')return json({...result.body,code:'doc_changed',error:'Your offline changes overlap with newer server edits.',hint:'Your changes were not applied. Keep this file and reconcile the edited blocks, or create an independent copy.'},409);
  if(result.status>=400)return json(result.body,result.status);
  const id=copy?String(result.body.id):file.artifactId;
  if(!/^[A-Za-z0-9]{6,12}$/.test(id))return json({error:'The server did not confirm a document identity. Preserve this file and inspect your account.'},502);
