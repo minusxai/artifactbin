@@ -1,7 +1,7 @@
 import {CLI_VERSION} from './version';
 import {normalizeServer} from './config';
 import {CliError} from './errors';
-import {validVersion} from './version-order';
+import {compareVersions,validVersion} from './version-order';
 import {globalInstall,type GlobalInstallResult,type NpmRunner} from './global-install';
 import {installSkills,type SkillHarness,type SkillInstallation} from './skill-install';
 /** Foreground progress events; npm does the download, so only the release and install stages are drawn. */
@@ -14,13 +14,18 @@ export type UpdateResult=
  |{dry_run:true;current:string;target:string;command:string}
  |{version:string;current:string;installed:GlobalInstallResult;installations:SkillInstallation[];harnesses:SkillHarness[]};
 const POINTER_TIMEOUT_MS=10_000;
-/** The version the selected server names in its release pointer; anything unusable means npm's latest. */
-export async function releaseTarget(server:string,fetcher:typeof fetch=fetch):Promise<string>{
+/**
+ * The version the selected server names in its release pointer, when it is newer than the running CLI;
+ * anything else (an unusable pointer, or a server still serving an older or equal release because its
+ * deploy lags the npm publish) means npm's latest. An update never installs a downgrade.
+ */
+export async function releaseTarget(server:string,fetcher:typeof fetch=fetch,current:string=CLI_VERSION):Promise<string>{
  try{
   const response=await fetcher(`${normalizeServer(server)}/chat/release.json`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(POINTER_TIMEOUT_MS)});
   if(!response.ok)return 'latest';
   const body=await response.json() as {version?:unknown}|null;
-  return body&&typeof body==='object'&&validVersion(body.version)?body.version:'latest';
+  const named=body&&typeof body==='object'&&validVersion(body.version)?body.version:undefined;
+  return named&&compareVersions(named,current)>0?named:'latest';
  }catch{return 'latest';}
 }
 /** An explicit request: install the server's version through npm globally, then refresh the selected skills. */

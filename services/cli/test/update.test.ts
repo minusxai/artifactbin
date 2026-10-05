@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {compareVersions} from '../src/version-order';
 import {mkdtemp,readFile,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -24,6 +25,12 @@ test('update --dry-run resolves the server release pointer and runs no npm',asyn
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
+test('a pointer naming the running version or an older one means latest: an update never downgrades',async()=>{
+ const {releaseTarget}=await import('../src/update');
+ for(const [named,current] of [['0.4.6','0.4.7'],['0.4.7','0.4.7'],['0.4.10','0.4.9']] as const)
+  assert.equal(await releaseTarget(SERVER,pointer({version:named,protocol:3}).fetch,current),compareVersions(named,current)>0?named:'latest',`${named} vs ${current}`);
+ assert.equal(await releaseTarget(SERVER,pointer({version:'9.8.7',protocol:3}).fetch,'0.4.7'),'9.8.7');
+});
 test('an unavailable or invalid release pointer falls back to latest, never an error',async()=>{
  const fetches:(typeof fetch)[]=[pointer({error:'down'},500).fetch,pointer({version:'not-a-version',protocol:3}).fetch,pointer('nope').fetch,(async()=>{throw new TypeError('fetch failed');}) as typeof fetch];
  for(const fetch of fetches){
