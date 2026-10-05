@@ -22,6 +22,7 @@ npm CLI: local files/browser approval. Direct HTTP: email auth without CLI insta
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork deliberately: copy the file and remove those five fields.
+- For questions about an existing document, inspect the selected content and source first. Explain the visible cause and possible fix in plain language; omit element IDs, CSS classes and debugging evidence unless requested. Stop once the question is answered. Use rendering only when a relevant uncertainty remains or visual verification is requested. Do not export HTML to search bundled CSS when the source already explains the difference.
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 

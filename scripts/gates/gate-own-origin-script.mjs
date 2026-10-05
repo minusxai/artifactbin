@@ -160,6 +160,27 @@ try {
   };
   const head = async (id) => (await api(`/api/artifacts/${id}`)).json();
 
+  await section('YouTube referrer in reader and editor', async () => {
+    const result = await publish({title:'YouTube referrer fixture', visibility:'unlisted', markup:'<div id="root"><iframe id="youtube" src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ" title="Video" /></div>'});
+    check(result.status === 201, 'YouTube fixture publishes');
+    const id = result.body.id, page = await ctx.newPage(), refs = [];
+    await page.route('https://www.youtube-nocookie.com/embed/**', async route => {
+      refs.push((await route.request().allHeaders()).referer ?? '');
+      await route.fulfill({contentType:'text/html',body:'<!doctype html><p>Player fixture</p>'});
+    });
+    try {
+      await page.goto(`${APP}/a/${id}`, {waitUntil:'load'});
+      const seen = await until(() => refs.length, n => n > 0, 10000);
+      check(seen > 0 && refs.every(ref => ref === `${pagesOrigin(id)}/`), `reader sends document origin only (${JSON.stringify(refs)})`);
+      const frame = documentLocator(page);
+      check(await frame.locator('#youtube').getAttribute('referrerpolicy') === 'strict-origin-when-cross-origin', 'reader retains YouTube referrer policy');
+      await openArtifactControls(page);
+      await page.locator('[aria-label="Edit artifact"]').click();
+      await page.locator('[aria-label="Exit edit mode"]').waitFor({timeout:20000});
+      check(await frame.locator('#youtube').getAttribute('referrerpolicy') === 'strict-origin-when-cross-origin', 'editor retains YouTube referrer policy');
+    } finally { await page.close(); await api(`/api/artifacts/${id}`, {method:'DELETE'}); }
+  });
+
   // ── 1. the app page frames a private document on its own origin (was gate-pages-origin) ──
   await section('origin', async () => {
     const dataset = await publish({ dataset: [{ region: 'east', amount: 5 }, { region: 'west', amount: 7 }, { region: 'west', amount: 30 }], visibility: 'private', title: 'Pages origin sales' });
