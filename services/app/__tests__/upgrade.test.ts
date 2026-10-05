@@ -106,6 +106,8 @@ describe('the additive DDL is replay-safe', () => {
       // The exact selection, appended after created_at: an older database grows
       // these two by ALTER TABLE on boot, so their ordinal position follows it.
       'quote', 'range',
+      // Saved UI context is optional; ordinary comments keep this column NULL.
+      'view_state',
       // The soft-delete stamp every adopted table carries, appended LAST for
       // the same reason. Nothing writes it on this table yet (a comment is
       // erased, not trashed); the gate in lib/annotations is what it buys.

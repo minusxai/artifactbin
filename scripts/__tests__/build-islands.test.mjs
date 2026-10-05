@@ -116,13 +116,13 @@ describe('buildIslands', () => {
     expect(bytes).toBeLessThanOrEqual(29_500);
   });
 
-  it('keeps comment target parsing, event contracts and runtime class merging out of rt+boot', () => {
+  it('keeps comment target and saved-view parsing, event contracts and runtime class merging out of rt+boot', () => {
     const { manifest, closure } = first;
     // Which modules each output carries: the --cache marker the setup build wrote beside its manifest.
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     const all = Object.values(outputInputs).flat();
     const modules = closure([manifest['@mx/rt'], manifest['@mx/boot']]).flatMap((url) => outputInputs[url]);
-    for (const name of ['story/annotations/comment-target.ts']) {
+    for (const name of ['story/annotations/comment-target.ts', 'contracts/src/comment-view-state.ts']) {
       expect(all.some((input) => input.endsWith(name)), `${name} is in the build at all`).toBe(true);
       expect(modules.some((input) => input.endsWith(name)), name).toBe(false);
     }
@@ -135,6 +135,8 @@ describe('buildIslands', () => {
   it('keeps every kit family inside the ready-time static budget, with the map engine behind dynamic imports', () => {
     const { manifest, files, closure } = first;
     const staticUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.map(family => manifest[`@mx/kit/${family}`])]);
+    const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
+    expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/comment-view-state.ts'))).toBe(false);
     const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
     expect(staticBytes).toBeLessThanOrEqual(80 * 1024);
     const withImage = closure([manifest['@mx/kit/image'], ...staticUrls]);

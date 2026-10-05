@@ -1,4 +1,4 @@
-import { parseCommentViewState } from '@artifactbin/contracts';
+import { parseCommentViewState } from '../../../../../../../contracts/src/comment-view-state';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**

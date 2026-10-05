@@ -46,4 +46,6 @@ export * from './schedules';
 export {parseProgramDefinition,type ProgramDefinition} from './program';
 export * from './preview-connect';
 
-export {parseCommentViewState, COMMENT_VIEW_STATE_MAX_BYTES, type CommentViewState, type ReviewJson} from './comment-view-state';
+// Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here
+// makes esbuild's split reader graph load that chunk through unrelated contract imports.
+export type {CommentViewState, ReviewJson} from './comment-view-state';
