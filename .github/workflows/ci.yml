@@ -927,24 +927,27 @@ jobs:
       - name: Install the same candidate for experience checks
         if: matrix.phase == 'experience'
         run: npm run test:npm-package -w services/cli -- --ci --install-only
-      - name: Installed public library declarations compile without private workspace aliases
-        if: matrix.phase == 'experience' && matrix.node == '22.22.3' && (runner.os == 'Linux' && runner.arch == 'X64' || runner.os == 'Windows')
-        working-directory: services/cli
-        run: node scripts/test-installed-npm.mjs types
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: matrix.phase == 'experience'
+        id: acceptance-browser
         with:
           path: |
             ~/.cache/ms-playwright
             ~/Library/Caches/ms-playwright
             ~/AppData/Local/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci/npm-acceptance/node_modules/playwright-core/browsers.json') }}
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci/npm-acceptance/node_modules/playwright/browsers.json') }}
+      # Windows/macOS ship Chromium dependencies; --with-deps needlessly installed
+      # Windows Media Foundation for 44s although these headless proofs do not record video.
+      - name: Install Linux acceptance browser dependencies
+        if: matrix.phase == 'experience' && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'
+        working-directory: services/cli
+        run: node ../../node_modules/playwright/cli.js install-deps chromium
       - name: Installed npm preview and export, with process shutdown
         if: matrix.phase == 'experience'
         working-directory: services/cli
         run: |
-          node ../../node_modules/playwright/cli.js install --with-deps chromium
-          node scripts/test-installed-npm.mjs experience
+          node ../../node_modules/playwright/cli.js install chromium
+          node scripts/test-installed-npm.mjs experience ${{ matrix.node == '22.22.3' && (runner.os == 'Linux' && runner.arch == 'X64' || runner.os == 'Windows') && '--types' || '' }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: failure() && matrix.phase == 'experience'

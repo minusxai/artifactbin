@@ -31,11 +31,21 @@ it('installs isolated acceptance tooling only for experience checks before consu
 
 it('runs invariant declarations on Linux and Windows once while keeping every consumer journey',()=>{
  const steps=workflow().jobs.cli.steps;
- const types=steps.find(step=>step.name?.startsWith('Installed public library declarations'));
- expect(types.if).toContain("matrix.node == '22.22.3'");
- expect(types.if).toContain("runner.os == 'Windows'");
- expect(types.if).toContain("runner.os == 'Linux' && runner.arch == 'X64'");
+ const types=steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
+ expect(types.run).toContain("matrix.node == '22.22.3'");
+ expect(types.run).toContain("runner.os == 'Windows'");
+ expect(types.run).toContain("runner.os == 'Linux' && runner.arch == 'X64'");
+ expect(types.run).toContain("&& '--types' || ''");
  const experience=steps.find(step=>step.run?.includes('test-installed-npm.mjs experience'));
  expect(experience.if).toBe("matrix.phase == 'experience'");
- expect(experience.run).toContain('playwright/cli.js install --with-deps chromium');
+ expect(experience.run).toContain('playwright/cli.js install chromium');
+});
+it('pins browser tooling to its actual aliased manifest and installs OS dependencies only on Linux misses',()=>{
+ const steps=workflow().jobs.cli.steps,cache=steps.find(step=>step.with?.key?.startsWith('chromium-'));
+ expect(cache?.with.key).toContain("hashFiles('scripts/ci/npm-acceptance/node_modules/playwright/browsers.json')");
+ const deps=steps.find(step=>step.name==='Install Linux acceptance browser dependencies');
+ expect(deps?.if).toBe("matrix.phase == 'experience' && runner.os == 'Linux' && steps.acceptance-browser.outputs.cache-hit != 'true'");
+ const proof=steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
+ expect(proof.run).toContain('playwright/cli.js install chromium');
+ expect(proof.run).not.toContain('--with-deps');
 });

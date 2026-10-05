@@ -836,7 +836,8 @@ describe('CI job shape', () => {
     expect(jobs.test.needs).not.toContain('warm-caches');
     const warmKeys = jobs['warm-caches'].steps.filter((step) => step.uses?.startsWith('actions/cache@')).map((step) => step.with.key);
     for (const restore of [debs, jobs.gates.steps.find((step) => step.id === 'playwright'), jobs.gates.steps.find((step) => step.id === 'build-cache')]) {
-      expect(warmKeys).toContain(restore.with.key);
+      // The independent warmer writes ordinary builds; release-only caches use their own shape.
+      expect(warmKeys).toContain(restore.with.key.replace('${{ needs.plan.outputs.cli }}','false'));
     }
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));

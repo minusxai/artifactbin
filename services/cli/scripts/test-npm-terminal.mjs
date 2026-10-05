@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile} from 'node:fs/promises';
+import {removeTerminalWorkspace} from './terminal-workspace-cleanup.mjs';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 
@@ -60,5 +61,5 @@ lines.once('line',line=>{
  console.log(JSON.stringify({native_terminal:'passed',natural_exit:true,exit_receipt:exitReceipt,platform:process.platform,node:process.version}));
 }finally{
  if(worker?.exitCode===null&&!worker?.signalCode)worker.kill();
- server.closeAllConnections();await new Promise(yes=>server.close(yes));await rm(directory,{recursive:true,force:true});
+ server.closeAllConnections();await new Promise(yes=>server.close(yes));await removeTerminalWorkspace(directory);
 }

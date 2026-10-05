@@ -16,3 +16,8 @@ export async function runAcceptanceProcesses(checks,{spawnProcess=spawn,timeout=
  const failures=results.filter(result=>result.status==='rejected').map(result=>result.reason);
  if(failures.length)throw new AggregateError(failures,'Installed-package acceptance failed');
 }
+
+/** Declaration invariants join the same isolated parallel proofs only where CI selects them. */
+export function installedAcceptanceModes(mode,includeTypes=false){
+ return mode==='experience'?['runner','terminal','preview','local',...(includeTypes?['types']:[])]:[mode];
+}
