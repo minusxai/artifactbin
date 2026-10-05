@@ -867,6 +867,7 @@ jobs:
             services/cli/dist/packages/*.tgz
             services/cli/dist/packages/*.sigstore
             services/cli/dist/packages/*.build.json
+            services/cli/dist/packages/transition/*
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
