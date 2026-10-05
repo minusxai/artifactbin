@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 'cli-preview', 'reference-compatibility'];
 
 /**
- * The four tracked release files carry only version changes. Teaching is generated
+ * The tracked release files carry only version changes. Teaching is generated
  * during the build, not committed. A version-only push needs packaging proofs:
  * the source under that version has already passed the suites.
  */
@@ -19,6 +19,8 @@ const VERSION_LINE = {
   'services/app/public/chat/release.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   // Twice, in two shapes: the installer's own default and the line of usage that quotes it.
   'services/app/public/chat/install.sh': /^\s*version=\d+\.\d+\.\d+$|--version \d+\.\d+\.\d+/,
+  // The bootstrap old 0.3.x installs download from every release pins the version it installs.
+  'services/cli/transition/afbin': /^AFBIN_VERSION=\d+\.\d+\.\d+$/,
 };
 
 export const VERSION_BUMP_FILES = Object.keys(VERSION_LINE);
@@ -37,7 +39,10 @@ export const CLI_BUMP_REFUSAL = 'This PR changes the CLI without bumping its ver
  * @param {{path: string, hunks: {removed: string[], added: string[]}[]}[]} files
  */
 export function isVersionOnlyBump(files) {
-  if (!files.length || !files.some((file) => file.path === 'services/cli/package.json')) return false;
+  // The package and the transition pin move together: a bump that leaves old installs on the old pin is not one.
+  for (const required of ['services/cli/package.json', 'services/cli/transition/afbin']) {
+    if (!files.some((file) => file.path === required)) return false;
+  }
   const withoutVersions = (line) => line.replace(/\d+\.\d+\.\d+/g, '#');
   for (const file of files) {
     const versionLine = VERSION_LINE[file.path];

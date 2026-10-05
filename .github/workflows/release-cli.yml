@@ -84,9 +84,12 @@ jobs:
           [[ "$build_sha" =~ ^[a-f0-9]{40}$ ]]
           test -f "$file.sigstore" && test ! -L "$file.sigstore"
           node scripts/ci/npm-provenance.mjs verify "$file" "$version" "$build_sha" "$SOURCE_RUN"
+          # The files old 0.3.x installs download from this release: hashes, pins and the updater's own check.
+          node services/cli/scripts/transition-assets.mjs verify ./package/transition
           {
             echo "build_run=$SOURCE_RUN"
             echo "file=$file"
+            echo "transition=./package/transition"
             echo "version=$version"
             echo "source_sha=$SOURCE_SHA"
           } >> "$GITHUB_OUTPUT"
@@ -125,15 +128,20 @@ jobs:
           PACKAGE_FILE: ${{ steps.package.outputs.file }}
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
           RELEASE_SOURCE_SHA: ${{ steps.package.outputs.source_sha }}
+          TRANSITION: ${{ steps.package.outputs.transition }}
         run: |
           set -euo pipefail
           tag="afbin-v$PACKAGE_VERSION"
+          # What the 0.3.x self-updater downloads: the bootstrap under the four old asset names, their manifests, the skills.
+          transition=()
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64; do transition+=("$TRANSITION/afbin-$target" "$TRANSITION/afbin-$target.manifest.json"); done
+          transition+=("$TRANSITION/afbin-skills.json")
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
             if [ "$(cat draft.txt)" = true ]; then
-              gh release upload "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --clobber
+              gh release upload "$tag" "$PACKAGE_FILE" "${transition[@]}" --repo "$GITHUB_REPOSITORY" --clobber
               gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
             fi
             exit 0
           fi
           grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
-          gh release create "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SOURCE_SHA" --title "$tag" --notes '' --latest=false
+          gh release create "$tag" "$PACKAGE_FILE" "${transition[@]}" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SOURCE_SHA" --title "$tag" --notes '' --latest=false
