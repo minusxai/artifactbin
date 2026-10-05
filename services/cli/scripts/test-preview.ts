@@ -1,8 +1,8 @@
 import sharp from 'sharp';
 /** CI-only real Chromium proof. No mocked HTTP, persistence or SQL. */
-import {chromium} from 'playwright';
+import {chromium,type Page} from 'playwright';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir,homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
@@ -39,15 +39,46 @@ if(!['all','preview','export-basic','export-variants'].includes(phase))throw new
 let server=phase.startsWith('export-')?undefined:await launch();
 let browser=phase.startsWith('export-')?undefined:await chromium.launch();
 const errors:string[]=[];
+const browserEvents:Array<Record<string,unknown>>=[];
+const trackedPages:Array<{page:Page;label:string}>=[];
+function trackPage(page:Page,label:string){
+ trackedPages.push({page,label});
+ page.on('pageerror',error=>{errors.push(error.message);browserEvents.push({page:label,type:'pageerror',message:error.stack??error.message});});
+ page.on('console',message=>browserEvents.push({page:label,type:'console',level:message.type(),message:message.text()}));
+ page.on('requestfailed',request=>browserEvents.push({page:label,type:'requestfailed',url:request.url(),error:request.failure()?.errorText}));
+ page.on('response',response=>{if(response.url().includes('/document?')||response.url().includes('/bundle/')||response.status()>=400)browserEvents.push({page:label,type:'response',url:response.url(),status:response.status()});});
+ return page;
+}
+async function ready(page:Page){
+ // SSR prose alone says nothing about either the reader module or the independently
+ // fetched preview chrome. Do not navigate away while that first boot is pending.
+ await page.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
+ await page.getByRole('button',{name:'Edit document',exact:true}).waitFor();
+}
+async function retainDiagnostics(error:unknown){
+ const destination=resolve('test-results','local-journey','preview-'+phase);
+ await mkdir(destination,{recursive:true});
+ await writeFile(join(destination,'failure.json'),JSON.stringify({entry,root,url:server?.url,error:error instanceof Error?error.stack:String(error),browserEvents},null,2));
+ for(const file of ['report.jsx','appendix.jsx','published.jsx','sales.csv'])await writeFile(join(destination,file),await readFile(join(root,file)));
+ for(const {page,label} of trackedPages){
+  if(page.isClosed())continue;
+  try{
+   await writeFile(join(destination,label+'-dom.html'),await page.content());
+   await writeFile(join(destination,label+'-aria.txt'),await page.locator('body').ariaSnapshot());
+   await writeFile(join(destination,label+'-state.json'),JSON.stringify(await page.evaluate(()=>({url:location.href,ready:document.documentElement.hasAttribute('data-mx-ready'),previewBars:document.querySelectorAll('.afbin-preview-bar').length,scripts:[...document.scripts].map(script=>({src:script.src,type:script.type}))})),null,2));
+   await page.screenshot({path:join(destination,label+'.png'),fullPage:true});
+  }catch(reason){await writeFile(join(destination,label+'-unavailable.txt'),String(reason));}
+ }
+ console.error('Preview diagnostics retained at '+destination);
+}
 try{
  if(server&&browser){
- const a=await browser.newPage(),b=await browser.newPage();
- a.on('pageerror',error=>errors.push(error.message));b.on('pageerror',error=>errors.push(error.message));
- await a.goto(server.url);await b.goto(server.url);
+ const a=trackPage(await browser.newPage(),'editing'),b=trackPage(await browser.newPage(),'reader');
+ await a.goto(server.url);await b.goto(server.url);await ready(a);await ready(b);
  await a.locator('#text').waitFor();assert.equal(await a.locator('#text').textContent(),'Draft paragraph');
  await a.getByRole('img',{name:'Local image'}).evaluate((image:HTMLImageElement)=>image.decode());
  // The compiled reader is a clean read-only page until "Edit document" is pressed; a link just navigates.
- await a.getByRole('link',{name:'Local appendix'}).click();await a.locator('#text').filter({hasText:'Unpublished appendix'}).waitFor();await a.goto(server.url);await a.locator('#text').waitFor();
+ await a.getByRole('link',{name:'Local appendix'}).click();await a.locator('#text').filter({hasText:'Unpublished appendix'}).waitFor();await a.goto(server.url);await ready(a);await a.locator('#text').waitFor();
  console.log('PASS offline CLI add, ID preview, image and JSX link resolve before publication');
  // `b` stays a clean reader for the rest of this run.
  await a.getByRole('button',{name:'Edit document',exact:true}).click();
@@ -169,4 +200,4 @@ try{
  for(const worker of workers)if(worker.status==='rejected')throw worker.reason;
  console.log(`PASS local image export proof (${phase}); sources unchanged and lazy caches reused`);
  }
-}catch(error){console.error('Browser errors:',errors);for(const context of browser?.contexts()??[])for(const page of context.pages())console.error((await page.locator('body').innerText()).slice(0,5000));throw error;}finally{await browser?.close();await server?.close();await rm(root,{recursive:true,force:true});}
+}catch(error){try{await retainDiagnostics(error);}catch(reason){console.error('Could not retain preview diagnostics',reason);}console.error('Browser errors:',errors);for(const context of browser?.contexts()??[])for(const page of context.pages())console.error((await page.locator('body').innerText()).slice(0,5000));throw error;}finally{await browser?.close();await server?.close();await rm(root,{recursive:true,force:true});}
