@@ -745,9 +745,17 @@ async function connecting(engineName, browser) {
       await step('edit and comment stay unsaved in the original file', async () => {
         await page.getByRole('button', { name: 'Edit', exact: true }).click();
         await answerName(page, 'Local reviewer');
-        await page.getByRole('heading', { name: 'Offline prose' }).click({ clickCount: 3 });
+        await page.getByRole('heading', { name: 'Offline prose' }).evaluate((heading) => {
+          (heading.closest('.ProseMirror') ?? heading).focus({ preventScroll: true });
+          const text = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
+          const selection = window.getSelection();
+          selection.removeAllRanges(); selection.setBaseAndExtent(text, 0, text, text.textContent.length);
+        });
         await page.keyboard.insertText('Connected prose');
         await page.getByRole('button', { name: 'Done editing' }).click();
+        await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible().catch(async (error) => {
+          throw new Error(`editor feedback: ${JSON.stringify(await page.evaluate(() => ({feedback: [...document.querySelectorAll('[role="status"], [role="alert"]')].map(node => node.textContent), buttons: [...document.querySelectorAll('button')].map(node => node.textContent)})))}; ${error.message}`);
+        });
         await expect(page.getByRole('heading', { name: 'Connected prose' })).toBeVisible();
         await page.getByRole('heading', { name: 'Connected prose' }).evaluate((heading) => {
           const range = document.createRange(); range.selectNodeContents(heading);
@@ -785,7 +793,8 @@ async function connecting(engineName, browser) {
         await source.fill((await source.inputValue()).replace('Connected prose', 'Saved on the server'));
         await popup.getByRole('button', { name: 'Done editing', exact: true }).click();
         await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 20_000 });
-        check(readFileSync(path.join(directory, 'connected.jsx'), 'utf8').includes('Saved on the server'), `${engineName}: full server editor writes imported JSX`);
+        await expect.poll(() => readFileSync(path.join(directory, 'connected.jsx'), 'utf8')).toContain('Saved on the server');
+        check(true, `${engineName}: full server editor writes imported JSX`);
         await expect(page.getByRole('heading', { name: 'Connected prose' })).toBeVisible();
         await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
         check(readFileSync(originalPath, 'utf8') === originalHtml, `${engineName}: original HTML remains unchanged`);
