@@ -6,7 +6,6 @@ import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
-import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
 import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
 const entry=resolve(process.argv[2]);
@@ -146,13 +145,19 @@ try{
  await popup.bringToFront();await connectedSource.click();await connectedSource.press('ControlOrMeta+a');await popup.keyboard.insertText(connectedReplacement);
  await popup.getByRole('status').filter({hasText:/^Unsaved$/}).waitFor();
  await popup.getByRole('heading',{name:'Connected saved report',exact:true}).waitFor();
- await popup.getByRole('button',{name:'Done editing',exact:true}).click();
+ // The heading is already updated in the unsaved editor: it is not a persistence receipt.
+ // Done writes /save and reloads only after that write succeeds. Arm both before clicking,
+ // as test-preview.ts does, then assert the actual file and rebuilt preview.
+ const [connectedSave]=await Promise.all([
+  popup.waitForResponse(response=>new URL(response.url()).pathname==='/save'&&response.request().method()==='POST'),
+  popup.waitForNavigation({waitUntil:'load'}),
+  popup.getByRole('button',{name:'Done editing',exact:true}).click(),
+ ]);
+ assert.equal(connectedSave.status(),200,'Connected editor must acknowledge the accepted save');
  await popup.getByRole('heading',{name:'Connected saved report',exact:true}).waitFor({timeout:30000});
- const commitDeadline=Date.now()+5000;
- let committed=await readFile(join(connected,'connected.jsx'),'utf8');
- while(!/Connected saved report/.test(committed)&&Date.now()<commitDeadline){
-  await delay(100);committed=await readFile(join(connected,'connected.jsx'),'utf8');
- }
+ await popup.getByRole('button',{name:'Edit',exact:true}).waitFor();
+ await popup.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
+ const committed=await readFile(join(connected,'connected.jsx'),'utf8');
  assert.match(committed,/Connected saved report/);
  assert.equal(await readFile(exported,'utf8'),html,'Connect must not overwrite the opened HTML');
  await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();

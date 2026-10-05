@@ -9,13 +9,22 @@
  * the assembler read public/islands/manifest.json — so every test process gets it the same way. So is
  * the CLI's generated teaching, which source consumers import: its content-verified cache makes the
  * call free when `npm test` already generated it (scripts/lib/generate-teaching.mjs).
+ * The local wrapper can omit reader assets only after proving its selected imports are app-free;
+ * app tests and direct Vitest/IDE invocations retain the complete provisioning contract.
  */
 import { execFileSync } from 'child_process';
 import path from 'path';
+import type { TestProject } from 'vitest/node';
 import { generateTeaching } from '../../../../scripts/lib/generate-teaching.mjs';
 import { serverReaderFresh } from '../../scripts/server-reader-cache.mjs';
 
-export default async function buildStoryRuntime(): Promise<void> {
+declare module 'vitest' {
+  interface ProvidedContext { readerAssetsRequired?: boolean; }
+}
+
+export default async function buildStoryRuntime(project: TestProject): Promise<void> {
+  // The local wrapper proves an app-free Vite import graph. Unknown/direct runners still build.
+  if (project.getProvidedContext().readerAssetsRequired === false) return;
   const appRoot = path.resolve(__dirname, '../..');
   await generateTeaching();
   if (serverReaderFresh()) console.log('build-server-reader: inputs unchanged, skipping rebuild (cache hit)');

@@ -89,15 +89,15 @@ $rejected=$false
 try{Invoke-Candidate (Join-Path $broken 'npm.cmd') @('--version')}catch{$rejected=$_.Exception.Message.Contains('exit 7')}
 if(!$rejected){throw 'Native command failure was ignored'}
 # The exact release tarball runs through npx.cmd under the same non-admin policy.
+$env:npm_config_audit='false';$env:npm_config_fund='false';$env:npm_config_update_notifier='false'
 $env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
+if(Test-Path $env:npm_config_cache){throw 'Expected genuinely cold npm cache'}
 $phase='standard-user online npx query'
 $result=Invoke-Candidate 'npx.cmd' @('--yes','--package','__ROOT__\candidate.tgz','afbin','query',$rows,'--json')
 if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('10'))){throw 'Standard-user npx candidate query failed'}
-$phase='standard-user warmed offline npm query'
-$result=Invoke-Candidate 'npm.cmd' @('exec','--offline','--yes','--package','__ROOT__\candidate.tgz','--','afbin','query',$rows,'--json')
-if(!(($result | ConvertFrom-Json | ConvertTo-Json -Depth 10).Contains('20'))){throw 'Standard-user warmed offline query failed'}
-[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","same-tarball-standard-user-npx","warmed-offline-query"]}')
+# Warmed offline/native behavior is proved by both Windows native matrix versions.
+[IO.File]::WriteAllText('__ROOT__\passed.json','{"status":"passed","checks":["standard-user","restricted-policy","absent-node","official-archive-checksum","npm-npx","repeat","broken-npm-repair","current-future-path","native-stderr-contract","same-tarball-standard-user-npx"]}')
 '@
 $child=$child.Replace('__ROOT__',$root.Replace("'","''"))
 # CreateProcessWithLogonW limits command lines to1024characters; keep script as

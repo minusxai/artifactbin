@@ -11,7 +11,7 @@
 NEVER after an individual edit, "just to check" or mid-task:** gate containers, pushing for PR CI, bare `npm test`.
 
 - **Finish the ENTIRE change on FAST checks, then run the SLOW tier ONE time.** Never a gate or a push per edit.
-- **Gates belong to PR CI** (12 gate shards, the build, every test shard). Run a local gate container
+- **Gates belong to PR CI** (7 gate shards, the build, every test shard). Run a local gate container
   only if CI's gate shard failed or you changed the reader/hydration.
 - **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
   the exact user scenario verified end to end on the built artifact → merge.
@@ -99,7 +99,7 @@ From the repo root; keep this list current.
 ## Change checks
 
 - CLI releases: `npm run release:cli` in the CLI's PR, or the `Release afbin` dispatch (straight to
-  main). `checks` refuses a CLI PR without a bump; a version-only diff builds only binaries; a tree PR
+  main). `checks` refuses a CLI PR without a bump; a version-only diff packs npm and verifies native consumers; a tree PR
   CI passed is not re-tested on merge. [Steps](services/cli/README.md). Teaching is generated before
   install/check/dev/build; never commit `services/cli/src/generated/teaching.json`. Main CI publishes
   the tested assets; deploys advance their source pin and verify the release before serving its installer.

@@ -12,7 +12,7 @@ import { existsSync, readdirSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { changedSpecifications } from '../lib/test-graph.mjs';
+import { changedSpecifications, needsReaderAssets } from '../lib/test-graph.mjs';
 
 export const DEFAULT_CAP = 50;
 // `api-isolated` is the api files that mock modules (vitest.config.ts): the same suite, own isolation.
@@ -109,6 +109,7 @@ export async function main(argv = process.argv.slice(2)) {
         // tests or unhandled errors exactly as the CLI does.
         const previous = process.exitCode;
         process.exitCode = undefined;
+        vitest.provide('readerAssetsRequired', await needsReaderAssets(vitest, selection.specs));
         await vitest.standalone();
         await vitest.runTestSpecifications(selection.specs, false);
         status = Number(process.exitCode ?? 0);
