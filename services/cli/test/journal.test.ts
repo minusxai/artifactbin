@@ -1,10 +1,10 @@
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,readFile,writeFile,rm,symlink,readdir} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm,symlink,readdir,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {digest} from '../src/files';
+import {digest,atomicWrite} from '../src/files';
 import {stageFiles,recoverFiles,stagedFiles,confinedPath} from '../src/journal';
 import {State} from '../src/state';
 import {stageRequest,readPendingRequest,savePendingResponse,clearPendingRequest,archivePendingRequest} from '../src/pending-request';
@@ -128,3 +128,14 @@ describe('the pending request record', () => {
    assert.ok(await readPendingRequest(home,root));
   }));
 });
+
+test('the CLI atomic writer preserves exclusive publication, bytes, modes and cleanup through its shared implementation',()=>fixture(async(_home,root)=>{
+ const path=join(root,'snapshot'),bytes=Buffer.from([0,255,17]);
+ await atomicWrite(path,bytes,{exclusive:true,mode:0o700});assert.deepEqual(await readFile(path),bytes);
+ if(process.platform!=='win32')assert.equal((await stat(path)).mode&0o777,0o700);
+ await assert.rejects(atomicWrite(path,'refused replacement',{exclusive:true}),{code:'EEXIST'});
+ assert.deepEqual(await readFile(path),bytes);assert.deepEqual(await readdir(root),['snapshot']);
+ await atomicWrite(path,'complete replacement');assert.equal(await readFile(path,'utf8'),'complete replacement');
+ if(process.platform!=='win32')assert.equal((await stat(path)).mode&0o777,0o600);
+ assert.deepEqual(await readdir(root),['snapshot']);
+}));
