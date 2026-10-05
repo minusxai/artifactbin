@@ -27,10 +27,10 @@ export function inspectBundle(bundle,version,bytes,expected){
 function officialSigner(signing=true){
  // setup-node 22.22.3 bundles npm 10.9.8. This deliberate npm-internal boundary is pinned;
  // fail visibly if that toolchain changes instead of silently generating a different format.
- const require=createRequire(npmDriver());
- if(!(signing?['10.9.8']:['10.9.8','11.19.0']).includes(require('../package.json').version))throw Error('Provenance requires the pinned npm10.9.8 build or npm11.19.0 release toolchain');
- const official=require('../node_modules/libnpmpublish/lib/provenance.js');
- const sigstore=require('../node_modules/sigstore');
+ const npmRequire=createRequire(npmDriver());
+ if(!(signing?['10.9.8']:['10.9.8','11.19.0']).includes(npmRequire('../package.json').version))throw Error('Provenance requires the pinned npm10.9.8 build or npm11.19.0 release toolchain');
+ const official=npmRequire('../node_modules/libnpmpublish/lib/provenance.js');
+ const sigstore=npmRequire('../node_modules/sigstore');
  return {generateProvenance:official.generateProvenance,verifyProvenance:async(subject,file)=>{
   const bundle=await official.verifyProvenance(subject,file);
   const statement=JSON.parse(Buffer.from(bundle.dsseEnvelope.payload,'base64').toString('utf8'));

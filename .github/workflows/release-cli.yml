@@ -65,9 +65,11 @@ jobs:
           [[ "$build_sha" =~ ^[a-f0-9]{40}$ ]]
           test -f "$file.sigstore" && test ! -L "$file.sigstore"
           node scripts/ci/npm-provenance.mjs verify "$file" "$version" "$build_sha" "$SOURCE_RUN"
-          echo "build_run=$SOURCE_RUN" >> "$GITHUB_OUTPUT"
-          echo "file=$file" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "build_run=$SOURCE_RUN"
+            echo "file=$file"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
       - name: Publish tested tarball through npm trusted publishing
         id: publish
         if: steps.package.outputs.file != ''
@@ -86,7 +88,7 @@ jobs:
             grep -q E404 npm-error.txt || { cat npm-error.txt >&2; exit 1; }
             if ! npm view '@afbin/cli' name > npm-package.txt 2> npm-package-error.txt; then
               grep -q E404 npm-package-error.txt || { cat npm-package-error.txt >&2; exit 1; }
-              echo 'First publication requires the maintainer’s verified npm login. No GitHub release has been created.'
+              echo 'First publication requires a verified maintainer npm login. No GitHub release has been created.'
               echo 'After successful main CI and publication approval, run locally:'
               echo "gh run download $PACKAGE_BUILD_RUN --repo $GITHUB_REPOSITORY --name afbin-npm-release --dir afbin-first-release"
               echo "npm publish afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz --access public --provenance=false --provenance-file afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz.sigstore --ignore-scripts"
