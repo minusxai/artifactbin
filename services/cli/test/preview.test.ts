@@ -11,6 +11,30 @@ import {prepareClientDocumentUpdate} from '../../app/lib/story/graph/document-up
 import {buildPreview} from '../scripts/build-preview.mjs';
 import {readdir} from 'node:fs/promises';
 
+test('empty preview starts without cloud access or selecting existing files',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-empty-command-'));
+ try{
+  await writeFile(join(root,'unselected.jsx'),'<p>Not implicitly selected</p>');
+  const errors:string[]=[];let invoked=false;
+  const code=await runCli(['preview','--port','7474'],{cwd:root,home:root,env:{},stdout:()=>{},stderr:value=>errors.push(value),preview:async options=>{invoked=true;assert.equal(options.port,7474);assert.deepEqual(options.paths,[]);return 0;},fetch:async()=>assert.fail('empty preview must not contact a remote host')});
+  assert.equal(code,0,errors.join(''));assert.equal(invoked,true);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('an empty preview serves a connection landing page without exposing workspace files',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-empty-host-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'unselected.jsx'),'<p>Private unselected source</p>');
+  session=await startPreview({root,files:[],home:join(root,'home')});
+  const response=await fetch(session.url);assert.equal(response.status,200);
+  assert.match(await response.text(),/Import an HTML file/);
+  assert.equal((await fetch(session.url+'/document?file=unselected.jsx')).status,403);
+  const denied=await fetch(session.url+'/connect/import',{method:'POST',headers:{origin:'https://unrelated.example','content-type':'application/json'},body:'{}'});
+  assert.equal(denied.status,403);
+  assert.equal(await readFile(join(root,'unselected.jsx'),'utf8'),'<p>Private unselected source</p>');
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
 test('file session HTTP saves reject stale revisions, preserve published metadata, query real data and persist comments',async()=>{
  const root=await mkdtemp(join(tmpdir(),'preview-http-'));
  let session:Awaited<ReturnType<typeof startPreview>>|undefined;

@@ -66,6 +66,42 @@ const shownSource = (): string => {
 afterEach(() => { disposeSolidOfflineFile(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Solid offline file', () => {
+  it.each(['ctrlKey', 'metaKey'] as const)('uses %s+S to save the edited portable file and explains its selected target', async (modifier) => {
+    const file = fixture();
+    const written: string[] = [];
+    const picker = vi.fn(async () => ({ name: 'chosen.jsx.html', createWritable: async () => ({
+      write: async (blob: Blob) => { written.push(await blob.text()); }, close: async () => {},
+    }) }));
+    vi.stubGlobal('showSaveFilePicker', picker);
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Saved with the shortcut</h1>') });
+    await mountSolidOfflineFile();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
+    const event = new KeyboardEvent('keydown', { key: 's', [modifier]: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(written).toHaveLength(1));
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
+    expect(saved.source).toContain('Saved with the shortcut');
+    expect(saved.threads).toEqual(file.threads);
+    await waitFor(() => expect(document.body.textContent).toContain('chosen.jsx.html'));
+    expect(document.body.textContent).toMatch(/tab.*(?:stays|still)|(?:reopen|open).*saved file/i);
+    expect(document.body.textContent).not.toContain('Unsaved changes');
+  });
+
+  it('keeps edits unsaved when the shortcut save picker is cancelled', async () => {
+    const picker = vi.fn(async () => { throw new DOMException('Cancelled', 'AbortError'); });
+    vi.stubGlobal('showSaveFilePicker', picker);
+    const file = fixture();
+    shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Retained after cancellation</h1>') });
+    await mountSolidOfflineFile();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(picker).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
+    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(screen.getByRole('heading', { name: 'Retained after cancellation' })).toBeTruthy();
+  });
+
   it('shows the offline identity, data time, live link and disabled Save reason', async () => {
     const file = fixture(); shell(file); await mountSolidOfflineFile();
     const bar = screen.getByRole('banner', { name: 'Offline copy' });
