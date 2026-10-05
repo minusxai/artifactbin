@@ -49,7 +49,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' > artifacts.txt
           if ! grep -Fxq afbin-npm-release artifacts.txt; then echo 'No new npm artifact; nothing to publish.'; exit 0; fi
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name afbin-npm-release --dir package
-          file="package/afbin-cli-$version.tgz"
+          file="./package/afbin-cli-$version.tgz"
           test -f "$file" && test ! -L "$file"
           tar -xOf "$file" package/package.json > manifest.json
           test "$(jq -r .name manifest.json)" = '@afbin/cli'

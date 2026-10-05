@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {parse} from 'yaml';
@@ -37,10 +37,20 @@ it('accepts the actual workflow publish arguments through npm CLI without confli
   const definition=parse(readFileSync(resolve(import.meta.dirname,'../../.github/workflows/release-cli.yml'),'utf8'));
   const command=definition.jobs.release.steps.find(step=>step.id==='publish').run.match(/^\s*npm publish "\$PACKAGE_FILE" (.+)$/m)[1];
   const args=command.match(/"[^"]*"|\S+/g).map(value=>value.replace(/^"|"$/g,'').replace('$PACKAGE_FILE.sigstore',provenance));
-  const invoke=extra=>spawnSync(process.execPath,[npmDriver(),'publish',fixture,...extra,'--dry-run','--json','--offline','--registry','http://127.0.0.1:1','--userconfig',config],{cwd:fixture,encoding:'utf8',timeout:15000,env:{...process.env,npm_config_cache:join(fixture,'cache')}});
+  const invoke=(extra,source=fixture)=>spawnSync(process.execPath,[npmDriver(),'publish',source,...extra,'--dry-run','--json','--offline','--registry','http://127.0.0.1:1','--userconfig',config],{cwd:fixture,encoding:'utf8',timeout:15000,env:{...process.env,npm_config_cache:join(fixture,'cache')}});
   // npm's real CLI rejects even false when both mutually exclusive config keys are present.
   const incompatible=invoke(['--access','public','--provenance=false','--provenance-file',provenance,'--ignore-scripts']);
   expect(incompatible.status).not.toBe(0);expect(incompatible.stderr).toMatch(/provenance-file.*can not be provided when using --provenance/);
   const actual=invoke(args);expect(actual.status,actual.stderr).toBe(0);expect(JSON.parse(actual.stdout).name).toBe('@afbin/cli-publish-argument-test');
+  // Exercise the workflow's actual tarball argument: an unprefixed `package/file.tgz`
+  // is parsed by npm as a GitHub shorthand instead of a local package.
+  mkdirSync(join(fixture,'package'));
+  writeFileSync(join(fixture,'package/package.json'),readFileSync(join(fixture,'package.json')));
+  const selection=definition.jobs.release.steps.find(step=>step.id==='package').run;
+  const source=selection.match(/^\s*file="([^"]+)"$/m)[1].replace('$version','0.0.0');
+  const packed=spawnSync('tar',['-czf',join(fixture,source),'-C',fixture,'package'],{encoding:'utf8'});
+  expect(packed.status,packed.stderr).toBe(0);
+  const tarball=invoke(args,source);expect(tarball.status,tarball.stderr).toBe(0);
+  expect(JSON.parse(tarball.stdout).name).toBe('@afbin/cli-publish-argument-test');
  }finally{rmSync(fixture,{recursive:true,force:true});}
 });
