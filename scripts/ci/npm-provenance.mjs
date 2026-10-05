@@ -44,7 +44,14 @@ export async function signArtifact(version,bytes,env,signer){
  if(env.GITHUB_REPOSITORY!==repository||env.GITHUB_REPOSITORY_VISIBILITY!=='public'||(env.GITHUB_EVENT_NAME==='pull_request'&&env.AFBIN_HEAD_REPOSITORY!==repository)||!['push','pull_request','schedule','workflow_dispatch'].includes(env.GITHUB_EVENT_NAME)||!env.GITHUB_WORKFLOW_REF?.startsWith(`${repository}/.github/workflows/ci.yml@`)||!/^\d+$/.test(env.GITHUB_RUN_ID??'')||!/^\d+$/.test(env.GITHUB_RUN_ATTEMPT??'')||! /^[a-f0-9]{40}$/.test(env.GITHUB_SHA??'')||! /^[a-f0-9]{40}$/.test(env.AFBIN_HEAD_SHA??''))throw Error('Only the public repository CI build may sign npm provenance');
  const official=signer??officialSigner(),subject=artifactSubject(version,bytes);
  // The official helper reads the real GitHub job environment; no SHA/run overrides are made.
- const bundle=await official.generateProvenance([subject],{});
+ let bundle;
+ try{bundle=await official.generateProvenance([subject],{});}
+ catch(error){
+  // An upload retry can lose the first receipt and report its existing Rekor entry.
+  // Make one fresh official signature/certificate; never fetch or trust that location.
+  if(error?.code!=='TLOG_CREATE_ENTRY_ERROR'||error.cause?.statusCode!==409||typeof error.cause?.location!=='string'||!/^\/api\/v1\/log\/entries\/(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{80})$/.test(error.cause.location))throw error;
+  bundle=await official.generateProvenance([subject],{});
+ }
  inspectBundle(bundle,version,bytes,{sha:env.GITHUB_SHA,run:env.GITHUB_RUN_ID});
  const directory=mkdtempSync(join(tmpdir(),'afbin-provenance-'));
  try{const file=join(directory,'bundle.sigstore');writeFileSync(file,JSON.stringify(bundle));await official.verifyProvenance(subject,file);}

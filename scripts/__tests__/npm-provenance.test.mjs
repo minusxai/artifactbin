@@ -21,6 +21,54 @@ describe('tested npm artifact provenance boundary',()=>{
  it('refuses unrelated repositories, fork PRs and private repository signing',async()=>{
   for(const env of [{...context,GITHUB_REPOSITORY:'other/repo'},{...context,AFBIN_HEAD_REPOSITORY:'fork/artifactbin'},{...context,GITHUB_REPOSITORY_VISIBILITY:'private'}])await expect(signArtifact('0.4.0',bytes,env,{})).rejects.toThrow();
  });
+ it('makes one fresh official signing attempt only for a duplicate Rekor entry',async()=>{
+  for(const length of [64,80]){
+   const duplicate=Object.assign(new Error('duplicate transparency entry'),{code:'TLOG_CREATE_ENTRY_ERROR',cause:{statusCode:409,location:'/api/v1/log/entries/'+'a'.repeat(length)}});
+   const signed=bundle(),calls=[];
+   const result=await signArtifact('0.4.0',bytes,context,{
+    generateProvenance:async(subjects,options)=>{calls.push({subjects,options});if(calls.length===1)throw duplicate;return signed;},
+    verifyProvenance:async(expected,file)=>{calls.push({expected,bundle:JSON.parse(readFileSync(file,'utf8'))});return signed;},
+   });
+   expect(result).toBe(signed);
+   expect(calls).toEqual([{subjects:[subject],options:{}},{subjects:[subject],options:{}},{expected:subject,bundle:signed}]);
+  }
+ });
+ it('fails closed when the one fresh signing attempt also conflicts',async()=>{
+  const first=Object.assign(new Error('first duplicate'),{code:'TLOG_CREATE_ENTRY_ERROR',cause:{statusCode:409,location:'/api/v1/log/entries/'+'a'.repeat(80)}});
+  const second=Object.assign(new Error('second duplicate'),{code:'TLOG_CREATE_ENTRY_ERROR',cause:{statusCode:409,location:'/api/v1/log/entries/'+'b'.repeat(80)}});
+  let generated=0,verified=0;
+  await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>{throw ++generated===1?first:second;},verifyProvenance:async()=>{verified++;}})).rejects.toBe(second);
+  expect(generated).toBe(2);expect(verified).toBe(0);
+ });
+ it('never retries unrelated failures or invalid duplicate entry locations',async()=>{
+  const location='/api/v1/log/entries/'+'a'.repeat(80);
+  const cases=[{code:'OTHER_ERROR',cause:{statusCode:409,location}},{code:'TLOG_CREATE_ENTRY_ERROR'},
+   ...[400,500,'409'].map(statusCode=>({code:'TLOG_CREATE_ENTRY_ERROR',cause:{statusCode,location}})),
+   ...['https://rekor.sigstore.dev'+location,'//rekor.sigstore.dev'+location,location+'?x=1',location+'#x',location+'/',
+    '/other/'+'a'.repeat(80),'/api/v1/log/entries/'+'a'.repeat(63),'/api/v1/log/entries/'+'a'.repeat(65),
+    '/api/v1/log/entries/'+'a'.repeat(79),'/api/v1/log/entries/'+'a'.repeat(81),'/api/v1/log/entries/'+'z'.repeat(80),null]
+    .map(value=>({code:'TLOG_CREATE_ENTRY_ERROR',cause:{statusCode:409,location:value}}))];
+  for(const detail of cases){
+   const error=Object.assign(new Error('signing failed'),detail);let generated=0,verified=0;
+   await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>{generated++;throw error;},verifyProvenance:async()=>{verified++;}})).rejects.toBe(error);
+   expect(generated).toBe(1);expect(verified).toBe(0);
+  }
+ });
+ it('still checks subject/build identity and requires signature verification after a fresh signing attempt',async()=>{
+  const duplicate=Object.assign(new Error('duplicate'),{code:'TLOG_CREATE_ENTRY_ERROR',cause:{statusCode:409,location:'/api/v1/log/entries/'+'a'.repeat(64)}});
+  const mismatched=change=>{const result=bundle();const statement=JSON.parse(Buffer.from(result.dsseEnvelope.payload,'base64').toString());change(statement);result.dsseEnvelope.payload=Buffer.from(JSON.stringify(statement)).toString('base64');return result;};
+  const cases=[[bundle({subject:[]}), 'Provenance subject'],[bundle({subject:[{...subject,digest:{sha512:'0'.repeat(128)}}]}),'Provenance subject'],
+   [mismatched(statement=>{statement.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit='b'.repeat(40);}), 'actual afbin build source'],
+   [mismatched(statement=>{statement.predicate.runDetails.metadata.invocationId='https://github.com/minusxai/artifactbin/actions/runs/42/attempts/2';}), 'selected build run']];
+  for(const [invalid,reason] of cases){
+   let generated=0,verified=0;
+   await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>{if(++generated===1)throw duplicate;return invalid;},verifyProvenance:async()=>{verified++;}})).rejects.toThrow(reason);
+   expect(generated).toBe(2);expect(verified).toBe(0);
+  }
+  let generated=0,verified=0;
+  await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>{if(++generated===1)throw duplicate;return bundle();},verifyProvenance:async()=>{verified++;throw Error('untrusted signature');}})).rejects.toThrow('untrusted signature');
+  expect(generated).toBe(2);expect(verified).toBe(1);
+ });
  it('uses the official signer and verifies its result without substituting build identity',async()=>{
   const calls=[];const signed=bundle();const result=await signArtifact('0.4.0',bytes,context,{generateProvenance:async subjects=>{calls.push(subjects);return signed;},verifyProvenance:async expected=>{calls.push(expected);return signed;}});
   expect(result).toBe(signed);expect(calls).toEqual([[subject],subject]);
