@@ -148,6 +148,6 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
     </Show>
   </>;
 
-  return <PageChrome label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
+  return <PageChrome menuDropdown label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
     panel={props.panel} setPanel={props.setPanel} mode={props.mode} onMode={props.onMode} star={!editing()} />;
 }
