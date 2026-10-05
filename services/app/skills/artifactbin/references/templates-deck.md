@@ -14,8 +14,8 @@ Beats, as options rather than a sequence: [[ template.beats | join(' · ') ]]
 
 Voice: a keynote. Every slide headline is a spoken sentence ("Retention
 pays for the price increase"), never a label ("Retention"). One idea per
-slide. A good slide is about 40% empty; put the air BELOW the content, not
-around it. The design system owns the stage's type scale, the one big
+slide. Leave enough space to read the idea at presentation distance.
+The design system owns the stage's composition, grounds, type scale, the one big
 number and the footer rule (its reference carries a deck specimen when it
 fits); the thesis owns which slides exist and in what order. Pick ONE
 composition and build that.
@@ -93,15 +93,15 @@ SLIDE TYPES (pick per beat; each stays one idea):
 ## Rules
 
 Do
-- Speakable headlines; huge type, few words; the air below the content.
+- Speakable headlines; legible display type, few words; deliberate space.
 - The same header band and footer meta on every content slide, so the deck
   reads as one object.
-- At most a cover entrance (`animate-fade-up`, staggered); slides page, they
-  don't perform.
+- Motion follows the system's register and respects reduced motion; slide
+  content remains readable and present-mode paging remains predictable.
 
 Don't
-- Two charts on a slide; paragraphs (three lines max); a content slide's
-  ground coloured when the deck has dividers.
+- Two charts competing for attention; paragraphs too long to read at
+  presentation distance; backgrounds that compromise contrast.
 - Scroll-snap or parallax tricks; cramming a slide to avoid adding one. Add
   the slide.
 

@@ -2,9 +2,9 @@
  * Story templates — the structural-genre registry next to the design themes (story-themes.ts).
  *
  * A template is the document's GENRE: its beat structure and layout grammar (editorial long-read,
- * slide deck, scrollytelling) — orthogonal to the design theme, which is purely
- * a token set. Templates carry NO runtime CSS: `content.template` is metadata, and the genre's
- * own skill doc drives what the agent authors.
+ * slide deck, scrollytelling). The design system owns visual treatment, including page grounds,
+ * type roles and component CSS. Templates carry NO runtime CSS here: the reader uses
+ * `content.template` for navigation behaviour, and the guide offers compositions to authors.
  *
  * The prose (labels, personalities, beats) is human-edited in
  * `orchestrator/prompts/story-guidance.yaml`; this module is the thin typed projection over it.

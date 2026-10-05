@@ -57,7 +57,7 @@ Skeleton of the runtime pieces (publishable as is; the composition is yours):
     <Query name="regions">{`select distinct region from sales.rows order by 1`}</Query>
     <Query name="rev_by_week">{`select date_trunc('week', day) period, sum(revenue) revenue from sales.rows where $region is null or region = $region group by 1 order by 1`}</Query>
   </Helmet>
-  <div data-design="tw" className="@container min-h-screen bg-background px-4 py-4 @2xl:px-6 text-foreground">
+  <div data-design="tw" className="@container min-h-screen px-4 py-4 @2xl:px-6 text-foreground">
     <header className="border-b-2 border-foreground pb-3">
       <p className="t-label">Ops · Weekly</p>
       <h1 className="mt-2 t-body">The verdict is one spoken sentence, set small.</h1>
@@ -79,14 +79,14 @@ current period, and label it. Statistical qualifiers override label length:
 ## Rules
 
 Do
-- One verdict, set small, in body text; the utility role carries every
-  repeated signal, `tabular-nums` on digits.
-- The accent in two places only: the controls' active states and the focal
-  series of the hero chart. Gray series elsewhere, direct labels.
+- One clear verdict, using the system's hierarchy; consistent roles carry
+  repeated signals, `tabular-nums` on digits.
+- Use the system's accent and chart-series roles consistently. Active
+  controls and important exceptions remain distinguishable; label series.
 - Vary tile sizes with importance; near-equal boxes read as a spreadsheet.
 
 Don't
-- Bold or display headlines; prose between tiles; a bare number where its
+- Decoration that competes with operating signals; a bare number where its
   trend exists; zero controls; a query that ignores the controls without reason.
 - Nested Grids; a Grid wrapping the command bar; `height=` on embeds inside
   cells; entrance or reveal animation on tiles.

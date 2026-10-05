@@ -47,7 +47,7 @@ that. Publish with `template: landing`.
 Skeleton of the runtime pieces (publishable as is; the opening is yours):
 
   <Helmet><Value name="session" type="string" /></Helmet>
-  <div data-design="tw" className="@container bg-background px-6 py-12 text-foreground @2xl:px-12">
+  <div data-design="tw" className="@container px-6 py-12 text-foreground @2xl:px-12">
     <header className="grid gap-8 @3xl:grid-cols-[3fr_2fr] @3xl:items-center">
       <div>
         <p className="t-label">After Hours · Four Fridays in October</p>

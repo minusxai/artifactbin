@@ -10,6 +10,10 @@ order: 1
 
 [[ template.personality ]]
 
+Reports, articles, briefings and long reads use `template: editorial`.
+The name describes the reading format; the document can be factual,
+analytical or narrative, with the design system supplying its appearance.
+
 Beats, as options rather than a sequence: [[ template.beats | join(' · ') ]]
 
 Voice: a document, not a webpage. Section headlines are CLAIMS in sentence
@@ -38,11 +42,12 @@ evidence is staged. Pick ONE composition and build that.
 - Three or more `<h2>` sections get a platform-built contents rail beside the
   column on wide screens; keep headings short enough to read in a list.
   Nothing to author.
-- Everything lives in ONE centered text column (`max-w-2xl` or the system's
-  measure). Charts and diagrams are the sanctioned exception: they may widen
-  symmetrically (`@3xl:-mx-24`, up to `-mx-40`) so they stay centered on the
-  column's axis. A table never widens; the platform makes every table its own
-  scroll box.
+- Keep each prose column at a readable measure (`max-w-2xl` or the system's
+  measure). A centered column is one composition; the system can also use
+  margin notes, asymmetric evidence spreads, bands and distinct surfaces.
+  Preserve source reading order and stack columns on narrow screens. Figures
+  and tables may widen within the document; the platform gives tables their
+  own scroll boxes. Keep the page itself free of horizontal overflow.
 - Every figure is a `<figure>` with a FIG-numbered `<figcaption>`, numbered
   continuously. Charts are `<Question>` over a `<Query>` in `<Helmet>`,
   evidence 380 to 440px, a lone number 170 to 220px. Diagrams are inline
@@ -52,7 +57,7 @@ evidence is staged. Pick ONE composition and build that.
 Skeleton of the runtime pieces (publishable as is; the staging is yours):
 
   <Helmet><Import name="sales" src="ref:abc123" /><Query name="q">{`select month, sum(revenue) revenue from sales.rows group by 1 order by 1`}</Query></Helmet>
-  <div data-design="tw" className="@container bg-background px-6 py-12 text-foreground @2xl:py-16">
+  <div data-design="tw" className="@container px-6 py-12 text-foreground @2xl:py-16">
     <article className="mx-auto max-w-2xl">
       <header>
         <p className="t-label">Org · Report No. 12</p>
@@ -78,13 +83,12 @@ Do
   in nearly every section, with a caption that states the finding.
 - A takeaway line closes each section, one sentence with its number, the
   same register every time; the summary up front is the same device aggregated.
-- Only the title block animates, once.
+- Motion follows the system's register, respects reduced motion and keeps
+  prose stable while it is being read.
 
 Don't
-- Side rails, asymmetric splits, full-bleed bands, KPI strips, boxed
-  takeaway widgets, alternating backgrounds, cards, shadows: webpage
-  furniture on what should be paper.
-- Prose wider than the column; a figure widened off the column's axis;
-  motion past the title block; topic headlines; a section that shows nothing.
+- Duplicate contents navigation; decoration that obscures evidence; prose
+  too wide to read; a visual order that contradicts source order; topic
+  headlines; a section that shows nothing.
 
 Components: [markup.md](markup.md); publish API: [publishing.md](publishing.md).

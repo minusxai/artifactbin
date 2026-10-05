@@ -14,13 +14,18 @@ didn't pick are noise:
 [% endfor %]
 
 Choosing: when the ask names a page type (slides → `deck`, an operating view
-→ `dashboard`, an implementation or rollout plan → `plan`, a board report or
-long read → `editorial`, a tool people operate → `app`, an offering to choose
+→ `dashboard`, an implementation or rollout plan → `plan`, a report, article,
+briefing or long read → `editorial`, a tool people operate → `app`, an offering to choose
 → `landing`, a story told by scrolling → `scrolly`), pick it. When it is NOT
 obvious, the reader's job decides: what must they understand or do first, and
 how much do they read before they act? There is no default page type. If you
 are genuinely torn between readings, clarify with the user and offer the
 candidate page types as options rather than guessing.
+
+“Make a report” selects `template: editorial` by default; editorial is the
+internal page-type name, not a requirement to write an opinion piece. Choose
+its composition from the content. Explicit requests for a live monitoring
+report select `dashboard`; a report presented as slides selects `deck`.
 
 ## What a page type is
 
@@ -35,6 +40,13 @@ structure derived from the subject itself beats any of them. The design
 system ([design-systems.md](design-systems.md)) owns the look of whatever
 structure you choose and carries a specimen for the page types it fits. The
 component vocabulary every page type is built from: [markup.md](markup.md).
+
+The system owns the page ground, textures, surfaces, type, rules, depth and
+motion. Keep layout wrappers transparent; the runtime paints the ground.
+Opaque panels and sections are deliberate system treatments, not a default
+`bg-background` on every document. Compositions below are starting points:
+use the system's visual vocabulary while preserving semantic reading order,
+legible prose, keyboard access, responsive stacking and bounded overflow.
 
 ## Editable columns
 

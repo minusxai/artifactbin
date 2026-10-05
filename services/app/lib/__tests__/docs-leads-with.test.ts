@@ -18,6 +18,17 @@ import { buildQuickSheet, renderDoc } from '../skills';
 
 const BASE = 'https://example.test';
 
+describe('report requests have an explicit page-type default', () => {
+  it('routes a report to editorial while distinguishing live monitoring and slides', () => {
+    const guide = renderDoc('artifactbin/references/templates.md', BASE);
+    expect(guide).toContain('“Make a report” selects `template: editorial` by default');
+    expect(guide).toContain('report select `dashboard`');
+    expect(guide).toContain('report presented as slides selects `deck`');
+    expect(renderDoc('artifactbin/references/templates-editorial.md', BASE))
+      .toContain('Reports, articles, briefings and long reads use `template: editorial`');
+  });
+});
+
 describe('the markup skill teaches vocabulary before configuration', () => {
   const doc = renderDoc('artifactbin/references/markup.md', BASE);
   it('carries the wrapper, the skeleton and both allowlists', () => {

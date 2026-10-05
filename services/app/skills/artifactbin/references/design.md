@@ -100,18 +100,18 @@ thesis in the Helmet comment, so a later edit extends the design instead of resk
   `t-label`, `t-numeral`) set size, leading, weight and tracking; headings
   take the display face without a class.
 - Spend the roles in three jobs. DISPLAY carries the argument: few, large,
-  sentence case. BODY carries reading, capped at `max-w-prose`. UTILITY
+  using the system's casing. BODY carries reading, capped at `max-w-prose`. UTILITY
   carries the apparatus: eyebrows, folios, figure numbers, table digits.
 - Stay on the system's scale; a size utility on an element that carries a
   role replaces the role, so put layout utilities there and never type ones.
 <!--bundle:skip-->
-- Uppercase belongs to the apparatus only, always tracked; aligned digits get
-  `tabular-nums`; if everything is bold, nothing is.
+- Casing, tracking and weight follow the system's type roles; aligned digits
+  get `tabular-nums`. Preserve a clear hierarchy between display and body.
 <!--/bundle:skip-->
 
 ## Space
 
-- Whitespace is structure, not waste. Pad sections generously (`py-16`); the
+- Whitespace is structure, not waste. Use the system's spacing rhythm; the
   gap between sections exceeds the gap within one. Space sibling groups with
   flex/grid `gap-*`, not per-element margins.
 - Align to the grid; when in doubt, flush left. Centered body copy is almost
@@ -123,8 +123,12 @@ thesis in the Helmet comment, so a later edit extends the design instead of resk
 - The system owns hue: author in its token classes. A subject that needs its
   own hue gets ONE `--ds-*` token reassigned under `:root` and `.dark`, and
   every component, chart and device follows; never a second palette.
-- ONE accent, meaning one thing (the subject, the exception). Context sits in
-  the system's quiet grounds. If everything is highlighted, nothing is.
+- Use the system's accent roles consistently: a system may pair several
+  expressive colours. Preserve a focal hierarchy and distinguish emphasis
+  from status and chart-series colours.
+- The runtime paints the system's page ground, including textures. Leave
+  layout wrappers transparent; opaque panels and sections are intentional
+  surfaces, not a blanket `bg-background` over the whole document.
 - Status colour (positive, caution, negative) is separate from the accent and
   always travels with a word or a glyph, never colour alone.
 

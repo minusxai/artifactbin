@@ -61,7 +61,7 @@ Skeleton of the runtime pieces (publishable as is; the surface is yours):
     <Query name="open">{`select id, title, status from tasks.rows order by id`}</Query>
     <Mutation name="change_status" expectedAffected={1}>{`update tasks.rows set status = $status where id = $task_id`}</Mutation>
   </Helmet>
-  <div data-design="tw" className="@container bg-background px-5 py-8 text-foreground">
+  <div data-design="tw" className="@container px-5 py-8 text-foreground">
     <header className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
       <h1 className="t-title">Workshop · Sign-out sheet</h1>
       <Button run="$change_status">Mark done</Button>
@@ -81,6 +81,6 @@ Do
 Don't
 - A placeholder control; invented availability; a demo that pretends to
   reserve a real seat or take a payment.
-- Marketing hero, decorative chrome, more than one primary action per view.
+- Decoration that hides the working surface or competes with its primary action.
 
 Components: [markup.md](markup.md); data and actions: [markup-data.md](markup-data.md).

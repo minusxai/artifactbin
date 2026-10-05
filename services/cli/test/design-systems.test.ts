@@ -19,6 +19,15 @@ const SECTIONS=['## Read first','## Bind it','## Type roles','## Colour','## Com
 const systems=Object.keys(helpTopics).filter(name=>/^system-[a-z]+$/.test(name));
 const fenced=(text:string,lang:string)=>[...text.matchAll(new RegExp('```'+lang+'\\n([\\s\\S]*?)```','g'))].map(m=>m[1]!);
 
+test('binding and page-type examples leave the system ground visible',()=>{
+ for(const name of [...systems,...PAGE_TYPES.map(type=>`templates-${type.toLowerCase()}`)]){
+  const text=helpTopics[name]!;
+  const roots=[...text.matchAll(/<div data-design="tw" className="([^"]+)"/g)];
+  assert.ok(roots.length,`${name}: document wrapper`);
+  for(const root of roots)assert.ok(!root[1]!.split(/\s+/).some(c=>c.startsWith('bg-')),`${name}: opaque document wrapper`);
+ }
+});
+
 test('thirteen systems are bundled, each a data reference in the skill tree',()=>{
  assert.equal(systems.length,13,systems.join(', '));
  // The bundle carries the rendered body; the frontmatter that declares the kind is on the source file.
