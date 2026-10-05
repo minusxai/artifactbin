@@ -45,10 +45,11 @@ it('accepts the actual workflow publish arguments through npm CLI without confli
   // Exercise the workflow's actual tarball argument: an unprefixed `package/file.tgz`
   // is parsed by npm as a GitHub shorthand instead of a local package.
   mkdirSync(join(fixture,'package'));
-  writeFileSync(join(fixture,'package/package.json'),readFileSync(join(fixture,'package.json')));
+  mkdirSync(join(fixture,'contents/package'),{recursive:true});
+  writeFileSync(join(fixture,'contents/package/package.json'),readFileSync(join(fixture,'package.json')));
   const selection=definition.jobs.release.steps.find(step=>step.id==='package').run;
   const source=selection.match(/^\s*file="([^"]+)"$/m)[1].replace('$version','0.0.0');
-  const packed=spawnSync('tar',['-czf',join(fixture,source),'-C',fixture,'package'],{encoding:'utf8'});
+  const packed=spawnSync('tar',['-czf',join(fixture,source),'-C',join(fixture,'contents'),'package'],{encoding:'utf8'});
   expect(packed.status,packed.stderr).toBe(0);
   const tarball=invoke(args,source);expect(tarball.status,tarball.stderr).toBe(0);
   expect(JSON.parse(tarball.stdout).name).toBe('@afbin/cli-publish-argument-test');
