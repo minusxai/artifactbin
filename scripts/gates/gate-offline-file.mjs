@@ -42,7 +42,7 @@
  *   usage: node scripts/gates/gate-offline-file.mjs [base]
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
@@ -717,6 +717,12 @@ async function emptyPreview(directory) {
     });
     return { url, close };
   } catch (error) { await close(); throw error; }
+}
+
+// Gate caches intentionally omit the CLI's hosted-app runtime. This gate also exercises preview,
+// so prepare its narrower runtime once, before the three browser lanes start concurrently.
+if (!existsSync(path.join(ROOT, 'services/cli/dist/runtime/bootstrap.cjs'))) {
+  execFileSync(process.execPath, ['scripts/build/build-preview-gate-inputs.mjs'], { cwd: ROOT, stdio: 'inherit' });
 }
 
 /** Explicit file:// handoff into the existing editor, without granting the file network access. */

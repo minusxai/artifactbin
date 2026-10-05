@@ -50,3 +50,17 @@ sits on. Bodies are plain text on the wire and read as a small markdown subset
 feedback writes what it would write in a terminal. A thread never travels in
 the markup: a full-replace PUT cannot delete a comment, and only the anchor
 attribute on the commented node is the agent's to preserve.
+
+## Edit a downloaded HTML file
+
+Open a `.jsx.html` file in your browser. You can edit text and add comments without a server. **Save** or **Cmd/Ctrl+S** writes the updated HTML, including those comments. Chrome/Edge can show a native Save picker; later saves in the same tab write to the chosen file. Firefox/Safari download an updated copy. The receipt names the saved file. Your tab stays on the originally opened file: if you saved elsewhere, open the saved copy to continue there.
+
+For the full local editor, start a preview server in the folder where you want the JSX copy:
+
+```sh
+npx --yes @afbin/cli@latest preview --port 7474
+```
+
+On Windows, use `npx.cmd --yes @afbin/cli@latest preview --port 7474`. In the HTML file, click **Connect to server**, enter `http://localhost:7474`, and click **Connect**. A server tab shows the document and comment count. Choose a workspace filename and click **Import and open**. Edits and comments then save through the existing local editor. The original HTML stays unchanged; its unsaved changes still need **Save** if you want to keep that standalone copy. You can also open the server directly and select **Import an HTML file**.
+
+Connect accepts localhost or an HTTPS origin hosting the same preview service, including your own custom domain. Configure a reverse proxy's public origin with `preview --public-url https://preview.example.com`; `--share` separately controls network binding. Preview is a trusted workspace session, with the same selected-file access and conflict checks as normal preview. Publishing to artifactbin remains an explicit CLI/HTTP action; Connect does not publish or synchronize with a hosted artifact automatically.
