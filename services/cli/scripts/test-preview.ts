@@ -56,14 +56,16 @@ async function ready(page:Page){
  await page.getByRole('button',{name:'Edit',exact:true}).waitFor();
 }
 /** Done persists then reloads: networkidle on the old document is not a readiness boundary. */
-async function finishEditing(page:Page){
+async function finishEditing(page:Page,fixtureKind:'data'|'prose'){
  const [saved]=await Promise.all([
   page.waitForResponse(response=>response.url().endsWith('/save')),
   page.waitForNavigation({waitUntil:'load'}),
   page.getByRole('button',{name:'Done editing',exact:true}).click(),
  ]);
  assert.equal(saved.status(),200);
- await ready(page);
+ // Data documents boot a reader engine; plain prose intentionally has no runtime-ready marker.
+ if(fixtureKind==='data')await ready(page);
+ else await page.getByRole('button',{name:'Edit',exact:true}).waitFor();
  return saved;
 }
 async function retainDiagnostics(error:unknown){
@@ -106,7 +108,7 @@ try{
  await a.keyboard.insertText('Browser saved paragraph');
  await a.waitForFunction(()=>document.getElementById('text')?.textContent==='Browser saved paragraph');
  await a.waitForSelector('text=Unsaved');
- const savedResponse=await finishEditing(a);
+ const savedResponse=await finishEditing(a,'data');
  assert.match(await readFile(join(root,'report.jsx'),'utf8'),/<p id="text">Browser saved paragraph<\/p>/);
  assert.ok((await readFile(join(root,'report.jsx'),'utf8')).includes('href="/a/'+ids['appendix.jsx']+'"'));
  assert.ok((await readFile(join(root,'report.jsx'),'utf8')).includes('src="ref:'+ids['pixel.png']+'"'));
@@ -147,7 +149,7 @@ try{
  const sourceInput=a.getByRole('textbox',{name:'Markup source',exact:true});
  await a.bringToFront();await sourceInput.click();await sourceInput.press('ControlOrMeta+a');await a.keyboard.insertText('<p id="text">Local v3 edit</p>');
  await a.locator('#text').filter({hasText:'Local v3 edit'}).waitFor();
- await finishEditing(a);
+ await finishEditing(a,'prose');
  await a.locator('#text').filter({hasText:'Local v3 edit'}).waitFor();
  assert.match(await readFile(join(root,'published.jsx'),'utf8'),/Local v3 edit/);
  assert.match(await readFile(join(root,'published.jsx'),'utf8'),/head_version: 3/);
