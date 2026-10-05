@@ -184,21 +184,21 @@ describe('README.md', () => {
   it('documents Node prerequisites, npm cloud and self-host workflows and development setup', () => {
     expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/ensure-node.sh`);
     expect(readme()).toContain(`Invoke-RestMethod ${defaultServer()}/chat/ensure-node.ps1 | Invoke-Expression`);
-    expect(readme()).toContain('npx --yes @artifactbin/cli@latest setup');
-    expect(readme()).toContain('npx.cmd --yes @artifactbin/cli@latest setup');
+    expect(readme()).toContain('npx --yes @afbin/cli@latest setup');
+    expect(readme()).toContain('npx.cmd --yes @afbin/cli@latest setup');
     expect(readme()).toContain('reuses supported Node/npm or installs official Node LTS for your user');
     expect(readme()).toContain('npm is the sole CLI distribution');
     expect(readme()).not.toContain('/chat/install.sh');
     expect(readme()).not.toContain('/chat/install.ps1');
     for (const command of ['preview report.jsx', 'push report.jsx', 'serve --dir ./artifactbin-data --port 7445', 'add report.jsx sales.csv --json']) {
-      expect(readme()).toContain(`npx --yes @artifactbin/cli@latest ${command}`);
+      expect(readme()).toContain(`npx --yes @afbin/cli@latest ${command}`);
     }
     expect(readme()).toContain('stable workspace-local IDs without uploading or signing in');
     expect(readme()).toContain('separate copy with remote IDs, preserving the originals and their local references');
     expect(readme()).toContain('Local preview continues independently after publication');
     expect(readme()).toMatch(/git clone https:\/\/github\.com\/minusxai\/artifactbin[\s\S]*npm ci[\s\S]*npm run setup[\s\S]*npm run dev/);
     expect(readme()).toContain('npm run setup -- --yes --port 7445');
-    expect(readme()).toContain(`npx --yes @artifactbin/cli@latest config set host ${defaultServer()}`);
+    expect(readme()).toContain(`npx --yes @afbin/cli@latest config set host ${defaultServer()}`);
     expect(readme()).not.toMatch(/https:\/\/artifactbin\.dev/);
     expect(readme()).toContain('Apache-2.0');
   });

@@ -988,7 +988,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/npm-preview" "$GITHUB_WORKSPACE"/npm-candidate/*.tgz
           npx playwright install chromium
-          node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/npm-preview/node_modules/@artifactbin/cli/dist/afbin.mjs" --phase=${{ matrix.phase }}
+          node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/npm-preview/node_modules/@afbin/cli/dist/afbin.mjs" --phase=${{ matrix.phase }}
 
   # Reference conformance checks the source bundle and the exact tested installed npm package.
   reference-compatibility:
@@ -1040,7 +1040,7 @@ jobs:
         working-directory: candidate
       - name: Installed npm package runs file preview
         working-directory: candidate/services/cli
-        run: node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs"
+        run: node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs"
       - name: Build OSS host
         working-directory: candidate
         run: npm run build
@@ -1054,7 +1054,7 @@ jobs:
             return "$ci_result"
           }
           ci_pids=()
-          for cli in "$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" "$RUNNER_TEMP/afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs"; do
+          for cli in "$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" "$RUNNER_TEMP/afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs"; do
             CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
             ci_pids+=("$!")
           done

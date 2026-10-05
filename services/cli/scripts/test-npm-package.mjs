@@ -25,7 +25,7 @@ try{
  const installOutput=(installed.stdout??'')+(installed.stderr??'');
  assert.equal(installed.status,0,installOutput);
  assert.doesNotMatch(installOutput,/Rebuilding because|gyp info|gyp ERR/,'Supported native consumers must use prebuilt dependencies, without a compiler fallback');
- const cli=join(root,'node_modules/@artifactbin/cli');
+ const cli=join(root,'node_modules/@afbin/cli');
  assert.ok(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
  await assert.rejects(readdir(join(cli,'dist/runtime/node_modules')));
  await assert.rejects(readdir(env.PLAYWRIGHT_BROWSERS_PATH));

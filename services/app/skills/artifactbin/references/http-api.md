@@ -13,7 +13,7 @@ Use your selected server, `[[ base ]]`, for all requests. JSON calls send `Conte
 3. `POST /api/authentication/token` with those cookies and the selected server's Origin. Only verified email account sessions qualify. The response contains `access_token`, `token_type: "Bearer"`, `expires_in` (seconds), and `scope: "artifacts"`.
 4. Use `Authorization: Bearer <access_token>` on this server's `/api` requests. Do not put bearer secrets in URLs, documents or logs. On expiry, repeat email authentication; this flow does not issue refresh tokens. `POST /api/auth/sign-out` closes the temporary session without revoking the separately issued bearer.
 
-The CLI has a separate authentication entry: `npx --yes @artifactbin/cli@latest auth` opens browser approval and may continue as a guest. On Windows use `npx.cmd`. A valid CLI capability can use HTTP internally; User-Agent or caller-provided headers do not determine whether a credential is allowed.
+The CLI has a separate authentication entry: `npx --yes @afbin/cli@latest auth` opens browser approval and may continue as a guest. On Windows use `npx.cmd`. A valid CLI capability can use HTTP internally; User-Agent or caller-provided headers do not determine whether a credential is allowed.
 
 ## Operations
 

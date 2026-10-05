@@ -38,6 +38,6 @@ afbin_ensure_node() {
   for afbin_node_rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc"; do
     if ! grep -Fqx "$afbin_node_export" "$afbin_node_rc" 2>/dev/null; then printf '\n%s\n' "$afbin_node_export" >> "$afbin_node_rc" || return 1; fi
   done
-  printf '%s\n' 'Node and npm/npx are ready. Next: npx --yes @artifactbin/cli@latest setup'
+  printf '%s\n' 'Node and npm/npx are ready. Next: npx --yes @afbin/cli@latest setup'
 }
 afbin_ensure_node

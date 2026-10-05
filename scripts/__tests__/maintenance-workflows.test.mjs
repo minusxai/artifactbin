@@ -21,14 +21,14 @@ it('publishes only successful main CI artifacts through trusted npm publishing',
 function packageBytes(version,options={}){
  const fixture=mkdtempSync(join(tmpdir(),'npm-release-bytes-'));
  try{
-  const directory=join(fixture,'package');mkdirSync(directory);writeFileSync(join(directory,'package.json'),JSON.stringify({name:options.name??'@artifactbin/cli',version}));
+  const directory=join(fixture,'package');mkdirSync(directory);writeFileSync(join(directory,'package.json'),JSON.stringify({name:options.name??'@afbin/cli',version}));
   if(!options.noLock)writeFileSync(join(directory,'npm-shrinkwrap.json'),'{}');
   if(options.native){mkdirSync(join(directory,'dist/runtime/node_modules/sharp'),{recursive:true});writeFileSync(join(directory,'dist/runtime/node_modules/sharp/native.node'),'build-machine');}
   const file=join(fixture,'package.tgz');const packed=spawnSync('tar',['-czf',file,'-C',fixture,'package'],{encoding:'utf8'});if(packed.status!==0)throw Error(packed.stderr);
   return readFileSync(file);
  }finally{rmSync(fixture,{recursive:true,force:true});}
 }
-const artifact=(version,bytes=packageBytes(version))=>({'afbin-npm-release':{[`artifactbin-cli-${version}.tgz`]:bytes.toString('base64')}});
+const artifact=(version,bytes=packageBytes(version))=>({'afbin-npm-release':{[`afbin-cli-${version}.tgz`]:bytes.toString('base64')}});
 const receipt=id=>({'tested-run':{'tested-run.json':Buffer.from(JSON.stringify({run_id:id})).toString('base64')}});
 const GH=String.raw`#!${process.execPath}
 const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process'),crypto=require('node:crypto');

@@ -44,7 +44,7 @@ export function unauthorized(request: Request): Response {
   return json(
     {
       error: 'unauthorized',
-      help: `Retry through afbin: npx --yes @artifactbin/cli@latest auth --server ${base}. Prepare Node: ${base}/chat/ensure-node.sh; Windows: ${base}/chat/ensure-node.ps1. CLI browser approval allows guests; direct HTTP requires email sign-in.`,
+      help: `Retry through afbin: npx --yes @afbin/cli@latest auth --server ${base}. Prepare Node: ${base}/chat/ensure-node.sh; Windows: ${base}/chat/ensure-node.ps1. CLI browser approval allows guests; direct HTTP requires email sign-in.`,
       guide: `${base}/llms.txt`,
     },
     401,

@@ -2,7 +2,7 @@
 
 Publish and edit artifacts through local files, with offline help and validation. Mirror a local terminal with `afbin remote`.
 
-Command examples use `afbin` as shorthand for `npx --yes @artifactbin/cli@latest` (`npx.cmd` on Windows); use that npm invocation unless you installed a development link.
+Command examples use `afbin` as shorthand for `npx --yes @afbin/cli@latest` (`npx.cmd` on Windows); use that npm invocation unless you installed a development link.
 
 ## Preview and host
 
@@ -34,21 +34,21 @@ Windows x64, PowerShell 5.1 or 7:
 
 ```powershell
 Invoke-RestMethod https://app.artifactbin.dev/chat/ensure-node.ps1 | Invoke-Expression
-npx.cmd --yes @artifactbin/cli@latest setup
-npx.cmd --yes @artifactbin/cli@latest preview report.jsx
+npx.cmd --yes @afbin/cli@latest setup
+npx.cmd --yes @afbin/cli@latest preview report.jsx
 ```
 
 macOS arm64/x64 and Linux arm64/x64 (glibc, bash or zsh):
 
 ```sh
 afbin_node_setup="$(mktemp)" && curl -fsSL https://app.artifactbin.dev/chat/ensure-node.sh -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"
-npx --yes @artifactbin/cli@latest setup
-npx --yes @artifactbin/cli@latest preview report.jsx
+npx --yes @afbin/cli@latest setup
+npx --yes @afbin/cli@latest preview report.jsx
 ```
 
 The Windows `.cmd` spelling runs under ordinary Restricted PowerShell without changing execution policy. The Unix helper must be sourced so this terminal receives PATH immediately. If a download fails, install Node LTS from https://nodejs.org/en/download and rerun the npx command.
 
-There is one afbin distribution: `@artifactbin/cli` on npm. No standalone executable or self-updater is supported. `@latest` resolves the latest published package when launched online; it does not update a running process hourly. Close a running preview before restarting with a newer package. Pin a version for reproducible use (`npx --yes @artifactbin/cli@VERSION ...`). Warm the npm cache and Chromium before disconnecting, then use `npm exec --offline --yes --package=@artifactbin/cli@VERSION -- afbin ...`. A cold cache cannot install offline. Package installation does not download Chromium; rendering downloads it on first use.
+There is one afbin distribution: `@afbin/cli` on npm. No standalone executable or self-updater is supported. `@latest` resolves the latest published package when launched online; it does not update a running process hourly. Close a running preview before restarting with a newer package. Pin a version for reproducible use (`npx --yes @afbin/cli@VERSION ...`). Warm the npm cache and Chromium before disconnecting, then use `npm exec --offline --yes --package=@afbin/cli@VERSION -- afbin ...`. A cold cache cannot install offline. Package installation does not download Chromium; rendering downloads it on first use.
 
 Existing standalone users keep their project files and `~/.artifactbin` state. Remove the old executable from PATH and stop any old processes, then use the commands above. Do not run the old uninstall script when migrating: it can remove credentials and skills. Agents must use npx commands rather than an old `afbin` executable found on PATH.
 
@@ -176,7 +176,7 @@ readiness, request and stop protocol.
 The CLI exports the same PTY lifecycle for another TypeScript/JavaScript CLI:
 
 ```ts
-import { loadConnection, runRemote } from '@artifactbin/cli';
+import { loadConnection, runRemote } from '@afbin/cli';
 const connection = await loadConnection();
 if (!connection) throw new Error('Run afbin auth to sign in first');
 const exitCode = await runRemote({
@@ -214,6 +214,6 @@ The account and the app server can access the terminal content and input. Keep t
 
 Run `npm run release:cli` in the CLI PR. Main CI builds `npm run build -w services/cli`, then `npm run pack:release -w services/cli` creates one tarball with an isolated npm consumer shrinkwrap. That exact artifact is installed outside the checkout on Windows x64 and macOS/Linux arm64/x64, with Node 22 and 24. The official node-pty dependency is pinned to 1.2.0-beta.15 because its npm tarball includes native prebuilds for all supported architectures, including Linux; installation does not require a compiler. This prerelease pin must pass the Node22/24 native matrix. Native acceptance verifies SQLite, sharp, node-pty shutdown, warmed offline npm execution, preview and exports. Chromium stays lazy at package install.
 
-Successful main CI triggers `release-cli.yml`, resolves any tested-run receipt, and publishes the tested tarball to npm using OIDC trusted publishing. Configure `@artifactbin/cli`'s trusted publisher for this repository and workflow before the first release; no npm bearer token is embedded in installers or repository files. The package is public and immutable per version. There are no SEA/executable or platform-specific runtime release assets in this release path. The GitHub release records the same tested tarball for traceability.
+Successful main CI triggers `release-cli.yml`, resolves any tested-run receipt, and publishes the tested tarball to npm using OIDC trusted publishing. Configure `@afbin/cli`'s trusted publisher for this repository and workflow before the first release; no npm bearer token is embedded in installers or repository files. The package is public and immutable per version. There are no SEA/executable or platform-specific runtime release assets in this release path. The GitHub release records the same tested tarball for traceability.
 
 No local production build or npm publication is part of ordinary development. Use FAST validate and focused tests, then the combined PR's final CI matrix. Clean Windows 11 desktop policies remain separate from the native Windows Server runner's coverage.

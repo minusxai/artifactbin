@@ -147,7 +147,7 @@ describe('source host compatibility matrix', () => {
     const steps = ci.jobs['reference-compatibility'].steps;
     const candidate = steps.find(step => step.name === 'ID-first conformance for source bundle and installed npm package');
     expect(candidate?.['working-directory']).toBe('candidate');
-    expect(candidate?.run).toContain('afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs');
+    expect(candidate?.run).toContain('afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('services/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('scripts/gates.mjs --servers=1 --only=accounts-and-workspace');
     expect(readFileSync(ciPath, 'utf8')).not.toContain('build-public-packages.mjs');

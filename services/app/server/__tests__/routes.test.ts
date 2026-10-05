@@ -45,7 +45,7 @@ describe('handlers through Hono', () => {
   // The retired `/docs` and `/mcp` addresses are docs-human.test.ts's subject — it is
   // their dedicated owner and answers them for browsers as well as machines.
   it('refuses an unknown document uniformly, and creates then reads an artifact with a bearer', async () => {
-    expect(await (await app.request('/llms.txt')).text()).toContain('npx --yes @artifactbin/cli@latest help');
+    expect(await (await app.request('/llms.txt')).text()).toContain('npx --yes @afbin/cli@latest help');
     expect((await app.request('/a/nope00/raw')).status).toBe(404);
     const t = await mintToken('t');
     const created = await app.request('/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ markup: '<div><p>via hono</p></div>' }) });

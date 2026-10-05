@@ -20,7 +20,7 @@ const shape = (nodes: JsxNode[]): unknown => nodes.map((node): unknown => node.t
 /** The downloaded module cannot compile new widgets without a local compiler.
  * Plain markup and static kit shells are projected; changed interactive trees
  * are refused before the backend adopts source, preserving the recoverable draft. */
-export const OFFLINE_COMPONENT_REASON = 'This component needs the local compiler. Open this file with npx @artifactbin/cli preview to edit it.';
+export const OFFLINE_COMPONENT_REASON = 'This component needs the local compiler. Open this file with npx @afbin/cli preview to edit it.';
 const STATIC_SHELLS = new Set(['Badge', 'Alert', 'AlertTitle', 'AlertDescription', 'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction', 'CardContent', 'CardFooter']);
 export function assertProjectionSupported(beforeSource: string, nextSource: string): void {
   const before = parseJsx(beforeSource), next = parseJsx(nextSource);
@@ -92,7 +92,7 @@ export function projectDocument(root: HTMLElement, nodes: JsxNode[], priorSource
       if (dynamic(node) && !retained) {
         const unavailable = document.createElement('div'); unavailable.setAttribute('data-mx-ast', path);
         const id = key(node); if (id) unavailable.id = id;
-        unavailable.textContent = `${node.tag}: preview this changed component locally with npx @artifactbin/cli preview.`;
+        unavailable.textContent = `${node.tag}: preview this changed component locally with npx @afbin/cli preview.`;
         fragment.append(unavailable); return;
       }
       const inSvg = svg || node.tag === 'svg';

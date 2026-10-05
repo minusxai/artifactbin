@@ -14,7 +14,7 @@ export function existingPaste(base: string, artifactId: string): string {
   // A fresh CLI already points at DEFAULT_SERVER; any other host must be selected explicitly.
   const serverHint = origin === DEFAULT_SERVER ? '' : ` Pass --server ${origin} to every afbin server command.`;
   const serverFlag = origin === DEFAULT_SERVER ? '' : ` --server ${origin}`;
-  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place. Prepare Node if needed: ${origin}/chat/ensure-node.sh (macOS/Linux), ${origin}/chat/ensure-node.ps1 (Windows). Run npx --yes @artifactbin/cli@latest help first, then npx --yes @artifactbin/cli@latest auth ${artifactUrl(base, artifactId)}${serverFlag}. Windows uses npx.cmd. Approve in the browser that created this artifact; guest access is fine.${serverHint}
+  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place. Prepare Node if needed: ${origin}/chat/ensure-node.sh (macOS/Linux), ${origin}/chat/ensure-node.ps1 (Windows). Run npx --yes @afbin/cli@latest help first, then npx --yes @afbin/cli@latest auth ${artifactUrl(base, artifactId)}${serverFlag}. Windows uses npx.cmd. Approve in the browser that created this artifact; guest access is fine.${serverHint}
 
 ---
 

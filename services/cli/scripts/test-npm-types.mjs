@@ -8,7 +8,7 @@ const repository=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const require=createRequire(import.meta.url);
 export async function checkInstalledTypes(entry){
  const root=resolve(dirname(entry),'../../../..'),fixture=join(root,'afbin-library-consumer.mts');
- await writeFile(fixture,"import {HttpClient,runRemote,loadConnection,saveConnection,normalizeServer,type RunOptions,type Connection} from '@artifactbin/cli';\nconst connection:Connection={server:normalizeServer('http://localhost:3030'),token:'fixture'};\nconst client=new HttpClient({connection});\nconst options:RunOptions={client,command:'echo',args:['ok'],interactive:false};\nvoid runRemote(options);void loadConnection();void saveConnection(connection);\n");
+ await writeFile(fixture,"import {HttpClient,runRemote,loadConnection,saveConnection,normalizeServer,type RunOptions,type Connection} from '@afbin/cli';\nconst connection:Connection={server:normalizeServer('http://localhost:3030'),token:'fixture'};\nconst client=new HttpClient({connection});\nconst options:RunOptions={client,command:'echo',args:['ok'],interactive:false};\nvoid runRemote(options);void loadConnection();void saveConnection(connection);\n");
  try{
   for(const [module,resolution] of [['NodeNext','NodeNext'],['ESNext','Bundler']])execFileSync(process.execPath,[require.resolve('typescript/bin/tsc'),'--noEmit','--strict','--skipLibCheck','false','--module',module,'--moduleResolution',resolution,'--target','ES2022','--types','node','--typeRoots',join(repository,'node_modules/@types'),fixture],{cwd:root,stdio:'pipe',timeout:30000});
   console.log('PASS installed public library declarations: NodeNext and Bundler, no private aliases or skipLibCheck');

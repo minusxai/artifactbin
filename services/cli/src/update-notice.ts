@@ -24,6 +24,6 @@ export async function checkUpdateNotice(options:UpdateNoticeOptions):Promise<voi
    }finally{state.close();}
   },{waitMs:0,reentrant:false},options.env);
   if(!claimed)return;
-  options.stderr(`A newer afbin version is available (${data.version}). Run npx --yes @artifactbin/cli@${data.version} <command> to use it.\n`);
+  options.stderr(`A newer afbin version is available (${data.version}). Run npx --yes @afbin/cli@${data.version} <command> to use it.\n`);
  }catch{/* Response notices and busy/unavailable local state never change command success. */}
 }

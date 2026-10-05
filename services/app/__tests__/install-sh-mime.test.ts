@@ -27,7 +27,7 @@ describe('served npm installer compatibility URLs', () => {
     const run = spawnSync('sh', [], { input: script, encoding: 'utf8', cwd: dir, env: { PATH: `${bin}:/usr/bin:/bin`, HOME: dir, AFBIN_PROBE: dir }, timeout: 10000 });
     expect(run.status, run.stderr).toBe(0);
     expect(fs.readFileSync(path.join(dir, 'helper-url'), 'utf8')).toBe('https://artifacts.example.test/chat/ensure-node.sh\n');
-    expect(fs.readFileSync(path.join(dir, 'npm-args'), 'utf8')).toBe('--yes\n@artifactbin/cli@latest\nsetup\n--server\nhttps://artifacts.example.test\n');
+    expect(fs.readFileSync(path.join(dir, 'npm-args'), 'utf8')).toBe('--yes\n@afbin/cli@latest\nsetup\n--server\nhttps://artifacts.example.test\n');
     expect(script).not.toContain('releases/download');
   });
   it('serves both shell aliases identically', async () => {
@@ -42,7 +42,7 @@ describe('served npm installer compatibility URLs', () => {
     const script = await response.text();
     expect(script).toContain("$Origin = 'https://artifacts.example.test'");
     expect(script).toContain('"$Origin/chat/ensure-node.ps1"');
-    expect(script).toContain('npx.cmd --yes @artifactbin/cli@latest setup --server $Origin');
+    expect(script).toContain('npx.cmd --yes @afbin/cli@latest setup --server $Origin');
     expect(script).not.toMatch(/Set-ExecutionPolicy|ReleaseRoot|afbin-windows/);
   });
   it('retires binary release assets even if old files remain in public storage', async () => {

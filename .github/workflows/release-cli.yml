@@ -45,10 +45,10 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' > artifacts.txt
           if ! grep -Fxq afbin-npm-release artifacts.txt; then echo 'No new npm artifact; nothing to publish.'; exit 0; fi
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name afbin-npm-release --dir package
-          file="package/artifactbin-cli-$version.tgz"
+          file="package/afbin-cli-$version.tgz"
           test -f "$file" && test ! -L "$file"
           tar -xOf "$file" package/package.json > manifest.json
-          test "$(jq -r .name manifest.json)" = '@artifactbin/cli'
+          test "$(jq -r .name manifest.json)" = '@afbin/cli'
           test "$(jq -r .version manifest.json)" = "$version"
           tar -tzf "$file" > package-files.txt
           grep -Fxq package/npm-shrinkwrap.json package-files.txt
@@ -62,9 +62,9 @@ jobs:
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
           set -euo pipefail
-          if npm view "@artifactbin/cli@$PACKAGE_VERSION" version > npm-existing.txt 2> npm-error.txt; then
+          if npm view "@afbin/cli@$PACKAGE_VERSION" version > npm-existing.txt 2> npm-error.txt; then
             test "$(cat npm-existing.txt)" = "$PACKAGE_VERSION"
-            published=$(npm view "@artifactbin/cli@$PACKAGE_VERSION" dist.integrity)
+            published=$(npm view "@afbin/cli@$PACKAGE_VERSION" dist.integrity)
             candidate=$(node -e 'const fs=require("node:fs"),crypto=require("node:crypto");console.log("sha512-"+crypto.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"))' "$PACKAGE_FILE")
             test "$published" = "$candidate" || { echo 'Published version has different bytes; refuse to mislabel the tested tarball.' >&2; exit 1; }
           else

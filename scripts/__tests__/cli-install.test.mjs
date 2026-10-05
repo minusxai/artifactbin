@@ -18,14 +18,14 @@ const run = (args = [], fail = false) => {
 it('prepares Node then delegates setup to npx, without installing a binary', () => {
   const result = run();
   expect(result.status, result.stderr).toBe(0);
-  expect(readFileSync(path.join(dir, 'args'), 'utf8')).toBe('--yes\n@artifactbin/cli@latest\nsetup\n');
-  expect(result.stdout).toContain('npx --yes @artifactbin/cli@latest');
+  expect(readFileSync(path.join(dir, 'args'), 'utf8')).toBe('--yes\n@afbin/cli@latest\nsetup\n');
+  expect(result.stdout).toContain('npx --yes @afbin/cli@latest');
 });
 it('refuses old binary installer flags with actionable npm instructions', () => {
   const result = run(['--dir', 'legacy-bin']);
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain('Legacy installer flags are no longer supported');
-  expect(result.stderr).toContain('npx --yes @artifactbin/cli@latest setup');
+  expect(result.stderr).toContain('npx --yes @afbin/cli@latest setup');
 });
 it('stops if preparing Node fails, before executing npm', () => {
   const result = run([], true);

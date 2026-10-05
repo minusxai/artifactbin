@@ -51,9 +51,9 @@ test('foreground team process serves real login and excludes another database ow
  try{
   const first=launch();await ready(first);
   // Startup teaches the operator what to hand teammates, not just that a socket is open.
-  assert.ok(first.output().includes(`npx --yes @artifactbin/cli@latest config set host http://app.lvh.me:${port}`));
+  assert.ok(first.output().includes(`npx --yes @afbin/cli@latest config set host http://app.lvh.me:${port}`));
   assert.ok(first.output().includes(`http://app.lvh.me:${port}/chat/ensure-node.sh`));
-  assert.ok(first.output().includes(`npx --yes @artifactbin/cli@latest setup --server http://app.lvh.me:${port}`));
+  assert.ok(first.output().includes(`npx --yes @afbin/cli@latest setup --server http://app.lvh.me:${port}`));
   assert.match(first.output(),/\[dev-mail\] otp/);
   const response=await fetch(`http://app.lvh.me:${port}/api/auth/get-session`);assert.equal(response.status,200);assert.equal(await response.json(),null);
   // The shipped host authenticates and submits a published lambda to a real signed HTTP runner.

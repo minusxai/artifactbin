@@ -116,7 +116,7 @@ it('keeps install and remote startup commands on the app origin', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })));
   open('');
   expect(screen.getByText(afbinInstallCommand(window.location.origin), { normalizer: text => text })).toBeInTheDocument();
-  expect(screen.getByText(`npx --yes @artifactbin/cli@latest remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
+  expect(screen.getByText(`npx --yes @afbin/cli@latest remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
   fireEvent.change(screen.getByRole('combobox', { name: 'Choose your agent' }), { target: { value: 'codex' } });
-  expect(screen.getByText(`npx --yes @artifactbin/cli@latest remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
+  expect(screen.getByText(`npx --yes @afbin/cli@latest remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
 });

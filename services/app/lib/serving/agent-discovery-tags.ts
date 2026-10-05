@@ -14,12 +14,12 @@ const origin=(base:string)=>base.replace(/\/$/,'');
 const quoted=(value:string,windows=false):string=>`'${windows?value.replaceAll("'","''"):value.replaceAll("'",`'"'"'`)}'`;
 const setupServer=(base:string,windows=false):string=>origin(base)===DEFAULT_SERVER?'':` --server ${quoted(origin(base),windows)}`;
 /** Prepare Node in this terminal, then install skills for the selected server. */
-export const afbinInstallCommand=(base:string):string=>`afbin_node_setup="$(mktemp)" && curl -fsSL ${quoted(`${origin(base)}/chat/ensure-node.sh`)} -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"\nnpx --yes @artifactbin/cli@latest setup${setupServer(base)}`;
+export const afbinInstallCommand=(base:string):string=>`afbin_node_setup="$(mktemp)" && curl -fsSL ${quoted(`${origin(base)}/chat/ensure-node.sh`)} -o "$afbin_node_setup" && . "$afbin_node_setup" && rm -f "$afbin_node_setup"\nnpx --yes @afbin/cli@latest setup${setupServer(base)}`;
 /** PowerShell uses .cmd to work under its default script execution policy. */
-export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/ensure-node.ps1`,true)} | Invoke-Expression\nnpx.cmd --yes @artifactbin/cli@latest setup${setupServer(base,true)}`;
+export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${origin(base)}/chat/ensure-node.ps1`,true)} | Invoke-Expression\nnpx.cmd --yes @afbin/cli@latest setup${setupServer(base,true)}`;
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
- return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @artifactbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`};
+ return {url:`${o}/llms.txt`,instruction:`afbin: npx --yes @afbin/cli@latest; Windows: npx.cmd. HTTP: email auth; /llms.txt. Local/offline editing needs no remote API.`};
 }
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="${escapeHtml(help.instruction)}">`;

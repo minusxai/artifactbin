@@ -262,7 +262,7 @@ describe('cli-preconditions', () => {
    const token=await mintToken('protocol');
    for(const protocol of ['0','1','2','unknown']){
     const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':protocol},json:{markup:'<p>Must not publish</p>'}}));
-    expect(response.status).toBe(426);expect(await response.json()).toMatchObject({error:'cli_update_required',required_protocol:3,required_version:cliRelease.version,hint:expect.stringContaining(`npx --yes @artifactbin/cli@${cliRelease.version}`)});expect(response.headers.get('X-Artifactbin-Protocol')).toBe('3');expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
+    expect(response.status).toBe(426);expect(await response.json()).toMatchObject({error:'cli_update_required',required_protocol:3,required_version:cliRelease.version,hint:expect.stringContaining(`npx --yes @afbin/cli@${cliRelease.version}`)});expect(response.headers.get('X-Artifactbin-Protocol')).toBe('3');expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
    }
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':'3'},json:{markup:'<p>Supported contract</p>'}}));
    expect(response.status).toBe(201);expect(response.headers.get('X-Artifactbin-Protocol')).toBe('3');expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);

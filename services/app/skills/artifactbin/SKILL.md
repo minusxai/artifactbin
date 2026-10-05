@@ -9,7 +9,7 @@ artifactbin publishes editable `.jsx`: a YAML fence, self-contained HTML and kit
 
 npm CLI: local files/browser approval. Direct HTTP: email auth without CLI installation; [HTTP API](references/http-api.md).
 
-- Run via `npx --yes @artifactbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
+- Run via `npx --yes @afbin/cli@latest <command>`; Windows uses `npx.cmd`. `afbin` below is shorthand. Node/npm and offline caches: [npm and local files](references/npm-local.md).
 - Preview is local; HTML downloads use `.jsx.html`. CLI browser approval allows guests; HTTP requires email.
 - Automatic browser approval also applies to `--yes`. If unavailable, ask for email: `afbin auth --email <email>`; then code: `afbin auth --email <email> --otp <code>`. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.

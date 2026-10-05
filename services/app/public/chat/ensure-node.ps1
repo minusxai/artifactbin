@@ -61,7 +61,7 @@ if (!(Test-AfbinNode)) {
 }
 $userPath = [Environment]::GetEnvironmentVariable('PATH','User')
 if (!(@($userPath -split ';') -contains $destination)) { [Environment]::SetEnvironmentVariable('PATH', "$destination;$userPath", 'User') }
-Write-Host 'Node and npm/npx are ready. Next: npx.cmd --yes @artifactbin/cli@latest setup'
+Write-Host 'Node and npm/npx are ready. Next: npx.cmd --yes @afbin/cli@latest setup'
 
 } finally {
   $ErrorActionPreference = $afbinPreviousErrorActionPreference
