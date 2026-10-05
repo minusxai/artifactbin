@@ -4,7 +4,7 @@ import {cleanup,fireEvent,render,screen,waitFor} from '@solidjs/testing-library'
 import {afterEach,expect,it,vi} from 'vitest';
 import {SchedulesPage} from '../Schedules';
 vi.mock('@/solid/lib/session',()=>({useSession:()=>({session:()=>({user:{id:'alice'}})})}));
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();vi.unstubAllGlobals();window.history.replaceState({},'', '/');});
 it('creates, edits, pauses and manually runs a schedule, showing actual attempt errors',async()=>{
  let rows:any[]=[];const calls:any[]=[];
  vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{
@@ -24,7 +24,7 @@ it('creates, edits, pauses and manually runs a schedule, showing actual attempt 
  expect(calls.find(call=>call.method==='POST').body).toMatchObject({artifactId:'doc-one',timezone:'UTC',maxAttempts:1,retryBackoffSeconds:60,input:null});
  await waitFor(()=>expect(screen.getByRole('button',{name:'Edit doc-one'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Edit doc-one'}));
  fireEvent.input(screen.getByLabelText('Cron expression'),{target:{value:'0 * * * *'}});fireEvent.click(screen.getByRole('button',{name:'Save schedule'}));await screen.findByText('0 * * * *');
- await waitFor(()=>expect(screen.getByRole('button',{name:'Pause doc-one'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Pause doc-one'}));await screen.findByRole('button',{name:'Resume doc-one'});
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Pause doc-one'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Pause doc-one'}));await screen.findByRole('button',{name:'Resume doc-one'});expect(screen.getByRole('button',{name:'Run now doc-one'})).toBeDisabled();expect(screen.getByText('Resume to run.')).toBeInTheDocument();await waitFor(()=>expect(screen.getByRole('button',{name:'Resume doc-one'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Resume doc-one'}));await screen.findByRole('button',{name:'Pause doc-one'});
  await waitFor(()=>expect(screen.getByRole('button',{name:'Run now doc-one'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Run now doc-one'}));await screen.findByText('Image pull failed');expect(screen.getByText(/run-one/)).toBeInTheDocument();
  expect(calls.find(call=>String(call.url).endsWith('/run')).body.requestId).toBeTruthy();
  await waitFor(()=>expect(screen.getByRole('button',{name:'Delete doc-one'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Delete doc-one'}));fireEvent.click(screen.getByRole('button',{name:'Confirm delete'}));await screen.findByText('No schedules yet.');
@@ -42,4 +42,9 @@ it('retries an ambiguously accepted manual run with the same ID and refreshes hi
   if(url.endsWith('/history')){historyReads++;return Response.json({history:[{id:'occ',scheduledFor:'2026-10-05T01:00:00Z',status:historyReads===1?'active':'completed',attempts:[]}]});}
   return Response.json({schedules:[record]});
  }));render(()=><SchedulesPage/>);await screen.findByRole('button',{name:'Run now doc-one'});fireEvent.click(screen.getByRole('button',{name:'Run now doc-one'}));await screen.findByText('Response lost');await waitFor(()=>expect(screen.getByRole('button',{name:'Run now doc-one'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Run now doc-one'}));await screen.findByRole('button',{name:'Refresh history'});expect(ids).toHaveLength(2);expect(ids[1]).toBe(ids[0]);await waitFor(()=>expect(screen.getByRole('button',{name:'Refresh history'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Refresh history'}));await screen.findByText(/ · completed/);expect(historyReads).toBe(2);
+});
+
+it('prefills the artifact query when route props contain an empty artifact ID',async()=>{
+ window.history.replaceState({},'', '/schedules?artifact=program-one');vi.stubGlobal('fetch',vi.fn(async()=>Response.json({schedules:[]})));
+ render(()=><SchedulesPage artifactId=""/>);await screen.findByText('No schedules yet.');expect(screen.getByLabelText('Artifact ID')).toHaveValue('program-one');
 });

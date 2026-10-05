@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import {createResource,createSignal,For,Show,type JSX} from 'solid-js';
 import type {ScheduleRecord,ScheduleOccurrence,RunnerJson} from '@artifactbin/contracts';
+import {newRequestId} from '../lib/request-id';
 import {apiRequest} from '../lib/api';
 import {useSession} from '../lib/session';
 const FIELD='mt-1 w-full rounded border border-edge bg-bg p-2 font-mono text-xs';
@@ -8,7 +9,7 @@ const BUTTON='rounded border border-edge px-3 py-2 font-mono text-xs disabled:op
 export function SchedulesPage(props:{artifactId?:string}={}):JSX.Element{
  const {session}=useSession();
  const [records,{refetch}]=createResource(()=>session()?.user?.id,()=>apiRequest<{schedules:ScheduleRecord[]}>('/api/schedules'));
- const [artifact,setArtifact]=createSignal(props.artifactId??new URLSearchParams(window.location.search).get('artifact')??'');
+ const [artifact,setArtifact]=createSignal(props.artifactId||new URLSearchParams(window.location.search).get('artifact')||'');
  const [cron,setCron]=createSignal('0 * * * *'),[timezone,setTimezone]=createSignal('UTC'),[input,setInput]=createSignal('null');
  const [maxAttempts,setMaxAttempts]=createSignal(1),[backoff,setBackoff]=createSignal(60),[editing,setEditing]=createSignal<string|null>(null);
  const [busy,setBusy]=createSignal(false),[error,setError]=createSignal(''),[notice,setNotice]=createSignal('');
@@ -38,7 +39,7 @@ export function SchedulesPage(props:{artifactId?:string}={}):JSX.Element{
  <For each={records()?.schedules}>{record=><article class="mb-3 rounded border border-edge p-4"><div class="flex flex-wrap justify-between gap-2"><a class="font-semibold underline" href={`/a/${record.artifactId}`}>{record.artifactId}</a><span>{record.enabled?'Active':'Paused'}</span></div><p class="mt-2 font-mono text-sm"><code>{record.cron}</code> · {record.timezone}</p><p class="mt-1 text-xs text-muted">{record.enabled?`Next: ${new Date(record.nextDueAt).toLocaleString()}`:'No automatic runs while paused'} · {record.maxAttempts} maximum attempts</p><div class="mt-3 flex flex-wrap gap-2">
  <button class={BUTTON} disabled={busy()} aria-label={`Edit ${record.artifactId}`} onClick={()=>edit(record)}>Edit</button>
  <button class={BUTTON} disabled={busy()} aria-label={`${record.enabled?'Pause':'Resume'} ${record.artifactId}`} onClick={()=>void action(async()=>{await apiRequest(`/api/schedules/${record.id}`,'PATCH',{enabled:!record.enabled});await refetch();})}>{record.enabled?'Pause':'Resume'}</button>
- <button class={BUTTON} disabled={busy()} aria-label={`Run now ${record.artifactId}`} onClick={()=>void action(async()=>{const requestId=pendingRunIds.get(record.id)??crypto.randomUUID();pendingRunIds.set(record.id,requestId);await apiRequest(`/api/schedules/${record.id}/run`,'POST',{requestId});pendingRunIds.delete(record.id);setNotice('Run requested.');await loadHistory(record);})}>Run now</button>
+ <button class={BUTTON} disabled={busy()||!record.enabled} aria-label={`Run now ${record.artifactId}`} onClick={()=>void action(async()=>{const requestId=pendingRunIds.get(record.id)??newRequestId();pendingRunIds.set(record.id,requestId);await apiRequest(`/api/schedules/${record.id}/run`,'POST',{requestId});pendingRunIds.delete(record.id);setNotice('Run requested.');await loadHistory(record);})}>Run now</button><Show when={!record.enabled}><span class="self-center text-xs text-muted">Resume to run.</span></Show>
  <button class={BUTTON} disabled={busy()} aria-label={`History ${record.artifactId}`} onClick={()=>void action(()=>loadHistory(record))}>History</button>
  <button class={BUTTON} disabled={busy()} aria-label={`Delete ${record.artifactId}`} onClick={()=>setDeleting(record.id)}>Delete</button>
  <Show when={deleting()===record.id}><span class="flex items-center gap-2 text-sm">Delete this schedule? Existing runs remain.<button class={BUTTON} onClick={()=>void action(async()=>{await apiRequest(`/api/schedules/${record.id}`,'DELETE');setDeleting(null);await refetch();})}>Confirm delete</button><button class={BUTTON} onClick={()=>setDeleting(null)}>Keep schedule</button></span></Show>

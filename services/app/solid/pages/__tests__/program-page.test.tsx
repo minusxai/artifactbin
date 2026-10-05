@@ -3,16 +3,18 @@ import '@testing-library/jest-dom/vitest';
 import {cleanup,fireEvent,render,screen} from '@solidjs/testing-library';
 import {afterEach,expect,it,vi} from 'vitest';
 import {ProgramPage} from '../Program';
-vi.mock('@/solid/lib/session',()=>({useSession:()=>({session:()=>({user:{id:'alice'}})})}));
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+const auth=vi.hoisted(()=>({user:{id:'alice'} as {id:string}|null}));
+vi.mock('@/solid/lib/session',()=>({useSession:()=>({session:()=>({user:auth.user})})}));
+afterEach(()=>{cleanup();vi.unstubAllGlobals();auth.user={id:'alice'};});
 it('creates a private saved program and invokes it',async()=>{
  const calls:Array<{url:string;body:any}>=[];vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{const body=init?.body?JSON.parse(String(init.body)):null;calls.push({url,body});if(url==='/api/my/artifacts')return Response.json({id:'program-one',version:1,state:'state-one'});if(url.endsWith('/invoke'))return Response.json({runId:'run-one'});return Response.json({runId:'run-one',status:'completed',output:'hello'});}));
  render(()=><ProgramPage/>);fireEvent.input(screen.getByLabelText('Program title'),{target:{value:'Hello program'}});fireEvent.input(screen.getByLabelText('Program JSON'),{target:{value:JSON.stringify({version:1,command:['node','-e','console.log("hello")']})}});fireEvent.click(screen.getByRole('button',{name:'Save program'}));await screen.findByRole('link',{name:'Open saved program'});
  expect(calls.find(call=>call.url==='/api/my/artifacts')?.body).toMatchObject({title:'Hello program',program:{version:1,command:['node','-e','console.log("hello")']},visibility:'private'});
  fireEvent.click(screen.getByRole('button',{name:'Run program'}));await screen.findByText('completed');expect(screen.getByLabelText('Schedule program')).toHaveAttribute('href','/schedules?artifact=program-one');
 });
-it('hides execution controls from readers',async()=>{
- vi.stubGlobal('fetch',vi.fn(async()=>Response.json({id:'program-one',title:'Shared program',program:{version:1,command:['echo','hello']},version:1,state:'state-one'})));
+it('shows the definition to signed-out readers without execution controls',async()=>{
+ auth.user=null;
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({role:'viewer',surface:{format:'program',title:'Shared program',source:JSON.stringify({version:1,command:['echo','hello']})}})));
  render(()=><ProgramPage artifactId="program-one" owner={false}/>);await screen.findByDisplayValue('Shared program');expect(screen.queryByRole('button',{name:'Run program'})).toBeNull();expect(screen.queryByLabelText('Schedule program')).toBeNull();expect(screen.getByText('Only the owner can run or schedule this program.')).toBeInTheDocument();
 });
 
