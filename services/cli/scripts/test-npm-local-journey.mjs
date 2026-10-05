@@ -10,8 +10,8 @@ import {chromium} from 'playwright';
 import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
 const entry=resolve(process.argv[2]);
 const scratch=await realpath(await mkdtemp(join(tmpdir(),'afbin npm local é ')));
-const workspace=join(scratch,'workspace'),copy=join(scratch,'transferred'),recovery=join(scratch,'recovered');
-for(const directory of [workspace,recovery])await mkdir(directory);
+const workspace=join(scratch,'workspace'),copy=join(scratch,'transferred'),recovery=join(scratch,'recovered'),connected=join(scratch,'connected');
+for(const directory of [workspace,recovery,connected])await mkdir(directory);
 let remoteRequests=0;
 const unavailable=createServer((_req,res)=>{remoteRequests++;res.writeHead(503);res.end('Offline acceptance: remote service unavailable');});
 await new Promise(done=>unavailable.listen(0,'127.0.0.1',done));
@@ -29,7 +29,7 @@ async function command(cwd,home,args,timeout=180000){
 }
 const jsonCommand=async(...args)=>JSON.parse(await command(...args));
 async function preview(cwd,home,path='report.jsx'){
- const child=spawn(process.execPath,[entry,'preview',path,'--port','0','--json'],{cwd,env:environment(home),stdio:['ignore','pipe','pipe','ipc']});
+ const child=spawn(process.execPath,[entry,'preview',...(path===null?[]:[path]),'--port','0','--json'],{cwd,env:environment(home),stdio:['ignore','pipe','pipe','ipc']});
  let stdout='',stderr='';child.stderr.on('data',chunk=>stderr+=chunk);
  const ready=new Promise((done,reject)=>{
   const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error(`Preview did not start\n${stdout}\n${stderr}`));},90000);
@@ -103,7 +103,7 @@ try{
  const exported=join(copy,'report.jsx.html');const html=await readFile(exported,'utf8');const file=payload(html);
  assert.equal(file.artifactId,ids['report.jsx']);assert.equal(file.threads[0].id,thread.id);assert.deepEqual(Object.keys(file.localWorkspace.assets).sort(),[ids['sales.csv'],ids['pixel.png']].sort());
  const offline=await browser.newContext({acceptDownloads:true});await offline.addInitScript(()=>{delete window.showSaveFilePicker;});
- let offlineRequests=0;await offline.route(/^https?:/,route=>{offlineRequests++;return route.abort();});
+ let offlineRequests=0;await offline.route(/^https?:/,route=>{if(active&&new URL(route.request().url()).origin===active.origin)return route.continue();offlineRequests++;return route.abort();});
  const offlinePage=trackPage(await offline.newPage(),'offline');await offlinePage.goto(pathToFileURL(exported).href);await offlinePage.getByRole('heading',{name:'Local report',exact:true}).waitFor({timeout:30000});await offlinePage.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
  await offlinePage.getByRole('img',{name:'Portable image'}).evaluate(element=>element.decode());
  await offlinePage.getByRole('button',{name:'Edit',exact:true}).click();
@@ -112,19 +112,47 @@ try{
  await offlinePage.locator('#title').evaluate(element=>{(element.closest('.ProseMirror')??element).focus();const text=document.createTreeWalker(element,NodeFilter.SHOW_TEXT).nextNode();const selection=getSelection();selection.removeAllRanges();selection.setBaseAndExtent(text,0,text,text.textContent.length);});
  await offlinePage.keyboard.insertText('Offline saved report');await offlinePage.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
  await offlinePage.getByRole('button',{name:'Done editing',exact:true}).click();
- const downloaded=await Promise.all([offlinePage.waitForEvent('download'),offlinePage.getByRole('button',{name:'Save',exact:true}).click()]);
+ const downloaded=await Promise.all([offlinePage.waitForEvent('download'),offlinePage.keyboard.press('Control+s')]);
  const savedHtml=join(recovery,'report.jsx.html');await downloaded[0].saveAs(savedHtml);
  const incoming=payload(await readFile(savedHtml,'utf8'));assert.match(incoming.source,/Offline saved report/);assert.equal(incoming.threads[0].id,thread.id);
  const reopened=trackPage(await offline.newPage(),'reopened');await reopened.goto(pathToFileURL(savedHtml).href);await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();await reopened.waitForFunction(()=>document.documentElement.hasAttribute('data-mx-ready'));
  assert.deepEqual(browserEvents.filter(event=>event.type==='pageerror'),[],'Offline reader boot and reopen must complete without browser exceptions');
- assert.equal(offlineRequests,0);await offline.close();
+ assert.equal(offlineRequests,0);
+ // The installed package must start an empty server on each native consumer OS.
+ await writeFile(join(connected,'unselected.jsx'),'<p>Unselected private file</p>');
+ active=await preview(connected,profiles[2],null);
+ assert.equal((await fetch(active.origin+'/document?file=unselected.jsx')).status,403);
+ await reopened.getByRole('button',{name:'Connect to server',exact:true}).click();
+ const connectDialog=reopened.getByRole('dialog',{name:'Connect to server',exact:true});
+ await connectDialog.getByRole('textbox',{name:'Server address'}).fill(active.origin);
+ const [popup]=await Promise.all([reopened.waitForEvent('popup'),connectDialog.getByRole('button',{name:'Connect',exact:true}).click()]);trackPage(popup,'connected');
+ await popup.getByRole('button',{name:'Import and open',exact:true}).waitFor();
+ await popup.getByRole('textbox',{name:'Workspace file',exact:true}).fill('connected.jsx');
+ await popup.getByRole('button',{name:'Import and open',exact:true}).click();
+ await popup.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor({timeout:30000});
+ await popup.getByRole('button',{name:'Edit document',exact:true}).waitFor();
+ await popup.getByRole('img',{name:'Portable image'}).evaluate(element=>element.decode());
+ const connectedThreads=await post(active.origin,'/editor',{file:'connected.jsx',operation:'annotations.list'});assert.equal(connectedThreads[0].id,thread.id);
+ assert.deepEqual((await post(active.origin,'/query',{file:'connected.jsx',values:{}})).tables.sales.rows,[{total:30}]);
+ await popup.getByRole('button',{name:'Edit the source',exact:true}).click();
+ const connectedSource=popup.getByRole('textbox',{name:'Markup source'});
+ await connectedSource.fill((await connectedSource.inputValue()).replace('Offline saved report','Connected saved report'));
+ await popup.getByRole('button',{name:'Done editing',exact:true}).click();
+ await popup.getByRole('heading',{name:'Connected saved report',exact:true}).waitFor({timeout:30000});
+ assert.match(await readFile(join(connected,'connected.jsx'),'utf8'),/Connected saved report/);
+ assert.equal(await readFile(exported,'utf8'),html,'Connect must not overwrite the opened HTML');
+ await reopened.getByRole('heading',{name:'Offline saved report',exact:true}).waitFor();
+ await reopened.getByRole('link',{name:'Open server editor',exact:true}).waitFor();
+ await active.close();active=undefined;
+ assert.equal(offlineRequests,0);assert.deepEqual(browserEvents.filter(event=>event.type==='pageerror'),[]);
+ await offline.close();
  const imported=await jsonCommand(recovery,profiles[2],['import','report.jsx.html','--output','recovered.jsx','--json']);assert.equal(imported.path,'recovered.jsx');
  const restoredIds=await jsonCommand(recovery,profiles[2],['add','recovered.jsx','sales.csv','pixel.png','--json']);assert.equal(restoredIds['recovered.jsx'],ids['report.jsx']);assert.equal(restoredIds['sales.csv'],ids['sales.csv']);assert.equal(restoredIds['pixel.png'],ids['pixel.png']);assert.deepEqual(await readFile(join(recovery,'pixel.png')),image);
  active=await preview(recovery,profiles[2],'recovered.jsx');assert.match((await get(active.origin,'/document?file=recovered.jsx')).body,/Offline saved report/);
  const restoredThreads=await post(active.origin,'/editor',{file:'recovered.jsx',operation:'annotations.list'});assert.equal(restoredThreads[0].id,thread.id);assert.equal(restoredThreads[0].thread[0].body,'Portable note');
  assert.deepEqual((await post(active.origin,'/query',{file:'recovered.jsx',values:{}})).tables.sales.rows,[{total:30}]);
  assert.equal(remoteRequests,0,'No installed CLI command may reach the selected unavailable remote service');
- console.log('PASS installed npm add/preview SQL+image, accepted/stale saves, comments/restart, fresh-home workspace copy, HTML file edit/save/reopen/import, stable IDs/assets/threads, zero remote requests');
+ console.log('PASS installed npm add/preview SQL+image, accepted/stale saves, comments/restart, fresh-home workspace copy, HTML shortcut save/reopen/import, empty server Connect/editor, stable IDs/assets/threads, zero remote requests');
 }catch(error){
  try{await retainDiagnostics(error);}catch(diagnosticError){console.error('Could not retain journey diagnostics',diagnosticError);}
  throw error;
