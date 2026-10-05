@@ -33,7 +33,7 @@ export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
  access_denied:{meaning:'Browser approval was denied.',fix:'Run afbin auth only when you intend to start a new approval request.'},
  approval_expired:{meaning:'The browser approval window expired.',fix:'Run afbin auth --email <email> when a browser is unavailable, or afbin auth to start another browser approval.'},
  cli_update_required:{meaning:'The server requires a newer CLI protocol.',fix:'Run npx --yes @afbin/cli@latest <command> (Windows: npx.cmd), then retry the command.'},
- cli_npm_required:{meaning:'afbin now runs through npm.',fix:'Install Node.js if needed, then use npx --yes @afbin/cli@latest <command> (Windows: npx.cmd). Your files and account stay the same.'},
+ cli_npm_required:{meaning:'afbin now installs through npm. Run npx --yes @afbin/cli@latest setup once, then use afbin.',fix:'Install Node.js if needed, then use npx --yes @afbin/cli@latest <command> (Windows: npx.cmd). Your files and account stay the same.'},
  state_conflict:{meaning:'Metadata or content changed since the observed head.',fix:'Inspect afbin diff --remote <ref>, reconcile the changes, then push. Use --force only when you intend a conditional replacement.'},
  version_conflict:{meaning:'The content version changed since the observed head.',fix:'Inspect afbin diff --remote <ref> and reconcile the current content before pushing again.'},
  edit_conflict:{meaning:'The body edit could not be rebased without a conflict.',fix:'Inspect the returned diff and current source; reconcile your proposal before pushing again.'},
