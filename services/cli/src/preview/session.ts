@@ -161,7 +161,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&(target.pathname===PREVIEW_CONNECT_PATH||target.pathname==='/'&&!options.files.length)){
    if(options.capture)throw new Refusal(403,'Image export is read-only');
    res.setHeader('Content-Type','text/html');
-   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
    return res.end(previewConnectPage());
   }
   if(req.method==='POST'&&(target.pathname===PREVIEW_CONNECT_INSPECT_PATH||target.pathname===PREVIEW_CONNECT_IMPORT_PATH)){

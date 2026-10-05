@@ -1,4 +1,5 @@
 /** The preview's own browser bundle: Solid only, over the compiled document the server already sent. */
+import {documentUiFontCss} from '../../app/lib/serving/app-font-face-css.mjs';
 import {build, transform} from 'esbuild';
 import {transformAsync} from '@babel/core';
 // @ts-expect-error babel-preset-solid ships no types; it is a Babel preset function.
@@ -38,6 +39,7 @@ export async function buildPreview(outdir=join(cli,'dist/runtime/preview')){
  await mkdir(outdir,{recursive:true});
  const compiler=await compile(await readFile(join(app,'app/globals.css'),'utf8'),{base:join(app,'app'),onDependency:()=>{}});
  const scanner=new Scanner({sources:compiler.sources});
+ await writeFile(join(outdir,'fonts.css'),documentUiFontCss(JSON.parse(await readFile(join(app,'lib/data/story/story-font-manifest.json'),'utf8')).app));
  await writeFile(join(outdir,'chrome.css'),optimize(compiler.build(scanner.scan()),{minify:true}).code);
  await build({
   entryPoints:[join(cli,'src/preview/client.tsx'),join(cli,'src/preview/connect.tsx')],bundle:true,minify:true,format:'esm',splitting:true,outdir,

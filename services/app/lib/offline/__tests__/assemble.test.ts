@@ -247,6 +247,11 @@ describe('a self-contained file', () => {
     const file = await download(w.doc, w.owner.actor);
     const css = [file.css.base, file.css.compiled, file.css.author].join('\n');
     expect(file.css.base).toContain('data:font/woff2;base64,');
+    expect(file.css.base).toContain("font-family:'JetBrains Mono Variable'");
+    expect(file.css.base).toContain("font-family:'IBM Plex Sans'");
+    const monoFace = /@font-face\{font-family:'JetBrains Mono Variable'[^}]*src:url\("?(data:font\/woff2;base64,[A-Za-z0-9+/=]+)/.exec(file.css.base);
+    expect(monoFace).not.toBeNull();
+    expect(Buffer.from(monoFace![1].split(',')[1], 'base64').subarray(0, 4).toString()).toBe('wOF2');
     expect(css).not.toMatch(/url\(\s*['"]?\//);
     const island = JSON.stringify(file.island);
     expect(island).toContain(`data:image/png;base64,${PNG_B64}`);

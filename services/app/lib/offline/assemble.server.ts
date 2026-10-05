@@ -51,6 +51,7 @@ import { webAssetByHash, webAssetsForSource } from '@/lib/serving/web-assets';
 import { offlineExtrasRef } from './bundle.server';
 import { ARTIFACT_FILE_FORMAT, sourceDigest, type ArtifactFile } from './file-format';
 import { precomputeVariants, valueDomains, type VariantCaps } from './variants';
+import { DOCUMENT_UI_FONT_CSS } from '@/lib/serving/app-fonts';
 import { withoutUnusedFaces } from './font-faces';
 import type { CompiledDataflow } from '@/lib/story/data';
 import { createHash } from 'node:crypto';
@@ -404,12 +405,13 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const snapshot = { at: new Date().toISOString(), state, held, variants, frozen };
   let inlined: { css: ArtifactFile['css']; island: StoryIslandData; compiled: NonNullable<ArtifactFile['compiled']>; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
   // Everything the file can draw: the font subsets no character of it reaches are left out (lib/offline/font-faces).
-  const text = [source, row.title ?? '', JSON.stringify(snapshot), JSON.stringify(threads)].join('\n');
+  const downloadedBy = await downloaderLabel(actor);
+  const text = [source, row.title ?? '', downloadedBy, JSON.stringify(snapshot), JSON.stringify(threads)].join('\n');
   const css = (sheet: string) => inliner.css(withoutUnusedFaces(sheet, text));
   try {
     inlined = await timed(timings, 'inline', async () => ({
       css: {
-        base: await css(parts.runtime.baseCss),
+        base: await css(parts.runtime.baseCss + '\n' + DOCUMENT_UI_FONT_CSS),
         compiled: compiledCss ? await css(compiledCss) : null,
         author: parts.runtime.authorCss ? await css(parts.runtime.authorCss) : null,
       },
@@ -428,7 +430,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     origin,
     artifactId: artifact.id,
     liveUrl: `${origin}/a/${artifact.id}`,
-    downloadedBy: await downloaderLabel(actor),
+    downloadedBy,
     downloadedAt: new Date().toISOString(),
     // An archived version's edit id is not recorded, so a sync merges from its source rather than fast-forwarding.
     base: { version: at ? at.version : artifact.version, editId: at ? '' : artifact.edit_id, source },

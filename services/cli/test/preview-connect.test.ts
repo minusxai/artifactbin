@@ -17,6 +17,8 @@ test('the receiver admits its embedded brand image while keeping external resour
  const response=await fetch(session.url+'/connect');assert.equal(response.status,200);
  const policy=response.headers.get('content-security-policy')!;
  assert.match(policy,/(?:^|;)\s*img-src data:(?:;|$)/);
+ assert.match(policy,/(?:^|;)\s*font-src 'self'(?:;|$)/);
+ assert.match(await response.text(),/<link rel="stylesheet" href="\/bundle\/fonts.css">/);
  assert.match(policy,/(?:^|;)\s*default-src 'none'(?:;|$)/);
  assert.doesNotMatch(policy,/img-src[^;]*(?:https?:|\*|'self')/);
 }));

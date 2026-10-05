@@ -30,6 +30,7 @@ import {renderArtifactFileHtml} from '../../app/lib/offline/file-html';
 import {sourceDigest,type ArtifactFile} from '../../app/lib/offline/file-format';
 import type {StoryIslandData} from '../../app/lib/story-runtime/contract';
 import type {ImportTables} from '../../app/lib/story/data/compiled-flow';
+import {DOCUMENT_UI_FONT_CSS} from '../../app/lib/serving/app-fonts';
 import {withoutUnusedFaces} from '../../app/lib/offline/font-faces';
 
 const MAX_BYTES=25*1024*1024;
@@ -120,7 +121,7 @@ export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string
  };
  const inline=(text:string)=>input.uris.get(text)??text.replace(/\b(src|href|poster)=(["'])([^"']*)\2/g,(original,name:string,quote:string,pointer:string)=>input.uris.has(pointer)?`${name}=${quote}${input.uris.get(pointer)}${quote}`:original);
  const css=async(text:string)=>{
-  const sheet=withoutUnusedFaces(text,document.body+JSON.stringify(input.state)+JSON.stringify(input.threads));
+  const sheet=withoutUnusedFaces(text,document.body+(document.metadata.title??input.path)+JSON.stringify(input.state)+JSON.stringify(input.threads));
   const replacements=new Map<string,string>();for(const match of sheet.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/g))replacements.set(match[0],`url("${await resource(match[2]!)}")`);
   let result=sheet;for(const [original,replacement] of replacements)result=result.split(original).join(replacement);return result;
  };
@@ -137,7 +138,7 @@ export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string
   };return visit(value) as T;
  };
  const now=new Date().toISOString();
- const file:ArtifactFile={format:1,origin:'http://localhost',artifactId:input.identity,liveUrl:'',downloadedBy:'Local workspace',downloadedAt:now,base:{version:0,editId:'',source:document.body},source:document.body,metadata:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode},css:{base:await css(prepared.baseCss),compiled:prepared.compiledCss?await css(prepared.compiledCss):null,author:prepared.authorCss?await css(prepared.authorCss):null},island:inlined(island),compiled:inlined(compiled),snapshot:{at:now,state:inlined(input.state),held:inlined(input.held),variants:[],frozen:[]},threads:inlined(input.threads),journal:[],localIds:input.threads.flatMap(thread=>[thread.id,...thread.thread.map(reply=>reply.id)]),bundle:'solid',derivedFrom:sourceDigest(document.body),compiledFlowDigest:sourceDigest(JSON.stringify(island.dataflow?.flow??null)),localWorkspace:{documentId:input.identity,baseDigest:sourceDigest(document.body),threadsDigest:digest(JSON.stringify(input.threads)),metadataBaseline:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode},assets:input.assets}};
+ const file:ArtifactFile={format:1,origin:'http://localhost',artifactId:input.identity,liveUrl:'',downloadedBy:'Local workspace',downloadedAt:now,base:{version:0,editId:'',source:document.body},source:document.body,metadata:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode},css:{base:await css(prepared.baseCss+'\n'+DOCUMENT_UI_FONT_CSS),compiled:prepared.compiledCss?await css(prepared.compiledCss):null,author:prepared.authorCss?await css(prepared.authorCss):null},island:inlined(island),compiled:inlined(compiled),snapshot:{at:now,state:inlined(input.state),held:inlined(input.held),variants:[],frozen:[]},threads:inlined(input.threads),journal:[],localIds:input.threads.flatMap(thread=>[thread.id,...thread.thread.map(reply=>reply.id)]),bundle:'solid',derivedFrom:sourceDigest(document.body),compiledFlowDigest:sourceDigest(JSON.stringify(island.dataflow?.flow??null)),localWorkspace:{documentId:input.identity,baseDigest:sourceDigest(document.body),threadsDigest:digest(JSON.stringify(input.threads)),metadataBaseline:{title:document.metadata.title??input.path,description:document.metadata.description??null,theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode},assets:input.assets}};
  const html=Buffer.from(renderArtifactFileHtml(await offlineFileParts(file)));
  if(html.length>MAX_BYTES)throw new CliError('export_too_large','The self-contained HTML file exceeds 25 MB.');
  return html;

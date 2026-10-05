@@ -220,6 +220,18 @@ const empty = (list) => Array.isArray(list) && list.length === 0;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const show = (value) => JSON.stringify(value).slice(0, 300);
 
+/** FontFaceSet returns actual loaded first-party faces, never a fallback font-family string. */
+async function expectUiFonts(page, label) {
+  const loaded = await page.evaluate(async () => {
+    const families = ['JetBrains Mono Variable', 'IBM Plex Sans'];
+    return Promise.all(families.map(async family => {
+      const faces = await document.fonts.load(`14px "${family}"`, 'Comment Edit Save');
+      return { family, loaded: faces.length > 0 && faces.every(face => face.status === 'loaded') };
+    }));
+  });
+  check(loaded.every(face => face.loaded), `${label}: shared UI font bytes loaded ${JSON.stringify(loaded)}`);
+}
+
 /** Select the first `length` characters of the heading's text, as a reader's drag does. */
 async function selectHeading(page, length) {
   await page.evaluate(({ id, length }) => {
@@ -287,6 +299,7 @@ async function reading(engineName, browser) {
       await expect(bar).toContainText(file.metadata.title);
       await expect(bar).toContainText('Offline');
       const metrics = await page.getByRole('button', { name: 'Comment', exact: true }).evaluate(button => ({ height: button.getBoundingClientRect().height, radius: getComputedStyle(button).borderRadius, fontSize: getComputedStyle(button).fontSize, barHeight: button.closest('header').getBoundingClientRect().height, shadow: button.getRootNode() instanceof ShadowRoot }));
+      await expectUiFonts(page, name);
       check(metrics.shadow && metrics.barHeight === 44 && metrics.height === 36 && metrics.radius === '8px' && metrics.fontSize !== '40px', `${name}: shared protected chrome metrics ${JSON.stringify(metrics)}`);
       await page.getByRole('button', { name: 'Open artifact controls', exact: true }).click();
       const controls = page.getByRole('region', { name: 'Artifact controls' });
@@ -425,6 +438,7 @@ async function editing(engineName, browser) {
     await reopened.goto(pathToFileURL(saved).href);
     await step('reopened: the edit, and Changes by name', async () => {
       await expect(reopened.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
+      await expectUiFonts(reopened, `${name} saved copy`);
       await expect(reopened.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
       await expect(reopened.getByRole('alertdialog')).toHaveCount(0); // no crash-buffer offer for a copy just saved
       await reopened.getByRole('button', { name: 'Open artifact controls' }).click();
@@ -814,6 +828,7 @@ async function connecting(engineName, browser) {
         await expect(popup.getByRole('heading', { name: 'Import an HTML file', exact: true })).toHaveCount(1);
         await expect(popup.getByRole('banner', { name: 'Page bar' })).toHaveCount(1);
         await expect(popup.getByRole('main')).toHaveCount(1);
+        await expectUiFonts(popup, `${engineName} receiver`);
         const brand = popup.getByRole('banner', { name: 'Page bar' }).locator('img');
         await brand.evaluate(image => image.decode());
         check(await brand.evaluate(image => image.naturalWidth > 0 && image.getBoundingClientRect().width === 28), `${engineName}: receiver displays the shared embedded brand`);
@@ -830,6 +845,7 @@ async function connecting(engineName, browser) {
       await step('comments travel and server source edits persist in the workspace copy', async () => {
         let sourceBeforeInput, sourceAfterInput;
         try {
+        await expectUiFonts(popup, `${engineName} preview`);
         const response = await fetch(`${server.url}/editor`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ file: 'connected.jsx', operation: 'annotations.list', status: 'open' }) });
         check(response.ok, `${engineName}: imported comments can be read through the existing backend`);
         const threads = await response.json();

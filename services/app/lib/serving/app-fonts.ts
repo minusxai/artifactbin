@@ -9,6 +9,7 @@
  * stylesheet at build time; the server preloads APP_SHELL_FONT_PRELOADS on the
  * pages whose first screen is the shell's (server/app).
  */
+import { documentUiFontCss } from './app-font-face-css.mjs';
 import fontManifest from '@/lib/data/story/story-font-manifest.json';
 
 export interface AppFontFace {
@@ -37,3 +38,6 @@ const isLatin = (face: AppFontFace) => /^U\+0+(?:-|,|$)/i.test(face.unicodeRange
 export const APP_SHELL_FONT_PRELOADS: readonly string[] = APP_FONT_FACES
   .filter((face) => face.family === SHELL_TEXT_FAMILY && face.style === 'normal' && isLatin(face))
   .map((face) => face.url);
+
+/** Global font-only rules for shared document controls; offline assembly subsets and inlines their bytes. */
+export const DOCUMENT_UI_FONT_CSS = documentUiFontCss(APP_FONT_FACES);
