@@ -1,11 +1,17 @@
 /* @jsxImportSource solid-js */
 import {createResource,createSignal,For,Show,type JSX} from 'solid-js';
+import {useSearchParams} from '@solidjs/router';
 import type {ScheduleRecord,ScheduleOccurrence,RunnerJson} from '@artifactbin/contracts';
 import {runtimeId as newRequestId} from '@/lib/story-runtime/runtime-id';
 import {apiRequest} from '../lib/api';
 import {useSession} from '../lib/session';
 const FIELD='mt-1 w-full rounded border border-edge bg-bg p-2 font-mono text-xs';
 const BUTTON='rounded border border-edge px-3 py-2 font-mono text-xs disabled:opacity-50 hover:bg-raised';
+/** Router location advances before window.history during client navigation. */
+export function SchedulesRoute():JSX.Element{
+ const [params]=useSearchParams();
+ return <SchedulesPage artifactId={typeof params.artifact==='string'?params.artifact:''}/>;
+}
 export function SchedulesPage(props:{artifactId?:string}={}):JSX.Element{
  const {session}=useSession();
  const [records,{refetch}]=createResource(()=>session()?.user?.id,()=>apiRequest<{schedules:ScheduleRecord[]}>('/api/schedules'));

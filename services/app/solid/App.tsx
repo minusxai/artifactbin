@@ -25,7 +25,7 @@ const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
 const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
-const SchedulesPage = lazy(() => import('./pages/Schedules').then(m => ({default:m.SchedulesPage})));
+const SchedulesPage = lazy(() => import('./pages/Schedules').then(m => ({default:m.SchedulesRoute})));
 const ProgramPage = lazy(() => import('./pages/Program').then(m => ({default:m.ProgramPage})));
 const ProgramEditPage = () => { const params=useParams<{id:string}>(); return <ProgramPage artifactId={params.id}/>; };
 const ChatPage = lazy(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage })));

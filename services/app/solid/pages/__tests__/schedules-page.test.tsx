@@ -2,9 +2,17 @@
 import '@testing-library/jest-dom/vitest';
 import {cleanup,fireEvent,render,screen,waitFor} from '@solidjs/testing-library';
 import {afterEach,expect,it,vi} from 'vitest';
-import {SchedulesPage} from '../Schedules';
+import {SchedulesPage,SchedulesRoute} from '../Schedules';
+import {createMemoryHistory,MemoryRouter,Route} from '@solidjs/router';
 vi.mock('@/solid/lib/session',()=>({useSession:()=>({session:()=>({user:{id:'alice'}})})}));
 afterEach(()=>{cleanup();vi.unstubAllGlobals();window.history.replaceState({},'', '/');});
+it('prefills from the active router query before browser history catches up',async()=>{
+ const history=createMemoryHistory();history.set({value:'/schedules?artifact=program-one',scroll:false,replace:true});
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({schedules:[]})));
+ render(()=><MemoryRouter history={history}><Route path="/schedules" component={SchedulesRoute}/></MemoryRouter>);
+ await screen.findByText('No schedules yet.');
+ expect(screen.getByLabelText('Artifact ID')).toHaveValue('program-one');
+});
 it('creates, edits, pauses and manually runs a schedule, showing actual attempt errors',async()=>{
  let rows:any[]=[];const calls:any[]=[];
  vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{
