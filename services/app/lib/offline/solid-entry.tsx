@@ -186,6 +186,9 @@ function OfflineShell(props: Opened) {
     window.clearTimeout(draftTimer);
     draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
   };
+  // Blur can publish held typing and move the toolbar between mousedown and click.
+  // Keep prose focus until the action itself flushes the editor, so the intended button receives its click.
+  const keepEditorFocus = (event: MouseEvent) => { if (editing() && event.button === 0) event.preventDefault(); };
   const edit = async () => {
     if (editing()) {
       editMount?.flush();
@@ -345,9 +348,9 @@ function OfflineShell(props: Opened) {
         <button class={BUTTON} onClick={() => setRenaming(true)}>{name() ? `You: ${name()}` : 'Set your name'}</button>
         <button class={BUTTON} aria-expanded={changes()} onClick={() => setChanges(!changes())}>Changes{file().journal.length ? ` (${file().journal.length})` : ''}</button>
         <button class={BUTTON} aria-pressed={comments()} onClick={() => setComments(!comments())}>Comments{threads().filter((t) => t.status === 'open').length ? ` (${threads().filter((t) => t.status === 'open').length})` : ''}</button>
-        <button class={BUTTON} aria-pressed={editing()} disabled={!!props.invalid} aria-description={props.invalid ? INVALID_SOURCE_EDIT : undefined} onClick={() => void edit()}>{editing() ? 'Done editing' : 'Edit'}</button>
+        <button class={BUTTON} onMouseDown={keepEditorFocus} aria-pressed={editing()} disabled={!!props.invalid} aria-description={props.invalid ? INVALID_SOURCE_EDIT : undefined} onClick={() => void edit()}>{editing() ? 'Done editing' : 'Edit'}</button>
         <button class={BUTTON} onClick={() => setConnectDialog(true)}>Connect to server</button>
-        <button class={BUTTON} disabled={!dirty() || saving()} aria-description={!dirty() ? NOTHING_TO_SAVE : undefined} onClick={() => void save()}>{saving() ? 'Saving…' : 'Save'}</button>
+        <button class={BUTTON} onMouseDown={keepEditorFocus} disabled={!dirty() || saving()} aria-description={!dirty() ? NOTHING_TO_SAVE : undefined} onClick={() => void save()}>{saving() ? 'Saving…' : 'Save'}</button>
       </span>
     </header>
     <Show when={saveReceipt()}><p role="status" class="m-0 px-4 pb-2 text-xs">{saveReceipt()}</p></Show>
