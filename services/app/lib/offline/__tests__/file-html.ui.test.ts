@@ -101,13 +101,14 @@ describe('the file, for a coding agent asked to edit it', () => {
     expect(note).toBe(
       'artifactbin offline file for "Q3 - -> review \\u003c!- - plan" (https://app.artifactbin.dev/a/Ab12Cd). '
       + 'To edit the document, change the top-level "source" string (the second key) in the <script id="afbin-file"> JSON below. '
-      + 'It is artifactbin JSX (reference: https://app.artifactbin.dev/llms.txt; prepare Node/npm using https://app.artifactbin.dev/llms.txt, then "npx @afbin/cli@latest help markup"). '
+      + 'It is artifactbin JSX (reference: https://app.artifactbin.dev/llms.txt; prepare Node/npm using https://app.artifactbin.dev/llms.txt). '
+      + 'If afbin is not installed, run "npx @afbin/cli@latest setup" once (Windows PowerShell: "npx.cmd @afbin/cli@latest setup"); it installs the afbin command and the agent skills. Then read "afbin help markup". '
       + 'Keep the JSON valid and write "<" as \\u003c inside it. '
       + 'Leave "#afbin-code" untouched. '
       + 'Static markup/text edits rebuild on open; compiler-dependent widgets require local CLI preview. Invalid markup shows validation errors. '
-      + 'To return to JSX, run "npx @afbin/cli@latest import file.jsx.html"; publication is explicit. '
+      + 'To return to JSX, run "afbin import file.jsx.html"; publication is explicit. '
       + 'Comments are in "threads". Save or Cmd/Ctrl+S writes the current edits and comments to a .jsx.html file; the tab stays on the original file. '
-      + 'For the full local editor, start "npx @afbin/cli@latest preview" (Windows PowerShell: "npx.cmd @afbin/cli@latest preview"), click "Connect to server", enter the printed server address, and confirm "Import and open" in its tab. A compatible HTTPS preview server also works. This creates a workspace copy, not a publication.',
+      + 'For the full local editor, start "afbin preview" (Windows PowerShell: "afbin.cmd preview"), click "Connect to server", enter the printed server address, and confirm "Import and open" in its tab. A compatible HTTPS preview server also works. This creates a workspace copy, not a publication.',
     );
   });
 

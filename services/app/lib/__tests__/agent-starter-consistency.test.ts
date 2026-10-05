@@ -122,7 +122,7 @@ describe('every agent-facing starter says the same thing', () => {
 describe('what the brief and the contract teach next', () => {
   const brief = renderTree(skillTree(), 'https://artifactbin.dev').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
 
-  it('teaches automatic sign-in, browser approval and the private configuration location, without a setup step', () => {
+  it('teaches automatic sign-in, browser approval, the private configuration location and the one-time setup line', () => {
     expect(brief).toContain(BOOTSTRAP);
     expect(brief.split('npx --yes @afbin/cli@').length - 1).toBe(1);
     expect(brief).not.toContain('shorthand');

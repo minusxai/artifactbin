@@ -18,7 +18,7 @@ export async function setupSkills(options:SetupOptions){
  return installSkills(selected,options);
 }
 export type SetupGlobal=GlobalInstallResult|{status:'skipped';reason:string};
-export const manualInstallHint=(version:string)=>`Run npm install -g @afbin/cli@${version} yourself, or npx --yes @afbin/cli@latest <command>.`;
+export const manualInstallHint=(version:string)=>`Run npm install -g @afbin/cli@${version} yourself, or npx --yes @afbin/cli@latest setup once.`;
 /**
  * From a package (npx, a global install), setup makes `afbin` npm's global command and retires an old
  * standalone `afbin` on PATH. A checkout never installs globally, so `npm run afbin -- setup` stays harmless.

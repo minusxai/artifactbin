@@ -207,12 +207,12 @@ describe('setup installs the afbin command through npm',()=>{
    assert.equal(await runCli(['setup','--yes','--json','--harness','none'],f.context(f.old,{npm})),0);
    const result=JSON.parse(f.out.join(''));
    assert.equal(result.global.status,'failed');assert.match(result.global.reason,/E404/);assert.deepEqual(result.retired,[]);
-   assert.ok(f.err.join('').includes(`Run npm install -g @afbin/cli@${CLI_VERSION} yourself, or npx --yes @afbin/cli@latest <command>.`),f.err.join(''));
+   assert.ok(f.err.join('').includes(`Run npm install -g @afbin/cli@${CLI_VERSION} yourself, or npx --yes @afbin/cli@latest setup once.`),f.err.join(''));
    assert.deepEqual(await readFile(join(f.old,'afbin')),STANDALONE,'nothing is retired without a replacement');
    f.out.length=0;f.err.length=0;
    assert.equal(await runCli(['setup','--yes','--harness','none'],f.context(f.old,{npm})),0);
    assert.match(f.out.join(''),/! afbin command  not installed: .*E404/);
-   assert.ok(f.out.join('').includes(`Run npm install -g @afbin/cli@${CLI_VERSION} yourself, or npx --yes @afbin/cli@latest <command>.`),f.out.join(''));
+   assert.ok(f.out.join('').includes(`Run npm install -g @afbin/cli@${CLI_VERSION} yourself, or npx --yes @afbin/cli@latest setup once.`),f.out.join(''));
   }finally{await rm(f.home,{recursive:true,force:true});}
  });
 });

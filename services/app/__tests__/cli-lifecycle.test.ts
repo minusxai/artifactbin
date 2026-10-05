@@ -272,8 +272,8 @@ describe('cli-preconditions', () => {
    for(const protocol of ['0','1','2','unknown']){
     const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':protocol},json:{markup:'<p>Must not publish</p>'}}));
     expect(response.status).toBe(426);
-    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_update_required',fix:expect.stringContaining(`npx --yes @afbin/cli@${cliRelease.version}`),details:{required_protocol:3,required_version:cliRelease.version,http_status:426}});
-    expect(await response.json()).toMatchObject({error:'cli_update_required',required_protocol:3,required_version:cliRelease.version,hint:expect.stringContaining(`npx --yes @afbin/cli@${cliRelease.version}`)});expect(response.headers.get('X-Artifactbin-Protocol')).toBeNull();expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
+    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_update_required',fix:'Run afbin update, then retry.',details:{required_protocol:3,required_version:cliRelease.version,http_status:426}});
+    expect(await response.json()).toMatchObject({error:'cli_update_required',required_protocol:3,required_version:cliRelease.version,hint:'Run afbin update, then retry.'});expect(response.headers.get('X-Artifactbin-Protocol')).toBeNull();expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
    }
    expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':'3'},json:{markup:'<p>Supported contract</p>'}}));

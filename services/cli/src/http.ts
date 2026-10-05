@@ -99,7 +99,7 @@ export class HttpClient {
    const protocol=response.headers.get('X-Artifactbin-Protocol');
    if(response.ok&&protocol&&protocol!==String(CLI_PROTOCOL_VERSION)){
     const required=response.headers.get('X-Artifactbin-CLI-Version');
-    throw new CliError('protocol_mismatch','The selected server requires a different CLI protocol.',`Run npx --yes @afbin/cli@${validVersion(required)?required:'latest'} <command>, then retry.`);
+    throw new CliError('protocol_mismatch','The selected server requires a different CLI protocol.','Run afbin update, then retry.',validVersion(required)?{required_version:required}:undefined);
    }
    const account=response.headers.get('X-Artifactbin-Account');
    if(account){if(this.account&&this.account!==account)throw new CliError('account_mismatch','The server account differs from this workspace.','Use the workspace account credentials.');this.account=account;}
