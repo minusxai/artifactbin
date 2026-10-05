@@ -198,7 +198,7 @@ function validateElement(
     form: 'the controls work without a <form> (<input>, <select>, <button>); drive them from the <Helmet> script',
     object: 'use <iframe src="https://…"> for a player or page, or <img>/<video> with a ref: source',
     embed: 'use <iframe src="https://…"> for a player or page, or <img>/<video> with a ref: source',
-    script: 'a document carries ONE script, in <Helmet><script>{`…`}</script></Helmet>',
+    script: 'scripts belong in <Helmet>: one browser <script>{`…`}</script> and optionally one <script type="server">{`…`}</script>',
     link: 'put @import url(…) or @font-face in <Helmet><style>{`…`}</style></Helmet>; there is no <link>',
     meta: '<meta name content /> belongs in <Helmet>; http-equiv is the document\'s own to set',
     base: 'the document sets its own base target; relative links already resolve',

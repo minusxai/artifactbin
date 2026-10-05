@@ -1,3 +1,4 @@
+import {isProgramFile,programFileBytes} from './program-file';
 import {findLocalWorkspace,readLocalWorkspaceState,localReferenceMap,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 /**
  * A workspace is a directory the CLI has registered in its own store. No file is
@@ -71,12 +72,13 @@ export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Wo
  return{home,root,cwd,tracking:{server:value.server,account:value.account,files}};
 }
 
-const RESOURCE_TYPES:Record<string,string>={markup:'artifact',folder:'folder',dataset:'dataset'};
+const RESOURCE_TYPES:Record<string,string>={markup:'artifact',program:'artifact',folder:'folder',dataset:'dataset'};
 /**
  * The accepted base text for a tracked file, derived from the snapshot rather
  * than stored beside it. Binaries have none: they are compared by hash alone.
  */
 export async function baselineOf(_workspace:Workspace,path:string,tracked:TrackedFile):Promise<Buffer|null>{
+ if(isProgramFile(path)&&tracked.snapshot.program!==undefined)return programFileBytes((tracked.selected??tracked.snapshot).program);
  const extension=extname(path).toLowerCase();
  if(extension==='.jsx'){
   const head=tracked.snapshot;const chosen=tracked.selected??head;

@@ -1,4 +1,3 @@
-import {createHostedRemoteAgent} from '@/lib/remote/hosted';
 import {hostedOperationTools} from '@/lib/remote/tools';
 import {setHostedRemoteAgent} from '@/lib/remote/hosted-interface';
 import {startLambdaSchedules,setLambdaProgramResolver,type LambdaProgramResolver} from '@/lib/runner';
@@ -10,16 +9,18 @@ import {startMermaidHarvester} from '@/lib/mermaid-images/harvester';
 import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/artifacts';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql/extensions';
-import type {Actor,Upstream} from '@artifactbin/contracts';
+import type {Actor,Upstream,RunnerService,HostedRemoteAgent} from '@artifactbin/contracts';
+import {externalHostedComments,clearExternalHostedComments} from '@/lib/remote/hosted-comments';
+import {HOSTED_AGENT_SERVICE_URL,RUNNER_ACTOR_SECRET} from '@/lib/platform/config';
 import {getDb,type Db} from '@/lib/platform';
-import {inProcess} from '@artifactbin/utils';
+import {inProcess,hostedAgentClient,hostedAgentDeliveryTransport,hostedAgentTransport} from '@artifactbin/utils';
 import {setServices,services,type Services} from '@/lib/platform';
 import {createAppServer,type AppServerOptions} from './app';
 export interface AppHostOptions extends AppServerOptions {
  services?:Partial<Services>;
  lambdaPrograms?:LambdaProgramResolver;
- /** Hosted deployment opt-in; OSS never supplies this. */
- hostedAgent?:{secret:string;model:string};
+ /** Deployment-owned implementation; no allocator, prompt or provider credentials belong to the app. */
+ hostedAgent?:(context:{db:Db;runner:RunnerService;operationTools:ReturnType<typeof hostedOperationTools>})=>Promise<{agent:HostedRemoteAgent;tick:()=>Promise<void>;close?:()=>Promise<void>}>;
  notificationDelivery?:NotificationDelivery;
  documentEditorPolicy?:DocumentEditorPolicy;
  mutationInvocation?:MutationInvocationFactory;
@@ -49,7 +50,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  await options.initialize?.(db);
  setLambdaProgramResolver(options.lambdaPrograms);
  const stopSchedules=await startLambdaSchedules(db);
- const hosted=options.hostedAgent?await createHostedRemoteAgent({...options.hostedAgent,runner:services().runner,operationTools:hostedOperationTools()}):undefined;
+ const hosted=await resolveHostedAgent({url:HOSTED_AGENT_SERVICE_URL,secret:RUNNER_ACTOR_SECRET,factory:options.hostedAgent},{db,runner:services().runner,operationTools:hostedOperationTools()});
  setHostedRemoteAgent(hosted?.agent);
  let ticking:Promise<void>|undefined;
  const timer=hosted?setInterval(()=>{if(!ticking)ticking=hosted.tick().catch(error=>console.error('[hosted-agent] dispatch failed',error instanceof Error?error.message:'unknown')).finally(()=>{ticking=undefined;});},1000):undefined;
@@ -63,7 +64,16 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  const fetch=options.identity?.(request).fetch??((incoming:Request)=>Promise.resolve(app.fetch(incoming)));
  let closing:Promise<void>|undefined;
  return {fetch,request,close:()=>closing??=(async()=>{
-  try{clearInterval(timer);await ticking;setHostedRemoteAgent(undefined);setLambdaProgramResolver(undefined);await stopSchedules();await stopBackgroundTasks();await stopRecheck();await stopHarvester();await services().events.close?.();await options.shutdown?.();}
+  try{clearInterval(timer);await ticking;await hosted?.close?.();setHostedRemoteAgent(undefined);clearExternalHostedComments();setLambdaProgramResolver(undefined);await stopSchedules();await stopBackgroundTasks();await stopRecheck();await stopHarvester();await services().events.close?.();await options.shutdown?.();}
   finally{await db.close();}
  })()};
+}
+/** Explicit URL wins over a deployment factory. Missing authentication never falls back locally. */
+export function externalHostedAgent(url:string,secret:string|undefined):Awaited<ReturnType<NonNullable<AppHostOptions['hostedAgent']>>>{
+ if(!secret)throw Error('CONTRACT__ACTOR_SECRET required for remote hosted agent');
+ const agent=hostedAgentClient(url,hostedAgentTransport(url,secret),hostedAgentDeliveryTransport(url,secret));
+ return {agent,tick:externalHostedComments(agent,secret)};
+}
+export async function resolveHostedAgent(options:{url?:string;secret?:string;factory?:AppHostOptions['hostedAgent']},context:Parameters<NonNullable<AppHostOptions['hostedAgent']>>[0]){
+ return options.url?externalHostedAgent(options.url,options.secret):options.factory?.(context);
 }

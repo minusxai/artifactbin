@@ -127,6 +127,7 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  */
 const CONTENT_FIELDS = {
   markup: z.string().optional().describe(MARKUP_FIELD_GUIDANCE),
+  program: z.union([z.record(z.string(),z.unknown()),z.string()]).optional().describe('Native program definition JSON: {version:1,command:[executable,...args],compute?,env?}. Execution is owner-only. Store only nonsecret configuration; common credential environment names and runtime overrides are rejected. Credentials cannot be detected in arbitrary argument strings.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
   columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date', 'timestamp']), choices:z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(100).optional() })).optional().describe('dataset: declared column types (win over inference)'),
@@ -149,7 +150,7 @@ const CONTENT_FIELDS = {
   // A FOLDER IS AN ARTIFACT, so the create door's `format` takes exactly one
   // value: everything else is named by its content field, and only a folder
   // has none.
-  format: z.enum(['folder']).optional().describe("a folder: send it with NO content field. A folder is an artifact like any other — it has a url, visibility and sharing — and you file documents under it with parent_id"),
+  format: z.enum(['folder','program']).optional().describe("A folder has no content field. A program definition uses the program content field. Other artifact formats are selected by their content field."),
   parent_id: z.string().nullable().optional().describe("the id of a FOLDER artifact to file this under (create one with {\"format\":\"folder\",\"title\":\"…\"}), or null for your root. Ids, never paths: two sibling folders may share a name. The URL keeps working wherever the file moves"),
   shares: z.array(z.object({email:z.string(),role:z.enum(['viewer','commenter','editor'])})).max(100).optional().describe('Explicit sharing list; omission preserves it and an empty list clears it atomically with content.'),
   access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL: 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>)."),

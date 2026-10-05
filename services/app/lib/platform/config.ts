@@ -362,3 +362,5 @@ export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
 /** Optional runner HTTP boundary; otherwise the composition root registers a local runner. */
 export const RUNNER_SERVICE_URL = env('RUNNER','SERVICE_URL');
 export const RUNNER_ACTOR_SECRET = env('CONTRACT','ACTOR_SECRET');
+/** Optional managed agent service. Unset means no hosted/default agent is installed. */
+export const HOSTED_AGENT_SERVICE_URL = env('HOSTED_AGENT','SERVICE_URL');

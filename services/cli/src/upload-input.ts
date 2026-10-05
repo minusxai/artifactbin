@@ -1,9 +1,11 @@
+import {isProgramFile,programFileDefinition} from './program-file';
 import {basename,extname} from 'node:path';
 import {assetFormatOf,fileContentType} from '../../app/lib/story/assets/file-types';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {datasetFileRows,isDatasetFile} from './dataset-file';
 import {CliError} from './commands';
 export function assetInput(path:string,bytes:Buffer):Record<string,unknown>{
+ if(isProgramFile(path))return {program:programFileDefinition(bytes,path)};
  const extension=extname(path).toLowerCase();
  if(extension==='.csv'){
   if(!parseCsv(bytes.toString()).headers.length)throw new CliError('invalid_dataset',`${path} has no CSV columns.`);

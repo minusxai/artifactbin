@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS app.runner_schedules (
   next_due_at TIMESTAMPTZ NOT NULL,
   active_request TEXT,
   enabled BOOLEAN NOT NULL DEFAULT true,
+  deleted BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY (id)
 );
 
@@ -166,12 +167,16 @@ ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS active_request TEXT;
 
 ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true;
 
+ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_schedule_due ON app.runner_schedules (enabled, next_due_at);
+
+CREATE INDEX IF NOT EXISTS idx_schedule_owner ON app.runner_schedules (owner, id);
+
 CREATE TABLE IF NOT EXISTS app.runner_schedule_occurrences (
   request_id TEXT NOT NULL,
   schedule_id TEXT NOT NULL,
   scheduled_at TIMESTAMPTZ NOT NULL,
-  spec JSONB NOT NULL,
-  run_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
   PRIMARY KEY (request_id)
 );
@@ -182,13 +187,57 @@ ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS schedule_id
 
 ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ NOT NULL;
 
-ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS spec JSONB NOT NULL;
-
-ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS run_id TEXT;
-
 ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_occurrence ON app.runner_schedule_occurrences (schedule_id, scheduled_at);
+
+CREATE INDEX IF NOT EXISTS idx_occurrence_status ON app.runner_schedule_occurrences (status);
+
+CREATE TABLE IF NOT EXISTS app.runner_schedule_attempts (
+  id TEXT NOT NULL,
+  occurrence_id TEXT NOT NULL,
+  attempt_number INTEGER NOT NULL,
+  request_id TEXT NOT NULL,
+  run_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  next_attempt_at TIMESTAMPTZ NOT NULL,
+  error TEXT,
+  result JSONB,
+  envelope JSONB,
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS occurrence_id TEXT NOT NULL;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS attempt_number INTEGER NOT NULL;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS request_id TEXT NOT NULL;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS run_id TEXT;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS error TEXT;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS result JSONB;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS envelope JSONB;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS lease_token TEXT;
+
+ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attempt_number ON app.runner_schedule_attempts (occurrence_id, attempt_number);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attempt_request ON app.runner_schedule_attempts (request_id);
+
+CREATE INDEX IF NOT EXISTS idx_attempt_dispatch ON app.runner_schedule_attempts (status, next_attempt_at, lease_until);
 
 CREATE TABLE IF NOT EXISTS app.pages_sessions (
   id_hash TEXT NOT NULL,

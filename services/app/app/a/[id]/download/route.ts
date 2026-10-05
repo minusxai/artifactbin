@@ -10,6 +10,8 @@ import { ID_RE } from '@/lib/platform';
 import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES, serverTiming, timed, type PhaseTimings } from '@/lib/offline/assemble.server';
 import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
+import {getArtifactById} from '@/lib/artifacts';
+import {GET as rawArtifact} from '../raw/route';
 
 /** A filename every OS accepts, from the document's title. */
 const fileName = (title: string) => `${title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'artifact'}.jsx.html`;
@@ -17,6 +19,14 @@ const fileName = (title: string) => `${title.replace(/[\\/:*?"<>|\u0000-\u001f]+
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404);
+  const artifact=await getArtifactById(id);
+  if(artifact?.format==='program'){
+    const raw=await rawArtifact(request,ctx);if(!raw.ok)return raw;
+    const name=fileName(artifact.title??'program').replace(/\.jsx\.html$/,'.program.json');
+    const headers=new Headers(raw.headers);
+    headers.set('Content-Disposition',`attachment; filename="${name.replace(/[^\x20-\x7e]/g,'_')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+    return new Response(raw.body,{status:raw.status,headers});
+  }
   const actor = await requestOrSessionActor(request);
   const asked = new URL(request.url).searchParams.get('version');
   const version = asked && /^\d+$/.test(asked) ? Number(asked) : undefined;

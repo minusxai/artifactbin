@@ -74,6 +74,7 @@ const SUMMARY_META_FIELDS = {
   // an individual read's business. Present so the lookup is total over
   // ArtifactFormat rather than falling through to the `?? []`.
   folder: [],
+  program: [],
 } as const;
 
 function summaryMeta(format: ArtifactRow['format'], meta: Record<string, unknown>) {
@@ -224,6 +225,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, content = t
         }
       : {}),
     ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(source ?? '') } : {}),
+    ...(format === 'program' && content ? {program:safeJson(source??'')} : {}),
     ...(format === 'image' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null } : {}),
     ...(format === 'file' ? { filename: (meta as { filename?: string }).filename, contentType: (meta as { contentType?: string }).contentType, bytes: (meta as { bytes?: number }).bytes } : {}),
     ...(format === 'pdf' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null, bytes: (meta as { bytes?: unknown }).bytes ?? 0, pages: (meta as { pages?: unknown }).pages ?? null } : {}),

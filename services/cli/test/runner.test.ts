@@ -187,6 +187,7 @@ test("retries the same batch after a lost response and recreates a missing sessi
   const urls: string[] = [];
   let failedBatch: unknown;
   let local = "";
+  let observedOutput = "";
   t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
     if (!body.runnerKey) {
@@ -210,11 +211,18 @@ test("retries the same batch after a lost response and recreates a missing sessi
       assert.equal(body.ack, 0);
       assert.equal(body.outputSeq, 1);
     }
-    return Response.json({ controller: "local", inputs: body.ack ? [] : [{ id: 1, kind: "input", data: "second\r" }] });
+    observedOutput += body.output;
+    return Response.json({ controller: "local", inputs: !body.ack
+      ? [{ id: 1, kind: "input", data: "second\r" }]
+      : body.ack === 1 && observedOutput.includes("result:first:second")
+        ? [{ id: 2, kind: "input", data: "finish\r" }]
+        : [] });
   });
   const code = await runRemote({
     client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
-    command: "/bin/sh", args: ["-c", 'read a; read b; printf "result:%s:%s\\n" "$a" "$b"'],
+    // Wait for the relay to observe the result before exiting. Linux PTYs can
+    // discard unread bytes on immediate exit when other CI tests are busy.
+    command: "/bin/sh", args: ["-c", 'read a; read b; printf "result:%s:%s\\n" "$a" "$b"; read finish; test "$finish" = finish'],
     interactive: false, onOutput: data => { local += data; }, onSession: url => urls.push(url),
     signal: AbortSignal.timeout(10000),
   });
@@ -223,6 +231,7 @@ test("retries the same batch after a lost response and recreates a missing sessi
   assert.equal(urls.length, 2);
   assert.equal(urls[0], urls[1]);
   assert.match(local, /result:first:second/);
+  assert.match(observedOutput, /result:first:second/);
 });
 
 test("output overflow keeps the local PTY running and the relay reconnecting", async (t) => {

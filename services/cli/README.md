@@ -200,7 +200,51 @@ comments and exports run on your machine without that service. Executing a
 published Lambda uses the selected server's runner; packaged `afbin serve`
 requires `RUNNER__SERVICE_URL` and its signing secret, and otherwise returns
 `runner_unavailable`. It does not install or start a local JavaScript execution
-sandbox. Cron schedules use the app's HTTP API.
+sandbox.
+
+Publish a program definition using the same push/pull workflow as other files.
+The `.program.json` suffix distinguishes it from JSON dataset rows:
+
+```json
+{"version":1,"command":["node","-e","console.log('hello')"],"env":{"REGION":"east"}}
+```
+
+```sh
+afbin push worker.program.json --json
+# Edit the definition, then push the same path to update the artifact.
+afbin pull worker.program.json --json
+# An untracked program ID pulls to <id>.program.json by default.
+afbin pull abc123 --json
+```
+
+Program JSON carries its command, optional compute settings and nonsecret string
+environment configuration. Identity and revisions remain in workspace tracking.
+The server validates execution and environment policy. Programs use `runs start`
+and `schedule` with the same artifact ID as document handlers.
+
+Create a schedule for any executable artifact, including a program artifact:
+
+```sh
+afbin schedule create --artifact abc123 --cron '0 9 * * *' --timezone Asia/Kolkata --input '{"region":"east"}' --max-attempts 3 --retry-backoff 60 --json
+afbin schedule list --json
+afbin schedule get sch_123 --json
+afbin schedule update sch_123 --cron '0 10 * * *' --input null --json
+afbin schedule pause sch_123 --json
+afbin schedule resume sch_123 --json
+afbin schedule run sch_123 --json
+afbin schedule history sch_123 --json
+afbin schedule delete sch_123 --json
+```
+
+Schedules reference the live published artifact: every attempt resolves its
+current source and authorization, without a version pin. Schedule `--input`
+takes inline JSON; omitted create input uses the server default. Cron and IANA
+timezone validation belong to the server. `--max-attempts` and `--retry-backoff`
+configure occurrence retries. Manual `run` saves its request identity before
+submission; after an uncertain response repeat the same command and arguments
+in the same workspace to recover it. Use `--request <stable-id>` to supply a
+caller identity. History reports occurrences, attempts and their run results.
+These commands use the same authenticated HTTP API as the scheduling UI.
 
 ## V0 boundaries
 

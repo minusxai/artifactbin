@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import type * as Esbuild from 'esbuild';
 import { transformAsync, type PluginObj } from '@babel/core';
-import { buildAuthorModule } from '@/lib/story/document/author-module.server';
+import { buildAuthorModule, type AuthorModuleNames } from '@/lib/story/document/author-module.server';
 import type { CompiledDataflow } from '@/lib/story/data/compiled-dataflow';
 
 const SOLID = ['batch', 'createEffect', 'createMemo', 'createRoot', 'createSignal', 'on', 'onCleanup', 'onMount', 'untrack'];
@@ -25,7 +25,7 @@ async function runtimeSource(build: typeof Esbuild.build): Promise<string> {
   }
 }
 
-export async function buildLambdaModule(script: string, flow: CompiledDataflow): Promise<string> {
+export async function buildLambdaModule(script: string, flow: CompiledDataflow, names?: AuthorModuleNames): Promise<string> {
   // Intentional lazy compiler import, identical to browser author-module: jsdom realm checks must not run at import.
   const { build, transform } = await import('esbuild');
   const plain = (await transform(script, { loader: 'ts', target: 'es2022', format: 'esm' })).code;
@@ -38,7 +38,7 @@ export async function buildLambdaModule(script: string, flow: CompiledDataflow):
       }
     } } })],
   });
-  const checked = await buildAuthorModule(plain, {
+  const checked = await buildAuthorModule(plain, names ?? {
     values: flow.values.filter((v) => v.kind === 'scalar' && v.type !== 'table').map((v) => v.name),
     tables: flow.values.filter((v) => v.kind === 'table' || v.type === 'table').map((v) => v.name),
     queries: flow.queries.map((q) => q.name), mutations: flow.mutations.map((m) => m.name),

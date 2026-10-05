@@ -73,7 +73,7 @@ it('reloads a snapshot when relay generation changes even if the sequence is reu
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   const session = { id: 'gen', name: 'Generation', harness: 'shell', machine: 'laptop', online: true, controller: 'local', cols: 80, rows: 24, exitCode: null };
   const urls: string[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url === '/api/remote/sessions') return { ok: true, json: async () => ({ sessions: [session] }) }; urls.push(url); const n = urls.length; return { ok: true, json: async () => ({ session, seq: 1, generation: n === 1 ? 'old' : 'new', frames: [], ...(n === 1 ? { snapshot: 'old screen' } : url.endsWith('since=-1') ? { snapshot: 'restored screen' } : {}) }) }; }));
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => { if (url === '/api/run-capabilities') return {ok:true,json:async()=>({version:1,managedProcesses:false})}; if (url === '/api/remote/sessions') return { ok: true, json: async () => ({ sessions: [session] }) }; urls.push(url); const n = urls.length; return { ok: true, json: async () => ({ session, seq: 1, generation: n === 1 ? 'old' : 'new', frames: [], ...(n === 1 ? { snapshot: 'old screen' } : url.endsWith('since=-1') ? { snapshot: 'restored screen' } : {}) }) }; }));
   open('gen');
   await waitFor(() => expect(write).toHaveBeenCalledWith('restored screen', expect.any(Function)));
   expect(urls.slice(0, 3)).toEqual(['/api/remote/sessions/gen?since=-1', '/api/remote/sessions/gen?since=1', '/api/remote/sessions/gen?since=-1']);
@@ -119,4 +119,28 @@ it('keeps install and remote startup commands on the app origin', async () => {
   expect(screen.getByText(`npx --yes @afbin/cli@latest remote --server '${window.location.origin}' claude`)).toBeInTheDocument();
   fireEvent.change(screen.getByRole('combobox', { name: 'Choose your agent' }), { target: { value: 'codex' } });
   expect(screen.getByText(`npx --yes @afbin/cli@latest remote --server '${window.location.origin}' codex`)).toBeInTheDocument();
+});
+
+it('offers native hosted boxes only when the configured service advertises managed processes',async()=>{
+ vi.stubGlobal('ResizeObserver',class {observe(){}disconnect(){}});
+ const session={id:'native',runId:'run-one',name:'my-agent',harness:'codex',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null};
+ const fetch=vi.fn(async(url:string,_options?:RequestInit)=>({ok:true,json:async()=>url==='/api/run-capabilities'?{version:1,managedProcesses:true}:url==='/api/runs'?{session,runId:'run-one'}:url==='/api/remote/sessions'?{sessions:[]}:{session,seq:0,frames:[],snapshot:'Log in to Codex'}}));
+ vi.stubGlobal('fetch',fetch);open('');
+ const program=await screen.findByRole('combobox',{name:'Hosted program'});fireEvent.change(program,{target:{value:'codex'}});
+ fireEvent.input(screen.getByRole('textbox',{name:'SSH public key'}),{target:{value:'ssh-ed25519 fixture-only'}});
+ fireEvent.click(screen.getByRole('button',{name:'Start hosted box'}));
+ await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/runs',expect.objectContaining({method:'POST'})));
+ const call=fetch.mock.calls.find(([url])=>url==='/api/runs')!;
+ expect(JSON.parse(call[1]!.body as string)).toMatchObject({name:'my-agent',command:['codex'],sshPublicKey:'ssh-ed25519 fixture-only',compute:{vcpu:1,memoryMiB:2048}});
+ await waitFor(()=>expect(write).toHaveBeenCalledWith('Log in to Codex',expect.any(Function)));
+});
+
+it('switches native terminal layout without sending unsupported PTY resize controls',async()=>{
+ let resized=()=>{};vi.stubGlobal('ResizeObserver',class {constructor(callback:()=>void){resized=callback;}observe(){}disconnect(){}});
+ const session={id:'native-fixed',runId:'run-fixed',name:'Fixed',harness:'bash',machine:'Hosted',online:true,controller:'web',cols:100,rows:30,exitCode:null};
+ const fetch=vi.fn(async(url:string,_options?:RequestInit)=>({ok:true,json:async()=>url==='/api/remote/sessions'?{sessions:[session]}:{session,seq:1,frames:[],snapshot:'native fixed terminal'}}));
+ vi.stubGlobal('fetch',fetch);open(session.id);
+ const toggle=await screen.findByRole('button',{name:'Switch to mobile'});await waitFor(()=>expect(toggle).toBeEnabled());
+ resized();fireEvent.click(toggle);const desktop=await screen.findByRole('button',{name:'Switch to desktop'});await waitFor(()=>expect(desktop).toBeEnabled());
+ expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(0);
 });

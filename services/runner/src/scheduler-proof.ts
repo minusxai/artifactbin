@@ -1,0 +1,26 @@
+/** Shared PostgreSQL proof used by the CI runner-design job and targeted integration test. */
+import assert from 'node:assert/strict';
+import {Pool} from 'pg';
+import {randomUUID} from 'node:crypto';
+import type {RunStart,RunSnapshot,RunnerService,ScheduleResolver} from '@artifactbin/contracts';
+import {createScheduler,type TransactionalDatabase} from './scheduler';
+export async function proveSchedulerPostgres(url:string){
+ const root=new Pool({connectionString:url}),schema='scheduler_'+randomUUID().replaceAll('-','');await root.query(`CREATE SCHEMA ${schema}`);
+ const pools=[new Pool({connectionString:url,options:`-c search_path=${schema}`,max:4}),new Pool({connectionString:url,options:`-c search_path=${schema}`,max:4})];
+ const databases=pools.map(pool=>({query:async<T>(sql:string,params?:unknown[])=>({rows:(await pool.query(sql,params)).rows as T[]}),transaction:async<T>(fn:(tx:TransactionalDatabase)=>Promise<T>)=>{const client=await pool.connect();try{await client.query('BEGIN');const result=await fn({query:async<T>(sql:string,params?:unknown[])=>({rows:(await client.query(sql,params)).rows as T[]})} as TransactionalDatabase);await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release()}}}) as TransactionalDatabase);
+ const now=new Date('2026-10-05T00:00:00Z'),starts:RunStart[]=[],runs=new Map<string,RunSnapshot>();let version=1,resolves=0,failAfterAccepted=true,releaseStale:undefined|(()=>void),stalePending:Promise<void>|undefined;
+ const runner:RunnerService={async start(input){starts.push(JSON.parse(JSON.stringify(input)));const runId=input.requestId;runs.set(runId,runs.get(runId)??{runId,status:'running',output:null,receipt:null});if(failAfterAccepted){failAfterAccepted=false;throw Error('transport_lost_after_accept')}if(stalePending){const wait=stalePending;stalePending=undefined;await wait;}return {runId}},async getRun({runId}){const result=runs.get(runId);if(!result)throw Error('not_found');return result},async events(){return {events:[],nextSequence:0,hasMore:false}},async cancel(){}};
+ const resolver:ScheduleResolver=async spec=>{resolves++;return {artifactId:spec.artifactId,artifactVersion:String(version),document:{source:'live'+version,editId:String(version)},program:{source:'export default()=>'+version,language:'javascript'}}};
+ try{
+ const schedulers=await Promise.all(databases.map(database=>createScheduler(database,runner,resolver)));const schedule=await schedulers[0]!.put({userId:'alice',artifactId:'artifact',cron:'* * * * *',timezone:'UTC',input:null,maxAttempts:2,retryBackoffSeconds:1},now);
+ await Promise.all(schedulers.map(s=>s.tick(new Date(now.getTime()+60000))));assert.equal((await databases[0]!.query('SELECT * FROM runner_schedule_occurrences')).rows.length,1);assert.equal((await databases[0]!.query('SELECT * FROM runner_schedule_attempts')).rows.length,1);assert.equal(new Set(starts.map(s=>s.requestId)).size,1);
+ version=2;await schedulers[1]!.tick(new Date(now.getTime()+60000));assert.equal(resolves,1);assert.ok(starts.length>=2);assert.deepEqual(starts[0],starts[1]);
+ const first=(await schedulers[0]!.history('alice',schedule.id))[0]!,runId=first.attempts[0]!.runId!;assert.ok(runId);runs.set(runId,{runId,status:'failed',output:null,receipt:{status:'failed',reason:'fixture_failure'} as NonNullable<RunSnapshot['receipt']>});await schedulers[0]!.tick(new Date(now.getTime()+60000));
+ // Simulate a controller crash after durable envelope write and before its admission response.
+ stalePending=new Promise<void>(resolve=>releaseStale=resolve);const old=schedulers[0]!.tick(new Date(now.getTime()+62000));for(let count=0;count<200;count++){if(starts.some(input=>input.requestId.endsWith(':2')))break;await new Promise(resolve=>setTimeout(resolve,5));}assert.ok(starts.some(input=>input.requestId.endsWith(':2')));
+ await databases[1]!.query("UPDATE runner_schedule_attempts SET lease_until=clock_timestamp()-interval '1 second' WHERE attempt_number=2");version=3;await schedulers[1]!.tick(new Date(now.getTime()+62000));releaseStale!();await old;
+ const history=(await schedulers[0]!.history('alice',schedule.id))[0]!;assert.equal(history.attempts.length,2);assert.equal(resolves,2);const secondStarts=starts.filter(input=>input.requestId.endsWith(':2'));assert.equal(secondStarts.length,2);assert.deepEqual(secondStarts[0],secondStarts[1]);assert.equal(secondStarts[0]!.artifactVersion,'2');assert.ok(history.attempts[1]!.runId);
+ const secondRun=history.attempts[1]!.runId!;runs.set(secondRun,{runId:secondRun,status:'completed',output:42,receipt:{status:'completed'} as NonNullable<RunSnapshot['receipt']>});await Promise.all(schedulers.map(s=>s.tick(new Date(now.getTime()+62000))));assert.equal((await schedulers[0]!.history('alice',schedule.id))[0]!.status,'completed');assert.equal((await databases[0]!.query('SELECT * FROM runner_schedule_attempts')).rows.length,2);
+ console.log('Scheduler PostgreSQL: concurrent controllers → one occurrence; unknown admission and expired lease → identical envelope; confirmed failure → one live retry.');
+ }finally{releaseStale?.();await Promise.all(pools.map(pool=>pool.end()));await root.query(`DROP SCHEMA ${schema} CASCADE`);await root.end()}
+}
