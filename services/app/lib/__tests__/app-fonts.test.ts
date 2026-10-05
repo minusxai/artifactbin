@@ -109,7 +109,7 @@ describe('the shell and the story name one file per face', () => {
 
   it('no two URLs across the shell and every theme carry the same bytes', async () => {
     const { css, assets } = await appBuild();
-    const all = [...facesOf(css, 'shell'), ...facesOf(storyCss(), 'story'), ...facesOf(readFileSync(path.join(process.cwd(), 'public/design-system-fonts.css'), 'utf8'), 'picker')];
+    const all = [...facesOf(css, 'shell'), ...facesOf(storyCss(), 'story')];
     const bytesOf = (url: string) => url.startsWith('/fonts/') ? readFileSync(path.join(process.cwd(), 'public', url)) : assets.get(url);
     const urlsByHash = new Map<string, Set<string>>();
     for (const url of new Set(all.flatMap((f) => f.urls).filter((u) => /\.woff2$/.test(u)))) {

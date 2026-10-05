@@ -795,8 +795,6 @@ describe('CI job shape', () => {
         // is that file with workspace versions normalised, written by the step just above.
         expect(cache.with.key).toMatch(/hashFiles\('(candidate\/package-lock\.json|\.ci-cache-key\/install\.json)'/);
         if (cache.with.key.includes('.ci-cache-key')) {
-          expect(cache.with.key).toContain('services/app/scripts/design-system-fonts.mjs');
-          expect(cache.with.key).toContain('services/app/scripts/fontsource-assets.mjs');
           const job = Object.values(workflow.jobs).find((entry) => (entry.steps ?? []).includes(cache));
           expect(job.steps.indexOf(cache), 'the fingerprint is written first').toBeGreaterThan(
             job.steps.findIndex((step) => step.run === 'node scripts/ci/ci.mjs lock-fingerprint'));

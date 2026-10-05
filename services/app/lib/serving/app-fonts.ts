@@ -20,7 +20,6 @@ export interface AppFontFace {
   display: string;
   format: string;
   unicodeRange?: string;
-  stretch?: string;
 }
 
 export const APP_FONT_FACES: readonly AppFontFace[] = fontManifest.app as AppFontFace[];

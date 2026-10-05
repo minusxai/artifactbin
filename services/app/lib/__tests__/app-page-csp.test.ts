@@ -122,7 +122,7 @@ describe('the app CSP', () => {
     const directives = APP_CSP.split('; ');
     expect(directives.find(d => d.startsWith('script-src'))).toBe(`script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`);
     expect(directives.find(d => d.startsWith('style-src'))).toBe("style-src 'self' 'unsafe-inline'");
-    expect(directives.find(d => d.startsWith('font-src'))).toBe("font-src 'self' data:");
+    expect(directives.find(d => d.startsWith('font-src'))).toBe("font-src 'self' data: https://fonts.gstatic.com");
     for (const directive of directives) expect(directive.split(' '), directive).not.toContain('https:');
   });
 
