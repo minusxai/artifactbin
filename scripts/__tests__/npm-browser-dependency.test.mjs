@@ -2,6 +2,8 @@ import {it,expect} from 'vitest';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {npmDriver} from '../ci/npm-driver.mjs';
+import {installedPackage} from './npm-installed-fixture.mjs';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
@@ -12,9 +14,15 @@ it('the npm browser engine retains Chromium API and lazy install without a nativ
  expect(lock.packages['node_modules/fsevents']).toBeUndefined();
  const root=await mkdtemp(join(tmpdir(),'afbin-browser-core-'));
  try{
-  await writeFile(join(root,'package.json'),JSON.stringify({dependencies:{playwright:manifest.dependencies.playwright}}));
+  const source=await installedPackage('playwright-core',fileURLToPath(new URL('../../',import.meta.url)));
+  const sourcePackage=JSON.parse(await readFile(join(source,'package.json'),'utf8'));
+  expect(manifest.dependencies.playwright).toBe('npm:playwright-core@'+sourcePackage.version);
+  const env={...process.env,npm_config_cache:join(root,'empty-cache')};delete env.npm_execpath;
+  const packed=spawnSync(process.execPath,[npmDriver(),'pack',source,'--ignore-scripts','--offline','--pack-destination',root,'--json'],{env,encoding:'utf8',timeout:15000});
+  expect(packed.status,packed.stderr).toBe(0);
+  const archive=join(root,JSON.parse(packed.stdout)[0].filename);
+  await writeFile(join(root,'package.json'),JSON.stringify({dependencies:{playwright:'file:'+archive}}));
   // CI invokes Vitest directly: prove this consumer without npm lifecycle variables.
-  const env={...process.env};delete env.npm_execpath;
   const installed=spawnSync(process.execPath,[npmDriver(),'install','--offline','--foreground-scripts','--no-audit','--no-fund'],{cwd:root,env,encoding:'utf8',timeout:15000});
   expect(installed.status,installed.stderr).toBe(0);
   expect(installed.stdout+installed.stderr).not.toMatch(/gyp info|gyp ERR/);
