@@ -3,13 +3,14 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {fireEvent,waitFor} from '@testing-library/dom';
 import {screen, trustedQuery} from './trusted-screen';
+import {createSignal} from 'solid-js';
 import {EditorView} from '@codemirror/view';
 import {render} from 'solid-js/web';
 import type {InPlaceEditOptions} from '@/solid/editor/create-in-place-edit';
 import type {PreviewDocument} from '../../../cli/src/preview/types';
 import {STORY_ROOT_ID} from '@/lib/story-runtime/contract';
-const edit=vi.hoisted(()=>({options:null as InPlaceEditOptions|null,commit:vi.fn(),realController:false}));
-vi.mock('@/solid/editor/create-in-place-edit',()=>({createInPlaceEdit:(options:InPlaceEditOptions)=>{edit.options=options;return {commitPending:edit.commit};}}));
+const edit=vi.hoisted(()=>({options:null as InPlaceEditOptions|null,commit:vi.fn(),realController:false,ready:null as (()=>boolean)|null}));
+vi.mock('@/solid/editor/create-in-place-edit',()=>({createInPlaceEdit:(options:InPlaceEditOptions)=>{edit.options=options;return {commitPending:edit.commit,ready:()=>edit.ready?.()??true};}}));
 vi.mock('@/solid/document/AnnotationLayer',()=>({AnnotationLayer:()=>null}));
 vi.mock('../../../cli/src/preview/edit-controller',async(original)=>{const actual=await original<typeof import('../../../cli/src/preview/edit-controller')>();return {createPreviewEditController:(options:Parameters<typeof actual.createPreviewEditController>[0])=>edit.realController?actual.createPreviewEditController(options):({nonce:'test-session',selectionReady(){},dispose(){},update(){}})};});
 vi.mock('../../../cli/src/preview/backend',()=>({createPreviewBackend:()=>({})}));
@@ -17,7 +18,7 @@ const initial={body:'<p id="words">Initial</p>',revision:'observed-revision',met
 let dispose:(()=>void)|undefined;
 const reload=vi.fn(),fetch_=vi.fn();
 beforeEach(()=>{
- document.body.innerHTML=`<div id="${STORY_ROOT_ID}"></div>`;edit.options=null;edit.realController=false;edit.commit.mockReset();reload.mockReset();fetch_.mockReset();
+ document.body.innerHTML=`<div id="${STORY_ROOT_ID}"></div>`;edit.options=null;edit.realController=false;edit.ready=null;edit.commit.mockReset();reload.mockReset();fetch_.mockReset();
  vi.stubGlobal('location',{pathname:'/workspace/report.jsx',search:'?capture=1',reload});
  fetch_.mockResolvedValue(new Response('{}',{headers:{'content-type':'application/json'}}));vi.stubGlobal('fetch',fetch_);
 });
@@ -30,6 +31,20 @@ async function code() {
  return EditorView.findFromDOM(trustedQuery('.cm-editor')!)!;
 }
 function replaceSource(view:EditorView,value:string){view.dispatch({changes:{from:0,to:view.state.doc.length,insert:value},userEvent:'input.type'});}
+it('waits for the compiled editor to be ready before offering Code, without dropping a commit during startup',async()=>{
+ const [ready,setReady]=createSignal(false);edit.ready=ready;
+ await mount();fireEvent.click(screen.getByRole('button',{name:'Edit'}));
+ const tab=screen.getByRole('tab',{name:'Edit the source'});
+ expect(tab.hasAttribute('disabled')).toBe(true);
+ expect(screen.getByRole('button',{name:'Done editing'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.getByRole('status').textContent).toContain('Opening editor');
+ expect(edit.commit).not.toHaveBeenCalled();
+ setReady(true);expect(screen.getByRole('tab',{name:'Edit the source'}).hasAttribute('disabled')).toBe(false);
+ expect(screen.getByRole('button',{name:'Done editing'}).hasAttribute('disabled')).toBe(false);
+ fireEvent.click(screen.getByRole('tab',{name:'Edit the source'}));await waitFor(()=>expect(trustedQuery('.cm-editor')).not.toBeNull());
+ expect(edit.commit).toHaveBeenCalledOnce();expect(edit.commit).toHaveBeenCalledWith(true);
+});
+
 it('keeps the in-place controller inactive behind the shared source pane',async()=>{
  await mount();await code();
  expect(edit.options!.editing).toBe(false);expect(edit.commit).toHaveBeenCalledOnce();expect(edit.commit).toHaveBeenCalledWith(true);

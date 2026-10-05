@@ -870,7 +870,22 @@ async function connecting(engineName, browser) {
           }).catch(reason => ({ snapshotError: String(reason) }));
           const documentResponse = await fetch(`${server.url}/document?file=connected.jsx`);
           const saved = documentResponse.ok ? await documentResponse.json() : { status: documentResponse.status };
-          throw new Error(`${error.message}\nPreview diagnostic: ${JSON.stringify({ sourceBeforeFill, sourceAfterFill, snapshot, server: { body: saved.body, revision: saved.revision, title: saved.metadata?.title }, errors, browserEvents })}`);
+          check.note(`${engineName} Preview diagnostic: ${JSON.stringify({ sourceBeforeFill, sourceAfterFill, snapshot, server: { body: saved.body, revision: saved.revision, title: saved.metadata?.title }, errors, browserEvents })}`);
+          // A failed DOM-only fill stays failed. Probe one real native key to distinguish
+          // an automation input path from a source-adapter/model-loss defect.
+          if (engineName === 'webkit' && sourceAfterFill !== undefined) {
+            let keyboardProbe;
+            try {
+              const source = popup.getByRole('textbox', { name: 'Markup source' });
+              await source.press('End', { timeout: 5000 });
+              await source.press('Space', { timeout: 5000 });
+              await expect(popup.getByRole('status').filter({ hasText: /^Unsaved$/ })).toBeVisible({ timeout: 5000 });
+              await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 5000 });
+              keyboardProbe = { unsaved: true, projected: true, source: await source.evaluate(node => 'value' in node ? node.value : node.textContent) };
+            } catch (reason) { keyboardProbe = { error: reason.message, statuses: await popup.getByRole('status').allTextContents().catch(() => []) }; }
+            check.note(`${engineName} Native input diagnostic: ${JSON.stringify(keyboardProbe)}`);
+          }
+          throw error;
         }
       });
     });

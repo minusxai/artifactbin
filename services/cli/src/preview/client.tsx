@@ -127,6 +127,9 @@ export function Toolbar(props: {initial: PreviewDocument}) {
   }
  };
 
+ // Entering the prose editor loads its compiled mount asynchronously. A commit sent
+ // before mx:edit-ready has no receiver, so Code/Done must wait for that actual contract.
+ const openingEditor = () => editing() && !source() && !edit.ready();
  const [sourceVersion, setSourceVersion] = createSignal(0);
  const [sourceDraft, setSourceDraft] = createSignal('');
  const openSource = async () => {
@@ -143,14 +146,14 @@ export function Toolbar(props: {initial: PreviewDocument}) {
   <TrustedUi overlay layer="navigation">
    <div class="fixed inset-x-0 top-0 text-fg"><PageBar mobileTitle={document_().metadata.title ?? file} navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title={document_().metadata.title ?? file}/><span class="text-xs text-muted">Local</span></>} actions={<>
     <DocumentCommentAction count={commentCount()} active={railOpen()} onClick={() => setRailOpen(open => !open)} />
-    <DocumentEditAction editing={editing()} onMouseDown={event => event.preventDefault()} onClick={() => editing() ? void finish() : setEditing(true)} />
+    <DocumentEditAction editing={editing()} disabled={openingEditor()} description={openingEditor() ? 'Opening editor…' : undefined} onMouseDown={event => event.preventDefault()} onClick={() => editing() ? void finish() : setEditing(true)} />
    </>}/></div>
    <Show when={editing()}><EditorToolbar top={TOP_OFFSET}>
     <div class="flex min-w-0 items-center overflow-x-auto"><EditorViewTabs tabs={[
      {key:'design',label:'App',aria:'Edit on the page',tip:'edit on the page',icon:<Paintbrush size={12}/>,active:!source(),choose:() => setSourceView(false)},
-     {key:'code',label:'Code',aria:'Edit the source',tip:'edit the source',icon:<Code size={12}/>,active:source(),choose:() => void openSource()},
+     {key:'code',label:'Code',aria:'Edit the source',tip:openingEditor()?'Opening editor…':'edit the source',icon:<Code size={12}/>,active:source(),disabled:openingEditor(),choose:() => void openSource()},
     ]}/></div>
-    <span role="status" aria-live="polite" class="truncate font-mono text-xs text-muted">{status()}</span>
+    <span role="status" aria-live="polite" class="truncate font-mono text-xs text-muted">{openingEditor() && status() === 'Ready' ? 'Opening editor…' : status()}</span>
    </EditorToolbar></Show>
    <Show when={source()}><EditorSourcePanel top={TOP_OFFSET+44} commentsOpen={railOpen()}>
     <SourceEditorPane value={sourceDraft()} revision={sourceVersion()} onChange={next => {setSourceDraft(next);editSource(next);}} />
