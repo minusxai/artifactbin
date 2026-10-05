@@ -116,6 +116,8 @@ const source = readFileSync(path.join(ROOT, 'scripts/fixtures/offline-file/dashb
 const exported = await download(await publish({ markup: source, visibility: 'unlisted' }));
 const FILE_JSON = /(<script type="application\/json" id="afbin-file">)([\s\S]*?)(<\/script>)/;
 const file = parseArtifactFile(JSON.parse(FILE_JSON.exec(exported)[2]));
+// Authored global CSS must affect the document, never the first-party controls.
+file.css.author += '\nbutton { border-radius: 0 !important; font: 40px serif !important; } header { height: 91px !important; }';
 // The second dataset is intentionally not held by this copy. Its free-text
 // filter is frozen while the first import remains live in SQLite.
 file.snapshot.frozen = ['note'];
@@ -281,10 +283,16 @@ async function reading(engineName, browser) {
     });
     check((await page.title()) === file.metadata.title, `${name}: document title`);
     await step('the top bar says offline copy, data as of, and links the live version', async () => {
-      const bar = page.getByRole('banner', { name: 'Offline copy' });
-      await expect(bar).toContainText(`Offline copy of ${file.metadata.title}`);
-      await expect(bar).toContainText('data as of');
-      await expect(bar.getByRole('link', { name: 'Open live version' })).toHaveAttribute('href', file.liveUrl);
+      const bar = page.getByRole('banner', { name: 'Page bar' });
+      await expect(bar).toContainText(file.metadata.title);
+      await expect(bar).toContainText('Offline');
+      const metrics = await page.getByRole('button', { name: 'Comment', exact: true }).evaluate(button => ({ height: button.getBoundingClientRect().height, radius: getComputedStyle(button).borderRadius, fontSize: getComputedStyle(button).fontSize, barHeight: button.closest('header').getBoundingClientRect().height, shadow: button.getRootNode() instanceof ShadowRoot }));
+      check(metrics.shadow && metrics.barHeight === 44 && metrics.height === 36 && metrics.radius === '8px' && metrics.fontSize !== '40px', `${name}: shared protected chrome metrics ${JSON.stringify(metrics)}`);
+      await page.getByRole('button', { name: 'Open artifact controls', exact: true }).click();
+      const controls = page.getByRole('region', { name: 'Artifact controls' });
+      await expect(controls).toContainText('Data as of');
+      await expect(controls.getByRole('link', { name: 'Open live version' })).toHaveAttribute('href', file.liveUrl);
+      await page.getByRole('button', { name: 'Dismiss Offline copy' }).click();
     });
 
     // The chart draws, from the same rows: one bar per month, summed.
@@ -385,7 +393,7 @@ async function editing(engineName, browser) {
 
     // What needs artifactbin says so where its control is.
     await step('history, image URL and query notebook reasons', async () => {
-      const history = page.getByRole('tab', { name: 'History' }).first();
+      const history = page.getByRole('button', { name: 'History' }).first();
       await expect(history).toBeDisabled();
       await expect(history).toHaveAccessibleDescription(HISTORY_REASON);
       await page.getByRole('button', { name: 'Insert', exact: true }).click();
@@ -419,11 +427,13 @@ async function editing(engineName, browser) {
       await expect(reopened.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
       await expect(reopened.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
       await expect(reopened.getByRole('alertdialog')).toHaveCount(0); // no crash-buffer offer for a copy just saved
+      await reopened.getByRole('button', { name: 'Open artifact controls' }).click();
       await reopened.getByRole('button', { name: /^Changes/ }).click();
       const changes = reopened.getByRole('region', { name: 'Changes in this file' });
       await expect(changes).toContainText('Asha');
       await expect(changes).toContainText("Edited text in 'Quarterly sales'");
       await reopened.getByRole('button', { name: /^Changes/ }).click();
+      await reopened.getByRole('button', { name: 'Dismiss Offline copy' }).click();
     });
 
     // Invalid markup in code view: the validator's reason, and nothing applied.
@@ -454,6 +464,7 @@ async function editing(engineName, browser) {
       await expect(reopened.getByRole('alert').filter({ hasText: 'Fix the source before saving' })).toBeVisible();
       await expect(plain).toHaveValue(rejected);
       await expect(reopened.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+      await reopened.getByRole('button', { name: 'Open artifact controls' }).click();
       await expect(reopened.getByRole('button', { name: /^Changes/ })).toHaveText('Changes (1)');
     });
     check(empty(await violations(reopened)), `${name}: CSP violations in the reopened copy`);
@@ -472,14 +483,15 @@ async function editing(engineName, browser) {
         await second.waitForTimeout(250);
       }
       await second.getByRole('button', { name: 'Comment on selected text' }).click();
+      await answerName(second, 'Ravi');
       await second.getByRole('textbox', { name: 'Annotation comment' }).fill('Is "Quarterly" right for a monthly table?');
       await second.getByRole('button', { name: 'Save annotation' }).click();
-      await answerName(second, 'Ravi');
       await expect(doc.locator(`#${headingId}[data-mx-annotated]`)).toHaveCount(1, { timeout: 10_000 });
-      await second.getByRole('button', { name: /^Comments/ }).click();
+      if (!(await second.getByRole('complementary', { name: 'Annotation sidebar' }).isVisible().catch(() => false))) await second.getByRole('button', { name: 'Comment', exact: true }).click();
       const thread = second.getByLabel('Annotation thread', { exact: true }).first();
       await expect(thread).toContainText('Ravi');
       await expect(thread).toContainText('monthly table');
+      if (!(await second.getByRole('textbox', { name: 'Reply to annotation' }).isVisible().catch(() => false))) await second.getByRole('button', { name: 'Open annotation thread' }).first().click();
       await second.getByRole('textbox', { name: 'Reply to annotation' }).first().fill('Checked: it is the Q3 view.');
       await second.getByRole('button', { name: 'Send reply' }).first().click();
       await expect(thread).toContainText('Checked: it is the Q3 view.');
@@ -498,7 +510,7 @@ async function editing(engineName, browser) {
     await third.goto(pathToFileURL(commented).href);
     await step('reopened: resolved thread with the name', async () => {
       await expect(third.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
-      await third.getByRole('button', { name: /^Comments/ }).click();
+      await third.getByRole('button', { name: 'Comment', exact: true }).click();
       const resolved = third.getByLabel('Resolved annotation thread');
       await expect(resolved).toHaveCount(1, { timeout: 10_000 });
       await expect(resolved).toContainText('Ravi');
@@ -608,9 +620,11 @@ async function editedByAnAgent(engineName, browser) {
       await expect(page.getByRole('table').first().getByRole('row').filter({ hasNot: page.getByRole('columnheader') })).toHaveCount(westRows.length);
       await expect(page.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
       await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+      await page.getByRole('button', { name: 'Open artifact controls' }).click();
       await page.getByRole('button', { name: /^Changes/ }).click();
       await expect(page.getByRole('region', { name: 'Changes in this file' })).toContainText(CHANGED_OUTSIDE);
       await page.getByRole('button', { name: /^Changes/ }).click();
+      await page.getByRole('button', { name: 'Dismiss Offline copy' }).click();
       await expect(saveButton(page)).toBeEnabled();
       return saveByDownload(page, path.join(work, `agent-saved-${engineName}.html`));
     });
@@ -780,7 +794,7 @@ async function connecting(engineName, browser) {
         await popup.getByRole('textbox', { name: 'Workspace file', exact: true }).fill('connected.jsx');
         await popup.getByRole('button', { name: 'Import and open', exact: true }).click();
         await expect(popup.getByRole('heading', { name: 'Connected prose' })).toBeVisible({ timeout: 20_000 });
-        await expect(popup.getByRole('button', { name: 'Edit document', exact: true })).toBeVisible();
+        await expect(popup.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
         await expect(page.getByRole('link', { name: 'Open server editor', exact: true })).toBeVisible();
       });
       await step('comments travel and server source edits persist in the workspace copy', async () => {
@@ -788,9 +802,10 @@ async function connecting(engineName, browser) {
         check(response.ok, `${engineName}: imported comments can be read through the existing backend`);
         const threads = await response.json();
         check(threads.some((thread) => thread.thread?.some((comment) => comment.body === 'This comment must travel to the local editor.')), `${engineName}: unsaved comment retained`);
-        await popup.getByRole('button', { name: 'Edit the source', exact: true }).click();
+        await popup.getByRole('button', { name: 'Edit', exact: true }).click();
+        await popup.getByRole('tab', { name: 'Edit the source', exact: true }).click();
         const source = popup.getByRole('textbox', { name: 'Markup source' });
-        await source.fill((await source.inputValue()).replace('Connected prose', 'Saved on the server'));
+        await source.fill((await source.evaluate(node => 'value' in node ? node.value : node.textContent)).replace('Connected prose', 'Saved on the server'));
         await popup.getByRole('button', { name: 'Done editing', exact: true }).click();
         await expect(popup.getByRole('heading', { name: 'Saved on the server' })).toBeVisible({ timeout: 20_000 });
         await expect.poll(() => readFileSync(path.join(directory, 'connected.jsx'), 'utf8')).toContain('Saved on the server');

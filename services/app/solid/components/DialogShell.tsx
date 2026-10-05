@@ -11,7 +11,7 @@ export function DialogShell(props: { onClose: () => void; lockScroll?: boolean; 
   const child = resolveChildren(() => props.children);
   const panel = () => {
     const root = child.toArray().find((node): node is HTMLElement => node instanceof HTMLElement);
-    return root?.matches('[role="dialog"]') ? root : root?.querySelector<HTMLElement>('[role="dialog"]') ?? undefined;
+    return root?.matches('[role="dialog"], [role="alertdialog"]') ? root : root?.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]') ?? undefined;
   };
   createDialogShell({
     panel,

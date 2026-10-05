@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { EditorView } from 'prosemirror-view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/dom';
+import { fireEvent, waitFor } from '@testing-library/dom';
+import { screen, trustedText, trustedQuery } from './trusted-screen';
 import { storyBodyFor } from '@/lib/story/document/body';
 import { CHANGED_OUTSIDE } from '@/lib/offline/file-backend';
 import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile } from '@/lib/offline/file-format';
@@ -72,6 +73,98 @@ const shownSource = (): string => {
 afterEach(() => { disposeSolidOfflineFile(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Solid offline file', () => {
+  it('uses the shared page bar and protects document controls from author CSS', async () => {
+    shell(fixture());
+    await mountSolidOfflineFile();
+    const host = document.querySelector('[data-trusted-ui]');
+    expect(host?.shadowRoot).toBeTruthy();
+    const bar = host!.shadowRoot!.querySelector('header[aria-label="Page bar"]');
+    expect(bar).toBeTruthy();
+    expect(bar!.textContent).toContain(fixture().metadata.title);
+    expect(document.querySelector('header[aria-label="Offline copy"]')).toBeNull();
+  });
+
+  it('does not offer a reload or a live link for an unpublished local file', async () => {
+    shell({ ...fixture(), liveUrl: '' }); await mountSolidOfflineFile();
+    expect(screen.queryByRole('link', { name: 'Home' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+    expect(screen.queryByRole('link', { name: 'Open live version' })).toBeNull();
+  });
+
+  it('reserves the comment rail beside both the document and source, using a phone sheet on resize', async () => {
+    vi.stubGlobal('innerWidth', 1024);
+    localStorage.setItem('afbin-offline-name', 'Asha');
+    shell(withComment(fixture())); await mountSolidOfflineFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await screen.findByRole('tab', { name: 'Edit the source' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit the source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    await screen.findByLabelText('Annotation sidebar');
+    const sourcePanel = screen.getByRole('region', { name: 'Source pane' });
+    expect(sourcePanel.style.right).toBe('320px');
+    expect(document.body.style.marginRight).toBe('320px');
+    vi.stubGlobal('innerWidth', 390); fireEvent(window, new Event('resize'));
+    await screen.findByRole('dialog', { name: 'Annotation sidebar' });
+    expect(sourcePanel.style.right).toBe('0px');
+    expect(document.body.style.marginRight).toBe('');
+  });
+
+  it('closes the shared Connect dialog with Escape and restores focus to its trigger', async () => {
+    shell(fixture()); await mountSolidOfflineFile();
+    const trigger = screen.getByRole('button', { name: 'Connect to server' });
+    trigger.focus(); fireEvent.click(trigger);
+    const input = screen.getByRole('textbox', { name: 'Server address' }); input.focus();
+    fireEvent.keyDown(input, { key: 'Escape', composed: true, bubbles: true });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Connect to server' })).toBeNull());
+    expect(trigger.getRootNode()).toHaveProperty('activeElement', trigger);
+  });
+
+  it('asks for a local name on a shared-thread reply and preserves a cancelled draft', async () => {
+    shell(withComment(fixture())); await mountSolidOfflineFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open annotation thread' }));
+    const reply = screen.getByRole('textbox', { name: 'Reply to annotation' });
+    fireEvent.input(reply, { target: { value: 'Keep this draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await screen.findByRole('dialog', { name: 'What should we call you?' });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Your draft is saved here'));
+    expect((reply as HTMLTextAreaElement).value).toBe('Keep this draft');
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await screen.findByRole('dialog', { name: 'What should we call you?' });
+    fireEvent.input(screen.getByRole('textbox', { name: 'Your name' }), { target: { value: 'Asha' } });
+    const dialog = screen.getByRole('dialog', { name: 'What should we call you?' });
+    fireEvent.click(dialog.querySelector('button')!);
+    await waitFor(() => expect(screen.getByLabelText('Annotation thread').textContent).toContain('Asha'));
+  });
+
+  it('replies and resolves using the shared thread UI, then saves and reopens the conversation', async () => {
+    localStorage.setItem('afbin-offline-name', 'Asha');
+    const file = withComment(fixture());
+    let written = '';
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => ({ name: 'conversation.jsx.html', createWritable: async () => ({ write: async (blob: Blob) => { written = await blob.text(); }, close: async () => {} }) })));
+    shell(file); await mountSolidOfflineFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open annotation thread' }));
+    fireEvent.input(screen.getByRole('textbox', { name: 'Reply to annotation' }), { target: { value: 'Reviewed offline' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(trustedText()).toContain('Reviewed offline'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resolve annotation' }).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve annotation' }));
+    await screen.findByLabelText('Resolved annotation thread');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(written).toContain('Reviewed offline'));
+    const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written)![1]!));
+    expect(saved.threads[0]?.status).toBe('resolved');
+    expect(saved.threads[0]?.thread.map(comment => comment.author.label)).toEqual(['Ravi', 'Asha']);
+    disposeSolidOfflineFile(); shell(saved); await mountSolidOfflineFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    const reopened = await screen.findByLabelText('Resolved annotation thread');
+    fireEvent.click(screen.getByRole('button', { name: 'Show resolved conversation' }));
+    expect(reopened.textContent).toContain('Reviewed offline');
+    expect(reopened.textContent).toContain('Asha');
+  });
+
   it.each(['ctrlKey', 'metaKey'] as const)('uses %s+S to save the edited portable file and explains its selected target', async (modifier) => {
     const file = fixture();
     const written: string[] = [];
@@ -82,16 +175,16 @@ describe('Solid offline file', () => {
     shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Saved with the shortcut</h1>') });
     await mountSolidOfflineFile();
     await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
-    const event = new KeyboardEvent('keydown', { key: 's', [modifier]: true, bubbles: true, cancelable: true });
+    const event = new KeyboardEvent('keydown', { key: 's', [modifier]: true, bubbles: true, composed: true, cancelable: true });
     document.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => expect(written).toHaveLength(1));
     const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
     expect(saved.source).toContain('Saved with the shortcut');
     expect(saved.threads).toEqual(file.threads);
-    await waitFor(() => expect(document.body.textContent).toContain('chosen.jsx.html'));
-    expect(document.body.textContent).toMatch(/tab.*(?:stays|still)|(?:reopen|open).*saved file/i);
-    expect(document.body.textContent).not.toContain('Unsaved changes');
+    await waitFor(() => expect(trustedText()).toContain('chosen.jsx.html'));
+    expect(trustedText()).toMatch(/tab.*(?:stays|still)|(?:reopen|open).*saved file/i);
+    expect(trustedText()).not.toContain('Unsaved changes');
   });
 
   it('flushes pending in-place typing before deciding there is nothing to save', async () => {
@@ -107,7 +200,7 @@ describe('Solid offline file', () => {
     await waitFor(() => expect(written).toHaveLength(1));
     const saved = parseArtifactFile(JSON.parse(/<script type="application\/json" id="afbin-file">([^<]*)<\/script>/.exec(written[0]!)![1]!));
     expect(saved.source).toContain('Saved queued typing.');
-    await waitFor(() => expect(document.body.textContent).not.toContain('Unsaved changes'));
+    await waitFor(() => expect(trustedText()).not.toContain('Unsaved changes'));
   });
 
   it('saves from a focused editor even when its keydown handler stops propagation', async () => {
@@ -122,7 +215,7 @@ describe('Solid offline file', () => {
     fireEvent.input(editor, { target: { value: file.source.replace('Regional sales</h1>', 'Saved from editor</h1>') } });
     editor.addEventListener('keydown', (event) => event.stopPropagation());
     editor.focus();
-    const shortcut = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    const shortcut = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, composed: true, cancelable: true });
     editor.dispatchEvent(shortcut);
     expect(shortcut.defaultPrevented).toBe(true);
     await waitFor(() => expect(written).toHaveLength(1));
@@ -139,14 +232,14 @@ describe('Solid offline file', () => {
     fireEvent.keyDown(document, { key: 's', ctrlKey: true });
     await waitFor(() => expect(picker).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('button', { name: /^(Save|Download updated file)$/ }).hasAttribute('disabled')).toBe(false));
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
     expect(screen.getByRole('heading', { name: 'Retained after cancellation' })).toBeTruthy();
   });
 
   it('keeps the file dirty after a failed write and suppresses the browser save even with no changes', async () => {
     const file = fixture();
     shell(file); await mountSolidOfflineFile();
-    const noChange = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    const noChange = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, composed: true, cancelable: true });
     document.dispatchEvent(noChange);
     expect(noChange.defaultPrevented).toBe(true);
     disposeSolidOfflineFile();
@@ -156,7 +249,7 @@ describe('Solid offline file', () => {
     await mountSolidOfflineFile();
     fireEvent.keyDown(document, { key: 's', ctrlKey: true });
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Disk full'));
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
     expect(screen.getByRole('heading', { name: 'Keep after failed write' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false);
   });
@@ -171,11 +264,11 @@ describe('Solid offline file', () => {
       observe() {} disconnect = disconnect;
     });
     shell(fixture()); await mountSolidOfflineFile();
-    const chrome = document.getElementById('afbin-chrome')!;
+    const chrome = trustedQuery('#afbin-chrome')!;
     vi.spyOn(chrome, 'getBoundingClientRect').mockReturnValue({ height: 96.3 } as DOMRect);
     resize([], {} as ResizeObserver);
     expect(document.body.style.paddingTop).toBe('97px');
-    const browserSaveAs = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+    const browserSaveAs = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, shiftKey: true, bubbles: true, composed: true, cancelable: true });
     document.dispatchEvent(browserSaveAs);
     expect(browserSaveAs.defaultPrevented).toBe(false);
     disposeSolidOfflineFile();
@@ -196,20 +289,21 @@ describe('Solid offline file', () => {
     await openAndEdit({ ...file, source: file.source.replace('Regional sales</h1>', 'Local report</h1>') });
     fireEvent.keyDown(document, { key: 's', ctrlKey: true });
     await waitFor(() => expect(written).toHaveLength(1));
-    fireEvent.click(screen.getByRole('button', { name: /Comments/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open annotation thread' }));
     fireEvent.input(screen.getByRole('textbox', { name: 'Reply to annotation' }), { target: { value: 'Comment while saving' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
-    await waitFor(() => expect(document.body.textContent).toContain('Comment while saving'));
+    await waitFor(() => expect(trustedText()).toContain('Comment while saving'));
     fireEvent.keyDown(document, { key: 's', metaKey: true });
     expect(written).toHaveLength(1);
     finish();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false));
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
     expect(readDraft(file)?.file.threads.some((thread) => thread.thread.some((reply) => reply.body === 'Comment while saving'))).toBe(true);
     delayWrite = false;
     fireEvent.keyDown(document, { key: 's', ctrlKey: true });
     await waitFor(() => expect(written).toHaveLength(2));
-    await waitFor(() => expect(document.body.textContent).not.toContain('Unsaved changes'));
+    await waitFor(() => expect(trustedText()).not.toContain('Unsaved changes'));
     expect(picker).toHaveBeenCalledTimes(1);
     expect(written[1]).toContain('Comment while saving');
   });
@@ -232,8 +326,8 @@ describe('Solid offline file', () => {
     expect(saved.threads).toEqual(file.threads);
     window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:7474', source: popup as unknown as Window, data: { channel: 'afbin-preview-connect-v1', requestId, type: 'opened', path: '/workspace/report.jsx' } }));
     expect(screen.getByRole('link', { name: 'Open server editor' }).getAttribute('href')).toBe('http://localhost:7474/workspace/report.jsx');
-    expect(document.body.textContent).toContain('Your original HTML file is unchanged');
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Your original HTML file is unchanged');
+    expect(trustedText()).toContain('Unsaved changes');
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(popup.close).not.toHaveBeenCalled();
   });
@@ -251,16 +345,17 @@ describe('Solid offline file', () => {
     window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:7474', source: popup as unknown as Window, data: { channel: 'afbin-preview-connect-v1', requestId, type: 'ready' } }));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
     expect(popup.postMessage).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
     expect((screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement).value).toBe('<main><h1>Broken');
   });
 
   it('shows the offline identity, data time, live link and disabled Save reason', async () => {
     const file = fixture(); shell(file); await mountSolidOfflineFile();
-    const bar = screen.getByRole('banner', { name: 'Offline copy' });
-    expect(bar.textContent).toContain(`Offline copy of ${file.metadata.title}`);
-    expect(bar.textContent).toContain('data as of');
-    expect(bar.querySelector('time')?.dateTime).toBe(file.snapshot.at);
+    const bar = screen.getByRole('banner', { name: 'Page bar' });
+    expect(bar.textContent).toContain(file.metadata.title);
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+    expect(trustedText()).toContain('Data as of');
+    expect(trustedQuery('time')?.getAttribute('datetime')).toBe(file.snapshot.at);
     expect(screen.getByRole('link', { name: 'Open live version' }).getAttribute('href')).toBe(file.liveUrl);
     expect(screen.getByRole('button', { name: 'Save' }).getAttribute('aria-description')).toBe('No changes to save');
   });
@@ -273,13 +368,15 @@ describe('Solid offline file', () => {
     fireEvent.click(dialog.querySelector('button')!);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(localStorage.getItem('afbin-offline-name')).toBe('Asha');
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
     expect(screen.getByRole('button', { name: 'You: Asha' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'History' }).getAttribute('aria-description')).toContain('Version history lives on artifactbin');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss Offline copy' }));
+    expect(screen.getByRole('button', { name: 'History' }).getAttribute('aria-description')).toContain('Version history lives on artifactbin');
     fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     fireEvent.click(screen.getByRole('button', { name: 'Image…' }));
     expect(screen.getByRole('textbox', { name: 'Image URL' }).getAttribute('aria-description')).toBe(OFFLINE_ASSET_REASON);
     fireEvent.click(screen.getByRole('tab', { name: 'Show data' }));
-    expect(document.body.textContent).toContain(OFFLINE_QUERY_REASON);
+    expect(trustedText()).toContain(OFFLINE_QUERY_REASON);
   });
 
   it('offers a newer crash draft and restores or discards only by choice', async () => {
@@ -290,7 +387,7 @@ describe('Solid offline file', () => {
     expect(await screen.findByRole('alertdialog', { name: 'Restore unsaved changes' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
     await opening;
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
     disposeSolidOfflineFile();
     shell(file);
     const next = mountSolidOfflineFile();
@@ -306,7 +403,8 @@ describe('Solid offline file', () => {
     shell({ ...file, source: file.source.replace('Regional sales</h1>', 'Quarterly sales</h1>') });
     await mountSolidOfflineFile();
     expect(screen.getByRole('heading', { name: 'Quarterly sales' })).toBeTruthy();
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
+    fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
     fireEvent.click(screen.getByRole('button', { name: /^Changes/ }));
     expect(screen.getByRole('region', { name: 'Changes in this file' }).textContent).toContain(CHANGED_OUTSIDE);
     disposeSolidOfflineFile();
@@ -391,7 +489,7 @@ describe('Solid offline file', () => {
     await waitFor(() => expect(screen.getAllByRole('status').some((status) => status.textContent?.includes('not saved'))).toBe(true));
     expect(picker).not.toHaveBeenCalled();
     expect(source.value).toBe(rejected);
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
     expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
   });
@@ -407,7 +505,7 @@ describe('Solid offline file', () => {
     fireEvent.input(textarea, { target: { value: newer } });
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
     expect(textarea.value).toBe(newer);
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
   });
 
   it('restores a rejected source draft separately from the last valid document', async () => {
@@ -420,7 +518,7 @@ describe('Solid offline file', () => {
     await opening;
     expect((screen.getByRole('textbox', { name: 'Markup source' }) as HTMLTextAreaElement).value).toBe(rejected);
     expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
-    expect(document.body.textContent).toContain('Unsaved changes');
+    expect(trustedText()).toContain('Unsaved changes');
   });
 
   it('refuses new compiled components without saving or blanking the valid reader', async () => {
@@ -434,7 +532,7 @@ describe('Solid offline file', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Fix the source'));
     expect(source.value).toBe(next);
     expect(screen.getByRole('heading', { name: 'Regional sales' })).toBeTruthy();
-    expect(document.body.textContent).toContain('local compiler');
+    expect(trustedText()).toContain('local compiler');
   });
 
   it('edits the paragraph at the edited path, not the first paragraph with the same words', async () => {

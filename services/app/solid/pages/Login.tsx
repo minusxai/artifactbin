@@ -4,8 +4,7 @@ import { loginRedirectTarget, internalRedirectTarget } from '@/lib/http/safe-red
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 
-const INPUT = 'w-full rounded-[4px] border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none';
-const BUTTON = 'cursor-pointer rounded-[4px] border border-accent bg-accent px-3 py-1.5 font-mono text-xs font-semibold text-bg transition-colors hover:brightness-110 disabled:opacity-50';
+import { FORM_INPUT as INPUT, FORM_PRIMARY_BUTTON as BUTTON } from '../components/FormControls';
 
 export function LoginPage(): JSX.Element {
   const { session, sessionError } = useSession();

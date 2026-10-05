@@ -14,6 +14,8 @@ export interface SourceEditorTools {
   formatter(): Promise<{ formatJsxPreview(source: string): Promise<string> }>;
   /** Why "View formatted" cannot be used right now, or null when it can. */
   formatterUnavailable: string | null;
+  /** Capability status while the plain fallback remains usable (portable files may stay offline). */
+  editorUnavailable?: string | null;
 }
 
 export const SITE_SOURCE_EDITOR_TOOLS: SourceEditorTools = {

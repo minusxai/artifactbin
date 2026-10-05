@@ -42,7 +42,7 @@ export async function buildPreview(outdir=join(cli,'dist/runtime/preview')){
  await build({
   entryPoints:[join(cli,'src/preview/client.tsx'),join(cli,'src/preview/connect.tsx')],bundle:true,minify:true,format:'esm',splitting:true,outdir,
   platform:'browser',target:'es2022',alias:{'@':app},define:{'process.env.NODE_ENV':'"production"'},
-  loader:{'.woff2':'dataurl','.css':'empty'},plugins:[solidPreviewPlugin()],
+  loader:{'.png':'dataurl','.woff2':'dataurl','.css':'empty'},plugins:[solidPreviewPlugin()],
  });
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await buildPreview();

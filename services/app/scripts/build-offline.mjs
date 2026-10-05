@@ -148,6 +148,7 @@ async function build() {
   });
   const common = {
     bundle: true,
+    loader: { '.png': 'dataurl' },
     write: false,
     minify: true,
     format: 'iife',

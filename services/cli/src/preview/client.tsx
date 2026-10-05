@@ -15,9 +15,19 @@
  * `StoryController` for the compiled DOM (docs/phase2-architecture.md's gap, PR #219's own
  * solid-routes.ts comment — "widen once a Solid controller-establishing mount exists").
  */
-import {createSignal, onCleanup, onMount} from 'solid-js';
+import {createSignal, Show, onCleanup, onMount} from 'solid-js';
 import {render} from 'solid-js/web';
 import {createInPlaceEdit} from '../../../app/solid/editor/create-in-place-edit';
+import {trustedPortalOf} from '../../../app/lib/islands/trusted-portal';
+import {TrustedUi} from '../../../app/solid/components/TrustedUi';
+import {configureTrustedUiStyles} from '../../../app/lib/serving/trusted-ui-styles';
+import {createDocumentViewport} from '../../../app/solid/document/create-document-viewport';
+import {PageBar,DocumentTitle} from '../../../app/solid/components/PageBar';
+import {DocumentCommentAction,DocumentEditAction} from '../../../app/solid/document/DocumentBarActions';
+import {EditorToolbar,EditorViewTabs,EditorSourcePanel} from '../../../app/solid/editor/EditorChrome';
+import SourceEditorPane from '../../../app/solid/editor/SourceEditorPane';
+import Code from 'lucide-solid/icons/code';
+import Paintbrush from 'lucide-solid/icons/paintbrush';
 import {AnnotationLayer} from '../../../app/solid/document/AnnotationLayer';
 import {createPreviewBackend} from './backend';
 import {createPreviewEditController} from './edit-controller';
@@ -36,7 +46,7 @@ async function api(path: string, body?: unknown): Promise<unknown> {
  return value;
 }
 
-const TOP_OFFSET = 40;
+const TOP_OFFSET = 44;
 
 export function Toolbar(props: {initial: PreviewDocument}) {
  const [status, setStatus] = createSignal('Ready');
@@ -57,17 +67,13 @@ export function Toolbar(props: {initial: PreviewDocument}) {
  };
  const backend = createPreviewBackend(file, adopt);
 
+ createDocumentViewport({barHeight:() => TOP_OFFSET,editing,commentsOpen:railOpen});
  onMount(() => {
-  // Reserve the bar's own height so it never covers the document's first line.
-  document.body.style.paddingTop = `${TOP_OFFSET}px`;
-  onCleanup(() => {document.body.style.paddingTop = '';});
 
   const root = document.getElementById(STORY_ROOT_ID);
   if (!root) {setStatus('No document root found'); return;}
-  const portal = document.createElement('div');
-  portal.setAttribute('data-afbin-selection-portal', '');
-  document.body.append(portal);
-  onCleanup(() => portal.remove());
+  const portal = trustedPortalOf(document);
+  if (!portal) {setStatus('No protected selection portal found');return;}
   const controller = createPreviewEditController({
    win: window, root, file, initialNodes: props.initial.data.nodes, sourceRef, portal,
    isSourceEditing: source,
@@ -121,43 +127,44 @@ export function Toolbar(props: {initial: PreviewDocument}) {
   }
  };
 
+ const [sourceVersion, setSourceVersion] = createSignal(0);
  const [sourceDraft, setSourceDraft] = createSignal('');
  const openSource = async () => {
   try {
    // Collect the last in-place keystrokes before disabling that controller and capturing the code buffer.
    if (editing() && !source()) await edit.commitPending(true);
-   setSourceDraft(sourceRef.current); setSourceView(true); setEditing(true);
+   setSourceDraft(sourceRef.current); setSourceVersion(version => version + 1); setSourceView(true); setEditing(true);
   } catch (error) {
    setStatus(error instanceof Error ? error.message : String(error));
   }
  };
 
- const barStyle = {position: 'fixed', top: '0', left: '0', right: '0', 'z-index': 2147483647, display: 'flex', 'align-items': 'center', gap: '12px', padding: '8px 16px', background: '#0f172a', color: '#e2e8f0', font: '13px system-ui, sans-serif'} as const;
  return <>
-  <div class="afbin-preview-bar" style={barStyle}>
-   <strong>Artifactbin preview</strong>
-   <span role="status" aria-live="polite" style={{flex: '1', opacity: 0.8}}>{status()}</span>
-   {source()
-    ? <button type="button" onClick={() => setSourceView(false)}>Edit in place</button>
-    : <button type="button" onClick={() => void openSource()}>Edit the source</button>}
-   {editing()
-    ? <button type="button" onClick={() => void finish()}>Done editing</button>
-    : <button type="button" onClick={() => setEditing(true)}>Edit document</button>}
-   <button type="button" aria-pressed={railOpen()} onClick={() => setRailOpen(open => !open)}>Comments ({commentCount()})</button>
-  </div>
-  {source() && <div style={{position: 'fixed', top: `${TOP_OFFSET}px`, left: '0', right: '0', bottom: '0', 'z-index': 2147483646, background: '#0f172a', padding: '12px'}}>
-   <textarea aria-label="Markup source" value={sourceDraft()}
-    style={{width: '100%', height: '100%', 'box-sizing': 'border-box', resize: 'none', 'font-family': 'ui-monospace, monospace', 'font-size': '13px', padding: '12px', color: '#e2e8f0', background: '#111827', border: '1px solid #334155', 'border-radius': '6px'}}
-    onInput={event => {setSourceDraft(event.currentTarget.value); editSource(event.currentTarget.value);}} />
-  </div>}
-  <AnnotationLayer id={document_().metadata.id ?? 'local-preview'} backend={backend} railOpen={railOpen()} onRailOpenChange={setRailOpen}
-   runtimeRef={runtimeRef} sessionNonce={nonce()} showViewComments topOffset={TOP_OFFSET} pickOnOpen
-   onAnnotationsChange={threads => setCommentCount(threads.filter(thread => thread.status === 'open').length)} />
+  <TrustedUi overlay layer="navigation">
+   <div class="fixed inset-x-0 top-0 text-fg"><PageBar mobileTitle={document_().metadata.title ?? file} navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title={document_().metadata.title ?? file}/><span class="text-xs text-muted">Local</span></>} actions={<>
+    <DocumentCommentAction count={commentCount()} active={railOpen()} onClick={() => setRailOpen(open => !open)} />
+    <DocumentEditAction editing={editing()} onMouseDown={event => event.preventDefault()} onClick={() => editing() ? void finish() : setEditing(true)} />
+   </>}/></div>
+   <Show when={editing()}><EditorToolbar top={TOP_OFFSET}>
+    <div class="flex min-w-0 items-center overflow-x-auto"><EditorViewTabs tabs={[
+     {key:'design',label:'App',aria:'Edit on the page',tip:'edit on the page',icon:<Paintbrush size={12}/>,active:!source(),choose:() => setSourceView(false)},
+     {key:'code',label:'Code',aria:'Edit the source',tip:'edit the source',icon:<Code size={12}/>,active:source(),choose:() => void openSource()},
+    ]}/></div>
+    <span role="status" aria-live="polite" class="truncate font-mono text-xs text-muted">{status()}</span>
+   </EditorToolbar></Show>
+   <Show when={source()}><EditorSourcePanel top={TOP_OFFSET+44} commentsOpen={railOpen()}>
+    <SourceEditorPane value={sourceDraft()} revision={sourceVersion()} onChange={next => {setSourceDraft(next);editSource(next);}} />
+   </EditorSourcePanel></Show>
+  </TrustedUi>
+  <TrustedUi overlay layer="discussion"><AnnotationLayer id={document_().metadata.id ?? 'local-preview'} backend={backend} railOpen={railOpen()} onRailOpenChange={setRailOpen}
+   runtimeRef={runtimeRef} sessionNonce={nonce()} showViewComments topOffset={TOP_OFFSET+(editing()?44:0)} pickOnOpen
+   onAnnotationsChange={threads => setCommentCount(threads.filter(thread => thread.status === 'open').length)} /></TrustedUi>
  </>;
+
 }
 
 if (!capture) {
- void (api('/document?file=' + encodeURIComponent(file)) as Promise<PreviewDocument>).then(initial => {
+ void Promise.all([api('/document?file=' + encodeURIComponent(file)) as Promise<PreviewDocument>, fetch('/bundle/chrome.css').then(async response => { if (!response.ok || !response.headers.get('content-type')?.includes('text/css')) throw new Error('Could not load preview controls stylesheet'); configureTrustedUiStyles(await response.text()); })]).then(([initial]) => {
   const host = document.createElement('div');
   document.body.append(host);
   render(() => <Toolbar initial={initial} />, host);

@@ -13,9 +13,7 @@
  */
 import { createSignal, Show, type Accessor, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
-import MessageCircle from 'lucide-solid/icons/message-circle';
 import GitFork from 'lucide-solid/icons/git-fork';
-import Pencil from 'lucide-solid/icons/pencil';
 import Download from 'lucide-solid/icons/download';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { loginHref } from '@/lib/http/login-href';
@@ -24,6 +22,8 @@ import { sharingIconFor, VISIBILITY_ICON_NODES } from '@/lib/workspace/visibilit
 import type { Visibility } from '@/lib/artifacts/access';
 import { PageChrome, type Panel } from '../components/PageChrome';
 import { Tooltip } from '../components/Tooltip';
+import { DocumentTitle } from '../components/PageBar';
+import { DocumentCommentAction, DocumentEditAction, DOCUMENT_ACTION_CLASS } from './DocumentBarActions';
 import { Avatar } from '../components/Avatar';
 import { sendReaction } from './reactions';
 
@@ -63,7 +63,7 @@ export interface DocumentChromeProps {
   controls: (close: () => void) => JSX.Element;
 }
 
-const RAIL_BUTTON = 'relative flex h-9 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-[8px] border-0 bg-transparent px-1.5 font-mono text-xs text-muted no-underline transition-colors hover:bg-raised hover:text-fg';
+const RAIL_BUTTON = DOCUMENT_ACTION_CLASS;
 const PILL = 'shrink-0 cursor-pointer rounded-full border border-edge bg-transparent px-2 py-0.5 font-mono text-[11px] text-muted hover:border-accent hover:text-accent';
 
 function SharingGlyph(props: { visibility: Visibility; invited: boolean }): JSX.Element {
@@ -107,7 +107,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
       )}</Show>
     </>}</Show>
     <ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" />
-    <Show when={props.titleSlot?.()} fallback={<span class="min-w-0 truncate font-semibold text-fg" data-mx-document-title="">{props.title()}</span>}>
+    <Show when={props.titleSlot?.()} fallback={<DocumentTitle title={props.title()} />}>
       <span class="min-w-0 flex-1" ref={(element) => props.titleHost?.(element)} />
     </Show>
     <Show when={!props.archived && !editing() && props.membership}>
@@ -128,12 +128,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
           <Show when={like().count > 0}><span>{like().count}</span></Show>
         </button>
       </Tooltip>
-      <Tooltip content="Comment">
-        <button type="button" class={RAIL_BUTTON} aria-label="Comment" onClick={() => props.onComment()}>
-          <MessageCircle size={18} stroke-width={1.5} />
-          <Show when={props.comments() > 0}><span>{props.comments()}</span></Show>
-        </button>
-      </Tooltip>
+      <DocumentCommentAction count={props.comments()} onClick={props.onComment} />
       <Show when={props.canFork}>
         <Tooltip content="Fork artifact"><button type="button" class={`${RAIL_BUTTON} hidden sm:flex`} aria-label="Fork artifact" onClick={() => props.onFork()}><GitFork size={18} stroke-width={1.5} /></button></Tooltip>
       </Show>
@@ -142,9 +137,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
       </Show>
     </Show>
     <Show when={props.canEdit && !props.archived}>
-      <Tooltip content={editing() ? 'Done editing' : 'Edit'}>
-        <button type="button" class={`${RAIL_BUTTON} ${editing() ? 'text-accent' : ''}`} aria-label={editing() ? 'Done editing' : 'Edit'} aria-pressed={editing()} onClick={() => props.onEdit()}><Pencil size={18} stroke-width={1.5} /></button>
-      </Tooltip>
+      <DocumentEditAction editing={editing()} onClick={props.onEdit} />
     </Show>
     <Show when={props.owner && !props.archived}>
       <Tooltip content="Share">

@@ -284,7 +284,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    // globals, whose `body` rules (a mono family, 14px) would restyle every element the design's root family
    // reaches, and its client mounts nothing under `?capture=1` anyway (preview/client.tsx).
    if(options.capture)html=html.replace('<body','<body data-afbin-export-ready=""');
-   else html=html.replace('</body>',`<link rel="stylesheet" href="/bundle/chrome.css"><script type="module" src="/bundle/client.js"></script></body>`);
+   else html=html.replace('</body>',`<script type="module" src="/bundle/client.js"></script></body>`);
    res.setHeader('Content-Type','text/html');
    for(const [name,value] of Object.entries(assembled.headers))res.setHeader(name,value);
    return res.end(html);

@@ -1,6 +1,8 @@
 /** Compatible preview-service receiver. Offers remain inert until the user confirms a workspace import. */
 import {createSignal,Show,onCleanup} from 'solid-js';
 import {render} from 'solid-js/web';
+import {PageBar, DocumentTitle} from '../../../app/solid/components/PageBar';
+import {FORM_INPUT, FORM_PRIMARY_BUTTON} from '../../../app/solid/components/FormControls';
 import {PREVIEW_CONNECT_CHANNEL,PREVIEW_CONNECT_INSPECT_PATH,PREVIEW_CONNECT_IMPORT_PATH,PREVIEW_CONNECT_MAX_BYTES,type PreviewConnectMessage} from '../../../contracts/src/preview-connect';
 
 interface Offer {html:string;filename:string}
@@ -44,19 +46,19 @@ function Connect(){
    location.replace(result.path);
   }catch(error){const message=error instanceof Error?error.message:String(error);setError(message);if(requestId)reply({channel:PREVIEW_CONNECT_CHANNEL,type:'error',requestId,message});setBusy(false);}
  };
- return <div class="mx-auto max-w-xl p-6 space-y-4">
-  <h1 class="text-2xl font-semibold">Import an HTML file</h1>
-  <p>Choose an artifactbin .jsx.html file, or use Connect to server in your offline file.</p>
-  <p>Importing creates or reconciles a copy in this server’s workspace. Your original HTML file stays unchanged. Nothing is published.</p>
-  <label class="block">HTML file <input aria-label="HTML file" type="file" accept=".html" disabled={busy()} onChange={event=>void choose(event)} /></label>
+ return <><PageBar home={null} mobileTitle="Preview server" navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title="Preview server"/><span class="text-xs text-muted">Local</span></>} actions={<></>}/><main class="mx-auto my-12 max-w-xl space-y-5 px-6 font-mono text-sm text-fg">
+  <h1 class="text-base font-semibold">Import an HTML file</h1>
+  <p class="text-muted">Choose an artifactbin .jsx.html file, or use Connect to server in your offline file.</p>
+  <p class="text-muted">Importing creates or reconciles a copy in this server’s workspace. Your original HTML file stays unchanged. Nothing is published.</p>
+  <label class="block space-y-2">HTML file <input class={FORM_INPUT} aria-label="HTML file" type="file" accept=".html" disabled={busy()} onChange={event=>void choose(event)} /></label>
   <Show when={busy()}><p role="status">Working…</p></Show>
-  <Show when={error()}><p role="alert">{error()}</p><p>Your original file and unsaved edits remain available. Resolve the reported conflict, or import into a separate workspace to keep an independent copy.</p></Show>
+  <Show when={error()}><p role="alert" class="text-danger">{error()}</p><p>Your original file and unsaved edits remain available. Resolve the reported conflict, or import into a separate workspace to keep an independent copy.</p></Show>
   <Show when={inspection()}>{value=><form class="space-y-4" onSubmit={event=>void submit(event)}>
    <p role="status">Ready to import “{value().title??'Untitled'}” with {value().comments} comment {value().comments===1?'thread':'threads'}.</p>
-   <label class="block">Workspace file <input aria-label="Workspace file" required value={target()} onInput={event=>setTarget(event.currentTarget.value)} disabled={busy()} /></label>
+   <label class="block space-y-2">Workspace file <input class={FORM_INPUT} aria-label="Workspace file" required value={target()} onInput={event=>setTarget(event.currentTarget.value)} disabled={busy()} /></label>
    <p>Existing files use the same conflict checks as CLI import. If both copies changed, the server retains both and reports the conflict.</p>
-   <button type="submit" disabled={busy()}>Import and open</button>
+   <button class={FORM_PRIMARY_BUTTON} type="submit" disabled={busy()}>Import and open</button>
   </form>}</Show>
- </div>;
+ </main></>;
 }
 const mount=document.getElementById('afbin-connect');if(mount){mount.replaceChildren();render(()=> <Connect />,mount);}
