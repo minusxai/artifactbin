@@ -90,15 +90,17 @@ describe('static chunks', () => {
     expect(jsx.skeleton.slice(jsx.skeleton.indexOf('<div class="mx-doc">'))).toContain('<File');
   }, 120_000);
 
-  it('serves an author <iframe> as written: its src, its attributes, nothing added or dropped', async () => {
-    const { fast, reference } = await compileBoth(await inputOf(edge('iframe', IFRAME)));
+  it('serves an author <iframe> as written, adding only the referrer policy a YouTube player needs to play', async () => {
+    const { fast, reference } = await compileBoth(await inputOf(edge('iframe', `${IFRAME}<iframe src="https://player.vimeo.com/video/1" title="Vimeo" id="vimeo" />`)));
     expect(fast.html).toBe(reference.html);
     const tag = /<iframe[^>]*id="player"[^>]*>/.exec(fast.html)?.[0] ?? /<iframe[^>]*title="Big Buck Bunny"[^>]*>/.exec(fast.html)?.[0];
     expect(tag, fast.html.slice(0, 2000)).toBeDefined();
     for (const attr of ['src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?start=5&amp;rel=0"', 'title="Big Buck Bunny"', 'width="560"', 'height="315"',
-      'allow="autoplay; encrypted-media; picture-in-picture"', 'loading="lazy"', 'class="aspect-video w-full"', 'style="border:0"']) expect(tag, attr).toContain(attr);
+      'allow="autoplay; encrypted-media; picture-in-picture"', 'loading="lazy"', 'class="aspect-video w-full"', 'style="border:0"',
+      'referrerpolicy="strict-origin-when-cross-origin"']) expect(tag, attr).toContain(attr);
     expect(tag).toMatch(/ allowfullscreen(="")?[ >]/);
     expect(tag).not.toMatch(/sandbox|srcdoc/);
+    expect(/<iframe[^>]*id="vimeo"[^>]*>/.exec(fast.html)?.[0]).not.toMatch(/referrerpolicy/i);
   }, 120_000);
 
   it('keeps a heavy static document out of the module Babel transforms', async () => {
