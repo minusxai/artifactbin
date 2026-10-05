@@ -11,8 +11,8 @@ import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResul
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
-/** Built and proved only for a release: the five-target binaries (the Intel proofs consume its artifact) and the distributions gate. */
-const RELEASE_JOBS = ['cli', 'cli-preview', 'reference-compatibility'];
+/** Built and proved only for a release: the universal npm package on all native consumer targets and the distributions gate. */
+const RELEASE_JOBS = ['cli', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const script = path.join(root, 'scripts/ci/ci.mjs');
@@ -41,14 +41,14 @@ describe('CI change selection', () => {
     for (const paths of [['package-lock.json'], ['services/contracts/src/remote.ts'], ['services/utils/src/index.ts'],
       ['vitest.config.ts'], ['.github/workflows/ci.yml'], ['services/new-service/src/index.ts'],
       ['services/cli/package.json'], ['services/cli/scripts/prepare-pty.mjs'], ['unexpected.txt']]) {
-      // …except the standalone-binary jobs, which only a CLI release selects (see below).
+      // …except the native npm jobs, which only a CLI release selects (see below).
       expect(planCi(paths).jobs, paths.join()).toEqual(Object.fromEntries(CI_JOBS.map((job) => [job, !RELEASE_JOBS.includes(job)])));
       expect(planCi(paths, { cliRelease: true }).jobs, paths.join()).toEqual(Object.fromEntries(CI_JOBS.map((job) => [job, true])));
     }
     expect(planCi(['README.md'], { full: true }).full).toBe(true);
   });
 
-  it('builds the standalone binaries only when the CLI version changed — on any run, full or affected', () => {
+  it('packs and proves the npm artifact only when the CLI version changed — on any run, full or affected', () => {
     for (const job of RELEASE_JOBS) {
       expect(planCi(['services/cli/src/runner.ts']).jobs[job], job).toBe(false);
       expect(planCi(['package-lock.json']).jobs[job], job).toBe(false);
@@ -158,9 +158,9 @@ describe('a release is a version and nothing else', () => {
     expect(isVersionOnlyBump([bump('services/cli/package.json'), { path: 'services/cli/package.json', hunks: [{ removed: [], added: ['  "sideEffects": false,'] }] }]), 'a line added').toBe(false);
   });
 
-  it('selects the binaries and the typecheck, and nothing that tests an unchanged tree', () => {
+  it('selects npm acceptance and the typecheck, and nothing that tests an unchanged tree', () => {
     const plan = planCi(VERSION_BUMP_FILES, { versionOnly: true });
-    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli', 'cli-preview']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli']);
     expect(plan.cliRelease).toBe(true);
     expect(plan.cliTests).toBe(false);
     expect(plan.nodeRoots).toEqual([]);
@@ -170,7 +170,7 @@ describe('a release is a version and nothing else', () => {
 
   it('runs the CLI matrix, and only that, on the nightly', () => {
     const plan = planCi([], { nightly: true });
-    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['cli', 'cli-preview']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['cli']);
     expect(plan.full).toBe(false);
   });
 });
@@ -230,13 +230,13 @@ describe('GitHub CI adapter', () => {
       }));
       expect(run(base)).toMatchObject({ full: false, nodeRoots: ['scripts/', 'services/app/', 'services/browser/', 'services/sql/'] });
       expect(run('0000000000000000000000000000000000000000').full).toBe(true);
-      // No services/cli/package.json in this fixture: no version to compare, so the binaries are built.
+      // No services/cli/package.json in this fixture: no version to compare, so npm acceptance runs.
       expect(readFileSync(output, 'utf8')).toContain('cli=true\n');
       expect(readFileSync(output, 'utf8')).toContain('cli-tests=true\n');
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
-  it('selects the binary jobs exactly when the CLI version moved between base and head', () => {
+  it('selects the npm jobs exactly when the CLI version moved between base and head', () => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'ci-release-'));
     try {
       const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -557,7 +557,7 @@ describe('GitHub CI adapter', () => {
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
-  it('records the tested tree and the run that holds its binaries', () => {
+  it('records the tested tree and the run that holds its npm artifact', () => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'ci-record-tree-'));
     try {
       const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -863,16 +863,16 @@ describe('CI job shape', () => {
     expect(sessions.run).toContain('sudo apt-get install -y bubblewrap ||');
   });
 
-  it('does not rebuild the CLI before the binary builder rebuilds it', () => {
+  it('does not rebuild the CLI inside its consumer matrix', () => {
     for (const job of ['cli']) {
       const commands = ci().jobs[job].steps.map(step => step.run);
       expect(commands).not.toContain('npm run build -w services/cli');
     }
   });
 
-  it('tests the Linux binary the release matrix built instead of compiling it again', () => {
+  it('tests the exact universal npm artifact instead of compiling it again', () => {
     const job = ci().jobs['reference-compatibility'];
-    expect(job.needs).toEqual(expect.arrayContaining(['plan', 'cli']));
+    expect(job.needs).toEqual(expect.arrayContaining(['plan', 'cli-pack']));
     expect(job['runs-on']).toBe('ubuntu-24.04');
     const commands = job.steps.map(step => step.run ?? '');
     expect(commands.some(command => command.includes('build:binary'))).toBe(false);
@@ -902,13 +902,11 @@ describe('CI job shape', () => {
     const {jobs}=ci();
     const proof=jobs.cli.steps.find(step=>step.name==='Installed npm preview and export, with process shutdown');
     expect(proof.if).toBe("matrix.phase == 'experience'");
-    expect(proof.run).toContain('scripts/test-installed-npm.mjs preview');
+    expect(proof.run).toContain('scripts/test-installed-npm.mjs experience');
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
-    expect(jobs.cli.steps.find(step=>step.name==='Standard-user Windows Node bootstrap under Restricted PS5.1').run).toContain('test-node-bootstrap.ps1');
-    const intel=jobs['cli-preview'].steps.find(step=>step.name==='File preview from the uploaded npm package');
-    expect(intel.run).toContain('dist/afbin.mjs');
-    expect(intel.run).toContain('--phase=${{ matrix.phase }}');
-    expect(jobs['cli-preview'].strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
+    expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
+    expect(jobs).not.toHaveProperty('cli-preview');
+    expect(jobs.cli.strategy.matrix.os).toContain('macos-15-intel');
     expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex(step=>step.run?.includes('test:npm-package')));
   });
 
@@ -993,12 +991,12 @@ describe('CI job shape', () => {
   });
 });
 
-it('never accepts an unproved Intel release binary',()=>{
+it('never accepts an unproved Intel npm consumer',()=>{
  for(const options of [{cliRelease:true},{versionOnly:true},{nightly:true}]){
   const plan=planCi(['services/cli/package.json'],options);
-  expect(plan.jobs['cli-preview']).toBe(true);
+  expect(plan.jobs.cli).toBe(true);
   const results=Object.fromEntries(CI_JOBS.map(job=>[job,plan.jobs[job]?'success':'skipped']));
-  for(const conclusion of ['failure','skipped'])expect(checkCiResults(plan,{...results,'cli-preview':conclusion})).toContain('cli-preview');
+  for(const conclusion of ['failure','skipped'])expect(checkCiResults(plan,{...results,cli:conclusion})).toContain('cli');
  }
 });
 

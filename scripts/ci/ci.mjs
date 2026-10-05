@@ -19,7 +19,7 @@ function cliVersionAt(rev) {
 }
 
 /**
- * Did this change bump the CLI version? That is what selects the standalone-binary jobs
+ * Did this change bump the CLI version? That is what selects universal npm packaging and native acceptance
  * (`lib/ci-plan`). The base is the PR's base, a push's `before`, or — for a dispatched run on a
  * release branch — the merge base with main. No base at all (a first push, a forced one, a shallow
  * clone) reads as a release, because building bytes nobody publishes costs minutes while skipping
@@ -222,7 +222,7 @@ if (mode === 'plan') {
   const versionOnly = !nightly && Array.isArray(paths) && paths.length > 0
     && paths.every((path) => VERSION_BUMP_FILES.includes(path))
     && isVersionOnlyBump(changedLines(range, paths));
-  // Order matters: a version-only push must BUILD its binaries, because the publisher uploads them
+  // Order matters: a version-only push must PACK its universal npm artifact, because the publisher uploads it
   // from this run. Only after that does a tree we already tested get to select nothing at all.
   let testedRun = !nightly && !versionOnly && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
   // THE TREE MISSED: another PR moved the base before this one merged. The PATCH may still be

@@ -82,7 +82,7 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
       expect(String(step.uses ?? '')).not.toMatch(/^actions\/download-artifact@/);
       expect(String(step.run ?? '')).not.toContain('.name == "build"');
     }
-    expect(ci.jobs.build.steps.some((step) => String(step.uses ?? '').startsWith('actions/upload-artifact'))).toBe(false);
+    expect(ci.jobs.build.steps.filter(step=>step.uses?.startsWith('actions/upload-artifact')).map(step=>step.with.name)).toEqual(['afbin-npm-packages']);
     const start = steps.find((step) => step.name === 'Build the app, server and CLI bundle in the background');
     const wait = steps.find((step) => step.name === "Wait for this shard's build");
     // Every stream redirected and the group backgrounded, or the runner holds the step open until it ends.
@@ -146,7 +146,7 @@ describe('source host compatibility matrix', () => {
   it('runs source bundle and installed npm package against the ID-first host', () => {
     const steps = ci.jobs['reference-compatibility'].steps;
     const candidate = steps.find(step => step.name === 'ID-first conformance for source bundle and installed npm package');
-    expect(candidate?.['working-directory']).toBe('candidate');
+    expect(candidate?.['working-directory']).toBe('.');
     expect(candidate?.run).toContain('afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('services/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('scripts/gates.mjs --servers=1 --only=accounts-and-workspace');
@@ -174,17 +174,16 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     const native = matrix.steps.find(step => step.name === 'Same-tarball native npm and warmed offline acceptance');
     expect(native.if).toBe("matrix.phase == 'native'");
     expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase == 'experience'");
-    for (const name of ['Installed public library declarations compile without private workspace aliases','Installed foreground server preserves the remote runner boundary','Actual installed CLI terminal exits naturally','Installed npm preview and export, with process shutdown','Complete installed npm local and HTML round-trip journey']) {
+    for (const name of ['Installed npm preview and export, with process shutdown']) {
       expect(matrix.steps.find(step => step.name === name)?.if,name).toBe("matrix.phase == 'experience'");
     }
     expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase == 'experience'");
-    for(const job of ['cli','cli-preview','reference-compatibility']){
+    for(const job of ['cli','reference-compatibility']){
       const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
       expect(download,job).toBeDefined();
     }
-    const proof=ci.jobs['cli-preview'];
-    expect(proof.strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
-    expect(proof.steps.some(step=>/npm run build/.test(step.run??''))).toBe(false);
+    expect(ci.jobs).not.toHaveProperty('cli-preview');
+    expect(matrix.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
     const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');
     expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');
     expect(release).toContain('afbin-npm-release');

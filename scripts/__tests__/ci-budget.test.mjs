@@ -1,16 +1,13 @@
 import {it,expect} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
-it('keeps npm release jobs in the existing CLI budget and ordinary jobs in their own budget',()=>{
- const jobs=workflow().jobs,step=jobs.test.steps.find(step=>step.env?.SLOW_BUDGET_S);
- expect(step.env.BUDGET_S).toBe('240');expect(step.env.SLOW_BUDGET_S).toBe('420');
- const classify=step.run.match(/case "\$name" in[^\n]*esac/)[0];
- for(const [name,budget] of [['CLI npm (macos-15-intel Node 22.22.3)','420'],['CLI npm pack','420'],['CLI (macos-15-intel preview)','420'],['CLI distributions against ID-first host','420'],['node (2)','240'],['gates (2)','240']]){
-  const run=spawnSync('bash',['-c',`name="$1";budget="$BUDGET_S";${classify};printf '%s' "$budget"`,'classify',name],{encoding:'utf8',env:{...process.env,...step.env}});
-  expect(run.status,run.stderr).toBe(0);expect(run.stdout,name).toBe(budget);
- }
+it('gives every required job the same four-minute budget',()=>{
+ const jobs=workflow().jobs,step=jobs.test.steps.find(step=>step.env?.BUDGET_S);
+ expect(step.env.BUDGET_S).toBe('240');expect(step.env).not.toHaveProperty('SLOW_BUDGET_S');
+ expect(step.run).not.toContain('SLOW_BUDGET_S');
+ expect(step.run).toContain('budget="$BUDGET_S"');
+ expect(step.run).toContain('exit 1');
  expect(jobs['cli-pack'].name).toBe('CLI npm pack');
 });
 it('installs isolated acceptance tooling only for experience checks before consumer runtime selection',()=>{
@@ -30,4 +27,15 @@ it('installs isolated acceptance tooling only for experience checks before consu
  const runtimes=native.filter(step=>step.uses?.startsWith('actions/setup-node@'));
  expect(runtimes.map(step=>step.with['node-version'])).toEqual(['22.22.3','${{ matrix.node }}']);
  expect(native.indexOf(runtimes[1])).toBeGreaterThan(install);
+});
+
+it('runs invariant declarations on Linux and Windows once while keeping every consumer journey',()=>{
+ const steps=workflow().jobs.cli.steps;
+ const types=steps.find(step=>step.name?.startsWith('Installed public library declarations'));
+ expect(types.if).toContain("matrix.node == '22.22.3'");
+ expect(types.if).toContain("runner.os == 'Windows'");
+ expect(types.if).toContain("runner.os == 'Linux' && runner.arch == 'X64'");
+ const experience=steps.find(step=>step.run?.includes('test-installed-npm.mjs experience'));
+ expect(experience.if).toBe("matrix.phase == 'experience'");
+ expect(experience.run).toContain('playwright/cli.js install --with-deps chromium');
 });

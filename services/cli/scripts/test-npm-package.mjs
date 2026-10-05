@@ -7,6 +7,7 @@ import {execFileSync,spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {npmConsumerArgs} from './npm-consumer-args.mjs';
+import {runAcceptanceProcesses} from './acceptance-processes.mjs';
 const ci=process.argv[2]==='--ci';
 const installOnly=process.argv.includes('--install-only');
 if(installOnly&&!ci)throw new Error('--install-only requires the CI candidate.');
@@ -20,6 +21,13 @@ const npm=process.env.npm_execpath;
 if(!npm)throw new Error('Run through npm run test:npm-package -w services/cli -- <tarball>');
 const env={...process.env,HOME:join(root,'home'),USERPROFILE:join(root,'home'),ARTIFACTBIN_SKILLS:'off',npm_config_cache:join(root,'cache'),ARTIFACTBIN_HOME:join(root,'home'),PLAYWRIGHT_BROWSERS_PATH:join(root,'chromium'),CLI__AUTO_UPDATE:'0',ARTIFACTBIN_URL:'http://127.0.0.1:1'};
 const run=args=>{const start=performance.now();try{return execFileSync(process.execPath,[npm,...args],{cwd:root,env,encoding:'utf8',timeout:300000});}finally{console.log(`Native timing: ${args.includes('--offline')?'offline':'online'} npm exec ${((performance.now()-start)/1000).toFixed(1)}s`);}};
+// The absent-Node proof is independent of this cold install: different homes and npm caches.
+// Run it only on Node22 matrix entries; it installs and validates the official Node24 bootstrap.
+const bootstrap=process.argv.includes('--parallel-bootstrap')&&process.versions.node.startsWith('22.')
+ ?runAcceptanceProcesses([{label:'absent-Node bootstrap',command:process.platform==='win32'?'powershell.exe':process.execPath,args:process.platform==='win32'?['-NoProfile','-File','services/cli/scripts/test-node-bootstrap.ps1','-Tarball',tarball]:['services/cli/scripts/test-node-bootstrap.mjs'],cwd:repository,env:process.env}])
+ :Promise.resolve();
+// Attach a handler immediately while synchronous npm install/native checks are running.
+bootstrap.catch(()=>{});
 try{
  await writeFile(join(root,'package.json'),'{}\n');
  const installStarted=performance.now();
@@ -51,9 +59,10 @@ try{
    terminal.onData(chunk=>output+=chunk);terminal.onExit(()=>{terminal.kill();clearTimeout(timer);try{assert.match(output,/npm-native-ok/);resolvePromise();}catch(error){reject(error);}});
  });
  }
+ await bootstrap;
  if(proof)await (await import('node:fs/promises')).mkdir(resolve(proof),{recursive:true});
  console.log(JSON.stringify({status:'passed',platform:process.platform,arch:process.arch,node:process.version,tarball,checks:installOnly?['consumer-lock','no-build-machine-native-files','no-install-chromium']:['consumer-lock','no-build-machine-native-files','no-install-chromium','npm-exec','warmed-offline-exec','sharp','prebuilt-pty-no-compiler','node-pty-shutdown']}));
  if(proof)await writeFile(join(resolve(proof),'installed-path.txt'),join(cli,'dist/afbin.mjs'));
  // CI browser conformance consumes this install, so keep it when requested.
  if(!proof)await rm(root,{recursive:true,force:true});
-}catch(error){await rm(root,{recursive:true,force:true});throw error;}
+}catch(error){await bootstrap.catch(()=>{});await rm(root,{recursive:true,force:true});throw error;}
