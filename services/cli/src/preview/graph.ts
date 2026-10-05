@@ -1,17 +1,20 @@
 /** Session scope is the selected documents and their registered ID references. */
-import {readFile,realpath} from 'node:fs/promises';
+import {readFile,realpath,lstat} from 'node:fs/promises';
 import {extname,join} from 'node:path';
 import {collectRefUses} from '../../../app/lib/story/data/refs';
 import {parseJsx,type JsxNode} from '../../../app/lib/jsx';
 import {parseDocument} from '../document';
 import {confinedPath} from '../journal';
-export async function previewGraph(root:string,entry:string,localFiles:Record<string,string>={}):Promise<string[]>{
+export async function previewGraph(root:string,entry:string,localFiles:Record<string,string>={},virtualFiles?:Record<string,string>):Promise<string[]>{
  root=await realpath(root);const selected=new Set<string>();
  async function visit(path:string):Promise<void>{
   if(selected.has(path))return;selected.add(path);
+  // Import preflight supplies future bytes; every external registered dependency must already exist without symlinks.
+  const virtual=virtualFiles!==undefined&&Object.hasOwn(virtualFiles,path);
+  if(virtualFiles!==undefined&&!virtual){let current=root;for(const part of path.split('/')){current=join(current,part);if((await lstat(current)).isSymbolicLink())throw new Error(`Preview dependency may not follow a symlink: ${path}`);}}
   const full=await confinedPath(root,join(root,path));
   if(extname(path).toLowerCase()!=='.jsx')return;
-  const document=parseDocument(await readFile(full,'utf8'));
+  const document=parseDocument(virtual?virtualFiles![path]!:await readFile(full,'utf8'));
   const ids=referenceIds(document.body);
   for(const id of ids)if(localFiles[id])await visit(localFiles[id]);
  }

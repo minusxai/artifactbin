@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import {request as httpRequest} from 'node:http';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,readFile,rm,readdir} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,rm,readdir,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {startPreview} from '../src/preview/session';
@@ -41,7 +41,7 @@ test('browser import rejects missing/null/foreign origins, malformed HTML and un
  const offer={html:html(file()),filename:'report.jsx.html'};
  for(const origin of ['','null','https://other.example'])assert.equal((await post(session,'/connect/import',offer,origin)).status,403);
  for(const target of ['../outside.jsx','/outside.jsx','.git/hook.jsx','node_modules/hook.jsx','C:\\outside.jsx'])assert.equal((await post(session,'/connect/import',{...offer,target})).status,400);
- for(const source of ['<html>no payload</html>',offer.html+offer.html])assert.equal((await post(session,'/connect/import',{...offer,html:source})).status,400);
+ for(const source of ['<html>no payload</html>',offer.html+offer.html,'<script id="afbin-file" type="application/json">{"format":1}</script>'])assert.equal((await post(session,'/connect/import',{...offer,html:source})).status,400);
  assert.equal((await post(session,'/connect/import',{...offer,html:'x'.repeat(25*1024*1024+1)})).status,400);
  const tooLarge=await fetch(session.url+'/connect/import',{method:'POST',headers:{origin:session.url,'content-type':'application/json'},body:'x'.repeat(50*1024*1024+1)});assert.equal(tooLarge.status,413);
  assert.equal((await fetch(session.url+'/files').then(r=>r.json())).length,0);await assert.rejects(readFile(join(root,'report.jsx')));
@@ -71,3 +71,24 @@ test('importing a new copy does not depend on unrelated selected files remaining
   const result=await post(session,'/connect/import',{html:html(file()),filename:'report.jsx.html'});assert.equal(result.status,200,await result.clone().text());assert.equal((await fetch(session.url+'/document?file=report.jsx')).status,200);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
+
+test('missing or escaped registered dependencies are refused before any imported copy or asset is written',()=>fixture(async(root,session)=>{
+ const store=await localWorkspaceState(root);store.put(LOCAL_WORKSPACE_SCOPE,'draft-identity','missing.jsx',{id:'gone01'});
+ const value=file();value.source=base+'<a href="/a/gone01">Missing document</a>';
+ let result=await post(session,'/connect/import',{html:html(value),filename:'report.jsx.html'});assert.equal(result.status,400);await assert.rejects(readFile(join(root,'report.jsx')));await assert.rejects(readFile(join(root,'rows.csv')));
+ const nested=file();nested.source=base+'<a href="/a/child1">Embedded child</a>';nested.localWorkspace!.assets.child1={path:'child.jsx',contentType:'text/plain',base64:Buffer.from('<a href="/a/gone01">Missing descendant</a>').toString('base64')};
+ const descendant=await post(session,'/connect/import',{html:html(nested),filename:'report.jsx.html'});assert.equal(descendant.status,400);await assert.rejects(readFile(join(root,'report.jsx')));await assert.rejects(readFile(join(root,'child.jsx')));
+ store.delete(LOCAL_WORKSPACE_SCOPE,'draft-identity','missing.jsx');store.put(LOCAL_WORKSPACE_SCOPE,'draft-identity','escape.jsx',{id:'gone01'});await symlink(tmpdir(),join(root,'escape.jsx'));
+ result=await post(session,'/connect/import',{html:html(value),filename:'report.jsx.html'});assert.equal(result.status,400);await assert.rejects(readFile(join(root,'report.jsx')));await assert.rejects(readFile(join(root,'rows.csv')));
+}));
+test('embedded JSX dependencies are checked virtually before import without requiring their files to exist yet',()=>fixture(async(_root,session)=>{
+ const value=file();value.source=base+'<a href="/a/child1">Embedded child</a>';value.localWorkspace!.assets.child1={path:'child.jsx',contentType:'text/plain',base64:Buffer.from('<p>Embedded child</p>').toString('base64')};
+ const result=await post(session,'/connect/import',{html:html(value),filename:'report.jsx.html'});assert.equal(result.status,200,await result.clone().text());assert.equal((await fetch(session.url+'/document?file=child.jsx')).status,200);
+}));
+
+test('malformed embedded asset metadata is rejected as a client error without imported files',()=>fixture(async(root,session)=>{
+ for(const invalid of [null,{path:'rows.csv',contentType:'text/csv',base64:42}]){
+  const value=file();(value.localWorkspace!.assets as Record<string,unknown>).data01=invalid;
+  const result=await post(session,'/connect/import',{html:html(value),filename:'report.jsx.html'});assert.equal(result.status,400,await result.clone().text());await assert.rejects(readFile(join(root,'report.jsx')));await assert.rejects(readFile(join(root,'rows.csv')));
+ }
+}));
