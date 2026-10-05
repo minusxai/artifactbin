@@ -166,3 +166,18 @@ test('publication rewrites semantic resource addresses while preserving literal 
   const rows=f.calls.find(call=>call.body.dataset)!.body.dataset;assert.match(rows[0].link,/^ref:r\d{5}$/);assert.equal(rows[0].description,'Literal ref:loc002 stays here');assert.equal(rows[0].nested.note,'See /a/loc002 in the instructions');assert.equal(await readFile(join(f.workspace.root,'doc.jsx'),'utf8'),source);
  }finally{await f.cleanup();}
 });
+
+test('an imported baseline may publish when the remote version advanced without changing the edited dependency',async()=>{
+ const f=await fixture();try{
+  const source='<p id="text">One</p>',document=createDocumentGraph(source,1);
+  const head={id:'old001',version:2,edit_id:'edit2',state:digest('old0012'),format:'markup',markup:source,document,title:'Remote metadata changed',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null,capabilities:{edit:true}};
+  f.heads.set(head.id,head);
+  (await localWorkspaceState(f.workspace.root)).put(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/child.jsx',{artifactId:head.id,origin:'https://example.com',base:{version:1,editId:'edit1',source},source:source.replace('One','Imported')});
+  await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Imported'));
+  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  assert.equal(f.heads.size,1);assert.match(f.heads.get('old001').markup,/Imported/);
+  assert.equal(f.heads.get('old001').title,'Remote metadata changed');
+  assert.ok(f.calls.some(call=>call.path==='/api/artifacts/old001/edits'));
+  assert.ok(!f.calls.some(call=>call.path==='/api/artifacts'||call.path==='/api/artifacts/reservations'));
+ }finally{await f.cleanup();}
+});
