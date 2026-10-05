@@ -20,7 +20,7 @@ async function fixture(){
  await writeFile(join(cwd,'child.jsx'),'---\nid: loc002\n---\n<p id="text">One</p>');await writeFile(join(cwd,'rows.json'),'[{"link":"ref:loc002"}]');
  await registerLocalFiles(workspace,['doc.jsx','child.jsx']);
  const portable=await localWorkspaceState(cwd);portable.put(LOCAL_WORKSPACE_SCOPE,'draft-identity','rows.json',{id:'loc003'});
- const heads=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let lose=false,conflict=false;
+ const heads=new Map<string,any>(),versions=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let lose=false,conflict=false;
  const request:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname,method=init?.method??'GET',body=JSON.parse(String(init?.body??'{}'));calls.push({path,method,body});
   const headers={'X-Artifactbin-Account':'usr_one'};
@@ -30,6 +30,7 @@ async function fixture(){
    const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':'dataset',...(markup?{markup,document:createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
   }
   const id=path.split('/')[3],head=heads.get(id);
+  if(method==='GET'&&path.includes('/versions/')){const archived=versions.get(id+':'+path.split('/').at(-1));return Response.json(archived??{error:'not_found'},{status:archived?200:404,headers});}
   if(method==='GET')return Response.json(head,{headers});
   if(path.endsWith('/edits')){
    if(conflict)return Response.json({error:'doc_changed',detail:'Changed',current:head},{status:409,headers});
@@ -38,7 +39,7 @@ async function fixture(){
   throw Error(`Unexpected ${method} ${path}`);
  };
  const client=new HttpClient({connection:{server:'https://example.com',token:'mxmx_test_publication'},home,account:'usr_one',fetch:request});
- return{root,workspace,client,heads,calls,setLost:()=>{lose=true;},setConflict:()=>{conflict=true;},cleanup:()=>rm(root,{recursive:true,force:true})};
+ return{root,workspace,client,heads,versions,calls,setLost:()=>{lose=true;},setConflict:()=>{conflict=true;},cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 test('local publication maps nested document and row references while retaining source, reuses identities, and survives workspace moves',async()=>{
  const f=await fixture();try{
@@ -171,7 +172,7 @@ test('an imported baseline may publish when the remote version advanced without 
  const f=await fixture();try{
   const source='<p id="text">One</p>',document=createDocumentGraph(source,1);
   const head={id:'old001',version:2,edit_id:'edit2',state:digest('old0012'),format:'markup',markup:source,document,title:'Remote metadata changed',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null,capabilities:{edit:true}};
-  f.heads.set(head.id,head);
+  f.heads.set(head.id,head);f.versions.set(head.id+':1',{artifact_id:head.id,version:1,format:'markup',markup:source,document,title:null,meta:{}});
   (await localWorkspaceState(f.workspace.root)).put(LOCAL_WORKSPACE_SCOPE,'archive','import-baseline/child.jsx',{artifactId:head.id,origin:'https://example.com',base:{version:1,editId:'edit1',source},source:source.replace('One','Imported')});
   await writeFile(join(f.workspace.root,'child.jsx'),(await readFile(join(f.workspace.root,'child.jsx'),'utf8')).replace('One','Imported'));
   await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
