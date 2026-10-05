@@ -33,6 +33,7 @@ interface Active {
     limits: RunnerLimits;
     controller: AbortController;
     child?: ChildProcessWithoutNullStreams;
+    containerCreation?: Promise<void>;
     timer?: ReturnType<typeof setTimeout>;
     finishing?: Promise<void>;
     resolve: () => void;
@@ -91,6 +92,12 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
         run.finishing = (async () => {
             clearTimeout(run.timer);
             run.controller.abort();
+            // A Docker daemon may still be creating the named container after its CLI is killed.
+            // Fence creation before reaping; a terminal receipt must never precede cleanup.
+            if (run.containerCreation) {
+                await run.containerCreation.catch(() => {});
+                await removeContainer(id);
+            }
             if (run.child) {
                 const child = run.child;
                 const exited = new Promise<void>(resolve => { if (child.exitCode !== null || child.signalCode !== null)
@@ -191,9 +198,22 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
         await db.query("UPDATE runner_runs SET status='running',started_at=$2 WHERE id=$1 AND status='queued'", [id, r.startedAt]);
         if (r.finishing)
             return;
-        const child = options.dockerImage ? spawn('docker', ['run', '--rm', '--name', `afbin-run-${id}`, '--label', 'artifactbin.runner=true', '-i', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--memory', `${r.limits.memoryMiB + 128}m`, '--cpus', '1', '--pids-limit', '32', options.dockerImage], { stdio: ['pipe', 'pipe', 'pipe'] }) : spawn(process.execPath, ['--no-node-snapshot', worker], { stdio: ['pipe', 'pipe', 'pipe'], env: {} });
-        r.child = child;
         r.timer = setTimeout(() => { void finish(id, 'failed', 'timeout'); }, r.limits.timeoutMs);
+        if (options.dockerImage) {
+            // Create and start are distinct lifecycle operations: cancellation can await creation
+            // without launching author code, then remove the exact named resource.
+            r.containerCreation = new Promise<void>((resolve, reject) => {
+                const creation = spawn('docker', ['create', '--rm', '--name', `afbin-run-${id}`, '--label', 'artifactbin.runner=true', '-i', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--memory', `${r.limits.memoryMiB + 128}m`, '--cpus', '1', '--pids-limit', '32', options.dockerImage!], { stdio: ['ignore', 'ignore', 'pipe'] });
+                let error = '';
+                creation.stderr.on('data', (bytes: Buffer) => { error = (error + bytes.toString()).slice(0, 2000); });
+                creation.once('error', reject);
+                creation.once('close', code => code === 0 ? resolve() : reject(Error(error || 'container_creation_failed')));
+            });
+            await r.containerCreation;
+            if (r.finishing) return;
+        }
+        const child = options.dockerImage ? spawn('docker', ['start', '-a', '-i', `afbin-run-${id}`], { stdio: ['pipe', 'pipe', 'pipe'] }) : spawn(process.execPath, ['--no-node-snapshot', worker], { stdio: ['pipe', 'pipe', 'pipe'], env: {} });
+        r.child = child;
         child.stdin.on('error', () => { if (!r.finishing)
             fail(id, Error('worker_stdin_closed')); });
         const decoder = new StringDecoder('utf8');

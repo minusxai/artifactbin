@@ -51,7 +51,7 @@ jobs:
       - name: Product runner and APIs in restricted workers
         env:
           RUNNER_TEST_IMAGE: artifactbin-worker
-        run: npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/runner-api.test.ts services/app/__tests__/lambda-artifact.test.ts services/app/__tests__/lambda-operations.test.ts
+        run: npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-container-lifecycle.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/runner-api.test.ts services/app/__tests__/lambda-artifact.test.ts services/app/__tests__/lambda-operations.test.ts
       - name: Prove OS restrictions independently of V8
         run: node docs/proposals/runner-validation/os-boundary.mjs runner-design-worker
       - name: Prove real PostgreSQL concurrency

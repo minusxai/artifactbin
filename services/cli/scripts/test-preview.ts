@@ -84,8 +84,16 @@ try{
  await a.getByRole('button',{name:'Edit document',exact:true}).click();
  await a.waitForFunction(()=>document.getElementById('text')?.isContentEditable);
  await a.locator('#text').dblclick();
- await a.locator('#text').evaluate(element=>{(element as HTMLElement).focus();const range=document.createRange();range.selectNodeContents(element);const selection=getSelection()!;selection.removeAllRanges();selection.addRange(range);});
- await a.keyboard.type('Browser saved paragraph');
+ await a.locator('#text').evaluate(element=>{
+  // Focus the editor, then select concrete text offsets. A Range across paragraph
+  // boundaries can be normalized to the caret by ProseMirror before native typing.
+  (element.closest('[contenteditable="true"]') as HTMLElement).focus();
+  const text=document.createTreeWalker(element,NodeFilter.SHOW_TEXT).nextNode()!;
+  const selection=getSelection()!;selection.removeAllRanges();selection.setBaseAndExtent(text,0,text,text.textContent!.length);
+ });
+ await a.waitForFunction(()=>getSelection()?.toString()==='Draft paragraph');
+ await a.keyboard.insertText('Browser saved paragraph');
+ await a.waitForFunction(()=>document.getElementById('text')?.textContent==='Browser saved paragraph');
  await a.waitForSelector('text=Unsaved');
  const saved=a.waitForResponse(response=>response.url().endsWith('/save'));
  await a.getByRole('button',{name:'Done editing',exact:true}).click();
