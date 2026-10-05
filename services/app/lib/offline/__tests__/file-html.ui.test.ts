@@ -13,6 +13,26 @@ describe('renderArtifactFileHtml', () => {
     expect(readArtifactFileParts(parse(html))).toEqual({ file, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=' });
   });
 
+  it('uses the document root theme and color mode on first paint and every saved copy', () => {
+    const themed = { ...file, metadata: { ...file.metadata, theme: 'manuscript', colorMode: 'dark' as const } };
+    const opened = parse(renderArtifactFileHtml({ file: themed, code: 'AA==' }));
+    expect(opened.documentElement.getAttribute('data-theme')).toBe('manuscript');
+    expect(opened.documentElement.className).toBe('dark');
+    const saved = readArtifactFileParts(opened);
+    saved.file.metadata.theme = null;
+    saved.file.metadata.colorMode = null;
+    const reopened = parse(renderArtifactFileHtml(saved));
+    expect(reopened.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(reopened.documentElement.className).toBe('light');
+  });
+
+  it('escapes the document root theme without creating another attribute', () => {
+    const theme = 'manuscript" onclick="alert(1)';
+    const doc = parse(renderArtifactFileHtml({ file: { ...file, metadata: { ...file.metadata, theme } }, code: 'AA==' }));
+    expect(doc.documentElement.getAttribute('data-theme')).toBe(theme);
+    expect(doc.documentElement.hasAttribute('onclick')).toBe(false);
+  });
+
   it('places the compiled reader output in the file for first paint', () => {
     const compiled = { ...file, compiled: { html: '<h1 data-mx-ast="0">Compiled sales</h1>' } as NonNullable<typeof file.compiled> };
     const doc = parse(renderArtifactFileHtml({ file: compiled, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=' }));

@@ -32,6 +32,7 @@ import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { fontPreloadTags } from '@/lib/story/styles';
 import { inlineStoryElement } from '@/lib/compiled-page/story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
+import { documentRootAttributes } from '@/lib/story/styles/document-root';
 import { DOCUMENT_ROOT_CSS } from '@/lib/story/styles';
 import {
   CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER,
@@ -103,9 +104,7 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
     + (help ? agentDiscoveryTail(help) : '');
 
   const html =
-    `<!doctype html><html class="${escapeHtml(input.colorMode)}"`
-    // The standalone document's sheets name the theme on the DOCUMENT element (`:root:where([data-theme])`).
-    + (input.sheets && input.theme ? ` data-theme="${escapeHtml(input.theme)}"` : '')
+    `<!doctype html><html ${documentRootAttributes(input.colorMode, input.sheets ? input.theme : null)}`
     + `${overlay.signedIn ? ` ${SIGNED_IN_HINT_ATTR}=""` : ''}`
     + `${input.appOrigin ? ` data-mx-app-origin="${escapeHtml(input.appOrigin)}"` : ''}>`
     + `<head>${head}</head><body${liveAttrs(input.live ?? null)}>${body}</body></html>`;

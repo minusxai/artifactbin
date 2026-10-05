@@ -220,6 +220,15 @@ const empty = (list) => Array.isArray(list) && list.length === 0;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const show = (value) => JSON.stringify(value).slice(0, 300);
 
+/** Theme recipes read :root, so the shell must match the embedded document metadata. */
+async function expectDocumentRoot(page, metadata, label) {
+  const actual = await page.evaluate(() => ({ theme: document.documentElement.getAttribute('data-theme'),
+    light: document.documentElement.classList.contains('light'), dark: document.documentElement.classList.contains('dark') }));
+  const mode = metadata.colorMode ?? 'light';
+  check(actual.theme === (metadata.theme || null) && actual.light === (mode === 'light') && actual.dark === (mode === 'dark'),
+    `${label}: document root matches embedded theme and mode ${JSON.stringify(actual)}`);
+}
+
 /** FontFaceSet returns actual loaded first-party faces, never a fallback font-family string. */
 async function expectUiFonts(page, label) {
   const loaded = await page.evaluate(async () => {
@@ -299,6 +308,7 @@ async function reading(engineName, browser) {
       await expect(bar).toContainText(file.metadata.title);
       await expect(bar).toContainText('Offline');
       const metrics = await page.getByRole('button', { name: 'Comment', exact: true }).evaluate(button => ({ height: button.getBoundingClientRect().height, radius: getComputedStyle(button).borderRadius, fontSize: getComputedStyle(button).fontSize, barHeight: button.closest('header').getBoundingClientRect().height, shadow: button.getRootNode() instanceof ShadowRoot }));
+      await expectDocumentRoot(page, file.metadata, name);
       await expectUiFonts(page, name);
       check(metrics.shadow && metrics.barHeight === 44 && metrics.height === 36 && metrics.radius === '8px' && metrics.fontSize !== '40px', `${name}: shared protected chrome metrics ${JSON.stringify(metrics)}`);
       await page.getByRole('button', { name: 'Open artifact controls', exact: true }).click();
@@ -438,6 +448,7 @@ async function editing(engineName, browser) {
     await reopened.goto(pathToFileURL(saved).href);
     await step('reopened: the edit, and Changes by name', async () => {
       await expect(reopened.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible({ timeout: 20_000 });
+      await expectDocumentRoot(reopened, file.metadata, `${name} saved copy`);
       await expectUiFonts(reopened, `${name} saved copy`);
       await expect(reopened.getByRole('heading', { name: 'Regional sales', exact: true })).toHaveCount(0);
       await expect(reopened.getByRole('alertdialog')).toHaveCount(0); // no crash-buffer offer for a copy just saved

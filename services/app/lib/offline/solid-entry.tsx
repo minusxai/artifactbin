@@ -17,6 +17,7 @@ import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-fil
 import { connectPreview, previewServerOrigin } from './preview-connect';
 import { unranQueriesOf } from './snapshot-current';
 import { projectDocument, sameSourceContent } from './project-document';
+import { applyDocumentRootAppearance } from '@/lib/story/styles/document-root';
 import { configureTrustedUiStyles } from '@/lib/serving/trusted-ui-styles';
 import { TrustedUi } from '@/solid/components/TrustedUi';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
@@ -116,6 +117,7 @@ interface Opened { parts: ArtifactFileParts; invalid: string | null; restored: b
 function OfflineShell(props: Opened) {
   const story = document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
   const [file, setFile] = createSignal(props.parts.file);
+  createEffect(() => applyDocumentRootAppearance(document.documentElement, file().metadata.colorMode, file().metadata.theme));
   const [dirty, setDirty] = createSignal(props.restored);
   const [name, setName] = createSignal(readName());
   const [asking, setAsking] = createSignal(false);

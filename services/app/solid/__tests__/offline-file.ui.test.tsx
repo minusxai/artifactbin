@@ -73,6 +73,24 @@ const shownSource = (): string => {
 afterEach(() => { disposeSolidOfflineFile(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Solid offline file', () => {
+  it('synchronizes the document root with the opened file metadata', async () => {
+    const original = fixture();
+    const file = { ...original, metadata: { ...original.metadata, theme: 'manuscript', colorMode: 'dark' as const } };
+    shell(file);
+    document.documentElement.setAttribute('data-theme', 'stale');
+    document.documentElement.classList.add('light');
+    await mountSolidOfflineFile();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('manuscript');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
+    disposeSolidOfflineFile();
+    shell({ ...file, metadata: { ...file.metadata, theme: null, colorMode: null } });
+    await mountSolidOfflineFile();
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
   it('uses the shared page bar and protects document controls from author CSS', async () => {
     shell(fixture());
     await mountSolidOfflineFile();
