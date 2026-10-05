@@ -5,7 +5,7 @@
  * this card is for the home page, profiles, docs and login, which have no
  * document of their own to photograph.
  *
- * Same rig as generate-theme-previews: the card is a self-contained HTML page
+ * The card is a self-contained HTML page
  * shot through headless Chromium, with its subresources (fonts, logo) served
  * out of public/ via page.route — no dev server required. Run after changing
  * the card or the brand:

@@ -25,7 +25,6 @@
     "test:islands": "vitest run --project=islands",
     "test:gates": "node scripts/gates.mjs",
     "generate-story-ui-classes": "npm run generate-story-ui-classes -w services/app",
-    "generate:theme-previews": "npm run generate:theme-previews -w services/app",
     "generate:og": "npm run generate:og -w services/app",
     "eval": "tsx evals/run.ts",
     "eval:report": "tsx evals/report-cli.ts",
