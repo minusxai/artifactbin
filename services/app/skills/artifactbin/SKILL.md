@@ -22,7 +22,7 @@ npm CLI: local files/browser approval. Direct HTTP: email auth without CLI insta
 - Unlisted tags such as `<form>` are refused; read the markup allowlist.
 - The kit covers content, layout, data, charts, tables, controls and motion. Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Fork deliberately: copy the file and remove those five fields.
-- Questions: source first, plain answers; internals on request. Stop when answered; render only if needed.
+- Questions: source first; answer plainly, internals on request. Render only if needed.
 - Publishing does not verify appearance, whether or not you can view images. For visual review, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time. For styling, no other skill, palette tool or image tooling is needed — the design system carries the palette and type.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write repeat the same command and arguments to recover it.
 
@@ -45,7 +45,7 @@ Before writing, read `afbin help <page type>` for design and markup; skipping th
 - [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
 - [errors](references/errors.md) — refusal codes and fixes.
 - [comments](references/publishing-annotations.md) — `afbin comment`; `afbin help remote-review`.
-- [apps](references/apps.md) — shared pages, grants, mentions.
+- [apps](references/apps.md) — shared pages; interactive wireframes: `afbin help review-state`.
 - [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
 - [authentication](references/publishing-auth.md) — sign-in and credentials.

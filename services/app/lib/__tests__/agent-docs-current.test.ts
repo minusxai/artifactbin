@@ -128,6 +128,20 @@ describe('the scripts reference teaches the in-document module', () => {
   });
 });
 
+describe('saved-view authoring guidance', () => {
+  it('publishes a complete local-state example without Values and preserves source on a second save', async () => {
+    const guide = renderDoc('artifactbin/references/review-state.md', BASE);
+    const sample = /```jsx\n([\s\S]*?)\n```/.exec(guide)?.[1];
+    expect(sample).toContain("import { reviewState } from 'page'");
+    expect(sample).not.toContain('<Value');
+    expect(sample).toContain('restore: saved => setView(saved)');
+    const saved = await publishJsx({}, sample!);
+    expect(saved instanceof Response ? await saved.text() : null).toBeNull();
+    const source = (saved as StoredContent).source!;
+    expect(((await publishJsx({}, source)) as StoredContent).source).toBe(source);
+  });
+});
+
 describe('no reference teaches the retired frame or the CSS strip', () => {
   const rendered = renderTree(skillTree(), BASE).map(({ file, text }) => [file.path, text] as const);
   it.each(rendered)('%s', (_path, text) => {

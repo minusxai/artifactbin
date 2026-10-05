@@ -40,9 +40,11 @@ drawing leads. Pick ONE composition and build that. Publish with
 - Flows are `<Mermaid>` ([markup-svg.md](markup-svg.md)): label arrows with the
   triggering action, include back, cancel, error and retry branches. Screen
   IDs stay consistent across drawings, arrows, state tables and tasks.
-- Wireframes are static HTML and CSS boxes or inline SVG drawn in the
-  system's hand, never a working app; label mock controls as part of the
-  drawing. Wide drawings get a bounded `overflow-x-auto` region.
+- Wireframe drawings are static HTML and CSS boxes or inline SVG drawn in the
+  system's hand; label mock controls as part of the drawing. Wide drawings
+  get a bounded `overflow-x-auto` region. If the user wants to click through
+  a flow and review its states, build an interactive `template: app` prototype
+  and register [saved comment views](review-state.md). Static drawings need no registration.
 - The ledger is a table: owner, dependencies, status, acceptance. Completed
   task labels are struck (`<s>`), never deleted; no checkboxes. Mark work
   complete only when the user reports it or you verified it; persist

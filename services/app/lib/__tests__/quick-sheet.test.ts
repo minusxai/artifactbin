@@ -3,6 +3,18 @@ import {buildQuickSheet,renderDoc,skillExample,stripBundleMarkers,condenseForBun
 import teaching from '../../../cli/src/generated/teaching.json';
 const sheet=buildQuickSheet('https://artifactbin.dev');
 describe('the installed short skill',()=>{
+ it('routes interactive wireframes to saved-view authoring guidance in both served and bundled teaching',()=>{
+  const bundled=teaching.files as Record<string,string>;
+  for(const text of [sheet,teaching.files['SKILL.md']]){
+   expect(text).toContain('afbin help review-state');
+   expect(text).toContain('wireframes');
+  }
+  for(const topic of ['templates-app','templates-plan','markup-state','markup-scripts']){
+   for(const text of [renderDoc(`artifactbin/references/${topic}.md`,'https://example.test'),bundled[`references/${topic}.md`]])expect(text,topic).toContain('(review-state.md)');
+  }
+  const guide=teaching.files['references/review-state.md'];
+  for(const text of ['reviewState','get: view','restore: saved => setView(saved)','false','Reload','current artifact','No registration'])expect(guide).toContain(text);
+ });
  it('fits its reading budget and uses local guidance',()=>{
   expect(sheet).toContain('afbin help');
   // The retired vocabulary (MCP, /docs/, token, mint, /raw, …) is banned across every
