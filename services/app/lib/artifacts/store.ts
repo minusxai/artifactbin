@@ -1,6 +1,6 @@
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type DatasetAccess, type Scope, type TokenActor, type Visibility, writerFor } from './access';
 import { compiledForRow, isEmptyCompiled, rowToResolvedRef } from './dataflow';
-import type { DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
+import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { commitDocumentUpdate } from '../story/graph/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import type { ProseOperation } from '../story/graph/index';
@@ -448,6 +448,7 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
 }
 
 interface VersionContent extends VersionSummary {
+  document?: DocumentGraph | null;
   source: string | null;
   meta: Record<string, unknown>;
   /** Written for the previous engine, and the converter cannot carry it over without a person (lib/migrate/sqlite/stored). */

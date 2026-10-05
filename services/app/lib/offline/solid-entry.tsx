@@ -307,7 +307,7 @@ function OfflineShell(props: Opened) {
         },
         onStatus: setConnectStatus,
         onError: (message) => { setConnecting(false); setConnectStatus(''); setConnectError(message); },
-        onOpened: (url) => { setConnecting(false); setConnectedUrl(url); setConnectStatus('Imported a workspace copy. Continue editing in the server tab. Your original HTML file is unchanged.'); },
+        onOpened: (url) => { setConnecting(false); setConnectedUrl(url); setConnectStatus('Connected. Continue editing in the server tab. Your original HTML file is unchanged.'); },
       });
     } catch (error) { setConnecting(false); setConnectError(error instanceof Error ? error.message : 'Could not open the server.'); }
   };
@@ -380,12 +380,12 @@ function OfflineShell(props: Opened) {
       <button class={BUTTON} aria-expanded={changes()} onClick={() => setChanges(!changes())}>Changes{file().journal.length ? ` (${file().journal.length})` : ''}</button>
     </PageControlsPanel></Show>
     <Show when={connectDialog()}><DialogShell onClose={() => { cancelConnect?.(); setConnecting(false); setConnectDialog(false); }}><section role="dialog" aria-label="Connect to server" class="fixed left-1/2 top-16 z-[2000] w-[min(90vw,32rem)] -translate-x-1/2 rounded-lg border border-edge bg-surface p-5 font-mono text-sm shadow-xl space-y-4">
-      <p>Connect to a compatible preview server to edit and comment on a workspace copy. The original HTML file stays here; this does not publish it.</p>
+      <p>Connect to a local preview server for a workspace copy, or to hosted artifactbin to update the original. Connecting only sends a copy for review. Nothing is published until you confirm “Apply to original” or “Create independent copy” in the server tab. Your original HTML file stays here.</p>
       <p><a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Install Node.js if needed</a>, then start a local server:</p>
       <p class="break-words text-xs">macOS / Linux: <code>npx --yes @afbin/cli@latest preview --port 7474</code></p>
       <p class="break-words text-xs">Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest preview --port 7474</code></p>
       <label class="block space-y-2">Server address <input class={FORM_INPUT} aria-label="Server address" value={serverAddress()} onInput={(event) => setServerAddress(event.currentTarget.value)} disabled={connecting()} /></label>
-      <p>Use http://localhost:7474, or the HTTPS address of your own compatible preview server.</p>
+      <p>Use http://localhost:7474, or the HTTPS address of hosted artifactbin or your compatible server.</p>
       <button class={FORM_PRIMARY_BUTTON} disabled={connecting()} onClick={connect}>{connecting() ? 'Connecting…' : 'Connect'}</button>
       <button class={BUTTON} onClick={() => { cancelConnect?.(); cancelConnect = null; setConnecting(false); setConnectStatus(''); setConnectDialog(false); }}>{connecting() ? 'Cancel connection' : 'Close'}</button>
       <Show when={connectStatus()}><p role="status">{connectStatus()}</p></Show>

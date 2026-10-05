@@ -48,8 +48,8 @@ export function connectPreview(options: PreviewConnectionOptions, browser: Windo
     if (message.type === 'ready' && !offered) {
       offered = true;
       browser.clearTimeout(timeout);
-      timeout = browser.setTimeout(() => fail('The import confirmation timed out. Try connecting again. Your edits are still here.'), 10 * 60_000);
-      options.onStatus('Preparing this file. Confirm “Import and open” in the server tab.');
+      // Authentication and explicit review have no deadline. Closing/cancelling the receiver still ends the handoff.
+      options.onStatus('Preparing this file. Review and confirm in the server tab.');
       void options.prepare().then((offer) => {
         if (disposed) return;
         if (new TextEncoder().encode(offer.html).byteLength > PREVIEW_CONNECT_MAX_BYTES) throw new Error('This file is too large to connect (maximum 25 MB).');
@@ -67,6 +67,6 @@ export function connectPreview(options: PreviewConnectionOptions, browser: Windo
   browser.addEventListener('message', receive);
   let timeout = browser.setTimeout(() => fail('The connection timed out. Start the preview server, then try again. Your edits are still here.'), 30_000);
   const closed = browser.setInterval(() => { if (popup.closed) fail('The server tab was closed. Your edits are still here.'); }, 1000);
-  options.onStatus('Opening the server. Confirm “Import and open” in its tab.');
+  options.onStatus('Opening the server. Review and confirm in its tab.');
   return () => { if (disposed) return; finish(); popup.close(); };
 }

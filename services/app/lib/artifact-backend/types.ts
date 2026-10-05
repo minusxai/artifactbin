@@ -114,6 +114,8 @@ export interface ArtifactVersionSummary {
 
 /** One archived version, with everything needed to RENDER it. */
 export interface ArtifactVersionSnapshot {
+  /** Authenticated historical authoring graph, when the stored version carries one. */
+  document?: DocumentGraph;
   version: number;
   format?: string;
   html: string;
