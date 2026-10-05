@@ -20,9 +20,11 @@ Write `report.jsx`, then run each command through npm:
 ```sh
 npx --yes @afbin/cli@latest preview report.jsx
 npx --yes @afbin/cli@latest export report.jsx --format html
-npx --yes @afbin/cli@latest import <id>-<slug>.jsx.html --output report.jsx
+npx --yes @afbin/cli@latest import ID-SLUG.jsx.html --output report.jsx
 npx --yes @afbin/cli@latest push report.jsx
 ```
+
+Replace `ID-SLUG.jsx.html` with the filename printed by export.
 
 Preview binds localhost and edits the source without sign-in or cloud requests. `--share` explicitly enables network access; anyone who can reach that server may edit. Close preview when finished.
 
