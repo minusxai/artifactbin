@@ -45,3 +45,7 @@ export type {RunnerCapabilities,RunnerTerminal} from './runner';
 export * from './schedules';
 export {parseProgramDefinition,type ProgramDefinition} from './program';
 export * from './preview-connect';
+
+// Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here
+// makes esbuild's split reader graph load that chunk through unrelated contract imports.
+export type {CommentViewState, ReviewJson} from './comment-view-state';

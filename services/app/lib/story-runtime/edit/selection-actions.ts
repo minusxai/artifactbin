@@ -1,3 +1,4 @@
+import { withReviewState } from '../review-state';
 'use client';
 
 import { COMMENT_PRESENTATION } from '../comment-presentation';
@@ -157,7 +158,7 @@ export function createFrameSelectionActions({
         const chosen = (action === 'annotate' ? activeAnnotation : null) ?? activeSelection;
         hide();
         if (action === 'select') win.getSelection()?.removeAllRanges();
-        onAction(action, chosen);
+        onAction(action, action === 'annotate' ? withReviewState(doc, chosen) : chosen);
       });
       (portal ?? doc.body).appendChild(toolbar);
     }

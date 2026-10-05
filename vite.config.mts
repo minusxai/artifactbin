@@ -11,6 +11,7 @@ import solid from 'vite-plugin-solid';
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { describePrecompression, precompressTree } from './scripts/lib/precompress.mjs';
+import { declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 
 const webRoot = path.resolve(import.meta.dirname, 'services/app/web');
 const outDir = path.resolve(import.meta.dirname, 'services/app/dist/web');
@@ -55,7 +56,8 @@ const appFontFaces = (): Plugin => ({
 
 export default defineConfig({
   root: webRoot,
-  plugins: [appFontFaces(), solid({ include: [/\/services\/app\/(?!node_modules\/).*\.(?:tsx|jsx)$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
+  // Dev ESM otherwise requests every icon in the barrel, overflowing live-session request queues.
+  plugins: [{ ...declaredLucideIcons(import.meta.dirname), apply: 'serve' }, appFontFaces(), solid({ include: [/\/services\/app\/(?!node_modules\/).*\.(?:tsx|jsx)$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },

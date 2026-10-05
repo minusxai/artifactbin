@@ -1,3 +1,4 @@
+import { reviewStateFor, type ReviewStateRegistration } from '@/lib/story-runtime/review-state';
 /**
  * THE AUTHOR SCRIPT'S RUNTIME (`@mx/page-runtime`), loaded by boot when a page carries a script or declares data.
  *
@@ -18,7 +19,7 @@
  * Solid is the island build's one instance (lib/islands/vendor, contract AUTHOR_VENDOR_EXPORTS): the script, this
  * runtime and the kit share one reactive graph.
  */
-import { untrack, type JSX } from 'solid-js';
+import { batch, getOwner, onCleanup, untrack, type JSX } from 'solid-js';
 import { createComponent, render } from 'solid-js/web';
 import type { DataflowStore } from '@/lib/story-runtime/store';
 import type { Row, Scalar } from '@/lib/story/data/dataflow';
@@ -143,13 +144,23 @@ export function resolveVendorImports(source: string, vendor: Readonly<Record<str
 /** Run the version's module in this document. Returns the stop function: unmounts its components and drops its bindings. */
 export async function startAuthorModule(input: AuthorModuleStart): Promise<() => void> {
   const bindings = bindPage(input.store);
+  const registrations = new Set<() => void>();
+  const reviewState = (part: ReviewStateRegistration) => {
+    const owner = 'ownerDocument' in input.root ? input.root.ownerDocument ?? document : input.root;
+    const remove = reviewStateFor(owner).register({ ...part, get: () => untrack(part.get), restore: value => batch(() => part.restore(value)) });
+    const cleanup = () => { remove(); registrations.delete(cleanup); };
+    registrations.add(cleanup);
+    if (getOwner()) onCleanup(cleanup);
+    return cleanup;
+  };
   // What the generated `page` module reads at import: the store's binders, and `proxy` for this document.
-  (globalThis as Record<string, unknown>)[PAGE_GLOBAL] = { ...bindings, proxy: (url: unknown) => pageProxyUrl(input.id, url) };
+  (globalThis as Record<string, unknown>)[PAGE_GLOBAL] = { ...bindings, reviewState, proxy: (url: unknown) => pageProxyUrl(input.id, url) };
   const code = resolveVendorImports(input.source, input.vendor);
   const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
   let mod: ComponentModule;
   try { mod = (await import(/* @vite-ignore */ url)) as ComponentModule; }
+  catch (error) { for (const remove of registrations) remove(); throw error; }
   finally { URL.revokeObjectURL(url); }
   const unmount = mountComponents(input.root, mod, bindings);
-  return () => { unmount(); };
+  return () => { unmount(); for (const remove of registrations) remove(); };
 }

@@ -1,3 +1,4 @@
+import { parseCommentViewState } from '../../../contracts/src/comment-view-state';
 /**
  * THE OFFLINE FILE'S BACKEND — the ArtifactBackend (lib/artifact-backend/types)
  * a downloaded `.html` answers from its own ArtifactFile, so the site's editor
@@ -547,6 +548,8 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
       const text = typeof body.body === 'string' ? body.body : '';
       if (!found || !nodeId) throw new BackendRequestError('bad_path: That part of the document is no longer here.', 400);
       if (!text.trim()) throw new BackendRequestError('invalid_annotation: A comment needs some words.', 400);
+      const viewState = body.view_state === undefined ? null : parseCommentViewState(body.view_state);
+      if (body.view_state !== undefined && !viewState) throw new BackendRequestError('Invalid saved view.', 400);
       const id = localId();
       const at = now();
       const quote = typeof body.quote === 'string' ? canonicalQuote(body.quote) || null : null;
@@ -554,6 +557,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
       const thread: AnnotationWire = {
         id, status: 'open', anchor: null, orphaned: false, anchor_version: version,
         snippet: snippetOf(file.source.slice(found.node.start, found.node.end)),
+        ...(viewState ? {view_state: viewState} : {}),
         quote, range: (body.range as AnnotationWire['range']) ?? null, quote_found: null,
         thread: [comment], created_at: at, resolved_at: null,
       };

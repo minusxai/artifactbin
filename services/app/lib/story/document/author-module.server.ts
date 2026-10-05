@@ -34,7 +34,7 @@ export const PAGE_SPECIFIER = 'page';
 export const PAGE_BINDERS = ['signal', 'query', 'mutation'] as const;
 type PageExport = (typeof PAGE_BINDERS)[number];
 /** Everything `page` exports: the binders, and `proxy(url)` (lib/islands/page-runtime pageProxyUrl), which takes any https URL. */
-export const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy'] as const;
+export const PAGE_EXPORTS = [...PAGE_BINDERS, 'proxy', 'reviewState'] as const;
 
 /** The declared names by kind: `values` are scalar Values; `tables` are table Values (rows, like a Query). */
 export interface AuthorModuleNames { values: string[]; tables?: string[]; queries: string[]; mutations: string[] }

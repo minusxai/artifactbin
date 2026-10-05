@@ -60,6 +60,16 @@ describe('the annotation composer', () => {
     expect(field).toHaveValue('');
   });
 
+  it('keeps the original view context across geometry updates and sends it with the native comment', async () => {
+    const viewState = { v: 1 as const, components: { screen: 'checkout', dialog: false } };
+    const view = layer({ railOpen: true, initialSelection: TEXT({ viewState }) });
+    await flush();
+    view.runtime.emit({ type: STORY_SELECTION_MESSAGE, selection: TEXT({ nodeId: 'node-1', rect: { x: 9, y: 10, width: 200, height: 40 } }) });
+    fireEvent.input(await screen.findByLabelText('Annotation comment'), { target: { value: 'Review this view' } });
+    fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
+    expect(JSON.parse(String(creates()[0]?.init?.body)).view_state).toEqual(viewState);
+  });
+
   it('forwards the selection quote and its anchor-relative range in the create POST', async () => {
     const range = { v: 1 as const, parts: [{ rel: '0', start: 8, end: 12, text: 'grew' }, { rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] };
     layer({ railOpen: true, initialSelection: TEXT({ quote: 'grew 40% in Q3,', range }) });

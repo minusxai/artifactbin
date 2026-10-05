@@ -1,3 +1,4 @@
+import {parseCommentViewState} from '../../../contracts/src/comment-view-state';
 /** The inert import grammar, shared by the npm workspace and hosted receiver. */
 import {parseAnnotationRange} from '../story/annotations/annotation-range';
 import type {ArtifactFile} from './file-format';
@@ -6,6 +7,7 @@ export function validateFileComments(file:ArtifactFile):void {
  for(const thread of file.threads){
   if(!thread||typeof thread.id!=='string'||!thread.id||thread.id.length>200||roots.has(thread.id)||!['open','resolved'].includes(thread.status)||!Array.isArray(thread.thread)||!thread.thread.length||thread.thread.length>1000)throw Error('Invalid or duplicate comment thread.');
   roots.add(thread.id);
+  if(thread.view_state!==undefined&&!parseCommentViewState(thread.view_state))throw Error('Invalid saved comment view.');
   if(thread.range!=null&&!parseAnnotationRange(thread.range))throw Error('Invalid comment selection.');
   if(thread.anchor!==null&&(!thread.anchor||typeof (thread.anchor.nodeId??thread.anchor.key)!=='string'||!(thread.anchor.nodeId??thread.anchor.key)|| (thread.anchor.nodeId??thread.anchor.key).length>200))throw Error('Invalid comment anchor.');
   for(const reply of thread.thread){

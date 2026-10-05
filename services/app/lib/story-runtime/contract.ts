@@ -1,3 +1,4 @@
+import type { CommentViewState } from '../../../contracts/src/comment-view-state';
 import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmark';
 import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 /**
@@ -539,6 +540,8 @@ export interface StoryEditRect { x: number; y: number; width: number; height: nu
  * attribute values, which is what the typography toolbar reasons over.
  */
 export interface StoryEditSelection {
+  viewState?: CommentViewState;
+  viewStateError?: string;
   /** Unclipped drag in this document viewport, separate from the node-relative anchor. */
   captureRect?: StoryEditRect;
   /** The prose engine owns formatting transactions and their source write-back. */
@@ -756,6 +759,8 @@ export interface StorySpotlightMessage { type: typeof STORY_SPOTLIGHT_MESSAGE; p
 export const STORY_ANNOTATIONS_MESSAGE = 'mx:annotations';
 export interface StoryAnnotationsMessage {
   canComment?: boolean;
+  /** Explicit reopen, including a restore button on the already-open thread. */
+  viewStateRequest?: number;
   type: typeof STORY_ANNOTATIONS_MESSAGE;
   mode: 'off' | 'on';
   /**
@@ -765,6 +770,7 @@ export interface StoryAnnotationsMessage {
    */
   pins: Array<{
     id: string;
+    viewState?: CommentViewState;
     /** Position a resolved preview without painting or interacting with its former highlight. */
     layoutOnly?: boolean;
     path: string;
@@ -820,6 +826,7 @@ interface StoryAnnotationHoverMessage {
 /** Frame → parent: the current viewport geometry of every anchored open thread. */
 export const STORY_ANNOTATION_LAYOUT_MESSAGE = 'mx:annotation-layout';
 interface StoryAnnotationLayoutMessage {
+  viewStateError?: { id: string; message: string } | null;
   type: typeof STORY_ANNOTATION_LAYOUT_MESSAGE;
   nonce: string;
   positions: Array<{ id: string; rect: StoryEditRect; status?: 'exact' | 'missing' | 'ambiguous' }>;
