@@ -145,9 +145,20 @@ export async function passTheWelcomePage(page, email) {
   }, email, { timeout: 20_000 }).then((handle) => handle.jsonValue()).catch(() => 'through');
   if (state !== 'welcome') return;
 
-  await page.waitForURL(onWelcome, { timeout: 20_000 }).catch(() => {
+  await page.waitForURL(onWelcome, { timeout: 20_000 }).catch(async () => {
+    // Structural first-party evidence only: never dump workspace text, session credentials or cookie values.
+    const shell = await page.evaluate(async expectedEmail => {
+      const root = document.getElementById('root');
+      let session;
+      try { const response = await fetch('/api/page/session', { credentials: 'same-origin', signal: AbortSignal.timeout(2000) }); const state = await response.json();
+        session = { status: response.status, kind: state.kind, expectedAccount: state.user?.email === expectedEmail, onboarded: state.onboarded };
+      } catch { session = { unavailable: true }; }
+      return { readyState: document.readyState, rootChildren: root?.childElementCount ?? null,
+        trustedHosts: document.querySelectorAll('[data-trusted-ui]').length, loadingPage: !!document.querySelector('main[aria-label="Loading page"]'),
+        scripts: [...document.scripts].filter(script => script.src).map(script => new URL(script.src).pathname), session };
+    }, email).catch(error => ({ unavailable: error.name }));
     throw new Error(
-      `${email} has not been through the welcome page (session onboarded=false) but the app never went there within 20s (url ${page.url()})`,
+      `${email} has not been through the welcome page (session onboarded=false) but the app never went there within 20s (path ${new URL(page.url()).pathname}); shell ${JSON.stringify(shell)}`,
     );
   });
   // By its accessible name, like every other control these gates drive. It is

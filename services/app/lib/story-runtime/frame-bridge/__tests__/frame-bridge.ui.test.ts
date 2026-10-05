@@ -6,6 +6,10 @@
  * frame's controller is a recording stand-in (the real one is proved by scripts/gates/gate-own-origin-script.mjs).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { compiledOf } from '@/test/helpers/compiled';
+import { createDataflowStore } from '@/lib/story-runtime/store';
+import { installIslandDocument } from '@/lib/islands/handover';
+import type { IslandDocument } from '@/lib/islands/contract';
 
 interface FakeController {
   input: Record<string, unknown> & { appFetch: (path: string, init: RequestInit) => Promise<Response>; editId: () => string; initialSource: () => string | null; fragmentSurface?: string };
@@ -286,6 +290,39 @@ describe('the frame bridge', () => {
     expect(onUrlValues.mock.calls).toEqual([['?$region=east'], ['']]);
     expect(urlValuesOf({ type: STORY_URL_VALUES_MESSAGE, search: '$region=east' })).toBe('$region=east');
     expect(urlValuesOf({ type: 'mx:frame-bridge', search: '?$region=east' })).toBeNull();
+  });
+
+  it('replays current declared URL scalars when the parent attaches late and after a new bridge session', async () => {
+    const { frame, frameWin, pageProxy, toFrame } = framedPair();
+    const flow = await compiledOf('<Value name="count" type="number" default={0}/><Value name="choice" default="a"/><Value name="private" url={false}/>');
+    const store = createDataflowStore({ flow, values: { count: 1, choice: 'b', private: 'never-in-the-link' } }, { debounceMs: 0 });
+    const root = frameWin.document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
+    installIslandDocument(root, { store } as IslandDocument);
+    // Child hydration and URL writes happened before this parent installed its listener.
+    openDoor(frameWin);
+    pageProxy.postMessage({ type: STORY_URL_VALUES_MESSAGE, search: '?$count=1&$choice=b' }, APP);
+    await tick();
+    const onUrlValues = vi.fn();
+    const { onReady } = parentFor(frame, { onUrlValues });
+    await settle(() => onReady.mock.calls.length > 0);
+    expect(onUrlValues.mock.calls).toEqual([['?$count=1&$choice=b']]);
+    expect(JSON.stringify(onUrlValues.mock.calls)).not.toContain('never-in-the-link');
+    const key = (toFrame.find(post => (post.data as { payload?: { kind?: string } }).payload?.kind === 'attach')!.data as { key: string }).key;
+    const receipt = (urlValues: unknown, overrides: Partial<MessageEventInit> = {}, receiptKey = key) =>
+      window.dispatchEvent(new MessageEvent('message', { source: frameWin, origin: PAGES,
+        data: { type: FRAME_BRIDGE_MESSAGE, key: receiptKey, payload: { kind: 'ready', nonce: 'n'.repeat(32), urlValues } }, ...overrides }));
+    const readyCount = onReady.mock.calls.length;
+    receipt('?$count=99', { origin: 'https://evil.test' });
+    receipt('?$count=99', { source: window });
+    receipt('?$count=99', {}, 'wrong-key');
+    expect(onReady).toHaveBeenCalledTimes(readyCount);
+    for (const invalid of [12, '?$count=99#other', '?$count=a b', '?$count=' + 'x'.repeat(9000)]) receipt(invalid);
+    expect(onUrlValues.mock.calls).toEqual([['?$count=1&$choice=b']]);
+    // Reattachment reads the new state, rather than replaying a stale first receipt.
+    store.setValue('count', 2);
+    pageProxy.postMessage({ type: FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } }, APP);
+    await settle(() => onUrlValues.mock.calls.length > 1);
+    expect(onUrlValues.mock.lastCall).toEqual(['?$count=2&$choice=b']);
   });
 
   it('reserves the page\'s bar over the frame\'s top edge inside the document and scrolls by it in the same task, so nothing moves; a reloaded document is told again', async () => {
