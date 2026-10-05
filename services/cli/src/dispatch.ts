@@ -27,7 +27,8 @@ import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
 import {progressRenderer} from './update-progress';
-import {setupSkills,setupSummary,setupService} from './setup';
+import {setupSkills,setupSummary,setupService,setupGlobal,globalSummary,manualInstallHint} from './setup';
+import type {InstallKind,NpmRunner} from './global-install';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
 import {installSkills,planSkills,restartHints,selectSkills,skillsDisabled,type SkillChoice,type SkillHarness,skillStatus} from './skill-install';
 import {CLI_VERSION} from './version';
@@ -60,7 +61,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const stdout=context.stdout??(value=>process.stdout.write(value));const stderr=context.stderr??(value=>process.stderr.write(value));
  // Colour only reaches a real terminal: a supplied writer stays plain unless the caller asks for colour.
@@ -119,7 +120,9 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // installer served from a second hostname does not pin the folder to a name of the same server.
    if(typeof flags.server==='string')await saveDefaultServer((await serverIdentity(flags.server,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})).canonical,home,context.env);
    const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   if(json)emit(result);else stdout(setupSummary(result.installations,style));
+   const installed=await setupGlobal({home,env:context.env??process.env,noGlobal:!!flags['no-global'],...(context.installKind?{kind:context.installKind}:{}),...(context.npm?{npm:context.npm}:{})});
+   if(json){emit({...result,...installed});if(installed.global.status==='failed')stderr(`afbin command not installed: ${installed.global.reason}\n${manualInstallHint(installed.global.version)}\n`);}
+   else stdout(setupSummary(result.installations,style)+globalSummary(installed,style));
    return 0;
   }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
@@ -170,7 +173,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const selected=await selectSkills({...selection,interactive:false});
    const ask=interactive&&!json&&!flags.yes&&!flags.harness&&!skillsDisabled(context.env);
    const live=!json&&(context.progress??(!context.stderr&&!!process.stderr.isTTY));
-   const updated=await (context.update??updateCli)({home,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch,
+   const updated=await (context.update??updateCli)({home,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch,...(context.npm?{npm:context.npm}:{}),
     ...(ask?{chooseHarnesses:()=>selectSkills({...selection,interactive:true})}:{}),
     ...(live?{report:progressRenderer(stderr,createStyle(context.stderr?styleOptions:colorSupport(context.env??process.env,true)))}:{})});
    emit(updated);
